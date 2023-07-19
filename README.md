@@ -7,9 +7,14 @@ This project is currently in development. A first firmware version and Android a
 - spectrum analyzer (analyse the frequency of a remote or signal);
 - the first version of this device will only work on 433/315 MHZ bands.
 
+New goal: transmit-only device:
+- send signals of various modulations;
+- import signals of various modulations;
+- be able to visualize the signal well, before sending;
+- very cheap hardware;
+- 433/315 MHz bands only for first version.
 
-
-This project is on halt, but development will resume on 28/06/2023. Stay tuned
+Current efforts are to make the version 1.1 board work with light USB library. Otherwise there will need to be a new version with a MCU with more memory.
 
 Hardware versions so far:
 
