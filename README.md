@@ -1,11 +1,11 @@
 # emwaver
 This project is currently in development. A first firmware version and Android app will be available as soon as late July 2023.
 
-~The goal of this device is to emulate all functionality of the Flipper Zero Sub-1GHz block, on a build that costs less than $10 to manufacture as a consumer. It ~will be able to (at least):~
-~- record signals and replay them at a chosen frequency;~
-~- easily load signals and send them (this is even easier because of running on an Android app)~
-~- spectrum analyzer (analyse the frequency of a remote or signal);~
-~- the first version of this device will only work on 433/315 MHZ bands.~
+~The goal of this device is to emulate all functionality of the Flipper Zero Sub-1GHz block, on a build that costs less than $10 to manufacture as a consumer. It will be able to (at least):
+- record signals and replay them at a chosen frequency;
+- easily load signals and send them (this is even easier because of running on an Android app)
+- spectrum analyzer (analyse the frequency of a remote or signal);
+- the first version of this device will only work on 433/315 MHZ bands.~
 
 
 
