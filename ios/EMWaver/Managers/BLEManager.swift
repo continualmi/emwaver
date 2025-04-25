@@ -176,6 +176,10 @@ class BLEManager: NSObject, ObservableObject {
     }
     
     func disconnect() {
+        // --- Add Logging Here ---
+        print("!!! BLEManager.disconnect() explicitly called.")
+        // --- End Logging ---
+
         guard let peripheral = peripheralDevice, isConnected else { return }
         
         centralManager.cancelPeripheralConnection(peripheral)
@@ -544,6 +548,15 @@ extension BLEManager: CBCentralManagerDelegate {
     }
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        // --- Add Logging Here ---
+        print("!!! centralManager:didDisconnectPeripheral called for \(peripheral.identifier.uuidString)")
+        if let error = error {
+            print("!!! Disconnect reason: \(error.localizedDescription)")
+        } else {
+            print("!!! Disconnect reason: No specific error provided by CoreBluetooth (potentially explicit disconnect or clean peripheral disconnect).")
+        }
+        // --- End Logging ---
+
         isConnected = false
         print("Disconnected from EMWaver device: \(error?.localizedDescription ?? "No error")")
         
@@ -653,4 +666,4 @@ extension BLEManager: CBPeripheralDelegate {
             print("Notifications \(state)")
         }
     }
-} 
+}
