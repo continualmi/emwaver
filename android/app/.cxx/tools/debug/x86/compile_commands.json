@@ -1,0 +1,17 @@
+[
+{
+  "directory": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/x86",
+  "command": "/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=i686-none-linux-android24 --sysroot=/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dnative_lib_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles/native-lib.dir/native-lib.cpp.o -c /Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/native-lib.cpp",
+  "file": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/native-lib.cpp"
+},
+{
+  "directory": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/x86",
+  "command": "/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=i686-none-linux-android24 --sysroot=/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dnative_lib_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles/native-lib.dir/EncodeIR.cpp.o -c /Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/EncodeIR.cpp",
+  "file": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/EncodeIR.cpp"
+},
+{
+  "directory": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/x86",
+  "command": "/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=i686-none-linux-android24 --sysroot=/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -Dnative_lib_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -o CMakeFiles/native-lib.dir/IRP.cpp.o -c /Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/IRP.cpp",
+  "file": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/IRP.cpp"
+}
+]

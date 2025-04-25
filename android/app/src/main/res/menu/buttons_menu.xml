@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_add_remote"
+        android:title="Add Remote"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_add_key"
+        android:title="Add Key"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_load_from_irdb"
+        android:title="Load from IRDB"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_load_from_storage"
+        android:title="Load from Storage"
+        app:showAsAction="never" />
+</menu>

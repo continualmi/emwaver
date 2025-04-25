@@ -1,0 +1,79 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.emwaver.emwaverandroidapp'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.emwaver.emwaverandroidapp"
+        minSdk 24
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+
+    externalNativeBuild {
+        cmake {
+            path file('src/main/cpp/CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
+    }
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.navigation:navigation-fragment:2.7.7'
+    implementation 'androidx.navigation:navigation-ui:2.7.7'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+
+    implementation 'com.github.mik3y:usb-serial-for-android:3.4.6'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.preference:preference:1.2.0'
+
+    implementation 'org.apache.commons:commons-csv:1.8'
+    implementation 'org.mozilla:rhino:1.7R4'
+    implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
+
+    implementation 'com.android.volley:volley:1.2.1'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.0'
+    // IrScrutinizer dependencies
+    //implementation 'org.harctoolbox:IrpTransmogrifier:1.2.11'
+    //implementation("com.github.bengtmartensson:IrpTransmogrifier:SchemaFactory_broken-SNAPSHOT")
+    //implementation("com.github.bengtmartensson:IrpTransmogrifier:1.0")
+    // You might also need these supporting libraries
+    //implementation 'com.beust:jcommander:1.78'
+    //implementation 'org.antlr:antlr-runtime:3.5.2'
+    
+    implementation files('libs/IrpTransmogrifier-1.2.13-jar-with-dependencies.jar')
+    //implementation files('libs/IrpTransmogrifier-1.2.14-SNAPSHOT-jar-with-dependencies.jar')
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
+}
