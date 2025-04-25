@@ -158,61 +158,46 @@ class CC1101 {
     
     // MARK: - SPI Communication Methods
     func spiStrobe(commandStrobe: UInt8) {
-        let command: [UInt8] = [0x25, commandStrobe] // '%' = 0x25
+        let command: [UInt8] = [UInt8(ascii: "%"), commandStrobe]
         let data = Data(command)
-        
         bleManager.sendPacket(data)
     }
     
     func writeBurstReg(addr: UInt8, data: [UInt8], len: UInt8) {
         var command = [UInt8](repeating: 0, count: data.count + 3)
-        command[0] = 0x3E // '>' = 0x3E
+        command[0] = UInt8(ascii: ">")
         command[1] = addr
         command[2] = len
-        
         for i in 0..<data.count {
             command[i + 3] = data[i]
         }
-        
         bleManager.sendPacket(Data(command))
     }
     
     func readBurstReg(addr: UInt8, len: Int) -> [UInt8] {
-        // Clear any pending data before sending command
-        bleManager.clearBuffer()
-        
-        let command: [UInt8] = [0x3C, addr | CC1101.READ_BURST, UInt8(len)] // '<' = 0x3C
-        bleManager.sendPacket(Data(command))
-        
-        // Use a single, longer wait to ensure response is received
-        Thread.sleep(forTimeInterval: 0.03) // 30ms wait
-        
-        if let response = bleManager.getCommand() {
+        print("CC1101: Reading burst register address 0x\(String(format: "%02X", addr)) length \(len)")
+        let command: [UInt8] = [UInt8(ascii: "<"), addr, UInt8(len)]
+        if let response = bleManager.sendCommand(Data(command), timeout: 1000) {
+            print("CC1101: Burst read 0x\(String(format: "%02X", addr)) received \(response.count) bytes: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
             return [UInt8](response)
         }
-        
+        print("CC1101: Failed to read burst register 0x\(String(format: "%02X", addr))")
         return []
     }
     
     func readReg(addr: UInt8) -> UInt8 {
-        // Clear any pending data before sending command
-        bleManager.clearBuffer()
-        
-        let command: [UInt8] = [0x3C, addr | CC1101.READ_SINGLE, 0x01] // '<' = 0x3C
-        bleManager.sendPacket(Data(command))
-        
-        // Use a single, longer wait to ensure response is received
-        Thread.sleep(forTimeInterval: 0.03) // 30ms wait
-        
-        if let response = bleManager.getCommand(), !response.isEmpty {
+        print("CC1101: Reading register address 0x\(String(format: "%02X", addr))")
+        let command: [UInt8] = [UInt8(ascii: "?"), addr]
+        if let response = bleManager.sendCommand(Data(command), timeout: 1000), !response.isEmpty {
+            print("CC1101: Register 0x\(String(format: "%02X", addr)) = 0x\(String(format: "%02X", response[0]))")
             return response[0]
         }
-        
+        print("CC1101: Failed to read register 0x\(String(format: "%02X", addr))")
         return 0
     }
     
     func writeReg(addr: UInt8, value: UInt8) {
-        let command: [UInt8] = [0x3E, addr, 0x01, value] // '>' = 0x3E
+        let command: [UInt8] = [UInt8(ascii: "!"), addr, value]
         bleManager.sendPacket(Data(command))
     }
     
