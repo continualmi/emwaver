@@ -38,7 +38,15 @@ struct LineChartViewController: UIViewControllerRepresentable {
         chartView.drawGridBackgroundEnabled = false
         chartView.scaleYEnabled = false // Only scale X-axis like Android
         chartView.scaleXEnabled = true
-
+        
+        // ENHANCED: Improve responsiveness
+        chartView.highlightPerTapEnabled = false
+        chartView.maxVisibleCount = 0 // Unlimited visible entries
+        chartView.autoScaleMinMaxEnabled = false
+        
+        // Ensure chart responds directly to touch events
+        chartView.isUserInteractionEnabled = true
+        
         // Set delegate for callbacks
         chartView.delegate = context.coordinator
 
@@ -130,12 +138,14 @@ struct LineChartViewController: UIViewControllerRepresentable {
     // Helper to update chart data - EXACTLY MATCH ANDROID
     private func updateChartData(chartView: LineChartView) {
         let dataSet = LineChartDataSet(entries: entries, label: "Demodulator")
-        dataSet.drawCirclesEnabled = false
+        dataSet.drawCirclesEnabled = true
+        dataSet.circleRadius = 2.0
         dataSet.drawValuesEnabled = false
         
         // Match Android color exactly - #0087FF
         let androidBlue = UIColor(red: 0.0, green: 135.0/255.0, blue: 255.0/255.0, alpha: 1.0)
         dataSet.setColor(androidBlue)
+        dataSet.setCircleColor(androidBlue)
         
         // Match Android line width exactly - 3.0f
         dataSet.lineWidth = 3.0
@@ -143,9 +153,6 @@ struct LineChartViewController: UIViewControllerRepresentable {
         // Other settings to match Android exactly
         dataSet.drawCircleHoleEnabled = false
         dataSet.mode = .linear
-        
-        // Disable circle drawing twice to ensure consistency
-        dataSet.drawCirclesEnabled = false
         
         let data = LineChartData(dataSet: dataSet)
         chartView.data = data
@@ -351,15 +358,27 @@ struct SamplerView: View {
     
     // Update chart with compression - EXACTLY MATCH ANDROID
     func updateChartWithCompression(visibleRangeStart: Double, visibleRangeEnd: Double) {
-        // Get compressed data from ViewModel
+        // Calculate view span
+        let viewSpan = visibleRangeEnd - visibleRangeStart
+        
+        // Add some padding to avoid edge effects
+        let paddedStart = max(0, visibleRangeStart - (viewSpan * 0.05))
+        let paddedEnd = visibleRangeEnd + (viewSpan * 0.05)
+        
+        // Get compressed data from ViewModel with enhanced range
         let entries = viewModel.updateChartWithCompression(
-            rangeStart: visibleRangeStart,
-            rangeEnd: visibleRangeEnd
+            rangeStart: paddedStart,
+            rangeEnd: paddedEnd
         )
         
         // Update chart entries
         DispatchQueue.main.async {
             self.chartEntries = entries
+            // If we have a chart view, make sure it redraws immediately
+            if let chartView = self.chartView {
+                chartView.notifyDataSetChanged()
+                chartView.setNeedsDisplay()
+            }
         }
     }
 

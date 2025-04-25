@@ -319,8 +319,16 @@ class BLEManager: NSObject, ObservableObject {
             return ([], [])
         }
         
-        // If the range is small enough, return raw data points - EXACTLY like Android
-        if totalPointsInRange <= Float(numberBins * 2) {
+        // IMPROVED: Enhanced handling of zoomed-in views - show raw points at higher zoom levels
+        // Original condition: totalPointsInRange <= Float(numberBins * 2)
+        // Enhanced condition: check if range is small enough for high-quality display
+        let isZoomedIn = totalPointsInRange <= 3000
+        let shouldShowRawPoints = isZoomedIn || totalPointsInRange <= Float(numberBins * 2)
+        
+        print("Range size: \(totalPointsInRange) points, Zoomed in: \(isZoomedIn), Showing raw: \(shouldShowRawPoints)")
+        
+        if shouldShowRawPoints {
+            // When zoomed in enough, show individual samples
             for i in rangeStart..<rangeEnd {
                 let byteIndex = i / 8
                 let bitIndex = i % 8
