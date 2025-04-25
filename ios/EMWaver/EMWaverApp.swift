@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct EMWaverApp: App {
+    @StateObject private var bleManager = BLEManager()
     var body: some Scene {
         WindowGroup {
             ContentView()
+            .environmentObject(bleManager)
         }
     }
 }

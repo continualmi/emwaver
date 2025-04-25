@@ -223,6 +223,29 @@ struct BLEView: View {
         .onReceive(timer) { _ in // Action for the timer
             fetchAndDisplayBufferedData()
         }
+        .onDisappear {
+            // --- Add Logging Here ---
+            print("!!! BLEView disappearing.")
+            // Check state immediately
+            if let peripheral = bleManager.peripheralDevice { // Use the instance from BLEManager
+                print("!!! BLEView onDisappear: Peripheral state is \(peripheral.state.rawValue)") // Raw value for more detail maybe
+            } else {
+                print("!!! BLEView onDisappear: Peripheral device is nil.")
+            }
+
+            // Check state after a small delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let peripheral = bleManager.peripheralDevice {
+                     print("!!! BLEView 0.1s after disappear: Peripheral state is \(peripheral.state.rawValue)")
+                     // If disconnected here without delegate call, it's confirmation
+                     if peripheral.state == .disconnected || peripheral.state == .disconnecting {
+                         print("!!! Peripheral disconnected shortly after view disappear, but didDisconnect delegate likely wasn't called.")
+                         // Potentially trigger a manual reconnect attempt here if needed
+                         // bleManager.attemptReconnect() // You'd need to implement this
+                     }
+                }
+            }
+        }
     }
     
     // Helper functions
