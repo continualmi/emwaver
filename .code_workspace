@@ -1,0 +1,8 @@
+{
+  "folders": [
+    { "path": "android" },
+    { "path": "ios" },
+    { "path": "firmware" }
+  ],
+  "settings": {}
+}
