@@ -10,20 +10,20 @@ struct LineChartViewController: UIViewControllerRepresentable {
         let viewController = UIViewController()
         let chartView = LineChartView()
         
-        // Basic chart setup (similar to Android)
+        // Basic chart setup (match Android where applicable)
         chartView.translatesAutoresizingMaskIntoConstraints = false
         chartView.chartDescription.enabled = false
-        chartView.legend.enabled = true
-        chartView.leftAxis.axisMinimum = -20 // Give some padding below 0
-        chartView.leftAxis.axisMaximum = 275 // Give some padding above 255
-        chartView.rightAxis.enabled = false
+        chartView.legend.enabled = true // Keep legend enabled
+        chartView.leftAxis.axisMinimum = -128 // Match Android
+        chartView.leftAxis.axisMaximum = 384 // Match Android (256 + 128)
+        chartView.rightAxis.enabled = false // Match Android
         chartView.xAxis.labelPosition = .bottom
         chartView.dragEnabled = true
         chartView.pinchZoomEnabled = true
-        chartView.setScaleEnabled(true)
+        // chartView.setScaleEnabled(true) // Redundant if setting X/Y individually
         chartView.drawGridBackgroundEnabled = false
-        chartView.scaleYEnabled = false // Disable Y-axis scaling
-        chartView.scaleXEnabled = true  // Enable X-axis scaling only
+        chartView.scaleYEnabled = false // Disable Y-axis scaling (Match Android)
+        chartView.scaleXEnabled = true  // Enable X-axis scaling only (Match Android)
 
         // Add chartView as a subview and set constraints
         viewController.view.addSubview(chartView)
@@ -63,12 +63,17 @@ struct LineChartViewController: UIViewControllerRepresentable {
 
     // Helper to update chart data
     private func updateChartData(chartView: LineChartView) {
-        let dataSet = LineChartDataSet(entries: entries, label: "Signal")
-        dataSet.drawCirclesEnabled = false
-        dataSet.drawValuesEnabled = false
-        dataSet.lineWidth = 1.5
-        dataSet.setColor(.systemBlue)
-        // dataSet.mode = .stepped // Make it look like a digital signal
+        let dataSet = LineChartDataSet(entries: entries, label: "Demodulator") // Match Android label
+        dataSet.drawCirclesEnabled = true // Match Android (default is usually true, explicitly enable)
+        dataSet.drawValuesEnabled = false // Match Android
+        dataSet.lineWidth = 3.0 // Match Android
+        
+        // Match Android color (#0087FF)
+        let androidBlue = UIColor(red: 0.0, green: 135.0/255.0, blue: 255.0/255.0, alpha: 1.0)
+        dataSet.setColor(androidBlue)
+        dataSet.setCircleColor(androidBlue) // Match Android circle color
+        dataSet.circleRadius = 2.0 // Small radius for circles
+        dataSet.drawCircleHoleEnabled = false // Solid circles
         
         let data = LineChartData(dataSet: dataSet)
         chartView.data = data
@@ -83,6 +88,7 @@ struct SamplerView: View {
     @State private var chartEntries: [ChartDataEntry] = []
     @State private var selectedPinIndex: Int = 6 // Default to GPIO6 (index 6 in PINS array)
     @State private var isRecording: Bool = false // Track recording state
+    @State private var timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // Timer for auto-refresh
 
     // Match the PINS array from Android
     let PINS = [
@@ -156,12 +162,21 @@ struct SamplerView: View {
             // Load initial test data or refresh based on current buffer
             refreshChartFromBuffer()
         }
-        // Add Toolbar for Clear, Save, Load later
-//        .toolbar {
-//            ToolbarItemGroup(placement: .navigationBarTrailing) {
-//                // Add Clear/Save/Load buttons here
-//            }
-//        }
+        .onReceive(timer) { _ in // Action for the timer
+             // Only refresh if not currently recording to avoid UI jumps
+             if !isRecording {
+                 refreshChartFromBuffer()
+             }
+        }
+        .toolbar {
+             ToolbarItemGroup(placement: .navigationBarTrailing) {
+                 Button {
+                     clearBufferAndChart()
+                 } label: {
+                     Label("Clear", systemImage: "trash")
+                 }
+             }
+         }
     }
 
     // MARK: - GPIO Pin Logic
@@ -278,6 +293,11 @@ struct SamplerView: View {
         print("Test Pattern 2 loaded into buffer.")
     }
 
+    func clearBufferAndChart() {
+        print("Clearing buffer and chart...")
+        bleManager.clearBuffer()
+        refreshChartFromBuffer()
+    }
 
     // MARK: - Chart Update Logic
 
@@ -311,7 +331,7 @@ struct SamplerView_Previews: PreviewProvider {
         // Provide a mock BLEManager for the preview
         NavigationView {
             SamplerView()
-                .environmentObject(BLEManager())
+                .environmentObject(BLEManager()) // Ensure BLEManager is injected for preview
         }
     }
 }

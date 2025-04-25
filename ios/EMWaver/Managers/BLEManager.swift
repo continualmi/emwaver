@@ -480,6 +480,12 @@ class BLEManager: NSObject, ObservableObject {
              print("Buffer transmission complete: \(totalBytesToSend) bytes sent")
          }
     }
+
+    // MARK: - Public Accessors
+    /// Expose the connected peripheral for read-only access (for debugging/logging only)
+    var connectedPeripheral: CBPeripheral? {
+        peripheralDevice
+    }
 }
 
 // MARK: - CBCentralManagerDelegate

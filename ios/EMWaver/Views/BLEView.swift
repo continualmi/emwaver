@@ -2,7 +2,7 @@ import SwiftUI
 import Combine // Added for Timer
 
 struct BLEView: View {
-    @StateObject private var bleManager = BLEManager()
+    @EnvironmentObject var bleManager: BLEManager // Use shared BLEManager from environment
     @State private var selectedPin = "GPIO0"
     @State private var commandInput = ""
     @State private var showHex = true
@@ -227,7 +227,7 @@ struct BLEView: View {
             // --- Add Logging Here ---
             print("!!! BLEView disappearing.")
             // Check state immediately
-            if let peripheral = bleManager.peripheralDevice { // Use the instance from BLEManager
+            if let peripheral = bleManager.connectedPeripheral { // Use the public accessor
                 print("!!! BLEView onDisappear: Peripheral state is \(peripheral.state.rawValue)") // Raw value for more detail maybe
             } else {
                 print("!!! BLEView onDisappear: Peripheral device is nil.")
@@ -235,7 +235,7 @@ struct BLEView: View {
 
             // Check state after a small delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let peripheral = bleManager.peripheralDevice {
+                if let peripheral = bleManager.connectedPeripheral {
                      print("!!! BLEView 0.1s after disappear: Peripheral state is \(peripheral.state.rawValue)")
                      // If disconnected here without delegate call, it's confirmation
                      if peripheral.state == .disconnected || peripheral.state == .disconnecting {
