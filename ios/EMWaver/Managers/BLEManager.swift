@@ -139,7 +139,9 @@ class BLEManager: NSObject, ObservableObject {
     // MARK: - Initialization
     override init() {
         super.init()
-        centralManager = CBCentralManager(delegate: self, queue: nil)
+        // Use a dedicated background queue for BLE
+        let bleQueue = DispatchQueue(label: "com.emwaver.ble", qos: .userInitiated)
+        centralManager = CBCentralManager(delegate: self, queue: bleQueue)
     }
     
     // MARK: - Public Methods
@@ -149,7 +151,9 @@ class BLEManager: NSObject, ObservableObject {
             return
         }
         
-        isScanning = true
+        DispatchQueue.main.async {
+            self.isScanning = true
+        }
         print("Scanning for EMWaver device...")
         
         // Set up scan options
@@ -172,7 +176,9 @@ class BLEManager: NSObject, ObservableObject {
         guard isScanning else { return }
         
         centralManager.stopScan()
-        isScanning = false
+        DispatchQueue.main.async {
+            self.isScanning = false
+        }
         print("Stopped scanning")
     }
     
@@ -201,13 +207,17 @@ class BLEManager: NSObject, ObservableObject {
     func clearBuffer() {
         buffer.removeAll()
         isNewCommandAvailable = false
-        bufferVersion += 1
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
     }
     
     func storeBulkPkt(_ data: Data) {
         buffer.append(data)
         isNewCommandAvailable = true
-        bufferVersion += 1
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
         
         // Update statistics
         let currentTime = Date().timeIntervalSince1970
@@ -218,6 +228,10 @@ class BLEManager: NSObject, ObservableObject {
         }
         
         totalBytesReceived += data.count
+        
+        // LOG: Print buffer contents and flag after storing
+        print("storeBulkPkt: buffer now has \(buffer.count) bytes, isNewCommandAvailable=\(isNewCommandAvailable)")
+        print("storeBulkPkt: buffer contents: \(buffer.map { String(format: "%02X", $0) }.joined(separator: " "))")
     }
     
     func getCommand() -> Data? {
@@ -251,7 +265,9 @@ class BLEManager: NSObject, ObservableObject {
     func loadBuffer(data: Data) {
         buffer = data
         isNewCommandAvailable = !buffer.isEmpty // Indicate data is available if buffer is not empty
-        bufferVersion += 1
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
         
         // Reset stats when loading new data
         totalBytesReceived = buffer.count 
@@ -269,7 +285,9 @@ class BLEManager: NSObject, ObservableObject {
     func invertBuffer() {
         buffer = Data(buffer.map { ~$0 })
         isNewCommandAvailable = !buffer.isEmpty // Ensure state reflects buffer content
-        bufferVersion += 1
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
     }
 
     /// Parses the buffer status ("BS" + 2 bytes) from the end of the buffer.
@@ -561,7 +579,9 @@ extension BLEManager: CBCentralManagerDelegate {
     }
     
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        isConnected = true
+        DispatchQueue.main.async {
+            self.isConnected = true
+        }
         connectionRetryCount = 0
         isReconnecting = false
         print("Connected to EMWaver device")
@@ -592,6 +612,9 @@ extension BLEManager: CBCentralManagerDelegate {
     }
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        DispatchQueue.main.async {
+            self.isConnected = false
+        }
         // --- Add Logging Here ---
         print("!!! centralManager:didDisconnectPeripheral called for \(peripheral.identifier.uuidString)")
         if let error = error {
@@ -601,7 +624,6 @@ extension BLEManager: CBCentralManagerDelegate {
         }
         // --- End Logging ---
 
-        isConnected = false
         print("Disconnected from EMWaver device: \(error?.localizedDescription ?? "No error")")
         
         // Try to reconnect if disconnected unexpectedly
