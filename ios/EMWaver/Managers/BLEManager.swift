@@ -7,6 +7,7 @@ class BLEManager: NSObject, ObservableObject {
     // MARK: - Published Properties
     @Published var isConnected = false
     @Published var isScanning = false
+    @Published var bufferVersion: Int = 0
     
     // MARK: - Utility Methods
     static func dataToHexString(_ data: Data) -> String {
@@ -200,11 +201,13 @@ class BLEManager: NSObject, ObservableObject {
     func clearBuffer() {
         buffer.removeAll()
         isNewCommandAvailable = false
+        bufferVersion += 1
     }
     
     func storeBulkPkt(_ data: Data) {
         buffer.append(data)
         isNewCommandAvailable = true
+        bufferVersion += 1
         
         // Update statistics
         let currentTime = Date().timeIntervalSince1970
@@ -248,6 +251,7 @@ class BLEManager: NSObject, ObservableObject {
     func loadBuffer(data: Data) {
         buffer = data
         isNewCommandAvailable = !buffer.isEmpty // Indicate data is available if buffer is not empty
+        bufferVersion += 1
         
         // Reset stats when loading new data
         totalBytesReceived = buffer.count 
@@ -265,6 +269,7 @@ class BLEManager: NSObject, ObservableObject {
     func invertBuffer() {
         buffer = Data(buffer.map { ~$0 })
         isNewCommandAvailable = !buffer.isEmpty // Ensure state reflects buffer content
+        bufferVersion += 1
     }
 
     /// Parses the buffer status ("BS" + 2 bytes) from the end of the buffer.
