@@ -291,14 +291,29 @@ struct ISMView: View {
             cc1101 = CC1101(bleManager: bleManager)
         }
         
-        // Load current settings
+        statusMessage = "Connecting to CC1101..."
+        isLoading = true
+        
+        // Check BLE connection before proceeding
+        if !bleManager.isConnected {
+            statusMessage = "Not connected to BLE device"
+            isLoading = false
+            return
+        }
+        
+        // Load current settings with a delay to ensure BLE is ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            loadCurrentSettings()
+            self.loadCurrentSettings()
         }
     }
     
     private func loadCurrentSettings() {
-        guard let cc1101 = cc1101 else { return }
+        guard let cc1101 = cc1101 else {
+            statusMessage = "CC1101 not initialized"
+            return 
+        }
+        
+        isLoading = true
         
         // Get frequency
         let freqValue = cc1101.getFrequency()
@@ -326,6 +341,9 @@ struct ISMView: View {
         
         // Load registers
         loadRegisters()
+        
+        isLoading = false
+        statusMessage = "Settings loaded successfully"
     }
     
     private func loadRegisters() {
@@ -338,19 +356,23 @@ struct ISMView: View {
         for i in 0..<47 {
             let addr = UInt8(i)
             let value = cc1101.readReg(addr: addr)
+            print("Read config register 0x\(String(format: "%02X", addr)): 0x\(String(format: "%02X", value))")
             registerValues[String(format: "%02X", addr)] = String(format: "%02X", value)
         }
         
-        // Status registers - use burst read mode with READ_SINGLE bit set
+        // Status registers - use burst read mode with READ_BURST bit set instead of READ_SINGLE
         for i in 0..<12 {
-            let addr = UInt8(0x30 + i) | CC1101.READ_SINGLE
+            let baseAddr = UInt8(CC1101.PARTNUM) + UInt8(i)
+            let addr = baseAddr | CC1101.READ_BURST
             let value = cc1101.readReg(addr: addr)
-            registerValues[String(format: "%02X", addr & 0x7F)] = String(format: "%02X", value)
+            print("Read status register 0x\(String(format: "%02X", baseAddr)): 0x\(String(format: "%02X", value))")
+            registerValues[String(format: "%02X", baseAddr)] = String(format: "%02X", value)
         }
         
         // PA Table
         let paTable = cc1101.readBurstReg(addr: CC1101.PATABLE, len: 8)
         for i in 0..<min(8, paTable.count) {
+            print("Read PA Table PA\(i): 0x\(String(format: "%02X", paTable[i]))")
             registerValues["PA\(i)"] = String(format: "%02X", paTable[i])
         }
     }
@@ -527,7 +549,7 @@ struct RegistersView: View {
                     
                     for register in statusRegisters {
                         if let addr = UInt8(register.key, radix: 16) {
-                            let value = cc1101.readReg(addr: addr | CC1101.READ_SINGLE)
+                            let value = cc1101.readReg(addr: addr | CC1101.READ_BURST)
                             registerValues[register.key] = String(format: "%02X", value)
                         }
                     }

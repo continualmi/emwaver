@@ -484,6 +484,46 @@ class BLEManager: NSObject, ObservableObject {
     var connectedPeripheral: CBPeripheral? {
         peripheralDevice
     }
+
+    // Send a command and wait for response - matches Android implementation
+    func sendCommand(_ command: Data, timeout: Int) -> Data? {
+        guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
+            print("Cannot send command: Not connected to device")
+            return nil
+        }
+        
+        // Start timing
+        let startTime = Date().timeIntervalSince1970
+        
+        // Clear any existing data
+        clearBuffer()
+        
+        // Write the command to the characteristic
+        peripheral.writeValue(command, for: characteristic, type: .withResponse)
+        
+        // Wait for response
+        var response: Data? = nil
+        
+        while (Date().timeIntervalSince1970 - startTime) * 1000 < Double(timeout) {
+            response = getCommand()
+            if let response = response, !response.isEmpty {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.01) // 10ms sleep to prevent busy waiting
+        }
+        
+        // End timing and log results
+        let endTime = Date().timeIntervalSince1970
+        let elapsedTimeMs = (endTime - startTime) * 1000
+        print("BLE command operation took \(Int(elapsedTimeMs))ms")
+        
+        // If we timed out waiting for a response
+        if response == nil || response!.isEmpty {
+            print("Command timed out or received empty response")
+        }
+        
+        return response
+    }
 }
 
 // MARK: - CBCentralManagerDelegate
