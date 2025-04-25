@@ -22,6 +22,8 @@ struct LineChartViewController: UIViewControllerRepresentable {
         chartView.pinchZoomEnabled = true
         chartView.setScaleEnabled(true)
         chartView.drawGridBackgroundEnabled = false
+        chartView.scaleYEnabled = false // Disable Y-axis scaling
+        chartView.scaleXEnabled = true  // Enable X-axis scaling only
 
         // Add chartView as a subview and set constraints
         viewController.view.addSubview(chartView)
