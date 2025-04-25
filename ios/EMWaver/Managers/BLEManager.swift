@@ -236,6 +236,246 @@ class BLEManager: NSObject, ObservableObject {
         
         return Double(totalBytesReceived * 8) / elapsedTimeSeconds
     }
+
+    // MARK: - Native Equivalent Methods
+
+    /// Replaces the current buffer content with the provided data.
+    /// - Parameter data: The new data for the buffer.
+    func loadBuffer(data: Data) {
+        buffer = data
+        isNewCommandAvailable = !buffer.isEmpty // Indicate data is available if buffer is not empty
+        
+        // Reset stats when loading new data
+        totalBytesReceived = buffer.count 
+        firstPacketTimeMillis = Date().timeIntervalSince1970
+        lastPacketReceivedTime = firstPacketTimeMillis
+    }
+
+    /// Returns the entire content of the buffer.
+    /// - Returns: The buffer data.
+    func getBuffer() -> Data {
+        return buffer
+    }
+
+    /// Inverts all the bits in the buffer.
+    func invertBuffer() {
+        buffer = Data(buffer.map { ~$0 })
+        isNewCommandAvailable = !buffer.isEmpty // Ensure state reflects buffer content
+    }
+
+    /// Parses the buffer status ("BS" + 2 bytes) from the end of the buffer.
+    /// Removes the status message if found.
+    /// - Returns: The status number, or -1 if not found.
+    func getStatusNumber() -> Int {
+        let header = Data("BS".utf8)
+        let headerSize = header.count
+        let statusSize = 2 // 2 bytes for the status number
+        let totalSize = headerSize + statusSize
+
+        guard buffer.count >= totalSize else { return -1 }
+
+        // Check from the end of the buffer
+        for i in stride(from: buffer.count, to: totalSize - 1, by: -1) {
+            let potentialHeaderIndex = i - totalSize
+            let potentialHeader = buffer.subdata(in: potentialHeaderIndex..<(potentialHeaderIndex + headerSize))
+            
+            if potentialHeader == header {
+                let statusData = buffer.subdata(in: (potentialHeaderIndex + headerSize)..<i)
+                let status = UInt16(statusData[0]) << 8 | UInt16(statusData[1])
+                
+                // Remove the parsed status message from the buffer
+                buffer.removeSubrange((potentialHeaderIndex)..<i)
+                
+                return Int(status)
+            }
+        }
+        return -1
+    }
+
+    /// Compresses the buffer data bits for chart display using min/max sampling.
+    /// - Parameters:
+    ///   - rangeStart: The starting bit index (inclusive).
+    ///   - rangeEnd: The ending bit index (exclusive).
+    ///   - numberBins: The number of bins for compression.
+    /// - Returns: A tuple containing arrays of time values (Float) and corresponding data values (Float).
+    func compressDataBits(rangeStart: Int, rangeEnd: Int, numberBins: Int) -> ([Float], [Float]) {
+        let timePerSample: Float = 1.0 // Assuming 1 unit per bit for now
+        let totalBitsInRange = rangeEnd - rangeStart
+        var timeValues: [Float] = []
+        var dataValues: [Float] = []
+        
+        guard rangeStart < rangeEnd, numberBins > 0, !buffer.isEmpty else {
+            return ([], [])
+        }
+        
+        // Adjust range to be within buffer bounds
+        let maxBitIndex = buffer.count * 8
+        let clampedRangeStart = max(0, rangeStart)
+        let clampedRangeEnd = min(maxBitIndex, rangeEnd)
+        let clampedTotalBits = clampedRangeEnd - clampedRangeStart
+        
+        if clampedTotalBits <= 0 {
+             return ([], [])
+        }
+
+        // If the range is small enough, return raw data points
+        if clampedTotalBits <= numberBins * 2 {
+            for i in clampedRangeStart..<clampedRangeEnd {
+                let byteIndex = i / 8
+                let bitIndex = i % 8
+                // Ensure byteIndex is valid
+                guard byteIndex < buffer.count else { continue } 
+                
+                let bit = (buffer[byteIndex] >> bitIndex) & 1
+                timeValues.append(Float(i) * timePerSample)
+                dataValues.append(bit == 1 ? 255.0 : 0.0)
+            }
+        } else {
+            // Perform min/max compression
+            let binWidth = Float(clampedTotalBits) / Float(numberBins)
+            for bin in 0..<numberBins {
+                let binStartIndex = Int(Float(clampedRangeStart) + Float(bin) * binWidth)
+                let binEndIndex = min(clampedRangeEnd, Int(Float(clampedRangeStart) + Float(bin + 1) * binWidth))
+
+                if binStartIndex >= binEndIndex { continue } // Skip empty bins
+
+                var minVal: Float = 255.0
+                var maxVal: Float = 0.0
+                var foundData = false
+
+                for i in binStartIndex..<binEndIndex {
+                    let byteIndex = i / 8
+                    let bitIndex = i % 8
+                    // Ensure byteIndex is valid
+                    guard byteIndex < buffer.count else { continue }
+                    
+                    let bit = (buffer[byteIndex] >> bitIndex) & 1
+                    let value: Float = (bit == 1) ? 255.0 : 0.0
+                    minVal = min(minVal, value)
+                    maxVal = max(maxVal, value)
+                    foundData = true
+                }
+
+                if foundData {
+                    // Add min and max points for this bin
+                    timeValues.append(Float(binStartIndex) * timePerSample)
+                    dataValues.append(minVal)
+                    timeValues.append(Float(binEndIndex - 1) * timePerSample) // Use end of bin for max point
+                    dataValues.append(maxVal)
+                }
+            }
+        }
+
+        return (timeValues, dataValues)
+    }
+    
+    /// Transmits the current buffer content to the connected peripheral.
+    /// Implements flow control based on status feedback from the device.
+    func transmitBuffer() {
+        guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
+            print("Cannot transmit buffer: Not connected or characteristic not ready.")
+            return
+        }
+
+        let bufferToSend = getBuffer() // Get a copy of the buffer
+        guard !bufferToSend.isEmpty else {
+            print("Buffer is empty, nothing to transmit.")
+            return
+        }
+        
+        clearBuffer() // Clear the main buffer after copying
+
+        let totalBytesToSend = bufferToSend.count
+        let maxPacketSize = 200 // Corresponds to peripheral's capability or MTU-3
+        let minPacketSize = 128
+        let initialPacketSize = 188
+        var currentPacketSize = maxPacketSize // Start with max for initial fill
+        
+        let fixedDelayMs: UInt64 = 15 // Milliseconds, adjust based on connection interval
+        let delayNanos = fixedDelayMs * 1_000_000
+
+        // Flow control thresholds (match Android)
+        let targetBufferLevel = 2048
+        let bufferHighThreshold = 3000
+        let bufferLowThreshold = 1000
+        let initialFillBytes = 2048
+
+        print("Starting buffer transmission: \(totalBytesToSend) bytes, Fixed Delay: \(fixedDelayMs)ms")
+        print("Flow control: Decrease if buffer > \(bufferHighThreshold), Increase if buffer < \(bufferLowThreshold)")
+
+        var bytesSent = 0
+        while bytesSent < totalBytesToSend {
+            // --- Get ESP32 Buffer Status ---
+            // Note: This assumes getStatusNumber() clears the status from the *internal* buffer.
+            // In a real scenario, you might need a separate mechanism or command to query status
+            // without interfering with incoming data, or parse status from regular notifications.
+            // For now, we simulate by checking our own buffer, which might contain status replies.
+            let bufferStatus = getStatusNumber() // Check for status in received data buffer
+            
+            // For simulation/testing, if no status received, assume target level to avoid stalling
+            let effectiveBufferStatus = (bufferStatus != -1) ? bufferStatus : targetBufferLevel
+            
+            print("Buffer Status: \(effectiveBufferStatus) | Pkt Size: \(currentPacketSize)")
+
+            // --- Calculate Packet ---
+            let remainingBytes = totalBytesToSend - bytesSent
+            let packetSize = min(currentPacketSize, remainingBytes)
+            let endRange = bytesSent + packetSize
+            let packet = bufferToSend.subdata(in: bytesSent..<endRange)
+
+            // --- Send Packet ---
+            // Send without response for potentially higher throughput, but less reliability.
+            // Use .withResponse if reliability is critical.
+            peripheral.writeValue(packet, for: characteristic, type: .withoutResponse) // or .withResponse
+            
+            // --- Apply Flow Control (after initial fill) ---
+            if bytesSent >= initialFillBytes {
+                if effectiveBufferStatus > bufferHighThreshold {
+                    let newSize = max(minPacketSize, currentPacketSize - 32)
+                    if newSize != currentPacketSize { currentPacketSize = newSize }
+                } else if effectiveBufferStatus < bufferLowThreshold {
+                    let newSize = min(maxPacketSize, currentPacketSize + 32)
+                    if newSize != currentPacketSize { currentPacketSize = newSize }
+                } else {
+                     // Nudge towards initialPacketSize if close to target
+                    if currentPacketSize != initialPacketSize && abs(effectiveBufferStatus - targetBufferLevel) < 100 {
+                        if currentPacketSize < initialPacketSize {
+                            currentPacketSize = min(initialPacketSize, currentPacketSize + 16)
+                        } else if currentPacketSize > initialPacketSize {
+                            currentPacketSize = max(initialPacketSize, currentPacketSize - 16)
+                        }
+                    }
+                }
+            } else {
+                // During initial fill, keep max packet size
+                currentPacketSize = maxPacketSize
+            }
+            
+            // --- Fixed Delay ---
+            // Use Task.sleep for async delay
+            Task { try? await Task.sleep(nanoseconds: delayNanos) }
+            // OR use Thread.sleep (blocks current thread - use carefully)
+            // Thread.sleep(forTimeInterval: TimeInterval(delayNanos) / 1_000_000_000.0)
+
+
+            bytesSent = endRange
+        }
+        
+        print("BEFORE_RELOAD: Total bytes sent: \(bytesSent)")
+
+        // Optional: Add delay for in-flight notifications if needed
+         Task {
+             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms delay
+             // Clear buffer again to remove status packets received during transmission
+             self.clearBuffer()
+             print("SECOND_CLEAR: Buffer cleared again before reload")
+             
+             // Reload the original buffer content
+             self.loadBuffer(data: bufferToSend)
+             print("AFTER_RELOAD: Buffer now contains \(self.getBuffer().count) bytes")
+             print("Buffer transmission complete: \(totalBytesToSend) bytes sent")
+         }
+    }
 }
 
 // MARK: - CBCentralManagerDelegate

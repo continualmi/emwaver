@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		46C17DC72DBB801B00BA6857 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = 46C17DC62DBB801B00BA6857 /* DGCharts */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		46DC3FE82DA99FBD00423E8A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -23,7 +27,21 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		46C17DC52DBB7F0000BA6857 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		46C17DC12DBB7EFB00BA6857 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
 		46DC3FDA2DA99FB800423E8A /* EMWaver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMWaver.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DC3FE72DA99FBD00423E8A /* EMWaverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DC3FF12DA99FBD00423E8A /* EMWaverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -65,6 +83,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				46C17DC72DBB801B00BA6857 /* DGCharts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,12 +104,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		46C17DC02DBB7EFB00BA6857 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				46C17DC12DBB7EFB00BA6857 /* Charts.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		46DC3FD12DA99FB800423E8A = {
 			isa = PBXGroup;
 			children = (
 				46DC3FDC2DA99FB800423E8A /* EMWaver */,
 				46DC3FEA2DA99FBD00423E8A /* EMWaverTests */,
 				46DC3FF42DA99FBD00423E8A /* EMWaverUITests */,
+				46C17DC02DBB7EFB00BA6857 /* Frameworks */,
 				46DC3FDB2DA99FB800423E8A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -115,6 +143,7 @@
 				46DC3FD62DA99FB800423E8A /* Sources */,
 				46DC3FD72DA99FB800423E8A /* Frameworks */,
 				46DC3FD82DA99FB800423E8A /* Resources */,
+				46C17DC52DBB7F0000BA6857 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -125,6 +154,7 @@
 			);
 			name = EMWaver;
 			packageProductDependencies = (
+				46C17DC62DBB801B00BA6857 /* DGCharts */,
 			);
 			productName = EMWaver;
 			productReference = 46DC3FDA2DA99FB800423E8A /* EMWaver.app */;
@@ -208,6 +238,9 @@
 			);
 			mainGroup = 46DC3FD12DA99FB800423E8A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				46C17DBB2DBB7D4A00BA6857 /* XCRemoteSwiftPackageReference "Charts" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 46DC3FDB2DA99FB800423E8A /* Products */;
 			projectDirPath = "";
@@ -569,6 +602,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		46C17DBB2DBB7D4A00BA6857 /* XCRemoteSwiftPackageReference "Charts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/danielgindi/Charts.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		46C17DC62DBB801B00BA6857 /* DGCharts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 46C17DBB2DBB7D4A00BA6857 /* XCRemoteSwiftPackageReference "Charts" */;
+			productName = DGCharts;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46DC3FD22DA99FB800423E8A /* Project object */;
 }
