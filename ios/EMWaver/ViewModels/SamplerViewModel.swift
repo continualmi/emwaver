@@ -54,7 +54,7 @@ class SamplerViewModel: ObservableObject {
     }
     
     // Handle chart range changes similar to Android implementation
-    func handleVisibleRangeChange(low: Double, high: Double, chartView: LineChartView?) {
+    func handleVisibleRangeChange(low: Double, high: Double, chartView: LineChartView?, isGestureEnded: Bool = false) {
         guard let chartView = chartView else {
             print("Chart view ref not available yet for gesture handling")
             return
@@ -63,6 +63,17 @@ class SamplerViewModel: ObservableObject {
         let newZoomLevel = chartView.scaleX
         let visibleRangeStart = low
         let visibleRangeEnd = high
+        
+        // If this is a gesture end notification, just update our state to match current view
+        // without triggering further updates that could cause continuous zooming
+        if isGestureEnded {
+            self.visibleRangeStart = max(0, visibleRangeStart)
+            self.visibleRangeEnd = visibleRangeEnd
+            self.prevRangeStart = self.visibleRangeStart
+            self.prevRangeEnd = self.visibleRangeEnd
+            self.currentZoomLevel = newZoomLevel
+            return
+        }
         
         var needsUpdate = false
         

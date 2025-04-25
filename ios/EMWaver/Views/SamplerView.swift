@@ -27,6 +27,10 @@ struct LineChartViewController: UIViewControllerRepresentable {
         chartView.xAxis.labelPosition = .bottom
         chartView.dragEnabled = true
         chartView.pinchZoomEnabled = true
+        // Prevent continuous zoom (inertia) after gesture ends
+        chartView.dragDecelerationEnabled = false
+        // Additional settings to control gestures more tightly
+        chartView.doubleTapToZoomEnabled = false // Disable double-tap to zoom
         // chartView.setScaleEnabled(true) // Redundant if setting X/Y individually
         chartView.drawGridBackgroundEnabled = false
         chartView.scaleYEnabled = false // Disable Y-axis scaling (Match Android)
@@ -98,9 +102,15 @@ struct LineChartViewController: UIViewControllerRepresentable {
              parent.onGestureEnded?()
          }
 
-         // Add other gesture end callbacks if needed (like zoom end)
-         // func chartView(_ chartView: ChartViewBase, didEndZoomingWith gesture: UIPinchGestureRecognizer) { ... }
-
+         // Add handler for when pinch zoom gesture ends
+         func chartViewDidEndZooming(_ chartView: ChartViewBase) {
+             parent.onGestureEnded?()
+         }
+         
+         // Implement gesture end callback with UIGestureRecognizer parameter
+         func chartView(_ chartView: ChartViewBase, didEndZoomingWith gesture: UIPinchGestureRecognizer) {
+             parent.onGestureEnded?()
+         }
     }
 
     // Helper to update chart data
@@ -167,6 +177,17 @@ struct SamplerView: View {
                 // Pass chart view reference to ViewModel for gesture handling
                 viewModel.handleVisibleRangeChange(low: low, high: high, chartView: chartView)
             } onGestureEnded: {
+                // When gesture ends, update the view model with isGestureEnded = true
+                // to prevent continuous zooming
+                if let chartView = self.actualChartView {
+                    viewModel.handleVisibleRangeChange(
+                        low: chartView.lowestVisibleX,
+                        high: chartView.highestVisibleX,
+                        chartView: chartView,
+                        isGestureEnded: true
+                    )
+                }
+                
                 // Trigger final compression update after gesture stops
                 viewModel.needsCompressionUpdate.send()
             } onChartViewCreated: { chartViewInstance in
