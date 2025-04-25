@@ -178,36 +178,34 @@ class CC1101 {
     }
     
     func readBurstReg(addr: UInt8, len: Int) -> [UInt8] {
-        let command: [UInt8] = [0x3C, addr | CC1101.READ_BURST, UInt8(len)] // '<' = 0x3C
+        // Clear any pending data before sending command
+        bleManager.clearBuffer()
         
+        let command: [UInt8] = [0x3C, addr | CC1101.READ_BURST, UInt8(len)] // '<' = 0x3C
         bleManager.sendPacket(Data(command))
         
-        // Wait for response
-        var timeout = 100
-        while timeout > 0 {
-            if let response = bleManager.getCommand() {
-                return [UInt8](response)
-            }
-            usleep(10000) // 10ms delay
-            timeout -= 1
+        // Use a single, longer wait to ensure response is received
+        Thread.sleep(forTimeInterval: 0.03) // 30ms wait
+        
+        if let response = bleManager.getCommand() {
+            return [UInt8](response)
         }
         
         return []
     }
     
     func readReg(addr: UInt8) -> UInt8 {
-        let command: [UInt8] = [0x3C, addr | CC1101.READ_SINGLE, 0x01] // '<' = 0x3C
+        // Clear any pending data before sending command
+        bleManager.clearBuffer()
         
+        let command: [UInt8] = [0x3C, addr | CC1101.READ_SINGLE, 0x01] // '<' = 0x3C
         bleManager.sendPacket(Data(command))
         
-        // Wait for response
-        var timeout = 100
-        while timeout > 0 {
-            if let response = bleManager.getCommand(), !response.isEmpty {
-                return response[0]
-            }
-            usleep(10000) // 10ms delay
-            timeout -= 1
+        // Use a single, longer wait to ensure response is received
+        Thread.sleep(forTimeInterval: 0.03) // 30ms wait
+        
+        if let response = bleManager.getCommand(), !response.isEmpty {
+            return response[0]
         }
         
         return 0
