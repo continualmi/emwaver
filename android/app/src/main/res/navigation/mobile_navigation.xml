@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/mobile_navigation"
+    app:startDestination="@+id/navigation_ble">
+
+
+    <fragment
+        android:id="@+id/navigation_cc1101"
+        android:name="com.emwaver.emwaverandroidapp.ui.ism.ismFragment"
+        android:label="ISM"
+        tools:layout="@layout/fragment_ism" />
+
+    <fragment
+        android:id="@+id/navigation_buttons"
+        android:name="com.emwaver.emwaverandroidapp.ui.buttons.ButtonsFragment"
+        android:label="Buttons"
+        tools:layout="@layout/fragment_buttons" />
+
+    <fragment
+        android:id="@+id/navigation_rfid"
+        android:name="com.emwaver.emwaverandroidapp.ui.rfid.rfidFragment"
+        android:label="RFID"
+        tools:layout="@layout/fragment_rfid" />
+
+    <fragment
+        android:id="@+id/navigation_console"
+        android:name="com.emwaver.emwaverandroidapp.ui.console.ConsoleFragment"
+        android:label="Console"
+        tools:layout="@layout/fragment_console" />
+
+    <fragment
+        android:id="@+id/navigation_sampler"
+        android:name="com.emwaver.emwaverandroidapp.ui.sampler.SamplerFragment"
+        android:label="Sampler"
+        tools:layout="@layout/fragment_sampler" />
+
+    <fragment
+        android:id="@+id/navigation_ble"
+        android:name="com.emwaver.emwaverandroidapp.ui.ble.BLEFragment"
+        android:label="BLE"
+        tools:layout="@layout/fragment_ble" />
+
+    <fragment
+        android:id="@+id/navigation_template"
+        android:name="com.emwaver.emwaverandroidapp.ui.template.TemplateFragment"
+        android:label="Template"
+        tools:layout="@layout/fragment_template" />
+
+    <fragment
+        android:id="@+id/navigation_firmware_update"
+        android:name="com.emwaver.emwaverandroidapp.ui.firmware.FirmwareUpdateFragment"
+        android:label="Firmware Update"
+        tools:layout="@layout/fragment_firmware_update" />
+
+    <fragment
+        android:id="@+id/navigation_bad_usb"
+        android:name="com.emwaver.emwaverandroidapp.ui.badusb.BadUSBFragment"
+        android:label="Bad-USB"
+        tools:layout="@layout/fragment_bad_usb" />
+
+    <fragment
+        android:id="@+id/navigation_ghz24"
+        android:name="com.emwaver.emwaverandroidapp.ui.ghz24.GHz24Fragment"
+        android:label="2.4 GHz"
+        tools:layout="@layout/fragment_ghz24" />
+
+</navigation>

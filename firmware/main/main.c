@@ -1,0 +1,785 @@
+/*
+ * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: CC0-1.0
+ */
+
+#include <stdio.h>
+#include <inttypes.h>
+#include "sdkconfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "esp_chip_info.h"
+#include "esp_flash.h"
+#include "esp_system.h"
+#include "esp_log.h"
+#include "driver/gpio.h"
+#include "esp_timer.h"
+#include "esp_rom_sys.h"
+#include "driver/timer.h"
+#include "soc/timer_group_struct.h"
+#include "soc/timer_group_reg.h"
+#include "driver/spi_master.h"
+#include "nvs_flash.h"
+#include "esp_heap_caps.h"
+
+// Include CC1101 module
+#include "cc1101.h"
+
+// Include BLE server
+#include "ble_server.h"
+
+// Include MFRC522 module
+#include "mfrc522.h"
+
+// Include BadUSB module
+#include "badusb.h"
+
+// Include NRF24 module
+#include "nrf24.h"
+
+// Place MFRC522 config here so it is visible everywhere
+static mfrc522_config_t mfrc522_cfg = {
+    .host = SPI2_HOST, // Same as CC1101
+    .miso_io = 13,     // Same as CC1101
+    .mosi_io = 11,     // Same as CC1101
+    .sck_io  = 12,     // Same as CC1101
+    .sda_io  = 9,      // CS for MFRC522 is GPIO9
+    .rst_io  = 7,      // RST for MFRC522 is GPIO7
+    .spi_device = NULL
+};
+
+// Place NRF24 config here so it is visible everywhere
+static nrf24_config_t nrf24_cfg = {
+    .host = SPI2_HOST, // Same as CC1101 and MFRC522
+    .miso_io = 13,     // Same as CC1101
+    .mosi_io = 11,     // Same as CC1101
+    .sck_io  = 12,     // Same as CC1101
+    .csn_io  = 16,     // CS for NRF24 is GPIO16
+    .ce_io   = 14,     // CE for NRF24 is GPIO14
+    .irq_io  = -1,     // No IRQ pin used
+    .spi_device = NULL
+};
+
+// Define buffer size for BLE transmission
+#define BLE_RX_BUFFER_SIZE 4096
+
+static const char *TAG = "EMWaver";
+static spi_device_handle_t spi_dev_handle; // SPI device handle
+
+/* ---------- Simple-command infrastructure ---------- */
+typedef struct {
+    uint8_t  data[256];
+    uint16_t length;
+} command_t;
+
+#define CMD_QUEUE_LEN 10
+static QueueHandle_t cmd_queue = NULL;
+
+// Sampling related definitions and variables
+#define MAX_BLOCKS 64
+#define BYTES_PER_BLOCK 16
+
+// Sampler buffer definitions
+static volatile uint8_t* bufferA = NULL;
+static volatile uint8_t* bufferB = NULL;
+static volatile uint8_t* currentBuffer = NULL;
+static volatile uint8_t* transmitBuffer = NULL;
+static volatile int bufferIndex = 0;
+static volatile uint8_t bufferReady = 0;
+static uint16_t samplerPin;  // Pin to sample
+
+// Timer handles
+static esp_timer_handle_t sampler_timer;
+static uint8_t transmitter_active = 0;
+static intr_handle_t transmission_timer_isr_handle = NULL; // Handle for timer ISR
+
+// Add these semaphores
+static SemaphoreHandle_t buffer_ready_sem = NULL;
+static TaskHandle_t sampler_task_handle = NULL;
+static TaskHandle_t transmission_monitor_task_handle = NULL;
+
+// Define timeout constants for transmission monitoring
+#define TRANSMISSION_TIMEOUT_MS 2000  // 2 seconds without data will stop transmission
+#define MONITOR_CHECK_INTERVAL_MS 10 // Check every 100ms
+
+// Function declarations
+void sampler_task(void* pvParameters);
+void transmission_monitor_task(void* pvParameters);
+
+// Modified ISR for BLE transmission
+static void IRAM_ATTR transmission_isr(void* arg) {
+    static uint8_t bitIndex = 0;
+    static uint8_t currentByte = 0;
+    static uint8_t needNewByte = 1;
+
+    // Clear the interrupt
+    timer_group_clr_intr_status_in_isr(TIMER_GROUP_0, TIMER_1);
+
+    // If this is the first bit of a byte, read the next byte from the buffer
+    if (bitIndex == 0 && needNewByte) {
+        // Check BLE buffer
+        if (ble_get_rx_bytes_available() > 0) {
+            ble_read_rx_buffer(&currentByte, 1);
+            needNewByte = 0;
+        } else {
+            // No data available, set pin low and wait for next cycle
+            gpio_set_level(samplerPin, 0);
+            timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_1);
+            return;
+        }
+    }
+
+    // Set the specified pin high or low based on the current bit
+    if (currentByte & (1 << bitIndex)) {
+        gpio_set_level(samplerPin, 1);
+    } else {
+        gpio_set_level(samplerPin, 0);
+    }
+
+    // Increment bit index and check if we have processed the whole byte
+    bitIndex++;
+    if (bitIndex > 7) {
+        bitIndex = 0;    // Reset bit index back to the LSB for the next byte
+        needNewByte = 1; // Flag that we need a new byte
+    }
+
+    // Reload timer
+    timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_1);
+}
+
+// Start transmission function - BLE only
+static void start_transmission(uint8_t pin) {
+    // Configure the pin as output
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << pin),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
+    samplerPin = pin;
+    
+    // Initialize BLE for transmission mode
+    ble_set_transmitter_mode(1);
+    
+    // Set up hardware timer (Timer Group 0, Timer 1)
+    timer_config_t config = {
+        .divider = 80, // 80 MHz / 80 = 1 MHz (1 tick = 1 us)
+        .counter_dir = TIMER_COUNT_UP,
+        .counter_en = TIMER_PAUSE,
+        .alarm_en = TIMER_ALARM_EN,
+        .auto_reload = true,
+    };
+    timer_init(TIMER_GROUP_0, TIMER_1, &config);
+    timer_set_counter_value(TIMER_GROUP_0, TIMER_1, 0x00000000ULL);
+    // 10us per bit exactly matches the sampling ISR timing
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_1, 10); 
+    timer_enable_intr(TIMER_GROUP_0, TIMER_1);
+    
+    // Register timer ISR only if not already registered
+    if (transmission_timer_isr_handle == NULL) {
+        esp_err_t err = timer_isr_register(TIMER_GROUP_0, TIMER_1, transmission_isr, NULL, ESP_INTR_FLAG_IRAM, &transmission_timer_isr_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to register timer ISR: %d", err);
+            return;
+        }
+    }
+    
+    // Mark the transmitter as active
+    transmitter_active = 1;
+    
+    // Start the transmission monitor task to wait for buffer to fill 
+    // and then start the transmission timer
+    if (transmission_monitor_task_handle == NULL) {
+        xTaskCreate(transmission_monitor_task, "tx_monitor", 4096, NULL, 5, &transmission_monitor_task_handle);
+    }
+    
+    // Send a success response over BLE
+    uint8_t resp = 1;
+    ble_server_notify(&resp, 1);
+    
+    ESP_LOGI(TAG, "BLE transmission initialized on pin %d", pin);
+    ESP_LOGI(TAG, "Waiting for buffer to fill before starting transmission...");
+}
+
+// Stop transmission function
+static void stop_transmission() {
+    // Stop the timer
+    if (transmitter_active) {
+        // First pause and disable the timer interrupt
+        timer_pause(TIMER_GROUP_0, TIMER_1);
+        timer_disable_intr(TIMER_GROUP_0, TIMER_1);
+        
+        // Unregister the timer ISR if it was registered
+        if (transmission_timer_isr_handle != NULL) {
+            esp_intr_free(transmission_timer_isr_handle);
+            transmission_timer_isr_handle = NULL;
+        }
+        
+        // Set pin to low state
+        gpio_set_level(samplerPin, 0);
+        
+        // Clean up BLE buffer
+        ble_set_transmitter_mode(0);
+        
+        // Mark transmission as inactive
+        transmitter_active = 0;
+    
+        ESP_LOGI(TAG, "BLE transmission stopped");
+    }
+}
+
+// Transmission monitor task - this will monitor data flow and auto-stop transmission after timeout
+void transmission_monitor_task(void* pvParameters) {
+    uint16_t last_bytes_available = 0;
+    uint16_t current_bytes_available = 0;
+    uint32_t elapsed_time_ms = 0;
+    bool timer_started = false;
+    
+    while (transmitter_active) {
+        // Get current buffer status
+        current_bytes_available = ble_get_rx_bytes_available();
+        
+        // Check if the timer should start (buffer half full)
+        if (!timer_started && current_bytes_available >= (BLE_RX_BUFFER_SIZE / 2)) {
+            ESP_LOGI(TAG, "Buffer reached half capacity (%d bytes). Starting transmission.", current_bytes_available);
+            // Start the hardware timer to begin transmission
+            timer_start(TIMER_GROUP_0, TIMER_1);
+            timer_started = true;
+        }
+        
+        // Only check for timeout once the timer has started
+        if (timer_started) {
+            // Check if we've received any new data
+            if (current_bytes_available != last_bytes_available) {
+                // Data is flowing, reset the timer
+                elapsed_time_ms = 0;
+                last_bytes_available = current_bytes_available;
+            } else {
+                // No new data, increment the timer
+                elapsed_time_ms += MONITOR_CHECK_INTERVAL_MS;
+                
+                // Check if we've exceeded the timeout
+                if (elapsed_time_ms >= TRANSMISSION_TIMEOUT_MS) {
+                    ESP_LOGI(TAG, "Transmission timeout - no new data for %d ms", TRANSMISSION_TIMEOUT_MS);
+                    
+                    // Stop transmission
+                    stop_transmission();
+                    
+                    // Break out of the loop - task will self-delete below
+                    break;
+                }
+            }
+        } else {
+            // Timer not started yet, but update last bytes for consistency
+            last_bytes_available = current_bytes_available;
+        }
+        
+        // Wait before checking again
+        vTaskDelay(pdMS_TO_TICKS(MONITOR_CHECK_INTERVAL_MS));
+    }
+    
+    // Clear handle before deleting task
+    TaskHandle_t temp_handle = transmission_monitor_task_handle;
+    transmission_monitor_task_handle = NULL;
+    
+    // Self-delete - ensure this is the last operation
+    vTaskDelete(NULL);
+}
+
+// Hardware timer ISR for sampling
+void IRAM_ATTR sampling_isr(void* arg) {
+    // Clear the interrupt
+    timer_group_clr_intr_status_in_isr(TIMER_GROUP_0, TIMER_0);
+
+    // Sample the configurable pin
+    static uint8_t bitIndex = 0;
+    static uint8_t currentByte = 0;
+    uint8_t pin_state = gpio_get_level(samplerPin);
+
+    if (pin_state) {
+        currentByte |= (1 << bitIndex);
+    } else {
+        currentByte &= ~(1 << bitIndex);
+    }
+
+    bitIndex++;
+    if (bitIndex >= 8) {
+        currentBuffer[bufferIndex] = currentByte;
+        bufferIndex++;
+        bitIndex = 0;
+        currentByte = 0;
+
+        if (bufferIndex >= 256) {  // 256 bytes is optimal for BLE packet size
+            transmitBuffer = currentBuffer;
+            currentBuffer = (currentBuffer == bufferA) ? bufferB : bufferA;
+            bufferIndex = 0;
+            // Signal the semaphore to notify data is ready
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+            xSemaphoreGiveFromISR(buffer_ready_sem, &xHigherPriorityTaskWoken);
+            if(xHigherPriorityTaskWoken) {
+                portYIELD_FROM_ISR();
+            }
+        }
+    }
+
+    // Reload timer
+    timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_0);
+}
+
+// Start sampling function using hardware timer
+static void start_sampling(uint8_t pin) {
+    // Configure the pin as input
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << pin),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
+    samplerPin = pin;
+
+    // Set up double buffer system with 256-byte buffers (optimized for BLE packet size)
+    bufferA = (uint8_t*)malloc(256 * sizeof(uint8_t));
+    bufferB = (uint8_t*)malloc(256 * sizeof(uint8_t));
+    currentBuffer = bufferA;
+    transmitBuffer = NULL;
+    bufferIndex = 0;
+    bufferReady = 0;
+
+    // Set up hardware timer (Timer Group 0, Timer 0)
+    timer_config_t config = {
+        .divider = 80, // 80 MHz / 80 = 1 MHz (1 tick = 1 us)
+        .counter_dir = TIMER_COUNT_UP,
+        .counter_en = TIMER_PAUSE,
+        .alarm_en = TIMER_ALARM_EN,
+        .auto_reload = true,
+    };
+    timer_init(TIMER_GROUP_0, TIMER_0, &config);
+    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0x00000000ULL);
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 10); // 10 us sampling period
+    timer_enable_intr(TIMER_GROUP_0, TIMER_0);
+    timer_isr_register(TIMER_GROUP_0, TIMER_0, sampling_isr, NULL, ESP_INTR_FLAG_IRAM, NULL);
+    timer_start(TIMER_GROUP_0, TIMER_0);
+    
+    ESP_LOGI(TAG, "BLE sampling started on pin %d", pin);
+}
+
+// Stop sampling function
+static void stop_sampling() {
+    // Stop the timer first!
+    timer_pause(TIMER_GROUP_0, TIMER_0);
+    timer_disable_intr(TIMER_GROUP_0, TIMER_0);
+    
+    // Then clean up buffers
+    free((void*)bufferA);
+    free((void*)bufferB);
+    bufferA = NULL;
+    bufferB = NULL;
+    currentBuffer = NULL;
+    transmitBuffer = NULL;
+    
+    ESP_LOGI(TAG, "BLE sampling stopped");
+}
+
+/* ---------- Command-processing task ---------- */
+static void command_task(void *pvParameters)
+{
+    command_t cmd;
+    for (;;) {
+        if (xQueueReceive(cmd_queue, &cmd, portMAX_DELAY) == pdTRUE) {
+            /* --- GPIO command --- */
+            if (cmd.length >= 8 && strncmp((char *)cmd.data, "gpio", 4) == 0) {
+                uint8_t pin    = cmd.data[5];
+                uint8_t action = cmd.data[6];   // 'R' or 'W'
+                uint8_t value  = cmd.data[7];
+
+                ESP_LOGI(TAG, "GPIO cmd: pin=%d action=%c value=%d",
+                         pin, action, value);
+
+                if (action == 'R') {
+                    gpio_set_direction(pin, GPIO_MODE_INPUT);
+                    uint8_t resp = gpio_get_level(pin);
+                    // Send notification over BLE
+                    ble_server_notify(&resp, 1);
+                } else if (action == 'W') {
+                    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+                    gpio_set_level(pin, value ? 1 : 0);
+                    // Send notification over BLE
+                    ble_server_notify(&value, 1);
+                }
+            }
+            /* --- SPI register commands --- */
+            else if (cmd.length >= 2 && (cmd.data[0] == '!' || cmd.data[0] == '?' || cmd.data[0] == '%' || cmd.data[0] == '>' || cmd.data[0] == '<')) {
+                if (cmd.data[0] == '!') { // Write register: ![addr][value]
+                    cc1101_write_reg(cmd.data[1], cmd.data[2]);
+                    uint8_t reading = cc1101_read_reg(cmd.data[1]);
+                    // Send notification over BLE
+                    ble_server_notify(&reading, 1);
+                } 
+                else if (cmd.data[0] == '?') { // Read register: ?[addr]
+                    uint8_t reading = cc1101_read_reg(cmd.data[1]);
+                    // Send notification over BLE
+                    ble_server_notify(&reading, 1);
+                } 
+                else if (cmd.data[0] == '%') { // Strobe command: %[cmd]
+                    uint8_t status = cc1101_strobe(cmd.data[1]);
+                    // Send notification over BLE
+                    ble_server_notify(&status, 1);
+                } 
+                else if (cmd.data[0] == '>') { // Burst write: >[addr][len][data...]
+                    uint8_t addr = cmd.data[1];
+                    uint8_t len = cmd.data[2];
+                    uint8_t status = cc1101_write_burst_reg(addr, &cmd.data[3], len);
+                    // Send notification over BLE
+                    ble_server_notify(&status, 1);
+                } 
+                else if (cmd.data[0] == '<') { // Burst read: <[addr][len]
+                    uint8_t addr = cmd.data[1];
+                    uint8_t len = cmd.data[2];
+                    uint8_t buffer[32]; // Max 32 bytes, adjust if needed
+                    cc1101_read_burst_reg(addr, buffer, len);
+                    // Send notification over BLE
+                    ble_server_notify(buffer, len);
+                }
+            }
+            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "raw", 3) == 0) {
+                uint8_t pin = cmd.data[3];
+                ESP_LOGI(TAG, "Raw sampling command: pin=%d", pin);
+                
+                // Initialize sampling with the pin
+                buffer_ready_sem = xSemaphoreCreateBinary();
+                xTaskCreate(sampler_task, "sampler", 4096, NULL, 5, &sampler_task_handle);
+                
+                // Start sampling
+                start_sampling(pin);
+                
+                // Respond over BLE
+                uint8_t resp = 1;
+                ble_server_notify(&resp, 1);
+            }
+            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "tran", 4) == 0) {
+                uint8_t pin = cmd.data[4];
+                ESP_LOGI(TAG, "Transmission command: pin=%d", pin);
+                
+                // Start transmission on the specified pin
+                start_transmission(pin);
+                
+                // Send a success response over BLE
+                uint8_t resp = 1;
+                ble_server_notify(&resp, 1);
+            }
+            else if (cmd.length >= 1 && cmd.data[0] == 's') {
+                // Stop command - only for sampling, not transmission
+                if (sampler_task_handle != NULL) {
+                    // Signal the sampling task to stop
+                    xTaskNotify(sampler_task_handle, 1, eSetValueWithOverwrite);
+                    
+                    // Send a success response over BLE
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+            }
+            // BLE specific commands
+            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "ble?", 4) == 0) {
+                ESP_LOGI(TAG, "BLE test command received");
+                
+                // Send a success response
+                uint8_t resp[5] = {'B', 'L', 'E', 'O', 'K'};
+                ble_server_notify(resp, 5);
+            }
+            else if (cmd.length >= 7 && strncmp((char *)cmd.data, "read", 4) == 0) {
+                // Format: 'read' [blockAddr] [authMode] [6 bytes key]
+                uint8_t blockAddr = cmd.data[4];
+                uint8_t authMode = cmd.data[5];
+                uint8_t keyA[6];
+                memcpy(keyA, &cmd.data[6], 6);
+                uint8_t status;
+                uint8_t bufferATQA[2];
+                uint8_t CardUID[5];
+                uint8_t responsePacket[40];
+                uint8_t responseIndex = 0;
+                // mfrc522_init(&mfrc522_cfg); // Initialization now done in app_main
+                status = mfrc522_request(PICC_REQIDL, bufferATQA);
+                if (status != MI_OK) {
+                    const char* msg = "No card detected";
+                    ble_server_notify((const uint8_t*)msg, strlen(msg));
+                    continue;
+                }
+                responsePacket[responseIndex++] = bufferATQA[0];
+                responsePacket[responseIndex++] = bufferATQA[1];
+                status = mfrc522_anticoll(CardUID);
+                if (status != MI_OK) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Anticollision failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                for (int i = 0; i < 4; i++) {
+                    responsePacket[responseIndex++] = CardUID[i];
+                }
+                status = mfrc522_select_tag(CardUID);
+                if (status == 0) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Card selection failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                status = mfrc522_auth(authMode, blockAddr, keyA, CardUID);
+                if (status != MI_OK) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Authentication failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                uint8_t buffer[16];
+                status = mfrc522_read(blockAddr, buffer);
+                if (status == MI_OK) {
+                    responsePacket[responseIndex++] = 0x00;
+                    for (int i = 0; i < 16; i++) {
+                        responsePacket[responseIndex++] = buffer[i];
+                    }
+                } else {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Read failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    responseIndex += strlen(msg);
+                }
+                ble_server_notify(responsePacket, responseIndex);
+                mfrc522_stop_crypto1();
+            }
+            else if (cmd.length >= 20 && strncmp((char *)cmd.data, "write", 5) == 0) {
+                // Format: 'write' [blockAddr] [authMode] [6 bytes key] [16 bytes data]
+                uint8_t blockAddr = cmd.data[5];
+                uint8_t authMode = cmd.data[6];
+                uint8_t key[6];
+                memcpy(key, &cmd.data[7], 6);
+                uint8_t writeData[16];
+                memcpy(writeData, &cmd.data[13], 16);
+                uint8_t status;
+                uint8_t bufferATQA[2];
+                uint8_t CardUID[5];
+                uint8_t responsePacket[40];
+                uint8_t responseIndex = 0;
+                // mfrc522_init(&mfrc522_cfg); // Initialization now done in app_main
+                status = mfrc522_request(PICC_REQIDL, bufferATQA);
+                if (status != MI_OK) {
+                    const char* msg = "No card detected";
+                    ble_server_notify((const uint8_t*)msg, strlen(msg));
+                    continue;
+                }
+                responsePacket[responseIndex++] = bufferATQA[0];
+                responsePacket[responseIndex++] = bufferATQA[1];
+                status = mfrc522_anticoll(CardUID);
+                if (status != MI_OK) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Anticollision failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                for (int i = 0; i < 4; i++) {
+                    responsePacket[responseIndex++] = CardUID[i];
+                }
+                status = mfrc522_select_tag(CardUID);
+                if (status == 0) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Select tag failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                status = mfrc522_auth(authMode, blockAddr, key, CardUID);
+                if (status != MI_OK) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Authentication failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                status = mfrc522_write(blockAddr, writeData);
+                if (status != MI_OK) {
+                    responsePacket[responseIndex++] = 0xFF;
+                    const char* msg = "Write failed";
+                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
+                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
+                    continue;
+                }
+                mfrc522_stop_crypto1();
+                const char* msg = "Success";
+                ble_server_notify((const uint8_t*)msg, strlen(msg));
+            }
+            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
+                // Everything after "usb" is the payload
+                char* payload = (char*)&cmd.data[3];
+                size_t payload_len = cmd.length - 3;
+                // Temporarily null-terminate the payload for safety
+                char saved = payload[payload_len];
+                payload[payload_len] = '\0';
+
+                // Initialize BadUSB (if not already)
+                badusb_install();
+
+                // Immediately send the payload as keyboard input
+                badusb_send_string(payload);
+
+                // Optionally, send immediate feedback over BLE
+                uint8_t resp = 1;
+                ble_server_notify(&resp, 1);
+            }
+            else if (cmd.length >= 3 && strncmp((char *)cmd.data, "nrf", 3) == 0) {
+                // Initialize NRF24 if not already initialized
+                if (nrf24_cfg.spi_device == NULL) {
+                    esp_err_t ret = nrf24_init(&nrf24_cfg);
+                    if (ret != ESP_OK) {
+                        ESP_LOGE(TAG, "NRF24 initialization failed");
+                        continue;
+                    }
+                }
+                
+                uint32_t rate = 1000000; // 1Mbps
+                uint8_t address[5];
+                uint8_t found_addresses[20][5] = {0}; // Store up to 20 addresses
+                uint8_t found_count = 0;
+                
+                // Scan channels 0-125
+                for (uint8_t channel = 0; channel <= 125; channel++) {
+                    nrf24_init_promisc_mode(&nrf24_cfg, channel, rate);
+                    int64_t start_time = esp_timer_get_time();
+                    while ((esp_timer_get_time() - start_time) < 30000) { // 30ms per channel
+                        if (nrf24_sniff_address(&nrf24_cfg, 5, address)) {
+                            // Check for duplicates
+                            bool duplicate = false;
+                            for (int i = 0; i < found_count; i++) {
+                                if (memcmp(found_addresses[i], address, 5) == 0) {
+                                    duplicate = true;
+                                    break;
+                                }
+                            }
+                            if (!duplicate && found_count < 20) {
+                                memcpy(found_addresses[found_count], address, 5);
+                                char addr_str[16];
+                                for (int j = 0; j < 5; j++) {
+                                    sprintf(&addr_str[j*2], "%02X", address[j]);
+                                }
+                                addr_str[10] = '\0';
+                                ESP_LOGI(TAG, "%s", addr_str);
+                                found_count++;
+                            }
+                        }
+                        vTaskDelay(1);
+                    }
+                    nrf24_power_down(&nrf24_cfg);
+                }
+                ESP_LOGI(TAG, "Scan complete. Found %d unique addresses.", found_count);
+                // Deinitialize NRF24 to free up SPI resources
+                if (nrf24_cfg.spi_device != NULL) {
+                    nrf24_deinit(&nrf24_cfg);
+                }
+            }
+        }
+    }
+}
+
+// Create a sampler task
+void sampler_task(void* pvParameters) {
+    bool stop_requested = false;
+    
+    while(!stop_requested) {
+        // Check for stop notification FIRST
+        uint32_t notification = 0;
+        if (xTaskNotifyWait(0, ULONG_MAX, &notification, 0) == pdTRUE) {
+            if (notification == 1) {
+                stop_requested = true;
+                break; // Exit the loop immediately
+            }
+        }
+        
+        // Check if buffer is ready with a SHORT timeout
+        if (xSemaphoreTake(buffer_ready_sem, 0) == pdTRUE) {
+            // Transmit buffer over BLE with the notification characteristic
+            ble_server_notify((uint8_t*)transmitBuffer, 256);
+            vTaskDelay(pdMS_TO_TICKS(15)); // Add delay between packets for BLE throughput
+        } else {
+            // No buffer ready, just yield briefly
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+    }
+    
+    // Clean up when stop is requested
+    ESP_LOGI(TAG, "Stopping sampling");
+    stop_sampling();
+    vSemaphoreDelete(buffer_ready_sem);
+    buffer_ready_sem = NULL;
+    sampler_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+void app_main(void)
+{
+    // Initialize NVS first
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    // Blink GPIO1 at startup (3 times)
+    gpio_config_t io_conf1 = {
+        .pin_bit_mask = (1ULL << 1),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf1);
+    for (int i = 0; i < 3; ++i) {
+        gpio_set_level(1, 1);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        gpio_set_level(1, 0);
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << 4),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&io_conf);
+    gpio_set_level(4, 0); // Set GPIO4 low
+    
+    ESP_LOGI(TAG, "EMWaver initialized");
+
+    // Initialize SPI for register operations
+    ESP_ERROR_CHECK(cc1101_init());
+    ESP_LOGI(TAG, "SPI interface initialized");
+
+    // Initialize MFRC522 only once at startup
+    ESP_ERROR_CHECK(mfrc522_init(&mfrc522_cfg));
+    ESP_LOGI(TAG, "MFRC522 initialized");
+
+    /* ---------- RTOS resources ---------- */
+    cmd_queue = xQueueCreate(CMD_QUEUE_LEN, sizeof(command_t));
+    configASSERT(cmd_queue != NULL);
+
+    // Initialize BLE server with the command queue
+    ble_server_init(cmd_queue);
+    ESP_LOGI(TAG, "BLE server initialized");
+
+    xTaskCreate(command_task, "cmd_task", 4096, NULL, 5, NULL);
+
+    ESP_LOGI("MEM", "Free heap: %d bytes", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+
+    /* app_main task finished – hand over to the scheduler */
+    vTaskDelete(NULL);
+}

@@ -1,0 +1,65 @@
+<resources>
+    <string name="app_name">EMWaver</string>
+    <string name="nav_header_desc">Navigation header</string>
+    <string name="nav_header_title">EMWaver</string>
+    <string-array name="modulations">
+        <item>Select a modulation</item>
+        <item>ASK</item>
+        <item>FSK</item>
+    </string-array>
+    <string-array name="preambles">
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>6</item>
+        <item>8</item>
+        <item>12</item>
+        <item>16</item>
+        <item>24</item>
+    </string-array>
+    <string-array name="sync_modes">
+        <item>No preamble/sync word</item>
+        <item>15/16 bits</item>
+        <item>16/16 bits</item>
+        <item>30/32 bits</item>
+        <item>No preamble/sync + carrier sense above threshold</item>
+        <item>15/16 + carrier sense above threshold</item>
+        <item>16/16 + carrier sense above threshold</item>
+        <item>30/32 + carrier sense above threshold</item>
+    </string-array>
+    <string name="device_status">Hold the flash button on the IR Waver and connect the device.\nOnce completed, grant permission to access de STM32 BOOTLOADER device.</string>
+    <string-array name="modulation_formats">
+        <item>2-FSK</item>
+        <item>GFSK</item>
+        <item>ASK/OOK</item>
+        <item>4-FSK</item>
+        <item>MSK</item>
+    </string-array>
+    <string-array name="tx_power_levels">
+        <item>-30 dBm</item>
+        <item>-20 dBm</item>
+        <item>-15 dBm</item>
+        <item>-10 dBm</item>
+        <item>0 dBm</item>
+        <item>5 dBm</item>
+        <item>7 dBm</item>
+        <item>10 dBm</item>
+    </string-array>
+    <string-array name="pin_options">
+        <item>Pin: GPIO0</item>
+        <item>Pin: GPIO2</item>
+        <item>Pin: GPIO4</item>
+        <item>Pin: GPIO5</item>
+        <item>Pin: GPIO12</item>
+        <item>Pin: GPIO13</item>
+        <item>Pin: GPIO14</item>
+        <item>Pin: GPIO15</item>
+    </string-array>
+
+    <string-array name="auth_modes">
+        <item>Key A</item>
+        <item>Key B</item>
+    </string-array>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+</resources>

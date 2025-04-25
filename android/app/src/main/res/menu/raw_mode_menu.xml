@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_clear_buffer"
+        android:icon="@drawable/ai_discard"
+        android:title="Clear Buffer"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_load_from_storage"
+        android:title="Load from Storage"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_save_to_storage"
+        android:title="Save to Storage"
+        app:showAsAction="never" />
+</menu>

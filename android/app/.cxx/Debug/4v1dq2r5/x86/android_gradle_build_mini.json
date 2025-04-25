@@ -1,0 +1,27 @@
+{
+  "buildFiles": [
+    "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/luispl/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/luispl/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "native-lib::@6890427a1f51a3e7e1df": {
+      "artifactName": "native-lib",
+      "abi": "x86",
+      "output": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/x86/libnative-lib.so",
+      "runtimeFiles": []
+    }
+  }
+}

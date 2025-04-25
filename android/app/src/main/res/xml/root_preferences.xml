@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="Sampler Settings"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:key="refresh_time"
+            android:title="Refresh Time"
+            android:summary="Select the refresh time interval for the sampler"
+            android:defaultValue="200"
+            android:entries="@array/refresh_time_entries"
+            android:entryValues="@array/refresh_time_values"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen> 
