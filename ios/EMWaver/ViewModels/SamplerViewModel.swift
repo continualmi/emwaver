@@ -57,8 +57,6 @@ class SamplerViewModel: ObservableObject {
         // Number of bins - match Android exactly
         let numberBins = 500
         
-        print("Compressing data for range: [\(effectiveStart), \(effectiveEnd)] with \(numberBins) bins")
-        
         // Call the compression function
         let (timeValues, dataValues) = bleManager.compressDataBits(
             rangeStart: effectiveStart,
