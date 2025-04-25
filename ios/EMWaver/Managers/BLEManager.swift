@@ -308,73 +308,66 @@ class BLEManager: NSObject, ObservableObject {
     ///   - numberBins: The number of bins for compression.
     /// - Returns: A tuple containing arrays of time values (Float) and corresponding data values (Float).
     func compressDataBits(rangeStart: Int, rangeEnd: Int, numberBins: Int) -> ([Float], [Float]) {
-        let timePerSample: Float = 1.0 // Assuming 1 unit per bit for now
-        let totalBitsInRange = rangeEnd - rangeStart
+        // EXACTLY match Android implementation
+        let timePerSample: Float = 1.0
+        let totalPointsInRange = Float(rangeEnd - rangeStart) / timePerSample
         var timeValues: [Float] = []
         var dataValues: [Float] = []
         
-        guard rangeStart < rangeEnd, numberBins > 0, !buffer.isEmpty else {
+        // Empty buffer check
+        if buffer.isEmpty || rangeStart >= rangeEnd || numberBins <= 0 {
             return ([], [])
         }
         
-        // Adjust range to be within buffer bounds
-        let maxBitIndex = buffer.count * 8
-        let clampedRangeStart = max(0, rangeStart)
-        let clampedRangeEnd = min(maxBitIndex, rangeEnd)
-        let clampedTotalBits = clampedRangeEnd - clampedRangeStart
-        
-        if clampedTotalBits <= 0 {
-             return ([], [])
-        }
-
-        // If the range is small enough, return raw data points
-        if clampedTotalBits <= numberBins * 2 {
-            for i in clampedRangeStart..<clampedRangeEnd {
+        // If the range is small enough, return raw data points - EXACTLY like Android
+        if totalPointsInRange <= Float(numberBins * 2) {
+            for i in rangeStart..<rangeEnd {
                 let byteIndex = i / 8
                 let bitIndex = i % 8
-                // Ensure byteIndex is valid
-                guard byteIndex < buffer.count else { continue } 
                 
-                let bit = (buffer[byteIndex] >> bitIndex) & 1
-                timeValues.append(Float(i) * timePerSample)
-                dataValues.append(bit == 1 ? 255.0 : 0.0)
+                if byteIndex < buffer.count {
+                    let bit = (buffer[byteIndex] >> bitIndex) & 1
+                    timeValues.append(Float(i) * timePerSample)
+                    dataValues.append(bit == 1 ? 255.0 : 0.0)
+                }
             }
         } else {
-            // Perform min/max compression
-            let binWidth = Float(clampedTotalBits) / Float(numberBins)
+            // Perform min/max compression - EXACTLY like Android
+            let binWidth = totalPointsInRange / Float(numberBins)
+            
             for bin in 0..<numberBins {
-                let binStartIndex = Int(Float(clampedRangeStart) + Float(bin) * binWidth)
-                let binEndIndex = min(clampedRangeEnd, Int(Float(clampedRangeStart) + Float(bin + 1) * binWidth))
-
-                if binStartIndex >= binEndIndex { continue } // Skip empty bins
-
+                let binStart = Int(Float(rangeStart) + Float(bin) * binWidth)
+                let binEnd = min(rangeEnd, Int(Float(binStart) + binWidth))
+                
+                var foundData = false
                 var minVal: Float = 255.0
                 var maxVal: Float = 0.0
-                var foundData = false
-
-                for i in binStartIndex..<binEndIndex {
+                
+                for i in binStart..<binEnd {
                     let byteIndex = i / 8
                     let bitIndex = i % 8
-                    // Ensure byteIndex is valid
-                    guard byteIndex < buffer.count else { continue }
                     
-                    let bit = (buffer[byteIndex] >> bitIndex) & 1
-                    let value: Float = (bit == 1) ? 255.0 : 0.0
-                    minVal = min(minVal, value)
-                    maxVal = max(maxVal, value)
-                    foundData = true
+                    if byteIndex < buffer.count {
+                        let bit = (buffer[byteIndex] >> bitIndex) & 1
+                        let value: Float = bit == 1 ? 255.0 : 0.0
+                        minVal = min(minVal, value)
+                        maxVal = max(maxVal, value)
+                        foundData = true
+                    }
                 }
-
+                
                 if foundData {
-                    // Add min and max points for this bin
-                    timeValues.append(Float(binStartIndex) * timePerSample)
+                    // Add min point
+                    timeValues.append(Float(binStart) * timePerSample)
                     dataValues.append(minVal)
-                    timeValues.append(Float(binEndIndex - 1) * timePerSample) // Use end of bin for max point
+                    
+                    // Add max point
+                    timeValues.append(Float(binEnd - 1) * timePerSample)
                     dataValues.append(maxVal)
                 }
             }
         }
-
+        
         return (timeValues, dataValues)
     }
     
