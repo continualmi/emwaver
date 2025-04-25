@@ -8,6 +8,7 @@ struct BLEView: View {
     @State private var showHex = true
     @State private var showAscii = true
     @State private var serialMonitorText = "" // Local state for serial monitor
+    @State private var jsEngine: JavaScriptEngine? // Add reference to JavaScriptEngine
 
     // Timer to fetch data from BLEManager buffer
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 100ms interval like Android
@@ -223,6 +224,17 @@ struct BLEView: View {
         .onReceive(timer) { _ in // Action for the timer
             fetchAndDisplayBufferedData()
         }
+        .onAppear {
+            // Initialize the JavaScript engine when the view appears
+            if bleManager.isConnected && jsEngine == nil {
+                setupJSEngine()
+            }
+        }
+        .onChange(of: bleManager.isConnected) { connected in
+            if connected && jsEngine == nil {
+                setupJSEngine()
+            }
+        }
         .onDisappear {
             // --- Add Logging Here ---
             print("!!! BLEView disappearing.")
@@ -351,6 +363,20 @@ struct BLEView: View {
         DispatchQueue.main.async {
             self.serialMonitorText += "\(logEntry)\n"
         }
+    }
+    
+    // Setup JavaScript engine for this view
+    private func setupJSEngine() {
+        jsEngine = JavaScriptEngine(bleManager: bleManager)
+        jsEngine?.setupContext(printCallback: { message in
+            DispatchQueue.main.async {
+                self.serialMonitorText += "JS: \(message)\n"
+            }
+        })
+        
+        // Set up CC1101 if needed later
+        let cc1101 = CC1101(bleManager: bleManager)
+        jsEngine?.setupCC1101(cc1101)
     }
 }
 
