@@ -1,35 +1,15 @@
-# emwaver
-This project is currently in development. A first firmware version and Android app will be available as soon as late July 2023.
+This is the repo for the EMWaver ESP firmware. EMWaver is a board with an ESP32 S3 and a few functionalities:
 
-~The goal of this device is to emulate all functionality of the Flipper Zero Sub-1GHz block, on a build that costs less than $10 to manufacture as a consumer. It will be able to (at least):~
-- record signals and replay them at a chosen frequency;
-- easily load signals and send them (this is even easier because of running on an Android app)
-- spectrum analyzer (analyse the frequency of a remote or signal);
-- the first version of this device will only work on 433/315 MHZ bands.
+- Infrared LED and infrared receiver
+- CC1101 transceiver
+- USB-C port connected to USB in ESP32-S3
+- USB-C port connected to CH340 converter and then to Serial interface in ESP32-S3
+- GPIO breakout pins
 
-New goal: transmit-only device:
-- send signals of various modulations;
-- import signals of various modulations;
-- be able to visualize the signal well, before sending;
-- very cheap hardware;
-- 433/315 MHz bands only for first version.
+The special aspect of the EMWaver device is that the USB-C port that connects directly to the ESP interface is a male port, meant to be connected directly to a smartphone, providing power and communications. With this, it is meant to interact with an APP for smartphone, the EMWaver App. 
 
-Current efforts are to make the version 1.1 board work with light USB library. Otherwise there will need to be a new version with a MCU with more memory.
+EMWaver is meant to be a educational tool for enthusiasts. The firmware is simple yet powerful, and is meant to be customizable.
 
-Hardware versions so far:
+USB and BLE is used to communicate with the smartphone. We utilize the simplest usage of these protocols. For example, with USB we use a simple IN endpoint and OUT endpoint of the type Bulk. And for BLE we have a similar setup with characteristics.
 
-Version 1.0
-STM32F106
-![WhatsApp Image 2023-04-28 at 22 31 09](https://user-images.githubusercontent.com/81360502/235257695-dff3780b-c9fe-4727-86f2-54477f3ad85f.jpeg)
-Sub-1GHz Android phone transceiver module.
-
-Version 1.1
-STM32F042
-![WhatsApp Image 2023-05-28 at 10 22 42](https://github.com/luispl77/emwaver/assets/81360502/2244f5ef-cd49-40ab-aa30-a5b7162e2d91)
-
-
-# Help me develop this
-
-If you're interested in helping me develop the code for this device (the STM32 firmware or the Android app), contact me.
-
-My discord: luispl#9021
+This project was previously built on STM32 platform. This will be an attempt to port it.
