@@ -277,6 +277,17 @@ struct SamplerView: View {
             .padding(.horizontal)
             .padding(.vertical, 5)
 
+            // Action Buttons Row
+            HStack {
+                Button("Convert to IR") {
+                    convertToIR()
+                }
+                .buttonStyle(.bordered)
+                
+                Spacer()
+            }
+            .padding(.horizontal)
+
             // Test Pattern Buttons
             HStack {
                 Button("Load Test Pattern 1") { loadTestPattern1() }
@@ -407,16 +418,22 @@ struct SamplerView: View {
         guard !bleManager.getBuffer().isEmpty else { return }
         guard let pinNumber = getSelectedPinNumber() else { return }
 
+        // Log buffer state before transmission - match Android
+        let bufferLength = bleManager.getBuffer().count
+        print("BEFORE_RETRANSMIT: Buffer contains \(bufferLength) bytes = \(bufferLength * 8) bits")
+        
         // Send tran command exactly like Android
         let commandBytes: [UInt8] = [0x74, 0x72, 0x61, 0x6E, pinNumber] // "tran" + pin number
         let commandData = Data(commandBytes)
         
         bleManager.sendPacket(commandData)
         
-        // Call transmitBuffer after a short delay - match Android approach
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            bleManager.transmitBuffer()
-        }
+        // Call transmitBuffer immediately - Android doesn't have a delay here
+        bleManager.transmitBuffer()
+        
+        // Log buffer state after transmission
+        let postTransmitLength = bleManager.getBuffer().count
+        print("AFTER_RETRANSMIT: Buffer contains \(postTransmitLength) bytes = \(postTransmitLength * 8) bits")
     }
 
     func getSelectedPinNumber() -> UInt8? {
@@ -466,6 +483,61 @@ struct SamplerView: View {
 
     func clearBufferAndChart() {
         bleManager.clearBuffer()
+    }
+
+    // MARK: - IR Conversion
+
+    func convertToIR() {
+        guard !bleManager.getBuffer().isEmpty else {
+            print("Buffer is empty, nothing to convert")
+            return
+        }
+        
+        // Get the current buffer
+        let buffer = bleManager.getBuffer()
+        
+        // Convert the buffer to IR format
+        let irBuffer = convertToIRBuffer(buffer: buffer)
+        
+        // Load the converted buffer back
+        bleManager.loadBuffer(data: irBuffer)
+        
+        // Refresh the chart
+        refreshChart()
+        
+        print("Signal converted to precise 38kHz IR carrier")
+    }
+
+    func convertToIRBuffer(buffer: Data) -> Data {
+        var irBuffer = Data(count: buffer.count)
+        
+        // Create a 38kHz carrier pattern (100 samples at 10μs resolution = 1ms period)
+        var carrierPattern = [Bool](repeating: false, count: 100)
+        for i in 0..<100 {
+            let cyclePosition = Double(i) * 38.0 / 100.0
+            let fractionalPart = cyclePosition - floor(cyclePosition)
+            carrierPattern[i] = fractionalPart < 0.5
+        }
+        
+        var patternIndex = 0
+        for i in 0..<buffer.count {
+            let currentByte = buffer[i]
+            var newByte: UInt8 = 0
+            
+            for bit in 0..<8 {
+                let isHigh = ((currentByte >> bit) & 1) != 0
+                if isHigh {
+                    if carrierPattern[patternIndex] {
+                        newByte |= (1 << bit)
+                    }
+                    patternIndex = (patternIndex + 1) % 100
+                }
+            }
+            
+            irBuffer[i] = newByte
+        }
+        
+        return irBuffer
     }
 }
 
