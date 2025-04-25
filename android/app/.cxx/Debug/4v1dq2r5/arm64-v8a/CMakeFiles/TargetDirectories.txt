@@ -1,3 +1,3 @@
-/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a/CMakeFiles/native-lib.dir
-/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a/CMakeFiles/edit_cache.dir
-/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a/CMakeFiles/rebuild_cache.dir
+/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a/CMakeFiles/native-lib.dir
+/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a/CMakeFiles/edit_cache.dir
+/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a/CMakeFiles/rebuild_cache.dir

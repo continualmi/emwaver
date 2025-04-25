@@ -9,8 +9,55 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var selection: String? = "BLE"
+    @State private var tabSelection: String = "BLE"
     
     var body: some View {
+        TabView(selection: $tabSelection) {
+            mainNavigationView(for: "BLE")
+                .tabItem {
+                    Label("BLE", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .tag("BLE")
+            
+            mainNavigationView(for: "ISM")
+                .tabItem {
+                    Label("ISM", systemImage: "memorychip")
+                }
+                .tag("ISM")
+            
+            mainNavigationView(for: "Sampler")
+                .tabItem {
+                    Label("Sampler", systemImage: "waveform")
+                }
+                .tag("Sampler")
+            
+            mainNavigationView(for: "Console")
+                .tabItem {
+                    Label("Console", systemImage: "text.and.command.macwindow")
+                }
+                .tag("Console")
+            
+            mainNavigationView(for: "Buttons")
+                .tabItem {
+                    Label("Buttons", systemImage: "apps.iphone")
+                }
+                .tag("Buttons")
+        }
+        .onChange(of: tabSelection) { newValue in
+            selection = newValue
+        }
+        .onChange(of: selection) { newValue in
+            if let newValue = newValue {
+                // Only update tab selection if it matches one of our tabs
+                if ["BLE", "ISM", "Sampler", "Console", "Buttons"].contains(newValue) {
+                    tabSelection = newValue
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func mainNavigationView(for initialSelection: String) -> some View {
         NavigationSplitView {
             List(selection: $selection) {
                 NavigationLink(value: "BLE") {

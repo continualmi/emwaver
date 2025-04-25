@@ -2,7 +2,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/x86/libnative-lib.so"
+			"path" : "/Users/luispl/Documents/emwaver-1/android/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/x86/libnative-lib.so"
 		}
 	],
 	"backtrace" : 1,
@@ -31,7 +31,7 @@
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 43,
+				"line" : 41,
 				"parent" : 0
 			}
 		]

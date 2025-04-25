@@ -13,6 +13,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
 import android.util.Log;
+import android.view.View;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -26,6 +27,7 @@ import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.navigation.NavigationView;
 
 import java.io.File;
@@ -42,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private BLEService bleService;
     private boolean isBleServiceBound = false;
+    private NavController navController;
 
     private final ServiceConnection bleServiceConnection = new ServiceConnection() {
         @Override
@@ -78,9 +81,35 @@ public class MainActivity extends AppCompatActivity {
                 .setOpenableLayout(drawer)
                 .build();
 
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
+        navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
+        
+        // Set up Bottom Navigation
+        BottomNavigationView bottomNavigationView = binding.bottomNavView;
+        NavigationUI.setupWithNavController(bottomNavigationView, navController);
+        
+        // Only show bottom navigation items that are in the bottom navigation menu
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            navController.navigate(item.getItemId());
+            return true;
+        });
+        
+        // Update bottom navigation when destination changes
+        navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
+            int destinationId = destination.getId();
+            if (destinationId == R.id.navigation_ble || 
+                destinationId == R.id.navigation_cc1101 || 
+                destinationId == R.id.navigation_sampler || 
+                destinationId == R.id.navigation_console || 
+                destinationId == R.id.navigation_buttons) {
+                bottomNavigationView.setVisibility(View.VISIBLE);
+                bottomNavigationView.getMenu().findItem(destinationId).setChecked(true);
+            } else {
+                // Hide bottom navigation for other destinations not in the bottom nav menu
+                bottomNavigationView.setVisibility(View.GONE);
+            }
+        });
 
         // Add settings menu item click listener
         navigationView.getMenu().findItem(R.id.navigation_settings).setOnMenuItemClickListener(item -> {

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/navigation_ble"
+        android:icon="@drawable/ai_bluetooth"
+        android:title="BLE" />
+        
+    <item
+        android:id="@+id/navigation_cc1101"
+        android:icon="@drawable/chip_svgrepo_com"
+        android:title="ISM" />
+
+    <item
+        android:id="@+id/navigation_sampler"
+        android:icon="@drawable/ic_rawmode_black_24dp"
+        android:title="Sampler" />
+
+    <item
+        android:id="@+id/navigation_console"
+        android:icon="@drawable/ic_console_black_24dp"
+        android:title="Console" />
+
+    <item
+        android:id="@+id/navigation_buttons"
+        android:icon="@drawable/ic_dial_pad_black"
+        android:title="Buttons" />
+</menu> 

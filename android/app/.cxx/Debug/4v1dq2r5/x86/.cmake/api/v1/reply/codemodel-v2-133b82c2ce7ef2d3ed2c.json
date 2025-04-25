@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "native-lib::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-native-lib-Debug-66da82a4d599cdd71a9b.json",
+					"jsonFile" : "target-native-lib-Debug-b11f8c000c2ef1bc8c7f.json",
 					"name" : "native-lib",
 					"projectIndex" : 0
 				}
@@ -49,8 +49,8 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a",
-		"source" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp"
+		"build" : "/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/x86",
+		"source" : "/Users/luispl/Documents/emwaver-1/android/app/src/main/cpp"
 	},
 	"version" : 
 	{

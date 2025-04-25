@@ -1,7 +1,5 @@
 # ninja log v5
-0	771	1745508440466045377	CMakeFiles/native-lib.dir/EncodeIR.cpp.o	38fccef3c942cbcc
-1	883	1745508440579833066	CMakeFiles/native-lib.dir/IRP.cpp.o	8d7bb7e839a370da
-1	1576	1745508605609885742	CMakeFiles/native-lib.dir/native-lib.cpp.o	4e6e2f9a707dc951
-1576	1956	1745508605950216688	/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a/libnative-lib.so	bfaeb1e440309d9a
-2	2054	1745508768837739790	CMakeFiles/native-lib.dir/native-lib.cpp.o	4e6e2f9a707dc951
-2054	2423	1745508769183554230	/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a/libnative-lib.so	bfaeb1e440309d9a
+3	1714	1745594341432215305	CMakeFiles/native-lib.dir/EncodeIR.cpp.o	ce60c9cfbba71367
+5	2018	1745594341744168431	CMakeFiles/native-lib.dir/IRP.cpp.o	25618492779e2ac2
+1	2354	1745594342080013400	CMakeFiles/native-lib.dir/native-lib.cpp.o	1af84aea0242e4df
+2355	2769	1745594342432432858	/Users/luispl/Documents/emwaver-1/android/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a/libnative-lib.so	be246e109364aeed

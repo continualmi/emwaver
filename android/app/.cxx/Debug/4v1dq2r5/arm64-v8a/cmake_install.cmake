@@ -1,4 +1,4 @@
-# Install script for directory: /Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp
+# Install script for directory: /Users/luispl/Documents/emwaver-1/android/app/src/main/cpp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
