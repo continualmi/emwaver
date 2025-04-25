@@ -4,11 +4,11 @@ struct ISMView: View {
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
     
-    // RF parameter states
-    @State private var frequency: String = "433.92"
-    @State private var dataRate: String = "4800"
-    @State private var bandwidth: String = "58.0"
-    @State private var deviation: String = "20000"
+    // RF parameter states - no defaults
+    @State private var frequency: String = ""
+    @State private var dataRate: String = ""
+    @State private var bandwidth: String = ""
+    @State private var deviation: String = ""
     @State private var selectedModulation: Int = 0
     @State private var selectedPower: Int = 4 // 0 dBm default
     
