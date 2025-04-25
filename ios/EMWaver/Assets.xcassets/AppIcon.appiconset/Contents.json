@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "Apr 25, 2025, 01_57_18 PM.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -12,6 +13,7 @@
           "value" : "dark"
         }
       ],
+      "filename" : "Apr 25, 2025, 01_57_18 PM 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -23,6 +25,7 @@
           "value" : "tinted"
         }
       ],
+      "filename" : "Apr 25, 2025, 01_57_18 PM 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
