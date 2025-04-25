@@ -401,8 +401,7 @@ class BLEManager: NSObject, ObservableObject {
         let initialPacketSize = 188
         var currentPacketSize = maxPacketSize // Start with max for initial fill
         
-        let fixedDelayMs: UInt64 = 15 // Milliseconds, adjust based on connection interval
-        let delayNanos = fixedDelayMs * 1_000_000
+        let fixedDelayMs: Double = 15.0 // Milliseconds, match Android's 15ms
 
         // Flow control thresholds (match Android)
         let targetBufferLevel = 2048
@@ -416,13 +415,9 @@ class BLEManager: NSObject, ObservableObject {
         var bytesSent = 0
         while bytesSent < totalBytesToSend {
             // --- Get ESP32 Buffer Status ---
-            // Note: This assumes getStatusNumber() clears the status from the *internal* buffer.
-            // In a real scenario, you might need a separate mechanism or command to query status
-            // without interfering with incoming data, or parse status from regular notifications.
-            // For now, we simulate by checking our own buffer, which might contain status replies.
-            let bufferStatus = getStatusNumber() // Check for status in received data buffer
+            let bufferStatus = getStatusNumber() // Check for status in buffer
             
-            // For simulation/testing, if no status received, assume target level to avoid stalling
+            // For simulation/testing, if no status received, assume target level
             let effectiveBufferStatus = (bufferStatus != -1) ? bufferStatus : targetBufferLevel
             
             print("Buffer Status: \(effectiveBufferStatus) | Pkt Size: \(currentPacketSize)")
@@ -434,20 +429,21 @@ class BLEManager: NSObject, ObservableObject {
             let packet = bufferToSend.subdata(in: bytesSent..<endRange)
 
             // --- Send Packet ---
-            // Send without response for potentially higher throughput, but less reliability.
-            // Use .withResponse if reliability is critical.
-            peripheral.writeValue(packet, for: characteristic, type: .withoutResponse) // or .withResponse
+            // Use .withoutResponse to match Android's behavior
+            peripheral.writeValue(packet, for: characteristic, type: .withoutResponse)
             
             // --- Apply Flow Control (after initial fill) ---
             if bytesSent >= initialFillBytes {
                 if effectiveBufferStatus > bufferHighThreshold {
+                    // Buffer too full, slow down
                     let newSize = max(minPacketSize, currentPacketSize - 32)
                     if newSize != currentPacketSize { currentPacketSize = newSize }
                 } else if effectiveBufferStatus < bufferLowThreshold {
+                    // Buffer too empty, speed up
                     let newSize = min(maxPacketSize, currentPacketSize + 32)
                     if newSize != currentPacketSize { currentPacketSize = newSize }
                 } else {
-                     // Nudge towards initialPacketSize if close to target
+                    // In target range, nudge towards initialPacketSize if close
                     if currentPacketSize != initialPacketSize && abs(effectiveBufferStatus - targetBufferLevel) < 100 {
                         if currentPacketSize < initialPacketSize {
                             currentPacketSize = min(initialPacketSize, currentPacketSize + 16)
@@ -461,30 +457,26 @@ class BLEManager: NSObject, ObservableObject {
                 currentPacketSize = maxPacketSize
             }
             
-            // --- Fixed Delay ---
-            // Use Task.sleep for async delay
-            Task { try? await Task.sleep(nanoseconds: delayNanos) }
-            // OR use Thread.sleep (blocks current thread - use carefully)
-            // Thread.sleep(forTimeInterval: TimeInterval(delayNanos) / 1_000_000_000.0)
-
+            // --- Fixed Delay - MATCH ANDROID BEHAVIOR ---
+            // Use Thread.sleep for consistent timing (blocks thread but ensures timing precision)
+            Thread.sleep(forTimeInterval: fixedDelayMs / 1000.0)
 
             bytesSent = endRange
         }
         
         print("BEFORE_RELOAD: Total bytes sent: \(bytesSent)")
 
-        // Optional: Add delay for in-flight notifications if needed
-         Task {
-             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms delay
-             // Clear buffer again to remove status packets received during transmission
-             self.clearBuffer()
-             print("SECOND_CLEAR: Buffer cleared again before reload")
-             
-             // Reload the original buffer content
-             self.loadBuffer(data: bufferToSend)
-             print("AFTER_RELOAD: Buffer now contains \(self.getBuffer().count) bytes")
-             print("Buffer transmission complete: \(totalBytesToSend) bytes sent")
-         }
+        // Add delay for in-flight notifications (100ms - match Android exactly)
+        Thread.sleep(forTimeInterval: 0.1) // 100ms delay
+        
+        // Clear buffer again to remove status packets received during transmission
+        self.clearBuffer()
+        print("SECOND_CLEAR: Buffer cleared again before reload")
+        
+        // Reload the original buffer content
+        self.loadBuffer(data: bufferToSend)
+        print("AFTER_RELOAD: Buffer now contains \(self.getBuffer().count) bytes")
+        print("Buffer transmission complete: \(totalBytesToSend) bytes sent")
     }
 
     // MARK: - Public Accessors
