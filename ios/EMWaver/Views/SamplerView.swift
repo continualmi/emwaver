@@ -6,7 +6,7 @@ struct LineChartViewController: UIViewControllerRepresentable {
     // Data to be displayed
     var entries: [ChartDataEntry]
     // Callback to notify SamplerView about visible range changes
-    var onVisibleRangeChanged: ((Double, Double) -> Void)?
+    var onVisibleRangeChanged: ((Double, Double, LineChartView) -> Void)?
     // Add callback for when chart interaction ends (optional but good for debouncing)
     var onGestureEnded: (() -> Void)?
     // Add callback for when the underlying chart view is created
@@ -84,13 +84,13 @@ struct LineChartViewController: UIViewControllerRepresentable {
         // Called when scaling the chart (pinch zoom)
         func chartScaled(_ chartView: ChartViewBase, scaleX: CGFloat, scaleY: CGFloat) {
             guard let chartView = self.chartView else { return }
-            parent.onVisibleRangeChanged?(chartView.lowestVisibleX, chartView.highestVisibleX)
+            parent.onVisibleRangeChanged?(chartView.lowestVisibleX, chartView.highestVisibleX, chartView)
         }
 
         // Called when translating the chart (pan)
         func chartTranslated(_ chartView: ChartViewBase, dX: CGFloat, dY: CGFloat) {
              guard let chartView = self.chartView else { return }
-            parent.onVisibleRangeChanged?(chartView.lowestVisibleX, chartView.highestVisibleX)
+            parent.onVisibleRangeChanged?(chartView.lowestVisibleX, chartView.highestVisibleX, chartView)
         }
 
          // Called when a gesture ends
@@ -136,21 +136,12 @@ struct LineChartViewController: UIViewControllerRepresentable {
 // MARK: - Sampler View
 struct SamplerView: View {
     @EnvironmentObject var bleManager: BLEManager // Access the shared BLEManager
-    @State private var chartEntries: [ChartDataEntry] = []
+    @StateObject private var viewModel: SamplerViewModel // Use StateObject for the ViewModel
     @State private var selectedPinIndex: Int = 5 // Default to GPIO5 (index 5 in PINS array)
     @State private var isRecording: Bool = false // Track recording state
-    // Remove the timer for auto-refresh, use gesture/buffer updates instead
-    // @State private var timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-
-    // State to hold current visible range
-    @State private var visibleXMin: Double = 0.0
-    @State private var visibleXMax: Double = 10000.0 // Initial default max
-    @State private var needsCompressionUpdate = PassthroughSubject<Void, Never>() // Use PassthroughSubject for debouncing
-
-    // Add state mirroring Android's gesture tracking
-    @State private var currentZoomLevel: CGFloat = 1.0
-    @State private var prevRangeStart: Double = 0.0
-    @State private var prevRangeEnd: Double = 10000.0
+    
+    // Weak reference to the actual chart view for accessing scaleX and setting axisMax
+    @State private var actualChartView: LineChartView?
 
     // Match the PINS array from Android
     let PINS = [
@@ -161,24 +152,25 @@ struct SamplerView: View {
         "GPIO34", "GPIO35", "GPIO36", "GPIO37", "GPIO38", "GPIO39", "GPIO40", "GPIO41",
         "GPIO42", "GPIO43", "GPIO44", "GPIO45", "GPIO46", "GPIO47", "GPIO48"
     ]
-
-    // Number of points/bins for compression
-    let numberBins = 500 // Match Android refreshChartFromBuffer logic
-
-    // Weak reference to the actual chart view for accessing scaleX and setting axisMax
-    @State private var actualChartView: LineChartView? // Renamed state variable
+    
+    // Initialize ViewModel with BLEManager
+    init() {
+        // Note: We can't use @EnvironmentObject directly in init,
+        // so we create a temporary instance that will be replaced
+        _viewModel = StateObject(wrappedValue: SamplerViewModel(bleManager: BLEManager()))
+    }
 
     var body: some View {
         VStack {
             // Chart - Pass the callbacks
-            LineChartViewController(entries: chartEntries) { low, high in
-                // Android-style threshold checks before updating state and triggering compression
-                handleVisibleRangeChange(low: low, high: high)
+            LineChartViewController(entries: viewModel.chartEntries) { low, high, chartView in
+                // Pass chart view reference to ViewModel for gesture handling
+                viewModel.handleVisibleRangeChange(low: low, high: high, chartView: chartView)
             } onGestureEnded: {
-                 // Trigger final compression update after gesture stops
-                 self.needsCompressionUpdate.send()
+                // Trigger final compression update after gesture stops
+                viewModel.needsCompressionUpdate.send()
             } onChartViewCreated: { chartViewInstance in
-                self.actualChartView = chartViewInstance // Assign the instance here
+                self.actualChartView = chartViewInstance
             }
             .frame(height: 300)
 
@@ -235,21 +227,60 @@ struct SamplerView: View {
         }
         .navigationTitle("Sampler")
         .onAppear {
+            // Use provided BLEManager
+            viewModel.bleManager = bleManager
+            
             // Load initial chart data using the default visible range
-             updateChartWithCompression(rangeStart: visibleXMin, rangeEnd: visibleXMax)
+            viewModel.updateChartWithCompression(
+                rangeStart: viewModel.visibleRangeStart,
+                rangeEnd: viewModel.visibleRangeEnd
+            )
         }
         // Debounced reaction to range changes
-        .onReceive(needsCompressionUpdate.debounce(for: .milliseconds(100), scheduler: RunLoop.main)) { _ in
-             print("Debounced update: Compressing range \(visibleXMin) - \(visibleXMax)")
-             // Pass the current state range to the compression function
-             updateChartWithCompression(rangeStart: visibleXMin, rangeEnd: visibleXMax)
+        .onReceive(viewModel.needsCompressionUpdate.debounce(for: .milliseconds(100), scheduler: RunLoop.main)) { _ in
+            print("Debounced update: Compressing range \(viewModel.visibleRangeStart) - \(viewModel.visibleRangeEnd)")
+            // Pass the current state range to the compression function
+            viewModel.updateChartWithCompression(
+                rangeStart: viewModel.visibleRangeStart,
+                rangeEnd: viewModel.visibleRangeEnd
+            )
         }
         // Reaction to external buffer changes (e.g., new recording data, file load)
         .onChange(of: bleManager.bufferVersion) { _ in
+            // Update chart axis maximum based on full data length - do this first
+            let totalBits = bleManager.getBuffer().count * 8
+            DispatchQueue.main.async {
+                if let chartView = self.actualChartView {
+                    chartView.xAxis.axisMaximum = Double(totalBits)
+                    // Ensure min is valid if max changes
+                    if chartView.xAxis.axisMinimum >= chartView.xAxis.axisMaximum {
+                        chartView.xAxis.axisMinimum = max(0, chartView.xAxis.axisMaximum - 1000) // Ensure min < max
+                    }
+                    
+                    // Force chart to recognize the new axis maximum
+                    chartView.notifyDataSetChanged()
+                }
+            }
+            
             // Mirror Android's refreshChart: Update data, trigger compression with CURRENT visible range
-            print("Buffer changed: Triggering compression for current visible range \(visibleXMin) - \(visibleXMax)")
-            // Don't modify visibleXMin/Max here based on buffer size, just trigger recompression of the current view
-             updateChartWithCompression(rangeStart: visibleXMin, rangeEnd: visibleXMax)
+            print("Buffer changed: Triggering compression for current visible range \(viewModel.visibleRangeStart) - \(viewModel.visibleRangeEnd)")
+            // If the buffer is larger than the visible range, expand the visible range
+            if Double(totalBits) > viewModel.visibleRangeEnd {
+                // Check if user is viewing the end of the data (within 5% of the current range end)
+                let viewingRightEdge = (viewModel.visibleRangeEnd >= viewModel.prevRangeEnd * 0.95)
+                if viewingRightEdge {
+                    // Auto-expand visible range to match full data
+                    viewModel.visibleRangeEnd = Double(totalBits)
+                    viewModel.prevRangeEnd = viewModel.visibleRangeEnd
+                    print("Auto-expanded visible range to \(viewModel.visibleRangeEnd)")
+                }
+            }
+            
+            // Now trigger compression with the potentially updated range
+            viewModel.updateChartWithCompression(
+                rangeStart: viewModel.visibleRangeStart,
+                rangeEnd: viewModel.visibleRangeEnd
+            )
         }
         .toolbar {
              ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -378,158 +409,7 @@ struct SamplerView: View {
         print("Clearing buffer and chart...")
         bleManager.clearBuffer()
         // onChange(of: bleManager.buffer) will handle the chart update
-        // Explicitly clear entries if buffer becomes empty before onChange triggers
-        if bleManager.getBuffer().isEmpty {
-            self.chartEntries = []
-            // Reset visible range on clear? Optional.
-            // self.visibleXMin = 0
-            // self.visibleXMax = 10000
-        }
     }
-
-    // MARK: - Chart Update Logic (Centralized Compression)
-
-    // This function now handles all chart updates by compressing the relevant buffer range
-    func updateChartWithCompression(rangeStart: Double, rangeEnd: Double) {
-        let bufferData = bleManager.getBuffer()
-        let totalBits = bufferData.count * 8
-
-        // Update chart axis maximum based on full data length
-        DispatchQueue.main.async {
-             if let chartView = self.actualChartView {
-                 chartView.xAxis.axisMaximum = Double(totalBits)
-                 // Ensure min is valid if max changes
-                 if chartView.xAxis.axisMinimum >= chartView.xAxis.axisMaximum {
-                      chartView.xAxis.axisMinimum = max(0, chartView.xAxis.axisMaximum - 1000) // Ensure min < max
-                 }
-                 // chartView.notifyDataSetChanged() // Maybe needed if axis change requires redraw
-             } else {
-                 print("Chart ref nil during axis update")
-             }
-        }
-
-        if totalBits == 0 {
-            // Reset state when buffer clears
-            self.chartEntries = []
-            self.visibleXMin = 0
-            self.visibleXMax = 10000 // Default range
-            self.prevRangeStart = 0
-            self.prevRangeEnd = 10000
-            self.currentZoomLevel = 1.0
-            print("Updated chart with 0 data points (empty buffer).")
-            return
-        }
-
-        // Clamp the requested range to the actual data bounds [0, totalBits]
-        let clampedStart = max(0, Int(rangeStart.rounded()))
-        let clampedEnd = min(totalBits, Int(rangeEnd.rounded()))
-        // Prevent negative range if start > end after clamping/rounding
-        let effectiveStart = (clampedEnd < clampedStart) ? clampedEnd : clampedStart
-        let effectiveEnd = max(clampedStart, clampedEnd)
-
-         // Avoid compression if the range is invalid or effectively zero
-         guard effectiveEnd > effectiveStart else {
-             print("Skipping compression: Invalid or zero range [\(effectiveStart), \(effectiveEnd)] after clamping")
-             // Optionally clear chart entries if range is truly invalid?
-             // self.chartEntries = []
-             return
-         }
-
-        print("Compressing data for range: [\(effectiveStart), \(effectiveEnd)] with \(numberBins) bins")
-
-        // Call the compression function
-        let (timeValues, dataValues) = bleManager.compressDataBits(
-            rangeStart: effectiveStart,
-            rangeEnd: effectiveEnd,
-            numberBins: numberBins
-        )
-
-        var entries: [ChartDataEntry] = []
-        entries.reserveCapacity(timeValues.count)
-        for i in 0..<timeValues.count {
-            guard i < dataValues.count else { break }
-            entries.append(ChartDataEntry(x: Double(timeValues[i]), y: Double(dataValues[i])))
-        }
-
-        // Update chart entries on the main thread
-        DispatchQueue.main.async {
-            self.chartEntries = entries
-             // We do NOT modify visibleXMin/Max or prevRangeStart/End here.
-             // Only the gesture handler modifies those state variables.
-            print("Updated chart data with \(entries.count) compressed points for range [\(effectiveStart)-\(effectiveEnd)]")
-        }
-    }
-
-    // Function mirroring Android's gesture checks
-    func handleVisibleRangeChange(low: Double, high: Double) {
-         guard let chartView = actualChartView else {
-              print("Chart view ref not available yet for gesture handling")
-              return
-         }
-         let newZoomLevel = chartView.scaleX
-         let visibleRangeStart = low
-         let visibleRangeEnd = high
-
-         var needsUpdate = false
-
-         // --- Scale Check (Mirroring Android onChartScale) ---
-         // Use a small epsilon to prevent updates from floating point inaccuracies
-         if abs(newZoomLevel - currentZoomLevel) >= max(0.01, (currentZoomLevel / 10.0)) {
-             print("Significant Zoom Detected: Old=\(currentZoomLevel), New=\(newZoomLevel)")
-             currentZoomLevel = newZoomLevel
-             // Update state *immediately* to reflect the gesture's effect
-             self.visibleXMin = max(0, visibleRangeStart)
-             self.visibleXMax = visibleRangeEnd
-             // Update prev range as well, as zoom changes the boundaries
-             self.prevRangeStart = self.visibleXMin
-             self.prevRangeEnd = self.visibleXMax
-             needsUpdate = true
-         }
-
-         // --- Translate Check (Mirroring Android onChartTranslate) ---
-         let span = visibleRangeEnd - visibleRangeStart
-         // Avoid threshold checks if span is too small or invalid
-         if span > 10 { // Added guard similar to Android comment
-             // Use a small epsilon or minimum threshold
-             let translationThreshold = max(1.0, span / 100.0) // 1% threshold or min 1.0
-
-             // Check absolute difference from previously recorded range start/end
-             if abs(visibleRangeStart - prevRangeStart) > translationThreshold || abs(visibleRangeEnd - prevRangeEnd) > translationThreshold {
-                 print("Significant Pan Detected: Old=[\(prevRangeStart)-\(prevRangeEnd)], New=[\(visibleRangeStart)-\(visibleRangeEnd)]")
-                 // Update state *immediately*
-                 self.visibleXMin = max(0, visibleRangeStart)
-                 self.visibleXMax = visibleRangeEnd
-                 // Update prev range to the new position
-                 self.prevRangeStart = self.visibleXMin
-                 self.prevRangeEnd = self.visibleXMax
-                 needsUpdate = true
-             }
-         }
-
-         // If significant change detected by either zoom or pan
-         if needsUpdate {
-             // Send event to trigger debounced compression
-             self.needsCompressionUpdate.send()
-         }
-    }
-
-    // Converts Data (bytes) into ChartDataEntry array (bits) - Keep for reference or potential future use
-    /*
-    func dataToChartEntries(data: Data) -> [ChartDataEntry] {
-        var entries: [ChartDataEntry] = []
-        entries.reserveCapacity(data.count * 8)
-
-        for (byteIndex, byte) in data.enumerated() {
-            for bitIndex in 0..<8 {
-                let bit = (byte >> bitIndex) & 1
-                let xValue = Double(byteIndex * 8 + bitIndex)
-                let yValue = Double(bit * 255) // Plot 0 or 255
-                entries.append(ChartDataEntry(x: xValue, y: yValue))
-            }
-        }
-        return entries
-    }
-    */
 }
 
 struct SamplerView_Previews: PreviewProvider {
