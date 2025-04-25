@@ -193,130 +193,127 @@ struct SamplerView: View {
     }
 
     var body: some View {
-        VStack {
-            // Chart view
-            LineChartViewController(entries: chartEntries,
-                                   onChartScale: { scaleX, scaleY in
-                // EXACTLY match Android scale handling
-                if let chartView = self.chartView {
-                    let visibleRangeStart = chartView.lowestVisibleX
-                    let visibleRangeEnd = chartView.highestVisibleX
-                    
-                    viewModel.setVisibleRangeStart(visibleRangeStart)
-                    viewModel.setVisibleRangeEnd(visibleRangeEnd)
-                    
-                    // Update chart with compressed data
-                    updateChartWithCompression(
-                        visibleRangeStart: visibleRangeStart,
-                        visibleRangeEnd: visibleRangeEnd
-                    )
-                }
-            }, onChartTranslate: { dX, dY in
-                // EXACTLY match Android translation handling
-                if let chartView = self.chartView {
-                    let visibleRangeStart = chartView.lowestVisibleX
-                    let visibleRangeEnd = chartView.highestVisibleX
-                    
-                    viewModel.setVisibleRangeStart(visibleRangeStart)
-                    viewModel.setVisibleRangeEnd(visibleRangeEnd)
-                    
-                    // Update chart with compressed data
-                    updateChartWithCompression(
-                        visibleRangeStart: visibleRangeStart,
-                        visibleRangeEnd: visibleRangeEnd
-                    )
-                }
-            }, onChartCreated: { chartView in
-                // Store the chart view and initialize it
-                self.chartView = chartView
-                
-                // Configure initial chart settings
-                chartView.xAxis.axisMinimum = self.chartMinX
-                chartView.xAxis.axisMaximum = self.chartMaxX
-                
-                // Initial refresh
-                self.refreshChart()
-            })
-            .frame(height: 300)
-
-            // Controls HStack
-            HStack {
-                // GPIO Pin Picker
-                Picker("GPIO Pin", selection: $selectedPinIndex) {
-                    ForEach(0..<PINS.count, id: \.self) { index in
-                        Text(PINS[index]).tag(index)
+        ScrollView {
+            VStack(spacing: 0) {
+                // Connection status bar (like ISMView)
+                HStack {
+                    Circle()
+                        .fill(bleManager.isConnected ? Color.green : Color.red)
+                        .frame(width: 10, height: 10)
+                    Text(bleManager.isConnected ? "Connected" : "Not Connected")
+                        .font(.subheadline)
+                    Spacer()
+                    Button(bleManager.isConnected ? "Disconnect" : "Connect") {
+                        if bleManager.isConnected {
+                            bleManager.disconnect()
+                        } else {
+                            bleManager.startScan()
+                        }
                     }
+                    .buttonStyle(.bordered)
                 }
-                .pickerStyle(.menu)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .padding(.horizontal)
+                .padding(.top, 8)
 
-                Spacer()
+                // Chart card
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Signal Chart")
+                        .font(.headline)
+                        .padding(.leading)
+                        .padding(.top, 8)
+                    LineChartViewController(entries: chartEntries,
+                                           onChartScale: { scaleX, scaleY in
+                        if let chartView = self.chartView {
+                            let visibleRangeStart = chartView.lowestVisibleX
+                            let visibleRangeEnd = chartView.highestVisibleX
+                            viewModel.setVisibleRangeStart(visibleRangeStart)
+                            viewModel.setVisibleRangeEnd(visibleRangeEnd)
+                            updateChartWithCompression(
+                                visibleRangeStart: visibleRangeStart,
+                                visibleRangeEnd: visibleRangeEnd
+                            )
+                        }
+                    }, onChartTranslate: { dX, dY in
+                        if let chartView = self.chartView {
+                            let visibleRangeStart = chartView.lowestVisibleX
+                            let visibleRangeEnd = chartView.highestVisibleX
+                            viewModel.setVisibleRangeStart(visibleRangeStart)
+                            viewModel.setVisibleRangeEnd(visibleRangeEnd)
+                            updateChartWithCompression(
+                                visibleRangeStart: visibleRangeStart,
+                                visibleRangeEnd: visibleRangeEnd
+                            )
+                        }
+                    }, onChartCreated: { chartView in
+                        self.chartView = chartView
+                        chartView.xAxis.axisMinimum = self.chartMinX
+                        chartView.xAxis.axisMaximum = self.chartMaxX
+                        self.refreshChart()
+                    })
+                    .frame(height: 300)
+                    .padding([.horizontal, .bottom])
+                }
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding([.horizontal, .top])
 
-                // Record/Stop Button
-                Button {
-                    if isRecording {
-                        stopRecording()
-                    } else {
-                        startRecording()
+                // Controls card
+                VStack(alignment: .leading, spacing: 15) {
+                    Text("Signal Controls")
+                        .font(.headline)
+                        .padding(.top, 8)
+                    HStack {
+                        Picker("GPIO Pin", selection: $selectedPinIndex) {
+                            ForEach(0..<PINS.count, id: \.self) { index in
+                                Text(PINS[index]).tag(index)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        Spacer()
+                        Button {
+                            if isRecording {
+                                stopRecording()
+                            } else {
+                                startRecording()
+                            }
+                        } label: {
+                            Text(isRecording ? "Stop" : "Record")
+                                .padding(.horizontal)
+                                .background(isRecording ? Color.red : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(5)
+                        }
+                        .frame(minWidth: 80)
+                        Button("Retransmit") {
+                            retransmitSignal()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(bleManager.getBuffer().isEmpty)
                     }
-                } label: {
-                    Text(isRecording ? "Stop" : "Record")
-                        .padding(.horizontal)
-                        .background(isRecording ? Color.red : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(5)
+                    Button("Convert to IR") {
+                        convertToIR()
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .frame(minWidth: 80)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding([.horizontal, .top])
 
-                // Retransmit Button
-                Button("Retransmit") {
-                    retransmitSignal()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(bleManager.getBuffer().isEmpty)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 5)
-
-            // Action Buttons Row
-            HStack {
-                Button("Convert to IR") {
-                    convertToIR()
-                }
-                .buttonStyle(.bordered)
-                
                 Spacer()
             }
-            .padding(.horizontal)
-
-            // Test Pattern Buttons
-            HStack {
-                Button("Load Test Pattern 1") { loadTestPattern1() }
-                    .buttonStyle(.bordered)
-                Button("Load Test Pattern 2") { loadTestPattern2() }
-                    .buttonStyle(.bordered)
-                Spacer()
-            }
-            .padding(.horizontal)
-
-            Spacer()
         }
         .navigationTitle("Sampler")
         .onAppear {
-            // Connect ViewModel to BLEManager
             viewModel.bleManager = bleManager
-            
-            // Initial refresh
             refreshChart()
-            
-            // Setup timer to periodically refresh chart - MATCH ANDROID
-            // Use DispatchQueue instead of Timer for better control
             let refreshQueue = DispatchQueue(label: "com.emwaver.chartRefresh", qos: .userInteractive)
             refreshQueue.async {
                 while true {
-                    // Refresh at 100ms intervals (10Hz) to match Android
                     Thread.sleep(forTimeInterval: 0.1)
-                    
-                    // Dispatch refresh to main thread
                     DispatchQueue.main.async { [self] in
                         refreshChart()
                     }
@@ -324,7 +321,6 @@ struct SamplerView: View {
             }
         }
         .onChange(of: bleManager.bufferVersion) { _ in
-            // Buffer changed - refresh chart
             refreshChart()
         }
         .toolbar {
@@ -447,44 +443,6 @@ struct SamplerView: View {
         return nil
     }
 
-    // MARK: - Test Pattern Loading
-    
-    // EXACTLY MATCH ANDROID patterns
-    func generatePattern1(totalBytes: Int) -> Data {
-        var testSignal = Data(capacity: totalBytes)
-        for i in 0..<totalBytes {
-            testSignal.append((i % 2 == 0) ? 0xFF : 0x00)
-        }
-        return testSignal
-    }
-
-    func generatePattern2(totalBytes: Int) -> Data {
-        var testSignal = Data(capacity: totalBytes)
-        for i in 0..<totalBytes {
-            let positionInBlock = i % 256
-            if positionInBlock == 0 || positionInBlock == 255 {
-                testSignal.append(0xFF)
-            } else {
-                testSignal.append(0x00)
-            }
-        }
-        return testSignal
-    }
-
-    func loadTestPattern1() {
-        let testData = generatePattern1(totalBytes: 4096) // Match Android 4096 bytes
-        bleManager.loadBuffer(data: testData)
-    }
-
-    func loadTestPattern2() {
-        let testData = generatePattern2(totalBytes: 4096) // Match Android 4096 bytes
-        bleManager.loadBuffer(data: testData)
-    }
-
-    func clearBufferAndChart() {
-        bleManager.clearBuffer()
-    }
-
     // MARK: - IR Conversion
 
     func convertToIR() {
@@ -538,6 +496,10 @@ struct SamplerView: View {
         }
         
         return irBuffer
+    }
+
+    func clearBufferAndChart() {
+        bleManager.clearBuffer()
     }
 }
 

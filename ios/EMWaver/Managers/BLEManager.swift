@@ -125,6 +125,8 @@ class BLEManager: NSObject, ObservableObject {
     
     private var buffer = Data()
     private var isNewCommandAvailable = false
+    // Add a serial queue for thread-safe buffer access
+    private let bufferQueue = DispatchQueue(label: "com.emwaver.bufferQueue")
     
     // Connection retry properties
     private var connectionRetryCount = 0
@@ -205,21 +207,27 @@ class BLEManager: NSObject, ObservableObject {
     
     // MARK: - Buffer Operations
     func clearBuffer() {
-        buffer.removeAll()
-        isNewCommandAvailable = false
+        bufferQueue.sync {
+            buffer.removeAll()
+        }
+        // Update UI-affecting state on main thread 
         DispatchQueue.main.async {
+            self.isNewCommandAvailable = false
             self.bufferVersion += 1
         }
     }
     
     func storeBulkPkt(_ data: Data) {
-        buffer.append(data)
-        isNewCommandAvailable = true
+        bufferQueue.sync {
+            buffer.append(data)
+        }
+        // This flag affects UI state indirectly, so set it in a main thread context along with bufferVersion
         DispatchQueue.main.async {
+            self.isNewCommandAvailable = true
             self.bufferVersion += 1
         }
         
-        // Update statistics
+        // Update statistics - these are just internal tracking variables, fine on background thread
         let currentTime = Date().timeIntervalSince1970
         lastPacketReceivedTime = currentTime
         
@@ -229,17 +237,26 @@ class BLEManager: NSObject, ObservableObject {
         
         totalBytesReceived += data.count
         
-        // LOG: Print buffer contents and flag after storing
-        print("storeBulkPkt: buffer now has \(buffer.count) bytes, isNewCommandAvailable=\(isNewCommandAvailable)")
-        print("storeBulkPkt: buffer contents: \(buffer.map { String(format: "%02X", $0) }.joined(separator: " "))")
+        // LOG comments kept for reference, prints already commented out
+        // print("storeBulkPkt: buffer now has \(buffer.count) bytes, isNewCommandAvailable=\(isNewCommandAvailable)")
+        // print("storeBulkPkt: buffer contents: \(buffer.map { String(format: "%02X", $0) }.joined(separator: " "))")
     }
     
     func getCommand() -> Data? {
-        guard isNewCommandAvailable else { return nil }
+        var result: Data?
+        bufferQueue.sync {
+            guard isNewCommandAvailable else { return }
+            
+            result = buffer
+            buffer.removeAll()
+        }
         
-        let result = buffer
-        buffer.removeAll()
-        isNewCommandAvailable = false
+        if result != nil {
+            DispatchQueue.main.async {
+                self.isNewCommandAvailable = false
+            }
+        }
+        
         return result
     }
     
@@ -263,14 +280,17 @@ class BLEManager: NSObject, ObservableObject {
     /// Replaces the current buffer content with the provided data.
     /// - Parameter data: The new data for the buffer.
     func loadBuffer(data: Data) {
-        buffer = data
-        isNewCommandAvailable = !buffer.isEmpty // Indicate data is available if buffer is not empty
+        bufferQueue.sync {
+            buffer = data
+        }
+        // Update UI-affecting state on main thread
         DispatchQueue.main.async {
+            self.isNewCommandAvailable = !data.isEmpty // Use data parameter instead of buffer
             self.bufferVersion += 1
         }
         
         // Reset stats when loading new data
-        totalBytesReceived = buffer.count 
+        totalBytesReceived = data.count 
         firstPacketTimeMillis = Date().timeIntervalSince1970
         lastPacketReceivedTime = firstPacketTimeMillis
     }
@@ -278,14 +298,23 @@ class BLEManager: NSObject, ObservableObject {
     /// Returns the entire content of the buffer.
     /// - Returns: The buffer data.
     func getBuffer() -> Data {
-        return buffer
+        var bufferCopy = Data()
+        bufferQueue.sync {
+            bufferCopy = buffer
+        }
+        return bufferCopy
     }
 
     /// Inverts all the bits in the buffer.
     func invertBuffer() {
-        buffer = Data(buffer.map { ~$0 })
-        isNewCommandAvailable = !buffer.isEmpty // Ensure state reflects buffer content
+        var isEmpty = false
+        bufferQueue.sync {
+            buffer = Data(buffer.map { ~$0 })
+            isEmpty = buffer.isEmpty
+        }
+        // Update UI-affecting state on main thread
         DispatchQueue.main.async {
+            self.isNewCommandAvailable = !isEmpty
             self.bufferVersion += 1
         }
     }
@@ -328,14 +357,18 @@ class BLEManager: NSObject, ObservableObject {
     func compressDataBits(rangeStart: Int, rangeEnd: Int, numberBins: Int) -> ([Float], [Float]) {
         // EXACTLY match Android implementation
         let timePerSample: Float = 1.0
-        let totalPointsInRange = Float(rangeEnd - rangeStart) / timePerSample
         var timeValues: [Float] = []
         var dataValues: [Float] = []
         
+        // Get a thread-safe copy of the buffer
+        let bufferCopy = bufferQueue.sync { return buffer }
+        
         // Empty buffer check
-        if buffer.isEmpty || rangeStart >= rangeEnd || numberBins <= 0 {
+        if bufferCopy.isEmpty || rangeStart >= rangeEnd || numberBins <= 0 {
             return ([], [])
         }
+        
+        let totalPointsInRange = Float(rangeEnd - rangeStart) / timePerSample
         
         // IMPROVED: Enhanced handling of zoomed-in views - show raw points at higher zoom levels
         // Original condition: totalPointsInRange <= Float(numberBins * 2)
@@ -343,16 +376,14 @@ class BLEManager: NSObject, ObservableObject {
         let isZoomedIn = totalPointsInRange <= 3000
         let shouldShowRawPoints = isZoomedIn || totalPointsInRange <= Float(numberBins * 2)
         
-        print("Range size: \(totalPointsInRange) points, Zoomed in: \(isZoomedIn), Showing raw: \(shouldShowRawPoints)")
-        
         if shouldShowRawPoints {
             // When zoomed in enough, show individual samples
             for i in rangeStart..<rangeEnd {
                 let byteIndex = i / 8
                 let bitIndex = i % 8
                 
-                if byteIndex < buffer.count {
-                    let bit = (buffer[byteIndex] >> bitIndex) & 1
+                if byteIndex < bufferCopy.count {
+                    let bit = (bufferCopy[byteIndex] >> bitIndex) & 1
                     timeValues.append(Float(i) * timePerSample)
                     dataValues.append(bit == 1 ? 255.0 : 0.0)
                 }
@@ -373,8 +404,8 @@ class BLEManager: NSObject, ObservableObject {
                     let byteIndex = i / 8
                     let bitIndex = i % 8
                     
-                    if byteIndex < buffer.count {
-                        let bit = (buffer[byteIndex] >> bitIndex) & 1
+                    if byteIndex < bufferCopy.count {
+                        let bit = (bufferCopy[byteIndex] >> bitIndex) & 1
                         let value: Float = bit == 1 ? 255.0 : 0.0
                         minVal = min(minVal, value)
                         maxVal = max(maxVal, value)
@@ -547,22 +578,27 @@ class BLEManager: NSObject, ObservableObject {
 // MARK: - CBCentralManagerDelegate
 extension BLEManager: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        switch central.state {
-        case .poweredOn:
-            print("Bluetooth is powered on")
-        case .poweredOff:
-            print("Bluetooth is powered off")
-            isConnected = false
-        case .resetting:
-            print("Bluetooth is resetting")
-        case .unauthorized:
-            print("Bluetooth is unauthorized")
-        case .unsupported:
-            print("Bluetooth is not supported")
-        case .unknown:
-            print("Bluetooth state is unknown")
-        @unknown default:
-            print("Bluetooth state is unknown (new state)")
+        // Process state change on background thread but dispatch UI updates to main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            switch central.state {
+            case .poweredOn:
+                print("Bluetooth is powered on")
+            case .poweredOff:
+                print("Bluetooth is powered off")
+                self.isConnected = false
+            case .resetting:
+                print("Bluetooth is resetting")
+            case .unauthorized:
+                print("Bluetooth is unauthorized")
+            case .unsupported:
+                print("Bluetooth is not supported")
+            case .unknown:
+                print("Bluetooth state is unknown")
+            @unknown default:
+                print("Bluetooth state is unknown (new state)")
+            }
         }
     }
     
