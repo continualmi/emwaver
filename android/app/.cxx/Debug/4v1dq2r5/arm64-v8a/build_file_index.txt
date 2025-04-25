@@ -1,1 +1,1 @@
-/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/CMakeLists.txt
+/Users/luispl/Documents/emwaver-1/android/app/src/main/cpp/CMakeLists.txt

@@ -42,7 +42,7 @@ rule CUSTOM_COMMAND
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = /Users/luispl/Library/Android/sdk/cmake/3.22.1/bin/cmake --regenerate-during-build -S/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp -B/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a
+  command = /Users/luispl/Library/Android/sdk/cmake/3.22.1/bin/cmake --regenerate-during-build -S/Users/luispl/Documents/emwaver-1/android/app/src/main/cpp -B/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a
   description = Re-running CMake...
   generator = 1
 

@@ -11,7 +11,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "arm64-v8a"
+			"value" : "x86"
 		},
 		{
 			"name" : "ANDROID_NDK",
@@ -63,7 +63,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "arm64-v8a"
+			"value" : "x86"
 		},
 		{
 			"name" : "CMAKE_ANDROID_NDK",
@@ -151,7 +151,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a"
+			"value" : "/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/x86"
 		},
 		{
 			"name" : "CMAKE_CACHE_MAJOR_VERSION",
@@ -715,7 +715,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp"
+			"value" : "/Users/luispl/Documents/emwaver-1/android/app/src/main/cpp"
 		},
 		{
 			"name" : "CMAKE_INSTALL_PREFIX",
@@ -751,7 +751,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a"
+			"value" : "/Users/luispl/Documents/emwaver-1/android/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/x86"
 		},
 		{
 			"name" : "CMAKE_LINKER",
@@ -1023,7 +1023,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a"
+			"value" : "/Users/luispl/Documents/emwaver-1/android/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/x86"
 		},
 		{
 			"name" : "CMAKE_SHARED_LINKER_FLAGS",
@@ -1307,7 +1307,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a"
+			"value" : "/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/x86"
 		},
 		{
 			"name" : "Project_IS_TOP_LEVEL",
@@ -1331,7 +1331,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp"
+			"value" : "/Users/luispl/Documents/emwaver-1/android/app/src/main/cpp"
 		},
 		{
 			"name" : "android-log",
@@ -1343,7 +1343,7 @@
 				}
 			],
 			"type" : "FILEPATH",
-			"value" : "/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/aarch64-linux-android/24/liblog.so"
+			"value" : "/Users/luispl/Library/Android/sdk/ndk/25.1.8937393/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/lib/i686-linux-android/24/liblog.so"
 		}
 	],
 	"kind" : "cache",

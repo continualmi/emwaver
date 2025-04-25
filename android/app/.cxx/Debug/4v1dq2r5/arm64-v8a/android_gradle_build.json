@@ -1,19 +1,19 @@
 {
   "buildFiles": [
-    "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/src/main/cpp/CMakeLists.txt"
+    "/Users/luispl/Documents/emwaver-1/android/app/src/main/cpp/CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
     [
       "/Users/luispl/Library/Android/sdk/cmake/3.22.1/bin/ninja",
       "-C",
-      "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a",
+      "/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a",
       "clean"
     ]
   ],
   "buildTargetsCommandComponents": [
     "/Users/luispl/Library/Android/sdk/cmake/3.22.1/bin/ninja",
     "-C",
-    "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/.cxx/Debug/4v1dq2r5/arm64-v8a",
+    "/Users/luispl/Documents/emwaver-1/android/app/.cxx/Debug/4v1dq2r5/arm64-v8a",
     "{LIST_OF_TARGETS_TO_BUILD}"
   ],
   "libraries": {
@@ -21,7 +21,7 @@
       "toolchain": "toolchain",
       "abi": "arm64-v8a",
       "artifactName": "native-lib",
-      "output": "/Users/luispl/AndroidStudioProjects/emwaver-androidapp-esp/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a/libnative-lib.so",
+      "output": "/Users/luispl/Documents/emwaver-1/android/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a/libnative-lib.so",
       "runtimeFiles": []
     }
   },
