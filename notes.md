@@ -43,3 +43,15 @@
 
 * Look into maybe increasing throughput from 100kbps to 200kbps just to get better resolution on recordings of 5us instead of 10us between samples. Not strictly needed as seen on IR transmission and so on, but something with some value to have
 
+
+
+
+esptool.py --chip esp32s3 merge_bin \
+  -o emwaver-v1.bin \
+  --flash_mode dio --flash_freq 40m --flash_size 4MB \
+  0x0     build/bootloader/bootloader.bin \
+  0x8000  build/partition_table/partition-table.bin \
+  0x10000 build/emwaveresp.bin
+
+
+  
