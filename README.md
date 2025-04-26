@@ -13,3 +13,5 @@ EMWaver is meant to be a educational tool for enthusiasts. The firmware is simpl
 USB and BLE is used to communicate with the smartphone. We utilize the simplest usage of these protocols. For example, with USB we use a simple IN endpoint and OUT endpoint of the type Bulk. And for BLE we have a similar setup with characteristics.
 
 This project was previously built on STM32 platform. This will be an attempt to port it.
+
+
