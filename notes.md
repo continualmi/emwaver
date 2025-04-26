@@ -13,7 +13,9 @@
 
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
 
-* Write firmware update code for OTA in ESP32
+* ~~Write firmware update code for OTA in ESP32~~
+
+* Build website with MKDocs and add ESP Web Tools to it
 
 * Further write Template Fragment
 
