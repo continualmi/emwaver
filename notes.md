@@ -1,6 +1,7 @@
 # Some tasks left to do
 
-* The Android implementation of Buttons requires this MakeHex which is in C++. For iOS, we might not be able to do this native-C++ trick to import it. Let's rewrite the whole thing instead in Java and then Swift.
+* ~~The Android implementation of Buttons requires this MakeHex which is in C++. For iOS, we might not be able to do this native-C++ trick to import it. Let's rewrite the whole thing instead in Java and then Swift.~~
+* The Android implementation of Buttons now uses a Java rewrite of MakeHex. For iOS, we still need to implement the equivalent logic in Swift, since native C++ import is not feasible.
 
 * ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 
