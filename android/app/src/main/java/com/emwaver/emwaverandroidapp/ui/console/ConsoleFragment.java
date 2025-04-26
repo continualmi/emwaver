@@ -45,6 +45,7 @@ import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
+import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -94,6 +95,7 @@ public class ConsoleFragment extends Fragment {
     private boolean hasUnsavedChanges = false;
 
     private Utils utils;
+    private IrEncoderWrapper irEncoderWrapper;
 
     private File getScriptsDir() {
         File dir = new File(getContext().getFilesDir(), SCRIPTS_DIR);
@@ -239,6 +241,7 @@ public class ConsoleFragment extends Fragment {
         setupAutoSave();
 
         utils = new Utils();
+        irEncoderWrapper = new IrEncoderWrapper();
         utils.setContext(requireContext());
 
         return root;
@@ -250,7 +253,7 @@ public class ConsoleFragment extends Fragment {
         new Thread(() -> {
             try {
                 String jsCode = binding.jsCodeInput.getText().toString();
-                ScriptsEngine scriptsEngine = new ScriptsEngine(cc, utils, bleService, this::print);
+                ScriptsEngine scriptsEngine = new ScriptsEngine(cc, utils, bleService, irEncoderWrapper, this::print);
                 String result = scriptsEngine.executeJavaScript(jsCode);
                 if(result != null){
                     print(result);

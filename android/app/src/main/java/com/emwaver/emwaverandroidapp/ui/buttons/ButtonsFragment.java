@@ -41,6 +41,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
+import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
 import com.emwaver.emwaverandroidapp.ui.console.ScriptsEngine;
 import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
 
@@ -89,6 +90,7 @@ public class ButtonsFragment extends Fragment {
     private BLEService bleService;
     private CC1101 cc1101;
     private boolean isServiceBound = false;
+    private IrEncoderWrapper irEncoderWrapper;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -137,8 +139,9 @@ public class ButtonsFragment extends Fragment {
         );
 
         Utils utils = new Utils();
+        irEncoderWrapper = new IrEncoderWrapper();
 
-        scriptsEngine = new ScriptsEngine(cc1101, utils, bleService, this::printToConsole);
+        scriptsEngine = new ScriptsEngine(cc1101, utils, bleService, irEncoderWrapper, this::printToConsole);
     }
 
     @Override
@@ -762,21 +765,38 @@ public class ButtonsFragment extends Fragment {
     }
 
     private String createScriptForButton(String protocol, int device, int subdevice, int function) {
+        // Clean, simplified script with proper ArrayList handling
         StringBuilder script = new StringBuilder();
-        script.append("var timings = Utils.encodeIR('").append(protocol).append("', ")
+        script.append("// Script for " + protocol + " IR signal\n");
+        script.append("try {\n");
+        script.append("    var timings = IrEncoder.encodeIR('").append(protocol).append("', ")
               .append(device).append(", ").append(subdevice).append(", ").append(function).append(");\n");
-        script.append("if (timings) {\n");
-        script.append("    Utils.logArray('IR Timings', timings);\n");
-        script.append("    var signal = Utils.convertTimingsToBinary(timings);\n");
-        script.append("    BLEService.loadBuffer(signal);\n");
-        script.append("    var irSignal = Utils.convertToIRBuffer(signal);\n");
-        script.append("    BLEService.loadBuffer(irSignal);\n");
-        script.append("    var commandBytes = [116, 114, 97, 110, 4];\n");
-        script.append("    BLEService.write(commandBytes);\n");
-        script.append("    BLEService.transmitBuffer();\n");
-        script.append("    Utils.log('Transmitted signal');\n");
-        script.append("} else {\n");
-        script.append("    Utils.logError('Error encoding IR signal');\n");
+        
+        script.append("    if (timings && timings.size() > 0) {\n");
+        script.append("        var arraySize = timings.size();\n");
+        script.append("        var floatArray = java.lang.reflect.Array.newInstance(java.lang.Float.TYPE, arraySize);\n");
+        
+        script.append("        for (var i = 0; i < arraySize; i++) {\n");
+        script.append("            floatArray[i] = timings.get(i);\n");
+        script.append("        }\n");
+        
+        script.append("        var signal = Utils.convertTimingsToBinary(floatArray);\n");
+        script.append("        var irSignal = Utils.convertToIRBuffer(signal);\n");
+        
+        script.append("        if (irSignal && irSignal.length > 0) {\n");
+        script.append("            BLEService.loadBuffer(irSignal);\n");
+        script.append("            var commandBytes = [0x74, 0x72, 0x61, 0x6E, 0x04]; // \"tran\" + type 4 (IR)\n");
+        script.append("            BLEService.write(commandBytes);\n");
+        script.append("            var status = BLEService.transmitBuffer();\n");
+        script.append("            Utils.log('Successfully transmitted " + protocol + " IR signal');\n");
+        script.append("        } else {\n");
+        script.append("            print('Error: Failed to convert timings to IR buffer');\n");
+        script.append("        }\n");
+        script.append("    } else {\n");
+        script.append("        print('Error: Failed to encode " + protocol + " signal');\n");
+        script.append("    }\n");
+        script.append("} catch (e) {\n");
+        script.append("    print('Script Error: ' + e.message);\n");
         script.append("}\n");
 
         return script.toString();
@@ -920,7 +940,8 @@ public class ButtonsFragment extends Fragment {
             CC1101 cc1101 = new CC1101(bleService);
             Utils utils = new Utils();
             utils.setContext(requireContext());
-            scriptsEngine = new ScriptsEngine(cc1101, utils, bleService, this::printToConsole);
+            irEncoderWrapper = new IrEncoderWrapper();
+            scriptsEngine = new ScriptsEngine(cc1101, utils, bleService, irEncoderWrapper, this::printToConsole);
         }
     }
 
