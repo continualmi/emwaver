@@ -1,3 +1,32 @@
-site_name: My Docs
+site_name: EMWaver
 theme:
   name: material
+  features:
+    - navigation.tabs
+  logo: logo.png
+  favicon: logo.png
+  toc:
+    permalink: false
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+extra:
+  toc:
+    sidebar: false
+nav:
+  - Home: index.md
+  - Technical Implementation: technical_implementation.md
+  - Software Update: firmware.md
+  - Buy EMWaver: buy.md
+extra_css:
+  - styles/hide-toc.css

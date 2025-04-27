@@ -1,4 +1,12 @@
-# Flash EMWaver Firmware
+# EMWaver Firmware
+
+This page will provide an overview of the EMWaver firmware, its architecture, main modules, and how to update or flash the firmware.
+
+- Firmware architecture and main modules
+- BLE/USB communication overview
+- How to update/flash firmware (browser-based and manual)
+
+## Flash EMWaver Firmware
 
 You can flash the latest EMWaver firmware to your device directly from your browser using the button below. This works best in Chrome or Edge on desktop, and requires a USB connection to your EMWaver device.
 
@@ -17,4 +25,6 @@ esptool.py --chip esp32s3 write_flash 0x0 emwaver-v1.bin
 ```
 
 - [Download merged firmware](firmware/emwaver-v1.bin)
-- [View manifest.json](firmware/manifest.json) 
+- [View manifest.json](firmware/manifest.json)
+
+More details coming soon. 
