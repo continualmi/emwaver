@@ -1,19 +1,16 @@
-# Welcome to MkDocs
+# Master **Hardware**, **Firmware**, **Software**.
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+<div style="display: flex; align-items: center; gap: 2em; margin-bottom: 2em;">
+  <img src="pcb.png" alt="EMWaver Logo" style="width: 180px; max-width: 30vw; height: auto; border-radius: 12px;">
+  <div>
+    <h2>Welcome to EMWaver!</h2>
+    <p>Your all-in-one platform for wireless experimentation, device control, and embedded development.</p>
+    <p>
+      Explore the tabs above to learn more, get 
+      <a href="technical_implementation.md" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">technical details</a>,
+      <a href="firmware.md" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">update your device</a>, or
+      <a href="buy.md" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">buy EMWaver</a>.
+    </p>
+  </div>
+</div>
 
-## Commands
-
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
-
-## Project layout
-
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
-
-- [Flash Firmware](firmware.md)
