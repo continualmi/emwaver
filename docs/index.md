@@ -7,9 +7,9 @@
     <p>Your all-in-one platform for wireless experimentation, device control, and embedded development.</p>
     <p>
       Explore the tabs above to learn more, get 
-      <a href="technical_implementation.md" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">technical details</a>,
-      <a href="firmware.md" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">update your device</a>, or
-      <a href="buy.md" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">buy EMWaver</a>.
+      <a href="technical_implementation/" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">technical details</a>,
+      <a href="firmware/" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">update your device</a>, or
+      <a href="buy/" style="color: #3f51b5; font-weight: bold; text-decoration: underline;">buy EMWaver</a>.
     </p>
   </div>
 </div>
