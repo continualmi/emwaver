@@ -1,7 +1,3 @@
----
-hide:
-  - toc
----
 # Technical Implementation
 
 EMWaver is an open-source hardware platform and companion software suite for wireless experimentation, signal analysis, and device control. It features an ESP32-S3-based board with sub-GHz (CC1101), infrared, USB-C, and GPIO expansion, plus powerful mobile apps for iOS and Android.
