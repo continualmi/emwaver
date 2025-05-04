@@ -67,10 +67,11 @@ public class ismFragment extends Fragment {
             cc1101 = new CC1101(bleService);
             Log.i("service binding", "onServiceConnected");
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (bleService.checkConnection()) {
+                if (isServiceBound && bleService != null && bleService.checkConnection()) {
                     loadRegisters();
-                    loadRFParameters(); // This should call loadCC1101Registers()
+                    loadRFParameters(); // This calls loadCC1101Registers internally
                 } else {
+                    showDisconnectedState();
                     showToast("Please connect to the BLE device first");
                 }
             }, 500); // 0.5 second delay
@@ -97,7 +98,7 @@ public class ismFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        // Show progress wheels and hide content containers
+        // Initially show progress wheels and hide content
         binding.registersProgressBar.setVisibility(View.VISIBLE);
         binding.registersContainer.setVisibility(View.GONE);
         binding.rfParametersProgressBar.setVisibility(View.VISIBLE);
@@ -228,7 +229,13 @@ public class ismFragment extends Fragment {
     }
 
     private void loadRFParameters() {
-        if (isServiceBound && cc1101 != null) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection() || cc1101 == null) {
+            Log.e("ismFragment", "Not connected or CC1101 not initialized when trying to load RF parameters.");
+            showDisconnectedState();
+            return;
+        }
+
+        try {
             // Frequency
             double frequency = cc1101.getFrequency();
             binding.frequencyTextView.setText(String.format(Locale.US, "%.6f", frequency));
@@ -261,8 +268,10 @@ public class ismFragment extends Fragment {
             // After loading all parameters, hide progress bar and show content
             binding.rfParametersProgressBar.setVisibility(View.GONE);
             binding.rfParametersContainer.setVisibility(View.VISIBLE);
-        } else {
-            Log.e("ismFragment", "USB Service not bound or CC1101 not initialized");
+        } catch (Exception e) {
+            Log.e("ismFragment", "Error loading RF parameters", e);
+            showToast("Error loading RF parameters. Check connection.");
+            showDisconnectedState();
         }
     }
 
@@ -286,73 +295,85 @@ public class ismFragment extends Fragment {
 
     private void loadCC1101Registers() {
         if (binding == null) {
-            Log.e("ismFragment", "Binding is null");
+            Log.e("ismFragment", "Binding is null in loadCC1101Registers");
+            return;
+        }
+        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+            Log.e("ismFragment", "Not connected or CC1101 not initialized when trying to load CC1101 registers.");
             return;
         }
 
-        List<String> registers = Arrays.asList(
-                "IOCFG2", "IOCFG1", "IOCFG0", "FIFOTHR", "SYNC1", "SYNC0", "PKTLEN", "PKTCTRL1", "PKTCTRL0",
-                "ADDR", "CHANNR", "FSCTRL1", "FSCTRL0", "FREQ2", "FREQ1", "FREQ0", "MDMCFG4", "MDMCFG3",
-                "MDMCFG2", "MDMCFG1", "MDMCFG0", "DEVIATN", "MCSM2", "MCSM1", "MCSM0", "FOCCFG", "BSCFG",
-                "AGCTRL2", "AGCTRL1", "AGCTRL0", "WOREVT1", "WOREVT0", "WORCTRL", "FREND1", "FREND0",
-                "FSCAL3", "FSCAL2", "FSCAL1", "FSCAL0", "RCCTRL1", "RCCTRL0", "FSTEST", "PTEST", "AGCTEST",
-                "TEST2", "TEST1", "TEST0"
-        );
+        try {
+            List<String> registers = Arrays.asList(
+                    "IOCFG2", "IOCFG1", "IOCFG0", "FIFOTHR", "SYNC1", "SYNC0", "PKTLEN", "PKTCTRL1", "PKTCTRL0",
+                    "ADDR", "CHANNR", "FSCTRL1", "FSCTRL0", "FREQ2", "FREQ1", "FREQ0", "MDMCFG4", "MDMCFG3",
+                    "MDMCFG2", "MDMCFG1", "MDMCFG0", "DEVIATN", "MCSM2", "MCSM1", "MCSM0", "FOCCFG", "BSCFG",
+                    "AGCTRL2", "AGCTRL1", "AGCTRL0", "WOREVT1", "WOREVT0", "WORCTRL", "FREND1", "FREND0",
+                    "FSCAL3", "FSCAL2", "FSCAL1", "FSCAL0", "RCCTRL1", "RCCTRL0", "FSTEST", "PTEST", "AGCTEST",
+                    "TEST2", "TEST1", "TEST0"
+            );
 
-        for (int i = 0; i < registers.size(); i++) {
-            String register = registers.get(i);
-            TextView textView = registerTextViews.get(register);
-            if (textView != null) {
-                byte value = cc1101.readReg((byte) i);
-                String hexValue = String.format("%02X", value);
-                textView.setText(hexValue);
-                Log.d("ismFragment", "Setting " + register + " to " + hexValue);
-            } else {
-                Log.e("ismFragment", "TextView not found for " + register);
+            for (int i = 0; i < registers.size(); i++) {
+                String register = registers.get(i);
+                TextView textView = registerTextViews.get(register);
+                if (textView != null) {
+                    byte value = cc1101.readReg((byte) i);
+                    String hexValue = String.format("%02X", value);
+                    textView.setText(hexValue);
+                    Log.d("ismFragment", "Setting " + register + " to " + hexValue);
+                } else {
+                    Log.e("ismFragment", "TextView not found for " + register);
+                }
             }
-        }
 
+            // Handle status registers separately
+            List<String> statusRegisters = Arrays.asList(
+                    "PARTNUM", "VERSION", "FREQEST", "LQI", "RSSI", "MARCSTATE",
+                    "WORTIME1", "WORTIME0", "PKTSTATUS", "VCO_VC_DAC", "TXBYTES", "RXBYTES"
+            );
 
-
-        // Handle status registers separately
-        List<String> statusRegisters = Arrays.asList(
-                "PARTNUM", "VERSION", "FREQEST", "LQI", "RSSI", "MARCSTATE",
-                "WORTIME1", "WORTIME0", "PKTSTATUS", "VCO_VC_DAC", "TXBYTES", "RXBYTES"
-        );
-
-        for (int i = 0; i < statusRegisters.size(); i++) {
-            String register = statusRegisters.get(i);
-            TextView textView = registerTextViews.get(register);
-            if (textView != null) {
-                byte value = cc1101.readReg((byte) (CC1101.PARTNUM + i | CC1101.READ_BURST));
-                String hexValue = String.format("%02X", value);
-                textView.setText(hexValue);
-                Log.d("ismFragment", "Setting status register " + register + " to " + hexValue);
-            } else {
-                Log.e("ismFragment", "TextView not found for status register " + register);
+            for (int i = 0; i < statusRegisters.size(); i++) {
+                String register = statusRegisters.get(i);
+                TextView textView = registerTextViews.get(register);
+                if (textView != null) {
+                    byte value = cc1101.readReg((byte) (CC1101.PARTNUM + i | CC1101.READ_BURST));
+                    String hexValue = String.format("%02X", value);
+                    textView.setText(hexValue);
+                    Log.d("ismFragment", "Setting status register " + register + " to " + hexValue);
+                } else {
+                    Log.e("ismFragment", "TextView not found for status register " + register);
+                }
             }
-        }
 
-        // Handle PA_TABLE separately as it requires burst read
-        byte[] paTableValues = cc1101.readBurstReg(CC1101.PATABLE, 8);
-        for (int i = 0; i < 8; i++) {
-            String register = "PA_TABLE" + i;
-            TextView textView = registerTextViews.get(register);
-            if (textView != null) {
-                String hexValue = String.format("%02X", paTableValues[i]);
-                textView.setText(hexValue);
-                Log.d("ismFragment", "Setting " + register + " to " + hexValue);
-            } else {
-                Log.e("ismFragment", "TextView not found for " + register);
+            // Handle PA_TABLE separately as it requires burst read
+            byte[] paTableValues = cc1101.readBurstReg(CC1101.PATABLE, 8);
+            for (int i = 0; i < 8; i++) {
+                String register = "PA_TABLE" + i;
+                TextView textView = registerTextViews.get(register);
+                if (textView != null) {
+                    String hexValue = String.format("%02X", paTableValues[i]);
+                    textView.setText(hexValue);
+                    Log.d("ismFragment", "Setting " + register + " to " + hexValue);
+                } else {
+                    Log.e("ismFragment", "TextView not found for " + register);
+                }
             }
+        } catch (Exception e) {
+            Log.e("ismFragment", "Error reading CC1101 registers", e);
+            showToast("Error reading registers. Check connection.");
         }
-
-
     }
 
     private void loadRegisters() {
         if (binding == null) {
             Log.e("ismFragment", "Binding is null");
+            return;
+        }
+
+        // Check connection status before proceeding
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+            Log.e("ismFragment", "Not connected when trying to load registers UI.");
+            showDisconnectedState();
             return;
         }
 
@@ -391,6 +412,10 @@ public class ismFragment extends Fragment {
             registerValueTextView.setClickable(true);
             registerValueTextView.setBackground(getResources().getDrawable(android.R.drawable.list_selector_background));
             registerValueTextView.setOnClickListener(v -> showEditDialog(register, registerValueTextView.getText().toString(), newValue -> {
+                if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+                    showToast("Not connected. Cannot write register.");
+                    return;
+                }
                 try {
                     byte value = (byte) Integer.parseInt(newValue, 16);
                     cc1101.writeReg((byte) registers.indexOf(register), value);
@@ -445,6 +470,10 @@ public class ismFragment extends Fragment {
             registerValueTextView.setClickable(true);
             registerValueTextView.setBackground(getResources().getDrawable(android.R.drawable.list_selector_background));
             registerValueTextView.setOnClickListener(v -> showEditDialog(register, registerValueTextView.getText().toString(), newValue -> {
+                if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+                    showToast("Not connected. Cannot write register.");
+                    return;
+                }
                 try {
                     byte value = (byte) Integer.parseInt(newValue, 16);
                     cc1101.writeReg((byte) (registers.size() + statusRegisters.indexOf(register)), value);
@@ -496,9 +525,13 @@ public class ismFragment extends Fragment {
             registerValueTextView.setClickable(true);
             registerValueTextView.setBackground(getResources().getDrawable(android.R.drawable.list_selector_background));
             registerValueTextView.setOnClickListener(v -> showEditDialog(register, registerValueTextView.getText().toString(), newValue -> {
+                if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+                    showToast("Not connected. Cannot write register.");
+                    return;
+                }
                 try {
                     byte value = (byte) Integer.parseInt(newValue, 16);
-                    cc1101.writeReg((byte) (registers.size() + statusRegisters.size() + index), value);
+                    cc1101.writeReg((byte) (CC1101.PATABLE + index), value);
                     registerValueTextView.setText(newValue);
                 } catch (NumberFormatException e) {
                     showToast("Invalid hexadecimal value");
@@ -537,10 +570,30 @@ public class ismFragment extends Fragment {
     }
 
     private void setupClickListeners() {
-        binding.frequencyTextView.setOnClickListener(v -> showEditDialog("Frequency", binding.frequencyTextView.getText().toString(), this::updateFrequency));
-        binding.dataRateTextView.setOnClickListener(v -> showEditDialog("Data Rate", binding.dataRateTextView.getText().toString(), this::updateDataRate));
-        binding.bandwidthTextView.setOnClickListener(v -> showEditDialog("Bandwidth", binding.bandwidthTextView.getText().toString(), this::updateBandwidth));
-        binding.deviationTextView.setOnClickListener(v -> showEditDialog("Deviation", binding.deviationTextView.getText().toString(), this::updateDeviation));
+        binding.frequencyTextView.setOnClickListener(v -> {
+            if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+                showToast("Not connected"); return;
+            }
+            showEditDialog("Frequency", binding.frequencyTextView.getText().toString(), this::updateFrequency);
+        });
+        binding.dataRateTextView.setOnClickListener(v -> {
+             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+                 showToast("Not connected"); return;
+             }
+            showEditDialog("Data Rate", binding.dataRateTextView.getText().toString(), this::updateDataRate);
+        });
+        binding.bandwidthTextView.setOnClickListener(v -> {
+             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+                 showToast("Not connected"); return;
+             }
+            showEditDialog("Bandwidth", binding.bandwidthTextView.getText().toString(), this::updateBandwidth);
+        });
+        binding.deviationTextView.setOnClickListener(v -> {
+             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+                 showToast("Not connected"); return;
+             }
+            showEditDialog("Deviation", binding.deviationTextView.getText().toString(), this::updateDeviation);
+        });
     }
 
     private void showEditDialog(String title, String currentValue, Consumer<String> updateFunction) {
@@ -591,6 +644,10 @@ public class ismFragment extends Fragment {
 
     private void updateFrequency(String newValue) {
         Log.d("updateFrequency", "update freq");
+        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+            showToast("Not connected");
+            return;
+        }
         try {
             double frequency = Double.parseDouble(newValue);
             if (cc1101.setFrequencyMHz(frequency)) {
@@ -604,6 +661,10 @@ public class ismFragment extends Fragment {
     }
 
     private void updateDataRate(String newValue) {
+        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+            showToast("Not connected");
+            return;
+        }
         try {
             int dataRate = Integer.parseInt(newValue);
             if (cc1101.setDataRate(dataRate)) {
@@ -617,6 +678,10 @@ public class ismFragment extends Fragment {
     }
 
     private void updateBandwidth(String newValue) {
+        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+            showToast("Not connected");
+            return;
+        }
         try {
             double bandwidth = Double.parseDouble(newValue);
             if (cc1101.setBandwidth(bandwidth)) {
@@ -630,6 +695,10 @@ public class ismFragment extends Fragment {
     }
 
     private void updateDeviation(String newValue) {
+        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+            showToast("Not connected");
+            return;
+        }
         try {
             int deviation = Integer.parseInt(newValue);
             if (cc1101.setDeviation(deviation)) {
@@ -649,7 +718,11 @@ public class ismFragment extends Fragment {
     }
 
     private void showToast(String message) {
-        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
+        if (getContext() != null) {
+            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
+        } else {
+            Log.w("ismFragment", "Context not available for Toast: " + message);
+        }
     }
 
     @Override
@@ -668,5 +741,15 @@ public class ismFragment extends Fragment {
     public void onPause() {
         super.onPause();
         Utils.updateActionBarStatus(this, "");
+    }
+
+    private void showDisconnectedState() {
+        if (binding != null) {
+            binding.registersProgressBar.setVisibility(View.GONE);
+            binding.registersContainer.setVisibility(View.GONE);
+            binding.rfParametersProgressBar.setVisibility(View.GONE);
+            binding.rfParametersContainer.setVisibility(View.GONE);
+        }
+        Log.d("ismFragment", "UI updated to disconnected state.");
     }
 }
