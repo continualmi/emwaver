@@ -106,36 +106,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/getTimingsButton" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/pattern1Button"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="8dp"
-        android:text="Pattern 1: FF/00 Blocks"
-        app:iconGravity="start"
-        app:iconTint="@android:color/white"
-        app:iconTintMode="src_in"
-        app:layout_constraintEnd_toStartOf="@+id/pattern2Button"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/invertSignalButton" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/pattern2Button"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp"
-        android:text="Pattern 2: FF Boundaries"
-        app:iconGravity="start"
-        app:iconTint="@android:color/white"
-        app:iconTintMode="src_in"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toEndOf="@+id/pattern1Button"
-        app:layout_constraintTop_toBottomOf="@+id/invertSignalButton" />
-
     <ScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -146,7 +116,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/getTimingsButton">
+        app:layout_constraintTop_toBottomOf="@+id/invertSignalButton">
 
         <TextView
             android:id="@+id/timingsEditText"

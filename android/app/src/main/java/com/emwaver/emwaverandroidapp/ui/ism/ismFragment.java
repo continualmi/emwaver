@@ -57,7 +57,6 @@ public class ismFragment extends Fragment {
     private boolean isServiceBound = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Map<String, TextView> registerTextViews = new HashMap<>();
-    private TextView bleStatusText;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -67,7 +66,6 @@ public class ismFragment extends Fragment {
             isServiceBound = true;
             cc1101 = new CC1101(bleService);
             Log.i("service binding", "onServiceConnected");
-            updateConnectionStatus();
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (bleService.checkConnection()) {
                     loadRegisters();
@@ -104,80 +102,11 @@ public class ismFragment extends Fragment {
         binding.registersContainer.setVisibility(View.GONE);
         binding.rfParametersProgressBar.setVisibility(View.VISIBLE);
         binding.rfParametersContainer.setVisibility(View.GONE);
-
-        // Add a BLE connect button to the layout
-        setupBleButton();
         
         // Set up spinners
         setupSpinners();
 
         setupClickListeners();
-    }
-
-    private void setupBleButton() {
-        // Add a button at the top to connect BLE
-        bleStatusText = new TextView(requireContext());
-        bleStatusText.setText("BLE Status: Not Connected");
-        bleStatusText.setId(View.generateViewId());
-        
-        ConstraintLayout.LayoutParams textParams = new ConstraintLayout.LayoutParams(
-                ConstraintLayout.LayoutParams.WRAP_CONTENT,
-                ConstraintLayout.LayoutParams.WRAP_CONTENT
-        );
-        bleStatusText.setLayoutParams(textParams);
-        
-        // Create connect button
-        Button bleConnectButton = new Button(requireContext());
-        bleConnectButton.setText("Connect BLE");
-        bleConnectButton.setId(View.generateViewId());
-        
-        ConstraintLayout.LayoutParams buttonParams = new ConstraintLayout.LayoutParams(
-                ConstraintLayout.LayoutParams.WRAP_CONTENT,
-                ConstraintLayout.LayoutParams.WRAP_CONTENT
-        );
-        bleConnectButton.setLayoutParams(buttonParams);
-        
-        // Set click listener for the connect button
-        bleConnectButton.setOnClickListener(v -> {
-            if (isServiceBound && bleService != null) {
-                bleService.startScan();
-                bleStatusText.setText("BLE Status: Scanning...");
-                showToast("Scanning for EMWaver BLE device...");
-            } else {
-                showToast("BLE Service not bound");
-            }
-        });
-        
-        // Get the root view which is a ConstraintLayout
-        ConstraintLayout rootLayout = (ConstraintLayout) binding.getRoot();
-        
-        rootLayout.addView(bleStatusText);
-        rootLayout.addView(bleConnectButton);
-        
-        ConstraintSet constraintSet = new ConstraintSet();
-        constraintSet.clone(rootLayout);
-        
-        // Position status text
-        constraintSet.connect(bleStatusText.getId(), ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 16);
-        constraintSet.connect(bleStatusText.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START, 16);
-        
-        // Position connect button to the right of the status text
-        constraintSet.connect(bleConnectButton.getId(), ConstraintSet.TOP, bleStatusText.getId(), ConstraintSet.TOP);
-        constraintSet.connect(bleConnectButton.getId(), ConstraintSet.BOTTOM, bleStatusText.getId(), ConstraintSet.BOTTOM);
-        constraintSet.connect(bleConnectButton.getId(), ConstraintSet.START, bleStatusText.getId(), ConstraintSet.END, 16);
-        
-        constraintSet.applyTo(rootLayout);
-    }
-
-    private void updateConnectionStatus() {
-        if (bleStatusText != null) {
-            if (isServiceBound && bleService != null) {
-                boolean connected = bleService.checkConnection();
-                bleStatusText.setText("BLE Status: " + (connected ? "Connected" : "Not Connected"));
-            } else {
-                bleStatusText.setText("BLE Status: Service Not Bound");
-            }
-        }
     }
 
     private class ModulationAdapter extends ArrayAdapter<String> {
@@ -732,7 +661,6 @@ public class ismFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        updateConnectionStatus();
         Utils.updateActionBarStatus(this, "");
     }
 
