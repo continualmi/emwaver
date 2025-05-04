@@ -84,6 +84,7 @@ public class BLEService extends Service {
     private boolean isReconnecting = false;
     private int serviceDiscoveryRetryCount = 0;
     private static final int MAX_SERVICE_DISCOVERY_RETRIES = 3;
+    private boolean isScanningInProgress = false;
     
     private final IBinder binder = new LocalBinder();
     private Handler handler = new Handler(Looper.getMainLooper());
@@ -630,6 +631,12 @@ public class BLEService extends Service {
 
     // Start scanning for BLE devices
     public void startScan() {
+        // Check if a scan is already in progress
+        if (isScanningInProgress) {
+            Log.d(TAG, "Scan already in progress, ignoring new scan request");
+            return;
+        }
+
         if (!hasRequiredPermissions()) {
             showToast("Missing required Bluetooth permissions");
             Log.e(TAG, "Cannot start scan - missing permissions");
@@ -682,6 +689,7 @@ public class BLEService extends Service {
             
             // Start scanning
             bluetoothLeScanner.startScan(filters, settings, scanCallback);
+            isScanningInProgress = true;
             Log.d(TAG, "Started BLE scan");
             showToast("Scanning for EMWaver device...");
             updateNotification("Scanning for EMWaver...");
@@ -698,12 +706,13 @@ public class BLEService extends Service {
             Log.e(TAG, "Error starting scan", e);
             showToast("Error starting BLE scan: " + e.getMessage());
             updateNotification("Error starting scan: " + e.getMessage());
+            isScanningInProgress = false;
         }
     }
 
     // Stop BLE scanning
     public void stopScan() {
-        if (bluetoothLeScanner != null) {
+        if (bluetoothLeScanner != null && isScanningInProgress) {
             try {
                 // Check permissions
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -714,15 +723,20 @@ public class BLEService extends Service {
                 }
                 
                 bluetoothLeScanner.stopScan(scanCallback);
+                isScanningInProgress = false;
                 Log.d(TAG, "Stopped BLE scan");
             } catch (Exception e) {
                 Log.e(TAG, "Error stopping scan", e);
+                isScanningInProgress = false;
             }
         }
     }
 
     // Connect to a BLE device
     private void connectToDevice(BluetoothDevice device) {
+        // Stop scanning as we're now connecting to a device
+        stopScan();
+        
         // Check connect permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) 
