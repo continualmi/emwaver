@@ -147,6 +147,13 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         
+        // Notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+        
         if (!permissions.isEmpty()) {
             Log.d(TAG, "Requesting permissions: " + permissions);
             ActivityCompat.requestPermissions(this, permissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);

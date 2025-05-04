@@ -42,7 +42,6 @@ public class BLEFragment extends Fragment {
     private Button readButton, writeHighButton, writeLowButton;
     private EditText commandInput;
     private Button sendPacketButton;
-    private Button bleConnectButton;
     private TextView bleStatusText;
     
     private BLEService bleService;
@@ -68,6 +67,10 @@ public class BLEFragment extends Fragment {
     private static final int MONITOR_UPDATE_INTERVAL = 100; // 100ms
     private Handler monitorHandler;
     private Runnable monitorRunnable;
+    
+    // Handler for periodic status updates
+    private Handler statusUpdateHandler;
+    private static final int STATUS_UPDATE_INTERVAL = 1000; // 1 second
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -84,28 +87,27 @@ public class BLEFragment extends Fragment {
         serialMonitorScroll = root.findViewById(R.id.serial_monitor_scroll);
         showHex = root.findViewById(R.id.show_hex);
         showAscii = root.findViewById(R.id.show_ascii);
-        bleConnectButton = root.findViewById(R.id.ble_connect_button);
         bleStatusText = root.findViewById(R.id.ble_status_text);
 
         setupSpinner();
         setupButtons();
         setupSendCommandButton();
         setupMonitorUpdates();
-        setupBleButton();
+        setupStatusUpdates();
 
         return root;
     }
 
-    private void setupBleButton() {
-        bleConnectButton.setOnClickListener(v -> {
-            if (isServiceBound && bleService != null) {
-                bleService.startScan();
-                bleStatusText.setText("Scanning for EMWaver device...");
-                Toast.makeText(getContext(), "Scanning for EMWaver BLE device...", Toast.LENGTH_LONG).show();
-            } else {
-                Toast.makeText(getContext(), "BLE Service not bound", Toast.LENGTH_SHORT).show();
+    private void setupStatusUpdates() {
+        statusUpdateHandler = new Handler(Looper.getMainLooper());
+        Runnable statusUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateConnectionStatus();
+                statusUpdateHandler.postDelayed(this, STATUS_UPDATE_INTERVAL);
             }
-        });
+        };
+        statusUpdateHandler.post(statusUpdateRunnable);
     }
 
     @Override
@@ -136,6 +138,9 @@ public class BLEFragment extends Fragment {
         super.onStart();
         Intent intent = new Intent(getActivity(), BLEService.class);
         getActivity().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+        
+        // Also start the service to ensure it's running even when not bound
+        getActivity().startService(intent);
     }
 
     @Override
@@ -147,6 +152,9 @@ public class BLEFragment extends Fragment {
         }
         if (monitorHandler != null) {
             monitorHandler.removeCallbacks(monitorRunnable);
+        }
+        if (statusUpdateHandler != null) {
+            statusUpdateHandler.removeCallbacksAndMessages(null);
         }
     }
 
