@@ -260,10 +260,6 @@ public class SamplerFragment extends Fragment {
 
         setupMenu();
 
-        // Wire up Pattern 1 and Pattern 2 buttons
-        binding.pattern1Button.setOnClickListener(v -> loadPattern1());
-        binding.pattern2Button.setOnClickListener(v -> loadPattern2());
-
         return root;
     }
 
@@ -582,78 +578,6 @@ public class SamplerFragment extends Fragment {
         }
 
         return byteBuffer.toByteArray();
-    }
-
-    /**
-     * Loads test pattern 1: Alternating blocks of 0xFF and 0x00.
-     * Each block is 256 bytes.
-     */
-    private void loadPattern1() {
-        if (BLEService != null) {
-            byte[] testSignal = generatePattern1(4096); // 2KB of test data
-            BLEService.loadBuffer(testSignal);
-            refreshChart();
-            Toast.makeText(getContext(), "Loaded pattern 1: Alternating FF/00 blocks", Toast.LENGTH_SHORT).show();
-            Log.d("SamplerFragment", "Test pattern 1 loaded: Alternating FF/00 blocks");
-        } else {
-            Toast.makeText(getContext(), "BLE service not available", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    /**
-     * Loads test pattern 2: Blocks with FF at boundaries.
-     */
-    private void loadPattern2() {
-        if (BLEService != null) {
-            byte[] testSignal = generatePattern2(4096); // 2KB of test data
-            BLEService.loadBuffer(testSignal);
-            refreshChart();
-            Toast.makeText(getContext(), "Loaded pattern 2: FF at block boundaries", Toast.LENGTH_SHORT).show();
-            Log.d("SamplerFragment", "Test pattern 2 loaded: FF at block boundaries");
-        } else {
-            Toast.makeText(getContext(), "BLE service not available", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    /**
-     * Pattern 1: Alternating bytes of 0xFF and 0x00.
-     * Example: 0xFF, 0x00, 0xFF, 0x00, ...
-     */
-    private byte[] generatePattern1(int totalBytes) {
-        byte[] testSignal = new byte[totalBytes];
-        for (int i = 0; i < totalBytes; i++) {
-            testSignal[i] = (i % 2 == 0) ? (byte)0xFF : (byte)0x00;
-        }
-        Log.d("SamplerFragment", "Generated pattern 1: " + totalBytes +
-              " bytes alternating 0xFF and 0x00");
-        Log.d("SamplerFragment", "Expected timing: 80μs high, 80μs low");
-        return testSignal;
-    }
-
-    /**
-     * Pattern 2: 256-byte blocks where first and last bytes are 0xFF, rest are 0x00.
-     * This creates consecutive 0xFF bytes at block boundaries.
-     */
-    private byte[] generatePattern2(int totalBytes) {
-        byte[] testSignal = new byte[totalBytes];
-        
-        for (int i = 0; i < totalBytes; i++) {
-            // Calculate position within current 256-byte block
-            int positionInBlock = i % 256;
-            
-            // Set first and last byte in each block to 0xFF, everything else to 0x00
-            if (positionInBlock == 0 || positionInBlock == 255) {
-                testSignal[i] = (byte)0xFF;
-            } else {
-                testSignal[i] = (byte)0x00;
-            }
-        }
-        
-        Log.d("SamplerFragment", "Generated pattern 2: " + totalBytes + 
-              " bytes with 0xFF at boundaries of each 256-byte block");
-        Log.d("SamplerFragment", "Expected timing: 80µs high, 20.32ms low, 80µs high, 80µs high...");
-        
-        return testSignal;
     }
 
     private void getTimings() {
