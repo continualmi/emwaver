@@ -23,15 +23,18 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.CheckBox;
+import android.content.IntentFilter;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.core.view.MenuHost;
 import androidx.core.view.MenuProvider;
+import androidx.core.content.ContextCompat;
 
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
+import com.emwaver.emwaverandroidapp.BLEReceiver;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +74,8 @@ public class BLEFragment extends Fragment {
     // Handler for periodic status updates
     private Handler statusUpdateHandler;
     private static final int STATUS_UPDATE_INTERVAL = 1000; // 1 second
+
+    private BLEReceiver bleReceiver;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -162,12 +167,22 @@ public class BLEFragment extends Fragment {
     public void onResume() {
         super.onResume();
         updateConnectionStatus();
+        
+        // Register receiver for BLE connection status updates
+        bleReceiver = new BLEReceiver(this::updateConnectionUI);
+        IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
+        requireActivity().registerReceiver(bleReceiver, filter);
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        Utils.updateActionBarStatus(this, "");
+        
+        // Unregister receiver
+        if (bleReceiver != null) {
+            requireActivity().unregisterReceiver(bleReceiver);
+            bleReceiver = null;
+        }
     }
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
@@ -188,23 +203,25 @@ public class BLEFragment extends Fragment {
     };
 
     private void updateConnectionStatus() {
-        String statusMessage;
-        
         if (isServiceBound && bleService != null) {
             boolean connected = bleService.checkConnection();
-            statusMessage = connected ? "Connected to EMWaver BLE" : "BLE not connected";
             
             if (bleStatusText != null) {
                 bleStatusText.setText(connected ? "Connected" : "Not connected");
+                // Change text color based on connection status
+                bleStatusText.setTextColor(connected ? 
+                        ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
+                        ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
             }
         } else {
-            statusMessage = "BLE Service not bound";
             if (bleStatusText != null) {
                 bleStatusText.setText("Service not bound");
+                bleStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
             }
         }
         
-        Utils.updateActionBarStatus(this, statusMessage);
+        // Removing actionbar status updates
+        // Utils.updateActionBarStatus(this, statusMessage);
     }
 
     private void setupSpinner() {
@@ -459,5 +476,15 @@ public class BLEFragment extends Fragment {
             }
         };
         monitorHandler.post(monitorRunnable);
+    }
+
+    // Helper method to update UI based on connection status from broadcast
+    private void updateConnectionUI(boolean connected) {
+        if (bleStatusText != null) {
+            bleStatusText.setText(connected ? "Connected" : "Not connected");
+            bleStatusText.setTextColor(connected ? 
+                    ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
+                    ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+        }
     }
 } 
