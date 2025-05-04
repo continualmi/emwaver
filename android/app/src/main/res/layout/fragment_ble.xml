@@ -5,18 +5,20 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- BLE Connection -->
+    <!-- BLE Connection Status -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="8dp"
+        android:padding="8dp"
+        android:background="#EFEFEF">
 
-        <Button
-            android:id="@+id/ble_connect_button"
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Connect to EMWaver" />
+            android:text="Status: "
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/ble_status_text"
@@ -25,8 +27,16 @@
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:text="Not connected"
-            android:textStyle="italic"
+            android:textColor="#FF0000"
             android:gravity="center_vertical" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connection managed by notification"
+            android:textSize="11sp"
+            android:textStyle="italic"
+            android:layout_marginStart="8dp" />
     </LinearLayout>
 
     <Spinner

@@ -1,6 +1,10 @@
 package com.emwaver.emwaverandroidapp;
 
 import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -19,6 +23,7 @@ import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -29,6 +34,7 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
@@ -44,6 +50,12 @@ public class BLEService extends Service {
 
     private static final String TAG = "BLEService";
 
+    // Notification constants
+    private static final String NOTIFICATION_CHANNEL_ID = "emwaver_ble_channel";
+    private static final int NOTIFICATION_ID = 1001;
+    private static final String ACTION_CONNECT = "com.emwaver.emwaverandroidapp.ACTION_CONNECT";
+    private static final String ACTION_DISCONNECT = "com.emwaver.emwaverandroidapp.ACTION_DISCONNECT";
+    
     // EMWaver BLE Service and Characteristic UUIDs
     // These must match the UUIDs defined in the ESP32 firmware
     private static final UUID SERVICE_UUID = 
@@ -106,7 +118,89 @@ public class BLEService extends Service {
         if (bluetoothManager != null) {
             bluetoothAdapter = bluetoothManager.getAdapter();
         }
+        
+        // Create notification channel for Android O and above
+        createNotificationChannel();
+        
+        // Start as a foreground service with initial "Not connected" notification
+        startForeground(NOTIFICATION_ID, createNotification("Not connected"));
+        
         Log.d(TAG, "BLE Service created");
+    }
+
+    // Create the notification channel (required for Android O and above)
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    NOTIFICATION_CHANNEL_ID,
+                    "EMWaver BLE Connection",
+                    NotificationManager.IMPORTANCE_LOW); // LOW importance to avoid sound/vibration
+            
+            channel.setDescription("Manages EMWaver device connections");
+            channel.enableLights(true);
+            channel.setLightColor(Color.BLUE);
+            channel.setShowBadge(true);
+            
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+            
+            Log.d(TAG, "Notification channel created");
+        }
+    }
+    
+    // Create and return a notification with the current status
+    private Notification createNotification(String status) {
+        // Create pending intents for actions
+        PendingIntent contentIntent = createLaunchAppIntent();
+        PendingIntent connectIntent = createActionIntent(ACTION_CONNECT);
+        PendingIntent disconnectIntent = createActionIntent(ACTION_DISCONNECT);
+        
+        // Build the notification
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("EMWaver BLE")
+                .setContentText(status)
+                .setSmallIcon(R.drawable.ai_bluetooth) // Using the bluetooth icon
+                .setContentIntent(contentIntent)
+                .setOngoing(true);
+                
+        // Add action buttons based on current connection status
+        if (isConnected) {
+            builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Disconnect", disconnectIntent);
+        } else {
+            builder.addAction(android.R.drawable.ic_menu_search, "Connect", connectIntent);
+        }
+        
+        return builder.build();
+    }
+    
+    // Update notification with current status
+    private void updateNotification(String status) {
+        NotificationManager notificationManager = 
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.notify(NOTIFICATION_ID, createNotification(status));
+        }
+    }
+    
+    // Create pending intent to launch the main activity
+    private PendingIntent createLaunchAppIntent() {
+        Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getActivity(this, 0, intent, flags);
+    }
+    
+    // Create pending intent for notification actions
+    private PendingIntent createActionIntent(String action) {
+        Intent intent = new Intent(this, BLEService.class);
+        intent.setAction(action);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getService(this, 0, intent, flags);
     }
 
     @Nullable
@@ -117,7 +211,30 @@ public class BLEService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "BLE Service started");
+        if (intent != null && intent.getAction() != null) {
+            String action = intent.getAction();
+            Log.d(TAG, "Received action: " + action);
+            
+            switch (action) {
+                case ACTION_CONNECT:
+                    updateNotification("Scanning for EMWaver...");
+                    startScan();
+                    break;
+                case ACTION_DISCONNECT:
+                    updateNotification("Disconnecting...");
+                    disconnectGatt();
+                    // Update notification after a brief delay to reflect disconnected state
+                    handler.postDelayed(() -> updateNotification("Not connected"), 500);
+                    break;
+            }
+        }
+        
+        // If we get started by the system (after reboot, etc.),
+        // automatically try to connect to the device
+        if (!isConnected && bluetoothAdapter != null && bluetoothAdapter.isEnabled()) {
+            startScan();
+        }
+        
         return START_STICKY;
     }
 
@@ -207,6 +324,10 @@ public class BLEService extends Service {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     Log.i(TAG, "Connected to GATT server.");
                     showToast("Connected to EMWaver device");
+                    updateNotification("Connected to EMWaver");
+                    
+                    // Broadcast connection status
+                    broadcastConnectionStatus(true);
                     
                     // Reset retry count on successful connection
                     connectionRetryCount = 0;
@@ -247,11 +368,16 @@ public class BLEService extends Service {
                     Log.i(TAG, "Disconnected from GATT server.");
                     isConnected = false;
                     showToast("Disconnected from EMWaver device");
+                    updateNotification("Disconnected from EMWaver");
+                    
+                    // Broadcast connection status
+                    broadcastConnectionStatus(false);
                     
                     // Try to reconnect if disconnected unexpectedly and not explicitly disconnected
                     if (bluetoothGatt != null && connectionRetryCount < MAX_RETRY_COUNT && !isReconnecting) {
                         connectionRetryCount++;
                         Log.d(TAG, "Attempting to reconnect: " + connectionRetryCount);
+                        updateNotification("Reconnecting... Attempt " + connectionRetryCount);
                         
                         // Get reference to device before closing GATT
                         BluetoothDevice device = gatt.getDevice();
@@ -268,16 +394,20 @@ public class BLEService extends Service {
                         // Reconnect after a small delay
                         isReconnecting = true;
                         handler.postDelayed(() -> connectToDevice(device), 1000);
+                    } else if (connectionRetryCount >= MAX_RETRY_COUNT) {
+                        updateNotification("Reconnection failed after " + MAX_RETRY_COUNT + " attempts");
                     }
                 }
             } else {
                 Log.w(TAG, "Connection state change failed with status: " + status);
                 isConnected = false;
+                updateNotification("Connection error: " + status);
                 
                 // Try to reconnect on error
                 if (connectionRetryCount < MAX_RETRY_COUNT && !isReconnecting) {
                     connectionRetryCount++;
                     Log.d(TAG, "Connection failed, retrying: " + connectionRetryCount + ", error: " + status);
+                    updateNotification("Reconnecting... Attempt " + connectionRetryCount);
                     
                     // Get reference to device before closing GATT
                     BluetoothDevice device = gatt.getDevice();
@@ -298,6 +428,7 @@ public class BLEService extends Service {
                     connectionRetryCount = 0;
                     disconnectGatt();
                     showToast("Connection failed after multiple attempts");
+                    updateNotification("Connection failed after " + MAX_RETRY_COUNT + " attempts");
                 }
             }
         }
@@ -463,9 +594,11 @@ public class BLEService extends Service {
                 if (descriptor.getCharacteristic().getUuid().equals(NOTIF_CHAR_UUID)) {
                     Log.d(TAG, "Notifications successfully enabled");
                     showToast("Ready to communicate with EMWaver");
+                    updateNotification("Connected to EMWaver (Ready)");
                 }
             } else {
                 Log.e(TAG, "Descriptor write failed: " + status);
+                updateNotification("Connection issue: Descriptor write failed");
             }
         }
     };
@@ -500,12 +633,14 @@ public class BLEService extends Service {
         if (!hasRequiredPermissions()) {
             showToast("Missing required Bluetooth permissions");
             Log.e(TAG, "Cannot start scan - missing permissions");
+            updateNotification("Error: Missing Bluetooth permissions");
             return;
         }
         
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
             showToast("Bluetooth is not enabled");
             Log.e(TAG, "Bluetooth is not enabled");
+            updateNotification("Error: Bluetooth is not enabled");
             return;
         }
 
@@ -513,6 +648,7 @@ public class BLEService extends Service {
         if (bluetoothLeScanner == null) {
             showToast("BLE scanner not available");
             Log.e(TAG, "BLE scanner not available");
+            updateNotification("Error: BLE scanner not available");
             return;
         }
 
@@ -534,11 +670,13 @@ public class BLEService extends Service {
                 if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) 
                         != PackageManager.PERMISSION_GRANTED) {
                     showToast("Missing BLUETOOTH_SCAN permission");
+                    updateNotification("Error: Missing BLUETOOTH_SCAN permission");
                     return;
                 }
             } else if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) 
                        != PackageManager.PERMISSION_GRANTED) {
                 showToast("Missing ACCESS_FINE_LOCATION permission");
+                updateNotification("Error: Missing location permission");
                 return;
             }
             
@@ -546,12 +684,20 @@ public class BLEService extends Service {
             bluetoothLeScanner.startScan(filters, settings, scanCallback);
             Log.d(TAG, "Started BLE scan");
             showToast("Scanning for EMWaver device...");
+            updateNotification("Scanning for EMWaver...");
             
             // Stop scan after 10 seconds to conserve battery
-            handler.postDelayed(this::stopScan, 10000);
+            handler.postDelayed(() -> {
+                stopScan();
+                // Only update notification if still not connected
+                if (!isConnected) {
+                    updateNotification("Device not found. Tap Connect to try again.");
+                }
+            }, 10000);
         } catch (Exception e) {
             Log.e(TAG, "Error starting scan", e);
             showToast("Error starting BLE scan: " + e.getMessage());
+            updateNotification("Error starting scan: " + e.getMessage());
         }
     }
 
@@ -986,5 +1132,13 @@ public class BLEService extends Service {
         
         boolean discoverStarted = gatt.discoverServices();
         Log.d(TAG, "Service discovery started: " + discoverStarted);
+    }
+
+    // Broadcast connection status
+    private void broadcastConnectionStatus(boolean isConnected) {
+        Intent intent = new Intent(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
+        intent.putExtra(BLEReceiver.EXTRA_CONNECTION_STATUS, isConnected);
+        sendBroadcast(intent);
+        Log.d(TAG, "Broadcasting connection status: " + (isConnected ? "connected" : "disconnected"));
     }
 } 
