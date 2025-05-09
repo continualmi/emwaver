@@ -17,6 +17,7 @@
 * Look into maybe increasing throughput from 100kbps to 200kbps just to get better resolution on recordings of 5us instead of 10us between samples. Not strictly needed as seen on IR transmission and so on, but something with some value to have (looked and no need really)
 * Further write Template Fragment (no need)
 * Remove nrf24 fragment (nrf24 will be for forking and custom implementations)
+* Make the feel of the console fragment UI betters
 
 ## Not Done
 
@@ -33,7 +34,7 @@
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
 
-* Make the feel of the console fragment UI better
+
 * Make the feel of the buttons fragment UI better
 * Implement Bad-USBs
 
