@@ -24,6 +24,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.CheckBox;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+import android.widget.AdapterView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -38,6 +41,8 @@ import com.emwaver.emwaverandroidapp.BLEReceiver;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class BLEFragment extends Fragment {
 
@@ -51,12 +56,21 @@ public class BLEFragment extends Fragment {
     private boolean isServiceBound = false;
 
     private static final String[] PINS = {
-            "GPIO0", "GPIO1", "GPIO2", "GPIO3", "GPIO4", "GPIO5", "GPIO6", "GPIO7", 
-            "GPIO8", "GPIO9", "GPIO10", "GPIO11", "GPIO12", "GPIO13", "GPIO14", "GPIO15", 
-            "GPIO16", "GPIO17", "GPIO18", "GPIO19", "GPIO20", "GPIO21",
-            "GPIO26", "GPIO27", "GPIO28", "GPIO29", "GPIO30", "GPIO31", "GPIO32", "GPIO33",
-            "GPIO34", "GPIO35", "GPIO36", "GPIO37", "GPIO38", "GPIO39", "GPIO40", "GPIO41",
-            "GPIO42", "GPIO43", "GPIO44", "GPIO45", "GPIO46", "GPIO47", "GPIO48"
+            "GPIO0 (IO0)",
+            "CC1101 GDO0 (IO1)",
+            "CC1101 GDO2 (IO2)",
+            "IR TX (IO4)",
+            "IR RX (IO5)",
+            "GPIO6 (IO6)",      // Schematic shows GPIO6 with overbar
+            "GPIO7 (IO7)",
+            "GPIO9 (IO9)",
+            "CC1101 NSS (IO10)", // SPI Chip Select
+            "CC1101 MOSI (IO11)",// SPI MOSI
+            "CC1101 SCK (IO12)", // SPI SCK
+            "CC1101 MISO (IO13)",// SPI MISO
+            "GPIO14 (IO14)",
+            "GPIO15 (IO15)",
+            "GPIO16 (IO16)"
     };
 
     private static final String TAG = "BLEFragment";
@@ -76,6 +90,8 @@ public class BLEFragment extends Fragment {
     private static final int STATUS_UPDATE_INTERVAL = 1000; // 1 second
 
     private BLEReceiver bleReceiver;
+
+    private static final String PREF_SELECTED_BLE_PIN_INDEX = "selectedBlePinIndex";
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -99,6 +115,16 @@ public class BLEFragment extends Fragment {
         setupSendCommandButton();
         setupMonitorUpdates();
         setupStatusUpdates();
+
+        // Load saved pin selection or set default
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        int defaultPinIndex = 0; // Default to the first pin in the list
+        int selectedPinIndex = prefs.getInt(PREF_SELECTED_BLE_PIN_INDEX, defaultPinIndex);
+        if (selectedPinIndex >= 0 && selectedPinIndex < pinSpinner.getAdapter().getCount()) {
+            pinSpinner.setSelection(selectedPinIndex);
+        } else {
+            pinSpinner.setSelection(defaultPinIndex); // Fallback to default
+        }
 
         return root;
     }
@@ -229,6 +255,22 @@ public class BLEFragment extends Fragment {
                 android.R.layout.simple_spinner_item, PINS);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         pinSpinner.setAdapter(adapter);
+
+        pinSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                // Save the selected pin index
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putInt(PREF_SELECTED_BLE_PIN_INDEX, position);
+                editor.apply();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Do nothing
+            }
+        });
     }
 
     private void setupButtons() {
@@ -341,13 +383,19 @@ public class BLEFragment extends Fragment {
                 selectedPin));
 
             // Extract GPIO pin number from the selected pin (e.g., "GPIO12" -> 12)
-            int pinNumber = Integer.parseInt(selectedPin.substring(4));
+            byte pinNumber = getPinNumberFromSelection(selectedPin);
+
+            if (pinNumber == -1) { // Check if pin parsing failed
+                Toast.makeText(getContext(), "GPIO command failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
+                updateResponse("GPIO command failed: Invalid pin selected.", "N/A");
+                return; // Don't proceed
+            }
 
             // Create command similar to ESP32 code's expectation
             byte[] command = new byte[]{
                     'g', 'p', 'i', 'o',
                     0, // This is ignored in ESP32
-                    (byte) pinNumber,
+                    pinNumber,
                     (byte) action.charAt(0),
                     value
             };
@@ -486,5 +534,22 @@ public class BLEFragment extends Fragment {
                     ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
                     ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
         }
+    }
+
+    private byte getPinNumberFromSelection(String selectedPinString) {
+        // Extracts the IO number, e.g., from "IR TX (IO4)" or "GPIO0 (IO0)"
+        Pattern pattern = Pattern.compile("\\(IO(\\d+)\\)");
+        Matcher matcher = pattern.matcher(selectedPinString);
+        if (matcher.find()) {
+            try {
+                // Group 1 contains the number part
+                return (byte) Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                Log.e(TAG, "Failed to parse IO number from: " + selectedPinString + " extracted part: " + matcher.group(1), e);
+            }
+        }
+        Log.e(TAG, "Could not extract IO number from: " + selectedPinString + ". Check PINS array format and regex.");
+        Toast.makeText(getContext(), "Error: Could not parse pin number from '" + selectedPinString + "'", Toast.LENGTH_LONG).show();
+        return -1; // Indicates an error
     }
 } 
