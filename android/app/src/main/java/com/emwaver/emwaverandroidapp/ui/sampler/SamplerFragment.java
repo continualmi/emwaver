@@ -59,7 +59,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -103,13 +104,26 @@ public class SamplerFragment extends Fragment {
 
     // Add PINS array to match UsbFragment
     private static final String[] PINS = {
-            "GPIO0", "GPIO1 (CC1101 GDO0)", "GPIO2", "GPIO3", "GPIO4 (IR Transmitter)", "GPIO5 (IR Receiver)", "GPIO6", "GPIO7", 
-            "GPIO8", "GPIO9", "GPIO10", "GPIO11", "GPIO12", "GPIO13", "GPIO14", "GPIO15", 
-            "GPIO16", "GPIO17", "GPIO18", "GPIO19", "GPIO20", "GPIO21",
-            "GPIO26", "GPIO27", "GPIO28", "GPIO29", "GPIO30", "GPIO31", "GPIO32", "GPIO33",
-            "GPIO34", "GPIO35", "GPIO36", "GPIO37", "GPIO38", "GPIO39", "GPIO40", "GPIO41",
-            "GPIO42", "GPIO43", "GPIO44", "GPIO45", "GPIO46", "GPIO47", "GPIO48"
+            "GPIO0 (IO0)",
+            "CC1101 GDO0 (IO1)",
+            "CC1101 GDO2 (IO2)",
+            
+            "IR TX (IO4)",
+            "IR RX (IO5)",
+            "GPIO6 (IO6)",      // Schematic shows GPIO6 with overbar
+            "GPIO7 (IO7)",
+
+            "GPIO9 (IO9)",
+            "CC1101 NSS (IO10)", // SPI Chip Select
+            "CC1101 MOSI (IO11)",// SPI MOSI
+            "CC1101 SCK (IO12)", // SPI SCK
+            "CC1101 MISO (IO13)",// SPI MISO
+            "GPIO14 (IO14)",
+            "GPIO15 (IO15)",
+            "GPIO16 (IO16)"
     };
+
+    private static final String PREF_SELECTED_PIN_INDEX = "selectedSamplerPinIndex";
 
     private ActivityResultLauncher<Intent> createFileLauncher;
     private ActivityResultLauncher<String[]> openFileLauncher;
@@ -147,8 +161,15 @@ public class SamplerFragment extends Fragment {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         binding.gpioSpinner.setAdapter(adapter);
 
-        // Set default selection to GPIO6 (index 6 in the array)
-        binding.gpioSpinner.setSelection(6);
+        // Load saved pin selection or set default
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        int defaultPinIndex = 6; // GPIO6 (IO6)
+        int selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, defaultPinIndex);
+        if (selectedPinIndex >= 0 && selectedPinIndex < adapter.getCount()) {
+            binding.gpioSpinner.setSelection(selectedPinIndex);
+        } else {
+            binding.gpioSpinner.setSelection(defaultPinIndex); // Fallback to default
+        }
 
         binding.gpioSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -156,6 +177,12 @@ public class SamplerFragment extends Fragment {
                 String selectedPin = parent.getItemAtPosition(position).toString();
                 // Show retransmit button for all pins
                 binding.retransmitButton.setVisibility(View.VISIBLE);
+
+                // Save the selected pin index
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putInt(PREF_SELECTED_PIN_INDEX, position);
+                editor.apply();
             }
 
             @Override
@@ -380,10 +407,13 @@ public class SamplerFragment extends Fragment {
 
     private void startRecording() {
         if (BLEService != null) {
-            String selectedPin = binding.gpioSpinner.getSelectedItem().toString();
-            // Extract GPIO pin number, handling the case with descriptive labels
-            String pinText = selectedPin.substring(4).split(" ")[0]; // Get just the number part
-            byte pinNumber = (byte) Integer.parseInt(pinText);
+            String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
+            byte pinNumber = getPinNumberFromSelection(selectedPinString);
+
+            if (pinNumber == -1) { // Check if pin parsing failed
+                Toast.makeText(getContext(), "Recording failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
+                return; // Don't proceed
+            }
             
             // Format command for ESP32 (raw + pin number)
             byte[] command = new byte[]{'r', 'a', 'w', pinNumber};
@@ -392,7 +422,7 @@ public class SamplerFragment extends Fragment {
             // Set recording flag
             isRecording = true;
             
-            Toast.makeText(getContext(), "Recording started on " + selectedPin, Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Recording started on " + selectedPinString, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -413,11 +443,13 @@ public class SamplerFragment extends Fragment {
         Log.d("SamplerFragment", "BEFORE_RETRANSMIT: Buffer contains " + bufferLength + 
               " bytes = " + (bufferLength * 8) + " bits");
           
-        String selectedPin = binding.gpioSpinner.getSelectedItem().toString();
-        
-        // Extract GPIO pin number, handling the case with descriptive labels
-        String pinText = selectedPin.substring(4).split(" ")[0]; // Get just the number part
-        byte pinNumber = (byte) Integer.parseInt(pinText);
+        String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
+        byte pinNumber = getPinNumberFromSelection(selectedPinString);
+
+        if (pinNumber == -1) { // Check if pin parsing failed
+            Toast.makeText(getContext(), "Retransmit failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
+            return; // Don't proceed
+        }
         
         // Send the 'tran' command with just the pin number
         byte[] commandBytes = new byte[5];
@@ -433,7 +465,7 @@ public class SamplerFragment extends Fragment {
         Log.d("SamplerFragment", "AFTER_RETRANSMIT: Buffer contains " + postTransmitLength + 
               " bytes = " + (postTransmitLength * 8) + " bits");
 
-        Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples on " + selectedPin, Toast.LENGTH_SHORT).show();
+        Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples on " + selectedPinString, Toast.LENGTH_SHORT).show();
     }
 
     public void initChart() {
@@ -697,5 +729,22 @@ public class SamplerFragment extends Fragment {
     private void forceRefresh() {
         forceRefresh = true;
         refreshChart();
+    }
+
+    private byte getPinNumberFromSelection(String selectedPinString) {
+        // Extracts the IO number, e.g., from "IR TX (IO4)" or "GPIO0 (IO0)"
+        Pattern pattern = Pattern.compile("\\(IO(\\d+)\\)");
+        Matcher matcher = pattern.matcher(selectedPinString);
+        if (matcher.find()) {
+            try {
+                // Group 1 contains the number part
+                return (byte) Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                Log.e("SamplerFragment", "Failed to parse IO number from: " + selectedPinString + " extracted part: " + matcher.group(1), e);
+            }
+        }
+        Log.e("SamplerFragment", "Could not extract IO number from: " + selectedPinString + ". Check PINS array format and regex.");
+        Toast.makeText(getContext(), "Error: Could not parse pin number from '" + selectedPinString + "'", Toast.LENGTH_LONG).show();
+        return -1; // Indicates an error
     }
 }
