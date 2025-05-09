@@ -27,6 +27,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.widget.AdapterView;
+import android.text.Html;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -79,7 +80,6 @@ public class BLEFragment extends Fragment {
     private ScrollView serialMonitorScroll;
 
     private CheckBox showHex;
-    private CheckBox showAscii;
 
     private static final int MONITOR_UPDATE_INTERVAL = 100; // 100ms
     private Handler monitorHandler;
@@ -107,7 +107,6 @@ public class BLEFragment extends Fragment {
         serialMonitor = root.findViewById(R.id.serial_monitor);
         serialMonitorScroll = root.findViewById(R.id.serial_monitor_scroll);
         showHex = root.findViewById(R.id.show_hex);
-        showAscii = root.findViewById(R.id.show_ascii);
         bleStatusText = root.findViewById(R.id.ble_status_text);
 
         setupSpinner();
@@ -287,16 +286,14 @@ public class BLEFragment extends Fragment {
                 return;
             }
 
-            // Log the user input
-            String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS")
-                .format(new java.util.Date());
-            appendToSerialMonitor(String.format("[%s] TX: %s", timestamp, userInput));
-
             byte[] commandBytes = parseCommand(userInput);
             if (commandBytes == null) {
                 Toast.makeText(getContext(), "Invalid packet format.", Toast.LENGTH_SHORT).show();
                 return;
             }
+
+            // Log the sent command bytes
+            logTxData(commandBytes);
 
             Log.d(TAG, "Sending packet: " + bytesToHex(commandBytes));
             if (isServiceBound && bleService != null) {
@@ -373,16 +370,7 @@ public class BLEFragment extends Fragment {
     private void sendGpioCommand(String action, byte value) {
         if (isServiceBound && bleService != null) {
             String selectedPin = (String) pinSpinner.getSelectedItem();
-            // Log the user action
-            String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS")
-                .format(new java.util.Date());
-            appendToSerialMonitor(String.format("[%s] Command: %s %s to %s", 
-                timestamp, 
-                action.equals("R") ? "Read" : "Write",
-                action.equals("R") ? "" : (value != 0 ? "HIGH" : "LOW"),
-                selectedPin));
-
-            // Extract GPIO pin number from the selected pin (e.g., "GPIO12" -> 12)
+            
             byte pinNumber = getPinNumberFromSelection(selectedPin);
 
             if (pinNumber == -1) { // Check if pin parsing failed
@@ -399,6 +387,9 @@ public class BLEFragment extends Fragment {
                     (byte) action.charAt(0),
                     value
             };
+
+            // Log the sent GPIO command bytes
+            logTxData(command);
 
             Log.d(TAG, "Sending GPIO command: " + bytesToHex(command));
             byte[] response = bleService.sendCommand(command, 2000);
@@ -438,21 +429,17 @@ public class BLEFragment extends Fragment {
                 String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS")
                     .format(new java.util.Date());
                 
-                StringBuilder output = new StringBuilder();
-                output.append(String.format("[%s] ", timestamp));
+                StringBuilder content = new StringBuilder();
+                content.append(String.format("[%s] ", timestamp));
                 
                 if (showHex.isChecked()) {
-                    output.append("HEX: ").append(hexMessage);
-                    if (showAscii.isChecked()) {
-                        output.append(" | ");
-                    }
+                    content.append(hexMessage);
+                } else {
+                    content.append(asciiMessage);
                 }
                 
-                if (showAscii.isChecked()) {
-                    output.append("ASCII: ").append(asciiMessage);
-                }
-                
-                appendToSerialMonitor(output.toString());
+                String htmlOutput = "<font color='#00AA00'>" + content.toString() + "</font>";
+                appendToSerialMonitor(htmlOutput);
             });
         }
     }
@@ -497,10 +484,10 @@ public class BLEFragment extends Fragment {
         }
     }
 
-    private void appendToSerialMonitor(String message) {
+    private void appendToSerialMonitor(String htmlMessage) {
         if (serialMonitor != null && getActivity() != null) {
             getActivity().runOnUiThread(() -> {
-                serialMonitor.append(message + "\n");
+                serialMonitor.append(Html.fromHtml(htmlMessage + "<br/>"));
                 serialMonitorScroll.post(() -> 
                     serialMonitorScroll.fullScroll(View.FOCUS_DOWN));
             });
@@ -551,5 +538,26 @@ public class BLEFragment extends Fragment {
         Log.e(TAG, "Could not extract IO number from: " + selectedPinString + ". Check PINS array format and regex.");
         Toast.makeText(getContext(), "Error: Could not parse pin number from '" + selectedPinString + "'", Toast.LENGTH_LONG).show();
         return -1; // Indicates an error
+    }
+
+    private void logTxData(byte[] data) {
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS")
+                        .format(new java.util.Date());
+
+                StringBuilder content = new StringBuilder();
+                content.append(String.format("[%s] ", timestamp));
+
+                if (showHex.isChecked()) {
+                    content.append(bytesToHex(data));
+                } else {
+                    content.append(bytesToAscii(data));
+                }
+
+                String htmlOutput = "<font color='#FFD700'>" + content.toString() + "</font>";
+                appendToSerialMonitor(htmlOutput);
+            });
+        }
     }
 } 
