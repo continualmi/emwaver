@@ -49,12 +49,6 @@
         tools:layout="@layout/fragment_template" />
 
     <fragment
-        android:id="@+id/navigation_firmware_update"
-        android:name="com.emwaver.emwaverandroidapp.ui.firmware.FirmwareUpdateFragment"
-        android:label="Firmware Update"
-        tools:layout="@layout/fragment_firmware_update" />
-
-    <fragment
         android:id="@+id/navigation_bad_usb"
         android:name="com.emwaver.emwaverandroidapp.ui.badusb.BadUSBFragment"
         android:label="Bad-USB"

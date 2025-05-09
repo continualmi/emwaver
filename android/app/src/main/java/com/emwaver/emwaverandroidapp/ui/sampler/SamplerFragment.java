@@ -547,7 +547,7 @@ public class SamplerFragment extends Fragment {
         }
 
         // Prepare the dataset
-        LineDataSet lineDataSet = new LineDataSet(entries, "Demodulator");
+        LineDataSet lineDataSet = new LineDataSet(entries, "Signal");
         lineDataSet.setDrawValues(false);
         lineDataSet.setLineWidth(3f);
         lineDataSet.setColor(Color.parseColor("#0087FF"));
