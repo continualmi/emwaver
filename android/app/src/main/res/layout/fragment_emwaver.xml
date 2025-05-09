@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- BLE Connection Status -->
+    <!-- EMWaver Connection Status -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -22,7 +22,7 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/ble_status_text"
+            android:id="@+id/emwaver_status_text"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -98,7 +98,7 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:hint="e.g., ble?[0x00][255][0xFF]"
+            android:hint="e.g., emwaver?[0x00][255][0xFF]"
             android:inputType="text"
             android:padding="8dp"
             android:background="@android:drawable/edit_text" />

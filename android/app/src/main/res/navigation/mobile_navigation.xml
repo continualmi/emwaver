@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/mobile_navigation"
-    app:startDestination="@+id/navigation_ble">
+    app:startDestination="@+id/navigation_emwaver">
 
 
     <fragment
@@ -37,10 +37,10 @@
         tools:layout="@layout/fragment_sampler" />
 
     <fragment
-        android:id="@+id/navigation_ble"
-        android:name="com.emwaver.emwaverandroidapp.ui.ble.BLEFragment"
-        android:label="BLE"
-        tools:layout="@layout/fragment_ble" />
+        android:id="@+id/navigation_emwaver"
+        android:name="com.emwaver.emwaverandroidapp.ui.emwaver.EMWaverFragment"
+        android:label="EMWaver"
+        tools:layout="@layout/fragment_emwaver" />
 
     <fragment
         android:id="@+id/navigation_template"

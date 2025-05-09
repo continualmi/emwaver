@@ -239,7 +239,7 @@ public class BLEService extends Service {
         return START_STICKY;
     }
 
-    // Public method to be called from BLEFragment to disconnect
+    // Public method to be called from EMWaverFragment to disconnect
     public void disconnect() {
         Log.d(TAG, "Disconnect called from UI");
         updateNotification("Disconnecting...");

@@ -1,4 +1,4 @@
-package com.emwaver.emwaverandroidapp.ui.ble;
+package com.emwaver.emwaverandroidapp.ui.emwaver;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -45,13 +45,13 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class BLEFragment extends Fragment {
+public class EMWaverFragment extends Fragment {
 
     private Spinner pinSpinner;
     private Button readButton, writeHighButton, writeLowButton;
     private EditText commandInput;
     private Button sendPacketButton;
-    private TextView bleStatusText;
+    private TextView emwaverStatusText;
     private Button disconnectButton;
     private Button connectButton;
     
@@ -76,7 +76,7 @@ public class BLEFragment extends Fragment {
             "GPIO16 (IO16)"
     };
 
-    private static final String TAG = "BLEFragment";
+    private static final String TAG = "EMWaverFragment";
 
     private TextView serialMonitor;
     private ScrollView serialMonitorScroll;
@@ -93,11 +93,11 @@ public class BLEFragment extends Fragment {
 
     private BLEReceiver bleReceiver;
 
-    private static final String PREF_SELECTED_BLE_PIN_INDEX = "selectedBlePinIndex";
+    private static final String PREF_SELECTED_EMWAVER_PIN_INDEX = "selectedEmwaverPinIndex";
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        View root = inflater.inflate(R.layout.fragment_ble, container, false);
+        View root = inflater.inflate(R.layout.fragment_emwaver, container, false);
 
         // Initialize UI elements
         pinSpinner = root.findViewById(R.id.pin_spinner);
@@ -109,7 +109,7 @@ public class BLEFragment extends Fragment {
         serialMonitor = root.findViewById(R.id.serial_monitor);
         serialMonitorScroll = root.findViewById(R.id.serial_monitor_scroll);
         showHex = root.findViewById(R.id.show_hex);
-        bleStatusText = root.findViewById(R.id.ble_status_text);
+        emwaverStatusText = root.findViewById(R.id.emwaver_status_text);
         disconnectButton = root.findViewById(R.id.disconnect_button);
         connectButton = root.findViewById(R.id.connect_button);
 
@@ -124,7 +124,7 @@ public class BLEFragment extends Fragment {
         // Load saved pin selection or set default
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
         int defaultPinIndex = 0; // Default to the first pin in the list
-        int selectedPinIndex = prefs.getInt(PREF_SELECTED_BLE_PIN_INDEX, defaultPinIndex);
+        int selectedPinIndex = prefs.getInt(PREF_SELECTED_EMWAVER_PIN_INDEX, defaultPinIndex);
         if (selectedPinIndex >= 0 && selectedPinIndex < pinSpinner.getAdapter().getCount()) {
             pinSpinner.setSelection(selectedPinIndex);
         } else {
@@ -199,7 +199,7 @@ public class BLEFragment extends Fragment {
         super.onResume();
         updateConnectionStatus();
         
-        // Register receiver for BLE connection status updates
+        // Register receiver for EMWaver connection status updates
         bleReceiver = new BLEReceiver(this::updateConnectionUI);
         IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
         requireActivity().registerReceiver(bleReceiver, filter);
@@ -222,14 +222,14 @@ public class BLEFragment extends Fragment {
             BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
             bleService = binder.getService();
             isServiceBound = true;
-            Log.d(TAG, "BLE Service Connected");
+            Log.d(TAG, "EMWaver Service Connected");
             updateConnectionStatus();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
             isServiceBound = false;
-            Log.d(TAG, "BLE Service Disconnected");
+            Log.d(TAG, "EMWaver Service Disconnected");
         }
     };
 
@@ -237,9 +237,9 @@ public class BLEFragment extends Fragment {
         if (isServiceBound && bleService != null) {
             boolean connected = bleService.checkConnection();
             
-            if (bleStatusText != null) {
-                bleStatusText.setText(connected ? "Connected" : "Not connected");
-                bleStatusText.setTextColor(connected ? 
+            if (emwaverStatusText != null) {
+                emwaverStatusText.setText(connected ? "Connected" : "Not connected");
+                emwaverStatusText.setTextColor(connected ? 
                         ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
                         ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
             }
@@ -248,9 +248,9 @@ public class BLEFragment extends Fragment {
                 connectButton.setVisibility(connected ? View.GONE : View.VISIBLE);
             }
         } else {
-            if (bleStatusText != null) {
-                bleStatusText.setText("Service not bound");
-                bleStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+            if (emwaverStatusText != null) {
+                emwaverStatusText.setText("Service not bound");
+                emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
             }
             if (disconnectButton != null) {
                 disconnectButton.setVisibility(View.GONE);
@@ -276,7 +276,7 @@ public class BLEFragment extends Fragment {
                 // Save the selected pin index
                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
                 SharedPreferences.Editor editor = prefs.edit();
-                editor.putInt(PREF_SELECTED_BLE_PIN_INDEX, position);
+                editor.putInt(PREF_SELECTED_EMWAVER_PIN_INDEX, position);
                 editor.apply();
             }
 
@@ -314,7 +314,7 @@ public class BLEFragment extends Fragment {
             if (isServiceBound && bleService != null) {
                 bleService.sendPacket(commandBytes);
             } else {
-                Toast.makeText(getContext(), "BLE Service not connected", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "EMWaver Service not connected", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -334,12 +334,12 @@ public class BLEFragment extends Fragment {
     private void setupConnectButton() {
         connectButton.setOnClickListener(v -> {
             if (isServiceBound && bleService != null) {
-                bleStatusText.setText("Connecting...");
-                bleStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_orange_dark));
+                emwaverStatusText.setText("Connecting...");
+                emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_orange_dark));
                 connectButton.setVisibility(View.GONE); // Hide connect while attempting, updateConnectionUI will fix later
                 bleService.startScan(); 
             } else {
-                Toast.makeText(getContext(), "BLE Service not bound. Cannot connect.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "EMWaver Service not bound. Cannot connect.", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -452,8 +452,8 @@ public class BLEFragment extends Fragment {
                 updateResponse("GPIO command failed or timed out", "N/A");
             }
         } else {
-            Log.e(TAG, "BLE Service not bound");
-            updateResponse("BLE Service not connected", "N/A");
+            Log.e(TAG, "EMWaver Service not bound");
+            updateResponse("EMWaver Service not connected", "N/A");
         }
     }
 
@@ -555,9 +555,9 @@ public class BLEFragment extends Fragment {
 
     // Helper method to update UI based on connection status from broadcast
     private void updateConnectionUI(boolean connected) {
-        if (bleStatusText != null) {
-            bleStatusText.setText(connected ? "Connected" : "Not connected");
-            bleStatusText.setTextColor(connected ? 
+        if (emwaverStatusText != null) {
+            emwaverStatusText.setText(connected ? "Connected" : "Not connected");
+            emwaverStatusText.setTextColor(connected ? 
                     ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
                     ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
         }
