@@ -24,6 +24,9 @@
 #include "nvs_flash.h"
 #include "esp_heap_caps.h"
 
+// Define firmware version
+#define FIRMWARE_VERSION "1.0.0"
+
 // Include CC1101 module
 #include "cc1101.h"
 
@@ -501,6 +504,18 @@ static void command_task(void *pvParameters)
                     uint8_t resp = 1;
                     ble_server_notify(&resp, 1);
                 }
+            }
+            // Version command
+            else if (cmd.length >= 7 && strncmp((char *)cmd.data, "version", 7) == 0) {
+                ESP_LOGI(TAG, "Version command received");
+                
+                // Create a welcome message with the version at the beginning
+                char welcome_message[64];
+                snprintf(welcome_message, sizeof(welcome_message), 
+                         "%s - Welcome to EMWaver!", FIRMWARE_VERSION);
+                
+                // Send the welcome message over BLE
+                ble_server_notify((uint8_t*)welcome_message, strlen(welcome_message));
             }
             // BLE specific commands
             else if (cmd.length >= 4 && strncmp((char *)cmd.data, "ble?", 4) == 0) {

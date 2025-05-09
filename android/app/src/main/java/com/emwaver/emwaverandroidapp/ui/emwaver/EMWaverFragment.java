@@ -23,6 +23,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.CheckBox;
+import android.widget.ImageButton;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
@@ -54,6 +55,8 @@ public class EMWaverFragment extends Fragment {
     private TextView emwaverStatusText;
     private Button disconnectButton;
     private Button connectButton;
+    private TextView firmwareVersionText;
+    private ImageButton checkVersionButton;
     
     private BLEService bleService;
     private boolean isServiceBound = false;
@@ -112,6 +115,8 @@ public class EMWaverFragment extends Fragment {
         emwaverStatusText = root.findViewById(R.id.emwaver_status_text);
         disconnectButton = root.findViewById(R.id.disconnect_button);
         connectButton = root.findViewById(R.id.connect_button);
+        firmwareVersionText = root.findViewById(R.id.firmware_version_text);
+        checkVersionButton = root.findViewById(R.id.check_version_button);
 
         setupSpinner();
         setupButtons();
@@ -120,6 +125,7 @@ public class EMWaverFragment extends Fragment {
         setupStatusUpdates();
         setupDisconnectButton();
         setupConnectButton();
+        setupVersionButton();
 
         // Load saved pin selection or set default
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
@@ -203,6 +209,14 @@ public class EMWaverFragment extends Fragment {
         bleReceiver = new BLEReceiver(this::updateConnectionUI);
         IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
         requireActivity().registerReceiver(bleReceiver, filter);
+        
+        // Check firmware version when fragment is first entered if already connected
+        if (isServiceBound && bleService != null && bleService.checkConnection()) {
+            // Add a delay to ensure the fragment is fully visible before requesting version
+            new Handler().postDelayed(() -> {
+                requestFirmwareVersion();
+            }, 2000);
+        }
     }
 
     @Override
@@ -340,6 +354,16 @@ public class EMWaverFragment extends Fragment {
                 bleService.startScan(); 
             } else {
                 Toast.makeText(getContext(), "EMWaver Service not bound. Cannot connect.", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void setupVersionButton() {
+        checkVersionButton.setOnClickListener(v -> {
+            if (isServiceBound && bleService != null && bleService.checkConnection()) {
+                requestFirmwareVersion();
+            } else {
+                Toast.makeText(getContext(), "Device not connected", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -565,6 +589,21 @@ public class EMWaverFragment extends Fragment {
             disconnectButton.setVisibility(connected ? View.VISIBLE : View.GONE);
             connectButton.setVisibility(connected ? View.GONE : View.VISIBLE);
         }
+        
+        // When connected, request firmware version after a short delay
+        // to ensure the connection is fully established
+        if (connected) {
+            new Handler().postDelayed(() -> {
+                requestFirmwareVersion();
+            }, 2000); // 500ms delay to allow connection to stabilize
+        } else {
+            // Reset firmware version to Unknown when disconnected
+            if (firmwareVersionText != null) {
+                firmwareVersionText.setText("Unknown");
+                firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                        android.R.color.darker_gray));
+            }
+        }
     }
 
     private byte getPinNumberFromSelection(String selectedPinString) {
@@ -603,5 +642,62 @@ public class EMWaverFragment extends Fragment {
                 appendToSerialMonitor(htmlOutput);
             });
         }
+    }
+
+    // Extract version checking logic into a separate method
+    private void requestFirmwareVersion() {
+        if (isServiceBound && bleService != null && bleService.checkConnection()) {
+            // Create the "version" command (changed from "ver")
+            byte[] command = new byte[]{'v', 'e', 'r', 's', 'i', 'o', 'n'};
+            
+            // Log the command to serial monitor as transmitted
+            logTxData(command);
+            
+            // Send the command to the device using existing command mechanism
+            byte[] response = bleService.sendCommand(command, 2000);
+            
+            // Process the response
+            if (response != null && response.length > 0) {
+                // Display the response in the serial monitor
+                String hexData = bytesToHex(response);
+                String asciiData = bytesToAscii(response);
+                updateResponse(hexData, asciiData);
+                
+                // Parse the version from the welcome message
+                String fullMessage = bytesToAscii(response);
+                String version = extractVersion(fullMessage);
+                
+                // Update the version text field with just the version number
+                firmwareVersionText.setText(version);
+                firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                        android.R.color.holo_blue_dark));
+            } else {
+                Toast.makeText(getContext(), "Failed to get firmware version", Toast.LENGTH_SHORT).show();
+                firmwareVersionText.setText("Unknown");
+                firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                        android.R.color.darker_gray));
+            }
+        } else {
+            firmwareVersionText.setText("Unknown");
+            firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                    android.R.color.darker_gray));
+        }
+    }
+    
+    // Extract version from the welcome message
+    private String extractVersion(String message) {
+        // Format is now "1.0.0 - Welcome to EMWaver!"
+        if (message == null || message.isEmpty()) {
+            return "Unknown";
+        }
+        
+        // The version is at the beginning up to the first dash
+        int dashIndex = message.indexOf('-');
+        if (dashIndex > 0) {
+            return message.substring(0, dashIndex).trim();
+        }
+        
+        // If parsing fails (no dash found), just return the original message
+        return message;
     }
 } 
