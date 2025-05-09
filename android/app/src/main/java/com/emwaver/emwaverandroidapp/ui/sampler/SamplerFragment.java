@@ -82,6 +82,7 @@ public class SamplerFragment extends Fragment {
     private boolean isRecording = false;
     private boolean forceRefresh = true;
     private int refreshDelay = 50; // Default, will be loaded from preferences
+    private int bufferSizeLimit = 393216; // Default to ~30 seconds at 10μs per sample, will be loaded from preferences
     private boolean schedulerRunning = false;
     private final Handler refreshHandler = new Handler(Looper.getMainLooper());
     private final Runnable refreshRunnable = new Runnable() {
@@ -196,6 +197,10 @@ public class SamplerFragment extends Fragment {
         binding.retransmitButton.setOnClickListener(v -> retransmitSignal());
         binding.getTimingsButton.setOnClickListener(v -> getTimings());
         binding.invertSignalButton.setOnClickListener(v -> convertToIR());
+        
+        // Initially disable the stop button as we're not recording yet
+        binding.stopButton.setEnabled(false);
+        
         rawModeViewModel = new ViewModelProvider(this).get(SamplerViewModel.class);
 
         Runtime runtime = Runtime.getRuntime();
@@ -361,6 +366,15 @@ public class SamplerFragment extends Fragment {
             refreshDelay = 50; // Fallback default
         }
         
+        // Get buffer size limit from preferences 
+        String bufferSizeLimitStr = prefs.getString("buffer_size_limit", "393216"); // Default ~30 seconds
+        
+        try {
+            bufferSizeLimit = Integer.parseInt(bufferSizeLimitStr);
+        } catch (NumberFormatException e) {
+            bufferSizeLimit = 393216; // Fallback to ~30 seconds
+        }
+        
         // Start new scheduler
         schedulerRunning = true;
         refreshHandler.post(refreshRunnable);
@@ -379,6 +393,13 @@ public class SamplerFragment extends Fragment {
 
         // Get current buffer size
         int currentBufferSize = BLEService.getBufferLength();
+        
+        // Check if buffer size limit has been reached while recording
+        if (isRecording && bufferSizeLimit > 0 && currentBufferSize >= bufferSizeLimit) {
+            Log.i("SamplerFragment", "Buffer size limit reached: " + currentBufferSize + " bytes. Stopping recording.");
+            stopRecording();
+            Toast.makeText(getContext(), "Recording stopped: Buffer size limit reached. You can change this limit in Settings.", Toast.LENGTH_LONG).show();
+        }
         
         // Only update if buffer size has changed or we're recording or force refresh
         if (currentBufferSize == lastBufferSize && !isRecording && !forceRefresh) {
@@ -422,6 +443,11 @@ public class SamplerFragment extends Fragment {
             // Set recording flag
             isRecording = true;
             
+            // Disable record button while recording
+            binding.recordButton.setEnabled(false);
+            // Enable stop button
+            binding.stopButton.setEnabled(true);
+            
             Toast.makeText(getContext(), "Recording started on " + selectedPinString, Toast.LENGTH_SHORT).show();
         }
     }
@@ -433,6 +459,11 @@ public class SamplerFragment extends Fragment {
             
             // Clear recording flag
             isRecording = false;
+            
+            // Re-enable record button
+            binding.recordButton.setEnabled(true);
+            // Disable stop button
+            binding.stopButton.setEnabled(false);
             
             Toast.makeText(getContext(), "Recording stopped", Toast.LENGTH_SHORT).show();
         }
@@ -580,6 +611,10 @@ public class SamplerFragment extends Fragment {
         
         // Force a refresh to make sure we're showing current data
         forceRefresh();
+        
+        // Update UI based on recording state
+        binding.recordButton.setEnabled(!isRecording);
+        binding.stopButton.setEnabled(isRecording);
     }
     @Override
     public void onPause() {
