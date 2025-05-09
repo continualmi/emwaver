@@ -12,7 +12,8 @@
         android:orientation="horizontal"
         android:layout_marginBottom="8dp"
         android:padding="8dp"
-        android:background="#EFEFEF">
+        android:background="#EFEFEF"
+        android:gravity="center_vertical">
 
         <TextView
             android:layout_width="wrap_content"
@@ -29,6 +30,26 @@
             android:text="Not connected"
             android:textColor="#FF0000"
             android:gravity="center_vertical" />
+
+        <Button
+            android:id="@+id/connect_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Connect"
+            android:layout_marginStart="8dp"
+            android:visibility="visible" />
+
+        <Button
+            android:id="@+id/disconnect_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="Disconnect"
+            android:layout_marginStart="8dp"
+            android:visibility="gone" />
 
     </LinearLayout>
 
