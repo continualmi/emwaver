@@ -54,10 +54,4 @@
         android:label="Bad-USB"
         tools:layout="@layout/fragment_bad_usb" />
 
-    <fragment
-        android:id="@+id/navigation_ghz24"
-        android:name="com.emwaver.emwaverandroidapp.ui.ghz24.GHz24Fragment"
-        android:label="2.4 GHz"
-        tools:layout="@layout/fragment_ghz24" />
-
 </navigation>

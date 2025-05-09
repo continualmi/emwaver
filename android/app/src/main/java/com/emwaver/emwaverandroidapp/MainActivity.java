@@ -77,7 +77,7 @@ public class MainActivity extends AppCompatActivity {
                 R.id.navigation_cc1101, R.id.navigation_rfid,
                 R.id.navigation_sampler, R.id.navigation_console, R.id.navigation_buttons,
                 R.id.navigation_emwaver, R.id.navigation_template,
-                R.id.navigation_bad_usb, R.id.navigation_ghz24)
+                R.id.navigation_bad_usb)
                 .setOpenableLayout(drawer)
                 .build();
 
