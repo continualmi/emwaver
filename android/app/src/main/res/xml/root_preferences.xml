@@ -17,6 +17,16 @@
             app:iconSpaceReserved="false"
             app:useSimpleSummaryProvider="true" />
 
+        <ListPreference
+            android:key="buffer_size_limit"
+            android:title="Buffer Size Limit"
+            android:summary="Set maximum buffer size for sampling (each sample is 10µs)"
+            android:defaultValue="393216"
+            android:entries="@array/buffer_size_limit_entries"
+            android:entryValues="@array/buffer_size_limit_values"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
     </PreferenceCategory>
 
 </PreferenceScreen> 

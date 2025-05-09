@@ -20,4 +20,24 @@
         <item>400</item>
         <item>500</item>
     </string-array>
+    
+    <!-- Buffer size limit options -->
+    <string-array name="buffer_size_limit_entries">
+        <item>1 MB (~80 seconds)</item>
+        <item>768 KB (~60 seconds)</item>
+        <item>512 KB (~40 seconds)</item>
+        <item>384 KB (~30 seconds)</item>
+        <item>256 KB (~20 seconds)</item>
+        <item>128 KB (~10 seconds)</item>
+        <item>No limit</item>
+    </string-array>
+    <string-array name="buffer_size_limit_values">
+        <item>1048576</item>
+        <item>786432</item>
+        <item>524288</item>
+        <item>393216</item>
+        <item>262144</item>
+        <item>131072</item>
+        <item>0</item>
+    </string-array>
 </resources> 
