@@ -649,7 +649,7 @@ static void command_task(void *pvParameters)
                 const char* msg = "Success";
                 ble_server_notify((const uint8_t*)msg, strlen(msg));
             }
-            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
+            else if (cmd.length >= 3 && strncmp((char *)cmd.data, "usb", 3) == 0) {
                 // Everything after "usb" is the payload
                 char* payload = (char*)&cmd.data[3];
                 size_t payload_len = cmd.length - 3;
@@ -657,15 +657,67 @@ static void command_task(void *pvParameters)
                 char saved = payload[payload_len];
                 payload[payload_len] = '\0';
 
-                // Initialize BadUSB (if not already)
-                badusb_install();
-
-                // Immediately send the payload as keyboard input
-                badusb_send_string(payload);
-
-                // Optionally, send immediate feedback over BLE
-                uint8_t resp = 1;
-                ble_server_notify(&resp, 1);
+                // Check if the payload starts with known DuckyScript commands
+                if (strncmp(payload, "ATTACKMODE", 10) == 0) {
+                    // ATTACKMODE command - just acknowledge it since we're already in HID mode
+                    ESP_LOGI(TAG, "BadUSB: ATTACKMODE command received");
+                    badusb_install(); // Ensure BadUSB is installed
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+                else if (strncmp(payload, "STRING ", 7) == 0) {
+                    // STRING command - extract and send the actual string
+                    char* string_content = payload + 7; // Skip "STRING " prefix
+                    ESP_LOGI(TAG, "BadUSB: STRING command with content: %s", string_content);
+                    
+                    // Initialize BadUSB (if not already)
+                    badusb_install();
+                    
+                    // Send the string content as keyboard input
+                    badusb_send_string(string_content);
+                    
+                    // Acknowledge
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+                else if (strncmp(payload, "DELAY", 5) == 0) {
+                    // DELAY command - extract and implement the delay
+                    ESP_LOGI(TAG, "BadUSB: DELAY command received");
+                    // Just acknowledge, the actual delay is handled on the app side
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+                else if (strncmp(payload, "ENTER", 5) == 0) {
+                    // ENTER command - send an Enter key
+                    ESP_LOGI(TAG, "BadUSB: ENTER command received");
+                    
+                    // Initialize BadUSB (if not already)
+                    badusb_install();
+                    
+                    // Send Enter key
+                    badusb_send_string("\n");
+                    
+                    // Acknowledge
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+                else {
+                    // Default case for raw text or unrecognized commands
+                    ESP_LOGI(TAG, "BadUSB: Sending raw text: %s", payload);
+                    
+                    // Initialize BadUSB (if not already)
+                    badusb_install();
+                    
+                    // Immediately send the payload as keyboard input
+                    badusb_send_string(payload);
+                    
+                    // Optionally, send immediate feedback over BLE
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+                
+                // Restore the original character that was overwritten by null terminator
+                payload[payload_len] = saved;
             }
             else if (cmd.length >= 3 && strncmp((char *)cmd.data, "nrf", 3) == 0) {
                 // Initialize NRF24 if not already initialized

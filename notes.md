@@ -18,6 +18,7 @@
 * Further write Template Fragment (no need)
 * Remove nrf24 fragment (nrf24 will be for forking and custom implementations)
 * Make the feel of the console fragment UI betters
+* Make the feel of the buttons fragment UI better
 
 ## Not Done
 
@@ -33,10 +34,14 @@
 * For BAD-USB, we need to write a NVS functionality as well, to make the ESP32 boot and immediatly inject payload that was saved to Non volatile storage NVS
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
+* Clean out nrf24 code from esp32
 
 
-* Make the feel of the buttons fragment UI better
-* Implement Bad-USBs
+
+* Implement Bad-USB functionality through Console fragment scripting. Much cleaner than doing my own Bas USB fragment!
+* Remove bad usb fragment
+* Remove template fragment. If people want to create a new fragment, there is no need for a template fragment i don't think. We think about it down the line
+
 
 
 ## Build Commands
