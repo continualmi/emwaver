@@ -161,7 +161,8 @@ public class ConsoleFragment extends Fragment {
         binding.jsCodeInput.setText("");
 
         // Set initial status
-        Utils.updateActionBarStatus(this, "Open a script");
+        currentScriptName = null;
+        hasUnsavedChanges = false;
 
         MenuHost menuHost = requireActivity();
         menuHost.addMenuProvider(new MenuProvider() {
@@ -209,8 +210,14 @@ public class ConsoleFragment extends Fragment {
                     final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
                     getContext().getContentResolver().takePersistableUriPermission(uri, takeFlags);
                     saveFileToUri(uri);
-                    Utils.updateActionBarStatus(this, getFileNameFromUri(getContext(), uri), hasUnsavedChanges);
+                    currentScriptName = getFileNameFromUri(getContext(), uri);
+                    updateScriptEditorTitle();
                 }
+            } else {
+                // If no file was selected, revert to the initial status
+                currentScriptName = null;
+                hasUnsavedChanges = false;
+                updateScriptEditorTitle();
             }
         });
 
@@ -230,8 +237,9 @@ public class ConsoleFragment extends Fragment {
                     binding.jsCodeInput.setText(content);
                     updateRecentScripts(fileName);
                     
-                    // Update action bar and save URI
-                    Utils.updateActionBarStatus(this, fileName, hasUnsavedChanges);
+                    // Update script editor title and save URI
+                    currentScriptName = fileName;
+                    updateScriptEditorTitle();
                     
                     showToastOnUiThread("Script loaded and saved to internal storage: " + fileName);
                 } catch (IOException e) {
@@ -240,7 +248,9 @@ public class ConsoleFragment extends Fragment {
                 }
             } else {
                 // If no file was selected, revert to the initial status
-                Utils.updateActionBarStatus(this, "Open a script");
+                currentScriptName = null;
+                hasUnsavedChanges = false;
+                updateScriptEditorTitle();
             }
         });
 
@@ -255,6 +265,14 @@ public class ConsoleFragment extends Fragment {
 
         // Setup collapsible sections
         setupCollapsibleSections();
+
+        // Initialize console output
+        binding.consoleWindowText.setText("<Console>");
+        
+        // Now that views are initialized, update the title
+        currentScriptName = null;
+        hasUnsavedChanges = false;
+        updateScriptEditorTitle();
 
         return root;
     }
@@ -456,7 +474,7 @@ public class ConsoleFragment extends Fragment {
         String content = loadScriptFromInternalStorage(scriptName);
         binding.jsCodeInput.setText(content);
         hasUnsavedChanges = false;
-        Utils.updateActionBarStatus(this, currentScriptName, hasUnsavedChanges);
+        updateScriptEditorTitle();
     }
 
     private void updateRecentScripts(String scriptName) {
@@ -499,7 +517,7 @@ public class ConsoleFragment extends Fragment {
             @Override
             public void afterTextChanged(Editable s) {
                 hasUnsavedChanges = true;
-                Utils.updateActionBarStatus(ConsoleFragment.this, currentScriptName, hasUnsavedChanges);
+                updateScriptEditorTitle();
                 autoSaveHandler.removeCallbacksAndMessages(null);
                 autoSaveHandler.postDelayed(() -> autoSaveScript(), AUTO_SAVE_DELAY_MS);
             }
@@ -511,7 +529,7 @@ public class ConsoleFragment extends Fragment {
             String content = binding.jsCodeInput.getText().toString();
             saveScriptToInternalStorage(currentScriptName, content);
             hasUnsavedChanges = false;
-            Utils.updateActionBarStatus(this, currentScriptName, hasUnsavedChanges);
+            updateScriptEditorTitle();
         }
     }
 
@@ -602,7 +620,7 @@ public class ConsoleFragment extends Fragment {
             scriptAdapter.notifyDataSetChanged();
             if (currentScriptName != null && currentScriptName.equals(oldName)) {
                 currentScriptName = newName;
-                Utils.updateActionBarStatus(this, currentScriptName, hasUnsavedChanges);
+                updateScriptEditorTitle();
             }
             showToastOnUiThread("Script renamed to: " + newName);
         } else {
@@ -627,7 +645,7 @@ public class ConsoleFragment extends Fragment {
             if (currentScriptName != null && currentScriptName.equals(scriptName)) {
                 binding.jsCodeInput.setText("");
                 currentScriptName = null;
-                Utils.updateActionBarStatus(this, "Open a script");
+                updateScriptEditorTitle();
             }
             showToastOnUiThread("Script deleted: " + scriptName);
         } else {
@@ -652,19 +670,14 @@ public class ConsoleFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // Reset action bar status when entering this fragment
-        if (currentScriptName != null) {
-            Utils.updateActionBarStatus(this, currentScriptName, hasUnsavedChanges);
-        } else {
-            Utils.updateActionBarStatus(this, "Open a script");
-        }
+        // Update script editor title when entering this fragment
+        updateScriptEditorTitle();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        // Clear action bar status when leaving this fragment
-        Utils.updateActionBarStatus(this, "");
+        // No longer need to clear action bar status
     }
 
     private void createDefaultScriptsIfNeeded() {
@@ -708,6 +721,20 @@ public class ConsoleFragment extends Fragment {
             saveScriptToInternalStorage(txScriptName, txContent);
             updateRecentScripts(txScriptName);
             showToastOnUiThread("Default CC1101 TX continuous script created");
+        }
+    }
+
+    private void updateScriptEditorTitle() {
+        if (getActivity() != null && scriptEditorTitle != null) {
+            getActivity().runOnUiThread(() -> {
+                String title;
+                if (currentScriptName != null && !currentScriptName.isEmpty()) {
+                    title = currentScriptName + (hasUnsavedChanges ? " *" : "");
+                } else {
+                    title = "Script Editor [No script open]";
+                }
+                scriptEditorTitle.setText(title);
+            });
         }
     }
 }
