@@ -12,6 +12,7 @@
 * Change pin choices to match the available on the latest EMWaver hardware
 * EMWaver logo on BLE connection notification
 * Change BLE Fragment to EMWaver fragment
+* Remove firmware update fragment. Instead, add versioning of EMWaver firmware, and then on BLE connected, check version and alert users for possible update
 
 ## Not Done
 
@@ -30,7 +31,7 @@
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Need to fix the RAM issue when recording for too long. Need a normal disk writing buffer strategy, maybe double buffer on RAM, this is for both IOS and Android
 * Look into maybe increasing throughput from 100kbps to 200kbps just to get better resolution on recordings of 5us instead of 10us between samples. Not strictly needed as seen on IR transmission and so on, but something with some value to have
-* Remove firmware update fragment. Instead, add versioning of EMWaver firmware, and then on BLE connected, check version and alert users for possible update
+
 
 
 ## Build Commands
