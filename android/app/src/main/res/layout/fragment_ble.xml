@@ -103,15 +103,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="HEX"
-            android:checked="true"
-            android:layout_marginEnd="8dp" />
-
-        <CheckBox
-            android:id="@+id/show_ascii"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="ASCII"
-            android:checked="true" />
+            android:checked="false" />
     </LinearLayout>
 
     <!-- Serial Monitor -->
