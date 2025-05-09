@@ -1126,6 +1126,16 @@ public class BLEService extends Service {
         return bufferStatus;
     }
 
+    // Helper method to send a string command directly
+    public void sendString(String command) {
+        if (command == null || command.isEmpty()) {
+            return;
+        }
+        
+        byte[] bytes = command.getBytes();
+        sendPacket(bytes);
+    }
+
     // Helper method to translate BLE characteristic properties to readable string
     private String getPropertiesString(int properties) {
         StringBuilder sb = new StringBuilder();
