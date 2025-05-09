@@ -32,11 +32,6 @@
             android:title="Console" />
 
         <item
-            android:id="@+id/navigation_firmware_update"
-            android:icon="@drawable/ic_flash_black_24dp"
-            android:title="Firmware Update" />
-
-        <item
             android:id="@+id/navigation_bad_usb"
             android:icon="@drawable/ai_usb"
             android:title="Bad-USB" />

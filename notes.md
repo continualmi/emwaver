@@ -13,6 +13,9 @@
 * EMWaver logo on BLE connection notification
 * Change BLE Fragment to EMWaver fragment
 * Remove firmware update fragment. Instead, add versioning of EMWaver firmware, and then on BLE connected, check version and alert users for possible update
+* Need to fix the RAM issue when recording for too long. Need a normal disk writing buffer strategy, maybe double buffer on RAM, this is for both IOS and Android (solution: added limit)
+* Look into maybe increasing throughput from 100kbps to 200kbps just to get better resolution on recordings of 5us instead of 10us between samples. Not strictly needed as seen on IR transmission and so on, but something with some value to have (looked and no need really)
+* Further write Template Fragment (no need)
 
 ## Not Done
 
@@ -21,7 +24,7 @@
 * Retransmission over and over on iOS also fails a bit, needs a bit more work.
 * Need to write README file properly too, including the EMWaver logo there, and basic repo instructions.
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
-* Further write Template Fragment
+
 * Settings fragment also needs to have some stuff, not sure what
 * Bad-USB fragment still needs to be written
 * Implement some 2.4 GHz basic functionality on 2.4 GHz fragment
@@ -29,8 +32,7 @@
 * See why RFID range is really bad for some reason using the cheap module. Not sure if it's a board issue since I never tested it even with old USB CDC Protocol
 * For BAD-USB, we need to write a NVS functionality as well, to make the ESP32 boot and immediatly inject payload that was saved to Non volatile storage NVS
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
-* Need to fix the RAM issue when recording for too long. Need a normal disk writing buffer strategy, maybe double buffer on RAM, this is for both IOS and Android
-* Look into maybe increasing throughput from 100kbps to 200kbps just to get better resolution on recordings of 5us instead of 10us between samples. Not strictly needed as seen on IR transmission and so on, but something with some value to have
+
 
 
 
