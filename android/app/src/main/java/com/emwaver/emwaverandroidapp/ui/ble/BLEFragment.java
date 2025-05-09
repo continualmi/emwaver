@@ -52,6 +52,8 @@ public class BLEFragment extends Fragment {
     private EditText commandInput;
     private Button sendPacketButton;
     private TextView bleStatusText;
+    private Button disconnectButton;
+    private Button connectButton;
     
     private BLEService bleService;
     private boolean isServiceBound = false;
@@ -108,12 +110,16 @@ public class BLEFragment extends Fragment {
         serialMonitorScroll = root.findViewById(R.id.serial_monitor_scroll);
         showHex = root.findViewById(R.id.show_hex);
         bleStatusText = root.findViewById(R.id.ble_status_text);
+        disconnectButton = root.findViewById(R.id.disconnect_button);
+        connectButton = root.findViewById(R.id.connect_button);
 
         setupSpinner();
         setupButtons();
         setupSendCommandButton();
         setupMonitorUpdates();
         setupStatusUpdates();
+        setupDisconnectButton();
+        setupConnectButton();
 
         // Load saved pin selection or set default
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
@@ -233,15 +239,24 @@ public class BLEFragment extends Fragment {
             
             if (bleStatusText != null) {
                 bleStatusText.setText(connected ? "Connected" : "Not connected");
-                // Change text color based on connection status
                 bleStatusText.setTextColor(connected ? 
                         ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
                         ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+            }
+            if (disconnectButton != null && connectButton != null) {
+                disconnectButton.setVisibility(connected ? View.VISIBLE : View.GONE);
+                connectButton.setVisibility(connected ? View.GONE : View.VISIBLE);
             }
         } else {
             if (bleStatusText != null) {
                 bleStatusText.setText("Service not bound");
                 bleStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+            }
+            if (disconnectButton != null) {
+                disconnectButton.setVisibility(View.GONE);
+            }
+            if (connectButton != null) {
+                connectButton.setVisibility(View.VISIBLE);
             }
         }
         
@@ -300,6 +315,31 @@ public class BLEFragment extends Fragment {
                 bleService.sendPacket(commandBytes);
             } else {
                 Toast.makeText(getContext(), "BLE Service not connected", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void setupDisconnectButton() {
+        disconnectButton.setOnClickListener(v -> {
+            if (isServiceBound && bleService != null && bleService.checkConnection()) {
+                bleService.disconnect();
+                Toast.makeText(getContext(), "Disconnected from device.", Toast.LENGTH_SHORT).show();
+                updateConnectionStatus();
+            } else {
+                Toast.makeText(getContext(), "Not connected or service not available.", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void setupConnectButton() {
+        connectButton.setOnClickListener(v -> {
+            if (isServiceBound && bleService != null) {
+                bleStatusText.setText("Connecting...");
+                bleStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_orange_dark));
+                connectButton.setVisibility(View.GONE); // Hide connect while attempting, updateConnectionUI will fix later
+                bleService.startScan(); 
+            } else {
+                Toast.makeText(getContext(), "BLE Service not bound. Cannot connect.", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -520,6 +560,10 @@ public class BLEFragment extends Fragment {
             bleStatusText.setTextColor(connected ? 
                     ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
                     ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+        }
+        if (disconnectButton != null && connectButton != null) {
+            disconnectButton.setVisibility(connected ? View.VISIBLE : View.GONE);
+            connectButton.setVisibility(connected ? View.GONE : View.VISIBLE);
         }
     }
 

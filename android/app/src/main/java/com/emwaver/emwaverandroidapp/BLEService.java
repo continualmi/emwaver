@@ -239,6 +239,17 @@ public class BLEService extends Service {
         return START_STICKY;
     }
 
+    // Public method to be called from BLEFragment to disconnect
+    public void disconnect() {
+        Log.d(TAG, "Disconnect called from UI");
+        updateNotification("Disconnecting...");
+        disconnectGatt();
+        // Ensure UI and notification reflect the disconnected state immediately
+        isConnected = false; // Explicitly set isConnected to false
+        broadcastConnectionStatus(false);
+        updateNotification("Not connected");
+    }
+
     @Override
     public void onDestroy() {
         disconnectGatt();
