@@ -92,6 +92,12 @@ public class ButtonsFragment extends Fragment {
     private boolean isServiceBound = false;
     private IrEncoderWrapper irEncoderWrapper;
 
+    // Views for collapsible sections
+    private TextView remotesListTitle;
+    private androidx.cardview.widget.CardView remotesListCard;
+    private TextView buttonGridTitle;
+    private androidx.cardview.widget.CardView buttonGridCard;
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
@@ -149,16 +155,53 @@ public class ButtonsFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_buttons, container, false);
 
         remotesListView = view.findViewById(R.id.remotes_list_view);
+        buttonGrid = view.findViewById(R.id.button_grid);
 
+        // Initialize collapsible section views
+        remotesListTitle = view.findViewById(R.id.remotes_list_title);
+        remotesListCard = view.findViewById(R.id.remotes_list_card);
+        buttonGridTitle = view.findViewById(R.id.button_grid_title);
+        buttonGridCard = view.findViewById(R.id.button_grid_card);
+        
         setupRemotesList();
         loadRemotes();
-
-        buttonGrid = view.findViewById(R.id.button_grid);
-        
         setupButtonGrid();
         setupMenu();
+        setupCollapsibleSections(); // Call a new method to setup collapsible behavior
 
         return view;
+    }
+
+    private void setupCollapsibleSections() {
+        // Set initial visibility and arrows
+        updateArrow(remotesListTitle, remotesListCard.getVisibility() == View.VISIBLE);
+        updateArrow(buttonGridTitle, buttonGridCard.getVisibility() == View.VISIBLE);
+
+        remotesListTitle.setOnClickListener(v -> {
+            toggleVisibility(remotesListCard);
+            updateArrow((TextView) v, remotesListCard.getVisibility() == View.VISIBLE);
+        });
+
+        buttonGridTitle.setOnClickListener(v -> {
+            toggleVisibility(buttonGridCard);
+            updateArrow((TextView) v, buttonGridCard.getVisibility() == View.VISIBLE);
+        });
+    }
+
+    private void toggleVisibility(View view) {
+        if (view.getVisibility() == View.VISIBLE) {
+            view.setVisibility(View.GONE);
+        } else {
+            view.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void updateArrow(TextView titleView, boolean isExpanded) {
+        if (isExpanded) {
+            titleView.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_arrow_up_black, 0);
+        } else {
+            titleView.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_arrow_down_black, 0);
+        }
     }
 
     private void setupMenu() {
@@ -269,7 +312,7 @@ public class ButtonsFragment extends Fragment {
             JSONArray buttons = currentRemoteJson.getJSONArray("buttons");
             buttonAdapter.updateButtons(buttons);
             currentRemote = fileName;
-            Utils.updateActionBarStatus(this, "Remote: " + fileName);
+            updateButtonGridTitle("Remote: " + fileName);
         } catch (IOException | JSONException e) {
             Log.e("ButtonsFragment", "Error loading remote: " + fileName, e);
             Toast.makeText(requireContext(), "Error loading remote: " + e.getMessage(), Toast.LENGTH_SHORT).show();
@@ -519,7 +562,7 @@ public class ButtonsFragment extends Fragment {
             }
             
             // Update UI to reflect no remote selected
-            Utils.updateActionBarStatus(this, "No remote selected");
+            updateButtonGridTitle("No remote selected");
             
             // Refresh the list of remotes
             loadRemotes();
@@ -968,9 +1011,9 @@ public class ButtonsFragment extends Fragment {
         super.onResume();
         // Reset action bar status when entering this fragment
         if (currentRemote != null) {
-            Utils.updateActionBarStatus(this, "Remote: " + currentRemote);
+            updateButtonGridTitle("Remote: " + currentRemote);
         } else {
-            Utils.updateActionBarStatus(this, "No remote selected");
+            updateButtonGridTitle("No remote selected");
         }
     }
 
@@ -978,7 +1021,13 @@ public class ButtonsFragment extends Fragment {
     public void onPause() {
         super.onPause();
         // Clear action bar status when leaving this fragment
-        Utils.updateActionBarStatus(this, "");
+        // No need to clear title here, it will be reset in onResume of the next fragment or this one.
+    }
+
+    private void updateButtonGridTitle(String title) {
+        if (getActivity() != null && buttonGridTitle != null) {
+            getActivity().runOnUiThread(() -> buttonGridTitle.setText(title));
+        }
     }
 
 }
