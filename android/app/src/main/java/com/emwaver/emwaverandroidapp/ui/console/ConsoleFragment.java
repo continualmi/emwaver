@@ -30,6 +30,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.app.AlertDialog;
 import android.widget.AdapterView;
+import androidx.cardview.widget.CardView;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -96,6 +97,14 @@ public class ConsoleFragment extends Fragment {
 
     private Utils utils;
     private IrEncoderWrapper irEncoderWrapper;
+
+    // Views for collapsible sections
+    private TextView scriptsListTitle;
+    private CardView scriptListCard;
+    private TextView scriptEditorTitle;
+    private CardView scriptEditorCard;
+    private TextView consoleMonitorTitle;
+    private CardView consoleMonitorCard;
 
     private File getScriptsDir() {
         File dir = new File(getContext().getFilesDir(), SCRIPTS_DIR);
@@ -244,7 +253,53 @@ public class ConsoleFragment extends Fragment {
         irEncoderWrapper = new IrEncoderWrapper();
         utils.setContext(requireContext());
 
+        // Setup collapsible sections
+        setupCollapsibleSections();
+
         return root;
+    }
+
+    private void setupCollapsibleSections() {
+        scriptsListTitle = binding.scriptsListTitle;
+        scriptListCard = binding.scriptListCard;
+        scriptEditorTitle = binding.scriptEditorTitle;
+        scriptEditorCard = binding.scriptEditorCard;
+        consoleMonitorTitle = binding.consoleMonitorTitle;
+        consoleMonitorCard = binding.cardView; // ID of the console's CardView is 'cardView'
+
+        // Set initial visibility and arrows (optional - default is visible, arrow down)
+        updateArrow(scriptsListTitle, scriptListCard.getVisibility() == View.VISIBLE);
+        updateArrow(scriptEditorTitle, scriptEditorCard.getVisibility() == View.VISIBLE);
+        updateArrow(consoleMonitorTitle, consoleMonitorCard.getVisibility() == View.VISIBLE);
+
+        scriptsListTitle.setOnClickListener(v -> {
+            toggleVisibility(scriptListCard);
+            updateArrow((TextView) v, scriptListCard.getVisibility() == View.VISIBLE);
+        });
+        scriptEditorTitle.setOnClickListener(v -> {
+            toggleVisibility(scriptEditorCard);
+            updateArrow((TextView) v, scriptEditorCard.getVisibility() == View.VISIBLE);
+        });
+        consoleMonitorTitle.setOnClickListener(v -> {
+            toggleVisibility(consoleMonitorCard);
+            updateArrow((TextView) v, consoleMonitorCard.getVisibility() == View.VISIBLE);
+        });
+    }
+
+    private void toggleVisibility(View view) {
+        if (view.getVisibility() == View.VISIBLE) {
+            view.setVisibility(View.GONE);
+        } else {
+            view.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void updateArrow(TextView titleView, boolean isExpanded) {
+        if (isExpanded) {
+            titleView.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_arrow_up_black, 0);
+        } else {
+            titleView.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.ic_arrow_down_black, 0);
+        }
     }
 
     private void executeScript(){
