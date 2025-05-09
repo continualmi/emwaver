@@ -104,6 +104,9 @@ static TaskHandle_t transmission_monitor_task_handle = NULL;
 #define TRANSMISSION_TIMEOUT_MS 2000  // 2 seconds without data will stop transmission
 #define MONITOR_CHECK_INTERVAL_MS 10 // Check every 100ms
 
+// Add this line with other global variables, around line 70
+static intr_handle_t sampling_timer_isr_handle = NULL;
+
 // Function declarations
 void sampler_task(void* pvParameters);
 void transmission_monitor_task(void* pvParameters);
@@ -362,8 +365,17 @@ static void start_sampling(uint8_t pin) {
     timer_init(TIMER_GROUP_0, TIMER_0, &config);
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0x00000000ULL);
     timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 10); // 10 us sampling period
+    
+    // Enable the timer interrupt
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
-    timer_isr_register(TIMER_GROUP_0, TIMER_0, sampling_isr, NULL, ESP_INTR_FLAG_IRAM, NULL);
+    
+    // Register timer ISR and store the handle
+    esp_err_t err = timer_isr_register(TIMER_GROUP_0, TIMER_0, sampling_isr, NULL, ESP_INTR_FLAG_IRAM, &sampling_timer_isr_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register timer ISR: %d", err);
+        return;
+    }
+    
     timer_start(TIMER_GROUP_0, TIMER_0);
     
     ESP_LOGI(TAG, "BLE sampling started on pin %d", pin);
@@ -374,6 +386,12 @@ static void stop_sampling() {
     // Stop the timer first!
     timer_pause(TIMER_GROUP_0, TIMER_0);
     timer_disable_intr(TIMER_GROUP_0, TIMER_0);
+    
+    // Unregister the timer ISR if it was registered
+    if (sampling_timer_isr_handle != NULL) {
+        esp_intr_free(sampling_timer_isr_handle);
+        sampling_timer_isr_handle = NULL;
+    }
     
     // Then clean up buffers
     free((void*)bufferA);

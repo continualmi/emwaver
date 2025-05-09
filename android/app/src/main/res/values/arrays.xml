@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="refresh_time_entries">
+        <item>10 ms</item>
         <item>50 ms</item>
         <item>100 ms</item>
         <item>150 ms</item>
@@ -10,6 +11,7 @@
         <item>500 ms</item>
     </string-array>
     <string-array name="refresh_time_values">
+        <item>10</item>
         <item>50</item>
         <item>100</item>
         <item>150</item>
