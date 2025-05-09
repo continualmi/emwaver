@@ -649,7 +649,7 @@ static void command_task(void *pvParameters)
                 const char* msg = "Success";
                 ble_server_notify((const uint8_t*)msg, strlen(msg));
             }
-            else if (cmd.length >= 3 && strncmp((char *)cmd.data, "usb", 3) == 0) {
+            else if (cmd.length >= 3 && strncmp((char *)cmd.data, "bsb", 3) == 0) {
                 // Everything after "usb" is the payload
                 char* payload = (char*)&cmd.data[3];
                 size_t payload_len = cmd.length - 3;
@@ -718,6 +718,24 @@ static void command_task(void *pvParameters)
                 
                 // Restore the original character that was overwritten by null terminator
                 payload[payload_len] = saved;
+            }
+            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
+                // Everything after "usb" is the payload
+                char* payload = (char*)&cmd.data[3];
+                size_t payload_len = cmd.length - 3;
+                // Temporarily null-terminate the payload for safety
+                char saved = payload[payload_len];
+                payload[payload_len] = '\0';
+
+                // Initialize BadUSB (if not already)
+                badusb_install();
+
+                // Immediately send the payload as keyboard input
+                badusb_send_string(payload);
+
+                // Optionally, send immediate feedback over BLE
+                uint8_t resp = 1;
+                ble_server_notify(&resp, 1);
             }
             else if (cmd.length >= 3 && strncmp((char *)cmd.data, "nrf", 3) == 0) {
                 // Initialize NRF24 if not already initialized

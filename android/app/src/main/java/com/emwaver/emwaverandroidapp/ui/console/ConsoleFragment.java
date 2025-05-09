@@ -722,6 +722,35 @@ public class ConsoleFragment extends Fragment {
             updateRecentScripts(txScriptName);
             showToastOnUiThread("Default CC1101 TX continuous script created");
         }
+        
+        // BadUSB Hello World Script
+        String badUsbScriptName = "hello_world_usb.js";
+        File badUsbScript = new File(getScriptsDir(), badUsbScriptName);
+        
+        if (!badUsbScript.exists()) {
+            String badUsbContent = 
+                "// Simple BadUSB Hello World Example\n" +
+                "// This script demonstrates basic BadUSB functionality using the EMWaver\n\n" +
+                "// Initialize BadUSB mode (puts the device in HID keyboard mode)\n" +
+                "print(\"Setting up BadUSB mode...\");\n" +
+                "BLEService.sendString(\"usbATTACKMODE HID\");\n\n" +
+                "// Wait for the device to initialize\n" +
+                "print(\"Waiting 2 seconds for HID to initialize...\");\n" +
+                "Utils.delay(2000);\n\n" +
+                "// Type \"Hello, World!\" string\n" +
+                "print(\"Typing 'Hello, World!'...\");\n" +
+                "BLEService.sendString(\"usbSTRING Hello, World!\");\n" +
+                "Utils.delay(500);\n\n" +
+                "// Press Enter\n" +
+                "print(\"Pressing Enter key...\");\n" +
+                "BLEService.sendString(\"usbENTER\");\n" +
+                "Utils.delay(500);\n\n" +
+                "print(\"BadUSB test complete!\");";
+
+            saveScriptToInternalStorage(badUsbScriptName, badUsbContent);
+            updateRecentScripts(badUsbScriptName);
+            showToastOnUiThread("Default BadUSB hello world script created");
+        }
     }
 
     private void updateScriptEditorTitle() {
