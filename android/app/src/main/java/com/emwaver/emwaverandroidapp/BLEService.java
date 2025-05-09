@@ -160,7 +160,7 @@ public class BLEService extends Service {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("EMWaver BLE")
                 .setContentText(status)
-                .setSmallIcon(R.drawable.ai_bluetooth) // Using the bluetooth icon
+                .setSmallIcon(R.drawable.emwaver_vector) // Using the new vector drawable
                 .setContentIntent(contentIntent)
                 .setOngoing(true);
                 
