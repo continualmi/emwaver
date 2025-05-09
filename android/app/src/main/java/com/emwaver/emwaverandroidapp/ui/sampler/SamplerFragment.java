@@ -59,6 +59,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -76,6 +77,29 @@ public class SamplerFragment extends Fragment {
     private int prevRangeStart = 0;
     private int prevRangeEnd = 0;
     private int visiblePoints = 300;
+    private int lastBufferSize = 0;
+    private boolean isRecording = false;
+    private boolean forceRefresh = true;
+    private int refreshDelay = 50; // Default, will be loaded from preferences
+    private boolean schedulerRunning = false;
+    private final Handler refreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable refreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            // Perform the refresh
+            refreshChart();
+            
+            // Calculate time for next refresh
+            long currentTime = System.currentTimeMillis();
+            long processingTime = System.currentTimeMillis() - currentTime; // This will be 0, but kept for structure
+            long timeToNextRefresh = Math.max(1, refreshDelay - processingTime);
+            
+            // Schedule the next refresh if still running
+            if (schedulerRunning) {
+                refreshHandler.postDelayed(this, timeToNextRefresh);
+            }
+        }
+    };
 
     // Add PINS array to match UsbFragment
     private static final String[] PINS = {
@@ -87,17 +111,8 @@ public class SamplerFragment extends Fragment {
             "GPIO42", "GPIO43", "GPIO44", "GPIO45", "GPIO46", "GPIO47", "GPIO48"
     };
 
-    private static final int DEFAULT_REFRESH_DELAY = 100; // milliseconds
-    private int refreshDelay = DEFAULT_REFRESH_DELAY;
-    private ScheduledExecutorService scheduler;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Handler backgroundHandler = new Handler(Looper.getMainLooper());
-    private Runnable pendingCompressionTask;
-
     private ActivityResultLauncher<Intent> createFileLauncher;
     private ActivityResultLauncher<String[]> openFileLauncher;
-
-    private int lastBufferSize = 0;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -203,6 +218,8 @@ public class SamplerFragment extends Fragment {
                     rawModeViewModel.setVisibleRangeStart((int) chart.getLowestVisibleX());
                     rawModeViewModel.setVisibleRangeEnd((int) chart.getHighestVisibleX());
 
+                    // Always update the chart when zooming
+                    lastBufferSize = -1; // Force refresh by making lastBufferSize different
                     updateChartWithCompression(
                         rawModeViewModel.getVisibleRangeStart(), 
                         rawModeViewModel.getVisibleRangeEnd(), 
@@ -231,6 +248,8 @@ public class SamplerFragment extends Fragment {
                     prevRangeStart = visibleRangeStart;
                     prevRangeEnd = visibleRangeEnd;
 
+                    // Always update the chart when panning
+                    lastBufferSize = -1; // Force refresh by making lastBufferSize different
                     updateChartWithCompression(visibleRangeStart, visibleRangeEnd, visiblePoints);
                 }
             }
@@ -293,6 +312,7 @@ public class SamplerFragment extends Fragment {
     private void clearBuffer() {
         if (BLEService != null) {
             BLEService.clearBuffer();
+            lastBufferSize = -1; // Force refresh
             refreshChart(); // Refresh the chart to reflect the cleared buffer
         } else {
             Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
@@ -300,20 +320,29 @@ public class SamplerFragment extends Fragment {
     }
 
     private void initScheduler() {
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow();
-        }
+        // Stop any existing scheduler
+        stopScheduler();
         
         // Get refresh delay from preferences
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        refreshDelay = Integer.parseInt(prefs.getString("refresh_time", String.valueOf(DEFAULT_REFRESH_DELAY)));
         
-        scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleWithFixedDelay(this::refreshChartWrapper, 0, refreshDelay, TimeUnit.MILLISECONDS);
+        String refreshDelayStr = prefs.getString("refresh_time", "50"); // Default 50ms in preferences
+        
+        try {
+            refreshDelay = Integer.parseInt(refreshDelayStr);
+        } catch (NumberFormatException e) {
+            refreshDelay = 50; // Fallback default
+        }
+        
+        // Start new scheduler
+        schedulerRunning = true;
+        refreshHandler.post(refreshRunnable);
     }
-
-    private void refreshChartWrapper() {
-        mainHandler.post(this::refreshChart);
+    
+    private void stopScheduler() {
+        // Remove any pending refresh tasks
+        schedulerRunning = false;
+        refreshHandler.removeCallbacks(refreshRunnable);
     }
 
     private void refreshChart() {
@@ -321,22 +350,32 @@ public class SamplerFragment extends Fragment {
             return;
         }
 
+        // Get current buffer size
         int currentBufferSize = BLEService.getBufferLength();
-        if (currentBufferSize != lastBufferSize) {
-            lastBufferSize = currentBufferSize;
-
-            int visibleRangeStart = (int) chart.getLowestVisibleX();
-            int visibleRangeEnd = (int) chart.getHighestVisibleX();
-            rawModeViewModel.setVisibleRangeStart(visibleRangeStart);
-            rawModeViewModel.setVisibleRangeEnd(visibleRangeEnd);
-
-            chartMaxX = currentBufferSize * 8;
-            XAxis xAxis = chart.getXAxis();
-            xAxis.setAxisMinimum(chartMinX);
-            xAxis.setAxisMaximum(chartMaxX);
-
-            updateChartWithCompression(visibleRangeStart, visibleRangeEnd, visiblePoints);
+        
+        // Only update if buffer size has changed or we're recording or force refresh
+        if (currentBufferSize == lastBufferSize && !isRecording && !forceRefresh) {
+            // Skip update if nothing has changed
+            return;
         }
+        
+        // Reset force refresh flag
+        forceRefresh = false;
+        
+        // Update last buffer size
+        lastBufferSize = currentBufferSize;
+
+        int visibleRangeStart = (int) chart.getLowestVisibleX();
+        int visibleRangeEnd = (int) chart.getHighestVisibleX();
+        rawModeViewModel.setVisibleRangeStart(visibleRangeStart);
+        rawModeViewModel.setVisibleRangeEnd(visibleRangeEnd);
+
+        chartMaxX = currentBufferSize * 8;
+        XAxis xAxis = chart.getXAxis();
+        xAxis.setAxisMinimum(chartMinX);
+        xAxis.setAxisMaximum(chartMaxX);
+
+        updateChartWithCompression(visibleRangeStart, visibleRangeEnd, visiblePoints);
     }
 
     private void startRecording() {
@@ -350,6 +389,9 @@ public class SamplerFragment extends Fragment {
             byte[] command = new byte[]{'r', 'a', 'w', pinNumber};
             BLEService.write(command);
             
+            // Set recording flag
+            isRecording = true;
+            
             Toast.makeText(getContext(), "Recording started on " + selectedPin, Toast.LENGTH_SHORT).show();
         }
     }
@@ -358,6 +400,9 @@ public class SamplerFragment extends Fragment {
         if (BLEService != null) {
             byte[] command = "s".getBytes();
             BLEService.write(command);
+            
+            // Clear recording flag
+            isRecording = false;
             
             Toast.makeText(getContext(), "Recording stopped", Toast.LENGTH_SHORT).show();
         }
@@ -454,33 +499,30 @@ public class SamplerFragment extends Fragment {
     }
 
     private void updateChart(LineDataSet lineDataSet) {
+        long startTime = System.currentTimeMillis();
+        
         LineData lineData = new LineData(lineDataSet);
         chart.setData(lineData);
         chart.notifyDataSetChanged();
+        
+        long beforeInvalidate = System.currentTimeMillis();
+        Log.d("SamplerFragment", "Chart data set in " + (beforeInvalidate - startTime) + "ms");
+        
         chart.invalidate();
+        
+        Log.d("SamplerFragment", "Chart invalidate took " + (System.currentTimeMillis() - beforeInvalidate) + "ms");
     }
 
     private void updateChartWithCompression(int visibleRangeStart, int visibleRangeEnd, int points) {
-        // Cancel any pending compression task
-        if (pendingCompressionTask != null) {
-            backgroundHandler.removeCallbacks(pendingCompressionTask);
-        }
-
-        // Create new compression task
-        pendingCompressionTask = () -> {
-            // Run compression in background thread
-            new Thread(() -> {
-                final LineDataSet compressedData = compressDataAndGetDataSet(visibleRangeStart, visibleRangeEnd, points);
-                
-                // Update chart on main thread
-                mainHandler.post(() -> {
-                    updateChart(compressedData);
-                });
-            }).start();
-        };
-
-        // Schedule the compression task with debouncing using the same delay as refresh
-        backgroundHandler.postDelayed(pendingCompressionTask, refreshDelay);
+        // Execute immediately on a background thread
+        new Thread(() -> {
+            final LineDataSet compressedData = compressDataAndGetDataSet(visibleRangeStart, visibleRangeEnd, points);
+            
+            // Update chart on main thread
+            refreshHandler.post(() -> {
+                updateChart(compressedData);
+            });
+        }).start();
     }
 
     @Override
@@ -500,32 +542,23 @@ public class SamplerFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (scheduler == null || scheduler.isShutdown()) {
-            initScheduler();
-        } else {
-            // Check if refresh delay has changed
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            int newRefreshDelay = Integer.parseInt(prefs.getString("refresh_time", String.valueOf(DEFAULT_REFRESH_DELAY)));
-            if (newRefreshDelay != refreshDelay) {
-                // Reinitialize scheduler with new delay
-                initScheduler();
-            }
-        }
+        
+        // Initialize scheduler with the latest settings
+        initScheduler();
+        
+        // Force a refresh to make sure we're showing current data
+        forceRefresh();
     }
     @Override
     public void onPause() {
         super.onPause();
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow();
-        }
+        stopScheduler();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow();
-        }
+        stopScheduler();
     }
 
     public void openFile() {
@@ -558,6 +591,7 @@ public class SamplerFragment extends Fragment {
                 byte[] fileData = readBytes(instream);
                 // Now send this data to your native code to populate dataBuffer
                 BLEService.loadBuffer(fileData);
+                lastBufferSize = -1; // Force refresh
                 refreshChart();
             } catch (IOException e) {
                 Log.e("filesys", "Error reading from file", e);
@@ -658,5 +692,10 @@ public class SamplerFragment extends Fragment {
 
         AlertDialog dialog = builder.create();
         dialog.show();
+    }
+
+    private void forceRefresh() {
+        forceRefresh = true;
+        refreshChart();
     }
 }

@@ -11,7 +11,7 @@
             android:key="refresh_time"
             android:title="Refresh Time"
             android:summary="Select the refresh time interval for the sampler"
-            android:defaultValue="200"
+            android:defaultValue="50"
             android:entries="@array/refresh_time_entries"
             android:entryValues="@array/refresh_time_values"
             app:iconSpaceReserved="false"
