@@ -94,6 +94,9 @@ public class BLEService extends Service {
     private long firstPacketTimeMillis = 0;
     private long lastPacketReceivedTime = 0;
     private long lastLogTimeMillis = 0;
+    
+    // Store firmware version information
+    private String firmwareVersion = "Unknown";
 
     // Native method declarations
     public native void storeBulkPkt(byte[] data);
@@ -246,6 +249,7 @@ public class BLEService extends Service {
         disconnectGatt();
         // Ensure UI and notification reflect the disconnected state immediately
         isConnected = false; // Explicitly set isConnected to false
+        firmwareVersion = "Unknown"; // Reset firmware version
         broadcastConnectionStatus(false);
         updateNotification("Not connected");
     }
@@ -381,6 +385,9 @@ public class BLEService extends Service {
                     isConnected = false;
                     showToast("Disconnected from EMWaver device");
                     updateNotification("Disconnected from EMWaver");
+                    
+                    // Reset firmware version on disconnection
+                    firmwareVersion = "Unknown";
                     
                     // Broadcast connection status
                     broadcastConnectionStatus(false);
@@ -786,6 +793,7 @@ public class BLEService extends Service {
                 bluetoothGatt.close();
                 bluetoothGatt = null;
                 isConnected = false;
+                firmwareVersion = "Unknown"; // Reset firmware version
                 Log.d(TAG, "Disconnected from GATT server");
             } catch (Exception e) {
                 Log.e(TAG, "Error disconnecting", e);
@@ -1165,5 +1173,14 @@ public class BLEService extends Service {
         intent.putExtra(BLEReceiver.EXTRA_CONNECTION_STATUS, isConnected);
         sendBroadcast(intent);
         Log.d(TAG, "Broadcasting connection status: " + (isConnected ? "connected" : "disconnected"));
+    }
+
+    // Getter and setter for firmware version
+    public String getFirmwareVersion() {
+        return firmwareVersion;
+    }
+    
+    public void setFirmwareVersion(String version) {
+        this.firmwareVersion = version;
     }
 } 
