@@ -210,12 +210,15 @@ public class EMWaverFragment extends Fragment {
         IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
         requireActivity().registerReceiver(bleReceiver, filter);
         
-        // Check firmware version when fragment is first entered if already connected
+        // Update firmware version display from stored version if connected
         if (isServiceBound && bleService != null && bleService.checkConnection()) {
-            // Add a delay to ensure the fragment is fully visible before requesting version
-            new Handler().postDelayed(() -> {
-                requestFirmwareVersion();
-            }, 2000);
+            String storedVersion = bleService.getFirmwareVersion();
+            if (!"Unknown".equals(storedVersion)) {
+                // Use the stored version instead of requesting it again
+                firmwareVersionText.setText(storedVersion);
+                firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                        android.R.color.holo_blue_dark));
+            }
         }
     }
 
@@ -666,6 +669,9 @@ public class EMWaverFragment extends Fragment {
                 // Parse the version from the welcome message
                 String fullMessage = bytesToAscii(response);
                 String version = extractVersion(fullMessage);
+                
+                // Store the version in the service for persistence across fragment changes
+                bleService.setFirmwareVersion(version);
                 
                 // Update the version text field with just the version number
                 firmwareVersionText.setText(version);
