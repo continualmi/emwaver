@@ -136,7 +136,7 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:hint="e.g., emwaver?[0x00][255][0xFF]"
+            android:hint="e.g., version[0x00][255][0xFF]"
             android:inputType="text"
             android:padding="8dp"
             android:background="@android:drawable/edit_text" />
