@@ -37,6 +37,7 @@
 * ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 * Implement Buttons fragment working for CC1101 and BLEService scripts
 * Need better UI pattern. Lets start with Console View, and try and get it to look like Console Fragment a bit more . Collapsible views
+* The navigation needs attention. There is "back" button that opens the side drawer, why? we need a three dashes icon like android. (fixed the status bar but kept the back arrow UI)
 
 ## Not Done
 
@@ -53,18 +54,17 @@
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
 * Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either
+* Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
 
 IOS STUFF:
 
 
-
-* The navigation needs attention. There is "back" button that opens the side drawer, why? we need a three dashes icon like android. 
+* RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
+* EMWaver view using more GPIO pins than necessary, only need the ones on the board
 * Implement encodeIR logic, ported from android
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 * Figure out how to deal with external storage in IOS, for loading external scripts and etc.
-* RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
-* EMWaver view using more GPIO pins than necessary, only need the ones on the board
-* Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
+
 
 ## Hardware
 
