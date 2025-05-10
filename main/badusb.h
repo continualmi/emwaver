@@ -43,6 +43,22 @@ int badusb_send_string(const char* str);
  */
 void badusb_install(void);
 
+/**
+ * @brief Set delays for keyboard input.
+ * 
+ * @param press_delay Delay in ms between key press and release.
+ * @param char_delay Delay in ms between characters.
+ */
+void badusb_set_delays(uint32_t press_delay, uint32_t char_delay);
+
+/**
+ * @brief Set the delay between characters for keyboard input.
+ * The press-release delay is fixed at 5ms.
+ * 
+ * @param char_delay Delay in ms between characters.
+ */
+void badusb_set_char_delay(uint32_t char_delay);
+
 #ifdef __cplusplus
 }
 #endif

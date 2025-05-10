@@ -14,6 +14,16 @@ static const char *TAG = "BadUSB";
 // Internal state - track if driver is installed
 static bool badusb_driver_installed = false;
 
+// Delays in milliseconds - press release is fixed, character delay is configurable
+static const uint32_t badusb_press_delay_ms = 10;  // Fixed at 5ms (fast but reliable)
+static uint32_t badusb_char_delay_ms = 10;        // Default, but configurable
+
+// Set the character delay for keyboard input
+void badusb_set_char_delay(uint32_t char_delay) {
+    badusb_char_delay_ms = char_delay;
+    ESP_LOGI(TAG, "BadUSB character delay set to %lu ms", (unsigned long)char_delay);
+}
+
 // Basic ASCII to HID keycode lookup table (US QWERTY layout)
 // Needs expansion for full character set and handling modifiers (Shift)
 const uint8_t ascii_to_hid[128][2] = {
@@ -268,14 +278,14 @@ int badusb_send_string(const char* str) {
             // Send key press
             tud_hid_keyboard_report(0, modifier, keycode);
             
-            // Small delay between press and release - use 50ms like the working example
-            vTaskDelay(pdMS_TO_TICKS(50));
+            // Fixed minimal delay between press and release
+            vTaskDelay(pdMS_TO_TICKS(badusb_press_delay_ms));
             
             // Send key release report using NULL keycodes (all keys up)
             tud_hid_keyboard_report(0, 0, NULL);
             
-            // Small delay between characters
-            vTaskDelay(pdMS_TO_TICKS(50));
+            // Configurable delay between characters
+            vTaskDelay(pdMS_TO_TICKS(badusb_char_delay_ms));
         }
     }
 
