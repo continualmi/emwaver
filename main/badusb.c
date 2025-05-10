@@ -179,7 +179,7 @@ static const uint8_t kbd_hid_configuration_descriptor[] = {
     TUD_CONFIG_DESCRIPTOR(1, 1, 0, TUSB_DESC_TOTAL_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
 
     // Interface number, string index, boot protocol KBD, report descriptor len, EP In address, size & polling interval
-    TUD_HID_DESCRIPTOR(0, 4, true, sizeof(kbd_hid_report_descriptor), 0x81, 16, 10),
+    TUD_HID_DESCRIPTOR(0, 4, false, sizeof(kbd_hid_report_descriptor), 0x81, 16, 10),
 };
 
 /**
@@ -196,6 +196,7 @@ void badusb_install(void)
     const tinyusb_config_t tusb_cfg = {
         .device_descriptor = NULL, // Use default
         .string_descriptor = kbd_hid_string_descriptor,
+        .string_descriptor_count = sizeof(kbd_hid_string_descriptor) / sizeof(kbd_hid_string_descriptor[0]),
         .external_phy = false,
         .configuration_descriptor = kbd_hid_configuration_descriptor,
 #if (TUD_OPT_HIGH_SPEED)
@@ -207,27 +208,6 @@ void badusb_install(void)
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
     badusb_driver_installed = true;
     ESP_LOGI(TAG, "USB initialization DONE");
-}
-
-// Helper: Wait until HID is ready and send report
-static int send_hid_report(uint8_t report_id, uint8_t modifiers, const uint8_t keycodes[6]) {
-    // Wait until HID interface is ready
-    // Add a timeout to prevent infinite loop if USB is not connected/enumerated
-    uint32_t start_ms = esp_log_timestamp();
-    while (!tud_hid_ready()) {
-        // Allow other tasks to run
-        vTaskDelay(pdMS_TO_TICKS(10));
-        // Timeout after 5 seconds
-        if (esp_log_timestamp() - start_ms > 5000) {
-             ESP_LOGE(TAG, "HID interface not ready - timeout");
-            return -1; // Indicate timeout/error
-        }
-        // Check tusb task status or add tud_task() call if needed by your config
-        // tud_task(); // If not running in a dedicated task
-    }
-
-    // Use HID_ITF_PROTOCOL_KEYBOARD for the interface number
-    return tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, modifiers, keycodes) ? 0 : -1;
 }
 
 int badusb_send_report(uint8_t modifiers, const uint8_t* keycodes, uint8_t key_count) {
@@ -242,63 +222,64 @@ int badusb_send_report(uint8_t modifiers, const uint8_t* keycodes, uint8_t key_c
         memcpy(report_codes, keycodes, count);
     }
 
-    return send_hid_report(0, modifiers, report_codes);
+    // Wait until HID is ready
+    uint32_t start_ms = esp_log_timestamp();
+    while (!tud_hid_ready()) {
+        // Allow other tasks to run
+        vTaskDelay(pdMS_TO_TICKS(10));
+        // Timeout after 5 seconds
+        if (esp_log_timestamp() - start_ms > 5000) {
+            ESP_LOGE(TAG, "HID interface not ready - timeout");
+            return -1; // Indicate timeout/error
+        }
+    }
+
+    // Send the keyboard report directly
+    return tud_hid_keyboard_report(0, modifiers, report_codes) ? 0 : -1;
 }
 
 int badusb_send_string(const char* str) {
-     if (!badusb_driver_installed) {
+    if (!badusb_driver_installed) {
         ESP_LOGE(TAG, "BadUSB driver not installed.");
         return -1;
     }
 
-    uint8_t keycodes[6] = {0};
-    uint8_t modifier = 0;
-    int ret = 0;
+    // Check if USB is mounted
+    if (!tud_mounted()) {
+        ESP_LOGE(TAG, "USB not mounted by host");
+        return -1;
+    }
 
     while (*str) {
         char c = *str++;
-        uint8_t keycode = 0;
-        uint8_t mod = 0;
+        uint8_t keycode[6] = {0};
+        uint8_t modifier = 0;
 
         if ((uint8_t)c < 128) {
-            keycode = ascii_to_hid[(uint8_t)c][0];
-            mod = ascii_to_hid[(uint8_t)c][1];
+            keycode[0] = ascii_to_hid[(uint8_t)c][0];
+            modifier = ascii_to_hid[(uint8_t)c][1];
         }
 
-        if (keycode != 0) {
-            keycodes[0] = keycode;
-            modifier = mod;
-
-            // Send key press report
-            // Note: report_id is 0 for keyboard in this setup
-            ret = send_hid_report(0, modifier, keycodes);
-            if (ret != 0) return ret; // Exit on error
-
-            // Small delay between press and release
-            vTaskDelay(pdMS_TO_TICKS(10)); // 10ms
-
-            // Send key release report (all keys up)
-            keycodes[0] = 0;
-            modifier = 0;
-            // Note: report_id is 0 for keyboard in this setup
-            ret = send_hid_report(0, modifier, keycodes);
-            if (ret != 0) return ret; // Exit on error
-
-             // Small delay between characters
-            vTaskDelay(pdMS_TO_TICKS(10)); // 10ms
-
-        } else {
-            // Character not in basic map - skip or log?
-             ESP_LOGW(TAG, "Unsupported character: %c (ASCII %d)", c, (int)c);
+        if (keycode[0] != 0) {
+            // Send key press report using the direct TinyUSB function
+            ESP_LOGI(TAG, "Sending keycode: 0x%02X, modifier: 0x%02X for char '%c'", 
+                    keycode[0], modifier, c);
+            
+            // Send key press
+            tud_hid_keyboard_report(0, modifier, keycode);
+            
+            // Small delay between press and release - use 50ms like the working example
+            vTaskDelay(pdMS_TO_TICKS(50));
+            
+            // Send key release report using NULL keycodes (all keys up)
+            tud_hid_keyboard_report(0, 0, NULL);
+            
+            // Small delay between characters
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
 
-    // Ensure all keys are released at the end
-    memset(keycodes, 0, sizeof(keycodes));
-    modifier = 0;
-    ret = send_hid_report(0, modifier, keycodes);
-
-    return ret;
+    return 0;
 }
 
 // --- TinyUSB HID required callbacks for keyboard emulation ---

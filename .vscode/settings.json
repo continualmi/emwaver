@@ -1,4 +1,4 @@
 {
-    "idf.port": "/dev/tty.wchusbserial1420",
+    "idf.port": "/dev/tty.wchusbserial58A60793011",
     "idf.flashType": "UART"
 }
