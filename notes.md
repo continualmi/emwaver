@@ -24,6 +24,7 @@
 * Remove template fragment. If people want to create a new fragment, there is no need for a template fragment i don't think. We think about it down the line
 * Implement some 2.4 GHz basic functionality on 2.4 GHz fragment (no need)
 * For BAD-USB, we need to write a NVS functionality as well, to make the ESP32 boot and immediatly inject payload that was saved to Non volatile storage NVS (we dont because we are just going to be doing ephemeral bad usb and remotely)
+* Consider adding using built in NFC and IR blaster on phones that have it (might be a bad idea because IOS doesnt, though NFC built-in has more protocols and standards than mifare. Best decision might be to not support any built in functions, also because we don't know how useful other NFC protocols are)
 
 ## Not Done
 
@@ -34,6 +35,7 @@
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
 * Resolve warnings in firmware
+* Consider having the BLE service check for connections periodically even on other fragments
 
 
 * See why RFID range is really bad for some reason using the cheap module. Not sure if it's a board issue since I never tested it even with old USB CDC Protocol
@@ -42,6 +44,10 @@
 * Need to write README file properly too, including the EMWaver logo there, and basic repo instructions.
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
 
+
+## Hardware
+
+* Noticed on x ray reports that the USB male port pads as not aligning with the component. Also noticed that from the 2 prototype boards, one does not work in reverse cable connection. This might suggest a soldering problem. May need to draw my own footprint
 
 ## Build Commands
 
