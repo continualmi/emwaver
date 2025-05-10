@@ -195,28 +195,22 @@ struct SamplerView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // Connection status bar (like ISMView)
-                HStack {
-                    Circle()
-                        .fill(bleManager.isConnected ? Color.green : Color.red)
-                        .frame(width: 10, height: 10)
-                    Text(bleManager.isConnected ? "Connected" : "Not Connected")
-                        .font(.subheadline)
-                    Spacer()
-                    Button(bleManager.isConnected ? "Disconnect" : "Connect") {
-                        if bleManager.isConnected {
-                            bleManager.disconnect()
-                        } else {
-                            bleManager.startScan()
-                        }
+                if !bleManager.isConnected {
+                    // Connection status bar shown only when disconnected
+                    HStack {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                        Text("Not Connected")
+                            .font(.subheadline)
+                        Spacer()
                     }
-                    .buttonStyle(.bordered)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
                 }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .padding(.horizontal)
-                .padding(.top, 8)
 
                 // Chart card
                 VStack(alignment: .leading, spacing: 0) {
