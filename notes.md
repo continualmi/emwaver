@@ -30,6 +30,7 @@
 * Clean out nrf24 code from esp32. Nrf24 is advanced functionality and not required here
 * Need to write README file properly too, including the EMWaver logo there, and basic repo instructions. (stil may require some modifications)
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
+* Need to revisit and refactor the command structure. Things like the cc1101 commands should start with cc1101 in the string, same with rfid commands. Like the current usb commands work. 
 
 ## Not Done
 
@@ -42,8 +43,8 @@
 * Resolve warnings in firmware
 * Consider having the BLE service check for connections periodically even on other fragments
 
-
-* Need to revisit and refactor the command structure. Things like the cc1101 commands should start with cc1101 in the string, same with rfid commands. Like the current usb commands work. 
+* Add help link to documentation website (where there are videos and stuff) on Settings Activity. Add also there the Project repository perhaps link
+* Add "?" help button UI to every non obvious function. Make UI in sampler more intuitive using this and also labling for example the spinner for selecting a pin
 * Need to fully write the techincal implementation 1:1 according to the entire codebase. At that point, the commands should all be listed in a section for better readability. Simplicity is the best approach. We keep a single md file for the technical docs.
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 
