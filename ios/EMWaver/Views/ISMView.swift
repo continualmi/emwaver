@@ -29,26 +29,41 @@ struct ISMView: View {
     private let powerValues = [-30, -20, -15, -10, 0, 5, 7, 10] // CC1101.POWER_* values
     
     var body: some View {
-        VStack {
-            connectionStatus
-            
-            if bleManager.isConnected {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        rfParametersCard
-                        buttonsCard
+        ScrollView {
+            VStack(spacing: 0) {
+                if !bleManager.isConnected {
+                    // Connection status bar shown only when disconnected
+                    HStack {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                        Text("Not Connected")
+                            .font(.subheadline)
+                        Spacer()
                     }
                     .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                    .padding(.top, 8)
                 }
-            } else {
-                connectionPrompt
-            }
-            
-            if isLoading {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle())
-                    .scaleEffect(1.5)
-                    .padding()
+
+                // ISM UI cards (always visible)
+                VStack(spacing: 20) {
+                    rfParametersCard
+                    buttonsCard
+                }
+                .padding()
+
+                // Loading indicator
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(1.5)
+                        .padding()
+                }
+
+                Spacer()
             }
         }
         .navigationTitle("ISM")
@@ -87,16 +102,6 @@ struct ISMView: View {
                 .font(.subheadline)
             
             Spacer()
-            
-            Button(bleManager.isConnected ? "Disconnect" : "Connect") {
-                if bleManager.isConnected {
-                    bleManager.disconnect()
-                } else {
-                    bleManager.startScan()
-                    statusMessage = "Scanning..."
-                }
-            }
-            .buttonStyle(.bordered)
         }
         .padding()
         .background(Color(.systemGray6))
@@ -115,13 +120,6 @@ struct ISMView: View {
             Text("Connect to an EMWaver device to control the CC1101 radio.")
                 .multilineTextAlignment(.center)
                 .padding()
-            
-            Button("Connect") {
-                bleManager.startScan()
-                statusMessage = "Scanning..."
-            }
-            .buttonStyle(.borderedProminent)
-            .padding()
             
             Text(statusMessage)
                 .font(.caption)
