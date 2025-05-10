@@ -43,6 +43,7 @@
 * Resolve warnings in firmware
 * Consider having the BLE service check for connections periodically even on other fragments
 
+* Make Sampler, RFID and ISM have the same gray background as the nicely done console and buttons fragments. Requires some prompting with 2.5 pro to get the same styling in.
 * Add help link to documentation website (where there are videos and stuff) on Settings Activity. Add also there the Project repository perhaps link
 * Add "?" help button UI to every non obvious function. Make UI in sampler more intuitive using this and also labling for example the spinner for selecting a pin
 * Need to fully write the techincal implementation 1:1 according to the entire codebase. At that point, the commands should all be listed in a section for better readability. Simplicity is the best approach. We keep a single md file for the technical docs.
