@@ -464,60 +464,10 @@ static void command_task(void *pvParameters)
                     ble_server_notify(buffer, len);
                 }
             }
-            /* --- Legacy single-character commands for backward compatibility --- */
-            else if (cmd.length >= 2 && (cmd.data[0] == '!' || cmd.data[0] == '?' || cmd.data[0] == '%' || cmd.data[0] == '>' || cmd.data[0] == '<')) {
-                if (cmd.data[0] == '!') { // Write register: ![addr][value]
-                    cc1101_write_reg(cmd.data[1], cmd.data[2]);
-                    uint8_t reading = cc1101_read_reg(cmd.data[1]);
-                    // Send notification over BLE
-                    ble_server_notify(&reading, 1);
-                } 
-                else if (cmd.data[0] == '?') { // Read register: ?[addr]
-                    uint8_t reading = cc1101_read_reg(cmd.data[1]);
-                    // Send notification over BLE
-                    ble_server_notify(&reading, 1);
-                } 
-                else if (cmd.data[0] == '%') { // Strobe command: %[cmd]
-                    uint8_t status = cc1101_strobe(cmd.data[1]);
-                    // Send notification over BLE
-                    ble_server_notify(&status, 1);
-                } 
-                else if (cmd.data[0] == '>') { // Burst write: >[addr][len][data...]
-                    uint8_t addr = cmd.data[1];
-                    uint8_t len = cmd.data[2];
-                    uint8_t status = cc1101_write_burst_reg(addr, &cmd.data[3], len);
-                    // Send notification over BLE
-                    ble_server_notify(&status, 1);
-                } 
-                else if (cmd.data[0] == '<') { // Burst read: <[addr][len]
-                    uint8_t addr = cmd.data[1];
-                    uint8_t len = cmd.data[2];
-                    uint8_t buffer[32]; // Max 32 bytes, adjust if needed
-                    cc1101_read_burst_reg(addr, buffer, len);
-                    // Send notification over BLE
-                    ble_server_notify(buffer, len);
-                }
-            }
             /* --- Sampling commands --- */
             else if (cmd.length >= 8 && strncmp((char *)cmd.data, "sample", 6) == 0) {
                 uint8_t pin = cmd.data[7]; // Pin number after "sample " (7th byte)
                 ESP_LOGI(TAG, "Sample command: pin=%d", pin);
-                
-                // Initialize sampling with the pin
-                buffer_ready_sem = xSemaphoreCreateBinary();
-                xTaskCreate(sampler_task, "sampler", 4096, NULL, 5, &sampler_task_handle);
-                
-                // Start sampling
-                start_sampling(pin);
-                
-                // Respond over BLE
-                uint8_t resp = 1;
-                ble_server_notify(&resp, 1);
-            }
-            /* --- Legacy raw sampling command for backward compatibility --- */
-            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "raw", 3) == 0) {
-                uint8_t pin = cmd.data[3];
-                ESP_LOGI(TAG, "Raw sampling command: pin=%d", pin);
                 
                 // Initialize sampling with the pin
                 buffer_ready_sem = xSemaphoreCreateBinary();
@@ -542,18 +492,6 @@ static void command_task(void *pvParameters)
                 uint8_t resp = 1;
                 ble_server_notify(&resp, 1);
             }
-            /* --- Legacy transmission command for backward compatibility --- */
-            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "tran", 4) == 0) {
-                uint8_t pin = cmd.data[4];
-                ESP_LOGI(TAG, "Legacy transmission command: pin=%d", pin);
-                
-                // Start transmission on the specified pin
-                start_transmission(pin);
-                
-                // Send a success response over BLE
-                uint8_t resp = 1;
-                ble_server_notify(&resp, 1);
-            }
             /* --- Stop commands --- */
             else if (cmd.length >= 4 && strncmp((char *)cmd.data, "stop", 4) == 0) {
                 // Stop command for sampling or transmission
@@ -570,18 +508,6 @@ static void command_task(void *pvParameters)
                 // Send a success response over BLE
                 uint8_t resp = 1;
                 ble_server_notify(&resp, 1);
-            }
-            /* --- Legacy stop command for backward compatibility --- */
-            else if (cmd.length >= 1 && cmd.data[0] == 's') {
-                // Legacy stop command - only for sampling, not transmission
-                if (sampler_task_handle != NULL) {
-                    // Signal the sampling task to stop
-                    xTaskNotify(sampler_task_handle, 1, eSetValueWithOverwrite);
-                    
-                    // Send a success response over BLE
-                    uint8_t resp = 1;
-                    ble_server_notify(&resp, 1);
-                }
             }
             /* --- Version command --- */
             else if (cmd.length >= 7 && strncmp((char *)cmd.data, "version", 7) == 0) {
@@ -754,153 +680,6 @@ static void command_task(void *pvParameters)
                     const char* msg = "Success";
                     ble_server_notify((const uint8_t*)msg, strlen(msg));
                 }
-            }
-            /* --- Legacy RFID commands for backward compatibility --- */
-            else if (cmd.length >= 7 && strncmp((char *)cmd.data, "read", 4) == 0) {
-                // Format: 'read' [blockAddr] [authMode] [6 bytes key]
-                uint8_t blockAddr = cmd.data[4];
-                uint8_t authMode = cmd.data[5];
-                uint8_t keyA[6];
-                memcpy(keyA, &cmd.data[6], 6);
-                uint8_t status;
-                uint8_t bufferATQA[2];
-                uint8_t CardUID[5];
-                uint8_t responsePacket[40];
-                uint8_t responseIndex = 0;
-                
-                // First check if the MFRC522 module is connected
-                if (!mfrc522_is_connected()) {
-                    const char* msg = "RFID module not connected";
-                    ble_server_notify((const uint8_t*)msg, strlen(msg));
-                    continue;
-                }
-                
-                // Replace the full init with soft reset
-                mfrc522_soft_reset();
-                ESP_LOGI(TAG, "MFRC522 reset completed");
-                
-                status = mfrc522_request(PICC_REQIDL, bufferATQA);
-                if (status != MI_OK) {
-                    const char* msg = "No card detected";
-                    ble_server_notify((const uint8_t*)msg, strlen(msg));
-                    continue;
-                }
-                responsePacket[responseIndex++] = bufferATQA[0];
-                responsePacket[responseIndex++] = bufferATQA[1];
-                status = mfrc522_anticoll(CardUID);
-                if (status != MI_OK) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Anticollision failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                for (int i = 0; i < 4; i++) {
-                    responsePacket[responseIndex++] = CardUID[i];
-                }
-                status = mfrc522_select_tag(CardUID);
-                if (status == 0) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Card selection failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                status = mfrc522_auth(authMode, blockAddr, keyA, CardUID);
-                if (status != MI_OK) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Authentication failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                uint8_t buffer[16];
-                status = mfrc522_read(blockAddr, buffer);
-                if (status == MI_OK) {
-                    responsePacket[responseIndex++] = 0x00;
-                    for (int i = 0; i < 16; i++) {
-                        responsePacket[responseIndex++] = buffer[i];
-                    }
-                } else {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Read failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    responseIndex += strlen(msg);
-                }
-                ble_server_notify(responsePacket, responseIndex);
-                mfrc522_stop_crypto1();
-            }
-            else if (cmd.length >= 20 && strncmp((char *)cmd.data, "write", 5) == 0) {
-                // Format: 'write' [blockAddr] [authMode] [6 bytes key] [16 bytes data]
-                uint8_t blockAddr = cmd.data[5];
-                uint8_t authMode = cmd.data[6];
-                uint8_t key[6];
-                memcpy(key, &cmd.data[7], 6);
-                uint8_t writeData[16];
-                memcpy(writeData, &cmd.data[13], 16);
-                uint8_t status;
-                uint8_t bufferATQA[2];
-                uint8_t CardUID[5];
-                uint8_t responsePacket[40];
-                uint8_t responseIndex = 0;
-                
-                // First check if the MFRC522 module is connected
-                if (!mfrc522_is_connected()) {
-                    const char* msg = "RFID module not connected";
-                    ble_server_notify((const uint8_t*)msg, strlen(msg));
-                    continue;
-                }
-                
-                // Replace the full init with soft reset for write too
-                mfrc522_soft_reset();
-                ESP_LOGI(TAG, "MFRC522 reset completed");
-                
-                status = mfrc522_request(PICC_REQIDL, bufferATQA);
-                if (status != MI_OK) {
-                    const char* msg = "No card detected";
-                    ble_server_notify((const uint8_t*)msg, strlen(msg));
-                    continue;
-                }
-                responsePacket[responseIndex++] = bufferATQA[0];
-                responsePacket[responseIndex++] = bufferATQA[1];
-                status = mfrc522_anticoll(CardUID);
-                if (status != MI_OK) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Anticollision failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                for (int i = 0; i < 4; i++) {
-                    responsePacket[responseIndex++] = CardUID[i];
-                }
-                status = mfrc522_select_tag(CardUID);
-                if (status == 0) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Select tag failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                status = mfrc522_auth(authMode, blockAddr, key, CardUID);
-                if (status != MI_OK) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Authentication failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                status = mfrc522_write(blockAddr, writeData);
-                if (status != MI_OK) {
-                    responsePacket[responseIndex++] = 0xFF;
-                    const char* msg = "Write failed";
-                    memcpy(&responsePacket[responseIndex], msg, strlen(msg));
-                    ble_server_notify(responsePacket, responseIndex + strlen(msg));
-                    continue;
-                }
-                mfrc522_stop_crypto1();
-                const char* msg = "Success";
-                ble_server_notify((const uint8_t*)msg, strlen(msg));
             }
             /* --- BadUSB commands --- */
             else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
