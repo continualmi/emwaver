@@ -144,7 +144,7 @@ public class rfidFragment extends Fragment {
                 return;
             }
 
-            byte[] command = new byte[20]; // Increased size to accommodate new format
+            byte[] command = new byte[21]; // Increased size to accommodate prefix + blockAddr + authMode + 6 byte key
             
             // Format: "mfrc522 read [blockAddr] [authMode] [6 bytes key]"
             String cmdPrefix = "mfrc522 read ";
@@ -173,7 +173,8 @@ public class rfidFragment extends Fragment {
                 return;
             }
 
-            byte[] command = new byte[40]; // Increased size to accommodate new format
+            // Calculate required buffer size: "mfrc522 write " (14) + blockAddr (1) + authMode (1) + key (6) + data (16) = 38 bytes
+            byte[] command = new byte[38]; 
             
             // Format: "mfrc522 write [blockAddr] [authMode] [6 bytes key] [16 bytes data]"
             String cmdPrefix = "mfrc522 write ";
