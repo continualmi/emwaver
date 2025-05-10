@@ -48,6 +48,7 @@
 * Add "?" help button UI to every non obvious function. Make UI in sampler more intuitive using this and also labling for example the spinner for selecting a pin
 * Need to fully write the techincal implementation 1:1 according to the entire codebase. At that point, the commands should all be listed in a section for better readability. Simplicity is the best approach. We keep a single md file for the technical docs.
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
+* Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
 
 IOS STUFF:
 
