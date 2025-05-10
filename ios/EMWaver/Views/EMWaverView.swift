@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine // Added for Timer
 
-struct BLEView: View {
+struct EMWaverView: View {
     @EnvironmentObject var bleManager: BLEManager // Use shared BLEManager from environment
     @State private var selectedPin = "GPIO0"
     @State private var commandInput = ""
@@ -388,7 +388,7 @@ enum DataDirection {
 
 #Preview {
     NavigationView {
-        BLEView()
+        EMWaverView()
     }
 } 
 

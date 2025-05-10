@@ -32,6 +32,7 @@
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
 * Need to revisit and refactor the command structure. Things like the cc1101 commands should start with cc1101 in the string, same with rfid commands. Like the current usb commands work. 
 * Remove all fragments that were removed on android, 2.4 ghz, bad usb, firmwre update, template.
+* Rename BLE fragment to EMwwaver fragment. 
 
 ## Not Done
 
@@ -51,13 +52,13 @@
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 
 IOS STUFF:
-* Rename BLE fragment to EMwwaver fragment. 
 * Migrate to new esp32 command structure, rfid, cc1101 and mfrc522 nomenclature
 
 
 ## Hardware
 
 * Noticed on x ray reports that the USB male port pads as not aligning with the component. Also noticed that from the 2 prototype boards, one does not work in reverse cable connection. This might suggest a soldering problem. May need to draw my own footprint
+* Interestingly, currently I dont have a 5V pin on the GPIO headers. However, there is value in powering EMWaver with a battery, taking advantage of the power pins. But with only the 3V3 pin, it would not work, as the IR LEDs use 5V.
 
 ## Build Commands
 
