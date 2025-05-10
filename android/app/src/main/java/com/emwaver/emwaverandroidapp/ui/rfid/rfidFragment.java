@@ -216,12 +216,24 @@ public class rfidFragment extends Fragment {
     private void processReadResponse(byte[] response) {
         if (response == null || response.length == 0) {
             showError("No response received.");
+            Log.e("RFID", "Null or empty response");
             return;
         }
 
+        // First log the raw response for debugging
+        logRawResponse(response);
+        
+        // Check if response is a plain text error message
         String responseString = new String(response, StandardCharsets.US_ASCII);
-        if (responseString.equals("No card detected")) {
+        Log.d("RFID", "Response as string: '" + responseString + "'");
+        
+        if (responseString.contains("No card detected")) {
             showError("Error: No card detected");
+            return;
+        }
+        
+        if (responseString.contains("RFID module not connected")) {
+            showError("Error: RFID module not connected");
             return;
         }
 
@@ -251,13 +263,26 @@ public class rfidFragment extends Fragment {
                     showResultDialog(result.toString(), data.toString().trim()); // Pass the full result and only the data part to the dialog
                     clearError(); // Clear any previous error message
                 } else {
-                    showError("Unexpected response format.");
+                    // Unexpected response format - log more details
+                    StringBuilder details = new StringBuilder("Unexpected response format.\n");
+                    details.append("Length: ").append(response.length).append("\n");
+                    if (response.length > 6) {
+                        details.append("Status byte: 0x").append(String.format("%02X", response[6])).append("\n");
+                    }
+                    details.append("Full response (hex): ");
+                    for (byte b : response) {
+                        details.append(String.format("%02X ", b));
+                    }
+                    Log.e("RFID", details.toString());
+                    showError("Unexpected response format. See logs for details.");
                 }
             } else {
-                showError("Incomplete response received.");
+                showError("Incomplete response received (length: " + response.length + ")");
+                Log.e("RFID", "Incomplete response. Length: " + response.length);
             }
         } else {
-            showError("Invalid response format.");
+            showError("Invalid response format (length: " + response.length + ")");
+            Log.e("RFID", "Invalid response format. Length: " + response.length);
         }
 
         logResponse("read", response);
@@ -266,20 +291,36 @@ public class rfidFragment extends Fragment {
     private void processWriteResponse(byte[] response) {
         if (response == null || response.length == 0) {
             showError("No response received.");
+            Log.e("RFID", "Null or empty response for write command");
             return;
         }
 
+        // Log the raw response for debugging
+        logRawResponse(response);
+        
         String responseString = new String(response, StandardCharsets.US_ASCII);
-        if (responseString.equals("No card detected")) {
+        Log.d("RFID", "Write response as string: '" + responseString + "'");
+        
+        if (responseString.contains("No card detected")) {
             showError("Error: No card detected");
             return;
         }
+        
+        if (responseString.contains("RFID module not connected")) {
+            showError("Error: RFID module not connected");
+            return;
+        }
 
-        if (responseString.equals("Success")) {
+        if (responseString.contains("Success")) {
             showResultDialog("Write successful", ""); // Pass an empty string for data
             clearError(); // Clear any previous error message
         } else {
-            showError("Error: " + responseString);
+            // More detailed error reporting
+            StringBuilder errorDetails = new StringBuilder("Error: ");
+            errorDetails.append(responseString);
+            errorDetails.append("\nRaw response size: ").append(response.length).append(" bytes");
+            showError(errorDetails.toString());
+            Log.e("RFID Write", "Error response: " + responseString);
         }
 
         logResponse("write", response);
@@ -369,6 +410,33 @@ public class rfidFragment extends Fragment {
         }
     }
 
+    // Add this new method to log the raw response in different formats
+    private void logRawResponse(byte[] response) {
+        // Log as hex
+        StringBuilder hexSb = new StringBuilder("Raw response (hex): ");
+        for (byte b : response) {
+            hexSb.append(String.format("%02X ", b));
+        }
+        Log.d("RFID", hexSb.toString());
+        
+        // Log as ASCII
+        StringBuilder asciiSb = new StringBuilder("Raw response (ASCII): ");
+        for (byte b : response) {
+            if (b >= 32 && b < 127) { // Printable ASCII
+                asciiSb.append((char)b);
+            } else {
+                asciiSb.append(".");
+            }
+        }
+        Log.d("RFID", asciiSb.toString());
+        
+        // Log as decimal
+        StringBuilder decSb = new StringBuilder("Raw response (decimal): ");
+        for (byte b : response) {
+            decSb.append((b & 0xFF)).append(" ");
+        }
+        Log.d("RFID", decSb.toString());
+    }
 
     @Override
     public void onDestroyView() {

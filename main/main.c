@@ -536,7 +536,18 @@ static void command_task(void *pvParameters)
                 uint8_t CardUID[5];
                 uint8_t responsePacket[40];
                 uint8_t responseIndex = 0;
-                // mfrc522_init(&mfrc522_cfg); // Initialization now done in app_main
+                
+                // First check if the MFRC522 module is connected
+                if (!mfrc522_is_connected()) {
+                    const char* msg = "RFID module not connected";
+                    ble_server_notify((const uint8_t*)msg, strlen(msg));
+                    continue;
+                }
+                
+                // Replace the full init with soft reset
+                mfrc522_soft_reset();
+                ESP_LOGI(TAG, "MFRC522 reset completed");
+                
                 status = mfrc522_request(PICC_REQIDL, bufferATQA);
                 if (status != MI_OK) {
                     const char* msg = "No card detected";
@@ -601,7 +612,18 @@ static void command_task(void *pvParameters)
                 uint8_t CardUID[5];
                 uint8_t responsePacket[40];
                 uint8_t responseIndex = 0;
-                // mfrc522_init(&mfrc522_cfg); // Initialization now done in app_main
+                
+                // First check if the MFRC522 module is connected
+                if (!mfrc522_is_connected()) {
+                    const char* msg = "RFID module not connected";
+                    ble_server_notify((const uint8_t*)msg, strlen(msg));
+                    continue;
+                }
+                
+                // Replace the full init with soft reset for write too
+                mfrc522_soft_reset();
+                ESP_LOGI(TAG, "MFRC522 reset completed");
+                
                 status = mfrc522_request(PICC_REQIDL, bufferATQA);
                 if (status != MI_OK) {
                     const char* msg = "No card detected";
