@@ -40,65 +40,95 @@ struct ButtonsView: View {
     @State private var jsEngine: JavaScriptEngine? = nil
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Remotes Section
-            sectionHeader("Remotes", isExpanded: $isRemoteListExpanded)
-            
-            if isRemoteListExpanded {
-                List {
-                    ForEach(remotes) { remote in
-                        Text(remote.name)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selectedRemote = remote
+        VStack(spacing: 8) {
+            DisclosureGroup(
+                isExpanded: $isRemoteListExpanded,
+                content: {
+                    if remotes.isEmpty {
+                        Text("No remotes available")
+                            .italic()
+                            .foregroundColor(.gray)
+                            .padding()
+                    } else {
+                        List {
+                            ForEach(remotes) { remote in
+                                Text(remote.name)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedRemote = remote
+                                    }
+                                    .onLongPressGesture {
+                                        actionSheetRemote = remote
+                                        showingActionSheet = true
+                                    }
+                                    .listRowBackground(
+                                        selectedRemote?.id == remote.id ? Color.blue.opacity(0.2) : Color.clear
+                                    )
                             }
-                            .onLongPressGesture {
-                                actionSheetRemote = remote
-                                showingActionSheet = true
-                            }
-                            .listRowBackground(
-                                selectedRemote?.id == remote.id ? Color.blue.opacity(0.2) : Color.clear
-                            )
+                        }
+                        .frame(height: 150)
+                        .listStyle(PlainListStyle())
+                    }
+                },
+                label: {
+                    HStack {
+                        Text("Remotes")
+                            .font(.headline)
+                        if !remotes.isEmpty {
+                            Text("(\(remotes.count))")
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-                .frame(height: 150)
-                .listStyle(PlainListStyle())
-            }
+            )
+            .padding(.horizontal)
             
-            // Buttons Grid Section
-            sectionHeader(selectedRemote != nil ? "Remote: \(selectedRemote!.name)" : "No remote selected", 
-                          isExpanded: $isButtonGridExpanded)
-            
-            if isButtonGridExpanded {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                        if let selectedRemote = selectedRemote {
-                            ForEach(Array(selectedRemote.buttons.enumerated()), id: \.element.id) { index, button in
-                                Button(action: {
-                                    executeScript(button.script)
-                                }) {
-                                    Text(button.name)
-                                        .frame(minWidth: 0, maxWidth: .infinity)
-                                        .frame(height: 60)
-                                        .background(colorFromString(button.color))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(8)
-                                }
-                                .contextMenu {
-                                    Button("Edit") {
-                                        editingButton = button
-                                        editingButtonIndex = index
-                                        showingEditButtonSheet = true
+            DisclosureGroup(
+                isExpanded: $isButtonGridExpanded,
+                content: {
+                    if let selectedRemote = selectedRemote {
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                                ForEach(Array(selectedRemote.buttons.enumerated()), id: \.element.id) { index, button in
+                                    Button(action: {
+                                        executeScript(button.script)
+                                    }) {
+                                        Text(button.name)
+                                            .frame(minWidth: 0, maxWidth: .infinity)
+                                            .frame(height: 60)
+                                            .background(colorFromString(button.color))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(8)
+                                    }
+                                    .contextMenu {
+                                        Button("Edit") {
+                                            editingButton = button
+                                            editingButtonIndex = index
+                                            showingEditButtonSheet = true
+                                        }
                                     }
                                 }
                             }
+                            .padding()
                         }
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        Text("Select a remote to view buttons")
+                            .italic()
+                            .foregroundColor(.gray)
+                            .padding()
                     }
-                    .padding()
+                },
+                label: {
+                    Text(selectedRemote != nil ? "Remote: \(selectedRemote!.name)" : "No remote selected")
+                        .font(.headline)
                 }
-                .frame(maxWidth: .infinity)
-            }
+            )
+            .padding(.horizontal)
+
+            Spacer()
         }
+        .padding()
         .navigationTitle("Buttons")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -38,6 +38,7 @@
 * Implement Buttons fragment working for CC1101 and BLEService scripts
 * Need better UI pattern. Lets start with Console View, and try and get it to look like Console Fragment a bit more . Collapsible views
 * The navigation needs attention. There is "back" button that opens the side drawer, why? we need a three dashes icon like android. (fixed the status bar but kept the back arrow UI)
+* RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc. (its fine, with the title gone there is some space)
 
 ## Not Done
 
@@ -59,8 +60,10 @@
 IOS STUFF:
 
 
-* RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
+* Get rid of the connect UI on each view, only connect UI is on EMWaver view
 * EMWaver view using more GPIO pins than necessary, only need the ones on the board
+* Editing keys on Console View does not work, the page it brings up is blank
+* Implement Load From Storage on IOS, both Console and Buttons
 * Implement encodeIR logic, ported from android
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 * Figure out how to deal with external storage in IOS, for loading external scripts and etc.
