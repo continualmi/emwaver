@@ -153,31 +153,42 @@ public class CC1101 {
 
     //region SPI functions
     public void spiStrobe(byte commandStrobe) {
-        byte[] command = new byte[2];
+        byte[] command = new byte[15]; // Increased size to accommodate new format
         byte[] response;
-        command[0] = '%'; // command strobe character
-        command[1] = commandStrobe;
+        
+        // Format: "cc1101 strobe X" where X is the commandStrobe byte
+        String cmdStr = "cc1101 strobe " + (char)commandStrobe;
+        System.arraycopy(cmdStr.getBytes(), 0, command, 0, cmdStr.length());
+        
         response = bleService.sendCommand(command, 1000);
         Log.i("spiStrobe", Utils.toHexStringWithHexPrefix(response));  //response is the status byte
     }
     
     public void writeBurstReg(byte addr, byte[] data, byte len){
-        byte [] command = new byte[data.length+3];
-        byte [] response;
-        command[0] = '>'; //write burst reg character
-        command[1] = addr; //burst write >[addr][len][data]
-        command[2] = len;
-        System.arraycopy(data, 0, command, 3, data.length); // Efficient array copy
+        byte[] command = new byte[data.length + 20]; // Increased size to accommodate new format
+        byte[] response;
+        
+        // Format: "cc1101 burstwrite X Y data..." where X is addr, Y is len
+        String cmdPrefix = "cc1101 burstwrite ";
+        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
+        command[cmdPrefix.length()] = addr;
+        command[cmdPrefix.length() + 1] = len;
+        System.arraycopy(data, 0, command, cmdPrefix.length() + 2, data.length);
+        
         response = bleService.sendCommand(command, 1000);
         Log.i("writeBurstReg", Utils.toHexStringWithHexPrefix(response)); //response is the status byte
     }
     
-    public byte [] readBurstReg(byte addr, int len){
-        byte [] command = new byte[3];
-        byte [] response;
-        command[0] = '<'; //read burst reg character
-        command[1] = addr; ////burst read <[addr][len]
-        command[2] = (byte)len;
+    public byte[] readBurstReg(byte addr, int len){
+        byte[] command = new byte[20]; // Increased size to accommodate new format
+        byte[] response;
+        
+        // Format: "cc1101 burstread X Y" where X is addr, Y is len
+        String cmdPrefix = "cc1101 burstread ";
+        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
+        command[cmdPrefix.length()] = addr;
+        command[cmdPrefix.length() + 1] = (byte)len;
+        
         response = bleService.sendCommand(command, 1000);
         Log.i("readBurstReg", Utils.toHexStringWithHexPrefix(response));
         return response;
@@ -186,9 +197,13 @@ public class CC1101 {
     public byte readReg(byte addr){
         long startTime = System.currentTimeMillis();
         
-        byte[] command = new byte[2];
-        command[0] = '?'; //read reg character
-        command[1] = addr; //single read ?[addr]
+        byte[] command = new byte[20]; // Increased size to accommodate new format
+        
+        // Format: "cc1101 readreg X" where X is addr
+        String cmdPrefix = "cc1101 readreg ";
+        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
+        command[cmdPrefix.length()] = addr;
+        
         byte[] response = bleService.sendCommand(command, 1000);
         
         long endTime = System.currentTimeMillis();
@@ -206,11 +221,14 @@ public class CC1101 {
     public void writeReg(byte addr, byte data){
         long startTime = System.currentTimeMillis();
         
-        byte[] command = new byte[3];
-        byte[] address = {addr};
-        command[0] = '!'; //write reg character
-        command[1] = addr; //single write ![addr][data]
-        command[2] = data;
+        byte[] command = new byte[20]; // Increased size to accommodate new format
+        
+        // Format: "cc1101 writereg X Y" where X is addr, Y is data
+        String cmdPrefix = "cc1101 writereg ";
+        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
+        command[cmdPrefix.length()] = addr;
+        command[cmdPrefix.length() + 1] = data;
+        
         bleService.sendCommand(command, 1000);
         
         long endTime = System.currentTimeMillis();

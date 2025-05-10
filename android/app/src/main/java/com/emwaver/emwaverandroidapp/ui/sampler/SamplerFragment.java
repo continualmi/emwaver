@@ -436,8 +436,10 @@ public class SamplerFragment extends Fragment {
                 return; // Don't proceed
             }
             
-            // Format command for ESP32 (raw + pin number)
-            byte[] command = new byte[]{'r', 'a', 'w', pinNumber};
+            // Format command for ESP32 using new standard format: "sample <pin>"
+            byte[] command = new byte[8]; // Increased size for "sample X"
+            System.arraycopy("sample ".getBytes(), 0, command, 0, 7);
+            command[7] = pinNumber; // Put the pin after the space
             BLEService.write(command);
             
             // Set recording flag
@@ -454,7 +456,8 @@ public class SamplerFragment extends Fragment {
 
     private void stopRecording() {
         if (BLEService != null) {
-            byte[] command = "s".getBytes();
+            // Use new standard "stop" command instead of "s"
+            byte[] command = "stop".getBytes();
             BLEService.write(command);
             
             // Clear recording flag
@@ -482,10 +485,10 @@ public class SamplerFragment extends Fragment {
             return; // Don't proceed
         }
         
-        // Send the 'tran' command with just the pin number
-        byte[] commandBytes = new byte[5];
-        System.arraycopy("tran".getBytes(), 0, commandBytes, 0, 4);
-        commandBytes[4] = pinNumber;
+        // Format command for ESP32 using new standard format: "transmit <pin>"
+        byte[] commandBytes = new byte[10]; // Increased size for "transmit X"
+        System.arraycopy("transmit ".getBytes(), 0, commandBytes, 0, 9);
+        commandBytes[9] = pinNumber;
         BLEService.write(commandBytes);
 
         // Now call the transmitBuffer method
