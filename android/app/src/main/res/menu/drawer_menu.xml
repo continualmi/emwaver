@@ -30,16 +30,6 @@
             android:id="@+id/navigation_rfid"
             android:icon="@drawable/beacon_svgrepo_com"
             android:title="RFID" />
-
-        <item
-            android:id="@+id/navigation_bad_usb"
-            android:icon="@drawable/ai_usb"
-            android:title="Bad-USB" />
-
-        <item
-            android:id="@+id/navigation_template"
-            android:icon="@drawable/ai_edit"
-            android:title="Template" />
     </group>
 
     <item
