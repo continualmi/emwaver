@@ -220,14 +220,14 @@ class BLEManager: NSObject, ObservableObject {
     func storeBulkPkt(_ data: Data) {
         bufferQueue.sync {
             buffer.append(data)
+            isNewCommandAvailable = true
         }
-        // This flag affects UI state indirectly, so set it in a main thread context along with bufferVersion
+        // This flag affects UI state indirectly, so update on main thread
         DispatchQueue.main.async {
-            self.isNewCommandAvailable = true
             self.bufferVersion += 1
         }
         
-        // Update statistics - these are just internal tracking variables, fine on background thread
+        // Update statistics
         let currentTime = Date().timeIntervalSince1970
         lastPacketReceivedTime = currentTime
         
@@ -236,27 +236,17 @@ class BLEManager: NSObject, ObservableObject {
         }
         
         totalBytesReceived += data.count
-        
-        // LOG comments kept for reference, prints already commented out
-        // print("storeBulkPkt: buffer now has \(buffer.count) bytes, isNewCommandAvailable=\(isNewCommandAvailable)")
-        // print("storeBulkPkt: buffer contents: \(buffer.map { String(format: "%02X", $0) }.joined(separator: " "))")
     }
     
     func getCommand() -> Data? {
         var result: Data?
         bufferQueue.sync {
-            guard isNewCommandAvailable else { return }
-            
-            result = buffer
-            buffer.removeAll()
-        }
-        
-        if result != nil {
-            DispatchQueue.main.async {
-                self.isNewCommandAvailable = false
+            if isNewCommandAvailable {
+                result = buffer
+                buffer.removeAll()
+                isNewCommandAvailable = false  // Reset flag synchronously
             }
         }
-        
         return result
     }
     
@@ -534,7 +524,7 @@ class BLEManager: NSObject, ObservableObject {
         peripheralDevice
     }
 
-    // Send a command and wait for response - matches Android implementation
+    // Send a command and wait for response
     func sendCommand(_ command: Data, timeout: Int) -> Data? {
         guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
             print("Cannot send command: Not connected to device")
@@ -543,12 +533,17 @@ class BLEManager: NSObject, ObservableObject {
         
         // Start timing
         let startTime = Date().timeIntervalSince1970
+        print("BLE: Sending command: \(command.map { String(format: "%02X", $0) }.joined(separator: " "))")
         
         // Clear any existing data
-        clearBuffer()
+        bufferQueue.sync {
+            buffer.removeAll()
+            isNewCommandAvailable = false
+        }
         
         // Write the command to the characteristic
         peripheral.writeValue(command, for: characteristic, type: .withResponse)
+        print("BLE: Command written, waiting for response (timeout: \(timeout)ms)")
         
         // Wait for response
         var response: Data? = nil
@@ -556,6 +551,8 @@ class BLEManager: NSObject, ObservableObject {
         while (Date().timeIntervalSince1970 - startTime) * 1000 < Double(timeout) {
             response = getCommand()
             if let response = response, !response.isEmpty {
+                let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
+                print("BLE: Response received after \(Int(elapsedMs))ms: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
                 break
             }
             Thread.sleep(forTimeInterval: 0.01) // 10ms sleep to prevent busy waiting
@@ -563,7 +560,8 @@ class BLEManager: NSObject, ObservableObject {
         
         // If we timed out waiting for a response
         if response == nil || response!.isEmpty {
-            print("Command timed out or received empty response")
+            let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
+            print("BLE: Command timed out after \(Int(elapsedMs))ms or received empty response")
         }
         
         return response
@@ -737,11 +735,15 @@ extension BLEManager: CBPeripheralDelegate {
         }
         
         guard let data = characteristic.value, !data.isEmpty else {
+            print("Received empty data in notification")
             return
         }
         
         // Process received data
         if characteristic.uuid == notifCharUUID {
+            // Debug logs for notification data
+            print("BLE: Received notification with \(data.count) bytes: \(data.map { String(format: "%02X", $0) }.joined(separator: " "))")
+            
             // Store data in buffer
             storeBulkPkt(data)
         }

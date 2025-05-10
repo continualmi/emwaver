@@ -427,22 +427,29 @@ static void command_task(void *pvParameters)
                     // Format: cc1101 writereg [addr] [value]
                     uint8_t addr = subcommand[9];
                     uint8_t value = subcommand[10];
+                    ESP_LOGI(TAG, "CC1101: Writing register 0x%02X with value 0x%02X", addr, value);
                     cc1101_write_reg(addr, value);
                     uint8_t reading = cc1101_read_reg(addr);
+                    ESP_LOGI(TAG, "CC1101: Read back value 0x%02X, sending notification", reading);
                     // Send notification over BLE
                     ble_server_notify(&reading, 1);
                 } 
                 else if (strncmp(subcommand, "readreg", 7) == 0) {
                     // Format: cc1101 readreg [addr]
                     uint8_t addr = subcommand[8];
+                    ESP_LOGI(TAG, "CC1101: Reading register 0x%02X", addr);
                     uint8_t reading = cc1101_read_reg(addr);
+                    ESP_LOGI(TAG, "CC1101: Read value 0x%02X, sending notification", reading);
                     // Send notification over BLE
                     ble_server_notify(&reading, 1);
+                    ESP_LOGI(TAG, "CC1101: Notification sent for register 0x%02X", addr);
                 } 
                 else if (strncmp(subcommand, "strobe", 6) == 0) {
                     // Format: cc1101 strobe [cmd]
                     uint8_t cmd_value = subcommand[7];
+                    ESP_LOGI(TAG, "CC1101: Sending strobe command 0x%02X", cmd_value);
                     uint8_t status = cc1101_strobe(cmd_value);
+                    ESP_LOGI(TAG, "CC1101: Strobe returned status 0x%02X, sending notification", status);
                     // Send notification over BLE
                     ble_server_notify(&status, 1);
                 } 
@@ -450,7 +457,9 @@ static void command_task(void *pvParameters)
                     // Format: cc1101 burstwrite [addr] [len] [data...]
                     uint8_t addr = subcommand[11];
                     uint8_t len = subcommand[12];
+                    ESP_LOGI(TAG, "CC1101: Writing burst to register 0x%02X, length %d", addr, len);
                     uint8_t status = cc1101_write_burst_reg(addr, (uint8_t*)&subcommand[13], len);
+                    ESP_LOGI(TAG, "CC1101: Burst write returned status 0x%02X, sending notification", status);
                     // Send notification over BLE
                     ble_server_notify(&status, 1);
                 } 
@@ -458,10 +467,16 @@ static void command_task(void *pvParameters)
                     // Format: cc1101 burstread [addr] [len]
                     uint8_t addr = subcommand[10];
                     uint8_t len = subcommand[11];
+                    ESP_LOGI(TAG, "CC1101: Reading burst from register 0x%02X, length %d", addr, len);
                     uint8_t buffer[32]; // Max 32 bytes, adjust if needed
                     cc1101_read_burst_reg(addr, buffer, len);
+                    ESP_LOGI(TAG, "CC1101: Burst read complete, sending %d bytes notification", len);
                     // Send notification over BLE
                     ble_server_notify(buffer, len);
+                    ESP_LOGI(TAG, "CC1101: Burst notification sent");
+                }
+                else {
+                    ESP_LOGW(TAG, "CC1101: Unknown subcommand: %s", subcommand);
                 }
             }
             /* --- Sampling commands --- */

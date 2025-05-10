@@ -194,9 +194,12 @@ class CC1101 {
         let commandString = "cc1101 readreg \(addr)"
         let command = commandString.data(using: .utf8)!
         
+        print("CC1101: Sending command: \(commandString)")
         if let response = bleManager.sendCommand(command, timeout: 1000), !response.isEmpty {
             print("CC1101: Register 0x\(String(format: "%02X", addr)) = 0x\(String(format: "%02X", response[0]))")
             return response[0]
+        } else {
+            print("CC1101: Command timed out or received empty response for register 0x\(String(format: "%02X", addr))")
         }
         print("CC1101: Failed to read register 0x\(String(format: "%02X", addr))")
         return 0
