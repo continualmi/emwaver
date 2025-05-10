@@ -158,19 +158,24 @@ class CC1101 {
     
     // MARK: - SPI Communication Methods
     func spiStrobe(commandStrobe: UInt8) {
-        let command = "cc1101 strobe \(commandStrobe)".data(using: .utf8)!
+        // Create command with text prefix and raw strobe byte
+        let prefix = "cc1101 strobe "
+        var command = Data(prefix.utf8)
+        command.append(commandStrobe)
+        
         if let response = bleManager.sendCommand(command, timeout: 1000) {
             print("CC1101: Strobe command 0x\(String(format: "%02X", commandStrobe)) response: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
         }
     }
     
     func writeBurstReg(addr: UInt8, data: [UInt8], len: UInt8) {
-        var commandString = "cc1101 burstwrite \(addr) \(len)"
-        for byte in data {
-            commandString += " \(byte)"
-        }
+        // Create command with text prefix and raw bytes
+        let prefix = "cc1101 burstwrite "
+        var command = Data(prefix.utf8)
+        command.append(addr)  // Raw register address
+        command.append(len)   // Raw length byte
+        command.append(contentsOf: data.prefix(Int(len)))  // Raw data bytes
         
-        let command = commandString.data(using: .utf8)!
         if let response = bleManager.sendCommand(command, timeout: 1000) {
             print("CC1101: Burst write to 0x\(String(format: "%02X", addr)) response: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
         }
@@ -178,8 +183,12 @@ class CC1101 {
     
     func readBurstReg(addr: UInt8, len: Int) -> [UInt8] {
         print("CC1101: Reading burst register address 0x\(String(format: "%02X", addr)) length \(len)")
-        let commandString = "cc1101 burstread \(addr) \(len)"
-        let command = commandString.data(using: .utf8)!
+        
+        // Create command with text prefix and raw bytes
+        let prefix = "cc1101 burstread "
+        var command = Data(prefix.utf8)
+        command.append(addr)  // Raw register address
+        command.append(UInt8(len))  // Raw length byte
         
         if let response = bleManager.sendCommand(command, timeout: 1000) {
             print("CC1101: Burst read 0x\(String(format: "%02X", addr)) received \(response.count) bytes: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
@@ -191,10 +200,13 @@ class CC1101 {
     
     func readReg(addr: UInt8) -> UInt8 {
         print("CC1101: Reading register address 0x\(String(format: "%02X", addr))")
-        let commandString = "cc1101 readreg \(addr)"
-        let command = commandString.data(using: .utf8)!
         
-        print("CC1101: Sending command: \(commandString)")
+        // Create a command with text prefix and raw byte address
+        let prefix = "cc1101 readreg "
+        var command = Data(prefix.utf8)
+        command.append(addr) // Append the raw byte, not its string representation
+        
+        print("CC1101: Sending binary command to read register 0x\(String(format: "%02X", addr))")
         if let response = bleManager.sendCommand(command, timeout: 1000), !response.isEmpty {
             print("CC1101: Register 0x\(String(format: "%02X", addr)) = 0x\(String(format: "%02X", response[0]))")
             return response[0]
@@ -206,8 +218,11 @@ class CC1101 {
     }
     
     func writeReg(addr: UInt8, value: UInt8) {
-        let commandString = "cc1101 writereg \(addr) \(value)"
-        let command = commandString.data(using: .utf8)!
+        // Create command with text prefix and raw bytes
+        let prefix = "cc1101 writereg "
+        var command = Data(prefix.utf8)
+        command.append(addr)  // Raw register address
+        command.append(value) // Raw value byte
         
         if let response = bleManager.sendCommand(command, timeout: 1000) {
             print("CC1101: Write register 0x\(String(format: "%02X", addr)) = 0x\(String(format: "%02X", value)) response: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
