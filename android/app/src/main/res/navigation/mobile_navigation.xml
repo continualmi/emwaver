@@ -8,7 +8,7 @@
 
     <fragment
         android:id="@+id/navigation_cc1101"
-        android:name="com.emwaver.emwaverandroidapp.ui.ism.ismFragment"
+        android:name="com.emwaver.emwaverandroidapp.ui.ism.IsmFragment"
         android:label="ISM"
         tools:layout="@layout/fragment_ism" />
 

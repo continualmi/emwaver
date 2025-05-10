@@ -101,9 +101,13 @@ public class MainActivity extends AppCompatActivity {
                 destinationId == R.id.navigation_cc1101 || 
                 destinationId == R.id.navigation_sampler || 
                 destinationId == R.id.navigation_console || 
-                destinationId == R.id.navigation_buttons) {
+                destinationId == R.id.navigation_buttons || 
+                destinationId == R.id.navigation_emwaver) {
                 bottomNavigationView.setVisibility(View.VISIBLE);
-                bottomNavigationView.getMenu().findItem(destinationId).setChecked(true);
+                // Find the menu item that corresponds to this destination
+                if (bottomNavigationView.getMenu().findItem(destinationId) != null) {
+                    bottomNavigationView.getMenu().findItem(destinationId).setChecked(true);
+                }
             } else {
                 // Hide bottom navigation for other destinations not in the bottom nav menu
                 bottomNavigationView.setVisibility(View.GONE);
