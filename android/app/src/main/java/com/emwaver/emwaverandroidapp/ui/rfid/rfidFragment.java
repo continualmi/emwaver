@@ -144,16 +144,16 @@ public class rfidFragment extends Fragment {
                 return;
             }
 
-            byte[] command = new byte[12]; // Updated size to include auth mode byte
-            command[0] = 'r';
-            command[1] = 'e';
-            command[2] = 'a';
-            command[3] = 'd';
-            command[4] = (byte) Integer.parseInt(blockAddress, 16);
-            command[5] = (byte) (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61); // Auth mode byte
+            byte[] command = new byte[20]; // Increased size to accommodate new format
+            
+            // Format: "mfrc522 read [blockAddr] [authMode] [6 bytes key]"
+            String cmdPrefix = "mfrc522 read ";
+            System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
+            command[cmdPrefix.length()] = (byte) Integer.parseInt(blockAddress, 16);
+            command[cmdPrefix.length() + 1] = (byte) (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61); // Auth mode byte
 
             for (int i = 0; i < 6; i++) {
-                command[6 + i] = (byte) Integer.parseInt(keyInputs[i].getText().toString(), 16);
+                command[cmdPrefix.length() + 2 + i] = (byte) Integer.parseInt(keyInputs[i].getText().toString(), 16);
             }
 
             byte[] response = bleService.sendCommand(command, 2000); // 2000ms timeout
@@ -173,22 +173,21 @@ public class rfidFragment extends Fragment {
                 return;
             }
 
-            byte[] command = new byte[29];
-            command[0] = 'w';
-            command[1] = 'r';
-            command[2] = 'i';
-            command[3] = 't';
-            command[4] = 'e';
-            command[5] = (byte) Integer.parseInt(blockAddress, 16);
-            command[6] = (byte) (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61);
+            byte[] command = new byte[40]; // Increased size to accommodate new format
+            
+            // Format: "mfrc522 write [blockAddr] [authMode] [6 bytes key] [16 bytes data]"
+            String cmdPrefix = "mfrc522 write ";
+            System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
+            command[cmdPrefix.length()] = (byte) Integer.parseInt(blockAddress, 16);
+            command[cmdPrefix.length() + 1] = (byte) (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61);
 
             for (int i = 0; i < 6; i++) {
-                command[7 + i] = (byte) Integer.parseInt(keyInputs[i].getText().toString(), 16);
+                command[cmdPrefix.length() + 2 + i] = (byte) Integer.parseInt(keyInputs[i].getText().toString(), 16);
             }
 
             String combinedData = combinedDataInput.getText().toString().replaceAll(" ", "");
             for (int i = 0; i < 16; i++) {
-                command[13 + i] = (byte) Integer.parseInt(combinedData.substring(i * 2, i * 2 + 2), 16);
+                command[cmdPrefix.length() + 8 + i] = (byte) Integer.parseInt(combinedData.substring(i * 2, i * 2 + 2), 16);
             }
 
             byte[] response = bleService.sendCommand(command, 2000); // 2000ms timeout
