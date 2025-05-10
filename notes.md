@@ -40,6 +40,7 @@
 * The navigation needs attention. There is "back" button that opens the side drawer, why? we need a three dashes icon like android. (fixed the status bar but kept the back arrow UI)
 * RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc. (its fine, with the title gone there is some space)
 * Get rid of the connect UI on each view, only connect UI is on EMWaver view
+* EMWaver view using more GPIO pins than necessary, only need the ones on the board. same with sampler, fixed
 
 ## Not Done
 
@@ -55,13 +56,13 @@
 * Need to fully write the techincal implementation 1:1 according to the entire codebase. At that point, the commands should all be listed in a section for better readability. Simplicity is the best approach. We keep a single md file for the technical docs.
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
-* Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either
+
 * Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
 
 IOS STUFF:
 
 
-* EMWaver view using more GPIO pins than necessary, only need the ones on the board
+* Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either
 * Need to fix the freezing that happens when we are loading the registers on ISM View
 * Fix the scrolling on Sampler view not working if finger on charts
 * Editing keys on Console View does not work, the page it brings up is blank
