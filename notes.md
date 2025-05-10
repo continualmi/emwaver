@@ -54,6 +54,7 @@
 IOS STUFF:
 
 * The Android implementation of Buttons now uses a Java rewrite of MakeHex. For iOS, we still need to implement the equivalent logic in Swift, since native C++ import is not feasible.
+* Figure out how to deal with external storage in IOS, for loading external scripts and etc.
 * RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
 
 
