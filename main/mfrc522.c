@@ -262,8 +262,8 @@ esp_err_t mfrc522_init(mfrc522_config_t* config)
     // Check version (optional but recommended)
     u_char version = mfrc522_read_reg(VersionReg);
     ESP_LOGI(TAG, "MFRC522 Version: 0x%02X", version);
-     if ((version != 0x91) && (version != 0x92) && (version != 0x88)) {
-         ESP_LOGW(TAG, "Warning: MFRC522 version mismatch! (Expected 0x91, 0x92 or 0x88)");
+     if ((version != 0x91) && (version != 0x92) && (version != 0x88) && (version != 0xB2)) {
+         ESP_LOGW(TAG, "Warning: MFRC522 version mismatch! (Expected 0x91, 0x92, 0x88 or 0xB2)");
          // Continue anyway, might work
      }
 
@@ -649,4 +649,92 @@ void mfrc522_stop_crypto1()
 {
     // Clear MFCrypto1On bit in Status2Reg
     mfrc522_clear_bit_mask(Status2Reg, 0x08);
+}
+
+/**
+ * @brief Check if MFRC522 module is physically connected
+ * 
+ * @return true if connected, false otherwise
+ */
+bool mfrc522_is_connected(void)
+{
+    if (!_config || !_config->spi_device) {
+        ESP_LOGE(TAG, "SPI device not initialized");
+        return false;
+    }
+
+    // Read the version register - should be 0x91, 0x92, 0x88 or 0xB2 if connected
+    uint8_t version = mfrc522_read_reg(VersionReg);
+    ESP_LOGI(TAG, "MFRC522 Version check: 0x%02X", version);
+    
+    // 0xFF is typically returned when reading from SPI with nothing connected
+    // or any unexpected value that's not one of the known version numbers
+    return (version == 0x91 || version == 0x92 || version == 0x88 || version == 0xB2);
+}
+
+/**
+ * @brief Soft reset and reconfigure the MFRC522 without reinitializing SPI bus
+ * 
+ * This function performs a reset and reconfiguration of the MFRC522 chip
+ * without attempting to initialize the SPI bus or add a new SPI device.
+ * Use this when you need to refresh the MFRC522 state between operations.
+ *
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t mfrc522_soft_reset(void)
+{
+    ESP_LOGI(TAG, "Performing MFRC522 soft reset");
+    
+    if (!_config || !_config->spi_device) {
+        ESP_LOGE(TAG, "MFRC522 not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Perform hardware reset if RST pin is connected
+    if (_config->rst_io >= 0) {
+        gpio_set_level(_config->rst_io, 0);
+        vTaskDelay(pdMS_TO_TICKS(5)); // Min reset pulse width
+        gpio_set_level(_config->rst_io, 1);
+        vTaskDelay(pdMS_TO_TICKS(50)); // Wait for oscillator startup
+        ESP_LOGI(TAG, "Hardware reset performed.");
+    } else {
+        // Software reset
+        mfrc522_reset();
+        ESP_LOGI(TAG, "Software reset performed.");
+    }
+
+    // Configure MFRC522 Registers
+    mfrc522_write_reg(TModeReg, 0x80);      // TAuto=1; timer starts automatically at the end of the transmission
+    mfrc522_write_reg(TPrescalerReg, 0xA9); // TPreScaler = TModeReg[3..0]:TPrescalerReg, ie 0x0A9 = 169 => f_timer=40kHz, timeour is 64 * TPrescalerReg
+    mfrc522_write_reg(TReloadRegL, 30);     // Reload timer value low: 30
+    mfrc522_write_reg(TReloadRegH, 0);      // Reload timer value high: 0 => timeout is 25ms
+    mfrc522_write_reg(TxAutoReg, 0x40);     // 100% ASK modulation
+
+    // Add enhanced range settings
+    // First put the chip in Idle mode
+    mfrc522_write_reg(CommandReg, PCD_IDLE);
+
+    // 1. Max out the receiver gain (48dB)
+    mfrc522_write_reg(RFCfgReg, 0x70);  // RxGain = 0b111 (max)
+
+    // 2. Increase transmitter power
+    mfrc522_write_reg(CWGsPReg, 0x3F);   // p-driver conductance during carrier wave - max value
+    mfrc522_write_reg(ModGsPReg, 0x3F);  // p-driver conductance during modulation - max value
+    mfrc522_write_reg(GsNReg, 0xF0);     // n-driver settings (CW=0xF, Mod=0x0)
+
+    // 3. Increase the timeout slightly for more reliable reads at distance
+    mfrc522_write_reg(TReloadRegL, 0x50); // Increase timeout value
+    mfrc522_write_reg(TReloadRegH, 0x00);
+
+    // Continue with standard settings
+    mfrc522_write_reg(ModeReg, 0x3D);       // CRC initial value 0x6363
+
+    // Turn antenna on
+    mfrc522_antenna_on();
+    ESP_LOGI(TAG, "Antenna ON.");
+
+    // Re-apply TxControlReg setting to ensure field is on after our changes
+    mfrc522_write_reg(TxControlReg, 0x83); // Enable both TX drivers
+
+    return ESP_OK;
 } 

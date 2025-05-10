@@ -238,6 +238,24 @@ void mfrc522_calculate_crc(u_char *pIndata, u_char len, u_char *pOutData);
 void mfrc522_stop_crypto1();
 
 /**
+ * @brief Soft reset and reconfigure the MFRC522 without reinitializing SPI bus
+ * 
+ * This function performs a reset and reconfiguration of the MFRC522 chip
+ * without attempting to initialize the SPI bus or add a new SPI device.
+ * Use this when you need to refresh the MFRC522 state between operations.
+ *
+ * @return esp_err_t ESP_OK on success
+ */
+esp_err_t mfrc522_soft_reset(void);
+
+/**
+ * @brief Check if MFRC522 module is physically connected
+ * 
+ * @return true if connected, false otherwise
+ */
+bool mfrc522_is_connected(void);
+
+/**
  * @brief Reads a single byte from an MFRC522 register.
  * (Internal helper function, exposed for potential advanced use)
  *
