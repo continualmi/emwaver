@@ -232,11 +232,32 @@ esp_err_t mfrc522_init(mfrc522_config_t* config)
     mfrc522_write_reg(TReloadRegL, 30);     // Reload timer value low: 30
     mfrc522_write_reg(TReloadRegH, 0);      // Reload timer value high: 0 => timeout is 25ms
     mfrc522_write_reg(TxAutoReg, 0x40);     // 100% ASK modulation
+
+    // Add enhanced range settings
+    // First put the chip in Idle mode
+    mfrc522_write_reg(CommandReg, PCD_IDLE);
+
+    // 1. Max out the receiver gain (48dB)
+    mfrc522_write_reg(RFCfgReg, 0x70);  // RxGain = 0b111 (max)
+
+    // 2. Increase transmitter power
+    mfrc522_write_reg(CWGsPReg, 0x3F);   // p-driver conductance during carrier wave - max value
+    mfrc522_write_reg(ModGsPReg, 0x3F);  // p-driver conductance during modulation - max value
+    mfrc522_write_reg(GsNReg, 0xF0);     // n-driver settings (CW=0xF, Mod=0x0)
+
+    // 3. Increase the timeout slightly for more reliable reads at distance
+    mfrc522_write_reg(TReloadRegL, 0x50); // Increase timeout value
+    mfrc522_write_reg(TReloadRegH, 0x00);
+
+    // Continue with standard settings
     mfrc522_write_reg(ModeReg, 0x3D);       // CRC initial value 0x6363
 
     // Turn antenna on
     mfrc522_antenna_on();
     ESP_LOGI(TAG, "Antenna ON.");
+
+    // Re-apply TxControlReg setting to ensure field is on after our changes
+    mfrc522_write_reg(TxControlReg, 0x83); // Enable both TX drivers
 
     // Check version (optional but recommended)
     u_char version = mfrc522_read_reg(VersionReg);
