@@ -63,6 +63,7 @@ IOS STUFF:
 
 
 * Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either
+* Add versioning to IOS
 * Need to fix the freezing that happens when we are loading the registers on ISM View
 * Fix the scrolling on Sampler view not working if finger on charts
 * Editing keys on Console View does not work, the page it brings up is blank
