@@ -8,16 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var selection: String? = "BLE"
-    @State private var tabSelection: String = "BLE"
+    @State private var selection: String? = "EMWaver"
+    @State private var tabSelection: String = "RFID"
     
     var body: some View {
         TabView(selection: $tabSelection) {
-            mainNavigationView(for: "BLE")
+            mainNavigationView(for: "RFID")
                 .tabItem {
-                    Label("BLE", systemImage: "dot.radiowaves.left.and.right")
+                    Label("RFID", systemImage: "dot.radiowaves.forward")
                 }
-                .tag("BLE")
+                .tag("RFID")
             
             mainNavigationView(for: "ISM")
                 .tabItem {
@@ -49,7 +49,7 @@ struct ContentView: View {
         .onChange(of: selection) { newValue in
             if let newValue = newValue {
                 // Only update tab selection if it matches one of our tabs
-                if ["BLE", "ISM", "Sampler", "Console", "Buttons"].contains(newValue) {
+                if ["RFID", "ISM", "Sampler", "Console", "Buttons"].contains(newValue) {
                     tabSelection = newValue
                 }
             }
@@ -60,8 +60,8 @@ struct ContentView: View {
     private func mainNavigationView(for initialSelection: String) -> some View {
         NavigationSplitView {
             List(selection: $selection) {
-                NavigationLink(value: "BLE") {
-                    Label("BLE", systemImage: "dot.radiowaves.left.and.right")
+                NavigationLink(value: "EMWaver") {
+                    Label("EMWaver", systemImage: "house")
                 }
                 NavigationLink(value: "ISM") {
                     Label("ISM", systemImage: "memorychip")
@@ -86,8 +86,8 @@ struct ContentView: View {
             .navigationTitle("EMWaver")
         } detail: {
             switch selection {
-            case "BLE":
-                BLEView()
+            case "EMWaver":
+                EMWaverView()
             case "ISM":
                 ISMView()
             case "RFID":
