@@ -49,7 +49,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
-public class ismFragment extends Fragment {
+public class IsmFragment extends Fragment {
 
     private FragmentIsmBinding binding;
     private CC1101 cc1101;
@@ -84,8 +84,8 @@ public class ismFragment extends Fragment {
         }
     };
 
-    public static ismFragment newInstance() {
-        return new ismFragment();
+    public static IsmFragment newInstance() {
+        return new IsmFragment();
     }
 
     @Override
