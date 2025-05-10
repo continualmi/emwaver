@@ -34,6 +34,7 @@
 * Remove all fragments that were removed on android, 2.4 ghz, bad usb, firmwre update, template.
 * Rename BLE fragment to EMwwaver fragment.
 * Migrate to new esp32 command structure, rfid, cc1101 and mfrc522 nomenclature 
+* ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 
 ## Not Done
 
@@ -52,7 +53,6 @@
 
 IOS STUFF:
 
-* ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 * The Android implementation of Buttons now uses a Java rewrite of MakeHex. For iOS, we still need to implement the equivalent logic in Swift, since native C++ import is not feasible.
 * RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
 
