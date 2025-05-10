@@ -69,12 +69,6 @@ struct ContentView: View {
                 NavigationLink(value: "RFID") {
                     Label("RFID", systemImage: "dot.radiowaves.forward")
                 }
-                NavigationLink(value: "2.4 GHz") {
-                    Label("2.4 GHz", systemImage: "antenna.radiowaves.left.and.right")
-                }
-                NavigationLink(value: "BadUSB") {
-                    Label("Bad-USB", systemImage: "keyboard")
-                }
                 NavigationLink(value: "Sampler") {
                     Label("Sampler", systemImage: "waveform")
                 }
@@ -84,13 +78,7 @@ struct ContentView: View {
                 NavigationLink(value: "Console") {
                     Label("Console", systemImage: "text.and.command.macwindow")
                 }
-                NavigationLink(value: "Firmware") {
-                    Label("Firmware Update", systemImage: "arrow.up.circle")
-                }
                 // TODO: Add Serial Monitor, Flasher when views are created
-                NavigationLink(value: "Template") {
-                    Label("Template", systemImage: "pencil.and.ruler")
-                }
                 NavigationLink(value: "Settings") {
                     Label("Settings", systemImage: "gearshape")
                 }
@@ -104,20 +92,12 @@ struct ContentView: View {
                 ISMView()
             case "RFID":
                 RFIDView()
-            case "2.4 GHz":
-                GHz24View()
-            case "BadUSB":
-                BadUSBView()
             case "Sampler":
                 SamplerView()
             case "Buttons":
                 ButtonsView()
             case "Console":
                 ConsoleView()
-            case "Firmware":
-                FirmwareUpdateView()
-            case "Template":
-                TemplateView()
             case "Settings":
                 SettingsView()
             default:
