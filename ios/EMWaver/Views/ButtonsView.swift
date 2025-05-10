@@ -37,7 +37,7 @@ struct ButtonsView: View {
     @State private var isButtonGridExpanded = true
     
     // JavaScript Engine
-    private let jsEngine = JavaScriptEngine(bleManager: BLEManager())
+    @State private var jsEngine: JavaScriptEngine? = nil
     
     var body: some View {
         VStack(spacing: 0) {
@@ -296,17 +296,18 @@ struct ButtonsView: View {
     // MARK: - Script Execution
     
     func setupJavaScriptEngine() {
-        jsEngine.setupContext { message in
+        jsEngine = JavaScriptEngine(bleManager: bleManager)
+        jsEngine?.setupContext { message in
             print("JS: \(message)")
         }
         
         if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            jsEngine.registerLoadFunction(scriptDirectoryURL: docDir)
+            jsEngine?.registerLoadFunction(scriptDirectoryURL: docDir)
         }
     }
     
     func executeScript(_ script: String) {
-        jsEngine.evaluateScript(script)
+        jsEngine?.evaluateScript(script)
     }
     
     // MARK: - Utilities
@@ -365,45 +366,39 @@ struct AddButtonView: View {
     @State private var buttonName: String = ""
     @State private var selectedColor: String = "red"
     @State private var script: String = """
-// Better error reporting in JavaScriptEngine could be implemented by:
-// 1. Adding a try-catch in JavaScriptEngine.evaluateScript that captures line numbers
-// 2. Modifying the exceptionHandler in setupContext to include line information
-// 3. Adding a debug mode to show more detailed error information
-
 try {
     // This is a simple script to toggle GPIO1 
-    // Since we can't create NSData directly, let's try with a different approach
-    
     print("Toggling GPIO1");
     
-    // Create byte arrays directly
+    // Send command in correct binary format:
+    // "gpio" (ASCII) + placeholder (0) + pin (raw byte) + 'W' (ASCII) + value (raw byte)
     var highCommand = new Uint8Array([
         103, 112, 105, 111,  // ASCII for "gpio"
-        1,                   // Pin 1
-        87,                  // ASCII for "W" (write)
-        1                    // HIGH value
+        0,                   // Placeholder byte (needed by firmware)
+        1,                   // Pin 1 as raw byte (0x01)
+        87,                  // ASCII for "W"
+        1                    // HIGH value as raw byte (0x01)
     ]);
     
     print("Sending HIGH command to GPIO1");
-    
-    // Use the BLEService.sendPacket method directly
-    // Use the array buffer as the parameter instead of the array itself
-    BLEService.sendPacket(highCommand.buffer);
+    BLEService.sendPacket(highCommand);
     
     print("GPIO1 set to HIGH");
     
     // Wait for 1 second
-    Utils.delay(1000);
+    Utils.sleep(1000);
     
+    // ASCII for "gpio" + placeholder + raw pin + 'W' + raw value
     var lowCommand = new Uint8Array([
         103, 112, 105, 111,  // ASCII for "gpio"
-        1,                   // Pin 1
-        87,                  // ASCII for "W" (write)
-        0                    // LOW value
+        0,                   // Placeholder byte (needed by firmware)
+        1,                   // Pin 1 as raw byte (0x01)
+        87,                  // ASCII for "W"
+        0                    // LOW value as raw byte (0x00)
     ]);
     
     print("Sending LOW command to GPIO1");
-    BLEService.sendPacket(lowCommand.buffer);
+    BLEService.sendPacket(lowCommand);
     
     print("GPIO1 set to LOW");
     print("Toggle completed successfully");
