@@ -76,8 +76,7 @@ public class MainActivity extends AppCompatActivity {
         appBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.navigation_cc1101, R.id.navigation_rfid,
                 R.id.navigation_sampler, R.id.navigation_console, R.id.navigation_buttons,
-                R.id.navigation_emwaver, R.id.navigation_template,
-                R.id.navigation_bad_usb)
+                R.id.navigation_emwaver)
                 .setOpenableLayout(drawer)
                 .build();
 
@@ -98,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         // Update bottom navigation when destination changes
         navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
             int destinationId = destination.getId();
-            if (destinationId == R.id.navigation_emwaver || 
+            if (destinationId == R.id.navigation_rfid || 
                 destinationId == R.id.navigation_cc1101 || 
                 destinationId == R.id.navigation_sampler || 
                 destinationId == R.id.navigation_console || 

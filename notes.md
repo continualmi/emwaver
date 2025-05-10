@@ -20,6 +20,8 @@
 * Make the feel of the console fragment UI betters
 * Make the feel of the buttons fragment UI better
 * Implement Bad-USB functionality through Console fragment scripting. Much cleaner than doing my own Bas USB fragment!
+* Remove bad usb fragment
+* Remove template fragment. If people want to create a new fragment, there is no need for a template fragment i don't think. We think about it down the line
 
 ## Not Done
 
@@ -38,8 +40,7 @@
 * Clean out nrf24 code from esp32
 * Resolve warnings in firmware
 
-* Remove bad usb fragment
-* Remove template fragment. If people want to create a new fragment, there is no need for a template fragment i don't think. We think about it down the line
+
 
 
 

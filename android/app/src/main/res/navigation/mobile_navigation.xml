@@ -42,16 +42,4 @@
         android:label="EMWaver"
         tools:layout="@layout/fragment_emwaver" />
 
-    <fragment
-        android:id="@+id/navigation_template"
-        android:name="com.emwaver.emwaverandroidapp.ui.template.TemplateFragment"
-        android:label="Template"
-        tools:layout="@layout/fragment_template" />
-
-    <fragment
-        android:id="@+id/navigation_bad_usb"
-        android:name="com.emwaver.emwaverandroidapp.ui.badusb.BadUSBFragment"
-        android:label="Bad-USB"
-        tools:layout="@layout/fragment_bad_usb" />
-
 </navigation>
