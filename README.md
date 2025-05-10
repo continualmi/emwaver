@@ -1,17 +1,33 @@
-This is the repo for the EMWaver ESP firmware. EMWaver is a board with an ESP32 S3 and a few functionalities:
+# EMWaver
 
-- Infrared LED and infrared receiver
-- CC1101 transceiver
-- USB-C port connected to USB in ESP32-S3
-- USB-C port connected to CH340 converter and then to Serial interface in ESP32-S3
-- GPIO breakout pins
+<div align="center">
+  <img src="logo.png" alt="EMWaver Logo" width="250">
+  <h3><a href="https://docs.emwaver.com">📚 Website: docs.emwaver.com</a></h3>
+</div>
 
-The special aspect of the EMWaver device is that the USB-C port that connects directly to the ESP interface is a male port, meant to be connected directly to a smartphone, providing power and communications. With this, it is meant to interact with an APP for smartphone, the EMWaver App. 
+## Overview
 
-EMWaver is meant to be a educational tool for enthusiasts. The firmware is simple yet powerful, and is meant to be customizable.
+EMWaver is a versatile ESP32-S3 development board with a male USB-C connector designed to plug directly into smartphones. It combines multiple wireless technologies in one compact device:
 
-USB and BLE is used to communicate with the smartphone. We utilize the simplest usage of these protocols. For example, with USB we use a simple IN endpoint and OUT endpoint of the type Bulk. And for BLE we have a similar setup with characteristics.
+- **CC1101 Transceiver**: For sub-GHz RF communication in ISM bands
+- **Infrared**: Built-in IR LED and receiver
+- **RFID Support**: Compatible with MFRC522 modules
+- **16 GPIO Pins**: For connecting external hardware and sensors
+- **USB HID**: Supports BadUSB functionality
 
-This project was previously built on STM32 platform. This will be an attempt to port it.
+## Features
+
+- Direct smartphone connectivity (Android/iOS)
+- BLE communication protocol
+- 10μs precision signal sampling and transmission
+- Simple command-based API
+
+## Documentation
+
+For complete documentation, visit [docs.emwaver.com](https://docs.emwaver.com)
+
+## License
+
+This project is open source and available under the [LICENSE](LICENSE) file.
 
 
