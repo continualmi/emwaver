@@ -38,10 +38,6 @@
 
 // Include BadUSB module
 #include "badusb.h"
-
-// Include NRF24 module
-#include "nrf24.h"
-
 // Place MFRC522 config here so it is visible everywhere
 static mfrc522_config_t mfrc522_cfg = {
     .host = SPI2_HOST, // Same as CC1101
@@ -50,18 +46,6 @@ static mfrc522_config_t mfrc522_cfg = {
     .sck_io  = 12,     // Same as CC1101
     .sda_io  = 9,      // CS for MFRC522 is GPIO9
     .rst_io  = 7,      // RST for MFRC522 is GPIO7
-    .spi_device = NULL
-};
-
-// Place NRF24 config here so it is visible everywhere
-static nrf24_config_t nrf24_cfg = {
-    .host = SPI2_HOST, // Same as CC1101 and MFRC522
-    .miso_io = 13,     // Same as CC1101
-    .mosi_io = 11,     // Same as CC1101
-    .sck_io  = 12,     // Same as CC1101
-    .csn_io  = 16,     // CS for NRF24 is GPIO16
-    .ce_io   = 14,     // CE for NRF24 is GPIO14
-    .irq_io  = -1,     // No IRQ pin used
     .spi_device = NULL
 };
 
@@ -772,56 +756,6 @@ static void command_task(void *pvParameters)
                 
                 // Restore the original character that was overwritten by null terminator
                 payload[payload_len] = saved;
-            }
-            else if (cmd.length >= 3 && strncmp((char *)cmd.data, "nrf", 3) == 0) {
-                // Initialize NRF24 if not already initialized
-                if (nrf24_cfg.spi_device == NULL) {
-                    esp_err_t ret = nrf24_init(&nrf24_cfg);
-                    if (ret != ESP_OK) {
-                        ESP_LOGE(TAG, "NRF24 initialization failed");
-                        continue;
-                    }
-                }
-                
-                uint32_t rate = 1000000; // 1Mbps
-                uint8_t address[5];
-                uint8_t found_addresses[20][5] = {0}; // Store up to 20 addresses
-                uint8_t found_count = 0;
-                
-                // Scan channels 0-125
-                for (uint8_t channel = 0; channel <= 125; channel++) {
-                    nrf24_init_promisc_mode(&nrf24_cfg, channel, rate);
-                    int64_t start_time = esp_timer_get_time();
-                    while ((esp_timer_get_time() - start_time) < 30000) { // 30ms per channel
-                        if (nrf24_sniff_address(&nrf24_cfg, 5, address)) {
-                            // Check for duplicates
-                            bool duplicate = false;
-                            for (int i = 0; i < found_count; i++) {
-                                if (memcmp(found_addresses[i], address, 5) == 0) {
-                                    duplicate = true;
-                                    break;
-                                }
-                            }
-                            if (!duplicate && found_count < 20) {
-                                memcpy(found_addresses[found_count], address, 5);
-                                char addr_str[16];
-                                for (int j = 0; j < 5; j++) {
-                                    sprintf(&addr_str[j*2], "%02X", address[j]);
-                                }
-                                addr_str[10] = '\0';
-                                ESP_LOGI(TAG, "%s", addr_str);
-                                found_count++;
-                            }
-                        }
-                        vTaskDelay(1);
-                    }
-                    nrf24_power_down(&nrf24_cfg);
-                }
-                ESP_LOGI(TAG, "Scan complete. Found %d unique addresses.", found_count);
-                // Deinitialize NRF24 to free up SPI resources
-                if (nrf24_cfg.spi_device != NULL) {
-                    nrf24_deinit(&nrf24_cfg);
-                }
             }
         }
     }

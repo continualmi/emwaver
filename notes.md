@@ -27,6 +27,7 @@
 * Consider adding using built in NFC and IR blaster on phones that have it (might be a bad idea because IOS doesnt, though NFC built-in has more protocols and standards than mifare. Best decision might be to not support any built in functions, also because we don't know how useful other NFC protocols are)
 * See why RFID range is really bad for some reason using the cheap module. Not sure if it's a board issue since I never tested it even with old USB CDC Protocol
 * Need a detection/warning for when any hardware is missing, cc1101, mfrc522, nrf24. Basic checks and warnings on chip status etc (actually just the mfrc522 is needed)
+* Clean out nrf24 code from esp32. Nrf24 is advanced functionality and not required here
 
 ## Not Done
 
@@ -41,10 +42,9 @@
 
 
 
-
-* Clean out nrf24 code from esp32
 * Need to write README file properly too, including the EMWaver logo there, and basic repo instructions.
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
+* Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 
 
 ## Hardware
