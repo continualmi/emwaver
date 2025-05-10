@@ -40,8 +40,42 @@ class JavaScriptEngine {
         let utils = JSUtils()
         context.setObject(utils, forKeyedSubscript: "Utils" as NSString)
         
-        // Expose the BLEManager to JavaScript
-        context.setObject(bleManager, forKeyedSubscript: "BLEService" as NSString)
+        // Create simple array wrapper for sending packets
+        let sendPacket: @convention(block) (JSValue) -> Void = { jsValue in
+            var byteArray = [UInt8]()
+            
+            // Debug what type we're getting
+            self.printCallback?("jsValue type: \(jsValue.isArray ? "Array" : "Non-Array")")
+            
+            // Try accessing each byte directly from the array
+            if let length = jsValue.forProperty("length").toNumber()?.intValue {
+                self.printCallback?("Array length: \(length)")
+                
+                for i in 0..<length {
+                    if let byteValue = jsValue.atIndex(i)?.toNumber()?.uint8Value {
+                        byteArray.append(byteValue)
+                    }
+                }
+                
+                self.printCallback?("Extracted \(byteArray.count) bytes")
+            }
+            
+            // Check if we have data before sending
+            if !byteArray.isEmpty {
+                let data = Data(byteArray)
+                self.printCallback?("Sending packet: \(BLEManager.dataToHexString(data))")
+                self.bleManager.sendPacket(data)
+            } else {
+                self.printCallback?("Error: Could not convert to byte array")
+            }
+        }
+        
+        // Create a simpler BLE service wrapper
+        let bleService = JSValue(newObjectIn: context)
+        bleService?.setValue(sendPacket, forProperty: "sendPacket")
+        
+        // Expose the BLE service to JavaScript
+        context.setObject(bleService, forKeyedSubscript: "BLEService" as NSString)
     }
     
     func setupCC1101(_ cc1101: CC1101) {

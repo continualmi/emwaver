@@ -150,10 +150,15 @@ import JavaScriptCore
 
 @objc protocol UtilsJSExport: JSExport {
     func sleep(_ milliseconds: Int)
+    func delay(_ milliseconds: Int)
 }
 
 class JSUtils: NSObject, UtilsJSExport {
     func sleep(_ milliseconds: Int) {
+        Thread.sleep(forTimeInterval: Double(milliseconds) / 1000.0)
+    }
+    
+    func delay(_ milliseconds: Int) {
         Thread.sleep(forTimeInterval: Double(milliseconds) / 1000.0)
     }
 }
