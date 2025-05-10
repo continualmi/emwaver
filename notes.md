@@ -22,26 +22,25 @@
 * Implement Bad-USB functionality through Console fragment scripting. Much cleaner than doing my own Bas USB fragment!
 * Remove bad usb fragment
 * Remove template fragment. If people want to create a new fragment, there is no need for a template fragment i don't think. We think about it down the line
+* Implement some 2.4 GHz basic functionality on 2.4 GHz fragment (no need)
+* For BAD-USB, we need to write a NVS functionality as well, to make the ESP32 boot and immediatly inject payload that was saved to Non volatile storage NVS (we dont because we are just going to be doing ephemeral bad usb and remotely)
 
 ## Not Done
 
 * The Android implementation of Buttons now uses a Java rewrite of MakeHex. For iOS, we still need to implement the equivalent logic in Swift, since native C++ import is not feasible.
 * ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 * Retransmission over and over on iOS also fails a bit, needs a bit more work.
-* Need to write README file properly too, including the EMWaver logo there, and basic repo instructions.
-* Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
 * Settings fragment also needs to have some stuff, not sure what
-* Implement some 2.4 GHz basic functionality on 2.4 GHz fragment
-* Need a detection/warning for when any hardware is missing, cc1101, mfrc522, nrf24. Basic checks and warnings on chip status etc
-* See why RFID range is really bad for some reason using the cheap module. Not sure if it's a board issue since I never tested it even with old USB CDC Protocol
-* For BAD-USB, we need to write a NVS functionality as well, to make the ESP32 boot and immediatly inject payload that was saved to Non volatile storage NVS
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
-* Clean out nrf24 code from esp32
 * Resolve warnings in firmware
 
 
-
+* See why RFID range is really bad for some reason using the cheap module. Not sure if it's a board issue since I never tested it even with old USB CDC Protocol
+* Need a detection/warning for when any hardware is missing, cc1101, mfrc522, nrf24. Basic checks and warnings on chip status etc (actually just the mfrc522 is needed)
+* Clean out nrf24 code from esp32
+* Need to write README file properly too, including the EMWaver logo there, and basic repo instructions.
+* Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
 
 
 ## Build Commands
