@@ -100,6 +100,7 @@ struct ButtonsView: View {
             }
         }
         .navigationTitle("Buttons")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
@@ -161,6 +162,14 @@ struct ButtonsView: View {
             )
         }
         .onAppear {
+            // Add this code for opaque navigation bar
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            // End of added code
+
             loadRemotes()
             setupJavaScriptEngine()
         }

@@ -23,238 +23,249 @@ struct EMWaverView: View {
     ]
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Connection Section
-                GroupBox(label: Label("Connection", systemImage: "antenna.radiowaves.left.and.right").font(.headline)) {
-                    HStack {
-                        Button(action: {
-                            if bleManager.isConnected {
-                                bleManager.disconnect()
-                            } else {
-                                bleManager.startScan()
-                            }
-                        }) {
-                            HStack {
-                                Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
-                                Text(bleManager.isConnected ? "Disconnect" : "Connect to EMWaver")
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(bleManager.isConnected ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                        }
-                        
+        TabView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Connection Section
+                    GroupBox(label: Label("Connection", systemImage: "antenna.radiowaves.left.and.right").font(.headline)) {
                         HStack {
-                            Circle()
-                                .fill(getConnectionStatusColor())
-                                .frame(width: 12, height: 12)
-                            Text(getConnectionStatusText())
-                                .font(.subheadline)
-                                .foregroundColor(getConnectionStatusColor())
-                        }
-                        .frame(width: 120)
-                        .padding(.horizontal)
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
-                
-                // GPIO Control Section
-                GroupBox(label: Label("GPIO Control", systemImage: "cpu").font(.headline)) {
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Select Pin:")
-                                .font(.subheadline)
-                            
-                            Picker("", selection: $selectedPin) {
-                                ForEach(pins, id: \.self) { pin in
-                                    Text(pin)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .disabled(!bleManager.isConnected)
-                            .frame(width: 120)
-                        }
-                        .padding(.vertical, 4)
-                        
-                        HStack(spacing: 10) {
                             Button(action: {
-                                sendGpioCommand(action: "R")
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.down.doc")
-                                    Text("Read")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.green.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
-                            
-                            Button(action: {
-                                sendGpioCommand(action: "W", value: 1)
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.up.square")
-                                    Text("High")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.orange.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
-                            
-                            Button(action: {
-                                sendGpioCommand(action: "W", value: 0)
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.down.square")
-                                    Text("Low")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.purple.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
-                
-                // Command Input Section
-                GroupBox(label: Label("Command Input", systemImage: "terminal").font(.headline)) {
-                    VStack(spacing: 12) {
-                        HStack {
-                            TextField("e.g., ble?[0x00][255][0xFF]", text: $commandInput)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.trailing, 8)
-                            
-                            Button(action: {
-                                sendPacket()
-                            }) {
-                                HStack {
-                                    Image(systemName: "paperplane.fill")
-                                    Text("Send")
-                                }
-                                .padding(10)
-                                .background(Color.blue.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
-                
-                // Serial Monitor Section
-                GroupBox(label: Label("Serial Monitor", systemImage: "doc.text").font(.headline)) {
-                    VStack {
-                        ScrollViewReader { scrollViewProxy in // Added ScrollViewReader for auto-scroll
-                            ScrollView {
-                                // Use the local serialMonitorText state
-                                if serialMonitorText.isEmpty {
-                                    Text("Serial monitor output will appear here.")
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundColor(Color.green.opacity(0.7))
-                                        .padding(8)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                if bleManager.isConnected {
+                                    bleManager.disconnect()
                                 } else {
-                                    // Display the formatted text directly
-                                    Text(serialMonitorText)
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundColor(Color.green.opacity(0.8)) // Basic coloring, can refine later if needed
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.bottom, 1) // Ensure last line is visible
-                                        .id("bottom") // ID for scrolling
+                                    bleManager.startScan()
                                 }
-                            }
-                            .background(Color.black)
-                            .cornerRadius(8)
-                            .frame(minHeight: 200, maxHeight: 200)
-                            .onChange(of: serialMonitorText) { _ in // Auto-scroll on change
-                                withAnimation {
-                                    scrollViewProxy.scrollTo("bottom", anchor: .bottom)
-                                }
-                            }
-                        }
-
-                        HStack {
-                            HStack(spacing: 20) {
-                                Toggle("HEX", isOn: $showHex)
-                                    .toggleStyle(SwitchToggleStyle(tint: .blue))
-                                Toggle("ASCII", isOn: $showAscii)
-                                    .toggleStyle(SwitchToggleStyle(tint: .blue))
-                            }
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                clearSerialMonitor()
                             }) {
                                 HStack {
-                                    Image(systemName: "trash")
-                                    Text("Clear")
+                                    Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
+                                    Text(bleManager.isConnected ? "Disconnect" : "Connect to EMWaver")
                                 }
-                                .padding(10)
-                                .background(Color.red.opacity(0.7))
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(bleManager.isConnected ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
                                 .foregroundColor(.white)
                                 .cornerRadius(10)
                             }
+                            
+                            HStack {
+                                Circle()
+                                    .fill(getConnectionStatusColor())
+                                    .frame(width: 12, height: 12)
+                                Text(getConnectionStatusText())
+                                    .font(.subheadline)
+                                    .foregroundColor(getConnectionStatusColor())
+                            }
+                            .frame(width: 120)
+                            .padding(.horizontal)
                         }
-                        .padding(.top, 8)
+                        .padding(.vertical, 8)
                     }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
-            }
-            .padding(.vertical)
-        }
-        .navigationTitle("EMWaver BLE Control")
-        .onReceive(timer) { _ in // Action for the timer
-            fetchAndDisplayBufferedData()
-        }
-        .onAppear {
-            // Initialize the JavaScript engine when the view appears
-            if bleManager.isConnected && jsEngine == nil {
-                setupJSEngine()
-            }
-        }
-        .onChange(of: bleManager.isConnected) { connected in
-            if connected && jsEngine == nil {
-                setupJSEngine()
-            }
-        }
-        .onDisappear {
-            // --- Add Logging Here ---
-            print("!!! BLEView disappearing.")
-            // Check state immediately
-            if let peripheral = bleManager.connectedPeripheral { // Use the public accessor
-                print("!!! BLEView onDisappear: Peripheral state is \(peripheral.state.rawValue)") // Raw value for more detail maybe
-            } else {
-                print("!!! BLEView onDisappear: Peripheral device is nil.")
-            }
+                    .padding(.horizontal)
+                    
+                    // GPIO Control Section
+                    GroupBox(label: Label("GPIO Control", systemImage: "cpu").font(.headline)) {
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Select Pin:")
+                                    .font(.subheadline)
+                                
+                                Picker("", selection: $selectedPin) {
+                                    ForEach(pins, id: \.self) { pin in
+                                        Text(pin)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .disabled(!bleManager.isConnected)
+                                .frame(width: 120)
+                            }
+                            .padding(.vertical, 4)
+                            
+                            HStack(spacing: 10) {
+                                Button(action: {
+                                    sendGpioCommand(action: "R")
+                                }) {
+                                    HStack {
+                                        Image(systemName: "arrow.down.doc")
+                                        Text("Read")
+                                    }
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.green.opacity(0.8))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                                .disabled(!bleManager.isConnected)
+                                
+                                Button(action: {
+                                    sendGpioCommand(action: "W", value: 1)
+                                }) {
+                                    HStack {
+                                        Image(systemName: "arrow.up.square")
+                                        Text("High")
+                                    }
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.orange.opacity(0.8))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                                .disabled(!bleManager.isConnected)
+                                
+                                Button(action: {
+                                    sendGpioCommand(action: "W", value: 0)
+                                }) {
+                                    HStack {
+                                        Image(systemName: "arrow.down.square")
+                                        Text("Low")
+                                    }
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.purple.opacity(0.8))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                                .disabled(!bleManager.isConnected)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Command Input Section
+                    GroupBox(label: Label("Command Input", systemImage: "terminal").font(.headline)) {
+                        VStack(spacing: 12) {
+                            HStack {
+                                TextField("e.g., ble?[0x00][255][0xFF]", text: $commandInput)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .padding(.trailing, 8)
+                                
+                                Button(action: {
+                                    sendPacket()
+                                }) {
+                                    HStack {
+                                        Image(systemName: "paperplane.fill")
+                                        Text("Send")
+                                    }
+                                    .padding(10)
+                                    .background(Color.blue.opacity(0.8))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                                .disabled(!bleManager.isConnected)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Serial Monitor Section
+                    GroupBox(label: Label("Serial Monitor", systemImage: "doc.text").font(.headline)) {
+                        VStack {
+                            ScrollViewReader { scrollViewProxy in // Added ScrollViewReader for auto-scroll
+                                ScrollView {
+                                    // Use the local serialMonitorText state
+                                    if serialMonitorText.isEmpty {
+                                        Text("Serial monitor output will appear here.")
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundColor(Color.green.opacity(0.7))
+                                            .padding(8)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    } else {
+                                        // Display the formatted text directly
+                                        Text(serialMonitorText)
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundColor(Color.green.opacity(0.8)) // Basic coloring, can refine later if needed
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.bottom, 1) // Ensure last line is visible
+                                            .id("bottom") // ID for scrolling
+                                    }
+                                }
+                                .background(Color.black)
+                                .cornerRadius(8)
+                                .frame(minHeight: 200, maxHeight: 200)
+                                .onChange(of: serialMonitorText) { _ in // Auto-scroll on change
+                                    withAnimation {
+                                        scrollViewProxy.scrollTo("bottom", anchor: .bottom)
+                                    }
+                                }
+                            }
 
-            // Check state after a small delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let peripheral = bleManager.connectedPeripheral {
-                     print("!!! BLEView 0.1s after disappear: Peripheral state is \(peripheral.state.rawValue)")
-                     // If disconnected here without delegate call, it's confirmation
-                     if peripheral.state == .disconnected || peripheral.state == .disconnecting {
-                         print("!!! Peripheral disconnected shortly after view disappear, but didDisconnect delegate likely wasn't called.")
-                         // Potentially trigger a manual reconnect attempt here if needed
-                         // bleManager.attemptReconnect() // You'd need to implement this
-                     }
+                            HStack {
+                                HStack(spacing: 20) {
+                                    Toggle("HEX", isOn: $showHex)
+                                        .toggleStyle(SwitchToggleStyle(tint: .blue))
+                                    Toggle("ASCII", isOn: $showAscii)
+                                        .toggleStyle(SwitchToggleStyle(tint: .blue))
+                                }
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    clearSerialMonitor()
+                                }) {
+                                    HStack {
+                                        Image(systemName: "trash")
+                                        Text("Clear")
+                                    }
+                                    .padding(10)
+                                    .background(Color.red.opacity(0.7))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                            }
+                            .padding(.top, 8)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.vertical)
+            }
+            .navigationTitle("EMWaver BLE Control")
+            .navigationBarTitleDisplayMode(.inline)
+            .onReceive(timer) { _ in // Action for the timer
+                fetchAndDisplayBufferedData()
+            }
+            .onAppear {
+                // Initialize the JavaScript engine when the view appears
+                if bleManager.isConnected && jsEngine == nil {
+                    setupJSEngine()
+                }
+
+                // Add this code for opaque navigation bar
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                // End of added code
+            }
+            .onChange(of: bleManager.isConnected) { connected in
+                if connected && jsEngine == nil {
+                    setupJSEngine()
+                }
+            }
+            .onDisappear {
+                // --- Add Logging Here ---
+                print("!!! BLEView disappearing.")
+                // Check state immediately
+                if let peripheral = bleManager.connectedPeripheral { // Use the public accessor
+                    print("!!! BLEView onDisappear: Peripheral state is \(peripheral.state.rawValue)") // Raw value for more detail maybe
+                } else {
+                    print("!!! BLEView onDisappear: Peripheral device is nil.")
+                }
+
+                // Check state after a small delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if let peripheral = bleManager.connectedPeripheral {
+                         print("!!! BLEView 0.1s after disappear: Peripheral state is \(peripheral.state.rawValue)")
+                         // If disconnected here without delegate call, it's confirmation
+                         if peripheral.state == .disconnected || peripheral.state == .disconnecting {
+                             print("!!! Peripheral disconnected shortly after view disappear, but didDisconnect delegate likely wasn't called.")
+                             // Potentially trigger a manual reconnect attempt here if needed
+                             // bleManager.attemptReconnect() // You'd need to implement this
+                         }
+                    }
                 }
             }
         }
