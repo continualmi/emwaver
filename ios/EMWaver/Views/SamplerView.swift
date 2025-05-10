@@ -305,30 +305,37 @@ struct SamplerView: View {
 
                 Spacer()
             }
-        }
-        .navigationTitle("Sampler")
-        .onAppear {
-            viewModel.bleManager = bleManager
-            refreshChart()
-            let refreshQueue = DispatchQueue(label: "com.emwaver.chartRefresh", qos: .userInteractive)
-            refreshQueue.async {
-                while true {
-                    Thread.sleep(forTimeInterval: 0.1)
-                    DispatchQueue.main.async { [self] in
-                        refreshChart()
-                    }
+            .navigationTitle("Sampler")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // Add this code for opaque navigation bar
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                // End of added code
+
+                viewModel.bleManager = bleManager
+                if bleManager.isConnected {
+                    refreshChart()
                 }
             }
-        }
-        .onChange(of: bleManager.bufferVersion) { _ in
-            refreshChart()
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    clearBufferAndChart()
-                } label: {
-                    Label("Clear", systemImage: "trash")
+            .onChange(of: bleManager.bufferVersion) { _ in
+                refreshChart()
+            }
+            .onChange(of: bleManager.isConnected) { isConnected in
+                if isConnected {
+                    refreshChart()
+                }
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        clearBufferAndChart()
+                    } label: {
+                        Label("Clear", systemImage: "trash")
+                    }
                 }
             }
         }

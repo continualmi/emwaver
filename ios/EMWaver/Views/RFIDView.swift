@@ -125,6 +125,16 @@ struct RFIDView: View {
             }
             .padding()
             .navigationTitle("RFID")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // Add this code for opaque navigation bar
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                // End of added code
+            }
             .alert(alertTitle, isPresented: $showingResultAlert) {
                 Button("OK", role: .cancel) { }
                 if alertHasDataToCopy {
