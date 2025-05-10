@@ -649,19 +649,51 @@ static void command_task(void *pvParameters)
                 const char* msg = "Success";
                 ble_server_notify((const uint8_t*)msg, strlen(msg));
             }
-            else if (cmd.length >= 3 && strncmp((char *)cmd.data, "bsb", 3) == 0) {
-                // Everything after "usb" is the payload
+            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
+                // Print the command and its bytes for debugging
+                ESP_LOGI(TAG, "USB command received, length: %d", cmd.length);
+                ESP_LOGI(TAG, "Command data: '%.*s'", cmd.length, cmd.data);
+                
+                // Everything after "usb " is the payload
                 char* payload = (char*)&cmd.data[3];
                 size_t payload_len = cmd.length - 3;
+                
+                // Skip the space after "usb" if present
+                if (payload_len > 0 && payload[0] == ' ') {
+                    payload++;
+                    payload_len--;
+                }
+                
                 // Temporarily null-terminate the payload for safety
                 char saved = payload[payload_len];
                 payload[payload_len] = '\0';
+
+                // Print payload details
+                ESP_LOGI(TAG, "Extracted payload: '%s', length: %d", payload, payload_len);
 
                 // Check if the payload starts with known DuckyScript commands
                 if (strncmp(payload, "ATTACKMODE", 10) == 0) {
                     // ATTACKMODE command - just acknowledge it since we're already in HID mode
                     ESP_LOGI(TAG, "BadUSB: ATTACKMODE command received");
                     badusb_install(); // Ensure BadUSB is installed
+                    uint8_t resp = 1;
+                    ble_server_notify(&resp, 1);
+                }
+                else if (strncmp(payload, "STRING_DELAY ", 13) == 0) {
+                    // STRING_DELAY command - set the character delay in milliseconds
+                    char* delay_str = payload + 13; // Skip "STRING_DELAY " prefix
+                    int delay_ms = atoi(delay_str);
+                    
+                    if (delay_ms > 0 && delay_ms < 1000) {
+                        // Set only the character delay
+                        badusb_set_char_delay(delay_ms);
+
+                        ESP_LOGI(TAG, "BadUSB: Setting character delay to %d ms", delay_ms);
+                    } else {
+                        ESP_LOGW(TAG, "BadUSB: Invalid delay value: %d (must be 1-999 ms)", delay_ms);
+                    }
+                    
+                    // Always acknowledge
                     uint8_t resp = 1;
                     ble_server_notify(&resp, 1);
                 }
@@ -717,39 +749,6 @@ static void command_task(void *pvParameters)
                 }
                 
                 // Restore the original character that was overwritten by null terminator
-                payload[payload_len] = saved;
-            }
-            else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
-                // Print the command and its bytes for debugging
-                ESP_LOGI(TAG, "USB command received, length: %d", cmd.length);
-                ESP_LOGI(TAG, "Command data: '%.*s'", cmd.length, cmd.data);
-                ESP_LOGI(TAG, "Bytes (hex):");
-                for (int i = 0; i < cmd.length; i++) {
-                    ESP_LOGI(TAG, "  byte[%d]: 0x%02X (%c)", i, cmd.data[i], 
-                             (cmd.data[i] >= 32 && cmd.data[i] <= 126) ? cmd.data[i] : '.');
-                }
-                
-                // Everything after "usb" is the payload
-                char* payload = (char*)&cmd.data[3];
-                size_t payload_len = cmd.length - 3;
-                // Temporarily null-terminate the payload for safety
-                char saved = payload[payload_len];
-                payload[payload_len] = '\0';
-
-                // Print payload details
-                ESP_LOGI(TAG, "Extracted payload: '%s', length: %d", payload, payload_len);
-                
-                // Initialize BadUSB (if not already)
-                badusb_install();
-
-                // Immediately send the payload as keyboard input
-                badusb_send_string(payload);
-
-                // Optionally, send immediate feedback over BLE
-                uint8_t resp = 1;
-                ble_server_notify(&resp, 1);
-                
-                // Restore original character
                 payload[payload_len] = saved;
             }
             else if (cmd.length >= 3 && strncmp((char *)cmd.data, "nrf", 3) == 0) {

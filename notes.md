@@ -19,6 +19,7 @@
 * Remove nrf24 fragment (nrf24 will be for forking and custom implementations)
 * Make the feel of the console fragment UI betters
 * Make the feel of the buttons fragment UI better
+* Implement Bad-USB functionality through Console fragment scripting. Much cleaner than doing my own Bas USB fragment!
 
 ## Not Done
 
@@ -35,10 +36,8 @@
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
 * Clean out nrf24 code from esp32
+* Resolve warnings in firmware
 
-
-
-* Implement Bad-USB functionality through Console fragment scripting. Much cleaner than doing my own Bas USB fragment!
 * Remove bad usb fragment
 * Remove template fragment. If people want to create a new fragment, there is no need for a template fragment i don't think. We think about it down the line
 
