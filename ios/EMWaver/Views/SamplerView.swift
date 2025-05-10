@@ -394,17 +394,18 @@ struct SamplerView: View {
     func startRecording() {
         guard let pinNumber = getSelectedPinNumber() else { return }
         
-        // Send raw command exactly like Android
-        let commandBytes: [UInt8] = [0x72, 0x61, 0x77, pinNumber] // "raw" + pin number
-        let commandData = Data(commandBytes)
-        
-        bleManager.sendPacket(commandData)
-        isRecording = true
+        // Use the updated "sample [pin]" command format
+        let commandString = "sample \(pinNumber)"
+        if let commandData = commandString.data(using: .utf8) {
+            bleManager.sendPacket(commandData)
+            isRecording = true
+        }
     }
 
     func stopRecording() {
-        // Send stop command exactly like Android
-        if let commandData = BLEManager.parseCommand("s") {
+        // Use the updated "stop" command format
+        let commandString = "stop"
+        if let commandData = commandString.data(using: .utf8) {
             bleManager.sendPacket(commandData)
             isRecording = false
         }
@@ -418,18 +419,18 @@ struct SamplerView: View {
         let bufferLength = bleManager.getBuffer().count
         print("BEFORE_RETRANSMIT: Buffer contains \(bufferLength) bytes = \(bufferLength * 8) bits")
         
-        // Send tran command exactly like Android
-        let commandBytes: [UInt8] = [0x74, 0x72, 0x61, 0x6E, pinNumber] // "tran" + pin number
-        let commandData = Data(commandBytes)
-        
-        bleManager.sendPacket(commandData)
-        
-        // Call transmitBuffer immediately - Android doesn't have a delay here
-        bleManager.transmitBuffer()
-        
-        // Log buffer state after transmission
-        let postTransmitLength = bleManager.getBuffer().count
-        print("AFTER_RETRANSMIT: Buffer contains \(postTransmitLength) bytes = \(postTransmitLength * 8) bits")
+        // Use the updated "transmit [pin]" command format
+        let commandString = "transmit \(pinNumber)"
+        if let commandData = commandString.data(using: .utf8) {
+            bleManager.sendPacket(commandData)
+            
+            // Call transmitBuffer immediately - Android doesn't have a delay here
+            bleManager.transmitBuffer()
+            
+            // Log buffer state after transmission
+            let postTransmitLength = bleManager.getBuffer().count
+            print("AFTER_RETRANSMIT: Buffer contains \(postTransmitLength) bytes = \(postTransmitLength * 8) bits")
+        }
     }
 
     func getSelectedPinNumber() -> UInt8? {

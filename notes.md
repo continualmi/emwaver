@@ -32,19 +32,17 @@
 * Need to write a markdown `.md` file containing lots of info for any LLM to aid in development and modifications in the codebase.
 * Need to revisit and refactor the command structure. Things like the cc1101 commands should start with cc1101 in the string, same with rfid commands. Like the current usb commands work. 
 * Remove all fragments that were removed on android, 2.4 ghz, bad usb, firmwre update, template.
-* Rename BLE fragment to EMwwaver fragment. 
+* Rename BLE fragment to EMwwaver fragment.
+* Migrate to new esp32 command structure, rfid, cc1101 and mfrc522 nomenclature 
 
 ## Not Done
 
-* The Android implementation of Buttons now uses a Java rewrite of MakeHex. For iOS, we still need to implement the equivalent logic in Swift, since native C++ import is not feasible.
-* ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 * Retransmission over and over on iOS also fails a bit, needs a bit more work.
 * Settings fragment also needs to have some stuff, not sure what
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
 * Resolve warnings in firmware
 * Consider having the BLE service check for connections periodically even on other fragments
-
 * Make Sampler, RFID and ISM have the same gray background as the nicely done console and buttons fragments. Requires some prompting with 2.5 pro to get the same styling in.
 * Add help link to documentation website (where there are videos and stuff) on Settings Activity. Add also there the Project repository perhaps link
 * Add "?" help button UI to every non obvious function. Make UI in sampler more intuitive using this and also labling for example the spinner for selecting a pin
@@ -52,7 +50,10 @@
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 
 IOS STUFF:
-* Migrate to new esp32 command structure, rfid, cc1101 and mfrc522 nomenclature
+
+* ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
+* The Android implementation of Buttons now uses a Java rewrite of MakeHex. For iOS, we still need to implement the equivalent logic in Swift, since native C++ import is not feasible.
+* RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
 
 
 ## Hardware

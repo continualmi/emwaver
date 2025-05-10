@@ -194,10 +194,8 @@ struct RFIDView: View {
         }
         
         // Create command buffer
-        var command = Data()
-        
-        // Command header: "read"
-        command.append(contentsOf: "read".utf8)
+        // Format should be: "mfrc522 read [blockAddr] [authMode] [6 bytes key]"
+        var command = Data("mfrc522 read ".utf8)
         
         // Block address
         command.append(blockAddressByte)
@@ -205,7 +203,7 @@ struct RFIDView: View {
         // Auth mode: 0x60 for Key A, 0x61 for Key B
         command.append(authMode == 0 ? 0x60 : 0x61)
         
-        // Key bytes
+        // Key bytes (6 bytes)
         for keyInput in keyInputs {
             if let keyByte = UInt8(keyInput, radix: 16) {
                 command.append(keyByte)
@@ -241,10 +239,8 @@ struct RFIDView: View {
         }
         
         // Create command buffer
-        var command = Data()
-        
-        // Command header: "write"
-        command.append(contentsOf: "write".utf8)
+        // Format should be: "mfrc522 write [blockAddr] [authMode] [6 bytes key] [16 bytes data]"
+        var command = Data("mfrc522 write ".utf8)
         
         // Block address
         command.append(blockAddressByte)
@@ -252,7 +248,7 @@ struct RFIDView: View {
         // Auth mode: 0x60 for Key A, 0x61 for Key B
         command.append(authMode == 0 ? 0x60 : 0x61)
         
-        // Key bytes
+        // Key bytes (6 bytes)
         for keyInput in keyInputs {
             if let keyByte = UInt8(keyInput, radix: 16) {
                 command.append(keyByte)
@@ -262,7 +258,7 @@ struct RFIDView: View {
             }
         }
         
-        // Data bytes
+        // Data bytes (16 bytes)
         let cleanData = combinedData.replacingOccurrences(of: " ", with: "")
         
         if cleanData.count != 32 {

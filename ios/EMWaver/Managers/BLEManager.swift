@@ -561,11 +561,6 @@ class BLEManager: NSObject, ObservableObject {
             Thread.sleep(forTimeInterval: 0.01) // 10ms sleep to prevent busy waiting
         }
         
-        // End timing and log results
-        let endTime = Date().timeIntervalSince1970
-        let elapsedTimeMs = (endTime - startTime) * 1000
-        print("BLE command operation took \(Int(elapsedTimeMs))ms")
-        
         // If we timed out waiting for a response
         if response == nil || response!.isEmpty {
             print("Command timed out or received empty response")
