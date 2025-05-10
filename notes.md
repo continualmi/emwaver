@@ -61,7 +61,7 @@ IOS STUFF:
 * Figure out how to deal with external storage in IOS, for loading external scripts and etc.
 * RFID view UI is not great, the response command is at the bottom. In fact all views are not great, title occupies a lot of space and etc.
 * EMWaver view using more GPIO pins than necessary, only need the ones on the board
-
+* Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
 
 ## Hardware
 
