@@ -2262,6 +2262,14 @@ CONFIG_WIFI_PROV_STA_ALL_CHANNEL_SCAN=y
 # TinyUSB Stack
 #
 CONFIG_TINYUSB_DEBUG_LEVEL=0
+CONFIG_TINYUSB_RHPORT_FS=y
+
+#
+# TinyUSB DCD
+#
+# CONFIG_TINYUSB_MODE_SLAVE is not set
+CONFIG_TINYUSB_MODE_DMA=y
+# end of TinyUSB DCD
 
 #
 # TinyUSB task configuration
@@ -2269,10 +2277,19 @@ CONFIG_TINYUSB_DEBUG_LEVEL=0
 # CONFIG_TINYUSB_NO_DEFAULT_TASK is not set
 CONFIG_TINYUSB_TASK_PRIORITY=5
 CONFIG_TINYUSB_TASK_STACK_SIZE=4096
+# CONFIG_TINYUSB_TASK_AFFINITY_NO_AFFINITY is not set
+# CONFIG_TINYUSB_TASK_AFFINITY_CPU0 is not set
+CONFIG_TINYUSB_TASK_AFFINITY_CPU1=y
+CONFIG_TINYUSB_TASK_AFFINITY=0x1
+# CONFIG_TINYUSB_INIT_IN_DEFAULT_TASK is not set
 # end of TinyUSB task configuration
 
 #
 # Descriptor configuration
+#
+
+#
+# You can provide your custom descriptors via tinyusb_driver_install()
 #
 CONFIG_TINYUSB_DESC_USE_ESPRESSIF_VID=y
 CONFIG_TINYUSB_DESC_USE_DEFAULT_PID=y
@@ -2305,6 +2322,34 @@ CONFIG_TINYUSB_MIDI_COUNT=0
 #
 CONFIG_TINYUSB_HID_COUNT=1
 # end of Human Interface Device Class (HID)
+
+#
+# Device Firmware Upgrade (DFU)
+#
+# CONFIG_TINYUSB_DFU_MODE_DFU is not set
+# CONFIG_TINYUSB_DFU_MODE_DFU_RUNTIME is not set
+CONFIG_TINYUSB_DFU_MODE_NONE=y
+# end of Device Firmware Upgrade (DFU)
+
+#
+# Bluetooth Host Class (BTH)
+#
+# CONFIG_TINYUSB_BTH_ENABLED is not set
+# end of Bluetooth Host Class (BTH)
+
+#
+# Network driver (ECM/NCM/RNDIS)
+#
+# CONFIG_TINYUSB_NET_MODE_ECM_RNDIS is not set
+# CONFIG_TINYUSB_NET_MODE_NCM is not set
+CONFIG_TINYUSB_NET_MODE_NONE=y
+# end of Network driver (ECM/NCM/RNDIS)
+
+#
+# Vendor Specific Interface
+#
+CONFIG_TINYUSB_VENDOR_COUNT=0
+# end of Vendor Specific Interface
 # end of TinyUSB Stack
 # end of Component config
 

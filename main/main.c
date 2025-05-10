@@ -720,6 +720,15 @@ static void command_task(void *pvParameters)
                 payload[payload_len] = saved;
             }
             else if (cmd.length >= 4 && strncmp((char *)cmd.data, "usb", 3) == 0) {
+                // Print the command and its bytes for debugging
+                ESP_LOGI(TAG, "USB command received, length: %d", cmd.length);
+                ESP_LOGI(TAG, "Command data: '%.*s'", cmd.length, cmd.data);
+                ESP_LOGI(TAG, "Bytes (hex):");
+                for (int i = 0; i < cmd.length; i++) {
+                    ESP_LOGI(TAG, "  byte[%d]: 0x%02X (%c)", i, cmd.data[i], 
+                             (cmd.data[i] >= 32 && cmd.data[i] <= 126) ? cmd.data[i] : '.');
+                }
+                
                 // Everything after "usb" is the payload
                 char* payload = (char*)&cmd.data[3];
                 size_t payload_len = cmd.length - 3;
@@ -727,6 +736,9 @@ static void command_task(void *pvParameters)
                 char saved = payload[payload_len];
                 payload[payload_len] = '\0';
 
+                // Print payload details
+                ESP_LOGI(TAG, "Extracted payload: '%s', length: %d", payload, payload_len);
+                
                 // Initialize BadUSB (if not already)
                 badusb_install();
 
@@ -736,6 +748,9 @@ static void command_task(void *pvParameters)
                 // Optionally, send immediate feedback over BLE
                 uint8_t resp = 1;
                 ble_server_notify(&resp, 1);
+                
+                // Restore original character
+                payload[payload_len] = saved;
             }
             else if (cmd.length >= 3 && strncmp((char *)cmd.data, "nrf", 3) == 0) {
                 // Initialize NRF24 if not already initialized
