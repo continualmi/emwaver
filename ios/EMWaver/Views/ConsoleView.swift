@@ -187,6 +187,7 @@ struct ConsoleView: View {
     @State private var hasUnsavedChanges: Bool = false
     @State private var isScriptRunning: Bool = false
     @State private var statusMessage: String = "Open a script"
+    @State private var dynamicScriptEditorTitle: String = "Script Editor [No script open]"
     @State private var showingScriptOptions: Bool = false
     @State private var selectedScript: String?
     @State private var showingNewScriptAlert: Bool = false
@@ -198,81 +199,112 @@ struct ConsoleView: View {
     @State private var autoSaveTimer: Timer?
     private let autoSaveDelay: TimeInterval = 3.0
     
+    // State for collapsible sections
+    @State private var isScriptsListExpanded: Bool = true
+    @State private var isScriptEditorExpanded: Bool = true
+    @State private var isConsoleOutputExpanded: Bool = true
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // Top: Script Editor
-            TextEditor(text: $scriptContent)
-                .font(.system(.body, design: .monospaced))
-                .disableAutocorrection(true)
-                .padding(4)
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                .onChange(of: scriptContent) { _ in
-                    hasUnsavedChanges = true
-                    setupAutoSave()
-                }
-            
-            Divider().padding(.vertical, 4)
-            
-            // Middle: Console Output
-            ScrollView {
-                Text(consoleOutput)
-                    .font(.system(.body, design: .monospaced))
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.black)
-                    .foregroundColor(Color.green)
-            }
-            .frame(height: 150)
-            .background(Color.black)
-            .cornerRadius(8)
-            
-            Divider().padding(.vertical, 4)
-            
-            // Bottom: Script List
-            VStack(alignment: .leading) {
-                Text("Saved Scripts")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
-                List {
-                    ForEach(recentScripts, id: \.self) { script in
-                        HStack {
-                            Text(script)
-                            Spacer()
-                            if currentScriptName == script && hasUnsavedChanges {
-                                Circle()
-                                    .fill(Color.red)
-                                    .frame(width: 8, height: 8)
+        VStack(spacing: 8) {
+            DisclosureGroup(
+                isExpanded: $isScriptsListExpanded,
+                content: {
+                    if recentScripts.isEmpty {
+                        Text("No scripts available")
+                            .italic()
+                            .foregroundColor(.gray)
+                            .padding()
+                    } else {
+                        List {
+                            ForEach(recentScripts, id: \.self) { script in
+                                HStack {
+                                    Text(script)
+                                    Spacer()
+                                    if currentScriptName == script && hasUnsavedChanges {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 8, height: 8)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    loadScript(script)
+                                }
+                                .onLongPressGesture {
+                                    selectedScript = script
+                                    showingScriptOptions = true
+                                }
                             }
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            loadScript(script)
-                        }
-                        .onLongPressGesture {
-                            selectedScript = script
-                            showingScriptOptions = true
+                        .listStyle(PlainListStyle())
+                        .frame(minHeight: 100, maxHeight: 200)
+                    }
+                },
+                label: {
+                    HStack {
+                        Text("Available Scripts")
+                            .font(.headline)
+                        if !recentScripts.isEmpty {
+                            Text("(\(recentScripts.count))")
+                                .foregroundColor(.secondary)
                         }
                     }
                 }
-                .listStyle(PlainListStyle())
-            }
+            )
+            .padding(.horizontal)
+
+            DisclosureGroup(
+                isExpanded: $isScriptEditorExpanded,
+                content: {
+                    TextEditor(text: $scriptContent)
+                        .font(.system(.body, design: .monospaced))
+                        .disableAutocorrection(true)
+                        .padding(4)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                        .frame(minHeight: 100, maxHeight: 250)
+                        .onChange(of: scriptContent) { _ in
+                            hasUnsavedChanges = true
+                            updateDynamicScriptEditorTitle()
+                            setupAutoSave()
+                        }
+                },
+                label: {
+                    Text(dynamicScriptEditorTitle)
+                        .font(.headline)
+                }
+            )
+            .padding(.horizontal)
+
+            DisclosureGroup(
+                isExpanded: $isConsoleOutputExpanded,
+                content: {
+                    ScrollView {
+                        Text(consoleOutput)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .background(Color.black)
+                    .foregroundColor(Color.green)
+                    .cornerRadius(8)
+                    .frame(minHeight: 100, maxHeight: 200)
+                },
+                label: {
+                    Text("Output Console")
+                        .font(.headline)
+                }
+            )
+            .padding(.horizontal)
+            
+            Spacer()
         }
         .padding()
         .navigationTitle("Console")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarItems(
-            leading: Text(statusMessage)
-                .font(.subheadline)
-                .foregroundColor(.secondary),
+            leading: EmptyView(),
             trailing: HStack {
-                Button(action: {
-                    showingNewScriptAlert = true
-                }) {
-                    Image(systemName: "doc.badge.plus")
-                }
-                
                 Button(action: {
                     if isScriptRunning {
                         stopScript()
@@ -298,20 +330,30 @@ struct ConsoleView: View {
                     Button("Make Copy") {
                         showingCopyScriptAlert = true
                     }
-                    
-                    Divider()
-                    
-                    Button("Clear Console") {
-                        clearConsole()
-                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
             }
         )
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                EmptyView()
+            }
+        }
         .onAppear {
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            
             loadRecentScripts()
             createDefaultScriptsIfNeeded()
+            updateDynamicScriptEditorTitle()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                refreshUIAfterLoading()
+            }
             
             if bleManager.isConnected {
                 cc1101 = CC1101(bleManager: bleManager)
@@ -350,9 +392,10 @@ struct ConsoleView: View {
         }
         .confirmationDialog("Script Options", isPresented: $showingScriptOptions, titleVisibility: .visible) {
             Button("Rename") {
-                // Show rename dialog
-                newScriptName = selectedScript ?? ""
-                showingNewScriptAlert = true
+                if let scriptName = selectedScript {
+                    newScriptName = scriptName
+                    print("Rename action for \(selectedScript ?? "nil")")
+                }
             }
             
             Button("Delete", role: .destructive) {
@@ -398,6 +441,7 @@ struct ConsoleView: View {
         } catch {
             print("Error loading scripts: \(error.localizedDescription)")
         }
+        updateDynamicScriptEditorTitle()
     }
     
     private func saveScript(_ name: String, content: String) {
@@ -415,6 +459,7 @@ struct ConsoleView: View {
         } catch {
             print("Error saving script: \(error.localizedDescription)")
         }
+        updateDynamicScriptEditorTitle()
     }
     
     private func loadScript(_ name: String) {
@@ -424,6 +469,7 @@ struct ConsoleView: View {
             currentScriptName = name
             hasUnsavedChanges = false
             statusMessage = name
+            updateDynamicScriptEditorTitle()
         } catch {
             print("Error loading script: \(error.localizedDescription)")
         }
@@ -445,6 +491,7 @@ struct ConsoleView: View {
                 currentScriptName = nil
                 statusMessage = "Open a script"
             }
+            updateDynamicScriptEditorTitle()
         } catch {
             print("Error deleting script: \(error.localizedDescription)")
         }
@@ -475,7 +522,17 @@ struct ConsoleView: View {
             if let scriptName = currentScriptName, hasUnsavedChanges {
                 saveScript(scriptName, content: scriptContent)
                 hasUnsavedChanges = false
+                updateDynamicScriptEditorTitle()
             }
+        }
+    }
+    
+    // MARK: - Dynamic Title Update
+    private func updateDynamicScriptEditorTitle() {
+        if let name = currentScriptName {
+            dynamicScriptEditorTitle = "\(name)\(hasUnsavedChanges ? " *" : "")"
+        } else {
+            dynamicScriptEditorTitle = "Script Editor [No script open]"
         }
     }
     
@@ -567,6 +624,7 @@ struct ConsoleView: View {
                 """
             
             saveScript(rxScriptName, content: rxContent)
+            print("Created default RX script")
         }
         
         // TX Continuous Script
@@ -596,9 +654,21 @@ struct ConsoleView: View {
                 """
             
             saveScript(txScriptName, content: txContent)
+            print("Created default TX script")
         }
         
         loadRecentScripts()
+    }
+    
+    // MARK: - Lifecycle methods
+
+    // Add an explicit method to be called at the end of onAppear
+    private func refreshUIAfterLoading() {
+        // Force update the recent scripts list
+        loadRecentScripts()
+        
+        // Ensure the UI reflects the current state
+        updateDynamicScriptEditorTitle()
     }
 }
 

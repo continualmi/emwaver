@@ -36,6 +36,7 @@
 * Migrate to new esp32 command structure, rfid, cc1101 and mfrc522 nomenclature 
 * ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
 * Implement Buttons fragment working for CC1101 and BLEService scripts
+* Need better UI pattern. Lets start with Console View, and try and get it to look like Console Fragment a bit more . Collapsible views
 
 ## Not Done
 
@@ -51,11 +52,13 @@
 * Need to fully write the techincal implementation 1:1 according to the entire codebase. At that point, the commands should all be listed in a section for better readability. Simplicity is the best approach. We keep a single md file for the technical docs.
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
+* Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either
 
 IOS STUFF:
 
 
-* Need better UI pattern. Lets start with Console View, and try and get it to look like Console Fragment a bit more . Collapsible views
+
+* The navigation needs attention. There is "back" button that opens the side drawer, why? we need a three dashes icon like android. 
 * Implement encodeIR logic, ported from android
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 * Figure out how to deal with external storage in IOS, for loading external scripts and etc.
