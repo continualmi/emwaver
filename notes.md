@@ -35,6 +35,7 @@
 * Rename BLE fragment to EMwwaver fragment.
 * Migrate to new esp32 command structure, rfid, cc1101 and mfrc522 nomenclature 
 * ISM fragment is not using `sendCommand` properly again on iOS. It seems the background threading is more difficult than on Android. Can't quite get `BLEManager` to function the same as `BLEService` in Android.
+* Implement Buttons fragment working for CC1101 and BLEService scripts
 
 ## Not Done
 
@@ -53,7 +54,8 @@
 
 IOS STUFF:
 
-* Implement Buttons fragment working for CC1101 and BLEService scripts
+
+* Need better UI pattern. Lets start with Console View, and try and get it to look like Console Fragment a bit more . Collapsible views
 * Implement encodeIR logic, ported from android
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 * Figure out how to deal with external storage in IOS, for loading external scripts and etc.
