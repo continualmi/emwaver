@@ -164,7 +164,7 @@ struct LineChartViewController: UIViewControllerRepresentable {
 struct SamplerView: View {
     @EnvironmentObject var bleManager: BLEManager
     @StateObject private var viewModel: SamplerViewModel
-    @State private var selectedPinIndex: Int = 5 // Default to GPIO5
+    @State private var selectedPinIndex: Int = 4 // Default to IR RX (IO5)
     @State private var isRecording: Bool = false
     
     // Chart state - MATCH ANDROID
@@ -177,14 +177,23 @@ struct SamplerView: View {
     @State private var prevRangeEnd: Double = 0
     @State private var lastBufferSize: Int = 0
     
-    // EXACTLY match Android's PINS array 
+    // Match Android's PINS array exactly
     let PINS = [
-        "GPIO0", "GPIO1 (CC1101 GDO0)", "GPIO2", "GPIO3", "GPIO4 (IR Transmitter)", "GPIO5 (IR Receiver)", "GPIO6", "GPIO7",
-        "GPIO8", "GPIO9", "GPIO10", "GPIO11", "GPIO12", "GPIO13", "GPIO14", "GPIO15",
-        "GPIO16", "GPIO17", "GPIO18", "GPIO19", "GPIO20", "GPIO21",
-        "GPIO26", "GPIO27", "GPIO28", "GPIO29", "GPIO30", "GPIO31", "GPIO32", "GPIO33",
-        "GPIO34", "GPIO35", "GPIO36", "GPIO37", "GPIO38", "GPIO39", "GPIO40", "GPIO41",
-        "GPIO42", "GPIO43", "GPIO44", "GPIO45", "GPIO46", "GPIO47", "GPIO48"
+        "GPIO0 (IO0)",
+        "CC1101 GDO0 (IO1)",
+        "CC1101 GDO2 (IO2)",
+        "IR TX (IO4)",
+        "IR RX (IO5)",
+        "GPIO6 (IO6)",
+        "GPIO7 (IO7)",
+        "GPIO9 (IO9)",
+        "CC1101 NSS (IO10)",
+        "CC1101 MOSI (IO11)",
+        "CC1101 SCK (IO12)",
+        "CC1101 MISO (IO13)",
+        "GPIO14 (IO14)",
+        "GPIO15 (IO15)",
+        "GPIO16 (IO16)"
     ]
     
     // Initialize ViewModel with BLEManager
@@ -437,11 +446,14 @@ struct SamplerView: View {
     func getSelectedPinNumber() -> UInt8? {
         guard selectedPinIndex >= 0 && selectedPinIndex < PINS.count else { return nil }
         let selectedPinString = PINS[selectedPinIndex]
-        // Extract digits after "GPIO"
-        if let range = selectedPinString.range(of: "GPIO") {
-            let numberString = selectedPinString[range.upperBound...].split(separator: " ")[0]
+        // Extract pin number from "(IO#)"
+        let pattern = "\\(IO(\\d+)\\)"
+        if let matchRange = selectedPinString.range(of: pattern, options: .regularExpression) {
+            let matchText = String(selectedPinString[matchRange]) // e.g. "(IO12)"
+            let numberString = String(matchText.dropFirst(3).dropLast()) // drop "(IO" and ")"
             return UInt8(numberString)
         }
+        print("Error: Could not parse pin number from \(selectedPinString)")
         return nil
     }
 

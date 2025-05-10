@@ -3,7 +3,7 @@ import Combine // Added for Timer
 
 struct EMWaverView: View {
     @EnvironmentObject var bleManager: BLEManager // Use shared BLEManager from environment
-    @State private var selectedPin = "GPIO0"
+    @State private var selectedPin = "GPIO0 (IO0)"
     @State private var commandInput = ""
     @State private var showHex = true
     @State private var showAscii = true
@@ -14,12 +14,21 @@ struct EMWaverView: View {
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 100ms interval like Android
 
     let pins = [
-        "GPIO0", "GPIO1", "GPIO2", "GPIO3", "GPIO4", "GPIO5", "GPIO6", "GPIO7",
-        "GPIO8", "GPIO9", "GPIO10", "GPIO11", "GPIO12", "GPIO13", "GPIO14", "GPIO15",
-        "GPIO16", "GPIO17", "GPIO18", "GPIO19", "GPIO20", "GPIO21",
-        "GPIO26", "GPIO27", "GPIO28", "GPIO29", "GPIO30", "GPIO31", "GPIO32", "GPIO33",
-        "GPIO34", "GPIO35", "GPIO36", "GPIO37", "GPIO38", "GPIO39", "GPIO40", "GPIO41",
-        "GPIO42", "GPIO43", "GPIO44", "GPIO45", "GPIO46", "GPIO47", "GPIO48"
+        "GPIO0 (IO0)",
+        "CC1101 GDO0 (IO1)",
+        "CC1101 GDO2 (IO2)",
+        "IR TX (IO4)",
+        "IR RX (IO5)",
+        "GPIO6 (IO6)",
+        "GPIO7 (IO7)",
+        "GPIO9 (IO9)",
+        "CC1101 NSS (IO10)",
+        "CC1101 MOSI (IO11)",
+        "CC1101 SCK (IO12)",
+        "CC1101 MISO (IO13)",
+        "GPIO14 (IO14)",
+        "GPIO15 (IO15)",
+        "GPIO16 (IO16)"
     ]
     
     var body: some View {
@@ -293,29 +302,36 @@ struct EMWaverView: View {
     }
     
     private func sendGpioCommand(action: String, value: UInt8 = 0) {
-        // Extract pin number from string (e.g., "GPIO12" -> 12)
-        if let pinNumber = Int(selectedPin.dropFirst(4)) {
-            // Construct command data
-            let commandBytes: [UInt8] = [
-                UInt8(ascii: "g".unicodeScalars.first!), 
-                UInt8(ascii: "p".unicodeScalars.first!), 
-                UInt8(ascii: "i".unicodeScalars.first!), 
-                UInt8(ascii: "o".unicodeScalars.first!),
-                0, // Placeholder
-                UInt8(pinNumber),
-                UInt8(ascii: action.unicodeScalars.first!),
-                value
-            ]
-            let commandData = Data(commandBytes)
-
-            // Log the command being sent to the local serial monitor
-            logToSerialMonitor(data: commandData, direction: .transmit)
-
-            // Send the command via BLEManager using sendPacket (fire-and-forget)
-            bleManager.sendPacket(commandData)
-            
-            // No completion handler needed here, response will be handled by the polling timer
+        // Extract pin number from (IO#)
+        let pattern = "\\(IO(\\d+)\\)"
+        var pinNumber: Int?
+        if let matchRange = selectedPin.range(of: pattern, options: .regularExpression) {
+            let matchText = String(selectedPin[matchRange]) // e.g. "(IO12)"
+            let numberString = String(matchText.dropFirst(3).dropLast()) // drop "(IO" and ")"
+            pinNumber = Int(numberString)
         }
+        guard let pin = pinNumber else {
+            print("Error: Could not parse pin number from \(selectedPin)")
+            return
+        }
+        // Construct command data
+        let commandBytes: [UInt8] = [
+            UInt8(ascii: "g".unicodeScalars.first!),
+            UInt8(ascii: "p".unicodeScalars.first!),
+            UInt8(ascii: "i".unicodeScalars.first!),
+            UInt8(ascii: "o".unicodeScalars.first!),
+            0,
+            UInt8(pin),
+            UInt8(action.utf8.first!),
+            value
+        ]
+        let commandData = Data(commandBytes)
+
+        // Log the command being sent to the local serial monitor
+        logToSerialMonitor(data: commandData, direction: .transmit)
+
+        // Send the command via BLEManager using sendPacket (fire-and-forget)
+        bleManager.sendPacket(commandData)
     }
     
     private func sendPacket() {
