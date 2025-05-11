@@ -58,10 +58,13 @@
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
 * Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
+* Clean up dependencies from old USB Serial libraries
 
+
+* Fix small issue with navigation on android, cant go back to emwaver fragment
 IOS STUFF:
-
-* Add versioning to IOS
+* ISM Fragment should show registers immediatly, remove the "actions" ui
+* Add versioning to IOS and fix EMWaver fragment
 * Need to fix the freezing that happens when we are loading the registers on ISM View
 * Fix the scrolling on Sampler view not working if finger on charts
 * Editing keys on Console View does not work, the page it brings up is blank

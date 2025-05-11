@@ -23,81 +23,77 @@ struct GPIOView: View {
     ]
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                // GPIO Control Section
-                GroupBox(label: Label("GPIO Control", systemImage: "cpu").font(.headline)) {
-                    VStack(spacing: 12) {
-                        HStack {
-                            Text("Select Pin:")
-                                .font(.subheadline)
-                            
-                            Picker("", selection: $selectedPin) {
-                                ForEach(pins, id: \.self) { pin in
-                                    Text(pin)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .disabled(!bleManager.isConnected)
-                            .frame(width: 120)
-                        }
-                        .padding(.vertical, 4)
+        VStack(spacing: 20) {
+            // GPIO Control Section
+            GroupBox(label: Label("GPIO Control", systemImage: "cpu").font(.headline)) {
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("Select Pin:")
+                            .font(.subheadline)
                         
-                        HStack(spacing: 10) {
-                            Button(action: {
-                                sendGpioCommand(action: "R")
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.down.doc")
-                                    Text("Read")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.green.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
+                        Picker("", selection: $selectedPin) {
+                            ForEach(pins, id: \.self) { pin in
+                                Text(pin)
                             }
-                            .disabled(!bleManager.isConnected)
-                            
-                            Button(action: {
-                                sendGpioCommand(action: "W", value: 1)
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.up.square")
-                                    Text("High")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.orange.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
-                            
-                            Button(action: {
-                                sendGpioCommand(action: "W", value: 0)
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.down.square")
-                                    Text("Low")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.purple.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
                         }
+                        .pickerStyle(.menu)
+                        .disabled(!bleManager.isConnected)
+                        .frame(width: 120)
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 4)
+                    
+                    HStack(spacing: 10) {
+                        Button(action: {
+                            sendGpioCommand(action: "R")
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.down.doc")
+                                Text("Read")
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.green.opacity(0.8))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(!bleManager.isConnected)
+                        
+                        Button(action: {
+                            sendGpioCommand(action: "W", value: 1)
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.up.square")
+                                Text("High")
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.orange.opacity(0.8))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(!bleManager.isConnected)
+                        
+                        Button(action: {
+                            sendGpioCommand(action: "W", value: 0)
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.down.square")
+                                Text("Low")
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.purple.opacity(0.8))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .disabled(!bleManager.isConnected)
+                    }
                 }
-                .padding(.horizontal)
-                
-                Spacer()
+                .padding(.vertical, 8)
             }
-            .navigationTitle("GPIO Control")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(.horizontal)
+            
+            Spacer()
         }
     }
     

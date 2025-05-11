@@ -22,13 +22,11 @@ struct ContentView: View {
             }
             .tag("EMWaver")
             
-            NavigationView {
-                ISMView()
-            }
+            ButtonsView()
             .tabItem {
-                Label("ISM", systemImage: "memorychip")
+                Label("Buttons", systemImage: "apps.iphone")
             }
-            .tag("ISM")
+            .tag("Buttons")
                 
             NavigationView {
                 SamplerView()
@@ -47,6 +45,12 @@ struct ContentView: View {
             .tag("Console")
             
             // "More" tab views - use different approach to avoid duplicate navigation bars
+            ISMView()
+            .tabItem {
+                Label("ISM", systemImage: "memorychip")
+            }
+            .tag("ISM")
+                
             RFIDView()
             .tabItem {
                 Label("RFID", systemImage: "dot.radiowaves.forward")
@@ -58,12 +62,6 @@ struct ContentView: View {
                 Label("GPIO", systemImage: "cpu")
             }
             .tag("GPIO")
-                
-            ButtonsView()
-            .tabItem {
-                Label("Buttons", systemImage: "apps.iphone")
-            }
-            .tag("Buttons")
                 
             SettingsView()
             .tabItem {
