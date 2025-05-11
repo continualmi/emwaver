@@ -61,24 +61,22 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 * Fix on buttons view, when we have too many buttons, the UX becomes unusable
 * Add feedback to Convert to IR button
 * Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
+* Retransmission over and over on iOS also fails a bit, needs a bit more work. (its fine, it was the buffer thing)
+* Consider having the BLE service check for connections periodically even on other fragments (done)
+* Make Sampler, RFID and ISM have the same gray background as the nicely done console and buttons fragments. Requires some prompting with 2.5 pro to get the same styling in. (nah)
+* Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities (building that list bellow)
 
 # Not Done
 
-* Retransmission over and over on iOS also fails a bit, needs a bit more work.
 * Settings fragment also needs to have some stuff, not sure what
 * Lots of polishing required for the apps to then be accepted on App Store and Google Play Store. Bugs cleaning compreensively across every fragment and feature.
 * Cross examine ISM Fragment, test it thorougly
 * Resolve warnings in firmware
-* Consider having the BLE service check for connections periodically even on other fragments
-* Make Sampler, RFID and ISM have the same gray background as the nicely done console and buttons fragments. Requires some prompting with 2.5 pro to get the same styling in.
 * Add help link to documentation website (where there are videos and stuff) on Settings Activity. Add also there the Project repository perhaps link
 * Add "?" help button UI to every non obvious function. Make UI in sampler more intuitive using this and also labling for example the spinner for selecting a pin
 * Need to fully write the techincal implementation 1:1 according to the entire codebase. At that point, the commands should all be listed in a section for better readability. Simplicity is the best approach. We keep a single md file for the technical docs.
 * Consider adding a OpenRouter LLM key setting, and a button to prompt and generate console scripts
-* Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
 * Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
-* Clean up dependencies from old USB Serial libraries
-On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
 * Implement external storage for signals on sampler
 * Fix zoom on Sampler
 * Need to understand the current BLE command structure on IOS, in order to document it etc
@@ -96,8 +94,11 @@ On both android and IOS, lets add help buttons on the Sampler, on convert IR but
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 * Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
 * Make sure tuo update default IR script on buttons IRDB, adding the 0x20 missing from the transmit command
+* Clean up dependencies from old USB Serial libraries
+On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
 
 ## IOS STUFF:
+* Be able to change individual register values in ISM view
 * Disconnect button does nothing since it reconnects automatically straight away
 
 
