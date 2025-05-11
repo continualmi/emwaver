@@ -1,22 +1,31 @@
 import SwiftUI
 
 struct RFIDView: View {
-    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject private var bleManager: BLEManager
     
-    // State variables for input fields
-    @State private var blockAddress: String = "00"
-    @State private var keyInputs: [String] = Array(repeating: "FF", count: 6)
-    @State private var combinedData: String = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
-    @State private var authMode: Int = 0 // 0 = Key A, 1 = Key B
-    @State private var resultText: String = ""
-    @State private var resultColor: Color = .primary
+    // RFID parameters
+    @State private var blockAddress = ""
+    @State private var authMode = 0 // 0 = Key A, 1 = Key B
+    @State private var keyInputs = Array(repeating: "", count: 6)
+    @State private var combinedData = ""
     
-    // Alert states
+    // Results and alerts
+    @State private var resultText = ""
+    @State private var resultColor = Color.black
     @State private var showingResultAlert = false
     @State private var alertTitle = ""
     @State private var alertMessage = ""
     @State private var alertHasDataToCopy = false
     @State private var dataForCopy = ""
+    
+    // Focus state
+    @FocusState private var focusedField: Field?
+    
+    enum Field: Hashable {
+        case blockAddress
+        case key(Int)
+        case combinedData
+    }
     
     // Card types
     let cardTypes: [UInt16: String] = [
@@ -37,6 +46,8 @@ struct RFIDView: View {
                     TextField("Block Address", text: $blockAddress)
                         .keyboardType(.asciiCapable)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .focused($focusedField, equals: .blockAddress)
+                        .submitLabel(.next)
                         .onChange(of: blockAddress) { newValue in
                             blockAddress = formatHexInput(newValue, maxLength: 2)
                         }
@@ -64,8 +75,17 @@ struct RFIDView: View {
                                 .keyboardType(.asciiCapable)
                                 .multilineTextAlignment(.center)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .focused($focusedField, equals: .key(index))
+                                .submitLabel(index < 5 ? .next : .done)
                                 .onChange(of: keyInputs[index]) { newValue in
                                     keyInputs[index] = formatHexInput(newValue, maxLength: 2)
+                                    
+                                    // Auto-advance to next field when 2 chars are entered
+                                    if newValue.count == 2 && index < 5 {
+                                        focusedField = .key(index + 1)
+                                    } else if newValue.count == 2 && index == 5 {
+                                        focusedField = nil
+                                    }
                                 }
                         }
                     }
@@ -77,6 +97,7 @@ struct RFIDView: View {
                         .font(.headline)
                     TextEditor(text: $combinedData)
                         .frame(height: 80)
+                        .focused($focusedField, equals: .combinedData)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
@@ -88,7 +109,10 @@ struct RFIDView: View {
                 
                 // Buttons
                 HStack {
-                    Button(action: sendReadCommand) {
+                    Button(action: {
+                        focusedField = nil
+                        sendReadCommand()
+                    }) {
                         HStack {
                             Image(systemName: "arrow.down.doc.fill")
                             Text("Read")
@@ -100,7 +124,10 @@ struct RFIDView: View {
                         .cornerRadius(8)
                     }
                     
-                    Button(action: sendWriteCommand) {
+                    Button(action: {
+                        focusedField = nil
+                        sendWriteCommand()
+                    }) {
                         HStack {
                             Image(systemName: "arrow.up.doc.fill")
                             Text("Write")
@@ -124,6 +151,14 @@ struct RFIDView: View {
                 }
             }
             .padding()
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
             .alert(alertTitle, isPresented: $showingResultAlert) {
                 Button("OK", role: .cancel) { }
                 if alertHasDataToCopy {

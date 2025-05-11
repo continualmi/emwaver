@@ -51,6 +51,7 @@
 * Implement Load From Storage on IOS, both Console and Buttons
 On console and buttons fragments on android, we have a way to save files and load them from storage, be it signals or scripts. On IOS, is this possible to achieve? (done on Console)
 * UX on buttons view is not great, clicking stuff often does nothing. Needs attention
+* When opening keyboards on IOS, we need to be careful since it has no back button, so we need a way to close it, perhaps this feature already exists on the keyboard just needs to be added
 
 
 # Not Done
@@ -79,7 +80,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 
 ## IOS STUFF:
 
-* When opening keyboards on IOS, we need to be careful since it has no back button, so we need a way to close it, perhaps this feature already exists on the keyboard just needs to be added
+* Add automatic connection on IOS
 * Implement encodeIR logic, ported from android
 On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java. Port the full code, complete port.
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts

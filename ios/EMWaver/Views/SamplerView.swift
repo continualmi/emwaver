@@ -490,12 +490,20 @@ struct SamplerView: View {
             }
             .alert("Export Signal", isPresented: $showingExportDialog) {
                 TextField("Filename", text: $exportFileName)
+                    .submitLabel(.done)
+                    .keyboardType(.default)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
                 
                 Button("Cancel", role: .cancel) {
                     // Just dismiss
+                    hideKeyboard()
                 }
                 
                 Button("Export") {
+                    // Hide keyboard first
+                    hideKeyboard()
+                    
                     // Add .raw extension if not present
                     if !exportFileName.lowercased().hasSuffix(".raw") {
                         exportFileName += ".raw"
@@ -509,6 +517,11 @@ struct SamplerView: View {
     }
     
     // MARK: - Helper Methods
+    
+    // Helper function to hide keyboard
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
     
     // Generate a default filename with timestamp
     private func generateDefaultFileName() -> String {

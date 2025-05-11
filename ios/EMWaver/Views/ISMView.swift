@@ -58,6 +58,16 @@ struct ISMView: View {
         ("38", "PKTSTATUS"), ("39", "VCO_VC_DAC"), ("3A", "TXBYTES"), ("3B", "RXBYTES")
     ]
     
+    // Focus state for keyboard dismissal
+    @FocusState private var focusedField: Field?
+    
+    enum Field: Hashable {
+        case frequency
+        case dataRate
+        case bandwidth
+        case deviation
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -131,6 +141,14 @@ struct ISMView: View {
                 loadAllSettings()
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    focusedField = nil
+                }
+            }
+        }
     }
     
     // Connection status view
@@ -186,14 +204,14 @@ struct ISMView: View {
                 TextField("Frequency", text: $frequency)
                     .keyboardType(.decimalPad)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .onTapGesture {
-                        // Show edit dialog
-                    }
+                    .focused($focusedField, equals: .frequency)
+                    .submitLabel(.done)
                 
                 Button("Set") {
                     if let freqValue = Double(frequency) {
                         setFrequency(freqValue)
                     }
+                    focusedField = nil
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -207,11 +225,14 @@ struct ISMView: View {
                 TextField("Data Rate", text: $dataRate)
                     .keyboardType(.numberPad)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .focused($focusedField, equals: .dataRate)
+                    .submitLabel(.done)
                 
                 Button("Set") {
                     if let rateValue = Int(dataRate) {
                         setDataRate(rateValue)
                     }
+                    focusedField = nil
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -225,11 +246,14 @@ struct ISMView: View {
                 TextField("Bandwidth", text: $bandwidth)
                     .keyboardType(.decimalPad)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .focused($focusedField, equals: .bandwidth)
+                    .submitLabel(.done)
                 
                 Button("Set") {
                     if let bwValue = Double(bandwidth) {
                         setBandwidth(bwValue)
                     }
+                    focusedField = nil
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -243,11 +267,14 @@ struct ISMView: View {
                 TextField("Deviation", text: $deviation)
                     .keyboardType(.numberPad)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .focused($focusedField, equals: .deviation)
+                    .submitLabel(.done)
                 
                 Button("Set") {
                     if let devValue = Int(deviation) {
                         setDeviation(devValue)
                     }
+                    focusedField = nil
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)

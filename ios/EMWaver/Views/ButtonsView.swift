@@ -1,5 +1,6 @@
 import SwiftUI
 import JavaScriptCore
+import Combine
 
 // MARK: - Models
 
@@ -36,6 +37,7 @@ struct ButtonsView: View {
     @State private var editButtonName = ""
     @State private var editButtonColor = ""
     @State private var editButtonScript = ""
+    @FocusState private var editButtonFocusField: Field?
     
     // Collapsible sections state
     @State private var isRemoteListExpanded = true
@@ -43,6 +45,10 @@ struct ButtonsView: View {
     
     // JavaScript Engine
     @State private var jsEngine: JavaScriptEngine? = nil
+    
+    enum Field {
+        case name, script
+    }
     
     var body: some View {
         NavigationView {
@@ -86,6 +92,7 @@ struct ButtonsView: View {
                     Form {
                         Section(header: Text("Button Details")) {
                             TextField("Button Name", text: $editButtonName)
+                                .focused($editButtonFocusField, equals: .name)
                             
                             Text("Button Color")
                                 .font(.headline)
@@ -108,9 +115,21 @@ struct ButtonsView: View {
                         }
                         
                         Section(header: Text("Script")) {
-                            TextEditor(text: $editButtonScript)
-                                .frame(minHeight: 200)
-                                .font(.system(size: 14, design: .monospaced))
+                            ZStack(alignment: .topLeading) {
+                                TextEditor(text: $editButtonScript)
+                                    .frame(minHeight: 200)
+                                    .font(.system(size: 14, design: .monospaced))
+                                    .focused($editButtonFocusField, equals: .script)
+                                
+                                if editButtonScript.isEmpty {
+                                    Text("Enter script here...")
+                                        .foregroundColor(.gray)
+                                        .font(.system(size: 14, design: .monospaced))
+                                        .padding(.top, 8)
+                                        .padding(.leading, 5)
+                                        .allowsHitTesting(false)
+                                }
+                            }
                         }
                     }
                     .navigationTitle("Edit Button")
@@ -129,7 +148,18 @@ struct ButtonsView: View {
                             }
                             .disabled(editButtonName.isEmpty || editButtonScript.isEmpty)
                         }
+                        
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") {
+                                editButtonFocusField = nil
+                            }
+                        }
                     }
+                }
+                .onAppear {
+                    // Focus the name field when view appears
+                    editButtonFocusField = .name
                 }
             }
             .sheet(isPresented: $showingExportSheet) {
@@ -528,6 +558,7 @@ struct ButtonsView: View {
 struct AddRemoteView: View {
     @State private var remoteName: String = ""
     @Environment(\.presentationMode) var presentationMode
+    @FocusState private var isNameFieldFocused: Bool
     var onSave: (String) -> Void
     
     var body: some View {
@@ -535,6 +566,7 @@ struct AddRemoteView: View {
             Form {
                 Section(header: Text("Remote Details")) {
                     TextField("Remote Name", text: $remoteName)
+                        .focused($isNameFieldFocused)
                 }
             }
             .navigationTitle("Add Remote")
@@ -552,6 +584,17 @@ struct AddRemoteView: View {
                     }
                     .disabled(remoteName.isEmpty)
                 }
+                
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        isNameFieldFocused = false
+                    }
+                }
+            }
+            .onAppear {
+                // Focus the name field when view appears
+                isNameFieldFocused = true
             }
         }
     }
@@ -604,13 +647,19 @@ try {
 }
 """
     @Environment(\.presentationMode) var presentationMode
+    @FocusState private var focusedField: Field?
     var onSave: (String, String, String) -> Void
+    
+    enum Field {
+        case name, script
+    }
     
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("Button Details")) {
                     TextField("Button Name", text: $buttonName)
+                        .focused($focusedField, equals: .name)
                     
                     Text("Button Color")
                         .font(.headline)
@@ -633,9 +682,21 @@ try {
                 }
                 
                 Section(header: Text("Script")) {
-                    TextEditor(text: $script)
-                        .frame(minHeight: 200)
-                        .font(.system(size: 14, design: .monospaced))
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $script)
+                            .frame(minHeight: 200)
+                            .font(.system(size: 14, design: .monospaced))
+                            .focused($focusedField, equals: .script)
+                        
+                        if script.isEmpty {
+                            Text("Enter script here...")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 14, design: .monospaced))
+                                .padding(.top, 8)
+                                .padding(.leading, 5)
+                                .allowsHitTesting(false)
+                        }
+                    }
                 }
             }
             .navigationTitle("Add Button")
@@ -653,6 +714,17 @@ try {
                     }
                     .disabled(buttonName.isEmpty || script.isEmpty)
                 }
+                
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
+            .onAppear {
+                // Focus the name field when view appears
+                focusedField = .name
             }
         }
     }
