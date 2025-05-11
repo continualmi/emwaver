@@ -47,6 +47,12 @@ struct LineChartViewController: UIViewControllerRepresentable {
         // Ensure chart responds directly to touch events
         chartView.isUserInteractionEnabled = true
         
+        // Fix scrolling issue by adding simultaneous gesture recognizer
+        if let panGesture = chartView.gestureRecognizers?.first(where: { $0 is UIPanGestureRecognizer }) {
+            panGesture.require(toFail: viewController.view.gestureRecognizers?.first(where: { $0 is UIPanGestureRecognizer }) ?? UIPanGestureRecognizer())
+            panGesture.delegate = context.coordinator
+        }
+        
         // Set delegate for callbacks
         chartView.delegate = context.coordinator
 
@@ -81,7 +87,7 @@ struct LineChartViewController: UIViewControllerRepresentable {
         Coordinator(self)
     }
     
-    class Coordinator: NSObject, ChartViewDelegate {
+    class Coordinator: NSObject, ChartViewDelegate, UIGestureRecognizerDelegate {
         var parent: LineChartViewController
         weak var chartView: LineChartView?
         // Exactly like Android - track current zoom level
@@ -91,6 +97,15 @@ struct LineChartViewController: UIViewControllerRepresentable {
 
         init(_ parent: LineChartViewController) {
             self.parent = parent
+        }
+        
+        // Allow simultaneous gesture recognition
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            // Allow chart gestures to work with ScrollView gestures
+            if otherGestureRecognizer is UIPanGestureRecognizer && gestureRecognizer is UIPanGestureRecognizer {
+                return true
+            }
+            return false
         }
 
         // EXACTLY MATCH ANDROID - Called when scaling the chart
@@ -203,7 +218,7 @@ struct SamplerView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
+            VStack(spacing: 12) {
                 if !bleManager.isConnected {
                     // Connection status bar shown only when disconnected
                     HStack {
@@ -257,25 +272,10 @@ struct SamplerView: View {
                         self.refreshChart()
                     })
                     .frame(height: 300)
-                    .padding([.horizontal, .bottom])
-                }
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-                .padding([.horizontal, .top])
-
-                // Controls card
-                VStack(alignment: .leading, spacing: 15) {
-                    Text("Signal Controls")
-                        .font(.headline)
-                        .padding(.top, 8)
-                    HStack {
-                        Picker("GPIO Pin", selection: $selectedPinIndex) {
-                            ForEach(0..<PINS.count, id: \.self) { index in
-                                Text(PINS[index]).tag(index)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        Spacer()
+                    .padding([.horizontal])
+                    
+                    // Move record and transmit buttons to chart card
+                    HStack(spacing: 15) {
                         Button {
                             if isRecording {
                                 stopRecording()
@@ -283,30 +283,89 @@ struct SamplerView: View {
                                 startRecording()
                             }
                         } label: {
-                            Text(isRecording ? "Stop" : "Record")
-                                .padding(.horizontal)
-                                .background(isRecording ? Color.red : Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(5)
+                            HStack {
+                                Image(systemName: isRecording ? "stop.circle.fill" : "record.circle")
+                                    .font(.system(size: 18))
+                                Text(isRecording ? "Stop" : "Record")
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(isRecording ? Color.red : Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
                         }
-                        .frame(minWidth: 80)
-                        Button("Retransmit") {
+                        
+                        Button {
                             retransmitSignal()
+                        } label: {
+                            HStack {
+                                Image(systemName: "arrow.up.circle")
+                                    .font(.system(size: 18))
+                                Text("Transmit")
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(bleManager.getBuffer().isEmpty ? Color.gray : Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
                         }
-                        .buttonStyle(.borderedProminent)
                         .disabled(bleManager.getBuffer().isEmpty)
                     }
-                    Button("Convert to IR") {
-                        convertToIR()
+                    .padding([.horizontal, .bottom])
+                }
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding([.horizontal, .top])
+
+                // Redesigned Controls card
+                VStack(alignment: .leading, spacing: 15) {
+                    Text("Signal Controls")
+                        .font(.headline)
+                        .padding(.top, 8)
+                    
+                    // GPIO Pin selector with better spacing
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("GPIO Pin:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Picker("", selection: $selectedPinIndex) {
+                            ForEach(0..<PINS.count, id: \.self) { index in
+                                Text(PINS[index]).tag(index)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.systemGray5))
+                        .cornerRadius(8)
                     }
-                    .buttonStyle(.bordered)
+                    
+                    // IR Conversion control with better styling
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Signal Processing:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Button {
+                            convertToIR()
+                        } label: {
+                            HStack {
+                                Image(systemName: "waveform")
+                                    .font(.system(size: 18))
+                                Text("Convert to IR")
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(bleManager.getBuffer().isEmpty ? Color.gray : Color.purple)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        .disabled(bleManager.getBuffer().isEmpty)
+                    }
                 }
                 .padding()
                 .background(Color(.systemGray6))
                 .cornerRadius(10)
                 .padding([.horizontal, .top])
 
-                Spacer()
+                Spacer(minLength: 20)
             }
             .navigationTitle("Sampler")
             .navigationBarTitleDisplayMode(.inline)
