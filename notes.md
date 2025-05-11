@@ -57,6 +57,7 @@ On console and buttons fragments on android, we have a way to save files and loa
 On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java. Port the full code, complete port.
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 On android, on the Buttons fragment, we have an option to load remotes from IRDB, which works well. Lets do that on IOS as well, adding it to the Buttons view. Notice how it works on android. We take a link from the github, and then pull the remote from there, creating the final json with all the scripts. Each button has a specific script that encodes the signal into byte form, and then sends it over using the same routine we have on the sampler transmit, and selecting the correct GPIO.
+* on buttons, need to fix the script to send a single code, and remove the test infrared scripts from console
 
 # Not Done
 
@@ -87,10 +88,10 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 ## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 * Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
+* Make sure tuo update default IR script on buttons IRDB, adding the 0x20 missing from the transmit command
 
 ## IOS STUFF:
 
-* on buttons, need to fix the script to send a single code, and remove the test infrared scripts from console
 * Fix on buttons view, when we have too many buttons, the UX becomes unusable
 * Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
 * Minor: add help button explaining what the convert to IR is, android and ios
