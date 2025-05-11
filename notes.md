@@ -65,6 +65,7 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 * Consider having the BLE service check for connections periodically even on other fragments (done)
 * Make Sampler, RFID and ISM have the same gray background as the nicely done console and buttons fragments. Requires some prompting with 2.5 pro to get the same styling in. (nah)
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities (building that list bellow)
+* Make sure tuo update default IR script on buttons IRDB, adding the 0x20 missing from the transmit command
 
 # Not Done
 
@@ -88,12 +89,12 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 * Minor: add help button explaining what the convert to IR is, android and ios
 On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
 * Minor: Referesh chart after clearing it to make signal go away
+* Dark mode colors on buttons fragment are not good, border the same color ar background
 
 
 ## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 * Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
-* Make sure tuo update default IR script on buttons IRDB, adding the 0x20 missing from the transmit command
 * Clean up dependencies from old USB Serial libraries
 On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
 
