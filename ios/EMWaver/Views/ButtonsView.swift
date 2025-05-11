@@ -169,6 +169,8 @@ struct ButtonsView: View {
                 loadRemotes()
                 setupJavaScriptEngine()
             }
+            .animation(.easeInOut, value: isRemoteListExpanded)
+            .animation(.easeInOut, value: isButtonGridExpanded)
         }
     }
     
@@ -186,18 +188,38 @@ struct ButtonsView: View {
                 } else {
                     List {
                         ForEach(remotes) { remote in
-                            Text(remote.name)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
+                            Button(action: {
+                                withAnimation {
                                     selectedRemote = remote
+                                    isButtonGridExpanded = true
                                 }
-                                .onLongPressGesture {
+                            }) {
+                                HStack {
+                                    Text(remote.name)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    if selectedRemote?.id == remote.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 8)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .background(
+                                selectedRemote?.id == remote.id ? Color.blue.opacity(0.2) : Color.clear
+                            )
+                            .cornerRadius(8)
+                            .contextMenu {
+                                Button("View JSON") {
+                                    exportRemote(remote)
+                                }
+                                Button("Delete") {
                                     actionSheetRemote = remote
                                     showingActionSheet = true
                                 }
-                                .listRowBackground(
-                                    selectedRemote?.id == remote.id ? Color.blue.opacity(0.2) : Color.clear
-                                )
+                            }
                         }
                     }
                     .frame(height: 150)
@@ -235,7 +257,31 @@ struct ButtonsView: View {
     @ViewBuilder
     private var buttonGridContent: some View {
         if let selectedRemote = selectedRemote {
-            buttonGrid(for: selectedRemote)
+            if selectedRemote.buttons.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "rectangle.fill.badge.plus")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray)
+                    Text("No buttons yet")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                    Text("Tap '+' to add a button")
+                        .font(.subheadline)
+                        .foregroundColor(.gray.opacity(0.8))
+                    Button("Add Button") {
+                        showingAddButtonSheet = true
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .frame(maxWidth: .infinity, maxHeight: 200)
+                .padding()
+            } else {
+                buttonGrid(for: selectedRemote)
+            }
         } else {
             Text("Select a remote to view buttons")
                 .italic()
@@ -258,6 +304,10 @@ struct ButtonsView: View {
     
     private func buttonView(for button: Remote.Button, at index: Int) -> some View {
         Button(action: {
+            // Add haptic feedback
+            let impactMed = UIImpactFeedbackGenerator(style: .medium)
+            impactMed.impactOccurred()
+            
             executeScript(button.script)
         }) {
             Text(button.name)
@@ -267,6 +317,7 @@ struct ButtonsView: View {
                 .foregroundColor(.white)
                 .cornerRadius(8)
         }
+        .buttonStyle(ButtonPressStyle())
         .contextMenu {
             Button("Edit") {
                 editingButton = button
@@ -280,6 +331,18 @@ struct ButtonsView: View {
                 // Show the edit sheet
                 showingEditButtonSheet = true
             }
+            
+            Button("Delete") {
+                if var currentRemote = selectedRemote {
+                    currentRemote.buttons.remove(at: index)
+                    
+                    if let remoteIndex = remotes.firstIndex(where: { $0.id == currentRemote.id }) {
+                        remotes[remoteIndex] = currentRemote
+                        saveRemote(currentRemote)
+                        selectedRemote = currentRemote
+                    }
+                }
+            }
         }
     }
     
@@ -287,7 +350,9 @@ struct ButtonsView: View {
     
     func sectionHeader(_ title: String, isExpanded: Binding<Bool>) -> some View {
         Button(action: {
-            isExpanded.wrappedValue.toggle()
+            withAnimation(.easeInOut) {
+                isExpanded.wrappedValue.toggle()
+            }
         }) {
             HStack {
                 Text(title)
@@ -320,9 +385,14 @@ struct ButtonsView: View {
             let jsonURLs = fileURLs.filter { $0.pathExtension == "json" }
             
             remotes = try jsonURLs.compactMap { url in
-                let data = try Data(contentsOf: url)
-                let decoder = JSONDecoder()
-                return try decoder.decode(Remote.self, from: data)
+                do {
+                    let data = try Data(contentsOf: url)
+                    let decoder = JSONDecoder()
+                    return try decoder.decode(Remote.self, from: data)
+                } catch {
+                    print("Error loading remote from \(url.lastPathComponent): \(error)")
+                    return nil
+                }
             }
         } catch {
             print("Error loading remotes: \(error)")
@@ -424,7 +494,15 @@ struct ButtonsView: View {
     }
     
     func executeScript(_ script: String) {
-        jsEngine?.evaluateScript(script)
+        guard !script.isEmpty else {
+            print("Warning: Attempted to execute empty script")
+            return
+        }
+        
+        // Run script evaluation on a background thread to prevent UI freezing
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.jsEngine?.evaluateScript(script)
+        }
     }
     
     // MARK: - Utilities
@@ -605,6 +683,17 @@ struct ExportView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Custom ButtonStyle for better tap feedback
+
+struct ButtonPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
