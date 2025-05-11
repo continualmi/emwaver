@@ -112,9 +112,8 @@ struct EMWaverView: View {
                                         .padding(8)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 } else {
-                                    // Display the text with rich formatting
-                                    Text(LocalizedStringKey(serialMonitorText))
-                                        .font(.system(.body, design: .monospaced))
+                                    // Display the text with different colors for TX/RX entries
+                                    MonitorTextView(text: serialMonitorText)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(.bottom, 1) // Ensure last line is visible
                                         .id("bottom") // ID for scrolling
@@ -304,21 +303,17 @@ struct EMWaverView: View {
         let dirSymbol = direction == .transmit ? "TX" : "RX"
         var logEntry = "[\(timestamp)] \(dirSymbol): "
         
-        // Create the formatted entry with HTML-like color tags
-        let color = direction == .transmit ? "FFD700" : "00AA00" // Gold for TX, Green for RX
-        
-        var content = ""
+        // Changed from HTML formatting to plain text
+        // The original code used HTML-like color tags which don't work with Text(LocalizedStringKey)
         if showHex {
-            content += "\(BLEManager.dataToHexString(data))"
+            logEntry += "\(BLEManager.dataToHexString(data))"
         } else {
             // If showHex is false, show ASCII
-            content += "\"\(BLEManager.dataToAsciiString(data))\""
+            logEntry += "\"\(BLEManager.dataToAsciiString(data))\""
         }
-        
-        let formattedEntry = "<font color='#\(color)'>\(logEntry)\(content)</font>"
 
         DispatchQueue.main.async {
-            self.serialMonitorText += formattedEntry + "\n"
+            self.serialMonitorText += logEntry + "\n"
         }
     }
     
@@ -385,5 +380,30 @@ extension BLEManager { // Added extension for DataDirection
     enum DataDirection {
         case transmit
         case receive
+    }
+}
+
+// Custom view to display monitor text with colored lines
+struct MonitorTextView: View {
+    let text: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(text.split(separator: "\n", omittingEmptySubsequences: false), id: \.self) { line in
+                Text(String(line))
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(getColorForLine(String(line)))
+            }
+        }
+    }
+    
+    private func getColorForLine(_ line: String) -> Color {
+        if line.contains("] TX:") {
+            return Color.yellow // Gold color for TX
+        } else if line.contains("] RX:") {
+            return Color.green // Green color for RX
+        } else {
+            return Color.green.opacity(0.7) // Default color
+        }
     }
 } 
