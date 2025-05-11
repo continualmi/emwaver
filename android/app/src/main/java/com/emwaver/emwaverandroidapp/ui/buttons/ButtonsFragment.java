@@ -828,7 +828,7 @@ public class ButtonsFragment extends Fragment {
         
         script.append("        if (irSignal && irSignal.length > 0) {\n");
         script.append("            BLEService.loadBuffer(irSignal);\n");
-        script.append("            var commandBytes = [0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x04]; // \"transmit\" + type 4 (IR)\n");
+        script.append("            var commandBytes = [0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x20, 0x04]; // \"transmit\" + type 4 (IR)\n");
         script.append("            BLEService.write(commandBytes);\n");
         script.append("            var status = BLEService.transmitBuffer();\n");
         script.append("            Utils.log('Successfully transmitted " + protocol + " IR signal');\n");
