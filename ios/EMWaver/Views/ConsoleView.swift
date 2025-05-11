@@ -629,6 +629,9 @@ struct ConsoleView: View {
             jsEngine?.setupCC1101(cc1101)
         }
         
+        // Set up IR encoder
+        jsEngine?.setupIR()
+        
         // Register script loading function
         jsEngine?.registerLoadFunction(scriptDirectoryURL: getDocumentsDirectory())
     }
@@ -724,6 +727,60 @@ struct ConsoleView: View {
             
             saveScript(txScriptName, content: txContent)
             print("Created default TX script")
+        }
+        
+        // IR Test Script
+        let irScriptName = "ir_test.js"
+        let irScriptPath = getDocumentsDirectory().appendingPathComponent(irScriptName)
+        
+        if !FileManager.default.fileExists(atPath: irScriptPath.path) {
+            let irContent = """
+                // Simple IR Test Script
+                // Tests encoding common IR protocols
+                
+                print("Starting IR Encoding Test");
+                print("-----------------------");
+                
+                // Test NEC protocol (common for many TVs and devices)
+                var protocol = "nec1";
+                var device = 0;   // Device address
+                var subdevice = -1; // -1 means no subdevice/use default
+                var funcCode = 16;  // Function code (e.g., power button)
+                
+                print("Encoding " + protocol + " signal: device=" + device + ", function=" + funcCode);
+                var timings = IRService.encodeIR(protocol, device, subdevice, funcCode);
+                
+                if (timings) {
+                    print("Success! Generated " + timings.length + " timing values");
+                    
+                    // Show the first few timings
+                    var output = "First 10 timings (µs): ";
+                    var count = Math.min(timings.length, 10);
+                    
+                    for (var i = 0; i < count; i++) {
+                        output += timings[i].toFixed(1);
+                        if (i < count - 1) output += ", ";
+                    }
+                    
+                    print(output);
+                    print("Total sequence length: " + timings.length);
+                } else {
+                    print("Error: Failed to encode " + protocol + " signal");
+                }
+                
+                print("\\nTesting Samsung protocol");
+                var samsung = IRService.encodeIR(IRService.PROTOCOL_SAMSUNG, 7, -1, 11);
+                if (samsung) {
+                    print("Success! Generated " + samsung.length + " timing values for Samsung");
+                } else {
+                    print("Error: Failed to encode Samsung signal");
+                }
+                
+                print("\\nIR Test Complete");
+                """
+            
+            saveScript(irScriptName, content: irContent)
+            print("Created default IR test script")
         }
         
         loadRecentScripts()

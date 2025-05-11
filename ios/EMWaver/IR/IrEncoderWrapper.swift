@@ -16,8 +16,8 @@ class IrEncoderWrapper {
      *   - function: The function code (F).
      * - Returns: An array of Doubles representing the pulse/gap sequence, or nil if encoding fails.
      */
-    func encodeIR(protocol: String, device: Int, subdevice: Int, function: Int) -> [Double]? {
+    func encodeIR(protocol protocolName: String, device: Int, subdevice: Int, function: Int) -> [Double]? {
         // Delegate the call to the static method in IrEncoder
-        return IrEncoder.encodeIR(protocol: `protocol`, device: device, subdevice: subdevice, function: function)
+        return IrEncoder.encodeIR(protocol: protocolName, device: device, subdevice: subdevice, function: function)
     }
 } 
