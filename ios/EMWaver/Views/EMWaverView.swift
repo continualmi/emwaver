@@ -141,7 +141,7 @@ struct EMWaverView: View {
             }
             .padding(.vertical)
         }
-        .navigationTitle("EMWaver BLE Control")
+        .navigationTitle("EMWaver")
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(timer) { _ in // Action for the timer
             fetchAndDisplayBufferedData()

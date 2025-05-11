@@ -66,17 +66,7 @@ struct ISMView: View {
                 Spacer()
             }
         }
-        .navigationTitle("ISM")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            // Add this code for opaque navigation bar
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().compactAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
-            // End of added code
-
             if bleManager.isConnected {
                 setupCC1101()
             }
