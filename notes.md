@@ -44,6 +44,8 @@
 * Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either (done on IOS)
 * Fix small issue with navigation on android, cant go back to emwaver fragment
 * ISM Fragment should show registers immediatly, remove the "actions" ui
+* Add versioning to IOS and fix EMWaver fragment
+* Need to fix the freezing that happens when we are loading the registers on ISM View
 
 ## Not Done
 
@@ -63,12 +65,11 @@
 * Clean up dependencies from old USB Serial libraries
 
 
-
+* On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 IOS STUFF:
 
-* Add versioning to IOS and fix EMWaver fragment
+
 * Need to understand the current BLE command structure on IOS, in order to document it etc
-* Need to fix the freezing that happens when we are loading the registers on ISM View
 * Fix the scrolling on Sampler view not working if finger on charts
 * Editing keys on Console View does not work, the page it brings up is blank
 * Implement Load From Storage on IOS, both Console and Buttons
