@@ -20,6 +20,13 @@ struct ISMView: View {
     @State private var isLoading: Bool = false
     @State private var isViewActive: Bool = false
     
+    // Load dialog state
+    @State private var showLoadingAlert: Bool = false
+    @State private var isLoadingRegisters: Bool = false
+    @State private var registerLoadingProgress: Double = 0.0
+    @State private var loadingRegistersCancelled: Bool = false
+    @State private var loadingAlertMessage: String = "Loading CC1101 parameters..."
+    
     // Define modulation types
     private let modulationFormats = ["2-FSK", "GFSK", "ASK/OOK", "4-FSK", "MSK"]
     private let modulationValues: [UInt8] = [0, 1, 3, 4, 7] // CC1101.MOD_* values
@@ -101,11 +108,27 @@ struct ISMView: View {
         .onDisappear {
             print("ISM View disappeared")
             isViewActive = false
+            // Cancel any ongoing register loading
+            loadingRegistersCancelled = true
         }
         // Only setup CC1101 when both view is active AND we get connected
         .onChange(of: bleManager.isConnected) { connected in
             if connected && isViewActive {
                 setupCC1101()
+            }
+        }
+        // Alert for loading parameters
+        .alert(loadingAlertMessage, isPresented: $showLoadingAlert) {
+            Button("Cancel", role: .cancel) {
+                loadingRegistersCancelled = true
+            }
+        }
+        .onChange(of: showLoadingAlert) { show in
+            if show {
+                // Automatically start loading when alert appears
+                isLoadingRegisters = true
+                loadingRegistersCancelled = false
+                loadAllSettings()
             }
         }
     }
@@ -287,7 +310,10 @@ struct ISMView: View {
                 Spacer()
                 
                 Button("Refresh") {
-                    loadRegisters()
+                    showLoadingAlert = true
+                    isLoadingRegisters = false
+                    registerLoadingProgress = 0.0
+                    loadingRegistersCancelled = false
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -380,9 +406,6 @@ struct ISMView: View {
             cc1101 = CC1101(bleManager: bleManager)
         }
         
-        statusMessage = "Connecting to CC1101..."
-        isLoading = true
-        
         // Check BLE connection before proceeding
         if !bleManager.isConnected {
             statusMessage = "Not connected to BLE device"
@@ -390,84 +413,187 @@ struct ISMView: View {
             return
         }
         
-        // Load current settings with a delay to ensure BLE is ready
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Double check that view is still active before loading settings
-            if self.isViewActive {
-                self.loadCurrentSettings()
-            } else {
-                self.isLoading = false
-            }
-        }
+        // Show loading dialog instead of loading directly
+        showLoadingAlert = true
+        isLoadingRegisters = false
+        registerLoadingProgress = 0.0
+        loadingRegistersCancelled = false
     }
     
-    private func loadCurrentSettings() {
+    private func loadAllSettings() {
         guard let cc1101 = cc1101 else {
-            statusMessage = "CC1101 not initialized"
-            return 
+            showLoadingAlert = false
+            return
         }
         
-        isLoading = true
-        
-        // Get frequency
-        let freqValue = cc1101.getFrequency()
-        frequency = String(format: "%.6f", freqValue)
-        
-        // Get data rate
-        let rateValue = cc1101.getDataRate()
-        dataRate = String(rateValue)
-        
-        // Get bandwidth
-        let bwValue = cc1101.getBandwidth()
-        bandwidth = String(format: "%.1f", bwValue)
-        
-        // Get deviation
-        let devValue = cc1101.getDeviation()
-        deviation = String(devValue)
-        
-        // Get modulation
-        let modValue = cc1101.getModulation()
-        selectedModulation = modulationValues.firstIndex(of: UInt8(modValue)) ?? 0
-        
-        // Get power level
-        let powValue = cc1101.getPowerLevel()
-        selectedPower = powerValues.firstIndex(of: powValue) ?? 4 // Default to 0 dBm
-        
-        // Load registers
-        loadRegisters()
-        
-        isLoading = false
-        statusMessage = "Settings loaded successfully"
-    }
-    
-    private func loadRegisters() {
-        guard let cc1101 = cc1101 else { return }
+        isLoadingRegisters = true
+        registerLoadingProgress = 0.0
         
         // Clear register values
         registerValues.removeAll()
         
-        // Configuration registers
-        for i in 0..<47 {
-            let addr = UInt8(i)
-            let value = cc1101.readReg(addr: addr)
-            print("Read config register 0x\(String(format: "%02X", addr)): 0x\(String(format: "%02X", value))")
-            registerValues[String(format: "%02X", addr)] = String(format: "%02X", value)
-        }
-        
-        // Status registers - use burst read mode with READ_BURST bit set instead of READ_SINGLE
-        for i in 0..<12 {
-            let baseAddr = UInt8(CC1101.PARTNUM) + UInt8(i)
-            let addr = baseAddr | CC1101.READ_BURST
-            let value = cc1101.readReg(addr: addr)
-            print("Read status register 0x\(String(format: "%02X", baseAddr)): 0x\(String(format: "%02X", value))")
-            registerValues[String(format: "%02X", baseAddr)] = String(format: "%02X", value)
-        }
-        
-        // PA Table
-        let paTable = cc1101.readBurstReg(addr: CC1101.PATABLE, len: 8)
-        for i in 0..<min(8, paTable.count) {
-            print("Read PA Table PA\(i): 0x\(String(format: "%02X", paTable[i]))")
-            registerValues["PA\(i)"] = String(format: "%02X", paTable[i])
+        // Use Task to perform loading asynchronously
+        Task {
+            // Set total steps (RF parameters + 47 config registers + 12 status registers + 8 PA table entries)
+            let totalSteps = 5 + 47 + 12 + 8 // 5 RF parameters + registers
+            var currentStep = 0
+            
+            // Step 1: Load RF parameters
+            if loadingRegistersCancelled {
+                await MainActor.run {
+                    showLoadingAlert = false
+                    isLoadingRegisters = false
+                }
+                return
+            }
+            
+            // Get frequency
+            await MainActor.run {
+                loadingAlertMessage = "Loading parameters... (1/5)"
+            }
+            let freqValue = cc1101.getFrequency()
+            await MainActor.run {
+                frequency = String(format: "%.6f", freqValue)
+                currentStep += 1
+                registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+            }
+            
+            // Get data rate
+            await MainActor.run {
+                loadingAlertMessage = "Loading parameters... (2/5)"
+            }
+            let rateValue = cc1101.getDataRate()
+            await MainActor.run {
+                dataRate = String(rateValue)
+                currentStep += 1
+                registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+            }
+            
+            // Get bandwidth
+            await MainActor.run {
+                loadingAlertMessage = "Loading parameters... (3/5)"
+            }
+            let bwValue = cc1101.getBandwidth()
+            await MainActor.run {
+                bandwidth = String(format: "%.1f", bwValue)
+                currentStep += 1
+                registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+            }
+            
+            // Get deviation
+            await MainActor.run {
+                loadingAlertMessage = "Loading parameters... (4/5)"
+            }
+            let devValue = cc1101.getDeviation()
+            await MainActor.run {
+                deviation = String(devValue)
+                currentStep += 1
+                registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+            }
+            
+            // Get modulation and power level
+            await MainActor.run {
+                loadingAlertMessage = "Loading parameters... (5/5)"
+            }
+            let modValue = cc1101.getModulation()
+            let powValue = cc1101.getPowerLevel()
+            await MainActor.run {
+                selectedModulation = modulationValues.firstIndex(of: UInt8(modValue)) ?? 0
+                selectedPower = powerValues.firstIndex(of: powValue) ?? 4
+                currentStep += 1
+                registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+            }
+            
+            // Step 2: Configuration registers
+            await MainActor.run {
+                loadingAlertMessage = "Loading registers... (1/3)"
+            }
+            for i in 0..<47 {
+                if loadingRegistersCancelled {
+                    await MainActor.run {
+                        showLoadingAlert = false
+                        isLoadingRegisters = false
+                    }
+                    return
+                }
+                
+                let addr = UInt8(i)
+                let value = cc1101.readReg(addr: addr)
+                
+                await MainActor.run {
+                    registerValues[String(format: "%02X", addr)] = String(format: "%02X", value)
+                    currentStep += 1
+                    registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+                    
+                    // Update loading message occasionally
+                    if i % 10 == 0 {
+                        loadingAlertMessage = "Loading config registers... (\(i)/47)"
+                    }
+                }
+                
+                // Short delay to allow UI to remain responsive
+                try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
+            }
+            
+            // Step 3: Status registers
+            await MainActor.run {
+                loadingAlertMessage = "Loading status registers... (2/3)"
+            }
+            for i in 0..<12 {
+                if loadingRegistersCancelled {
+                    await MainActor.run {
+                        showLoadingAlert = false
+                        isLoadingRegisters = false
+                    }
+                    return
+                }
+                
+                let baseAddr = UInt8(CC1101.PARTNUM) + UInt8(i)
+                let addr = baseAddr | CC1101.READ_BURST
+                let value = cc1101.readReg(addr: addr)
+                
+                await MainActor.run {
+                    registerValues[String(format: "%02X", baseAddr)] = String(format: "%02X", value)
+                    currentStep += 1
+                    registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+                }
+                
+                try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
+            }
+            
+            // Step 4: PA Table
+            await MainActor.run {
+                loadingAlertMessage = "Loading PA table... (3/3)"
+            }
+            let paTable = cc1101.readBurstReg(addr: CC1101.PATABLE, len: 8)
+            for i in 0..<min(8, paTable.count) {
+                if loadingRegistersCancelled {
+                    await MainActor.run {
+                        showLoadingAlert = false
+                        isLoadingRegisters = false
+                    }
+                    return
+                }
+                
+                await MainActor.run {
+                    registerValues["PA\(i)"] = String(format: "%02X", paTable[i])
+                    currentStep += 1
+                    registerLoadingProgress = Double(currentStep) / Double(totalSteps)
+                }
+                
+                if i < 7 { // Don't delay after the last item
+                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
+                }
+            }
+            
+            // Complete loading
+            await MainActor.run {
+                registerLoadingProgress = 1.0
+                isLoadingRegisters = false
+                showLoadingAlert = false
+                statusMessage = "Settings loaded successfully"
+                loadingAlertMessage = "Loading CC1101 parameters..." // Reset for next time
+            }
         }
     }
     
@@ -570,8 +696,12 @@ struct ISMView: View {
         cc1101.spiStrobe(commandStrobe: CC1101.SRES) // Reset chip
         Thread.sleep(forTimeInterval: 0.1) // Wait for reset
         
-        loadCurrentSettings() // Reload settings
-        statusMessage = "Radio reset and re-initialized"
+        // Show loading dialog for reloading settings after reset
+        showLoadingAlert = true
+        isLoadingRegisters = false
+        registerLoadingProgress = 0.0
+        loadingRegistersCancelled = false
+        statusMessage = "Radio reset. Load parameters to continue."
         isLoading = false
     }
 }
