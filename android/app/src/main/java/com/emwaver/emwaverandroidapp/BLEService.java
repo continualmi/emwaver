@@ -89,7 +89,7 @@ public class BLEService extends Service {
     private final IBinder binder = new LocalBinder();
     private Handler handler = new Handler(Looper.getMainLooper());
 
-    // Variables for speed calculation (match USBService implementation)
+    // Variables for speed calculation
     private long totalBytesReceived = 0;
     private long firstPacketTimeMillis = 0;
     private long lastPacketReceivedTime = 0;

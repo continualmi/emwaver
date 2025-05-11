@@ -159,7 +159,7 @@ public class rfidFragment extends Fragment {
             byte[] response = bleService.sendCommand(command, 2000); // 2000ms timeout
             processReadResponse(response);
         } else {
-            binding.textResult.setText("USB Service not bound. Please reconnect.");
+            binding.textResult.setText("BLE Service not bound. Please reconnect.");
             binding.textResult.setTextColor(Color.RED);
         }
     }
@@ -194,7 +194,7 @@ public class rfidFragment extends Fragment {
             byte[] response = bleService.sendCommand(command, 2000); // 2000ms timeout
             processWriteResponse(response);
         } else {
-            binding.textResult.setText("USB Service not bound. Please reconnect.");
+            binding.textResult.setText("BLE Service not bound. Please reconnect.");
             binding.textResult.setTextColor(Color.RED);
         }
     }
