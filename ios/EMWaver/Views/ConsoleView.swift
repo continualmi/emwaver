@@ -284,6 +284,9 @@ struct ConsoleView: View {
                 setupJSEngine()
             }
         }
+        .animation(.easeInOut, value: isScriptsListExpanded)
+        .animation(.easeInOut, value: isScriptEditorExpanded)
+        .animation(.easeInOut, value: isConsoleOutputExpanded)
         .applyAlerts(
             showingNewScriptAlert: $showingNewScriptAlert,
             newScriptName: $newScriptName,
@@ -331,6 +334,9 @@ struct ConsoleView: View {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 loadScript(script)
+                                withAnimation {
+                                    isScriptEditorExpanded = true
+                                }
                             }
                             .onLongPressGesture {
                                 selectedScript = script
