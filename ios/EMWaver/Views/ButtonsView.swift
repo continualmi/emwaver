@@ -32,6 +32,11 @@ struct ButtonsView: View {
     @State private var showingExportSheet = false
     @State private var exportContent: String = ""
     
+    // IRDB loading states
+    @State private var showingIRDBAlert = false
+    @State private var irdbURL = ""
+    @State private var isLoadingRemote = false
+    
     // New states for alert-based editing
     @State private var showingEditButtonSheet = false
     @State private var editButtonName = ""
@@ -68,6 +73,7 @@ struct ButtonsView: View {
                             Button("Add Key", action: { showingAddButtonSheet = true })
                         }
                         Divider()
+                        Button("Load from IRDB", action: showLoadFromIRDBAlert)
                         Button("Load from Storage", action: loadFromStorage)
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -157,9 +163,29 @@ struct ButtonsView: View {
                         }
                     }
                 }
-                .onAppear {
-                    // Focus the name field when view appears
-                    editButtonFocusField = .name
+                .navigationTitle("Edit Button")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            showingEditButtonSheet = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            if let index = editingButtonIndex, !editButtonName.isEmpty, !editButtonScript.isEmpty {
+                                updateButton(index: index, name: editButtonName, color: editButtonColor, script: editButtonScript)
+                            }
+                            showingEditButtonSheet = false
+                        }
+                        .disabled(editButtonName.isEmpty || editButtonScript.isEmpty)
+                    }
+                    
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            editButtonFocusField = nil
+                        }
+                    }
                 }
             }
             .sheet(isPresented: $showingExportSheet) {
@@ -187,6 +213,41 @@ struct ButtonsView: View {
                     ]
                 )
             }
+            .alert("Load Remote from IRDB", isPresented: $showingIRDBAlert) {
+                TextField("Enter GitHub URL", text: $irdbURL)
+                Button("Cancel", role: .cancel) {
+                    irdbURL = ""
+                }
+                Button("Load") {
+                    loadRemoteFromIRDB(irdbURL)
+                    irdbURL = ""
+                }
+            } message: {
+                Text("Enter the URL of the remote on GitHub")
+            }
+            .overlay(
+                ZStack {
+                    if isLoadingRemote {
+                        Color.black.opacity(0.4)
+                            .edgesIgnoringSafeArea(.all)
+                        
+                        VStack(spacing: 15) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            
+                            Text("Loading Remote...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+                        .padding(25)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                        .shadow(radius: 10)
+                    }
+                }
+                .animation(.easeInOut, value: isLoadingRemote)
+            )
             .onAppear {
                 // Add this code for opaque navigation bar
                 let appearance = UINavigationBarAppearance()
@@ -553,6 +614,206 @@ struct ButtonsView: View {
     
     func loadFromStorage() {
         // Implement document picker to import JSON files
+    }
+    
+    // MARK: - IRDB Remote Loading
+    
+    func showLoadFromIRDBAlert() {
+        irdbURL = ""
+        showingIRDBAlert = true
+    }
+    
+    func loadRemoteFromIRDB(_ url: String) {
+        guard !url.isEmpty else { return }
+        
+        isLoadingRemote = true
+        
+        // Convert GitHub URL to CDN URL if needed
+        let cdnUrl = convertToCDNLink(url)
+        
+        // Extract remote name from URL
+        let remoteName = extractRemoteNameFromUrl(cdnUrl)
+        
+        // Download and process the remote
+        downloadRemoteFromURL(cdnUrl) { result in
+            DispatchQueue.main.async {
+                self.isLoadingRemote = false
+                
+                switch result {
+                case .success(let csvContent):
+                    do {
+                        // Make sure the CSV is not empty and has a header
+                        guard !csvContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                            self.showErrorAlert("The downloaded file appears to be empty.")
+                            return
+                        }
+                        
+                        let remoteJson = try self.convertCsvToJson(csvContent)
+                        
+                        // Make sure we have at least one button
+                        guard !remoteJson.isEmpty else {
+                            self.showErrorAlert("No valid buttons found in the remote file.")
+                            return
+                        }
+                        
+                        let sanitizedName = self.sanitizeFileName(remoteName)
+                        
+                        self.saveRemote(Remote(name: sanitizedName, buttons: remoteJson))
+                        self.loadRemotes()
+                        self.selectedRemote = self.remotes.first(where: { $0.name == sanitizedName })
+                        
+                        // Show success message
+                        let successAlert = UIAlertController(
+                            title: "Remote Loaded",
+                            message: "Successfully loaded \(remoteJson.count) buttons from \(sanitizedName)",
+                            preferredStyle: .alert
+                        )
+                        successAlert.addAction(UIAlertAction(title: "OK", style: .default))
+                        
+                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                           let viewController = windowScene.windows.first?.rootViewController {
+                            viewController.present(successAlert, animated: true)
+                        }
+                    } catch {
+                        self.showErrorAlert("Error converting remote data: \(error.localizedDescription)")
+                    }
+                    
+                case .failure(let error):
+                    self.showErrorAlert("Error downloading remote: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func showErrorAlert(_ message: String) {
+        let alert = UIAlertController(
+            title: "Error",
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let viewController = windowScene.windows.first?.rootViewController {
+            viewController.present(alert, animated: true)
+        }
+    }
+    
+    func convertToCDNLink(_ link: String) -> String {
+        var result = link
+        if link.starts(with: "https://github.com") {
+            // Convert GitHub link to CDN link
+            result = link.replacingOccurrences(of: "https://github.com", with: "https://cdn.jsdelivr.net/gh")
+            result = result.replacingOccurrences(of: "/blob/", with: "@")
+            result = result.replacingOccurrences(of: "%2C", with: ",")  // Replace URL-encoded comma
+        }
+        return result
+    }
+    
+    func extractRemoteNameFromUrl(_ url: String) -> String {
+        let components = url.components(separatedBy: "/")
+        
+        if components.count >= 3 {
+            // Combine the last three parts (brand, device type, model)
+            let brand = components[components.count - 3]
+            let deviceType = components[components.count - 2]
+            let model = components[components.count - 1].components(separatedBy: ".")[0] // Remove extension
+            return "\(brand)_\(deviceType)_\(model)"
+        } else {
+            // Fallback
+            return url.components(separatedBy: "/").last?.components(separatedBy: ".")[0] ?? "remote_\(Int(Date().timeIntervalSince1970))"
+        }
+    }
+    
+    func sanitizeFileName(_ fileName: String) -> String {
+        return fileName.replacingOccurrences(of: "[^a-zA-Z0-9._-]", with: "_", options: .regularExpression)
+    }
+    
+    func downloadRemoteFromURL(_ urlString: String, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let url = URL(string: urlString) else {
+            completion(.failure(NSError(domain: "Invalid URL", code: -1, userInfo: nil)))
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                completion(.failure(NSError(domain: "Server Error", code: -2, userInfo: nil)))
+                return
+            }
+            
+            guard let data = data, let content = String(data: data, encoding: .utf8) else {
+                completion(.failure(NSError(domain: "Invalid Data", code: -3, userInfo: nil)))
+                return
+            }
+            
+            completion(.success(content))
+        }
+        
+        task.resume()
+    }
+    
+    func convertCsvToJson(_ csvContent: String) throws -> [Remote.Button] {
+        var buttons = [Remote.Button]()
+        
+        let lines = csvContent.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            // Skip header row
+            if index == 0 { continue }
+            
+            let tokens = line.components(separatedBy: ",")
+            if tokens.count >= 5 {
+                let name = tokens[0]
+                let protocolName = tokens[1]
+                let device = Int(tokens[2]) ?? 0
+                let subdevice = Int(tokens[3]) ?? -1
+                let function = Int(tokens[4]) ?? 0
+                
+                let script = createScriptForButton(protocolName: protocolName, device: device, subdevice: subdevice, function: function)
+                
+                let button = Remote.Button(name: name, color: "normal", script: script)
+                buttons.append(button)
+            }
+        }
+        
+        return buttons
+    }
+    
+    func createScriptForButton(protocolName: String, device: Int, subdevice: Int, function: Int) -> String {
+        let script = """
+        // Script for \(protocolName) IR signal
+        try {
+            var timings = IRService.encodeIR("\(protocolName)", \(device), \(subdevice), \(function));
+            
+            if (timings && timings.length > 0) {
+                print("Encoded \(protocolName) signal successfully");
+                
+                // Convert timings to binary signal
+                var signal = Utils.convertTimingsToBinary(timings);
+                
+                // Define the transmit command for IR
+                var transmitCommand = new Uint8Array([
+                    0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x04 // "transmit" + type 4 (IR)
+                ]);
+                
+                // Send the IR signal
+                BLEService.sendPacket(signal);
+                BLEService.sendPacket(transmitCommand);
+                
+                print("Successfully transmitted \(protocolName) IR signal");
+            } else {
+                print("Error: Failed to encode \(protocolName) signal");
+            }
+        } catch (e) {
+            print("Script Error: " + e.message);
+        }
+        """
+        
+        return script
     }
 }
 
