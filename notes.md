@@ -98,7 +98,7 @@ On both android and IOS, lets add help buttons on the Sampler, on convert IR but
 * Make sure tuo update default IR script on buttons IRDB, adding the 0x20 missing from the transmit command
 
 ## IOS STUFF:
-
+* Disconnect button does nothing since it reconnects automatically straight away
 
 
 ## Hardware
