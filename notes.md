@@ -87,6 +87,9 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 * Consider adding a warning when we try to retransmit on the IR RX pin, since it does seem to crash it
 * EMWaver icon instead of home icon on IOS
 * Look into if its a problem it not transmitting when we dont have half buffer on sampler, requiring multiple fills
+* Minor: add help button explaining what the convert to IR is, android and ios
+On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
+* Minor: Referesh chart after clearing it to make signal go away
 
 
 ## ANDROID STUFF:
@@ -96,9 +99,6 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 
 ## IOS STUFF:
 
-* Minor: add help button explaining what the convert to IR is, android and ios
-On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
-* Referesh chart after clearing it to make signal go away
 
 
 ## Hardware
