@@ -66,6 +66,8 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 * Make Sampler, RFID and ISM have the same gray background as the nicely done console and buttons fragments. Requires some prompting with 2.5 pro to get the same styling in. (nah)
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities (building that list bellow)
 * Make sure tuo update default IR script on buttons IRDB, adding the 0x20 missing from the transmit command
+* Clean up dependencies from old USB Serial libraries
+On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
 
 # Not Done
 
@@ -90,15 +92,8 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
 * Minor: Referesh chart after clearing it to make signal go away
 * Dark mode colors on buttons fragment are not good, border the same color ar background
-
-
-## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 * Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
-* Clean up dependencies from old USB Serial libraries
-On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
-
-## IOS STUFF:
 * Be able to change individual register values in ISM view
 * Disconnect button does nothing since it reconnects automatically straight away
 
@@ -108,16 +103,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 * Noticed on x ray reports that the USB male port pads as not aligning with the component. Also noticed that from the 2 prototype boards, one does not work in reverse cable connection. This might suggest a soldering problem. May need to draw my own footprint
 * Interestingly, currently I dont have a 5V pin on the GPIO headers. However, there is value in powering EMWaver with a battery, taking advantage of the power pins. But with only the 3V3 pin, it would not work, as the IR LEDs use 5V.
 
-## Build Commands
-
-esptool.py --chip esp32s3 merge_bin \
-  -o emwaver-v1.bin \
-  --flash_mode dio --flash_freq 40m --flash_size 4MB \
-  0x0     build/bootloader/bootloader.bin \
-  0x8000  build/partition_table/partition-table.bin \
-  0x10000 build/emwaveresp.bin
-
-## List of tests that need to pass:
+## List of tests that need to pass (and running them provides more bugs to fix):
 
 RFID:
 * Read/Write rfid cards without a issue. Edit and play around with keys and access control as per mifare protocol. Clone cards easily.
@@ -133,3 +119,13 @@ CONSOLE:
 * Must be able to access all other fuctionality through javascripts that are the same on both IOS and android. This requires functions and porting to javascript of all functionality on both sides
 
   
+
+
+## Build Commands
+
+esptool.py --chip esp32s3 merge_bin \
+  -o emwaver-v1.bin \
+  --flash_mode dio --flash_freq 40m --flash_size 4MB \
+  0x0     build/bootloader/bootloader.bin \
+  0x8000  build/partition_table/partition-table.bin \
+  0x10000 build/emwaveresp.bin
