@@ -26,11 +26,16 @@ struct ButtonsView: View {
     @State private var showingAddButtonSheet = false
     @State private var showingActionSheet = false
     @State private var actionSheetRemote: Remote?
-    @State private var showingEditButtonSheet = false
     @State private var editingButton: Remote.Button?
     @State private var editingButtonIndex: Int?
     @State private var showingExportSheet = false
     @State private var exportContent: String = ""
+    
+    // New states for alert-based editing
+    @State private var showingEditButtonSheet = false
+    @State private var editButtonName = ""
+    @State private var editButtonColor = ""
+    @State private var editButtonScript = ""
     
     // Collapsible sections state
     @State private var isRemoteListExpanded = true
@@ -77,10 +82,53 @@ struct ButtonsView: View {
                 }
             }
             .sheet(isPresented: $showingEditButtonSheet) {
-                if let button = editingButton {
-                    EditButtonView(button: button) { name, color, script in
-                        updateButton(index: editingButtonIndex ?? 0, name: name, color: color, script: script)
-                        showingEditButtonSheet = false
+                NavigationView {
+                    Form {
+                        Section(header: Text("Button Details")) {
+                            TextField("Button Name", text: $editButtonName)
+                            
+                            Text("Button Color")
+                                .font(.headline)
+                                .padding(.top, 10)
+                            
+                            HStack(spacing: 20) {
+                                ColorOptionView(title: "Normal", color: .gray, 
+                                               isSelected: editButtonColor == "normal", 
+                                               action: { editButtonColor = "normal" })
+                                
+                                ColorOptionView(title: "Red", color: .red, 
+                                               isSelected: editButtonColor == "red", 
+                                               action: { editButtonColor = "red" })
+                                
+                                ColorOptionView(title: "Green", color: .green, 
+                                               isSelected: editButtonColor == "green", 
+                                               action: { editButtonColor = "green" })
+                            }
+                            .padding(.bottom, 10)
+                        }
+                        
+                        Section(header: Text("Script")) {
+                            TextEditor(text: $editButtonScript)
+                                .frame(minHeight: 200)
+                                .font(.system(size: 14, design: .monospaced))
+                        }
+                    }
+                    .navigationTitle("Edit Button")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") {
+                                showingEditButtonSheet = false
+                            }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                if let index = editingButtonIndex, !editButtonName.isEmpty, !editButtonScript.isEmpty {
+                                    updateButton(index: index, name: editButtonName, color: editButtonColor, script: editButtonScript)
+                                }
+                                showingEditButtonSheet = false
+                            }
+                            .disabled(editButtonName.isEmpty || editButtonScript.isEmpty)
+                        }
                     }
                 }
             }
@@ -223,6 +271,13 @@ struct ButtonsView: View {
             Button("Edit") {
                 editingButton = button
                 editingButtonIndex = index
+                
+                // Initialize edit values
+                editButtonName = button.name
+                editButtonColor = button.color
+                editButtonScript = button.script
+                
+                // Show the edit sheet
                 showingEditButtonSheet = true
             }
         }
@@ -426,7 +481,7 @@ struct AddRemoteView: View {
 
 struct AddButtonView: View {
     @State private var buttonName: String = ""
-    @State private var selectedColor: String = "red"
+    @State private var selectedColor: String = "normal"
     @State private var script: String = """
 try {
     // This is a simple script to toggle GPIO1 
@@ -479,11 +534,24 @@ try {
                 Section(header: Text("Button Details")) {
                     TextField("Button Name", text: $buttonName)
                     
-                    Picker("Color", selection: $selectedColor) {
-                        Text("Red").tag("red")
-                        Text("Green").tag("green")
+                    Text("Button Color")
+                        .font(.headline)
+                        .padding(.top, 10)
+                    
+                    HStack(spacing: 20) {
+                        ColorOptionView(title: "Normal", color: .gray, 
+                                       isSelected: selectedColor == "normal", 
+                                       action: { selectedColor = "normal" })
+                        
+                        ColorOptionView(title: "Red", color: .red, 
+                                       isSelected: selectedColor == "red", 
+                                       action: { selectedColor = "red" })
+                        
+                        ColorOptionView(title: "Green", color: .green, 
+                                       isSelected: selectedColor == "green", 
+                                       action: { selectedColor = "green" })
                     }
-                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.bottom, 10)
                 }
                 
                 Section(header: Text("Script")) {
@@ -493,61 +561,6 @@ try {
                 }
             }
             .navigationTitle("Add Button")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        if !buttonName.isEmpty && !script.isEmpty {
-                            onSave(buttonName, selectedColor, script)
-                        }
-                    }
-                    .disabled(buttonName.isEmpty || script.isEmpty)
-                }
-            }
-        }
-    }
-}
-
-struct EditButtonView: View {
-    let button: Remote.Button
-    @State private var buttonName: String
-    @State private var selectedColor: String
-    @State private var script: String
-    @Environment(\.presentationMode) var presentationMode
-    var onSave: (String, String, String) -> Void
-    
-    init(button: Remote.Button, onSave: @escaping (String, String, String) -> Void) {
-        self.button = button
-        self._buttonName = State(initialValue: button.name)
-        self._selectedColor = State(initialValue: button.color)
-        self._script = State(initialValue: button.script)
-        self.onSave = onSave
-    }
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Button Details")) {
-                    TextField("Button Name", text: $buttonName)
-                    
-                    Picker("Color", selection: $selectedColor) {
-                        Text("Red").tag("red")
-                        Text("Green").tag("green")
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                }
-                
-                Section(header: Text("Script")) {
-                    TextEditor(text: $script)
-                        .frame(minHeight: 200)
-                        .font(.system(size: 14, design: .monospaced))
-                }
-            }
-            .navigationTitle("Edit Button")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
@@ -595,6 +608,42 @@ struct ExportView: View {
     }
 }
 
+// MARK: - Helper Views
+
+struct ColorOptionView: View {
+    let title: String
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        VStack {
+            ZStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? Color.blue : Color.gray, lineWidth: isSelected ? 3 : 1)
+                    )
+                
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(.white)
+                        .font(.system(size: 20, weight: .bold))
+                }
+            }
+            .onTapGesture {
+                action()
+            }
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(isSelected ? .primary : .secondary)
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview {
@@ -602,4 +651,4 @@ struct ExportView: View {
         ButtonsView()
             .environmentObject(BLEManager())
     }
-} 
+}
