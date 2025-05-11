@@ -1,6 +1,37 @@
 import SwiftUI
 import DGCharts
 import Combine // Needed for PassthroughSubject
+import UniformTypeIdentifiers // Add this for file types
+
+// MARK: - Extension for UTType
+extension UTType {
+    static var rawSignal: UTType {
+        UTType(filenameExtension: "raw") ?? .data
+    }
+}
+
+// MARK: - Signal Document type
+struct SignalDocument: FileDocument {
+    var data: Data
+    
+    init(_ data: Data) {
+        self.data = data
+    }
+    
+    static var readableContentTypes: [UTType] { [.rawSignal, .data] }
+    
+    init(configuration: ReadConfiguration) throws {
+        if let data = configuration.file.regularFileContents {
+            self.data = data
+        } else {
+            self.data = Data()
+        }
+    }
+    
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        return FileWrapper(regularFileWithContents: data)
+    }
+}
 
 struct LineChartViewController: UIViewControllerRepresentable {
     // Data to be displayed
@@ -191,6 +222,12 @@ struct SamplerView: View {
     @State private var prevRangeStart: Double = 0
     @State private var prevRangeEnd: Double = 0
     @State private var lastBufferSize: Int = 0
+    
+    // File import/export states
+    @State private var showingFileImporter = false
+    @State private var showingFileExporter = false
+    @State private var showingExportDialog = false
+    @State private var exportFileName = "signal.raw"
     
     // Match Android's PINS array exactly
     let PINS = [
@@ -393,14 +430,149 @@ struct SamplerView: View {
             }
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        clearBufferAndChart()
+                    Menu {
+                        Button(action: clearBufferAndChart) {
+                            Label("Clear", systemImage: "trash")
+                        }
+                        
+                        Divider()
+                        
+                        Button(action: { showingFileImporter = true }) {
+                            Label("Import from Files", systemImage: "square.and.arrow.down")
+                        }
+                        
+                        Button(action: {
+                            let buffer = bleManager.getBuffer()
+                            if !buffer.isEmpty {
+                                exportFileName = generateDefaultFileName()
+                                showingExportDialog = true
+                            } else {
+                                showImportExportToast("Buffer is empty, nothing to export")
+                            }
+                        }) {
+                            Label("Export to Files", systemImage: "square.and.arrow.up")
+                        }
                     } label: {
-                        Label("Clear", systemImage: "trash")
+                        Image(systemName: "ellipsis.circle")
+                            .imageScale(.large)
                     }
                 }
             }
+            .fileImporter(
+                isPresented: $showingFileImporter,
+                allowedContentTypes: [.rawSignal, .data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        importSignalFromFile(url: url)
+                    }
+                case .failure(let error):
+                    print("Error importing file: \(error.localizedDescription)")
+                    showImportExportToast("Error importing file: \(error.localizedDescription)")
+                }
+            }
+            .fileExporter(
+                isPresented: $showingFileExporter,
+                document: SignalDocument(bleManager.getBuffer()),
+                contentType: .rawSignal,
+                defaultFilename: exportFileName
+            ) { result in
+                switch result {
+                case .success(let url):
+                    print("Signal exported to: \(url.lastPathComponent)")
+                    showImportExportToast("Signal exported successfully")
+                case .failure(let error):
+                    print("Error exporting signal: \(error.localizedDescription)")
+                    showImportExportToast("Error exporting signal: \(error.localizedDescription)")
+                }
+            }
+            .alert("Export Signal", isPresented: $showingExportDialog) {
+                TextField("Filename", text: $exportFileName)
+                
+                Button("Cancel", role: .cancel) {
+                    // Just dismiss
+                }
+                
+                Button("Export") {
+                    // Add .raw extension if not present
+                    if !exportFileName.lowercased().hasSuffix(".raw") {
+                        exportFileName += ".raw"
+                    }
+                    showingFileExporter = true
+                }
+            } message: {
+                Text("Enter a name for the signal file")
+            }
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    // Generate a default filename with timestamp
+    private func generateDefaultFileName() -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+        let dateString = dateFormatter.string(from: Date())
+        
+        // Get pin name
+        let pinName = PINS[selectedPinIndex].replacingOccurrences(of: " ", with: "_")
+        let pinString = pinName.replacingOccurrences(of: "(", with: "").replacingOccurrences(of: ")", with: "")
+        
+        return "signal_\(pinString)_\(dateString).raw"
+    }
+    
+    // MARK: - File Operations
+    
+    func importSignalFromFile(url: URL) {
+        do {
+            // Start accessing security-scoped resource
+            guard url.startAccessingSecurityScopedResource() else {
+                print("Failed to access security-scoped resource")
+                showImportExportToast("Failed to access file")
+                return
+            }
+            
+            defer {
+                // Make sure to release the security-scoped resource when done
+                url.stopAccessingSecurityScopedResource()
+            }
+            
+            // Read the file data
+            let data = try Data(contentsOf: url)
+            
+            // Load the data into the buffer
+            bleManager.loadBuffer(data: data)
+            
+            // Refresh the chart
+            refreshChart()
+            
+            let filename = url.lastPathComponent
+            print("Imported signal from: \(filename)")
+            showImportExportToast("Imported signal: \(filename)")
+        } catch {
+            print("Error importing signal: \(error.localizedDescription)")
+            showImportExportToast("Error importing signal")
+        }
+    }
+    
+    // Helper to show toast messages for file operations
+    private func showImportExportToast(_ message: String) {
+        #if os(iOS)
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let controller = windowScene.windows.first?.rootViewController else {
+            return
+        }
+        
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        controller.present(alert, animated: true)
+        
+        // Dismiss after short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            alert.dismiss(animated: true)
+        }
+        #endif
     }
     
     // MARK: - Chart Functions
@@ -463,12 +635,13 @@ struct SamplerView: View {
     func startRecording() {
         guard let pinNumber = getSelectedPinNumber() else { return }
         
-        // Use the updated "sample [pin]" command format
-        let commandString = "sample \(pinNumber)"
-        if let commandData = commandString.data(using: .utf8) {
-            bleManager.sendPacket(commandData)
-            isRecording = true
-        }
+        // Create a byte array directly with the command and pin as a raw byte value
+        var commandBytes = Data("sample ".utf8)
+        // Append the actual pin number as a single byte, not as ASCII
+        commandBytes.append(pinNumber)
+        
+        bleManager.sendPacket(commandBytes)
+        isRecording = true
     }
 
     func stopRecording() {
@@ -488,18 +661,19 @@ struct SamplerView: View {
         let bufferLength = bleManager.getBuffer().count
         print("BEFORE_RETRANSMIT: Buffer contains \(bufferLength) bytes = \(bufferLength * 8) bits")
         
-        // Use the updated "transmit [pin]" command format
-        let commandString = "transmit \(pinNumber)"
-        if let commandData = commandString.data(using: .utf8) {
-            bleManager.sendPacket(commandData)
-            
-            // Call transmitBuffer immediately - Android doesn't have a delay here
-            bleManager.transmitBuffer()
-            
-            // Log buffer state after transmission
-            let postTransmitLength = bleManager.getBuffer().count
-            print("AFTER_RETRANSMIT: Buffer contains \(postTransmitLength) bytes = \(postTransmitLength * 8) bits")
-        }
+        // Create a byte array directly with the command and pin as a raw byte value
+        var commandBytes = Data("transmit ".utf8)
+        // Append the actual pin number as a single byte, not as ASCII
+        commandBytes.append(pinNumber)
+        
+        bleManager.sendPacket(commandBytes)
+        
+        // Call transmitBuffer immediately - Android doesn't have a delay here
+        bleManager.transmitBuffer()
+        
+        // Log buffer state after transmission
+        let postTransmitLength = bleManager.getBuffer().count
+        print("AFTER_RETRANSMIT: Buffer contains \(postTransmitLength) bytes = \(postTransmitLength * 8) bits")
     }
 
     func getSelectedPinNumber() -> UInt8? {
@@ -573,6 +747,9 @@ struct SamplerView: View {
 
     func clearBufferAndChart() {
         bleManager.clearBuffer()
+        lastBufferSize = 0 // Reset last buffer size to force chart refresh
+        refreshChart() // Refresh the chart to clear it
+        showImportExportToast("Buffer cleared")
     }
 }
 
