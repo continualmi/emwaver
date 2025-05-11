@@ -1,6 +1,7 @@
 import SwiftUI
 import JavaScriptCore
 import UniformTypeIdentifiers
+import Combine
 
 // MARK: - Extension for UTType
 extension UTType {
@@ -184,6 +185,46 @@ class JSUtils: NSObject, UtilsJSExport {
 // Extension to make BLEManager JavaScript-compatible
 extension BLEManager: BLEManagerJSExport {}
 
+// MARK: - TextEditor with keyboard toolbar
+struct KeyboardToolbarTextEditor: View {
+    @Binding var text: String
+    @State private var showKeyboard = false
+    @FocusState private var isFocused: Bool
+    var font: Font
+    
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            TextEditor(text: $text)
+                .font(font)
+                .disableAutocorrection(true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .focused($isFocused)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            isFocused = false
+                        }
+                    }
+                }
+                .onChange(of: isFocused) { focused in
+                    showKeyboard = focused
+                }
+            
+            // Optional background tap gesture to dismiss keyboard
+            if showKeyboard {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onTapGesture {
+                        isFocused = false
+                    }
+                    .ignoresSafeArea()
+            }
+        }
+    }
+}
+
 struct ConsoleView: View {
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
@@ -366,9 +407,7 @@ struct ConsoleView: View {
         DisclosureGroup(
             isExpanded: $isScriptEditorExpanded,
             content: {
-                TextEditor(text: $scriptContent)
-                    .font(.system(.body, design: .monospaced))
-                    .disableAutocorrection(true)
+                KeyboardToolbarTextEditor(text: $scriptContent, font: .system(.body, design: .monospaced))
                     .padding(4)
                     .background(Color(.systemGray6))
                     .cornerRadius(8)

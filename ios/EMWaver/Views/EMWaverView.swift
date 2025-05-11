@@ -8,6 +8,7 @@ struct EMWaverView: View {
     @State private var serialMonitorText = "" // Local state for serial monitor
     @State private var jsEngine: JavaScriptEngine? // Add reference to JavaScriptEngine
     @State private var firmwareVersion = "Unknown" // Add firmware version state
+    @FocusState private var isCommandFieldFocused: Bool
 
     // Use a timer publisher without autoconnect
     private let timerPublisher = Timer.publish(every: 0.1, on: .main, in: .common)
@@ -81,9 +82,18 @@ struct EMWaverView: View {
                             TextField("e.g., version[0x00][255][0xFF]", text: $commandInput)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .padding(.trailing, 8)
+                                .focused($isCommandFieldFocused)
+                                .submitLabel(.send)
+                                .onSubmit {
+                                    if bleManager.isConnected {
+                                        sendPacket()
+                                    }
+                                    isCommandFieldFocused = false
+                                }
                             
                             Button(action: {
                                 sendPacket()
+                                isCommandFieldFocused = false
                             }) {
                                 HStack {
                                     Image(systemName: "paperplane.fill")
@@ -100,6 +110,14 @@ struct EMWaverView: View {
                     .padding(.vertical, 8)
                 }
                 .padding(.horizontal)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            isCommandFieldFocused = false
+                        }
+                    }
+                }
                 
                 // Serial Monitor Section
                 GroupBox(label: Label("Serial Monitor", systemImage: "doc.text").font(.headline)) {
