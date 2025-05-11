@@ -89,6 +89,8 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
 * Need to understand the current BLE command structure on IOS, in order to document it etc
 
+* To ensure compatibility between Android and IOS scriptng, need to ensure all scripts that run on IOS run the same on Android
+
 
 ## Hardware
 

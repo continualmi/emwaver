@@ -750,7 +750,7 @@ struct ConsoleView: View {
                 print("Encoding " + protocol + " signal: device=" + device + ", function=" + funcCode);
                 var timings = IRService.encodeIR(protocol, device, subdevice, funcCode);
                 
-                if (timings) {
+                if (timings && timings.length > 0) {
                     print("Success! Generated " + timings.length + " timing values");
                     
                     // Show the first few timings
@@ -764,6 +764,25 @@ struct ConsoleView: View {
                     
                     print(output);
                     print("Total sequence length: " + timings.length);
+                    
+                    // Convert timings to binary signal
+                    print("Converting timings to binary signal...");
+                    var signal = Utils.convertTimingsToBinary(timings);
+                    print("Binary signal size: " + signal.length + " bytes");
+                    
+                    // Apply IR carrier modulation
+                    print("Applying 38kHz IR carrier modulation...");
+                    var irSignal = Utils.convertToIRBuffer(signal);
+                    print("IR signal size: " + irSignal.length + " bytes");
+                    
+                    // Define the transmit command for IR
+                    var transmitCommand = new Uint8Array([
+                        0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x04 // "transmit" + type 4 (IR)
+                    ]);
+                    
+                    print("To send this signal:");
+                    print("1. BLEService.sendPacket(irSignal);");
+                    print("2. BLEService.sendPacket(transmitCommand);");
                 } else {
                     print("Error: Failed to encode " + protocol + " signal");
                 }
@@ -772,6 +791,10 @@ struct ConsoleView: View {
                 var samsung = IRService.encodeIR(IRService.PROTOCOL_SAMSUNG, 7, -1, 11);
                 if (samsung) {
                     print("Success! Generated " + samsung.length + " timing values for Samsung");
+                    
+                    // Convert and show payload size
+                    var samsungSignal = Utils.convertTimingsToBinary(samsung);
+                    print("Samsung binary signal size: " + samsungSignal.length + " bytes");
                 } else {
                     print("Error: Failed to encode Samsung signal");
                 }
