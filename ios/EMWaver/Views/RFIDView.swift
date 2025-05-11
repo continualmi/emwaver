@@ -28,122 +28,124 @@ struct RFIDView: View {
     ]
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Block Address
-                VStack(alignment: .leading) {
-                    Text("Block Address")
-                        .font(.headline)
-                    TextField("Block Address", text: $blockAddress)
-                        .keyboardType(.asciiCapable)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .onChange(of: blockAddress) { newValue in
-                            blockAddress = formatHexInput(newValue, maxLength: 2)
-                        }
-                }
-                
-                // Authentication Mode
-                VStack(alignment: .leading) {
-                    Text("Authentication Mode")
-                        .font(.headline)
-                    Picker("Auth Mode", selection: $authMode) {
-                        Text("Key A").tag(0)
-                        Text("Key B").tag(1)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                }
-                
-                // Key Input
-                VStack(alignment: .leading) {
-                    Text("Key (6 bytes)")
-                        .font(.headline)
-                    
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                        ForEach(0..<6, id: \.self) { index in
-                            TextField("", text: $keyInputs[index])
-                                .keyboardType(.asciiCapable)
-                                .multilineTextAlignment(.center)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .onChange(of: keyInputs[index]) { newValue in
-                                    keyInputs[index] = formatHexInput(newValue, maxLength: 2)
-                                }
-                        }
-                    }
-                }
-                
-                // Combined Data
-                VStack(alignment: .leading) {
-                    Text("Data (16 bytes)")
-                        .font(.headline)
-                    TextEditor(text: $combinedData)
-                        .frame(height: 80)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                        )
-                        .onChange(of: combinedData) { newValue in
-                            combinedData = formatHexInput(newValue, maxLength: 47) // 16 bytes with spaces
-                        }
-                }
-                
-                // Buttons
-                HStack {
-                    Button(action: sendReadCommand) {
-                        HStack {
-                            Image(systemName: "arrow.down.doc.fill")
-                            Text("Read")
-                        }
-                        .frame(minWidth: 0, maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Block Address
+                    VStack(alignment: .leading) {
+                        Text("Block Address")
+                            .font(.headline)
+                        TextField("Block Address", text: $blockAddress)
+                            .keyboardType(.asciiCapable)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .onChange(of: blockAddress) { newValue in
+                                blockAddress = formatHexInput(newValue, maxLength: 2)
+                            }
                     }
                     
-                    Button(action: sendWriteCommand) {
-                        HStack {
-                            Image(systemName: "arrow.up.doc.fill")
-                            Text("Write")
+                    // Authentication Mode
+                    VStack(alignment: .leading) {
+                        Text("Authentication Mode")
+                            .font(.headline)
+                        Picker("Auth Mode", selection: $authMode) {
+                            Text("Key A").tag(0)
+                            Text("Key B").tag(1)
                         }
-                        .frame(minWidth: 0, maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                    
+                    // Key Input
+                    VStack(alignment: .leading) {
+                        Text("Key (6 bytes)")
+                            .font(.headline)
+                        
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                            ForEach(0..<6, id: \.self) { index in
+                                TextField("", text: $keyInputs[index])
+                                    .keyboardType(.asciiCapable)
+                                    .multilineTextAlignment(.center)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .onChange(of: keyInputs[index]) { newValue in
+                                        keyInputs[index] = formatHexInput(newValue, maxLength: 2)
+                                    }
+                            }
+                        }
+                    }
+                    
+                    // Combined Data
+                    VStack(alignment: .leading) {
+                        Text("Data (16 bytes)")
+                            .font(.headline)
+                        TextEditor(text: $combinedData)
+                            .frame(height: 80)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            )
+                            .onChange(of: combinedData) { newValue in
+                                combinedData = formatHexInput(newValue, maxLength: 47) // 16 bytes with spaces
+                            }
+                    }
+                    
+                    // Buttons
+                    HStack {
+                        Button(action: sendReadCommand) {
+                            HStack {
+                                Image(systemName: "arrow.down.doc.fill")
+                                Text("Read")
+                            }
+                            .frame(minWidth: 0, maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        
+                        Button(action: sendWriteCommand) {
+                            HStack {
+                                Image(systemName: "arrow.up.doc.fill")
+                                Text("Write")
+                            }
+                            .frame(minWidth: 0, maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                    }
+                    
+                    // Results
+                    if !resultText.isEmpty {
+                        Text(resultText)
+                            .padding()
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                            .foregroundColor(resultColor)
                     }
                 }
-                
-                // Results
-                if !resultText.isEmpty {
-                    Text(resultText)
-                        .padding()
-                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                        .foregroundColor(resultColor)
+                .padding()
+                .navigationTitle("RFID")
+                .navigationBarTitleDisplayMode(.inline)
+                .onAppear {
+                    // Add this code for opaque navigation bar
+                    let appearance = UINavigationBarAppearance()
+                    appearance.configureWithOpaqueBackground()
+                    UINavigationBar.appearance().standardAppearance = appearance
+                    UINavigationBar.appearance().compactAppearance = appearance
+                    UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                    // End of added code
                 }
-            }
-            .padding()
-            .navigationTitle("RFID")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                // Add this code for opaque navigation bar
-                let appearance = UINavigationBarAppearance()
-                appearance.configureWithOpaqueBackground()
-                UINavigationBar.appearance().standardAppearance = appearance
-                UINavigationBar.appearance().compactAppearance = appearance
-                UINavigationBar.appearance().scrollEdgeAppearance = appearance
-                // End of added code
-            }
-            .alert(alertTitle, isPresented: $showingResultAlert) {
-                Button("OK", role: .cancel) { }
-                if alertHasDataToCopy {
-                    Button("Copy to Write") {
-                        combinedData = dataForCopy
+                .alert(alertTitle, isPresented: $showingResultAlert) {
+                    Button("OK", role: .cancel) { }
+                    if alertHasDataToCopy {
+                        Button("Copy to Write") {
+                            combinedData = dataForCopy
+                        }
                     }
+                } message: {
+                    Text(alertMessage)
                 }
-            } message: {
-                Text(alertMessage)
             }
         }
     }
