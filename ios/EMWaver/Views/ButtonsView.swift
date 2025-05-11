@@ -57,12 +57,14 @@ struct ButtonsView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 8) {
-                remoteListDisclosureGroup
-                buttonGridDisclosureGroup
-                Spacer()
+            ScrollView {
+                VStack(spacing: 8) {
+                    remoteListDisclosureGroup
+                    buttonGridDisclosureGroup
+                    Spacer()
+                }
+                .padding()
             }
-            .padding()
             .navigationTitle("Buttons")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

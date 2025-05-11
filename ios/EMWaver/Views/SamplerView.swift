@@ -722,7 +722,8 @@ struct SamplerView: View {
         
         // Refresh the chart
         refreshChart()
-        
+
+        showImportExportToast("Signal converted to 38kHz IR format")
         print("Signal converted to precise 38kHz IR carrier")
     }
 
