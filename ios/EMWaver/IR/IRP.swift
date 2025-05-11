@@ -95,7 +95,7 @@ class IRP {
     
     init() {
         // Initialize value map for A-Z
-        for c in "A"..."Z" {
+        for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
             value[c] = 0 // Default value 0
         }
         

@@ -108,5 +108,7 @@ esptool.py --chip esp32s3 merge_bin \
 
 RFID:
 * Read/Write rfid cards without a issue. Edit and play around with keys and access control as per mifare protocol. Clone cards easily.
-
+ISM:
+* Capture Tesla signal, Retransmit, check RTL-SDR for integrity
+* On console scripts, must be able to do the same but packetized Tesla signal
   

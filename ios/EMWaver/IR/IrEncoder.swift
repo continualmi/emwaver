@@ -657,33 +657,33 @@ class IrEncoder {
         - function: The function code (F)
      - Returns: An array of Doubles representing the pulse/gap sequence in microseconds, or nil if encoding fails
      */
-    static func encodeIR(protocol: String, device: Int, subdevice: Int, function: Int) -> [Double]? {
-        guard !`protocol`.isEmpty else {
+    static func encodeIR(protocol protocolName: String, device: Int, subdevice: Int, function: Int) -> [Double]? {
+        guard !protocolName.isEmpty else {
             print("Error: Protocol name cannot be null or empty.")
             return nil
         }
         
         var irpDefinitionBuilder = ""
-        var baseProtocolName = `protocol`
+        var baseProtocolName = protocolName
         var baseDefinition: String?
         
         // --- Handle Protocol Lookup and Special Cases ---
-        if let match = rc6Pattern.firstMatch(in: `protocol`, options: [], range: NSRange(location: 0, length: `protocol`.count)) {
+        if let match = rc6Pattern.firstMatch(in: protocolName, options: [], range: NSRange(location: 0, length: protocolName.count)) {
             // Extract mode and length for RC6
-            if let modeRange = Range(match.range(at: 1), in: `protocol`),
-               let lengthRange = Range(match.range(at: 2), in: `protocol`),
-               let m = Int(`protocol`[modeRange]),
-               let l = Int(`protocol`[lengthRange]) {
+            if let modeRange = Range(match.range(at: 1), in: protocolName),
+               let lengthRange = Range(match.range(at: 2), in: protocolName),
+               let m = Int(protocolName[modeRange]),
+               let l = Int(protocolName[lengthRange]) {
                 // Prepend Define M=... and Define L=... to the base rc6-M-L definition
                 irpDefinitionBuilder += "Define M=\(m)\nDefine L=\(l)\n"
                 baseProtocolName = "rc6-M-L" // Use the template key
             } else {
-                print("Error: Invalid numbers in RC6-M-L protocol name: \(`protocol`)")
+                print("Error: Invalid numbers in RC6-M-L protocol name: \(protocolName)")
                 return nil
             }
-        } else if `protocol`.lowercased() == "nec" {
+        } else if protocolName.lowercased() == "nec" {
             baseProtocolName = "nec2" // Alias used in the original Java code
-        } else if `protocol`.lowercased() == "necx" {
+        } else if protocolName.lowercased() == "necx" {
             baseProtocolName = "NECx2" // Alias used in the original Java code
         }
         
@@ -695,14 +695,14 @@ class IrEncoder {
             for (key, definition) in protocolDefinitions {
                 if key.lowercased() == baseProtocolName.lowercased() {
                     baseDefinition = definition
-                    print("Used case-insensitive match for protocol: \(`protocol`) -> \(key)")
+                    print("Used case-insensitive match for protocol: \(protocolName) -> \(key)")
                     break
                 }
             }
         }
         
         guard let baseDefinition = baseDefinition else {
-            print("Error: Unknown protocol: \(`protocol`) (searched for: \(baseProtocolName))")
+            print("Error: Unknown protocol: \(protocolName) (searched for: \(baseProtocolName))")
             return nil
         }
         
@@ -721,7 +721,7 @@ class IrEncoder {
         
         // Parse the combined definition
         if !irp.readIrpString(irpDefinitionBuilder) {
-            print("Error: Failed to parse IRP definition for protocol: \(`protocol`)")
+            print("Error: Failed to parse IRP definition for protocol: \(protocolName)")
             print("--- Parsed Definition ---:")
             print(irpDefinitionBuilder)
             print("------------------------")
@@ -732,7 +732,7 @@ class IrEncoder {
         let sequence = irp.generate(device, subdevice, function)
         
         if sequence.isEmpty {
-            print("Error: Generation failed or produced empty sequence for protocol: \(`protocol`)")
+            print("Error: Generation failed or produced empty sequence for protocol: \(protocolName)")
             return nil
         }
         

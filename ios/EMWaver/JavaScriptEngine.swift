@@ -8,6 +8,7 @@ typealias JSPrintCallback = (String) -> Void
 class JavaScriptEngine {
     private var context: JSContext?
     private var cc1101Wrapper: CC1101Wrapper?
+    private var irEncoderWrapper: IrEncoderWrapper?
     private var bleManager: BLEManager
     private var printCallback: JSPrintCallback?
     
@@ -131,6 +132,47 @@ class JavaScriptEngine {
             CC1101.MDMCFG2 = 0x12;
             CC1101.DEVIATN = 0x15;
             CC1101.PATABLE = 0x3E;
+        """)
+    }
+    
+    func setupIR() {
+        guard let context = context else { return }
+        
+        // Create the IR encoder wrapper
+        irEncoderWrapper = IrEncoderWrapper()
+        
+        // Create the IR encoding function for JavaScript
+        let encodeIRFunc: @convention(block) (String, Int, Int, Int) -> JSValue? = { protocolName, deviceId, subdeviceId, functionCode in
+            guard let irEncoderWrapper = self.irEncoderWrapper,
+                  let sequence = irEncoderWrapper.encodeIR(protocol: protocolName, device: deviceId, subdevice: subdeviceId, function: functionCode) else {
+                return JSValue(nullIn: context)
+            }
+            
+            // Convert the Double array to a JavaScript array
+            let jsArray = JSValue(newArrayIn: context)
+            for (index, value) in sequence.enumerated() {
+                jsArray?.setObject(value, atIndexedSubscript: Int(index))
+            }
+            return jsArray
+        }
+        
+        // Create an IR service object for JavaScript
+        let irService = JSValue(newObjectIn: context)
+        irService?.setValue(encodeIRFunc, forProperty: "encodeIR")
+        
+        // Expose the IR service to JavaScript
+        context.setObject(irService, forKeyedSubscript: "IRService" as NSString)
+        
+        // Add some common protocol definitions directly to the JS context
+        context.evaluateScript("""
+            // Common IR protocols
+            IRService.PROTOCOL_NEC = "nec1";
+            IRService.PROTOCOL_RC5 = "rc5";
+            IRService.PROTOCOL_RC6 = "rc6";
+            IRService.PROTOCOL_SONY = "sony";
+            IRService.PROTOCOL_SAMSUNG = "Samsung20";
+            IRService.PROTOCOL_JVC = "jvc";
+            IRService.PROTOCOL_DENON = "denon";
         """)
     }
     

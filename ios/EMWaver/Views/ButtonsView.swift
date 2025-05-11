@@ -518,6 +518,9 @@ struct ButtonsView: View {
             print("JS: \(message)")
         }
         
+        // Set up IR encoder
+        jsEngine?.setupIR()
+        
         if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             jsEngine?.registerLoadFunction(scriptDirectoryURL: docDir)
         }
