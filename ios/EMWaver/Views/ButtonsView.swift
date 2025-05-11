@@ -787,6 +787,7 @@ struct ButtonsView: View {
         let script = """
         // Script for \(protocolName) IR signal
         try {
+            // Encode the IR signal
             var timings = IRService.encodeIR("\(protocolName)", \(device), \(subdevice), \(function));
             
             if (timings && timings.length > 0) {
@@ -795,13 +796,16 @@ struct ButtonsView: View {
                 // Convert timings to binary signal
                 var signal = Utils.convertTimingsToBinary(timings);
                 
+                // Apply IR carrier modulation (38kHz)
+                var irSignal = Utils.convertToIRBuffer(signal);
+                
                 // Define the transmit command for IR
                 var transmitCommand = new Uint8Array([
                     0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x04 // "transmit" + type 4 (IR)
                 ]);
                 
                 // Send the IR signal
-                BLEService.sendPacket(signal);
+                BLEService.sendPacket(irSignal);
                 BLEService.sendPacket(transmitCommand);
                 
                 print("Successfully transmitted \(protocolName) IR signal");

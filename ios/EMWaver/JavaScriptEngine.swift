@@ -37,9 +37,64 @@ class JavaScriptEngine {
         }
         context.setObject(printFunc, forKeyedSubscript: "print" as NSString)
         
-        // Create utilities
-        let utils = JSUtils()
-        context.setObject(utils, forKeyedSubscript: "Utils" as NSString)
+        // Create simple utilities for JavaScript
+        let jsUtils = JSUtils()
+        context.setObject(jsUtils, forKeyedSubscript: "Utils" as NSString)
+        
+        // Create more advanced Utils for IR conversion
+        let utils = Utils()
+        
+        // Register convertTimingsToBinary function
+        let convertTimingsToBinaryFunc: @convention(block) ([Double]) -> JSValue = { timings in
+            let binaryData = utils.convertTimingsToBinary(timings)
+            
+            // Convert to Uint8Array for JavaScript
+            let jsArrayBuffer = JSValue(object: (binaryData as NSData), in: context)
+            
+            if let uint8ArrayConstructor = context.globalObject.forProperty("Uint8Array"),
+               let jsArrayBuffer = jsArrayBuffer {
+                return uint8ArrayConstructor.construct(withArguments: [jsArrayBuffer])
+            } else {
+                self.printCallback?("Error: Unable to create Uint8Array from binary data")
+                return JSValue(nullIn: context)
+            }
+        }
+        
+        // Register convertToIRBuffer function
+        let convertToIRBufferFunc: @convention(block) (JSValue) -> JSValue = { jsValue in
+            // Convert the JavaScript Uint8Array to Swift Data
+            var byteArray = [UInt8]()
+            
+            if let length = jsValue.forProperty("length").toNumber()?.intValue {
+                for i in 0..<length {
+                    if let byteValue = jsValue.atIndex(i)?.toNumber()?.uint8Value {
+                        byteArray.append(byteValue)
+                    }
+                }
+            }
+            
+            let inputData = Data(byteArray)
+            let irData = utils.convertToIRBuffer(inputData)
+            
+            // Convert back to JavaScript Uint8Array
+            let jsArrayBuffer = JSValue(object: (irData as NSData), in: context)
+            
+            if let uint8ArrayConstructor = context.globalObject.forProperty("Uint8Array"),
+               let jsArrayBuffer = jsArrayBuffer {
+                return uint8ArrayConstructor.construct(withArguments: [jsArrayBuffer])
+            } else {
+                self.printCallback?("Error: Unable to create Uint8Array from IR data")
+                return JSValue(nullIn: context)
+            }
+        }
+        
+        // Register with JavaScript Utils object
+        if let jsUtilsObject = context.globalObject.forProperty("Utils") {
+            jsUtilsObject.setObject(convertTimingsToBinaryFunc, forKeyedSubscript: "convertTimingsToBinary" as NSString)
+            jsUtilsObject.setObject(convertToIRBufferFunc, forKeyedSubscript: "convertToIRBuffer" as NSString)
+        } else {
+            self.printCallback?("Error: Unable to access Utils object in JavaScript context")
+        }
         
         // Create simple array wrapper for sending packets
         let sendPacket: @convention(block) (JSValue) -> Void = { jsValue in
