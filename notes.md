@@ -111,4 +111,10 @@ RFID:
 ISM:
 * Capture Tesla signal, Retransmit, check RTL-SDR for integrity
 * On console scripts, must be able to do the same but packetized Tesla signal
+* Must be able to change individual registers on ism view. try one that we can verify with certainty that it worked
+IR:
+* Record and retransmit IR signals after conversion (already working)
+* Import a toshiba tv remote and test (already working)
+USB: 
+* Must be able to send various characters such as CTRL, SHIFT, etc. Must have a working Never gonna give you up script
   
