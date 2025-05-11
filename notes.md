@@ -58,6 +58,9 @@ On the android side, we ported the encodeIR logic into Java, which came from a r
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 On android, on the Buttons fragment, we have an option to load remotes from IRDB, which works well. Lets do that on IOS as well, adding it to the Buttons view. Notice how it works on android. We take a link from the github, and then pull the remote from there, creating the final json with all the scripts. Each button has a specific script that encodes the signal into byte form, and then sends it over using the same routine we have on the sampler transmit, and selecting the correct GPIO.
 * on buttons, need to fix the script to send a single code, and remove the test infrared scripts from console
+* Fix on buttons view, when we have too many buttons, the UX becomes unusable
+* Add feedback to Convert to IR button
+* Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
 
 # Not Done
 
@@ -85,6 +88,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 * EMWaver icon instead of home icon on IOS
 * Look into if its a problem it not transmitting when we dont have half buffer on sampler, requiring multiple fills
 
+
 ## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 * Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
@@ -92,11 +96,8 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 
 ## IOS STUFF:
 
-* Fix on buttons view, when we have too many buttons, the UX becomes unusable
-* Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
 * Minor: add help button explaining what the convert to IR is, android and ios
 On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
-* Add feedback to Convert to IR button
 * Referesh chart after clearing it to make signal go away
 
 
