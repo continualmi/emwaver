@@ -46,8 +46,11 @@
 * ISM Fragment should show registers immediatly, remove the "actions" ui
 * Add versioning to IOS and fix EMWaver fragment
 * Need to fix the freezing that happens when we are loading the registers on ISM View
+* Fix the scrolling on Sampler view not working if finger on charts
+* Editing keys on Console View does not work, the page it brings up is blank
 
-## Not Done
+
+# Not Done
 
 * Retransmission over and over on iOS also fails a bit, needs a bit more work.
 * Settings fragment also needs to have some stuff, not sure what
@@ -63,25 +66,23 @@
 * Need to find a way to cross check all functionality, like see if editng settings in cc1101 is working, and writing rfid cards etc. Need a set of compreensive testing that targets all possibilities
 * Just need to test the app without debuggin mode to avoid hangs, see if it rolls good then
 * Clean up dependencies from old USB Serial libraries
+On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
 
 
-ANDROID STUFF:
+## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
 * Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
 
-IOS STUFF:
-* Need to understand the current BLE command structure on IOS, in order to document it etc
-* Fix the scrolling on Sampler view not working if finger on charts
-* Editing keys on Console View does not work, the page it brings up is blank
-editing the keys on the console view does not work. when we press the edit button, a blank page comes up. maybe we can use , like in android, a simple IOS equivalent of the alert? 
+## IOS STUFF:
 * Implement Load From Storage on IOS, both Console and Buttons
 On console and buttons fragments on android, we have a way to save files and load them from storage, be it signals or scripts. On IOS, is this possible to achieve? 
 * Implement encodeIR logic, ported from android
 On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
-* Figure out how to deal with external storage in IOS, for loading external scripts and etc.
+On android, on the Buttons fragment, we have an option to load remotes from IRDB, which works well. Lets do that on IOS as well, adding it to the Buttons view
 * Minor: add help button explaining what the convert to IR is, android and ios
-
+On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
+* Need to understand the current BLE command structure on IOS, in order to document it etc
 
 ## Hardware
 
