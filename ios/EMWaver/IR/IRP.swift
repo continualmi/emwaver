@@ -108,6 +108,17 @@ class IRP {
     
     // MARK: - Utility Methods
     
+    /// Converts a Double to Int, matching C++ behavior by truncating
+    /// This is crucial for matching C++ implementation which uses (int)double casts
+    @inline(__always)
+    private func cppStyleInt(_ d: Double) -> Int {
+        // C++ behavior: truncate to int range
+        if !d.isFinite { return 0 }
+        if d >= Double(Int.max) { return Int.max }
+        if d <= Double(Int.min) { return Int.min }
+        return Int(d)
+    }
+    
     /// Reverses the lower 32 bits of a UInt64 (equivalent to C++ unsigned int reverse)
     private func reverseBits(_ number: UInt64) -> UInt64 {
         var n = number
@@ -421,22 +432,13 @@ class IRP {
             _ = state.consume() // Consume '~'
             result = parseVal(state, precedence: .unary)
             
-            // Apply bitwise NOT
-            // Safely convert to UInt64, handling large double values
-            if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) {
-                let intVal = UInt64(result.val)
-                if result.bits > 0 {
-                    let inverted = ~intVal
-                    result.val = Double(inverted & mask[result.bits]) // Apply mask
-                } else {
-                    // Bitwise NOT on non-bitfield numbers is standard integer NOT
-                    result.val = Double(~intVal)
-                    result.bits = 0 // Result is not a bitfield
-                }
-            } else {
-                print("Warning: Double value too large for UInt64 conversion in NOT operation")
-                // If we can't perform NOT, treat as a simple value
-                result.bits = 0
+            // Apply bitwise NOT - in C++ this is implemented as -(val+1)
+            result.val = -(result.val + 1)
+            
+            // If it's a bitfield, apply the mask
+            if result.bits > 0 {
+                let intVal = cppStyleInt(result.val)
+                result.val = Double(intVal & Int(mask[result.bits]))
             }
         } else if startChar == "(" {
             _ = state.consume() // Consume '('
@@ -495,15 +497,10 @@ class IRP {
                 _ = state.consume()
                 v2 = parseVal(state, precedence: nextPrecedence)
                 
-                // Safely convert to UInt64, handling large double values
-                if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) && 
-                   v2.val.isFinite && v2.val >= 0 && v2.val < Double(UInt64.max) {
-                    result.val = Double(UInt64(result.val) ^ UInt64(v2.val))
-                } else {
-                    print("Warning: Double value too large for UInt64 conversion in XOR operation")
-                    // If we can't perform XOR, treat as a simple value
-                    result.bits = 0
-                }
+                // XOR operation - in C++ this is done with direct int casts
+                let intVal1 = cppStyleInt(result.val)
+                let intVal2 = cppStyleInt(v2.val)
+                result.val = Double(intVal1 ^ intVal2)
                 
                 // Bit length propagation (take max bits if one is defined)
                 if result.bits > 0 && (v2.bits <= 0 || v2.bits > result.bits) {
@@ -522,43 +519,28 @@ class IRP {
                     _ = state.consume() // Consume second ':'
                     v2 = parseVal(state, precedence: nextPrecedence) // Parse shift amount
                     
-                    // Safely convert to UInt64, handling large double values
-                    if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) && 
-                       v2.val.isFinite && v2.val >= 0 && v2.val < Double(UInt64.max) {
-                        result.val = Double(UInt64(result.val) >> UInt64(v2.val))
-                    } else {
-                        print("Warning: Double value too large for UInt64 conversion in shift operation")
-                        // If we can't perform shift, just use zero
-                        result.val = 0
-                    }
+                    // C++ uses direct int casts for shifting
+                    let intVal = cppStyleInt(result.val)
+                    let shiftAmount = cppStyleInt(v2.val)
+                    result.val = Double(intVal >> shiftAmount)
                 }
                 
                 if result.bits < 0 { // Negative bits indicates reversal
                     result.bits = -result.bits
                     if result.bits > 0 && result.bits <= 32 {
-                        // Safely convert to UInt64, handling large double values
-                        if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) {
-                            result.val = Double(reverseBits(UInt64(result.val)) >> UInt64(32 - result.bits))
-                        } else {
-                            print("Warning: Double value too large for UInt64 conversion in reversal operation")
-                            result.val = 0
-                        }
+                        // In C++, it casts directly to int before reversing
+                        let intVal = UInt32(cppStyleInt(result.val))
+                        let reversed = reverseBits(UInt64(intVal))
+                        result.val = Double(reversed >> UInt64(32 - result.bits))
                     } else {
                         print("Warning: Invalid bit count for reversal: \(result.bits)")
                     }
                 }
                 
-                // Apply mask
+                // Apply mask - C++ uses direct int cast
                 if result.bits > 0 && result.bits < mask.count {
-                    // More robust safety check for UInt64 conversion
-                    if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) {
-                        // Safe to convert
-                        result.val = Double(UInt64(result.val) & mask[result.bits])
-                    } else {
-                        print("Warning: Double value too large for UInt64 conversion: \(result.val)")
-                        // For very large values, just use the mask value
-                        result.val = Double(mask[result.bits])
-                    }
+                    let intVal = cppStyleInt(result.val)
+                    result.val = Double(intVal & Int(mask[result.bits]))
                 } else if result.bits != 0 { // Allow bits=0 for simple values
                     print("Warning: Invalid bit count for mask: \(result.bits)")
                 }
@@ -659,51 +641,48 @@ class IRP {
                         genHexPulseGap(val.val)
                     }
                 } else { // Bit sequence (val.bits > 0)
-                    // Safely convert to UInt64, handling large double values
-                    if val.val.isFinite && val.val >= 0 && val.val < Double(UInt64.max) {
-                        var number = UInt64(val.val)
-                        var bitsToProcess = val.bits
+                    // C++ uses direct int cast - use same behavior
+                    let intValue = cppStyleInt(val.val)
+                    var number = intValue
+                    var bitsToProcess = val.bits
+                    
+                    // Apply MSB reversal if needed
+                    if msb && bitsToProcess <= 32 {
+                        number = Int(reverseBits(UInt64(number)) >> UInt64(32 - bitsToProcess))
+                    }
+                    
+                    while bitsToProcess > 0 {
+                        bitsToProcess -= 1
+                        let currentBit = number & 1
                         
-                        // Apply MSB reversal if needed
-                        if msb && bitsToProcess <= 32 {
-                            number = reverseBits(number) >> UInt64(32 - bitsToProcess)
-                        }
-                        
-                        while bitsToProcess > 0 {
-                            bitsToProcess -= 1
-                            let currentBit = Int(number & 1)
-                            
-                            if msb {
-                                // Shift new bit in from the right (LSB position)
-                                pendingBits = (pendingBits << 1) | currentBit
-                                // Check if a full group is formed (mask is power_of_2 - 1)
-                                if (pendingBits & bitGroup) != 0 { // Check the marker bit (leftmost bit of the group)
-                                    let digitIndex = pendingBits & (bitGroup - 1) // Extract the value bits
-                                    if digitIndex < digits.count, let digitDef = digits[digitIndex] {
-                                        _ = genHexSequence(digitDef) // Recursive call
-                                    } else {
-                                        print("Warning: Undefined digit definition for index: \(digitIndex) (msb)")
-                                    }
-                                    pendingBits = 1 // Reset for next group (marker bit)
+                        if msb {
+                            // Shift new bit in from the right (LSB position)
+                            pendingBits = (pendingBits << 1) | currentBit
+                            // Check if a full group is formed (mask is power_of_2 - 1)
+                            if (pendingBits & bitGroup) != 0 { // Check the marker bit (leftmost bit of the group)
+                                let digitIndex = pendingBits & (bitGroup - 1) // Extract the value bits
+                                if digitIndex < digits.count, let digitDef = digits[digitIndex] {
+                                    _ = genHexSequence(digitDef) // Recursive call
+                                } else {
+                                    print("Warning: Undefined digit definition for index: \(digitIndex) (msb)")
                                 }
-                            } else { // LSB
-                                // Shift new bit in from the left (MSB position of the group)
-                                pendingBits = (pendingBits >> 1) | (currentBit * bitGroup)
-                                // Check if a full group is formed (marker bit is the LSB)
-                                if (pendingBits & 1) != 0 { // Check the marker bit
-                                    let digitIndex = pendingBits >> 1 // Extract the value bits
-                                    if digitIndex < digits.count, let digitDef = digits[digitIndex] {
-                                        _ = genHexSequence(digitDef) // Recursive call
-                                    } else {
-                                        print("Warning: Undefined digit definition for index: \(digitIndex) (lsb)")
-                                    }
-                                    pendingBits = bitGroup // Reset for next group (marker bit)
-                                }
+                                pendingBits = 1 // Reset for next group (marker bit)
                             }
-                            number >>= 1 // Shift number to get next bit
+                        } else { // LSB
+                            // Shift new bit in from the left (MSB position of the group)
+                            pendingBits = (pendingBits >> 1) | (currentBit * bitGroup)
+                            // Check if a full group is formed (marker bit is the LSB)
+                            if (pendingBits & 1) != 0 { // Check the marker bit
+                                let digitIndex = pendingBits >> 1 // Extract the value bits
+                                if digitIndex < digits.count, let digitDef = digits[digitIndex] {
+                                    _ = genHexSequence(digitDef) // Recursive call
+                                } else {
+                                    print("Warning: Undefined digit definition for index: \(digitIndex) (lsb)")
+                                }
+                                pendingBits = bitGroup // Reset for next group (marker bit)
+                            }
                         }
-                    } else {
-                        print("Warning: Double value too large for UInt64 conversion in bit sequence processing: \(val.val)")
+                        number >>= 1 // Shift number to get next bit
                     }
                 }
             }
