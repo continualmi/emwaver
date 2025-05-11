@@ -4,10 +4,10 @@ import Combine // Added for Timer
 struct EMWaverView: View {
     @EnvironmentObject var bleManager: BLEManager // Use shared BLEManager from environment
     @State private var commandInput = ""
-    @State private var showHex = true
-    @State private var showAscii = true
+    @State private var showHex = false // Default to false to match Android
     @State private var serialMonitorText = "" // Local state for serial monitor
     @State private var jsEngine: JavaScriptEngine? // Add reference to JavaScriptEngine
+    @State private var firmwareVersion = "Unknown" // Add firmware version state
 
     // Timer to fetch data from BLEManager buffer
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 100ms interval like Android
@@ -17,35 +17,56 @@ struct EMWaverView: View {
             VStack(spacing: 20) {
                 // Connection Section
                 GroupBox(label: Label("Connection", systemImage: "antenna.radiowaves.left.and.right").font(.headline)) {
-                    HStack {
-                        Button(action: {
-                            if bleManager.isConnected {
-                                bleManager.disconnect()
-                            } else {
-                                bleManager.startScan()
+                    VStack(spacing: 10) {
+                        HStack {
+                            Button(action: {
+                                if bleManager.isConnected {
+                                    bleManager.disconnect()
+                                } else {
+                                    bleManager.startScan()
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
+                                    Text(bleManager.isConnected ? "Disconnect" : "Connect to EMWaver")
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(bleManager.isConnected ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
                             }
-                        }) {
-                            HStack {
-                                Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
-                                Text(bleManager.isConnected ? "Disconnect" : "Connect to EMWaver")
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(bleManager.isConnected ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
                         }
                         
                         HStack {
-                            Circle()
-                                .fill(getConnectionStatusColor())
-                                .frame(width: 12, height: 12)
-                            Text(getConnectionStatusText())
-                                .font(.subheadline)
-                                .foregroundColor(getConnectionStatusColor())
+                            HStack {
+                                Circle()
+                                    .fill(getConnectionStatusColor())
+                                    .frame(width: 12, height: 12)
+                                Text(getConnectionStatusText())
+                                    .font(.subheadline)
+                                    .foregroundColor(getConnectionStatusColor())
+                            }
+                            
+                            Spacer()
+                            
+                            // Add firmware version display
+                            HStack {
+                                Text("Firmware: ")
+                                    .font(.subheadline)
+                                Text(firmwareVersion)
+                                    .font(.subheadline)
+                                    .foregroundColor(firmwareVersion == "Unknown" ? .gray : .blue)
+                                
+                                Button(action: {
+                                    requestFirmwareVersion()
+                                }) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .foregroundColor(.blue)
+                                }
+                                .disabled(!bleManager.isConnected)
+                            }
                         }
-                        .frame(width: 120)
-                        .padding(.horizontal)
                     }
                     .padding(.vertical, 8)
                 }
@@ -55,7 +76,7 @@ struct EMWaverView: View {
                 GroupBox(label: Label("Command Input", systemImage: "terminal").font(.headline)) {
                     VStack(spacing: 12) {
                         HStack {
-                            TextField("e.g., ble?[0x00][255][0xFF]", text: $commandInput)
+                            TextField("e.g., version[0x00][255][0xFF]", text: $commandInput)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .padding(.trailing, 8)
                             
@@ -91,10 +112,9 @@ struct EMWaverView: View {
                                         .padding(8)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 } else {
-                                    // Display the formatted text directly
-                                    Text(serialMonitorText)
+                                    // Display the text with rich formatting
+                                    Text(LocalizedStringKey(serialMonitorText))
                                         .font(.system(.body, design: .monospaced))
-                                        .foregroundColor(Color.green.opacity(0.8)) // Basic coloring, can refine later if needed
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(.bottom, 1) // Ensure last line is visible
                                         .id("bottom") // ID for scrolling
@@ -111,12 +131,9 @@ struct EMWaverView: View {
                         }
 
                         HStack {
-                            HStack(spacing: 20) {
-                                Toggle("HEX", isOn: $showHex)
-                                    .toggleStyle(SwitchToggleStyle(tint: .blue))
-                                Toggle("ASCII", isOn: $showAscii)
-                                    .toggleStyle(SwitchToggleStyle(tint: .blue))
-                            }
+                            // Single checkbox for HEX display to match Android
+                            Toggle("HEX", isOn: $showHex)
+                                .toggleStyle(SwitchToggleStyle(tint: .blue))
                             
                             Spacer()
                             
@@ -159,10 +176,27 @@ struct EMWaverView: View {
             UINavigationBar.appearance().compactAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             // End of added code
+            
+            // Check firmware version after a short delay when view appears
+            if bleManager.isConnected {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    requestFirmwareVersion()
+                }
+            }
         }
         .onChange(of: bleManager.isConnected) { connected in
             if connected && jsEngine == nil {
                 setupJSEngine()
+            }
+            
+            // Check firmware version after connection
+            if connected {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    requestFirmwareVersion()
+                }
+            } else {
+                // Reset firmware version when disconnected
+                firmwareVersion = "Unknown"
             }
         }
         .onDisappear {
@@ -215,7 +249,7 @@ struct EMWaverView: View {
         guard !commandInput.isEmpty else { return }
 
         if let data = BLEManager.parseCommand(commandInput) {
-            // Log the packet being sent to the local serial monitor
+            // Log the packet being sent to the local serial monitor with gold color
             logToSerialMonitor(data: data, direction: .transmit)
             bleManager.sendPacket(data)
             commandInput = "" // Clear input after sending
@@ -225,7 +259,7 @@ struct EMWaverView: View {
             let errorMessage = "[\(timestamp)] Error: Invalid packet format for input: \(commandInput)"
 
             DispatchQueue.main.async {
-                self.serialMonitorText += "\(errorMessage)\n"
+                self.serialMonitorText += errorMessage + "\n"
             }
         }
     }
@@ -243,6 +277,23 @@ struct EMWaverView: View {
 
         if let data = bleManager.getCommand(), !data.isEmpty {
             logToSerialMonitor(data: data, direction: .receive)
+            
+            // Check if this might be a response to the version command
+            checkForVersionResponse(data)
+        }
+    }
+    
+    // Check incoming data for possible version response
+    private func checkForVersionResponse(_ data: Data) {
+        // If current firmware version is Unknown, check if this might be the version response
+        if firmwareVersion == "Unknown" {
+            let asciiString = BLEManager.dataToAsciiString(data)
+            if asciiString.contains("-") && asciiString.contains("Welcome") {
+                let version = extractVersion(from: asciiString)
+                DispatchQueue.main.async {
+                    self.firmwareVersion = version
+                }
+            }
         }
     }
 
@@ -251,21 +302,22 @@ struct EMWaverView: View {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let dirSymbol = direction == .transmit ? "TX" : "RX"
         var logEntry = "[\(timestamp)] \(dirSymbol): "
-
+        
+        // Create the formatted entry with HTML-like color tags
+        let color = direction == .transmit ? "FFD700" : "00AA00" // Gold for TX, Green for RX
+        
+        var content = ""
         if showHex {
-            logEntry += "\(BLEManager.dataToHexString(data))"
+            content += "\(BLEManager.dataToHexString(data))"
+        } else {
+            // If showHex is false, show ASCII
+            content += "\"\(BLEManager.dataToAsciiString(data))\""
         }
-
-        if showHex && showAscii {
-            logEntry += " | "
-        }
-
-        if showAscii {
-            logEntry += "\"\(BLEManager.dataToAsciiString(data))\""
-        }
+        
+        let formattedEntry = "<font color='#\(color)'>\(logEntry)\(content)</font>"
 
         DispatchQueue.main.async {
-            self.serialMonitorText += "\(logEntry)\n"
+            self.serialMonitorText += formattedEntry + "\n"
         }
     }
     
@@ -281,6 +333,37 @@ struct EMWaverView: View {
         // Set up CC1101 if needed later
         let cc1101 = CC1101(bleManager: bleManager)
         jsEngine?.setupCC1101(cc1101)
+    }
+    
+    // Request firmware version method to match Android implementation
+    private func requestFirmwareVersion() {
+        guard bleManager.isConnected else { return }
+        
+        // Create version command as byte array (exactly as in Android)
+        let versionCommand = "version".data(using: .ascii)!
+        
+        // Log the command to serial monitor as transmitted
+        logToSerialMonitor(data: versionCommand, direction: .transmit)
+        
+        // Send the command
+        bleManager.sendPacket(versionCommand)
+        
+        // Response will be handled by the fetchAndDisplayBufferedData function 
+        // which checks all incoming data
+    }
+    
+    // Extract version from the welcome message to match Android implementation
+    private func extractVersion(from message: String) -> String {
+        guard !message.isEmpty else { return "Unknown" }
+        
+        // The version is at the beginning up to the first dash
+        if let dashIndex = message.firstIndex(of: "-") {
+            let versionPart = message[..<dashIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            return String(versionPart)
+        }
+        
+        // If parsing fails (no dash found), just return the original message
+        return message
     }
 }
 
