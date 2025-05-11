@@ -9,8 +9,10 @@ struct EMWaverView: View {
     @State private var jsEngine: JavaScriptEngine? // Add reference to JavaScriptEngine
     @State private var firmwareVersion = "Unknown" // Add firmware version state
 
-    // Timer to fetch data from BLEManager buffer
-    let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect() // 100ms interval like Android
+    // Use a timer publisher without autoconnect
+    private let timerPublisher = Timer.publish(every: 0.1, on: .main, in: .common)
+    // Store the subscription to cancel it later
+    @State private var timerSubscription: AnyCancellable? = nil
     
     var body: some View {
         ScrollView {
@@ -159,10 +161,14 @@ struct EMWaverView: View {
         }
         .navigationTitle("EMWaver")
         .navigationBarTitleDisplayMode(.inline)
-        .onReceive(timer) { _ in // Action for the timer
-            fetchAndDisplayBufferedData()
-        }
         .onAppear {
+            // Start the timer when view appears
+            timerSubscription = timerPublisher
+                .autoconnect()
+                .sink { _ in
+                    self.fetchAndDisplayBufferedData()
+                }
+                
             // Initialize the JavaScript engine when the view appears
             if bleManager.isConnected && jsEngine == nil {
                 setupJSEngine()
@@ -200,6 +206,11 @@ struct EMWaverView: View {
             }
         }
         .onDisappear {
+            // Cancel the timer when view disappears
+            print("EMWaverView disappearing, canceling timer")
+            timerSubscription?.cancel()
+            timerSubscription = nil
+            
             // --- Add Logging Here ---
             print("!!! BLEView disappearing.")
             // Check state immediately
@@ -274,7 +285,9 @@ struct EMWaverView: View {
     // New function to fetch data from BLEManager buffer and update local state
     private func fetchAndDisplayBufferedData() {
         guard bleManager.isConnected else { return } // Only fetch if connected
-
+        
+        print("EMWaverView timer polling BLE buffer at \(Date())")
+        
         if let data = bleManager.getCommand(), !data.isEmpty {
             logToSerialMonitor(data: data, direction: .receive)
             

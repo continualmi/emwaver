@@ -519,10 +519,6 @@ static void command_task(void *pvParameters)
                 if (transmitter_active) {
                     stop_transmission();
                 }
-                
-                // Send a success response over BLE
-                uint8_t resp = 1;
-                ble_server_notify(&resp, 1);
             }
             /* --- Version command --- */
             else if (cmd.length >= 7 && strncmp((char *)cmd.data, "version", 7) == 0) {
