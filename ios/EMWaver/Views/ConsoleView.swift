@@ -1,5 +1,13 @@
 import SwiftUI
 import JavaScriptCore
+import UniformTypeIdentifiers
+
+// MARK: - Extension for UTType
+extension UTType {
+    static var javascript: UTType {
+        UTType(filenameExtension: "js") ?? .plainText
+    }
+}
 
 // MARK: - JavaScript Export Protocols
 
@@ -204,98 +212,18 @@ struct ConsoleView: View {
     @State private var isScriptEditorExpanded: Bool = true
     @State private var isConsoleOutputExpanded: Bool = true
     
+    // MARK: - External Storage & Network Operations
+    
+    @State private var showingFileImporter = false
+    @State private var showingFileExporter = false
+    @State private var showingURLPrompt = false
+    @State private var downloadURL = ""
+    
     var body: some View {
         VStack(spacing: 8) {
-            DisclosureGroup(
-                isExpanded: $isScriptsListExpanded,
-                content: {
-                    if recentScripts.isEmpty {
-                        Text("No scripts available")
-                            .italic()
-                            .foregroundColor(.gray)
-                            .padding()
-                    } else {
-                        List {
-                            ForEach(recentScripts, id: \.self) { script in
-                                HStack {
-                                    Text(script)
-                                    Spacer()
-                                    if currentScriptName == script && hasUnsavedChanges {
-                                        Circle()
-                                            .fill(Color.red)
-                                            .frame(width: 8, height: 8)
-                                    }
-                                }
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    loadScript(script)
-                                }
-                                .onLongPressGesture {
-                                    selectedScript = script
-                                    showingScriptOptions = true
-                                }
-                            }
-                        }
-                        .listStyle(PlainListStyle())
-                        .frame(minHeight: 100, maxHeight: 200)
-                    }
-                },
-                label: {
-                    HStack {
-                        Text("Available Scripts")
-                            .font(.headline)
-                        if !recentScripts.isEmpty {
-                            Text("(\(recentScripts.count))")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            )
-            .padding(.horizontal)
-
-            DisclosureGroup(
-                isExpanded: $isScriptEditorExpanded,
-                content: {
-                    TextEditor(text: $scriptContent)
-                        .font(.system(.body, design: .monospaced))
-                        .disableAutocorrection(true)
-                        .padding(4)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                        .frame(minHeight: 100, maxHeight: 250)
-                        .onChange(of: scriptContent) { _ in
-                            hasUnsavedChanges = true
-                            updateDynamicScriptEditorTitle()
-                            setupAutoSave()
-                        }
-                },
-                label: {
-                    Text(dynamicScriptEditorTitle)
-                        .font(.headline)
-                }
-            )
-            .padding(.horizontal)
-
-            DisclosureGroup(
-                isExpanded: $isConsoleOutputExpanded,
-                content: {
-                    ScrollView {
-                        Text(consoleOutput)
-                            .font(.system(.body, design: .monospaced))
-                            .padding(8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .background(Color.black)
-                    .foregroundColor(Color.green)
-                    .cornerRadius(8)
-                    .frame(minHeight: 100, maxHeight: 200)
-                },
-                label: {
-                    Text("Output Console")
-                        .font(.headline)
-                }
-            )
-            .padding(.horizontal)
+            scriptsListSection
+            scriptEditorSection
+            consoleOutputSection
             
             Spacer()
         }
@@ -322,17 +250,7 @@ struct ConsoleView: View {
                     Image(systemName: "trash")
                 }
                 
-                Menu {
-                    Button("New Script") {
-                        showingNewScriptAlert = true
-                    }
-                    
-                    Button("Make Copy") {
-                        showingCopyScriptAlert = true
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
+                menuButton
             }
         )
         .toolbar {
@@ -366,53 +284,157 @@ struct ConsoleView: View {
                 setupJSEngine()
             }
         }
-        .alert("New Script", isPresented: $showingNewScriptAlert) {
-            TextField("Script Name", text: $newScriptName)
-            Button("Cancel", role: .cancel) {
-                newScriptName = ""
+        .applyAlerts(
+            showingNewScriptAlert: $showingNewScriptAlert,
+            newScriptName: $newScriptName,
+            createNewScript: createNewScript,
+            showingCopyScriptAlert: $showingCopyScriptAlert,
+            copyCurrentScript: copyCurrentScript,
+            showingScriptOptions: $showingScriptOptions,
+            selectedScript: selectedScript,
+            showingDeleteConfirmation: $showingDeleteConfirmation,
+            deleteScript: deleteScript,
+            showingFileImporter: $showingFileImporter,
+            importScriptFromExternalStorage: importScriptFromExternalStorage,
+            showingFileExporter: $showingFileExporter,
+            scriptDocument: ScriptDocument(scriptContent),
+            currentScriptName: currentScriptName,
+            showingURLPrompt: $showingURLPrompt, 
+            downloadURL: $downloadURL,
+            downloadScriptFromURL: downloadScriptFromURL
+        )
+    }
+    
+    // MARK: - View Components
+    
+    private var scriptsListSection: some View {
+        DisclosureGroup(
+            isExpanded: $isScriptsListExpanded,
+            content: {
+                if recentScripts.isEmpty {
+                    Text("No scripts available")
+                        .italic()
+                        .foregroundColor(.gray)
+                        .padding()
+                } else {
+                    List {
+                        ForEach(recentScripts, id: \.self) { script in
+                            HStack {
+                                Text(script)
+                                Spacer()
+                                if currentScriptName == script && hasUnsavedChanges {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                loadScript(script)
+                            }
+                            .onLongPressGesture {
+                                selectedScript = script
+                                showingScriptOptions = true
+                            }
+                        }
+                    }
+                    .listStyle(PlainListStyle())
+                    .frame(minHeight: 100, maxHeight: 200)
+                }
+            },
+            label: {
+                HStack {
+                    Text("Available Scripts")
+                        .font(.headline)
+                    if !recentScripts.isEmpty {
+                        Text("(\(recentScripts.count))")
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
-            Button("Create") {
-                createNewScript(newScriptName)
-                newScriptName = ""
+        )
+        .padding(.horizontal)
+    }
+    
+    private var scriptEditorSection: some View {
+        DisclosureGroup(
+            isExpanded: $isScriptEditorExpanded,
+            content: {
+                TextEditor(text: $scriptContent)
+                    .font(.system(.body, design: .monospaced))
+                    .disableAutocorrection(true)
+                    .padding(4)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    .frame(minHeight: 100, maxHeight: 250)
+                    .onChange(of: scriptContent) { _ in
+                        hasUnsavedChanges = true
+                        updateDynamicScriptEditorTitle()
+                        setupAutoSave()
+                    }
+            },
+            label: {
+                Text(dynamicScriptEditorTitle)
+                    .font(.headline)
             }
-        } message: {
-            Text("Enter a name for the new script")
-        }
-        .alert("Copy Script", isPresented: $showingCopyScriptAlert) {
-            TextField("Script Name", text: $newScriptName)
-            Button("Cancel", role: .cancel) {
-                newScriptName = ""
+        )
+        .padding(.horizontal)
+    }
+    
+    private var consoleOutputSection: some View {
+        DisclosureGroup(
+            isExpanded: $isConsoleOutputExpanded,
+            content: {
+                ScrollView {
+                    Text(consoleOutput)
+                        .font(.system(.body, design: .monospaced))
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .background(Color.black)
+                .foregroundColor(Color.green)
+                .cornerRadius(8)
+                .frame(minHeight: 100, maxHeight: 200)
+            },
+            label: {
+                Text("Output Console")
+                    .font(.headline)
             }
-            Button("Copy") {
-                copyCurrentScript(newScriptName)
-                newScriptName = ""
+        )
+        .padding(.horizontal)
+    }
+    
+    private var menuButton: some View {
+        Menu {
+            Button("New Script") {
+                showingNewScriptAlert = true
             }
-        } message: {
-            Text("Enter a name for the copy")
-        }
-        .confirmationDialog("Script Options", isPresented: $showingScriptOptions, titleVisibility: .visible) {
-            Button("Rename") {
-                if let scriptName = selectedScript {
-                    newScriptName = scriptName
-                    print("Rename action for \(selectedScript ?? "nil")")
+            
+            Button("Make Copy") {
+                showingCopyScriptAlert = true
+            }
+            
+            Divider()
+            
+            Button("Import from Files") {
+                showingFileImporter = true
+            }
+            
+            Button("Export to Files") {
+                if currentScriptName != nil {
+                    showingFileExporter = true
+                } else {
+                    print("No script open to export")
                 }
             }
             
-            Button("Delete", role: .destructive) {
-                showingDeleteConfirmation = true
-            }
+            Divider()
             
-            Button("Cancel", role: .cancel) {}
-        }
-        .alert("Delete Script", isPresented: $showingDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                if let script = selectedScript {
-                    deleteScript(script)
-                }
+            Button("Download from URL") {
+                showingURLPrompt = true
             }
-        } message: {
-            Text("Are you sure you want to delete \(selectedScript ?? "this script")?")
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
     }
     
@@ -501,16 +523,18 @@ struct ConsoleView: View {
         guard !name.isEmpty else { return }
         
         // Create a new script with default content
-        saveScript(name, content: "// New script")
-        loadScript(name)
+        let filename = getExportFilename(name)
+        saveScript(filename, content: "// New script")
+        loadScript(filename)
     }
     
     private func copyCurrentScript(_ name: String) {
         guard !name.isEmpty, currentScriptName != nil else { return }
         
         // Copy current script content to a new script
-        saveScript(name, content: scriptContent)
-        loadScript(name)
+        let filename = getExportFilename(name)
+        saveScript(filename, content: scriptContent)
+        loadScript(filename)
     }
     
     private func setupAutoSave() {
@@ -669,6 +693,253 @@ struct ConsoleView: View {
         
         // Ensure the UI reflects the current state
         updateDynamicScriptEditorTitle()
+    }
+    
+    // MARK: - External Storage & Network Operations
+    
+    private func importScriptFromExternalStorage(url: URL) {
+        do {
+            // Start accessing security-scoped resource
+            guard url.startAccessingSecurityScopedResource() else {
+                print("Failed to access security-scoped resource")
+                return
+            }
+            
+            defer {
+                // Make sure to release the security-scoped resource when done
+                url.stopAccessingSecurityScopedResource()
+            }
+            
+            // Use file coordination for safer file access
+            var error: NSError?
+            var content = ""
+            
+            NSFileCoordinator().coordinate(readingItemAt: url, error: &error) { coordinatedURL in
+                do {
+                    content = try String(contentsOf: coordinatedURL)
+                } catch {
+                    print("Error reading file contents: \(error.localizedDescription)")
+                }
+            }
+            
+            if let fileError = error {
+                print("File coordination error: \(fileError.localizedDescription)")
+                return
+            }
+            
+            if content.isEmpty {
+                print("Failed to read file content")
+                return
+            }
+            
+            let filename = url.lastPathComponent
+            
+            // Save to internal storage
+            saveScript(filename, content: content)
+            
+            // Load the script
+            loadScript(filename)
+            
+            print("Imported script: \(filename)")
+        } catch {
+            print("Error importing script: \(error.localizedDescription)")
+        }
+    }
+    
+    private func downloadScriptFromURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else {
+            print("Invalid URL")
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    print("Download error: \(error.localizedDescription)")
+                }
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                DispatchQueue.main.async {
+                    print("Server error: \(response.debugDescription)")
+                }
+                return
+            }
+            
+            if let data = data, let content = String(data: data, encoding: .utf8) {
+                DispatchQueue.main.async {
+                    // Use the URL's last path component as the filename
+                    let filename = url.lastPathComponent
+                    
+                    // Save to internal storage
+                    saveScript(filename, content: content)
+                    
+                    // Load the script
+                    loadScript(filename)
+                    
+                    print("Downloaded and imported script: \(filename)")
+                }
+            }
+        }
+        
+        task.resume()
+    }
+}
+
+// Create a ViewModifier instead of an extension method
+private extension View {
+    func applyAlerts(
+        showingNewScriptAlert: Binding<Bool>,
+        newScriptName: Binding<String>,
+        createNewScript: @escaping (String) -> Void,
+        showingCopyScriptAlert: Binding<Bool>,
+        copyCurrentScript: @escaping (String) -> Void,
+        showingScriptOptions: Binding<Bool>,
+        selectedScript: String?,
+        showingDeleteConfirmation: Binding<Bool>,
+        deleteScript: @escaping (String) -> Void,
+        showingFileImporter: Binding<Bool>,
+        importScriptFromExternalStorage: @escaping (URL) -> Void,
+        showingFileExporter: Binding<Bool>,
+        scriptDocument: ScriptDocument,
+        currentScriptName: String?,
+        showingURLPrompt: Binding<Bool>,
+        downloadURL: Binding<String>,
+        downloadScriptFromURL: @escaping (String) -> Void
+    ) -> some View {
+        self
+            .alert("New Script", isPresented: showingNewScriptAlert) {
+                TextField("Script Name", text: newScriptName)
+                Button("Cancel", role: .cancel) {
+                    newScriptName.wrappedValue = ""
+                }
+                Button("Create") {
+                    createNewScript(newScriptName.wrappedValue)
+                    newScriptName.wrappedValue = ""
+                }
+            } message: {
+                Text("Enter a name for the new script")
+            }
+            .alert("Copy Script", isPresented: showingCopyScriptAlert) {
+                TextField("Script Name", text: newScriptName)
+                Button("Cancel", role: .cancel) {
+                    newScriptName.wrappedValue = ""
+                }
+                Button("Copy") {
+                    copyCurrentScript(newScriptName.wrappedValue)
+                    newScriptName.wrappedValue = ""
+                }
+            } message: {
+                Text("Enter a name for the copy")
+            }
+            .confirmationDialog(selectedScript != nil ? "Options for \"\(selectedScript!)\"" : "Script Options", isPresented: showingScriptOptions, titleVisibility: .visible) {
+                Button("Rename") {
+                    if let scriptName = selectedScript {
+                        newScriptName.wrappedValue = scriptName
+                        print("Rename action for \(selectedScript ?? "nil")")
+                    }
+                }
+                
+                Button("Delete", role: .destructive) {
+                    showingDeleteConfirmation.wrappedValue = true
+                }
+                
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert("Delete Script", isPresented: showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    if let script = selectedScript {
+                        deleteScript(script)
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete \(selectedScript ?? "this script")?")
+            }
+            .fileImporter(
+                isPresented: showingFileImporter,
+                allowedContentTypes: [.plainText, .javascript],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        // Try to get persistent access to the file URL
+                        do {
+                            let secureURL = url.startAccessingSecurityScopedResource()
+                            if !secureURL {
+                                print("Failed to get secure access to URL")
+                            }
+                            
+                            // Use the secured URL for import
+                            importScriptFromExternalStorage(url)
+                            
+                            // Always release when done
+                            url.stopAccessingSecurityScopedResource()
+                        } catch {
+                            print("Error securing file access: \(error.localizedDescription)")
+                        }
+                    }
+                case .failure(let error):
+                    print("Error importing file: \(error.localizedDescription)")
+                }
+            }
+            .fileExporter(
+                isPresented: showingFileExporter,
+                document: scriptDocument,
+                contentType: .plainText,
+                defaultFilename: getExportFilename(currentScriptName)
+            ) { result in
+                switch result {
+                case .success(let url):
+                    print("Script exported to: \(url.path)")
+                case .failure(let error):
+                    print("Error exporting script: \(error.localizedDescription)")
+                }
+            }
+            .alert("Download Script", isPresented: showingURLPrompt) {
+                TextField("URL", text: downloadURL)
+                Button("Cancel", role: .cancel) {
+                    downloadURL.wrappedValue = ""
+                }
+                Button("Download") {
+                    downloadScriptFromURL(downloadURL.wrappedValue)
+                    downloadURL.wrappedValue = ""
+                }
+            } message: {
+                Text("Enter the URL of the script to download")
+            }
+    }
+}
+
+// Add this helper function in the View extension
+func getExportFilename(_ filename: String?) -> String {
+    let name = filename ?? "script"
+    return name.lowercased().hasSuffix(".js") ? name : name + ".js"
+}
+
+// MARK: - Script Document
+struct ScriptDocument: FileDocument {
+    var text: String
+    
+    init(_ text: String) {
+        self.text = text
+    }
+    
+    static var readableContentTypes: [UTType] { [.plainText] }
+    
+    init(configuration: ReadConfiguration) throws {
+        if let data = configuration.file.regularFileContents {
+            text = String(decoding: data, as: UTF8.self)
+        } else {
+            text = ""
+        }
+    }
+    
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        let data = Data(text.utf8)
+        return FileWrapper(regularFileWithContents: data)
     }
 }
 
