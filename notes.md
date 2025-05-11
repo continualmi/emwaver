@@ -77,6 +77,11 @@ On android, on the Buttons fragment, we have an option to load remotes from IRDB
 On the android, we have a redatacted imports for USB Serial libraries. In fact, clean up all USB functionality from android, since we only use BLE now
 * Implement external storage for signals on sampler
 * Fix zoom on Sampler
+* Need to understand the current BLE command structure on IOS, in order to document it etc
+* To ensure compatibility between Android and IOS scriptng, need to ensure all scripts that run on IOS run the same on Android
+* Note on code clean up: lots of printing, useless functionality deep in the code base. need to inspect codebase with some time
+* Consider adding a warning when we try to retransmit on the IR RX pin, since it does seem to crash it
+* EMWaver icon instead of home icon on IOS
 
 ## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
@@ -84,12 +89,12 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 
 ## IOS STUFF:
 
+* Fix on buttons view, when we have too many buttons, the UX becomes unusable
 * Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
 * Minor: add help button explaining what the convert to IR is, android and ios
 On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
-* Need to understand the current BLE command structure on IOS, in order to document it etc
-
-* To ensure compatibility between Android and IOS scriptng, need to ensure all scripts that run on IOS run the same on Android
+* Add feedback to Convert to IR button
+* Referesh chart after clearing it to make signal go away
 
 
 ## Hardware

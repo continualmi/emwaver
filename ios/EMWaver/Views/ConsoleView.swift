@@ -820,6 +820,90 @@ struct ConsoleView: View {
             print("Created default IR test script")
         }
         
+        // IR Test Script 2 - NEC 64, -1, 18
+        let irScript2Name = "test_ir2.js"
+        let irScript2Path = getDocumentsDirectory().appendingPathComponent(irScript2Name)
+        
+        if !FileManager.default.fileExists(atPath: irScript2Path.path) {
+            let irScript2Content = """
+                // IR Test Script 2 - NEC 64, -1, 18
+                // Tests sending a specific NEC code 5 times
+                
+                print("Starting NEC IR Code Test (5x repeat)");
+                print("-----------------------");
+                
+                // NEC protocol with specific parameters
+                var protocol = "nec1";
+                var device = 64;   // Device address 
+                var subdevice = -1; // No subdevice/use default
+                var funcCode = 18;  // Function code
+                
+                print("Encoding " + protocol + " signal: device=" + device + ", subdevice=" + subdevice + ", function=" + funcCode);
+                var timings = IRService.encodeIR(protocol, device, subdevice, funcCode);
+                
+                if (timings && timings.length > 0) {
+                    print("Success! Generated " + timings.length + " timing values");
+                    
+                    // Show the first few timings
+                    var output = "First 10 timings (µs): ";
+                    var count = Math.min(timings.length, 10);
+                    
+                    for (var i = 0; i < count; i++) {
+                        output += timings[i].toFixed(1);
+                        if (i < count - 1) output += ", ";
+                    }
+                    
+                    print(output);
+                    print("Total sequence length: " + timings.length);
+                    
+                    // Convert timings to binary signal
+                    print("Converting timings to binary signal...");
+                    var signal = Utils.convertTimingsToBinary(timings);
+                    print("Single signal size: " + signal.length + " bytes");
+                    
+                    // Create a buffer to hold 5 copies of the signal
+                    var repeatedSignal = new Uint8Array(signal.length * 5);
+                    
+                    // Fill the buffer with 5 copies of the signal
+                    print("Creating buffer with 5 copies of the signal...");
+                    for (var i = 0; i < 5; i++) {
+                        for (var j = 0; j < signal.length; j++) {
+                            repeatedSignal[i * signal.length + j] = signal[j];
+                        }
+                    }
+                    print("Repeated signal size: " + repeatedSignal.length + " bytes");
+                    
+                    // Apply IR carrier modulation
+                    print("Applying 38kHz IR carrier modulation...");
+                    var irSignal = Utils.convertToIRBuffer(repeatedSignal);
+                    print("Final IR signal size: " + irSignal.length + " bytes");
+                    
+                    // Define the transmit command for IR - use pin 4 (IR TX) in binary format
+                    var transmitCommand = new Uint8Array([
+                        0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x20, 0x04 // "transmit " + raw pin 4 (IR TX)
+                    ]);
+                    
+                    print("Sending NEC IR signal (5x) now...");
+                    
+                    // Load the buffer with the IR signal (containing 5 copies)
+                    BLEService.loadBuffer(irSignal);
+                    
+                    // Send the transmit command
+                    BLEService.sendPacket(transmitCommand);
+                    
+                    // Transmit the buffer
+                    BLEService.transmitBuffer();
+                    
+                    print("NEC IR signal transmission complete (5 codes sent)");
+                } else {
+                    print("Error: Failed to encode NEC signal");
+                }
+                """
+            
+            saveScript(irScript2Name, content: irScript2Content)
+            print("Created NEC IR test script")
+        }
+        
         loadRecentScripts()
     }
     
