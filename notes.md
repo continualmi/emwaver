@@ -43,6 +43,7 @@
 * EMWaver view using more GPIO pins than necessary, only need the ones on the board. same with sampler, fixed
 * Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either (done on IOS)
 * Fix small issue with navigation on android, cant go back to emwaver fragment
+* ISM Fragment should show registers immediatly, remove the "actions" ui
 
 ## Not Done
 
@@ -64,7 +65,7 @@
 
 
 IOS STUFF:
-* ISM Fragment should show registers immediatly, remove the "actions" ui
+
 * Add versioning to IOS and fix EMWaver fragment
 * Need to fix the freezing that happens when we are loading the registers on ISM View
 * Fix the scrolling on Sampler view not working if finger on charts
