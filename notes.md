@@ -82,6 +82,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 * Note on code clean up: lots of printing, useless functionality deep in the code base. need to inspect codebase with some time
 * Consider adding a warning when we try to retransmit on the IR RX pin, since it does seem to crash it
 * EMWaver icon instead of home icon on IOS
+* Look into if its a problem it not transmitting when we dont have half buffer on sampler, requiring multiple fills
 
 ## ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
@@ -89,6 +90,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 
 ## IOS STUFF:
 
+* on buttons, need to fix the script to send a single code, and remove the test infrared scripts from console
 * Fix on buttons view, when we have too many buttons, the UX becomes unusable
 * Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
 * Minor: add help button explaining what the convert to IR is, android and ios
