@@ -180,6 +180,7 @@ class JSUtils: NSObject, UtilsJSExport {
     func loadBuffer(data: Data)
     func sendPacket(_ data: Data)
     func sendCommand(_ command: Data, timeout: Int) -> Data?
+    func transmitBuffer()
 }
 
 // Extension to make BLEManager JavaScript-compatible
@@ -775,14 +776,27 @@ struct ConsoleView: View {
                     var irSignal = Utils.convertToIRBuffer(signal);
                     print("IR signal size: " + irSignal.length + " bytes");
                     
-                    // Define the transmit command for IR
+                    // Define the transmit command for IR - use pin 4 (IR TX) in binary format
                     var transmitCommand = new Uint8Array([
-                        0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x04 // "transmit" + type 4 (IR)
+                        0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x20, 0x04 // "transmit " + raw pin 4 (IR TX)
                     ]);
                     
                     print("To send this signal:");
-                    print("1. BLEService.sendPacket(irSignal);");
+                    print("1. BLEService.loadBuffer(irSignal);");
                     print("2. BLEService.sendPacket(transmitCommand);");
+                    
+                    // Actually send the signal - following SamplerView pattern
+                    print("\\nSending IR signal now...");
+                    
+                    // Load the buffer with the IR signal
+                    BLEService.loadBuffer(irSignal);
+                    
+                    // Send the transmit command (type 4 = IR)
+                    BLEService.sendPacket(transmitCommand);
+                    
+                    // Transmit the buffer
+                    BLEService.transmitBuffer();
+                    print("Transmission complete");
                 } else {
                     print("Error: Failed to encode " + protocol + " signal");
                 }

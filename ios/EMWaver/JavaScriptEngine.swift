@@ -46,16 +46,22 @@ class JavaScriptEngine {
         
         // Register convertTimingsToBinary function
         let convertTimingsToBinaryFunc: @convention(block) ([Double]) -> JSValue = { timings in
+            self.printCallback?("Converting \(timings.count) timings to binary")
             let binaryData = utils.convertTimingsToBinary(timings)
             
-            // Convert to Uint8Array for JavaScript
-            let jsArrayBuffer = JSValue(object: (binaryData as NSData), in: context)
-            
-            if let uint8ArrayConstructor = context.globalObject.forProperty("Uint8Array"),
-               let jsArrayBuffer = jsArrayBuffer {
-                return uint8ArrayConstructor.construct(withArguments: [jsArrayBuffer])
+            // Use the same improved approach as other methods
+            if let arrayBuffer = context.globalObject.forProperty("ArrayBuffer")?.construct(withArguments: [binaryData.count]) {
+                let uint8Array = context.globalObject.forProperty("Uint8Array")?.construct(withArguments: [arrayBuffer])
+                
+                // Copy the data into the Uint8Array
+                for i in 0..<binaryData.count {
+                    uint8Array?.setObject(Int(binaryData[i]), atIndexedSubscript: i)
+                }
+                
+                self.printCallback?("Created Uint8Array with \(binaryData.count) bytes for binary data")
+                return uint8Array!
             } else {
-                self.printCallback?("Error: Unable to create Uint8Array from binary data")
+                self.printCallback?("Error: Failed to create Uint8Array for binary data")
                 return JSValue(nullIn: context)
             }
         }
@@ -65,25 +71,35 @@ class JavaScriptEngine {
             // Convert the JavaScript Uint8Array to Swift Data
             var byteArray = [UInt8]()
             
+            // Print debugging info
+            self.printCallback?("convertToIRBuffer called with type: \(jsValue.isArray ? "Array" : jsValue.isObject ? "Object" : "Other")")
+            
             if let length = jsValue.forProperty("length").toNumber()?.intValue {
+                self.printCallback?("Object has length: \(length)")
                 for i in 0..<length {
                     if let byteValue = jsValue.atIndex(i)?.toNumber()?.uint8Value {
                         byteArray.append(byteValue)
                     }
                 }
+                self.printCallback?("Extracted \(byteArray.count) bytes for IR conversion")
             }
             
             let inputData = Data(byteArray)
             let irData = utils.convertToIRBuffer(inputData)
             
-            // Convert back to JavaScript Uint8Array
-            let jsArrayBuffer = JSValue(object: (irData as NSData), in: context)
-            
-            if let uint8ArrayConstructor = context.globalObject.forProperty("Uint8Array"),
-               let jsArrayBuffer = jsArrayBuffer {
-                return uint8ArrayConstructor.construct(withArguments: [jsArrayBuffer])
+            // Convert back to JavaScript Uint8Array using a more reliable approach
+            if let arrayBuffer = context.globalObject.forProperty("ArrayBuffer")?.construct(withArguments: [irData.count]) {
+                let uint8Array = context.globalObject.forProperty("Uint8Array")?.construct(withArguments: [arrayBuffer])
+                
+                // Copy the data into the Uint8Array
+                for i in 0..<irData.count {
+                    uint8Array?.setObject(Int(irData[i]), atIndexedSubscript: i)
+                }
+                
+                self.printCallback?("Created Uint8Array with \(irData.count) bytes")
+                return uint8Array!
             } else {
-                self.printCallback?("Error: Unable to create Uint8Array from IR data")
+                self.printCallback?("Error: Failed to create Uint8Array for IR data")
                 return JSValue(nullIn: context)
             }
         }
@@ -129,6 +145,96 @@ class JavaScriptEngine {
         // Create a simpler BLE service wrapper
         let bleService = JSValue(newObjectIn: context)
         bleService?.setValue(sendPacket, forProperty: "sendPacket")
+        
+        // Add loadBuffer method
+        let loadBuffer: @convention(block) (JSValue) -> Void = { jsValue in
+            // More detailed logging for debugging
+            self.printCallback?("loadBuffer called with type: \(jsValue.isArray ? "Array" : jsValue.isObject ? "Object" : "Other")")
+            
+            if jsValue.isUndefined || jsValue.isNull {
+                self.printCallback?("Error: loadBuffer received null or undefined")
+                return
+            }
+            
+            var byteArray = [UInt8]()
+            
+            // Try getting array properties even if not detected as array
+            if let length = jsValue.forProperty("length").toNumber()?.intValue {
+                self.printCallback?("Object has length property: \(length)")
+                
+                for i in 0..<length {
+                    if let byteValue = jsValue.atIndex(i)?.toNumber()?.uint8Value {
+                        byteArray.append(byteValue)
+                    }
+                }
+                
+                self.printCallback?("Extracted \(byteArray.count) bytes from object")
+            }
+            
+            // If conversion failed, try alternate approaches
+            if byteArray.isEmpty && jsValue.isObject {
+                self.printCallback?("Trying alternative conversion for JavaScript object")
+                
+                // If it's a JavaScript ArrayBuffer, try direct conversion
+                if let objectData = jsValue.toObject() as? NSData {
+                    let data = Data(referencing: objectData)
+                    self.printCallback?("Converted object directly to Data with size: \(data.count)")
+                    self.bleManager.loadBuffer(data: data)
+                    return
+                } else {
+                    // Dump some properties to understand what we're working with
+                    self.printCallback?("Object properties: \(String(describing: jsValue.toDictionary()))")
+                }
+            }
+            
+            if !byteArray.isEmpty {
+                let data = Data(byteArray)
+                self.printCallback?("Loading buffer with \(byteArray.count) bytes")
+                self.bleManager.loadBuffer(data: data)
+            } else {
+                self.printCallback?("Error: Could not convert to byte array for loadBuffer")
+            }
+        }
+        
+        // Add getBuffer method
+        let getBuffer: @convention(block) () -> JSValue = {
+            let bufferData = self.bleManager.getBuffer()
+            self.printCallback?("Getting buffer with \(bufferData.count) bytes")
+            
+            // Use the same improved approach as in convertToIRBuffer
+            if let arrayBuffer = context.globalObject.forProperty("ArrayBuffer")?.construct(withArguments: [bufferData.count]) {
+                let uint8Array = context.globalObject.forProperty("Uint8Array")?.construct(withArguments: [arrayBuffer])
+                
+                // Copy the data into the Uint8Array
+                for i in 0..<bufferData.count {
+                    uint8Array?.setObject(Int(bufferData[i]), atIndexedSubscript: i)
+                }
+                
+                self.printCallback?("Created Uint8Array with \(bufferData.count) bytes for buffer")
+                return uint8Array!
+            } else {
+                self.printCallback?("Error: Failed to create Uint8Array for buffer data")
+                return JSValue(nullIn: context)
+            }
+        }
+        
+        // Add clearBuffer method
+        let clearBuffer: @convention(block) () -> Void = {
+            self.bleManager.clearBuffer()
+            self.printCallback?("Buffer cleared")
+        }
+        
+        // Add transmitBuffer method
+        let transmitBuffer: @convention(block) () -> Void = {
+            self.printCallback?("Transmitting buffer...")
+            self.bleManager.transmitBuffer()
+        }
+        
+        // Add all methods to the BLEService object
+        bleService?.setValue(loadBuffer, forProperty: "loadBuffer")
+        bleService?.setValue(getBuffer, forProperty: "getBuffer")
+        bleService?.setValue(clearBuffer, forProperty: "clearBuffer")
+        bleService?.setValue(transmitBuffer, forProperty: "transmitBuffer")
         
         // Expose the BLE service to JavaScript
         context.setObject(bleService, forKeyedSubscript: "BLEService" as NSString)
