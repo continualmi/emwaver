@@ -799,14 +799,19 @@ struct ButtonsView: View {
                 // Apply IR carrier modulation (38kHz)
                 var irSignal = Utils.convertToIRBuffer(signal);
                 
-                // Define the transmit command for IR
+                // Define the transmit command for IR - use pin 4 (IR TX) in binary format
                 var transmitCommand = new Uint8Array([
-                    0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x04 // "transmit" + type 4 (IR)
+                    0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x20, 0x04 // "transmit " + raw pin 4 (IR TX)
                 ]);
                 
-                // Send the IR signal
-                BLEService.sendPacket(irSignal);
+                // Load the buffer with the IR signal
+                BLEService.loadBuffer(irSignal);
+                
+                // Send the transmit command
                 BLEService.sendPacket(transmitCommand);
+                
+                // Transmit the buffer
+                BLEService.transmitBuffer();
                 
                 print("Successfully transmitted \(protocolName) IR signal");
             } else {
