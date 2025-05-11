@@ -9,6 +9,10 @@ struct EMWaverView: View {
     @State private var jsEngine: JavaScriptEngine? // Add reference to JavaScriptEngine
     @State private var firmwareVersion = "Unknown" // Add firmware version state
     @FocusState private var isCommandFieldFocused: Bool
+    
+    // Add auto-connect state variables
+    @State private var autoConnectEnabled = true
+    @State private var isPerformingAutoConnect = false
 
     // Use a timer publisher without autoconnect
     private let timerPublisher = Timer.publish(every: 0.1, on: .main, in: .common)
@@ -26,6 +30,7 @@ struct EMWaverView: View {
                                 if bleManager.isConnected {
                                     bleManager.disconnect()
                                 } else {
+                                    isPerformingAutoConnect = false // Disable auto-connect when manual connect is used
                                     bleManager.startScan()
                                 }
                             }) {
@@ -70,6 +75,11 @@ struct EMWaverView: View {
                                 .disabled(!bleManager.isConnected)
                             }
                         }
+                        
+                        // Add auto-connect toggle
+                        Toggle("Auto Connect", isOn: $autoConnectEnabled)
+                            .toggleStyle(SwitchToggleStyle(tint: .blue))
+                            .padding(.top, 4)
                     }
                     .padding(.vertical, 8)
                 }
@@ -200,6 +210,9 @@ struct EMWaverView: View {
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             // End of added code
             
+            // Auto-connect functionality
+            startAutoConnect()
+            
             // Check firmware version after a short delay when view appears
             if bleManager.isConnected {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -218,9 +231,15 @@ struct EMWaverView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     requestFirmwareVersion()
                 }
+                isPerformingAutoConnect = false // Reset auto-connect flag once connected
             } else {
                 // Reset firmware version when disconnected
                 firmwareVersion = "Unknown"
+                
+                // If disconnected and auto-connect is enabled, try to reconnect
+                if autoConnectEnabled && !isPerformingAutoConnect {
+                    startAutoConnect()
+                }
             }
         }
         .onDisappear {
@@ -248,6 +267,36 @@ struct EMWaverView: View {
                          // Potentially trigger a manual reconnect attempt here if needed
                          // bleManager.attemptReconnect() // You'd need to implement this
                      }
+                }
+            }
+        }
+    }
+    
+    // Add function to handle auto-connect
+    private func startAutoConnect() {
+        // Only start auto-connect if enabled and not already connecting/connected
+        guard autoConnectEnabled && 
+              !bleManager.isConnected && 
+              !bleManager.isScanning && 
+              !isPerformingAutoConnect else {
+            return
+        }
+        
+        print("Starting auto-connect process...")
+        isPerformingAutoConnect = true
+        
+        // Start scanning for devices
+        bleManager.startScan()
+        
+        // Add timeout for auto-connect attempt
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+            if isPerformingAutoConnect && !bleManager.isConnected {
+                print("Auto-connect timeout - resetting state")
+                isPerformingAutoConnect = false
+                
+                // If still scanning, stop the scan
+                if bleManager.isScanning {
+                    bleManager.stopScan()
                 }
             }
         }
@@ -303,8 +352,6 @@ struct EMWaverView: View {
     // New function to fetch data from BLEManager buffer and update local state
     private func fetchAndDisplayBufferedData() {
         guard bleManager.isConnected else { return } // Only fetch if connected
-        
-        print("EMWaverView timer polling BLE buffer at \(Date())")
         
         if let data = bleManager.getCommand(), !data.isEmpty {
             logToSerialMonitor(data: data, direction: .receive)
