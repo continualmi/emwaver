@@ -14,7 +14,6 @@ struct ISMView: View {
     
     // Register viewer
     @State private var registerValues: [String: String] = [:]
-    @State private var showingRegistersView: Bool = false
     
     // Status
     @State private var statusMessage: String = "Not connected"
@@ -27,6 +26,29 @@ struct ISMView: View {
     // Define power levels
     private let powerLevels = ["-30 dBm", "-20 dBm", "-15 dBm", "-10 dBm", "0 dBm", "5 dBm", "7 dBm", "10 dBm"]
     private let powerValues = [-30, -20, -15, -10, 0, 5, 7, 10] // CC1101.POWER_* values
+    
+    // Configuration registers
+    private let configRegisters: [(key: String, name: String)] = [
+        ("00", "IOCFG2"), ("01", "IOCFG1"), ("02", "IOCFG0"), ("03", "FIFOTHR"),
+        ("04", "SYNC1"), ("05", "SYNC0"), ("06", "PKTLEN"), ("07", "PKTCTRL1"),
+        ("08", "PKTCTRL0"), ("09", "ADDR"), ("0A", "CHANNR"), ("0B", "FSCTRL1"),
+        ("0C", "FSCTRL0"), ("0D", "FREQ2"), ("0E", "FREQ1"), ("0F", "FREQ0"),
+        ("10", "MDMCFG4"), ("11", "MDMCFG3"), ("12", "MDMCFG2"), ("13", "MDMCFG1"),
+        ("14", "MDMCFG0"), ("15", "DEVIATN"), ("16", "MCSM2"), ("17", "MCSM1"),
+        ("18", "MCSM0"), ("19", "FOCCFG"), ("1A", "BSCFG"), ("1B", "AGCCTRL2"),
+        ("1C", "AGCCTRL1"), ("1D", "AGCCTRL0"), ("1E", "WOREVT1"), ("1F", "WOREVT0"),
+        ("20", "WORCTRL"), ("21", "FREND1"), ("22", "FREND0"), ("23", "FSCAL3"),
+        ("24", "FSCAL2"), ("25", "FSCAL1"), ("26", "FSCAL0"), ("27", "RCCTRL1"),
+        ("28", "RCCTRL0"), ("29", "FSTEST"), ("2A", "PTEST"), ("2B", "AGCTEST"),
+        ("2C", "TEST2"), ("2D", "TEST1"), ("2E", "TEST0")
+    ]
+    
+    // Status registers
+    private let statusRegisters: [(key: String, name: String)] = [
+        ("30", "PARTNUM"), ("31", "VERSION"), ("32", "FREQEST"), ("33", "LQI"),
+        ("34", "RSSI"), ("35", "MARCSTATE"), ("36", "WORTIME1"), ("37", "WORTIME0"),
+        ("38", "PKTSTATUS"), ("39", "VCO_VC_DAC"), ("3A", "TXBYTES"), ("3B", "RXBYTES")
+    ]
     
     var body: some View {
         ScrollView {
@@ -51,7 +73,9 @@ struct ISMView: View {
                 // ISM UI cards (always visible)
                 VStack(spacing: 20) {
                     rfParametersCard
-                    buttonsCard
+                    
+                    // Register viewer section directly below RF parameters
+                    registersViewSection
                 }
                 .padding()
 
@@ -75,9 +99,6 @@ struct ISMView: View {
             if connected {
                 setupCC1101()
             }
-        }
-        .sheet(isPresented: $showingRegistersView) {
-            RegistersView(cc1101: cc1101, registerValues: $registerValues)
         }
     }
     
@@ -232,52 +253,114 @@ struct ISMView: View {
                     setPowerLevel(powerValues[newValue])
                 }
             }
+            
+            // Quick controls
+            HStack {
+                Button("Reset") {
+                    resetRadio()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(10)
     }
     
-    // Buttons Card
-    private var buttonsCard: some View {
+    // Registers View Section
+    private var registersViewSection: some View {
         VStack(alignment: .leading, spacing: 15) {
-            Text("Actions")
-                .font(.headline)
-                .padding(.bottom, 5)
-            
-            HStack(spacing: 20) {
-                Button("View Registers") {
+            HStack {
+                Text("CC1101 Registers")
+                    .font(.headline)
+                    .padding(.bottom, 5)
+                
+                Spacer()
+                
+                Button("Refresh") {
                     loadRegisters()
-                    showingRegistersView = true
                 }
                 .buttonStyle(.bordered)
-                
-                Button("Calibrate") {
-                    calibrateRadio()
-                }
-                .buttonStyle(.bordered)
-                
-                Button("Reset") {
-                    resetRadio()
-                }
-                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             
-            HStack(spacing: 20) {
-                Button("315 MHz Antenna") {
-                    select315MHzAntenna()
+            ScrollView {
+                VStack(spacing: 8) {
+                    // Configuration Registers
+                    Text("Configuration Registers")
+                        .font(.subheadline)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    ForEach(configRegisters, id: \.key) { register in
+                        registerRow(
+                            name: register.name,
+                            address: register.key,
+                            value: registerValues[register.key] ?? "??"
+                        )
+                    }
+                    
+                    Divider()
+                        .padding(.vertical, 4)
+                    
+                    // Status Registers
+                    Text("Status Registers")
+                        .font(.subheadline)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    ForEach(statusRegisters, id: \.key) { register in
+                        registerRow(
+                            name: register.name,
+                            address: register.key,
+                            value: registerValues[register.key] ?? "??"
+                        )
+                    }
+                    
+                    Divider()
+                        .padding(.vertical, 4)
+                    
+                    // PA Table
+                    Text("PA Table")
+                        .font(.subheadline)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    ForEach(0..<8, id: \.self) { index in
+                        registerRow(
+                            name: "PA[\(index)]",
+                            address: "PA\(index)",
+                            value: registerValues["PA\(index)"] ?? "??"
+                        )
+                    }
                 }
-                .buttonStyle(.bordered)
-                
-                Button("433 MHz Antenna") {
-                    select433MHzAntenna()
-                }
-                .buttonStyle(.bordered)
+                .padding(.horizontal, 4)
             }
+            .frame(height: 400)
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(10)
+    }
+    
+    private func registerRow(name: String, address: String, value: String) -> some View {
+        HStack {
+            Text(name)
+                .font(.headline)
+            Spacer()
+            Text("0x\(address)")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text("0x\(value)")
+                .font(.system(.body, design: .monospaced))
+                .onTapGesture {
+                    // Show edit dialog if needed
+                }
+        }
     }
     
     // MARK: - Helper Methods
@@ -462,15 +545,6 @@ struct ISMView: View {
         isLoading = false
     }
     
-    private func calibrateRadio() {
-        guard let cc1101 = cc1101 else { return }
-        
-        isLoading = true
-        cc1101.calibrate()
-        statusMessage = "Radio calibrated"
-        isLoading = false
-    }
-    
     private func resetRadio() {
         guard let cc1101 = cc1101 else { return }
         
@@ -486,123 +560,6 @@ struct ISMView: View {
         statusMessage = "Radio reset and re-initialized"
         isLoading = false
     }
-    
-    private func select315MHzAntenna() {
-        guard let cc1101 = cc1101 else { return }
-        
-        isLoading = true
-        cc1101.select315MHzAntenna()
-        statusMessage = "315 MHz antenna selected"
-        isLoading = false
-    }
-    
-    private func select433MHzAntenna() {
-        guard let cc1101 = cc1101 else { return }
-        
-        isLoading = true
-        cc1101.select433MHzAntenna()
-        statusMessage = "433 MHz antenna selected"
-        isLoading = false
-    }
-}
-
-// MARK: - Register Viewer
-
-struct RegistersView: View {
-    let cc1101: CC1101?
-    @Binding var registerValues: [String: String]
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            List {
-                Section(header: Text("Configuration Registers")) {
-                    ForEach(configRegisters, id: \.key) { register in
-                        registerRow(name: register.name, address: register.key, value: registerValues[register.key] ?? "??")
-                    }
-                }
-                
-                Section(header: Text("Status Registers")) {
-                    ForEach(statusRegisters, id: \.key) { register in
-                        registerRow(name: register.name, address: register.key, value: registerValues[register.key] ?? "??")
-                    }
-                }
-                
-                Section(header: Text("PA Table")) {
-                    ForEach(0..<8, id: \.self) { index in
-                        registerRow(name: "PA[\(index)]", address: "PA\(index)", value: registerValues["PA\(index)"] ?? "??")
-                    }
-                }
-            }
-            .refreshable {
-                // Refresh register values
-                if let cc1101 = cc1101 {
-                    for register in configRegisters {
-                        if let addr = UInt8(register.key, radix: 16) {
-                            let value = cc1101.readReg(addr: addr)
-                            registerValues[register.key] = String(format: "%02X", value)
-                        }
-                    }
-                    
-                    for register in statusRegisters {
-                        if let addr = UInt8(register.key, radix: 16) {
-                            let value = cc1101.readReg(addr: addr | CC1101.READ_BURST)
-                            registerValues[register.key] = String(format: "%02X", value)
-                        }
-                    }
-                    
-                    let paTable = cc1101.readBurstReg(addr: CC1101.PATABLE, len: 8)
-                    for i in 0..<min(8, paTable.count) {
-                        registerValues["PA\(i)"] = String(format: "%02X", paTable[i])
-                    }
-                }
-            }
-            .navigationTitle("CC1101 Registers")
-            .navigationBarItems(trailing: Button("Done") {
-                dismiss()
-            })
-        }
-    }
-    
-    private func registerRow(name: String, address: String, value: String) -> some View {
-        HStack {
-            Text(name)
-                .font(.headline)
-            Spacer()
-            Text("0x\(address)")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-            Text("0x\(value)")
-                .font(.system(.body, design: .monospaced))
-                .onTapGesture {
-                    // Show edit dialog if needed
-                }
-        }
-    }
-    
-    // Configuration registers
-    private let configRegisters: [(key: String, name: String)] = [
-        ("00", "IOCFG2"), ("01", "IOCFG1"), ("02", "IOCFG0"), ("03", "FIFOTHR"),
-        ("04", "SYNC1"), ("05", "SYNC0"), ("06", "PKTLEN"), ("07", "PKTCTRL1"),
-        ("08", "PKTCTRL0"), ("09", "ADDR"), ("0A", "CHANNR"), ("0B", "FSCTRL1"),
-        ("0C", "FSCTRL0"), ("0D", "FREQ2"), ("0E", "FREQ1"), ("0F", "FREQ0"),
-        ("10", "MDMCFG4"), ("11", "MDMCFG3"), ("12", "MDMCFG2"), ("13", "MDMCFG1"),
-        ("14", "MDMCFG0"), ("15", "DEVIATN"), ("16", "MCSM2"), ("17", "MCSM1"),
-        ("18", "MCSM0"), ("19", "FOCCFG"), ("1A", "BSCFG"), ("1B", "AGCCTRL2"),
-        ("1C", "AGCCTRL1"), ("1D", "AGCCTRL0"), ("1E", "WOREVT1"), ("1F", "WOREVT0"),
-        ("20", "WORCTRL"), ("21", "FREND1"), ("22", "FREND0"), ("23", "FSCAL3"),
-        ("24", "FSCAL2"), ("25", "FSCAL1"), ("26", "FSCAL0"), ("27", "RCCTRL1"),
-        ("28", "RCCTRL0"), ("29", "FSTEST"), ("2A", "PTEST"), ("2B", "AGCTEST"),
-        ("2C", "TEST2"), ("2D", "TEST1"), ("2E", "TEST0")
-    ]
-    
-    // Status registers
-    private let statusRegisters: [(key: String, name: String)] = [
-        ("30", "PARTNUM"), ("31", "VERSION"), ("32", "FREQEST"), ("33", "LQI"),
-        ("34", "RSSI"), ("35", "MARCSTATE"), ("36", "WORTIME1"), ("37", "WORTIME0"),
-        ("38", "PKTSTATUS"), ("39", "VCO_VC_DAC"), ("3A", "TXBYTES"), ("3B", "RXBYTES")
-    ]
 }
 
 #Preview {
