@@ -8,105 +8,81 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var selection: String? = "EMWaver"
-    @State private var tabSelection: String = "RFID"
+    @EnvironmentObject var bleManager: BLEManager
+    @State private var selection: String = "EMWaver"
     
     var body: some View {
-        TabView(selection: $tabSelection) {
-            mainNavigationView(for: "RFID")
-                .tabItem {
-                    Label("RFID", systemImage: "dot.radiowaves.forward")
-                }
-                .tag("RFID")
-            
-            mainNavigationView(for: "ISM")
-                .tabItem {
-                    Label("ISM", systemImage: "memorychip")
-                }
-                .tag("ISM")
-            
-            mainNavigationView(for: "Sampler")
-                .tabItem {
-                    Label("Sampler", systemImage: "waveform")
-                }
-                .tag("Sampler")
-            
-            mainNavigationView(for: "Console")
-                .tabItem {
-                    Label("Console", systemImage: "text.and.command.macwindow")
-                }
-                .tag("Console")
-            
-            mainNavigationView(for: "Buttons")
-                .tabItem {
-                    Label("Buttons", systemImage: "apps.iphone")
-                }
-                .tag("Buttons")
-        }
-        .onChange(of: tabSelection) { newValue in
-            selection = newValue
-        }
-        .onChange(of: selection) { newValue in
-            if let newValue = newValue {
-                // Only update tab selection if it matches one of our tabs
-                if ["RFID", "ISM", "Sampler", "Console", "Buttons"].contains(newValue) {
-                    tabSelection = newValue
-                }
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func mainNavigationView(for initialSelection: String) -> some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                NavigationLink(value: "EMWaver") {
-                    Label("EMWaver", systemImage: "house")
-                }
-                NavigationLink(value: "ISM") {
-                    Label("ISM", systemImage: "memorychip")
-                }
-                NavigationLink(value: "RFID") {
-                    Label("RFID", systemImage: "dot.radiowaves.forward")
-                }
-                NavigationLink(value: "Sampler") {
-                    Label("Sampler", systemImage: "waveform")
-                }
-                NavigationLink(value: "Buttons") {
-                    Label("Buttons", systemImage: "apps.iphone")
-                }
-                NavigationLink(value: "Console") {
-                    Label("Console", systemImage: "text.and.command.macwindow")
-                }
-                // TODO: Add Serial Monitor, Flasher when views are created
-                NavigationLink(value: "Settings") {
-                    Label("Settings", systemImage: "gearshape")
-                }
-            }
-            .navigationTitle("EMWaver")
-        } detail: {
-            switch selection {
-            case "EMWaver":
+        TabView(selection: $selection) {
+            // Main Views - these always appear in the tab bar
+            NavigationView {
                 EMWaverView()
-            case "ISM":
-                ISMView()
-            case "RFID":
-                RFIDView()
-            case "Sampler":
-                SamplerView()
-            case "Buttons":
-                ButtonsView()
-            case "Console":
-                ConsoleView()
-            case "Settings":
-                SettingsView()
-            default:
-                Text("Select a menu item")
             }
+            .tabItem {
+                Label("EMWaver", systemImage: "house")
+            }
+            .tag("EMWaver")
+            
+            NavigationView {
+                ISMView()
+            }
+            .tabItem {
+                Label("ISM", systemImage: "memorychip")
+            }
+            .tag("ISM")
+                
+            NavigationView {
+                SamplerView()
+            }
+            .tabItem {
+                Label("Sampler", systemImage: "waveform")
+            }
+            .tag("Sampler")
+                
+            NavigationView {
+                ConsoleView()
+            }
+            .tabItem {
+                Label("Console", systemImage: "text.and.command.macwindow")
+            }
+            .tag("Console")
+            
+            // "More" tab views - use different approach to avoid duplicate navigation bars
+            RFIDView()
+            .tabItem {
+                Label("RFID", systemImage: "dot.radiowaves.forward")
+            }
+            .tag("RFID")
+                
+            GPIOView()
+            .tabItem {
+                Label("GPIO", systemImage: "cpu")
+            }
+            .tag("GPIO")
+                
+            ButtonsView()
+            .tabItem {
+                Label("Buttons", systemImage: "apps.iphone")
+            }
+            .tag("Buttons")
+                
+            SettingsView()
+            .tabItem {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .tag("Settings")
+        }
+        .onAppear {
+            // Set up consistent navigation bar appearance
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            UINavigationBar.appearance().standardAppearance = appearance
+            UINavigationBar.appearance().compactAppearance = appearance
+            UINavigationBar.appearance().scrollEdgeAppearance = appearance
         }
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(BLEManager())
 }

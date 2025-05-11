@@ -40,168 +40,191 @@ struct ButtonsView: View {
     @State private var jsEngine: JavaScriptEngine? = nil
     
     var body: some View {
-        VStack(spacing: 8) {
-            DisclosureGroup(
-                isExpanded: $isRemoteListExpanded,
-                content: {
-                    if remotes.isEmpty {
-                        Text("No remotes available")
-                            .italic()
-                            .foregroundColor(.gray)
-                            .padding()
-                    } else {
-                        List {
-                            ForEach(remotes) { remote in
-                                Text(remote.name)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        selectedRemote = remote
-                                    }
-                                    .onLongPressGesture {
-                                        actionSheetRemote = remote
-                                        showingActionSheet = true
-                                    }
-                                    .listRowBackground(
-                                        selectedRemote?.id == remote.id ? Color.blue.opacity(0.2) : Color.clear
-                                    )
-                            }
+        NavigationView {
+            VStack(spacing: 8) {
+                remoteListDisclosureGroup
+                buttonGridDisclosureGroup
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Buttons")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button("Add Remote", action: { showingAddRemoteSheet = true })
+                        if selectedRemote != nil {
+                            Button("Add Key", action: { showingAddButtonSheet = true })
                         }
-                        .frame(height: 150)
-                        .listStyle(PlainListStyle())
-                    }
-                },
-                label: {
-                    HStack {
-                        Text("Remotes")
-                            .font(.headline)
-                        if !remotes.isEmpty {
-                            Text("(\(remotes.count))")
-                                .foregroundColor(.secondary)
-                        }
+                        Divider()
+                        Button("Load from Storage", action: loadFromStorage)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
-            )
-            .padding(.horizontal)
-            
-            DisclosureGroup(
-                isExpanded: $isButtonGridExpanded,
-                content: {
-                    if let selectedRemote = selectedRemote {
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                                ForEach(Array(selectedRemote.buttons.enumerated()), id: \.element.id) { index, button in
-                                    Button(action: {
-                                        executeScript(button.script)
-                                    }) {
-                                        Text(button.name)
-                                            .frame(minWidth: 0, maxWidth: .infinity)
-                                            .frame(height: 60)
-                                            .background(colorFromString(button.color))
-                                            .foregroundColor(.white)
-                                            .cornerRadius(8)
-                                    }
-                                    .contextMenu {
-                                        Button("Edit") {
-                                            editingButton = button
-                                            editingButtonIndex = index
-                                            showingEditButtonSheet = true
-                                        }
-                                    }
+            }
+            // Sheets
+            .sheet(isPresented: $showingAddRemoteSheet) {
+                AddRemoteView { remoteName in
+                    createNewRemote(name: remoteName)
+                    showingAddRemoteSheet = false
+                }
+            }
+            .sheet(isPresented: $showingAddButtonSheet) {
+                AddButtonView { name, color, script in
+                    addButtonToRemote(name: name, color: color, script: script)
+                    showingAddButtonSheet = false
+                }
+            }
+            .sheet(isPresented: $showingEditButtonSheet) {
+                if let button = editingButton {
+                    EditButtonView(button: button) { name, color, script in
+                        updateButton(index: editingButtonIndex ?? 0, name: name, color: color, script: script)
+                        showingEditButtonSheet = false
+                    }
+                }
+            }
+            .sheet(isPresented: $showingExportSheet) {
+                ExportView(content: exportContent)
+            }
+            .actionSheet(isPresented: $showingActionSheet) {
+                ActionSheet(
+                    title: Text("Remote Options"),
+                    message: Text(actionSheetRemote?.name ?? ""),
+                    buttons: [
+                        .default(Text("View JSON")) {
+                            if let remote = actionSheetRemote {
+                                exportRemote(remote)
+                            }
+                        },
+                        .default(Text("Rename")) {
+                            // Show rename dialog
+                        },
+                        .destructive(Text("Delete")) {
+                            if let remote = actionSheetRemote {
+                                deleteRemote(remote)
+                            }
+                        },
+                        .cancel()
+                    ]
+                )
+            }
+            .onAppear {
+                // Add this code for opaque navigation bar
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                // End of added code
+
+                loadRemotes()
+                setupJavaScriptEngine()
+            }
+        }
+    }
+    
+    // MARK: - UI Components
+    
+    private var remoteListDisclosureGroup: some View {
+        DisclosureGroup(
+            isExpanded: $isRemoteListExpanded,
+            content: {
+                if remotes.isEmpty {
+                    Text("No remotes available")
+                        .italic()
+                        .foregroundColor(.gray)
+                        .padding()
+                } else {
+                    List {
+                        ForEach(remotes) { remote in
+                            Text(remote.name)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedRemote = remote
                                 }
-                            }
-                            .padding()
+                                .onLongPressGesture {
+                                    actionSheetRemote = remote
+                                    showingActionSheet = true
+                                }
+                                .listRowBackground(
+                                    selectedRemote?.id == remote.id ? Color.blue.opacity(0.2) : Color.clear
+                                )
                         }
-                        .frame(maxWidth: .infinity)
-                    } else {
-                        Text("Select a remote to view buttons")
-                            .italic()
-                            .foregroundColor(.gray)
-                            .padding()
                     }
-                },
-                label: {
-                    Text(selectedRemote != nil ? "Remote: \(selectedRemote!.name)" : "No remote selected")
+                    .frame(height: 150)
+                    .listStyle(PlainListStyle())
+                }
+            },
+            label: {
+                HStack {
+                    Text("Remotes")
                         .font(.headline)
-                }
-            )
-            .padding(.horizontal)
-
-            Spacer()
-        }
-        .padding()
-        .navigationTitle("Buttons")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button("Add Remote", action: { showingAddRemoteSheet = true })
-                    if selectedRemote != nil {
-                        Button("Add Key", action: { showingAddButtonSheet = true })
+                    if !remotes.isEmpty {
+                        Text("(\(remotes.count))")
+                            .foregroundColor(.secondary)
                     }
-                    Divider()
-                    Button("Load from Storage", action: loadFromStorage)
-                } label: {
-                    Image(systemName: "ellipsis.circle")
                 }
             }
-        }
-        // Sheets
-        .sheet(isPresented: $showingAddRemoteSheet) {
-            AddRemoteView { remoteName in
-                createNewRemote(name: remoteName)
-                showingAddRemoteSheet = false
+        )
+        .padding(.horizontal)
+    }
+    
+    private var buttonGridDisclosureGroup: some View {
+        DisclosureGroup(
+            isExpanded: $isButtonGridExpanded,
+            content: {
+                buttonGridContent
+            },
+            label: {
+                Text(selectedRemote != nil ? "Remote: \(selectedRemote!.name)" : "No remote selected")
+                    .font(.headline)
             }
+        )
+        .padding(.horizontal)
+    }
+    
+    @ViewBuilder
+    private var buttonGridContent: some View {
+        if let selectedRemote = selectedRemote {
+            buttonGrid(for: selectedRemote)
+        } else {
+            Text("Select a remote to view buttons")
+                .italic()
+                .foregroundColor(.gray)
+                .padding()
         }
-        .sheet(isPresented: $showingAddButtonSheet) {
-            AddButtonView { name, color, script in
-                addButtonToRemote(name: name, color: color, script: script)
-                showingAddButtonSheet = false
-            }
-        }
-        .sheet(isPresented: $showingEditButtonSheet) {
-            if let button = editingButton {
-                EditButtonView(button: button) { name, color, script in
-                    updateButton(index: editingButtonIndex ?? 0, name: name, color: color, script: script)
-                    showingEditButtonSheet = false
+    }
+    
+    private func buttonGrid(for remote: Remote) -> some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(Array(remote.buttons.enumerated()), id: \.element.id) { index, button in
+                    buttonView(for: button, at: index)
                 }
             }
+            .padding()
         }
-        .sheet(isPresented: $showingExportSheet) {
-            ExportView(content: exportContent)
+        .frame(maxWidth: .infinity)
+    }
+    
+    private func buttonView(for button: Remote.Button, at index: Int) -> some View {
+        Button(action: {
+            executeScript(button.script)
+        }) {
+            Text(button.name)
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .frame(height: 60)
+                .background(colorFromString(button.color))
+                .foregroundColor(.white)
+                .cornerRadius(8)
         }
-        .actionSheet(isPresented: $showingActionSheet) {
-            ActionSheet(
-                title: Text("Remote Options"),
-                message: Text(actionSheetRemote?.name ?? ""),
-                buttons: [
-                    .default(Text("View JSON")) {
-                        if let remote = actionSheetRemote {
-                            exportRemote(remote)
-                        }
-                    },
-                    .default(Text("Rename")) {
-                        // Show rename dialog
-                    },
-                    .destructive(Text("Delete")) {
-                        if let remote = actionSheetRemote {
-                            deleteRemote(remote)
-                        }
-                    },
-                    .cancel()
-                ]
-            )
-        }
-        .onAppear {
-            // Add this code for opaque navigation bar
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().compactAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
-            // End of added code
-
-            loadRemotes()
-            setupJavaScriptEngine()
+        .contextMenu {
+            Button("Edit") {
+                editingButton = button
+                editingButtonIndex = index
+                showingEditButtonSheet = true
+            }
         }
     }
     
