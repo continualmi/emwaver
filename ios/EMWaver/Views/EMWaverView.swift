@@ -191,6 +191,7 @@ struct EMWaverView: View {
             
             // Check firmware version after connection
             if connected {
+                print("EMWaverView detected new connection")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     requestFirmwareVersion()
                 }
