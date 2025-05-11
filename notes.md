@@ -53,7 +53,10 @@ On console and buttons fragments on android, we have a way to save files and loa
 * UX on buttons view is not great, clicking stuff often does nothing. Needs attention
 * When opening keyboards on IOS, we need to be careful since it has no back button, so we need a way to close it, perhaps this feature already exists on the keyboard just needs to be added
 * Add automatic connection on IOS
-
+* Implement encodeIR logic, ported from android
+On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java. Port the full code, complete port.
+* Implement and test IRDB loading of remotes and using generated encodeIR scripts
+On android, on the Buttons fragment, we have an option to load remotes from IRDB, which works well. Lets do that on IOS as well, adding it to the Buttons view. Notice how it works on android. We take a link from the github, and then pull the remote from there, creating the final json with all the scripts. Each button has a specific script that encodes the signal into byte form, and then sends it over using the same routine we have on the sampler transmit, and selecting the correct GPIO.
 
 # Not Done
 
@@ -81,10 +84,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 
 ## IOS STUFF:
 
-* Implement encodeIR logic, ported from android
-On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java. Port the full code, complete port.
-* Implement and test IRDB loading of remotes and using generated encodeIR scripts
-On android, on the Buttons fragment, we have an option to load remotes from IRDB, which works well. Lets do that on IOS as well, adding it to the Buttons view. Notice how it works on android. We take a link from the github, and then pull the remote from there, creating the final json with all the scripts. Each button has a specific script that encodes the signal into byte form, and then sends it over using the same routine we have on the sampler transmit, and selecting the correct GPIO.
+* Integrate buffer transmission and encode ir into buttons fragment when loading from IRDB, the script
 * Minor: add help button explaining what the convert to IR is, android and ios
 On both android and IOS, lets add help buttons on the Sampler, on convert IR button 
 * Need to understand the current BLE command structure on IOS, in order to document it etc
@@ -117,6 +117,8 @@ ISM:
 IR:
 * Record and retransmit IR signals after conversion (already working)
 * Import a toshiba tv remote and test (already working)
-USB: 
+CONSOLE:
 * Must be able to send various characters such as CTRL, SHIFT, etc. Must have a working Never gonna give you up script
+* Must be able to access all other fuctionality through javascripts that are the same on both IOS and android. This requires functions and porting to javascript of all functionality on both sides
+
   
