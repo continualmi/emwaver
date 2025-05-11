@@ -65,17 +65,22 @@
 * Clean up dependencies from old USB Serial libraries
 
 
+ANDROID STUFF:
 * On android ISM , we should have a dialog show up for the loading, and empty parameters if we are not connected and it doestn load, so its not blank, like IOS
+* Minor improvement on android Sampler: make the record/stop a single button, side by side with transmit, like on OIS
+
 IOS STUFF:
-
-
 * Need to understand the current BLE command structure on IOS, in order to document it etc
 * Fix the scrolling on Sampler view not working if finger on charts
 * Editing keys on Console View does not work, the page it brings up is blank
+editing the keys on the console view does not work. when we press the edit button, a blank page comes up. maybe we can use , like in android, a simple IOS equivalent of the alert? 
 * Implement Load From Storage on IOS, both Console and Buttons
+On console and buttons fragments on android, we have a way to save files and load them from storage, be it signals or scripts. On IOS, is this possible to achieve? 
 * Implement encodeIR logic, ported from android
+On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
 * Figure out how to deal with external storage in IOS, for loading external scripts and etc.
+* Minor: add help button explaining what the convert to IR is, android and ios
 
 
 ## Hardware
