@@ -82,7 +82,19 @@ public class MainActivity extends AppCompatActivity {
 
         navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
-        NavigationUI.setupWithNavController(navigationView, navController);
+        
+        // Custom navigation for drawer to fix issues with navigation
+        navigationView.setNavigationItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            if (itemId == R.id.navigation_settings) {
+                startActivity(new Intent(this, SettingsActivity.class));
+            } else {
+                // Explicitly navigate to the correct destination
+                navController.navigate(itemId);
+                drawer.closeDrawers();
+            }
+            return true;
+        });
         
         // Set up Bottom Navigation
         BottomNavigationView bottomNavigationView = binding.bottomNavView;
@@ -112,12 +124,6 @@ public class MainActivity extends AppCompatActivity {
                 // Hide bottom navigation for other destinations not in the bottom nav menu
                 bottomNavigationView.setVisibility(View.GONE);
             }
-        });
-
-        // Add settings menu item click listener
-        navigationView.getMenu().findItem(R.id.navigation_settings).setOnMenuItemClickListener(item -> {
-            startActivity(new Intent(this, SettingsActivity.class));
-            return true;
         });
 
         // Request ALL necessary permissions at startup

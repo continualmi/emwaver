@@ -42,6 +42,7 @@
 * Get rid of the connect UI on each view, only connect UI is on EMWaver view
 * EMWaver view using more GPIO pins than necessary, only need the ones on the board. same with sampler, fixed
 * Might be good to do GPIO control on a dedicated fragment. In fact that makes a lot of sense now that I think about it. With the version checking button, testing commands is easy on EMWaver fragment, so we dont need the GPIO testing there either (done on IOS)
+* Fix small issue with navigation on android, cant go back to emwaver fragment
 
 ## Not Done
 
@@ -61,7 +62,7 @@
 * Clean up dependencies from old USB Serial libraries
 
 
-* Fix small issue with navigation on android, cant go back to emwaver fragment
+
 IOS STUFF:
 * ISM Fragment should show registers immediatly, remove the "actions" ui
 * Add versioning to IOS and fix EMWaver fragment
