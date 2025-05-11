@@ -422,14 +422,21 @@ class IRP {
             result = parseVal(state, precedence: .unary)
             
             // Apply bitwise NOT
-            let intVal = UInt64(result.val)
-            if result.bits > 0 {
-                let inverted = ~intVal
-                result.val = Double(inverted & mask[result.bits]) // Apply mask
+            // Safely convert to UInt64, handling large double values
+            if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) {
+                let intVal = UInt64(result.val)
+                if result.bits > 0 {
+                    let inverted = ~intVal
+                    result.val = Double(inverted & mask[result.bits]) // Apply mask
+                } else {
+                    // Bitwise NOT on non-bitfield numbers is standard integer NOT
+                    result.val = Double(~intVal)
+                    result.bits = 0 // Result is not a bitfield
+                }
             } else {
-                // Bitwise NOT on non-bitfield numbers is standard integer NOT
-                result.val = Double(~intVal)
-                result.bits = 0 // Result is not a bitfield
+                print("Warning: Double value too large for UInt64 conversion in NOT operation")
+                // If we can't perform NOT, treat as a simple value
+                result.bits = 0
             }
         } else if startChar == "(" {
             _ = state.consume() // Consume '('
@@ -487,7 +494,16 @@ class IRP {
                 nextPrecedence = .plus // Same precedence as +/- in original code
                 _ = state.consume()
                 v2 = parseVal(state, precedence: nextPrecedence)
-                result.val = Double(UInt64(result.val) ^ UInt64(v2.val))
+                
+                // Safely convert to UInt64, handling large double values
+                if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) && 
+                   v2.val.isFinite && v2.val >= 0 && v2.val < Double(UInt64.max) {
+                    result.val = Double(UInt64(result.val) ^ UInt64(v2.val))
+                } else {
+                    print("Warning: Double value too large for UInt64 conversion in XOR operation")
+                    // If we can't perform XOR, treat as a simple value
+                    result.bits = 0
+                }
                 
                 // Bit length propagation (take max bits if one is defined)
                 if result.bits > 0 && (v2.bits <= 0 || v2.bits > result.bits) {
@@ -505,13 +521,28 @@ class IRP {
                 if state.peek() == ":" { // Check for optional shift part (value:bits:shift)
                     _ = state.consume() // Consume second ':'
                     v2 = parseVal(state, precedence: nextPrecedence) // Parse shift amount
-                    result.val = Double(UInt64(result.val) >> UInt64(v2.val))
+                    
+                    // Safely convert to UInt64, handling large double values
+                    if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) && 
+                       v2.val.isFinite && v2.val >= 0 && v2.val < Double(UInt64.max) {
+                        result.val = Double(UInt64(result.val) >> UInt64(v2.val))
+                    } else {
+                        print("Warning: Double value too large for UInt64 conversion in shift operation")
+                        // If we can't perform shift, just use zero
+                        result.val = 0
+                    }
                 }
                 
                 if result.bits < 0 { // Negative bits indicates reversal
                     result.bits = -result.bits
                     if result.bits > 0 && result.bits <= 32 {
-                        result.val = Double(reverseBits(UInt64(result.val)) >> UInt64(32 - result.bits))
+                        // Safely convert to UInt64, handling large double values
+                        if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) {
+                            result.val = Double(reverseBits(UInt64(result.val)) >> UInt64(32 - result.bits))
+                        } else {
+                            print("Warning: Double value too large for UInt64 conversion in reversal operation")
+                            result.val = 0
+                        }
                     } else {
                         print("Warning: Invalid bit count for reversal: \(result.bits)")
                     }
@@ -519,7 +550,15 @@ class IRP {
                 
                 // Apply mask
                 if result.bits > 0 && result.bits < mask.count {
-                    result.val = Double(UInt64(result.val) & mask[result.bits])
+                    // More robust safety check for UInt64 conversion
+                    if result.val.isFinite && result.val >= 0 && result.val < Double(UInt64.max) {
+                        // Safe to convert
+                        result.val = Double(UInt64(result.val) & mask[result.bits])
+                    } else {
+                        print("Warning: Double value too large for UInt64 conversion: \(result.val)")
+                        // For very large values, just use the mask value
+                        result.val = Double(mask[result.bits])
+                    }
                 } else if result.bits != 0 { // Allow bits=0 for simple values
                     print("Warning: Invalid bit count for mask: \(result.bits)")
                 }
@@ -620,46 +659,51 @@ class IRP {
                         genHexPulseGap(val.val)
                     }
                 } else { // Bit sequence (val.bits > 0)
-                    var number = UInt64(val.val)
-                    var bitsToProcess = val.bits
-                    
-                    // Apply MSB reversal if needed
-                    if msb && bitsToProcess <= 32 {
-                        number = reverseBits(number) >> UInt64(32 - bitsToProcess)
-                    }
-                    
-                    while bitsToProcess > 0 {
-                        bitsToProcess -= 1
-                        let currentBit = Int(number & 1)
+                    // Safely convert to UInt64, handling large double values
+                    if val.val.isFinite && val.val >= 0 && val.val < Double(UInt64.max) {
+                        var number = UInt64(val.val)
+                        var bitsToProcess = val.bits
                         
-                        if msb {
-                            // Shift new bit in from the right (LSB position)
-                            pendingBits = (pendingBits << 1) | currentBit
-                            // Check if a full group is formed (mask is power_of_2 - 1)
-                            if (pendingBits & bitGroup) != 0 { // Check the marker bit (leftmost bit of the group)
-                                let digitIndex = pendingBits & (bitGroup - 1) // Extract the value bits
-                                if digitIndex < digits.count, let digitDef = digits[digitIndex] {
-                                    _ = genHexSequence(digitDef) // Recursive call
-                                } else {
-                                    print("Warning: Undefined digit definition for index: \(digitIndex) (msb)")
-                                }
-                                pendingBits = 1 // Reset for next group (marker bit)
-                            }
-                        } else { // LSB
-                            // Shift new bit in from the left (MSB position of the group)
-                            pendingBits = (pendingBits >> 1) | (currentBit * bitGroup)
-                            // Check if a full group is formed (marker bit is the LSB)
-                            if (pendingBits & 1) != 0 { // Check the marker bit
-                                let digitIndex = pendingBits >> 1 // Extract the value bits
-                                if digitIndex < digits.count, let digitDef = digits[digitIndex] {
-                                    _ = genHexSequence(digitDef) // Recursive call
-                                } else {
-                                    print("Warning: Undefined digit definition for index: \(digitIndex) (lsb)")
-                                }
-                                pendingBits = bitGroup // Reset for next group (marker bit)
-                            }
+                        // Apply MSB reversal if needed
+                        if msb && bitsToProcess <= 32 {
+                            number = reverseBits(number) >> UInt64(32 - bitsToProcess)
                         }
-                        number >>= 1 // Shift number to get next bit
+                        
+                        while bitsToProcess > 0 {
+                            bitsToProcess -= 1
+                            let currentBit = Int(number & 1)
+                            
+                            if msb {
+                                // Shift new bit in from the right (LSB position)
+                                pendingBits = (pendingBits << 1) | currentBit
+                                // Check if a full group is formed (mask is power_of_2 - 1)
+                                if (pendingBits & bitGroup) != 0 { // Check the marker bit (leftmost bit of the group)
+                                    let digitIndex = pendingBits & (bitGroup - 1) // Extract the value bits
+                                    if digitIndex < digits.count, let digitDef = digits[digitIndex] {
+                                        _ = genHexSequence(digitDef) // Recursive call
+                                    } else {
+                                        print("Warning: Undefined digit definition for index: \(digitIndex) (msb)")
+                                    }
+                                    pendingBits = 1 // Reset for next group (marker bit)
+                                }
+                            } else { // LSB
+                                // Shift new bit in from the left (MSB position of the group)
+                                pendingBits = (pendingBits >> 1) | (currentBit * bitGroup)
+                                // Check if a full group is formed (marker bit is the LSB)
+                                if (pendingBits & 1) != 0 { // Check the marker bit
+                                    let digitIndex = pendingBits >> 1 // Extract the value bits
+                                    if digitIndex < digits.count, let digitDef = digits[digitIndex] {
+                                        _ = genHexSequence(digitDef) // Recursive call
+                                    } else {
+                                        print("Warning: Undefined digit definition for index: \(digitIndex) (lsb)")
+                                    }
+                                    pendingBits = bitGroup // Reset for next group (marker bit)
+                                }
+                            }
+                            number >>= 1 // Shift number to get next bit
+                        }
+                    } else {
+                        print("Warning: Double value too large for UInt64 conversion in bit sequence processing: \(val.val)")
                     }
                 }
             }
