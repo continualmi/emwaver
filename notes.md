@@ -78,6 +78,7 @@ On the android, we have a redatacted imports for USB Serial libraries. In fact, 
 ## IOS STUFF:
 
 * Implement external storage for signals on sampler
+* Fix zoom on Sampler
 * Implement encodeIR logic, ported from android
 On the android side, we ported the encodeIR logic into Java, which came from a repo called MakeHex. Anyway, we need to do the same for IOS, so we can use it on the Console fragment with scripting. Start by porting the classes exactly the same from java to swift, since they work fine on java. Port the full code, complete port.
 * Implement and test IRDB loading of remotes and using generated encodeIR scripts
