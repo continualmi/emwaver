@@ -67,6 +67,7 @@
 IOS STUFF:
 
 * Add versioning to IOS and fix EMWaver fragment
+* Need to understand the current BLE command structure on IOS, in order to document it etc
 * Need to fix the freezing that happens when we are loading the registers on ISM View
 * Fix the scrolling on Sampler view not working if finger on charts
 * Editing keys on Console View does not work, the page it brings up is blank
