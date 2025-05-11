@@ -18,6 +18,7 @@ struct ISMView: View {
     // Status
     @State private var statusMessage: String = "Not connected"
     @State private var isLoading: Bool = false
+    @State private var isViewActive: Bool = false
     
     // Define modulation types
     private let modulationFormats = ["2-FSK", "GFSK", "ASK/OOK", "4-FSK", "MSK"]
@@ -91,12 +92,19 @@ struct ISMView: View {
             }
         }
         .onAppear {
+            print("ISM View appeared")
+            isViewActive = true
             if bleManager.isConnected {
                 setupCC1101()
             }
         }
+        .onDisappear {
+            print("ISM View disappeared")
+            isViewActive = false
+        }
+        // Only setup CC1101 when both view is active AND we get connected
         .onChange(of: bleManager.isConnected) { connected in
-            if connected {
+            if connected && isViewActive {
                 setupCC1101()
             }
         }
@@ -366,6 +374,7 @@ struct ISMView: View {
     // MARK: - Helper Methods
     
     private func setupCC1101() {
+        print("Setting up CC1101 in ISM View")
         // Initialize CC1101 if needed
         if cc1101 == nil {
             cc1101 = CC1101(bleManager: bleManager)
@@ -383,7 +392,12 @@ struct ISMView: View {
         
         // Load current settings with a delay to ensure BLE is ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.loadCurrentSettings()
+            // Double check that view is still active before loading settings
+            if self.isViewActive {
+                self.loadCurrentSettings()
+            } else {
+                self.isLoading = false
+            }
         }
     }
     
