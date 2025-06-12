@@ -19,6 +19,7 @@ struct ContentView: View {
                 NavigationView {
                     EMWaverView()
                 }
+                .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
                     Label("EMWaver", systemImage: "house")
                 }
@@ -33,6 +34,7 @@ struct ContentView: View {
                 NavigationView {
                     SamplerView()
                 }
+                .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
                     Label("Sampler", systemImage: "waveform")
                 }
@@ -41,6 +43,7 @@ struct ContentView: View {
                 NavigationView {
                     ConsoleView()
                 }
+                .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
                     Label("Console", systemImage: "text.and.command.macwindow")
                 }
