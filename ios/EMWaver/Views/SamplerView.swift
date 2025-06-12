@@ -222,6 +222,8 @@ struct SamplerView: View {
     @State private var prevRangeStart: Double = 0
     @State private var prevRangeEnd: Double = 0
     @State private var lastBufferSize: Int = 0
+    @State private var refreshTimer: Timer?
+    @State private var isSchedulerRunning = false
     
     // File import/export states
     @State private var showingFileImporter = false
@@ -417,16 +419,18 @@ struct SamplerView: View {
 
                 viewModel.bleManager = bleManager
                 if bleManager.isConnected {
-                    refreshChart()
+                    initScheduler()
                 }
-            }
-            .onChange(of: bleManager.bufferVersion) { _ in
-                refreshChart()
             }
             .onChange(of: bleManager.isConnected) { isConnected in
                 if isConnected {
-                    refreshChart()
+                    initScheduler()
+                } else {
+                    stopScheduler()
                 }
+            }
+            .onDisappear {
+                stopScheduler()
             }
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -586,6 +590,43 @@ struct SamplerView: View {
             alert.dismiss(animated: true)
         }
         #endif
+    }
+    
+    // MARK: - Scheduler Functions
+    
+    private func initScheduler() {
+        // Stop any existing scheduler
+        stopScheduler()
+        
+        // Get refresh delay from settings
+        let refreshDelay = viewModel.refreshTime
+        
+        // Start new scheduler
+        isSchedulerRunning = true
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: Double(refreshDelay) / 1000.0, repeats: true) { _ in
+            if isSchedulerRunning {
+                refreshChartWithBufferCheck()
+            }
+        }
+    }
+    
+    private func stopScheduler() {
+        isSchedulerRunning = false
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+    
+    private func refreshChartWithBufferCheck() {
+        // Check if buffer size limit has been reached while recording
+        if viewModel.isBufferSizeLimitReached(isRecording: isRecording) {
+            let currentBufferSize = bleManager.getBuffer().count
+            print("Buffer size limit reached: \(currentBufferSize) bytes. Stopping recording.")
+            stopRecording()
+            showImportExportToast("Recording stopped: Buffer size limit reached. You can change this limit in Settings.")
+        }
+        
+        // Refresh chart normally
+        refreshChart()
     }
     
     // MARK: - Chart Functions
