@@ -1,5 +1,0 @@
-# ninja log v5
-3	1714	1745594341432215305	CMakeFiles/native-lib.dir/EncodeIR.cpp.o	ce60c9cfbba71367
-5	2018	1745594341744168431	CMakeFiles/native-lib.dir/IRP.cpp.o	25618492779e2ac2
-1	2354	1745594342080013400	CMakeFiles/native-lib.dir/native-lib.cpp.o	1af84aea0242e4df
-2355	2769	1745594342432432858	/Users/luispl/Documents/emwaver-1/android/app/build/intermediates/cxx/Debug/4v1dq2r5/obj/arm64-v8a/libnative-lib.so	be246e109364aeed
