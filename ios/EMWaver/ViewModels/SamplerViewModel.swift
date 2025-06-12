@@ -12,11 +12,31 @@ class SamplerViewModel: ObservableObject {
     // Reference to BLE manager for buffer access
     var bleManager: BLEManager
     
+    // Reference to settings manager
+    @ObservedObject private var settingsManager = SettingsManager.shared
+    
     // Compression debounce publisher
     let needsCompressionUpdate = PassthroughSubject<Void, Never>()
     
     init(bleManager: BLEManager) {
         self.bleManager = bleManager
+    }
+    
+    // Get refresh time from settings (in milliseconds)
+    var refreshTime: Int {
+        return settingsManager.refreshTime
+    }
+    
+    // Get buffer size limit from settings (in bytes, 0 = no limit)
+    var bufferSizeLimit: Int {
+        return settingsManager.bufferSizeLimit
+    }
+    
+    // Check if buffer size limit has been reached during recording
+    func isBufferSizeLimitReached(isRecording: Bool) -> Bool {
+        guard isRecording && bufferSizeLimit > 0 else { return false }
+        let currentBufferSize = bleManager.getBuffer().count
+        return currentBufferSize >= bufferSizeLimit
     }
     
     // Match Android's getVisibleRangeStart
