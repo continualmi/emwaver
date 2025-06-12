@@ -1,3 +1,94 @@
-build
+# Gradle files
+.gradle/
+build/
+*/build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log Files
+*.log
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# IntelliJ
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/jarRepositories.xml
+# Comment the next line if you want to checkin your web deploy settings,
+# but database connection strings (with potential passwords) will be unencrypted
+.idea/modules.xml
+.idea/*.iws
+
+# Keystore files
+# Uncomment the following lines if you do not want to check your keystore files in.
+*.jks
+*.keystore
+
+# External native build folder generated in Android Studio 2.2 and later
+.externalNativeBuild
+.cxx/
+
+# Google Services (e.g. APIs or Firebase)
+# google-services.json
+
+# Freeline
+freeline.py
+freeline/
+freeline_project_description.json
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/readme.md
+
+# Version control
+vcs.xml
+
+# lint
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+# lint/reports/
+
+# Android Profiling
+*.hprof
+
+# macOS
+.DS_Store
+
+# CMake
+cmake-build-*/
+
+# NDK
+obj/
+
+# APK files (you may want to check these in if they're release builds)
+*.apk
+*.ap_
+*.aab
+
+# Release folder
+release/
+
+# Backup files
+*.bak
+
+# Notes (keeping your existing entry)
+notes.md
+
+# ESP-IDF specific (keeping your existing entry)
 managed_components
 notes.md
