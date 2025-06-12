@@ -50,6 +50,11 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value=".MainActivity" />
         </activity>
+        <activity
+            android:name=".WelcomeActivity"
+            android:label="Welcome"
+            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
+            android:exported="false" />
     </application>
 
 </manifest>

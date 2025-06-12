@@ -29,4 +29,30 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:title="Support &amp; Information"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="help_documentation"
+            android:title="Help &amp; Documentation"
+            android:summary="Visit docs.emwaver.com for setup guides and tutorials"
+            app:iconSpaceReserved="false">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:data="https://docs.emwaver.com" />
+        </Preference>
+
+        <Preference
+            android:key="privacy_policy"
+            android:title="Privacy Policy"
+            android:summary="View our privacy policy"
+            app:iconSpaceReserved="false">
+            <intent
+                android:action="android.intent.action.VIEW"
+                android:data="https://emwaverpolicy.z6.web.core.windows.net/" />
+        </Preference>
+
+    </PreferenceCategory>
+
 </PreferenceScreen> 
