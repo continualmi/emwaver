@@ -10,72 +10,98 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var bleManager: BLEManager
     @State private var selection: String = "EMWaver"
+    @State private var showWelcome: Bool = false
     
     var body: some View {
-        TabView(selection: $selection) {
-            // Main Views - these always appear in the tab bar
-            NavigationView {
-                EMWaverView()
+        ZStack {
+            TabView(selection: $selection) {
+                // Main Views - these always appear in the tab bar
+                NavigationView {
+                    EMWaverView()
+                }
+                .tabItem {
+                    Label("EMWaver", systemImage: "house")
+                }
+                .tag("EMWaver")
+                
+                ButtonsView()
+                .tabItem {
+                    Label("Buttons", systemImage: "apps.iphone")
+                }
+                .tag("Buttons")
+                    
+                NavigationView {
+                    SamplerView()
+                }
+                .tabItem {
+                    Label("Sampler", systemImage: "waveform")
+                }
+                .tag("Sampler")
+                    
+                NavigationView {
+                    ConsoleView()
+                }
+                .tabItem {
+                    Label("Console", systemImage: "text.and.command.macwindow")
+                }
+                .tag("Console")
+                
+                // "More" tab views - use different approach to avoid duplicate navigation bars
+                ISMView()
+                .tabItem {
+                    Label("ISM", systemImage: "memorychip")
+                }
+                .tag("ISM")
+                    
+                RFIDView()
+                .tabItem {
+                    Label("RFID", systemImage: "dot.radiowaves.forward")
+                }
+                .tag("RFID")
+                    
+                GPIOView()
+                .tabItem {
+                    Label("GPIO", systemImage: "cpu")
+                }
+                .tag("GPIO")
+                    
+                SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .tag("Settings")
             }
-            .tabItem {
-                Label("EMWaver", systemImage: "house")
+            .onAppear {
+                // Set up consistent navigation bar appearance
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                
+                // Check if this is the first launch
+                checkFirstLaunch()
             }
-            .tag("EMWaver")
             
-            ButtonsView()
-            .tabItem {
-                Label("Buttons", systemImage: "apps.iphone")
+            // Show welcome screen if it's the first launch
+            if showWelcome {
+                WelcomeView(onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showWelcome = false
+                    }
+                    // Mark that user has seen the welcome screen
+                    UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+                })
+                .transition(.opacity)
+                .zIndex(1)
             }
-            .tag("Buttons")
-                
-            NavigationView {
-                SamplerView()
-            }
-            .tabItem {
-                Label("Sampler", systemImage: "waveform")
-            }
-            .tag("Sampler")
-                
-            NavigationView {
-                ConsoleView()
-            }
-            .tabItem {
-                Label("Console", systemImage: "text.and.command.macwindow")
-            }
-            .tag("Console")
-            
-            // "More" tab views - use different approach to avoid duplicate navigation bars
-            ISMView()
-            .tabItem {
-                Label("ISM", systemImage: "memorychip")
-            }
-            .tag("ISM")
-                
-            RFIDView()
-            .tabItem {
-                Label("RFID", systemImage: "dot.radiowaves.forward")
-            }
-            .tag("RFID")
-                
-            GPIOView()
-            .tabItem {
-                Label("GPIO", systemImage: "cpu")
-            }
-            .tag("GPIO")
-                
-            SettingsView()
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .tag("Settings")
         }
-        .onAppear {
-            // Set up consistent navigation bar appearance
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().compactAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
+    }
+    
+    private func checkFirstLaunch() {
+        let hasSeenWelcome = UserDefaults.standard.bool(forKey: "hasSeenWelcome")
+        if !hasSeenWelcome {
+            showWelcome = true
         }
     }
 }
