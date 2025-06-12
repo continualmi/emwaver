@@ -625,7 +625,11 @@ struct ConsoleView: View {
             self.print(message)
         })
         
-        // Set up CC1101 if available
+        // Set up CC1101 if available (create instance if connected and not already created)
+        if bleManager.isConnected && cc1101 == nil {
+            cc1101 = CC1101(bleManager: bleManager)
+        }
+        
         if let cc1101 = cc1101 {
             jsEngine?.setupCC1101(cc1101)
         }
@@ -638,9 +642,9 @@ struct ConsoleView: View {
     }
     
     private func executeScript() {
-        guard bleManager.isConnected else {
-            print("Not connected to device. Please connect first.")
-            return
+        // Initialize JS engine if not already done (allows script execution even when disconnected)
+        if jsEngine == nil {
+            setupJSEngine()
         }
         
         guard jsEngine != nil else {
@@ -728,6 +732,96 @@ struct ConsoleView: View {
             
             saveScript(txScriptName, content: txContent)
             print("Created default TX script")
+        }
+        
+        // IR Test Script
+        let irTestScriptName = "ir_test.js"
+        let irTestScriptPath = getDocumentsDirectory().appendingPathComponent(irTestScriptName)
+        
+        if !FileManager.default.fileExists(atPath: irTestScriptPath.path) {
+            let irTestContent = """
+                // Simple IR Test Script
+                // Tests encoding common IR protocols
+
+                print("Starting IR Encoding Test");
+                print("-----------------------");
+
+                // Test NEC protocol (common for many TVs and devices)
+                var protocol = "nec1";
+                var device = 0;   // Device address
+                var subdevice = -1; // -1 means no subdevice/use default
+                var funcCode = 16;  // Function code (e.g., power button)
+
+                print("Encoding " + protocol + " signal: device=" + device + ", function=" + funcCode);
+                var timings = IRService.encodeIR(protocol, device, subdevice, funcCode);
+
+                if (timings && timings.length > 0) {
+                    print("Success! Generated " + timings.length + " timing values");
+                    
+                    // Show the first few timings
+                    var output = "First 10 timings (µs): ";
+                    var count = Math.min(timings.length, 10);
+                    
+                    for (var i = 0; i < count; i++) {
+                        output += timings[i].toFixed(1);
+                        if (i < count - 1) output += ", ";
+                    }
+                    
+                    print(output);
+                    print("Total sequence length: " + timings.length);
+                    
+                    // Convert timings to binary signal
+                    print("Converting timings to binary signal...");
+                    var signal = Utils.convertTimingsToBinary(timings);
+                    print("Binary signal size: " + signal.length + " bytes");
+                    
+                    // Apply IR carrier modulation
+                    print("Applying 38kHz IR carrier modulation...");
+                    var irSignal = Utils.convertToIRBuffer(signal);
+                    print("IR signal size: " + irSignal.length + " bytes");
+                    
+                    // Define the transmit command for IR - use pin 4 (IR TX) in binary format
+                    var transmitCommand = new Uint8Array([
+                        0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x20, 0x04 // "transmit " + raw pin 4 (IR TX)
+                    ]);
+                    
+                    print("To send this signal:");
+                    print("1. BLEService.loadBuffer(irSignal);");
+                    print("2. BLEService.sendPacket(transmitCommand);");
+                    
+                    // Actually send the signal - following SamplerView pattern
+                    print("\\nSending IR signal now...");
+                    
+                    // Load the buffer with the IR signal
+                    BLEService.loadBuffer(irSignal);
+                    
+                    // Send the transmit command (type 4 = IR)
+                    BLEService.sendPacket(transmitCommand);
+                    
+                    // Transmit the buffer
+                    BLEService.transmitBuffer();
+                    print("Transmission complete");
+                } else {
+                    print("Error: Failed to encode " + protocol + " signal");
+                }
+
+                print("\\nTesting Samsung protocol");
+                var samsung = IRService.encodeIR(IRService.PROTOCOL_SAMSUNG, 7, -1, 11);
+                if (samsung) {
+                    print("Success! Generated " + samsung.length + " timing values for Samsung");
+                    
+                    // Convert and show payload size
+                    var samsungSignal = Utils.convertTimingsToBinary(samsung);
+                    print("Samsung binary signal size: " + samsungSignal.length + " bytes");
+                } else {
+                    print("Error: Failed to encode Samsung signal");
+                }
+
+                print("\\nIR Test Complete");
+                """
+            
+            saveScript(irTestScriptName, content: irTestContent)
+            print("Created default IR test script")
         }
         
         loadRecentScripts()
