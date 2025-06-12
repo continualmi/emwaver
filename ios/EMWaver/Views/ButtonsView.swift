@@ -265,6 +265,7 @@ struct ButtonsView: View {
             .animation(.easeInOut, value: isRemoteListExpanded)
             .animation(.easeInOut, value: isButtonGridExpanded)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     // MARK: - UI Components
