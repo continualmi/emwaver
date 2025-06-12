@@ -4,6 +4,7 @@ struct SettingsView: View {
     @StateObject private var settingsManager = SettingsManager.shared
     @State private var showingRefreshTimePicker = false
     @State private var showingBufferSizePicker = false
+    @Environment(\.openURL) private var openURL
     
     var body: some View {
         List {
@@ -49,6 +50,40 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.vertical, 4)
+            }
+            
+            Section("Support & Information") {
+                // Help Documentation
+                Button(action: {
+                    if let url = URL(string: "https://docs.emwaver.com") {
+                        openURL(url)
+                    }
+                }) {
+                    HStack {
+                        Label("Help & Documentation", systemImage: "questionmark.circle")
+                        Spacer()
+                        Image(systemName: "arrow.up.right.square")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+                .foregroundColor(.primary)
+                
+                // Privacy Policy
+                Button(action: {
+                    if let url = URL(string: "https://emwaverpolicy.z6.web.core.windows.net/") {
+                        openURL(url)
+                    }
+                }) {
+                    HStack {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                        Spacer()
+                        Image(systemName: "arrow.up.right.square")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+                .foregroundColor(.primary)
             }
         }
         .navigationTitle("Settings")
