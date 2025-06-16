@@ -7,5 +7,3 @@ You can flash the latest EMWaver firmware to your device directly from your brow
 <esp-web-install-button
   manifest="/firmware/manifest.json">
 </esp-web-install-button>
-
-More details coming soon. 
