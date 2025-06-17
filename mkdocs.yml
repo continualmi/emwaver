@@ -24,9 +24,18 @@ extra:
   toc:
     sidebar: false
 nav:
-  - Home: index.md
+  - Home: https://emwavers.com/
   - Documentation: documentation.md
   - Firmware Update: firmware.md
-  - Store: https://brave-desert-0fdc19403.6.azurestaticapps.net/
+  - Store: https://emwavers.com/store
+  - App: https://emwavers.com/app
+  - Certificates: https://emwavers.com/certificates
+
 extra_css:
   - styles/hide-toc.css
+markdown_extensions:
+  - attr_list    # Allow attribute lists like {.class}
+  - md_in_html   # Enable Markdown processing inside HTML blocks (needed for <div markdown>)
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
