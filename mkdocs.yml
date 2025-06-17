@@ -25,8 +25,8 @@ extra:
     sidebar: false
 nav:
   - Home: index.md
-  - Technical Implementation: technical_implementation.md
+  - Documentation: documentation.md
   - Firmware Update: firmware.md
-  - Buy EMWaver: https://brave-desert-0fdc19403.6.azurestaticapps.net/
+  - Store: https://brave-desert-0fdc19403.6.azurestaticapps.net/
 extra_css:
   - styles/hide-toc.css
