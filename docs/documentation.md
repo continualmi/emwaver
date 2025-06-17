@@ -1,6 +1,42 @@
-# Technical Implementation
+# EMWaver Documentation
 
 EMWaver is an open-source hardware platform and companion software suite for wireless experimentation, signal analysis, and device control. It features an ESP32-S3-based board with sub-GHz (CC1101), infrared, USB-C, and GPIO expansion, plus powerful mobile apps for iOS and Android.
+
+<div class="grid cards" markdown>
+
+-   :material-chip:{ .lg .middle } **Hardware**
+
+    ---
+
+    ESP32-S3 board components and specifications
+
+    [:octicons-arrow-right-24: Go to Hardware](#hardware)
+
+-   :material-cog:{ .lg .middle } **Firmware**
+
+    ---
+
+    ESP-IDF firmware architecture and modules
+
+    [:octicons-arrow-right-24: Go to Firmware](#firmware)
+
+-   :simple-apple:{ .lg .middle } **iOS App**
+
+    ---
+
+    SwiftUI mobile app for iPhone control
+
+    [:octicons-arrow-right-24: Go to iOS App](#ios-app)
+
+-   :simple-android:{ .lg .middle } **Android App**
+
+    ---
+
+    Native Android app with full features
+
+    [:octicons-arrow-right-24: Go to Android App](#android-app)
+
+</div>
 
 ## What is EMWaver?
 
