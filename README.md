@@ -2,13 +2,13 @@
   <img src="logo.png" alt="EMWaver Logo" width="250">
 </div>
 
-# EMWaver Firmware (ESP-IDF ESP32-S3)
-
 This repository hosts the EMWaver firmware and the Android/iOS companion apps. Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com). The sections below cover CLI workflows to install ESP-IDF, build/flash the firmware, and reference the app projects for command-line builds.
 
-## Firmware: Command-Line Setup (ESP-IDF 5.5.1)
+# Firmware
 
-### Linux (Ubuntu/Debian)
+Target device: ESP32-S3 running on ESP-IDF v5.5.1.
+
+## Linux (Ubuntu/Debian)
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git wget flex bison gperf python3 python3-pip python3-venv \
@@ -41,7 +41,7 @@ idf.py -p /dev/ttyACM0 monitor  # Exit with Ctrl+]
 
 Use `idf.py -p /dev/ttyACM0 flash monitor` to combine flashing and monitoring.
 
-### macOS (Intel & Apple Silicon)
+## macOS (Intel & Apple Silicon)
 
 ```bash
 brew update && brew install cmake ninja dfu-util ccache python@3
@@ -73,7 +73,7 @@ idf.py -p /dev/cu.usbmodemXXXX monitor  # Exit with Ctrl+]
 
 `idf.py -p /dev/cu.usbmodemXXXX flash monitor` performs flash and monitor in one command.
 
-### Windows (ESP-IDF Tools Installer)
+## Windows (ESP-IDF Tools Installer)
 
 1. Download the ESP-IDF Tools Installer (online or offline) from Espressif and launch it (see the v5.5.1 guide: https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32c3/get-started/windows-setup.html).
 2. During installation:
@@ -98,14 +98,26 @@ Use `idf.py -p COM7 flash monitor` to combine flashing and serial monitoring. Th
 
 If you prefer a reusable alias, add `alias get_idf='source ~/emwaver/setup.sh'` to your shell profile so new sessions pick up the toolchain quickly.
 
-## EMWaver Android App (CLI build & deploy)
+# Android App
 
-_Coming soon._
+- Project lives in `android/` (Gradle wrapper included).
+- Build debug APK:
+  - `cd android`
+  - `./gradlew assembleDebug`
+  - Output: `app/build/outputs/apk/debug/app-debug.apk`
+- Install to a connected device with USB debugging enabled: `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+- For signed releases, configure Gradle signing in `android/app/build.gradle` and run `./gradlew assembleRelease`.
 
-## EMWaver iOS App (CLI build & deploy)
+# iOS App
 
-_Coming soon._
+- Project lives in `ios/` (Xcode workspace `EMWaver.xcworkspace`).
+- Build for simulator:
+  - `cd ios`
+  - `xcodebuild -workspace EMWaver.xcworkspace -scheme EMWaver -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15' build`
+- Archive for devices (requires provisioning profile):
+  - `xcodebuild -workspace EMWaver.xcworkspace -scheme EMWaver -configuration Release archive -archivePath build/EMWaver.xcarchive`
+- Export/install via Xcode Organizer or `xcodebuild -exportArchive -archivePath build/EMWaver.xcarchive -exportOptionsPlist <plist>` once signing assets are configured.
 
-## License
+# License
 
 This project is open source and available under the [LICENSE](LICENSE) file.
