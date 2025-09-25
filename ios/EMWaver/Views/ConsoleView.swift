@@ -503,13 +503,8 @@ struct ConsoleView: View {
     }
 
     private var waveletPreview: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.systemGray6))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
+        ZStack(alignment: .topLeading) {
             WaveletRenderView(tree: activeWaveletTree, invokeHandler: handleWaveletCallback)
-                .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             if activeWaveletTree == nil && !isRenderingWavelet {
@@ -521,6 +516,7 @@ struct ConsoleView: View {
                         .padding()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemGroupedBackground))
             }
 
             if isRenderingWavelet {
@@ -534,6 +530,7 @@ struct ConsoleView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var menuButton: some View {
