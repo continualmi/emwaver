@@ -208,7 +208,7 @@ struct KeyboardToolbarTextEditor: View {
                         }
                     }
                 }
-                .onChange(of: isFocused) { focused in
+                .onChangeCompat(of: isFocused) { focused in
                     showKeyboard = focused
                 }
             
@@ -365,13 +365,13 @@ struct ConsoleView: View {
                 setupJSEngine()
             }
         }
-        .onChange(of: selectedTab) { newValue in
+        .onChangeCompat(of: selectedTab) { newValue in
             if newValue == .wavelets, !isRenderingWavelet, activeWaveletTree == nil {
                 Swift.print("[Wavelet] Wavelets tab selected; triggering preview refresh")
                 renderWavelet()
             }
         }
-        .onChange(of: bleManager.isConnected) { connected in
+        .onChangeCompat(of: bleManager.isConnected) { connected in
             if connected {
                 cc1101 = CC1101(bleManager: bleManager)
                 setupJSEngine()
@@ -465,7 +465,7 @@ struct ConsoleView: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
                     .frame(minHeight: 100, maxHeight: 250)
-                    .onChange(of: scriptContent) { _ in
+                    .onChangeCompat(of: scriptContent) { _ in
                         hasUnsavedChanges = true
                         updateDynamicScriptEditorTitle()
                         setupAutoSave()
@@ -933,6 +933,14 @@ struct ConsoleView: View {
             print("Created default wavelet demo script")
         }
 
+        let rfidWaveletName = "wavelet_rfid.js"
+        let rfidWaveletPath = getDocumentsDirectory().appendingPathComponent(rfidWaveletName)
+
+        if !FileManager.default.fileExists(atPath: rfidWaveletPath.path) {
+            saveScript(rfidWaveletName, content: waveletRFIDScript())
+            print("Created default RFID wavelet script")
+        }
+
         loadRecentScripts()
     }
     
@@ -950,52 +958,40 @@ struct ConsoleView: View {
     // MARK: - External Storage & Network Operations
     
     private func importScriptFromExternalStorage(url: URL) {
-        do {
-            // Start accessing security-scoped resource
-            guard url.startAccessingSecurityScopedResource() else {
-                print("Failed to access security-scoped resource")
-                return
-            }
-            
-            defer {
-                // Make sure to release the security-scoped resource when done
-                url.stopAccessingSecurityScopedResource()
-            }
-            
-            // Use file coordination for safer file access
-            var error: NSError?
-            var content = ""
-            
-            NSFileCoordinator().coordinate(readingItemAt: url, error: &error) { coordinatedURL in
-                do {
-                    content = try String(contentsOf: coordinatedURL)
-                } catch {
-                    print("Error reading file contents: \(error.localizedDescription)")
-                }
-            }
-            
-            if let fileError = error {
-                print("File coordination error: \(fileError.localizedDescription)")
-                return
-            }
-            
-            if content.isEmpty {
-                print("Failed to read file content")
-                return
-            }
-            
-            let filename = url.lastPathComponent
-            
-            // Save to internal storage
-            saveScript(filename, content: content)
-            
-            // Load the script
-            loadScript(filename)
-            
-            print("Imported script: \(filename)")
-        } catch {
-            print("Error importing script: \(error.localizedDescription)")
+        guard url.startAccessingSecurityScopedResource() else {
+            print("Failed to access security-scoped resource")
+            return
         }
+
+        defer {
+            url.stopAccessingSecurityScopedResource()
+        }
+
+        var coordinationError: NSError?
+        var content = ""
+
+        NSFileCoordinator().coordinate(readingItemAt: url, error: &coordinationError) { coordinatedURL in
+            do {
+                content = try String(contentsOf: coordinatedURL, encoding: .utf8)
+            } catch {
+                print("Error reading file contents: \(error.localizedDescription)")
+            }
+        }
+
+        if let fileError = coordinationError {
+            print("File coordination error: \(fileError.localizedDescription)")
+            return
+        }
+
+        if content.isEmpty {
+            print("Failed to read file content")
+            return
+        }
+
+        let filename = url.lastPathComponent
+        saveScript(filename, content: content)
+        loadScript(filename)
+        print("Imported script: \(filename)")
     }
     
     private func downloadScriptFromURL(_ urlString: String) {
@@ -1095,9 +1091,9 @@ struct ConsoleView: View {
         return lowered.contains("ui.render(") || lowered.contains("ui.column(") || lowered.contains("ui.row(")
     }
 
-    private func handleWaveletCallback(_ token: String) {
-        print("[Wavelet] Invoking handler \(token)")
-        waveletEngine?.invoke(handler: token)
+    private func handleWaveletCallback(_ token: String, arguments: [Any]) {
+        print("[Wavelet] Invoking handler \(token) with arguments: \(arguments)")
+        waveletEngine?.invoke(handler: token, arguments: arguments)
     }
 
     private func waveletDemoScript() -> String {
@@ -1130,6 +1126,172 @@ struct ConsoleView: View {
         });
 
         UI.render(root);
+        """
+    }
+
+    private func waveletRFIDScript() -> String {
+        return """
+        const state = {
+            blockAddress: "",
+            authMode: "A",
+            keyInputs: Array.from({ length: 6 }, () => ""),
+            data: "",
+            result: null
+        };
+
+        function formatHexInput(input, maxLength) {
+            if (!input) {
+                return "";
+            }
+            const sanitized = String(input).toUpperCase().replace(/[^0-9A-F ]/g, "");
+            return sanitized.slice(0, maxLength);
+        }
+
+        function updateBlockAddress(value) {
+            setState({ blockAddress: formatHexInput(value, 2) });
+        }
+
+        function updateKey(index, value) {
+            const nextKeys = state.keyInputs.slice();
+            nextKeys[index] = formatHexInput(value, 2);
+            setState({ keyInputs: nextKeys });
+        }
+
+        function updateData(value) {
+            setState({ data: formatHexInput(value, 47) });
+        }
+
+        function handleRead() {
+            const block = state.blockAddress || "00";
+            print(`[Wavelet/RFID] Read block ${block} using Key ${state.authMode}`);
+            setState({
+                result: {
+                    kind: "info",
+                    text: `Read command queued for block ${block} (Key ${state.authMode}).`
+                }
+            });
+        }
+
+        function handleWrite() {
+            const block = state.blockAddress || "00";
+            const byteCount = state.data.trim().length === 0
+                ? 0
+                : state.data.trim().split(/\\s+/).filter(Boolean).length;
+            print(`[Wavelet/RFID] Write block ${block} using Key ${state.authMode}`);
+            setState({
+                result: {
+                    kind: "success",
+                    text: `Write command queued with ${byteCount} byte(s) for block ${block}.`
+                }
+            });
+        }
+
+        function setState(patch) {
+            Object.assign(state, patch);
+            render();
+        }
+
+        function render() {
+            UI.render(
+                UI.scroll({
+                    padding: 16,
+                    spacing: 16,
+                    children: [
+                        UI.column({
+                            spacing: 16,
+                            children: [
+                                UI.text({
+                                    text: "RFID Tools",
+                                    font: "title2",
+                                    fontWeight: "semibold"
+                                }),
+                                UI.text({
+                                    text: "Send quick read/write commands to nearby tags using the EMWaver RFID module.",
+                                    foregroundColor: "#6B7280"
+                                }),
+                                UI.textField({
+                                    label: "Block Address",
+                                    placeholder: "00",
+                                    value: state.blockAddress,
+                                    keyboard: "ascii",
+                                    autocapitalize: "none",
+                                    onChange: updateBlockAddress
+                                }),
+                                UI.picker({
+                                    label: "Authentication Mode",
+                                    style: "segmented",
+                                    selected: state.authMode,
+                                    options: [
+                                        { label: "Key A", value: "A" },
+                                        { label: "Key B", value: "B" }
+                                    ],
+                                    onChange: function(value) {
+                                        setState({ authMode: value });
+                                    }
+                                }),
+                                UI.column({
+                                    spacing: 8,
+                                    children: [
+                                        UI.text({ text: "Key (6 bytes)", font: "headline" }),
+                                        UI.grid({
+                                            columns: 3,
+                                            spacing: 8,
+                                            children: state.keyInputs.map(function(keyValue, index) {
+                                                return UI.textField({
+                                                    placeholder: "00",
+                                                    value: keyValue,
+                                                    keyboard: "ascii",
+                                                    autocapitalize: "none",
+                                                    onChange: function(nextValue) {
+                                                        updateKey(index, nextValue);
+                                                    }
+                                                });
+                                            })
+                                        })
+                                    ]
+                                }),
+                                UI.textEditor({
+                                    label: "Data (16 bytes)",
+                                    placeholder: "Enter 16 bytes of data (e.g. FF FF ...)",
+                                    value: state.data,
+                                    onChange: updateData
+                                }),
+                                UI.row({
+                                    spacing: 12,
+                                    children: [
+                                        UI.button({
+                                            label: "Read",
+                                            icon: "arrow.down.doc.fill",
+                                            backgroundColor: "#1D4ED8",
+                                            foregroundColor: "#FFFFFF",
+                                            cornerRadius: 10,
+                                            onTap: handleRead
+                                        }),
+                                        UI.button({
+                                            label: "Write",
+                                            icon: "arrow.up.doc.fill",
+                                            backgroundColor: "#15803D",
+                                            foregroundColor: "#FFFFFF",
+                                            cornerRadius: 10,
+                                            onTap: handleWrite
+                                        })
+                                    ]
+                                }),
+                                state.result ? UI.text({
+                                    text: state.result.text,
+                                    backgroundColor: state.result.kind === "info" ? "#DBEAFE" : "#DCFCE7",
+                                    foregroundColor: state.result.kind === "info" ? "#1D4ED8" : "#166534",
+                                    padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                                    cornerRadius: 8
+                                }) : null
+                            ]
+                        })
+                    ]
+                })
+            );
+        }
+
+        render();
         """
     }
 
@@ -1214,21 +1376,7 @@ private extension View {
                 switch result {
                 case .success(let urls):
                     if let url = urls.first {
-                        // Try to get persistent access to the file URL
-                        do {
-                            let secureURL = url.startAccessingSecurityScopedResource()
-                            if !secureURL {
-                                print("Failed to get secure access to URL")
-                            }
-                            
-                            // Use the secured URL for import
-                            importScriptFromExternalStorage(url)
-                            
-                            // Always release when done
-                            url.stopAccessingSecurityScopedResource()
-                        } catch {
-                            print("Error securing file access: \(error.localizedDescription)")
-                        }
+                        importScriptFromExternalStorage(url)
                     }
                 case .failure(let error):
                     print("Error importing file: \(error.localizedDescription)")
@@ -1266,6 +1414,18 @@ private extension View {
 func getExportFilename(_ filename: String?) -> String {
     let name = filename ?? "script"
     return name.lowercased().hasSuffix(".js") ? name : name + ".js"
+}
+
+private extension View {
+    func onChangeCompat<Value: Equatable>(of value: Value, perform action: @escaping (Value) -> Void) -> some View {
+        if #available(iOS 17.0, *) {
+            return onChange(of: value) { _, newValue in
+                action(newValue)
+            }
+        } else {
+            return onChange(of: value, perform: action)
+        }
+    }
 }
 
 // MARK: - Script Document

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 // Represents the UI node type that Wavelet scripts can construct.
 enum WaveletNodeType: String {
@@ -9,11 +10,18 @@ enum WaveletNodeType: String {
     case button
     case slider
     case logViewer
+    case scroll
+    case textField
+    case textEditor
+    case picker
+    case grid
 }
 
 // Supported event types for Wavelet UI nodes.
 enum WaveletEventType: String {
     case tap
+    case change
+    case submit
 }
 
 // Stored properties associated with a Wavelet node.
@@ -85,6 +93,175 @@ struct WaveletNodeProps {
         WaveletNodeProps.extractCGFloat(raw["width"])
     }
 
+    var frameHeight: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["height"])
+    }
+
+    var cornerRadius: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["cornerRadius"])
+    }
+
+    var backgroundColor: Color? {
+        WaveletNodeProps.parseColor(raw["backgroundColor"])
+    }
+
+    var foregroundColor: Color? {
+        WaveletNodeProps.parseColor(raw["foregroundColor"])
+    }
+
+    var font: Font? {
+        guard let value = (raw["font"] as? String)?.lowercased() else { return nil }
+        switch value {
+        case "largetitle": return .largeTitle
+        case "title": return .title
+        case "title2": return .title2
+        case "title3": return .title3
+        case "headline": return .headline
+        case "subheadline": return .subheadline
+        case "body": return .body
+        case "callout": return .callout
+        case "caption": return .caption
+        case "caption2": return .caption2
+        case "footnote": return .footnote
+        default: return nil
+        }
+    }
+
+    var fontWeight: Font.Weight? {
+        guard let value = (raw["fontWeight"] as? String)?.lowercased() else { return nil }
+        switch value {
+        case "ultralight": return .ultraLight
+        case "thin": return .thin
+        case "light": return .light
+        case "regular": return .regular
+        case "medium": return .medium
+        case "semibold": return .semibold
+        case "bold": return .bold
+        case "heavy": return .heavy
+        case "black": return .black
+        default: return nil
+        }
+    }
+
+    var systemIconName: String? {
+        raw["icon"] as? String
+    }
+
+    var axis: Axis.Set {
+        guard let rawAxis = (raw["axis"] as? String)?.lowercased() else { return .vertical }
+        switch rawAxis {
+        case "horizontal":
+            return .horizontal
+        case "both":
+            return [.horizontal, .vertical]
+        default:
+            return .vertical
+        }
+    }
+
+    var showsIndicators: Bool {
+        if let value = raw["showsIndicators"] as? Bool { return value }
+        if let number = raw["showsIndicators"] as? NSNumber { return number.boolValue }
+        return true
+    }
+
+    var textFieldValue: String {
+        raw["value"] as? String ?? ""
+    }
+
+    var placeholder: String {
+        raw["placeholder"] as? String ?? ""
+    }
+
+    var textContentType: UITextContentType? {
+        guard let value = (raw["textContentType"] as? String)?.lowercased() else { return nil }
+        switch value {
+        case "username": return .username
+        case "password": return .password
+        case "email": return .emailAddress
+        case "name": return .name
+        case "telephone": return .telephoneNumber
+        default: return nil
+        }
+    }
+
+    var keyboardType: UIKeyboardType {
+        guard let value = (raw["keyboard"] as? String)?.lowercased() else { return .default }
+        switch value {
+        case "number": return .numberPad
+        case "decimal": return .decimalPad
+        case "email": return .emailAddress
+        case "url": return .URL
+        case "ascii": return .asciiCapable
+        case "phone": return .phonePad
+        case "password": return .asciiCapable
+        default: return .default
+        }
+    }
+
+    var autocapitalizationMode: String? {
+        (raw["autocapitalize"] as? String)?.lowercased()
+    }
+
+    var isSecureField: Bool {
+        (raw["secure"] as? Bool) ?? false
+    }
+
+    var pickerOptions: [WaveletPickerOption] {
+        guard let rawOptions = raw["options"] as? [[String: Any]] else { return [] }
+        return rawOptions.compactMap { WaveletPickerOption(dictionary: $0) }
+    }
+
+    var pickerSelection: String {
+        raw["selected"] as? String ?? ""
+    }
+
+    var pickerStyle: String? {
+        (raw["style"] as? String)?.lowercased()
+    }
+
+    var gridColumns: Int {
+        if let value = raw["columns"] as? Int { return max(1, value) }
+        if let number = raw["columns"] as? NSNumber { return max(1, number.intValue) }
+        return 2
+    }
+
+    var gridSpacing: CGFloat {
+        WaveletNodeProps.extractCGFloat(raw["spacing"]) ?? 8
+    }
+
+    var sliderValue: Double {
+        if let number = raw["value"] as? NSNumber { return number.doubleValue }
+        if let double = raw["value"] as? Double { return double }
+        if let string = raw["value"] as? String, let parsed = Double(string) { return parsed }
+        return 0
+    }
+
+    var sliderRange: ClosedRange<Double> {
+        let minValue: Double
+        if let number = raw["min"] as? NSNumber {
+            minValue = number.doubleValue
+        } else if let string = raw["min"] as? String, let parsed = Double(string) {
+            minValue = parsed
+        } else {
+            minValue = 0
+        }
+
+        let maxValue: Double
+        if let number = raw["max"] as? NSNumber {
+            maxValue = number.doubleValue
+        } else if let string = raw["max"] as? String, let parsed = Double(string) {
+            maxValue = parsed
+        } else {
+            maxValue = 1
+        }
+
+        if minValue > maxValue {
+            return maxValue...minValue
+        }
+        return minValue...maxValue
+    }
+
     func handlerId(for event: WaveletEventType) -> String? {
         eventHandlers[event]
     }
@@ -101,6 +278,79 @@ struct WaveletNodeProps {
             return CGFloat(int)
         }
         return nil
+    }
+    private static func parseColor(_ value: Any?) -> Color? {
+        guard let string = value as? String else { return nil }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("#") {
+            let hexString = String(trimmed.dropFirst())
+            return colorFromHex(hexString)
+        }
+        if trimmed.lowercased().hasPrefix("0x") {
+            let hexString = String(trimmed.dropFirst(2))
+            return colorFromHex(hexString)
+        }
+        switch trimmed.lowercased() {
+        case "blue": return .blue
+        case "green": return .green
+        case "red": return .red
+        case "orange": return .orange
+        case "yellow": return .yellow
+        case "pink": return .pink
+        case "purple": return .purple
+        case "gray": return .gray
+        case "white": return .white
+        case "black": return .black
+        case "teal": return .teal
+        case "mint": return .mint
+        case "cyan": return .cyan
+        case "indigo": return .indigo
+        case "brown": return .brown
+        case "systemgray6": return Color(.systemGray6)
+        case "systemgray5": return Color(.systemGray5)
+        case "systemgray4": return Color(.systemGray4)
+        case "systemgray3": return Color(.systemGray3)
+        case "systemgray2": return Color(.systemGray2)
+        case "systemgray": return Color(.systemGray)
+        default: return nil
+        }
+    }
+
+    private static func colorFromHex(_ hex: String) -> Color? {
+        let cleaned = hex.replacingOccurrences(of: "_", with: "").replacingOccurrences(of: " ", with: "")
+        guard cleaned.count == 6 || cleaned.count == 8 else { return nil }
+        var value: UInt64 = 0
+        guard Scanner(string: cleaned).scanHexInt64(&value) else { return nil }
+        if cleaned.count == 6 {
+            let r = Double((value & 0xFF0000) >> 16) / 255.0
+            let g = Double((value & 0x00FF00) >> 8) / 255.0
+            let b = Double(value & 0x0000FF) / 255.0
+            return Color(red: r, green: g, blue: b)
+        } else {
+            let r = Double((value & 0xFF000000) >> 24) / 255.0
+            let g = Double((value & 0x00FF0000) >> 16) / 255.0
+            let b = Double((value & 0x0000FF00) >> 8) / 255.0
+            let a = Double(value & 0x000000FF) / 255.0
+            return Color(red: r, green: g, blue: b, opacity: a)
+        }
+    }
+}
+
+struct WaveletPickerOption: Identifiable {
+    let id = UUID()
+    let label: String
+    let value: String
+
+    init?(dictionary: [String: Any]) {
+        guard let label = dictionary["label"] as? String else { return nil }
+        self.label = label
+        if let value = dictionary["value"] as? String {
+            self.value = value
+        } else if let number = dictionary["value"] as? NSNumber {
+            self.value = number.stringValue
+        } else {
+            self.value = label
+        }
     }
 }
 
