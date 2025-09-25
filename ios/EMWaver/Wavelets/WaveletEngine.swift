@@ -166,6 +166,47 @@ private extension WaveletEngine {
             }
         };
 
+        if (typeof print === 'undefined') {
+            var print = function () {
+                var parts = [];
+                for (var i = 0; i < arguments.length; i += 1) {
+                    var arg = arguments[i];
+                    if (typeof arg === 'string') {
+                        parts.push(arg);
+                    } else {
+                        try {
+                            parts.push(JSON.stringify(arg));
+                        } catch (e) {
+                            parts.push(String(arg));
+                        }
+                    }
+                }
+                WaveletBridge.log(parts.join(' '));
+            };
+        }
+
+        if (typeof console === 'undefined') {
+            var console = {};
+        }
+
+        if (typeof console.log !== 'function') {
+            console.log = function () {
+                print.apply(null, arguments);
+            };
+        }
+
+        if (typeof console.warn !== 'function') {
+            console.warn = function () {
+                print.apply(null, arguments);
+            };
+        }
+
+        if (typeof console.error !== 'function') {
+            console.error = function () {
+                print.apply(null, arguments);
+            };
+        }
+
         if (typeof UI === 'undefined') {
             var UI = (function () {
                 var idCounter = 0;
