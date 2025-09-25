@@ -21,7 +21,8 @@
   ```
 - Bridge plan: translate DSL nodes to native components (SwiftUI/Compose), diff updates, marshal callbacks safely.
 - Sandbox rules: expose only scoped APIs, run JS off main thread, enforce timeouts, keep modules viewable/editable.
-- Packaging format draft: `wavelet.json` manifest + `main.js`; later add signing, repo sync, sharing UX.
+- Packaging format draft: single `wavelet.js` file (metadata via header comment or inline object). Add optional manifest/signing only after the core flow proves out.
+- Initial app integration: bundle a default Wavelet script in app assets, let Console view load it in-memory, and prompt the user to register it as a Wavelet that appears in the sidebar/navigation.
 
 ## Fragment/Wavelet Strategy
 - Keep **Home** fragment native (static buttons, landing UX).
