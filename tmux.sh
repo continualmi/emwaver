@@ -22,11 +22,11 @@ tmux send-keys -t "$SESSION:sf.0" 'vim ./' C-m
 # Pane 1: git diff
 tmux send-keys -t "$SESSION:sf.1" 'git diff' C-m
 
-# Pane 2: cd into android
-tmux send-keys -t "$SESSION:sf.2" 'cd android' C-m
+# Pane 2: codex
+tmux send-keys -t "$SESSION:sf.2" 'codex' C-m
 
-# Pane 3: cd into ios
-tmux send-keys -t "$SESSION:sf.3" 'cd ios' C-m
+# Pane 3: terminal
+tmux send-keys -t "$SESSION:sf.3" 'cd emwaver' C-m
 
 # ── FIRMWARE WINDOW (fw) ──────────────────────────────────────────────
 tmux new-window -t "$SESSION" -n fw -c firmware
@@ -48,8 +48,8 @@ tmux send-keys -t "$SESSION:fw.1" 'git diff' C-m
 # Pane 2: codex
 tmux send-keys -t "$SESSION:fw.2" 'codex' C-m
 
-# Pane 3: codex
-tmux send-keys -t "$SESSION:fw.3" 'codex' C-m
+# Pane 3: terminal
+tmux send-keys -t "$SESSION:fw.3" 'cd emwaver' C-m
 
 # ── Focus & attach ───────────────────────────────────────────────────
 tmux select-window -t "$SESSION:sf"
