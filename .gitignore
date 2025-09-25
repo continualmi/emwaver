@@ -86,6 +86,9 @@ release/
 # Backup files
 *.bak
 
+# ESP-IDF generated configuration backup
+sdkconfig.old
+
 # Notes (keeping your existing entry)
 notes.md
 
