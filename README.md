@@ -1,10 +1,12 @@
-# EMWaver
+<div align="center">
+  <img src="logo.png" alt="EMWaver Logo" width="250">
+</div>
 
-Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com).
+# EMWaver Firmware (ESP-IDF ESP32-S3)
 
-## Command-Line Setup (ESP-IDF 5.5.1)
+This repository hosts the EMWaver firmware and the Android/iOS companion apps. Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com). The sections below cover CLI workflows to install ESP-IDF, build/flash the firmware, and reference the app projects for command-line builds.
 
-Follow Espressif's manual workflow if you prefer the command line; the steps below install ESP-IDF v5.5.1 and build EMWaver.
+## Firmware: Command-Line Setup (ESP-IDF 5.5.1)
 
 ### Linux (Ubuntu/Debian)
 
@@ -73,7 +75,7 @@ idf.py -p /dev/cu.usbmodemXXXX monitor  # Exit with Ctrl+]
 
 ### Windows (ESP-IDF Tools Installer)
 
-1. Download the ESP-IDF Tools Installer (online or offline) from Espressif and launch it.
+1. Download the ESP-IDF Tools Installer (online or offline) from Espressif and launch it (see the v5.5.1 guide: https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32c3/get-started/windows-setup.html).
 2. During installation:
    - Keep the ESP-IDF and tools paths under 90 characters and free of spaces or non-ASCII characters.
    - Select **ESP-IDF v5.5.1** as the version to install.
@@ -95,6 +97,14 @@ idf.py -p COM7 monitor  # Exit with Ctrl+]
 Use `idf.py -p COM7 flash monitor` to combine flashing and serial monitoring. The installer caches downloads in `%USERPROFILE%\.espressif`; remove `%USERPROFILE%\esp\tools\dist` (or `$env:IDF_TOOLS_PATH\dist`) if you need to reclaim disk space.
 
 If you prefer a reusable alias, add `alias get_idf='source ~/emwaver/setup.sh'` to your shell profile so new sessions pick up the toolchain quickly.
+
+## EMWaver Android App (CLI build & deploy)
+
+_Coming soon._
+
+## EMWaver iOS App (CLI build & deploy)
+
+_Coming soon._
 
 ## License
 
