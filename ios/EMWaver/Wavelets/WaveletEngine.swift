@@ -76,14 +76,14 @@ final class WaveletEngine {
         }
     }
 
-    func invoke(handler token: String) {
+    func invoke(handler token: String, arguments: [Any] = []) {
         executionQueue.async { [weak self] in
             guard let self else { return }
             guard let callback = self.callbackRegistry[token] else {
                 self.printHandler?("No callback registered for token \(token)")
                 return
             }
-            _ = callback.call(withArguments: [])
+            _ = callback.call(withArguments: arguments)
         }
     }
 
@@ -235,14 +235,22 @@ private extension WaveletEngine {
 
                 var collectHandlers = function (id, props) {
                     var handlers = {};
-                    if (typeof props.onTap === 'function') {
-                        var token = id + ':tap';
-                        WaveletBridge.registerCallback(token, props.onTap);
-                        handlers.tap = token;
-                    }
-                    if (props.onTap !== undefined) {
-                        delete props.onTap;
-                    }
+                    var events = [
+                        { key: 'onTap', type: 'tap' },
+                        { key: 'onChange', type: 'change' },
+                        { key: 'onSubmit', type: 'submit' }
+                    ];
+                    events.forEach(function (event) {
+                        var fn = props[event.key];
+                        if (typeof fn === 'function') {
+                            var token = id + ':' + event.type;
+                            WaveletBridge.registerCallback(token, fn);
+                            handlers[event.type] = token;
+                        }
+                        if (props.hasOwnProperty(event.key)) {
+                            delete props[event.key];
+                        }
+                    });
                     return handlers;
                 };
 
@@ -265,6 +273,11 @@ private extension WaveletEngine {
                     button: function (props) { return makeNode('button', props || {}); },
                     slider: function (props) { return makeNode('slider', props || {}); },
                     logViewer: function (props) { return makeNode('logViewer', props || {}); },
+                    scroll: function (props) { return makeNode('scroll', props || {}); },
+                    textField: function (props) { return makeNode('textField', props || {}); },
+                    textEditor: function (props) { return makeNode('textEditor', props || {}); },
+                    picker: function (props) { return makeNode('picker', props || {}); },
+                    grid: function (props) { return makeNode('grid', props || {}); },
                     render: function (node) {
                         if (!node || typeof node !== 'object') {
                             WaveletBridge.log('UI.render called with invalid node');
