@@ -15,10 +15,12 @@ final class WaveletEngine {
         self.printHandler = printHandler
         self.renderHandler = renderHandler
         executionQueue.sync {
+            Swift.print("[WaveletEngine] Setup requested")
             let context = JSContext()
             context?.exceptionHandler = { [weak self] _, exception in
                 if let message = exception?.toString() {
                     self?.printHandler?("Wavelet error: \(message)")
+                    Swift.print("[WaveletEngine] JS exception: \(message)")
                 }
             }
 
@@ -40,9 +42,11 @@ final class WaveletEngine {
 
             if let context {
                 injectDSL(into: context)
+                Swift.print("[WaveletEngine] DSL injected during setup")
             }
 
             self.context = context
+            Swift.print("[WaveletEngine] Setup finished: context assigned = \(self.context != nil)")
         }
     }
 
@@ -50,9 +54,17 @@ final class WaveletEngine {
         executionQueue.async { [weak self] in
             guard let self, let context = self.context else { return }
             self.callbackRegistry.removeAll()
+            Swift.print("[WaveletEngine] execute(script:) reloading DSL before evaluation")
+            self.injectDSL(into: context)
+            context.exception = nil
+            Swift.print("[WaveletEngine] Evaluating script snippet: \(script.prefix(80))...")
             context.evaluateScript(script)
+            if let exception = context.exception?.toString(), !exception.isEmpty {
+                Swift.print("[WaveletEngine] Evaluation exception: \(exception)")
+            }
             if let completion {
                 DispatchQueue.main.async {
+                    Swift.print("[WaveletEngine] Completion callback dispatched")
                     completion()
                 }
             }
@@ -71,7 +83,10 @@ final class WaveletEngine {
     }
 
     private func injectDSL(into context: JSContext) {
+        Swift.print("[WaveletEngine] Injecting DSL bundle")
         context.evaluateScript(Self.dslBootstrap)
+        let uiType = context.evaluateScript("typeof UI")?.toString() ?? "undefined"
+        Swift.print("[WaveletEngine] After inject typeof UI = \(uiType)")
     }
 
     private func handleRender(nodeValue: JSValue) {
@@ -87,6 +102,7 @@ final class WaveletEngine {
             metadata = dict
         }
         let tree = WaveletTree(root: rootNode, metadata: metadata)
+        Swift.print("[WaveletEngine] handleRender with root type \(rootNode.type.rawValue)")
         DispatchQueue.main.async {
             renderHandler(tree)
         }
@@ -136,7 +152,7 @@ private extension WaveletEngine {
     static let dslBootstrap = """
         'use strict';
 
-        const WaveletBridge = {
+        var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
             render(node) {
                 _waveletRender(node);
             },
@@ -150,66 +166,68 @@ private extension WaveletEngine {
             }
         };
 
-        const UI = (() => {
-            let idCounter = 0;
+        if (typeof UI === 'undefined') {
+            var UI = (function () {
+                var idCounter = 0;
 
-            const ensureId = (type, props) => {
-                if (props && typeof props.id === 'string' && props.id.length > 0) {
-                    return props.id;
-                }
-                idCounter += 1;
-                return `${type}_${idCounter}`;
-            };
-
-            const normalizeProps = (type, props) => {
-                const assigned = props ? { ...props } : {};
-                const children = Array.isArray(assigned.children) ? assigned.children : [];
-                delete assigned.children;
-                const id = ensureId(type, assigned);
-                assigned.id = id;
-                return { id, props: assigned, children };
-            };
-
-            const collectHandlers = (id, props) => {
-                const handlers = {};
-                if (typeof props.onTap === 'function') {
-                    const token = `${id}:tap`;
-                    WaveletBridge.registerCallback(token, props.onTap);
-                    handlers.tap = token;
-                }
-                if (props.onTap !== undefined) {
-                    delete props.onTap;
-                }
-                return handlers;
-            };
-
-            const makeNode = (type, props) => {
-                const normalized = normalizeProps(type, props);
-                const handlerTokens = collectHandlers(normalized.id, normalized.props);
-                return {
-                    type,
-                    id: normalized.id,
-                    props: normalized.props,
-                    children: normalized.children,
-                    handlers: handlerTokens
-                };
-            };
-
-            return {
-                column(props = {}) { return makeNode('column', props); },
-                row(props = {}) { return makeNode('row', props); },
-                text(props = {}) { return makeNode('text', props); },
-                button(props = {}) { return makeNode('button', props); },
-                slider(props = {}) { return makeNode('slider', props); },
-                logViewer(props = {}) { return makeNode('logViewer', props); },
-                render(node) {
-                    if (!node || typeof node !== 'object') {
-                        WaveletBridge.log('UI.render called with invalid node');
-                        return;
+                var ensureId = function (type, props) {
+                    if (props && typeof props.id === 'string' && props.id.length > 0) {
+                        return props.id;
                     }
-                    WaveletBridge.render(node);
-                }
-            };
-        })();
+                    idCounter += 1;
+                    return type + '_' + idCounter;
+                };
+
+                var normalizeProps = function (type, props) {
+                    var assigned = props ? Object.assign({}, props) : {};
+                    var children = Array.isArray(assigned.children) ? assigned.children : [];
+                    delete assigned.children;
+                    var id = ensureId(type, assigned);
+                    assigned.id = id;
+                    return { id: id, props: assigned, children: children };
+                };
+
+                var collectHandlers = function (id, props) {
+                    var handlers = {};
+                    if (typeof props.onTap === 'function') {
+                        var token = id + ':tap';
+                        WaveletBridge.registerCallback(token, props.onTap);
+                        handlers.tap = token;
+                    }
+                    if (props.onTap !== undefined) {
+                        delete props.onTap;
+                    }
+                    return handlers;
+                };
+
+                var makeNode = function (type, props) {
+                    var normalized = normalizeProps(type, props);
+                    var handlerTokens = collectHandlers(normalized.id, normalized.props);
+                    return {
+                        type: type,
+                        id: normalized.id,
+                        props: normalized.props,
+                        children: normalized.children,
+                        handlers: handlerTokens
+                    };
+                };
+
+                return {
+                    column: function (props) { return makeNode('column', props || {}); },
+                    row: function (props) { return makeNode('row', props || {}); },
+                    text: function (props) { return makeNode('text', props || {}); },
+                    button: function (props) { return makeNode('button', props || {}); },
+                    slider: function (props) { return makeNode('slider', props || {}); },
+                    logViewer: function (props) { return makeNode('logViewer', props || {}); },
+                    render: function (node) {
+                        if (!node || typeof node !== 'object') {
+                            WaveletBridge.log('UI.render called with invalid node');
+                            return;
+                        }
+                        WaveletBridge.render(node);
+                    }
+                };
+            })();
+        }
     """
 }

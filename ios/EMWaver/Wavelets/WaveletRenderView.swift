@@ -15,11 +15,7 @@ struct WaveletRenderView: View {
 
     private func renderRoot() -> AnyView {
         guard let root = tree?.root else {
-            return AnyView(
-                Text("Wavelet UI will appear here")
-                    .foregroundColor(.secondary)
-                    .italic()
-            )
+            return AnyView(EmptyView())
         }
         return render(node: root)
     }
