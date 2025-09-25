@@ -227,26 +227,50 @@ struct KeyboardToolbarTextEditor: View {
 }
 
 struct ConsoleView: View {
+    private enum ConsoleTab: String, CaseIterable, Identifiable {
+        case scripts
+        case wavelets
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .scripts: return "Scripts"
+            case .wavelets: return "Wavelets"
+            }
+        }
+    }
+
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
     @State private var jsEngine: JavaScriptEngine?
+    @State private var waveletEngine: WaveletEngine?
     @State private var scriptContent: String = ""
     @State private var consoleOutput: String = "<Console>\n"
+    @State private var waveletConsoleOutput: String = "<Wavelets>\n"
+    @State private var waveletScriptContent: String = ""
     @State private var currentScriptName: String?
+    @State private var currentWaveletName: String?
     @State private var recentScripts: [String] = []
+    @State private var waveletScripts: [String] = []
     @State private var hasUnsavedChanges: Bool = false
+    @State private var waveletHasUnsavedChanges: Bool = false
     @State private var isScriptRunning: Bool = false
+    @State private var isWaveletRunning: Bool = false
     @State private var statusMessage: String = "Open a script"
     @State private var dynamicScriptEditorTitle: String = "Script Editor [No script open]"
+    @State private var waveletEditorTitle: String = "Wavelet Editor [No wavelet open]"
     @State private var showingScriptOptions: Bool = false
     @State private var selectedScript: String?
     @State private var showingNewScriptAlert: Bool = false
     @State private var showingCopyScriptAlert: Bool = false
     @State private var showingDeleteConfirmation: Bool = false
     @State private var newScriptName: String = ""
+    @State private var selectedTab: ConsoleTab = .scripts
+    @State private var activeWaveletTree: WaveletTree?
     
     // Auto-save timer
     @State private var autoSaveTimer: Timer?
+    @State private var waveletAutoSaveTimer: Timer?
     private let autoSaveDelay: TimeInterval = 3.0
     
     // State for collapsible sections
@@ -262,12 +286,23 @@ struct ConsoleView: View {
     @State private var downloadURL = ""
     
     var body: some View {
-        VStack(spacing: 8) {
-            scriptsListSection
-            scriptEditorSection
-            consoleOutputSection
-            
-            Spacer()
+        VStack(spacing: 12) {
+            Picker("Mode", selection: $selectedTab) {
+                ForEach(ConsoleTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if selectedTab == .scripts {
+                scriptsListSection
+                scriptEditorSection
+                consoleOutputSection
+                Spacer()
+            } else {
+                waveletWorkspace
+                Spacer()
+            }
         }
         .padding()
         .navigationTitle("Console")
@@ -275,24 +310,45 @@ struct ConsoleView: View {
         .navigationBarItems(
             leading: EmptyView(),
             trailing: HStack {
-                Button(action: {
-                    if isScriptRunning {
-                        stopScript()
-                    } else {
-                        executeScript()
+                if selectedTab == .scripts {
+                    Button(action: {
+                        if isScriptRunning {
+                            stopScript()
+                        } else {
+                            executeScript()
+                        }
+                    }) {
+                        Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
+                            .foregroundColor(isScriptRunning ? .red : .green)
                     }
-                }) {
-                    Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
-                        .foregroundColor(isScriptRunning ? .red : .green)
+
+                    Button(action: {
+                        clearConsole()
+                    }) {
+                        Image(systemName: "trash")
+                    }
+
+                    menuButton
+                } else {
+                    Button(action: {
+                        if isWaveletRunning {
+                            stopWavelet()
+                        } else {
+                            executeWavelet()
+                        }
+                    }) {
+                        Image(systemName: isWaveletRunning ? "stop.fill" : "play.fill")
+                            .foregroundColor(isWaveletRunning ? .red : .blue)
+                    }
+
+                    Button(action: {
+                        clearWaveletConsole()
+                    }) {
+                        Image(systemName: "trash")
+                    }
+
+                    waveletMenuButton
                 }
-                
-                Button(action: {
-                    clearConsole()
-                }) {
-                    Image(systemName: "trash")
-                }
-                
-                menuButton
             }
         )
         .toolbar {
@@ -310,6 +366,13 @@ struct ConsoleView: View {
             loadRecentScripts()
             createDefaultScriptsIfNeeded()
             updateDynamicScriptEditorTitle()
+            createDefaultWaveletIfNeeded()
+            loadWaveletScriptsList()
+            updateWaveletEditorTitle()
+            setupWaveletEngineIfNeeded()
+            if waveletScriptContent.isEmpty {
+                loadSampleWaveletScript()
+            }
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 refreshUIAfterLoading()
@@ -324,7 +387,12 @@ struct ConsoleView: View {
             if connected {
                 cc1101 = CC1101(bleManager: bleManager)
                 setupJSEngine()
+                setupWaveletEngineIfNeeded()
             }
+        }
+        .onDisappear {
+            waveletAutoSaveTimer?.invalidate()
+            waveletAutoSaveTimer = nil
         }
         .animation(.easeInOut, value: isScriptsListExpanded)
         .animation(.easeInOut, value: isScriptEditorExpanded)
@@ -449,6 +517,140 @@ struct ConsoleView: View {
         )
         .padding(.horizontal)
     }
+
+    private var waveletWorkspace: some View {
+        GeometryReader { geometry in
+            let isCompact = geometry.size.width < 700
+
+            ScrollView {
+                if isCompact {
+                    VStack(spacing: 12) {
+                        waveletListPanel
+                        waveletEditorPanel
+                        waveletPreviewPanel.frame(maxWidth: .infinity, minHeight: 200)
+                        waveletConsolePanel
+                    }
+                    .frame(maxWidth: .infinity)
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        waveletListPanel
+                            .frame(maxWidth: 220)
+
+                        VStack(spacing: 12) {
+                            waveletEditorPanel
+                            waveletConsolePanel
+                        }
+
+                        waveletPreviewPanel
+                            .frame(minWidth: geometry.size.width * 0.3, maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var waveletListPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Wavelet Scripts")
+                .font(.headline)
+
+            if waveletScripts.isEmpty {
+                Text("No wavelet scripts yet")
+                    .foregroundColor(.secondary)
+                    .italic()
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(waveletScripts, id: \.self) { script in
+                        Button(action: {
+                            loadWaveletScript(script)
+                        }) {
+                            HStack {
+                                Text(script)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                if currentWaveletName == script && waveletHasUnsavedChanges {
+                                    Circle()
+                                        .fill(Color.orange)
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
+                            .padding(6)
+                            .background(currentWaveletName == script ? Color.accentColor.opacity(0.15) : Color.clear)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+
+    private var waveletEditorPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(waveletEditorTitle)
+                .font(.headline)
+
+            KeyboardToolbarTextEditor(text: $waveletScriptContent, font: .system(.body, design: .monospaced))
+                .frame(minHeight: 160)
+                .padding(4)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                .onChange(of: waveletScriptContent) { _ in
+                    waveletHasUnsavedChanges = true
+                    updateWaveletEditorTitle()
+                    scheduleWaveletAutoSave()
+                }
+        }
+        .padding()
+        .background(Color(.systemBackground).opacity(0.8))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+
+    private var waveletPreviewPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Wavelet Preview")
+                .font(.headline)
+
+            WaveletRenderView(tree: activeWaveletTree, invokeHandler: handleWaveletCallback(_:))
+                .frame(maxWidth: .infinity, minHeight: 200, alignment: .top)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+        }
+        .padding()
+        .background(Color(.systemBackground).opacity(0.8))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+
+    private var waveletConsolePanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Wavelet Console")
+                .font(.headline)
+
+            ScrollView {
+                Text(waveletConsoleOutput)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minHeight: 120)
+            .padding(8)
+            .background(Color.black)
+            .foregroundColor(Color.green)
+            .cornerRadius(10)
+        }
+        .padding()
+        .background(Color(.systemBackground).opacity(0.8))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
     
     private var menuButton: some View {
         Menu {
@@ -478,6 +680,36 @@ struct ConsoleView: View {
             
             Button("Download from URL") {
                 showingURLPrompt = true
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+    }
+
+    private var waveletMenuButton: some View {
+        Menu {
+            Button("Reload Sample Wavelet") {
+                loadSampleWaveletScript()
+            }
+
+            if let name = currentWaveletName {
+                Button("Save Wavelet") {
+                    saveWaveletScript(name, content: waveletScriptContent)
+                    waveletHasUnsavedChanges = false
+                    updateWaveletEditorTitle()
+                }
+            } else {
+                Button("Save Wavelet") {
+                    let defaultName = "wavelet_\(Int(Date().timeIntervalSince1970)).js"
+                    saveWaveletScript(defaultName, content: waveletScriptContent)
+                    currentWaveletName = defaultName
+                    if !waveletScripts.contains(defaultName) {
+                        waveletScripts.append(defaultName)
+                        waveletScripts.sort()
+                    }
+                    waveletHasUnsavedChanges = false
+                    updateWaveletEditorTitle()
+                }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -927,6 +1159,193 @@ struct ConsoleView: View {
         }
         
         task.resume()
+    }
+
+    // MARK: - Wavelet Support
+
+    private func setupWaveletEngineIfNeeded() {
+        guard waveletEngine == nil else { return }
+        let engine = WaveletEngine()
+        engine.setup(printHandler: { message in
+            DispatchQueue.main.async {
+                appendWaveletConsole(message)
+            }
+        }, renderHandler: { tree in
+            DispatchQueue.main.async {
+                self.activeWaveletTree = tree
+            }
+        })
+        waveletEngine = engine
+    }
+
+    private func appendWaveletConsole(_ message: String) {
+        waveletConsoleOutput += message + "\n"
+    }
+
+    private func clearWaveletConsole() {
+        waveletConsoleOutput = "<Wavelets>\n"
+    }
+
+    private func executeWavelet() {
+        guard !waveletScriptContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            appendWaveletConsole("No wavelet script to execute")
+            return
+        }
+        setupWaveletEngineIfNeeded()
+        guard let engine = waveletEngine else { return }
+
+        isWaveletRunning = true
+        appendWaveletConsole("Executing wavelet \(currentWaveletName ?? "(unnamed)")...")
+        activeWaveletTree = nil
+
+        let script = waveletScriptContent
+        engine.execute(script: script) {
+            self.isWaveletRunning = false
+        }
+    }
+
+    private func stopWavelet() {
+        isWaveletRunning = false
+        appendWaveletConsole("Wavelet execution stopped")
+    }
+
+    private func handleWaveletCallback(_ token: String) {
+        appendWaveletConsole("Invoking handler \(token)")
+        waveletEngine?.invoke(handler: token)
+    }
+
+    private func getWaveletsDirectory() -> URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        return paths[0].appendingPathComponent("wavelets", isDirectory: true)
+    }
+
+    private func ensureWaveletDirectoryExists() {
+        let directory = getWaveletsDirectory()
+        if !FileManager.default.fileExists(atPath: directory.path) {
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+    }
+
+    private func loadWaveletScriptsList() {
+        ensureWaveletDirectoryExists()
+        let directory = getWaveletsDirectory()
+        do {
+            let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            waveletScripts = files.filter { $0.pathExtension == "js" }.map { $0.lastPathComponent }.sorted()
+        } catch {
+            print("Failed to load wavelet scripts: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadWaveletScript(_ name: String) {
+        ensureWaveletDirectoryExists()
+        let fileURL = getWaveletsDirectory().appendingPathComponent(name)
+        do {
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            waveletScriptContent = content
+            currentWaveletName = name
+            waveletHasUnsavedChanges = false
+            updateWaveletEditorTitle()
+        } catch {
+            appendWaveletConsole("Failed to load wavelet: \(error.localizedDescription)")
+        }
+    }
+
+    private func saveWaveletScript(_ name: String, content: String) {
+        ensureWaveletDirectoryExists()
+        let fileURL = getWaveletsDirectory().appendingPathComponent(name)
+        do {
+            try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            if !waveletScripts.contains(name) {
+                waveletScripts.append(name)
+                waveletScripts.sort()
+            }
+            appendWaveletConsole("Saved wavelet as \(name)")
+        } catch {
+            appendWaveletConsole("Failed to save wavelet: \(error.localizedDescription)")
+        }
+    }
+
+    private func scheduleWaveletAutoSave() {
+        waveletAutoSaveTimer?.invalidate()
+        guard let name = currentWaveletName, !name.isEmpty else { return }
+        waveletAutoSaveTimer = Timer.scheduledTimer(withTimeInterval: autoSaveDelay, repeats: false) { _ in
+            autoSaveWaveletScript()
+        }
+        if let timer = waveletAutoSaveTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    private func autoSaveWaveletScript() {
+        guard let name = currentWaveletName, !name.isEmpty else { return }
+        saveWaveletScript(name, content: waveletScriptContent)
+        waveletHasUnsavedChanges = false
+        updateWaveletEditorTitle()
+        waveletAutoSaveTimer?.invalidate()
+        waveletAutoSaveTimer = nil
+    }
+
+    private func updateWaveletEditorTitle() {
+        if let name = currentWaveletName {
+            let suffix = waveletHasUnsavedChanges ? " *" : ""
+            waveletEditorTitle = "Wavelet Editor [\(name)\(suffix)]"
+        } else {
+            waveletEditorTitle = "Wavelet Editor [No wavelet open]"
+        }
+    }
+
+    private func createDefaultWaveletIfNeeded() {
+        ensureWaveletDirectoryExists()
+        let defaultName = "demo_wavelet.js"
+        let fileURL = getWaveletsDirectory().appendingPathComponent(defaultName)
+        if !FileManager.default.fileExists(atPath: fileURL.path) {
+            let content = defaultWaveletScript()
+            do {
+                try content.write(to: fileURL, atomically: true, encoding: .utf8)
+                appendWaveletConsole("Created demo wavelet script")
+            } catch {
+                appendWaveletConsole("Failed to create demo wavelet: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func loadSampleWaveletScript() {
+        let defaultName = "demo_wavelet.js"
+        loadWaveletScript(defaultName)
+    }
+
+    private func defaultWaveletScript() -> String {
+        return """
+        const root = UI.column({
+            spacing: 12,
+            padding: 8,
+            children: [
+                UI.text({ text: "Wavelet Demo" }),
+                UI.text({ text: "Use UI.button, UI.row, and UI.column to compose layouts." }),
+                UI.row({
+                    spacing: 8,
+                    children: [
+                        UI.button({
+                            label: "Pulse LED",
+                            onTap: () => {
+                                print('Pulse LED requested');
+                            }
+                        }),
+                        UI.button({
+                            label: "Log Message",
+                            onTap: () => {
+                                print('Wavelet button pressed');
+                            }
+                        })
+                    ]
+                }),
+                UI.logViewer({ text: "Console messages will appear below." })
+            ]
+        });
+
+        UI.render(root);
+        """
     }
 }
 
