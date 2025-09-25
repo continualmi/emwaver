@@ -57,8 +57,13 @@ final class WaveletEngine {
             Swift.print("[WaveletEngine] execute(script:) reloading DSL before evaluation")
             self.injectDSL(into: context)
             context.exception = nil
+            let wrappedScript = """
+(() => {
+\(script)
+})();
+"""
             Swift.print("[WaveletEngine] Evaluating script snippet: \(script.prefix(80))...")
-            context.evaluateScript(script)
+            context.evaluateScript(wrappedScript)
             if let exception = context.exception?.toString(), !exception.isEmpty {
                 Swift.print("[WaveletEngine] Evaluation exception: \(exception)")
             }
