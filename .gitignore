@@ -69,6 +69,13 @@ lint/tmp/
 # macOS
 .DS_Store
 
+# Xcode user-specific data
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+*.xcuserdatad
+*.xcworkspace/xcuserdata/
+
 # CMake
 cmake-build-*/
 
