@@ -208,7 +208,7 @@ struct KeyboardToolbarTextEditor: View {
                         }
                     }
                 }
-                .onChange(of: isFocused) { focused in
+                .onChangeCompat(of: isFocused) { focused in
                     showKeyboard = focused
                 }
             
@@ -227,15 +227,30 @@ struct KeyboardToolbarTextEditor: View {
 }
 
 struct ConsoleView: View {
+    private enum ConsoleTab: String, CaseIterable, Identifiable {
+        case scripts
+        case wavelets
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .scripts: return "Scripts"
+            case .wavelets: return "Wavelets"
+            }
+        }
+    }
+
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
     @State private var jsEngine: JavaScriptEngine?
+    @State private var waveletEngine: WaveletEngine?
     @State private var scriptContent: String = ""
     @State private var consoleOutput: String = "<Console>\n"
     @State private var currentScriptName: String?
     @State private var recentScripts: [String] = []
     @State private var hasUnsavedChanges: Bool = false
     @State private var isScriptRunning: Bool = false
+    @State private var isRenderingWavelet: Bool = false
     @State private var statusMessage: String = "Open a script"
     @State private var dynamicScriptEditorTitle: String = "Script Editor [No script open]"
     @State private var showingScriptOptions: Bool = false
@@ -244,7 +259,9 @@ struct ConsoleView: View {
     @State private var showingCopyScriptAlert: Bool = false
     @State private var showingDeleteConfirmation: Bool = false
     @State private var newScriptName: String = ""
-    
+    @State private var selectedTab: ConsoleTab = .scripts
+    @State private var activeWaveletTree: WaveletTree?
+
     // Auto-save timer
     @State private var autoSaveTimer: Timer?
     private let autoSaveDelay: TimeInterval = 3.0
@@ -262,12 +279,23 @@ struct ConsoleView: View {
     @State private var downloadURL = ""
     
     var body: some View {
-        VStack(spacing: 8) {
-            scriptsListSection
-            scriptEditorSection
-            consoleOutputSection
-            
-            Spacer()
+        VStack(spacing: 12) {
+            Picker("Mode", selection: $selectedTab) {
+                ForEach(ConsoleTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if selectedTab == .scripts {
+                scriptsListSection
+                scriptEditorSection
+                consoleOutputSection
+                Spacer(minLength: 0)
+            } else {
+                waveletPreview
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .padding()
         .navigationTitle("Console")
@@ -275,24 +303,41 @@ struct ConsoleView: View {
         .navigationBarItems(
             leading: EmptyView(),
             trailing: HStack {
-                Button(action: {
-                    if isScriptRunning {
-                        stopScript()
-                    } else {
-                        executeScript()
+                if selectedTab == .scripts {
+                    Button(action: {
+                        if isScriptRunning {
+                            stopScript()
+                        } else {
+                            executeScript()
+                        }
+                    }) {
+                        Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
+                            .foregroundColor(isScriptRunning ? .red : .green)
                     }
-                }) {
-                    Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
-                        .foregroundColor(isScriptRunning ? .red : .green)
+
+                    Button(action: {
+                        renderWavelet()
+                    }) {
+                        Image(systemName: "square.grid.2x2")
+                            .overlay {
+                                if isRenderingWavelet {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .frame(width: 16, height: 16)
+                                }
+                            }
+                    }
+                    .disabled(isRenderingWavelet || scriptContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Render Wavelet Preview")
+
+                    Button(action: {
+                        clearConsole()
+                    }) {
+                        Image(systemName: "trash")
+                    }
+
+                    menuButton
                 }
-                
-                Button(action: {
-                    clearConsole()
-                }) {
-                    Image(systemName: "trash")
-                }
-                
-                menuButton
             }
         )
         .toolbar {
@@ -307,9 +352,9 @@ struct ConsoleView: View {
             UINavigationBar.appearance().compactAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
             
-            loadRecentScripts()
             createDefaultScriptsIfNeeded()
             updateDynamicScriptEditorTitle()
+            setupWaveletEngineIfNeeded()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 refreshUIAfterLoading()
@@ -320,10 +365,17 @@ struct ConsoleView: View {
                 setupJSEngine()
             }
         }
-        .onChange(of: bleManager.isConnected) { connected in
+        .onChangeCompat(of: selectedTab) { newValue in
+            if newValue == .wavelets, !isRenderingWavelet, activeWaveletTree == nil {
+                Swift.print("[Wavelet] Wavelets tab selected; triggering preview refresh")
+                renderWavelet()
+            }
+        }
+        .onChangeCompat(of: bleManager.isConnected) { connected in
             if connected {
                 cc1101 = CC1101(bleManager: bleManager)
                 setupJSEngine()
+                setupWaveletEngineIfNeeded()
             }
         }
         .animation(.easeInOut, value: isScriptsListExpanded)
@@ -413,7 +465,7 @@ struct ConsoleView: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
                     .frame(minHeight: 100, maxHeight: 250)
-                    .onChange(of: scriptContent) { _ in
+                    .onChangeCompat(of: scriptContent) { _ in
                         hasUnsavedChanges = true
                         updateDynamicScriptEditorTitle()
                         setupAutoSave()
@@ -449,7 +501,38 @@ struct ConsoleView: View {
         )
         .padding(.horizontal)
     }
-    
+
+    private var waveletPreview: some View {
+        ZStack(alignment: .topLeading) {
+            WaveletRenderView(tree: activeWaveletTree, invokeHandler: handleWaveletCallback)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            if activeWaveletTree == nil && !isRenderingWavelet {
+                VStack {
+                    Text("Render a wavelet from the Scripts tab to see it here.")
+                        .foregroundColor(.secondary)
+                        .italic()
+                        .multilineTextAlignment(.center)
+                        .padding()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemGroupedBackground))
+            }
+
+            if isRenderingWavelet {
+                VStack {
+                    ProgressView("Rendering wavelet…")
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(12)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private var menuButton: some View {
         Menu {
             Button("New Script") {
@@ -483,6 +566,7 @@ struct ConsoleView: View {
             Image(systemName: "ellipsis.circle")
         }
     }
+
     
     // MARK: - Script Management
     
@@ -646,16 +730,30 @@ struct ConsoleView: View {
         if jsEngine == nil {
             setupJSEngine()
         }
-        
-        guard jsEngine != nil else {
-            print("JavaScript engine not initialized.")
+
+        let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            self.print("No script to execute.")
             return
         }
-        
+
+        if isWaveletScript(trimmed) {
+            let infoMessage = "[Wavelet] Detected wavelet DSL, rendering preview instead of running in standard engine"
+            self.print(infoMessage)
+            Swift.print(infoMessage)
+            renderWavelet()
+            return
+        }
+
+        guard jsEngine != nil else {
+            self.print("JavaScript engine not initialized.")
+            return
+        }
+
         isScriptRunning = true
-        
+
         // Execute the script
-        jsEngine?.evaluateScript(scriptContent) {
+        jsEngine?.evaluateScript(trimmed) {
             DispatchQueue.main.async {
                 self.isScriptRunning = false
             }
@@ -823,7 +921,31 @@ struct ConsoleView: View {
             saveScript(irTestScriptName, content: irTestContent)
             print("Created default IR test script")
         }
-        
+
+        let waveletDemoName = "wavelet_demo.js"
+        let waveletDemoPath = getDocumentsDirectory().appendingPathComponent(waveletDemoName)
+
+        if !FileManager.default.fileExists(atPath: waveletDemoPath.path) {
+            saveScript(waveletDemoName, content: waveletDemoScript())
+            print("Created default wavelet demo script")
+        }
+
+        let rfidWaveletName = "wavelet_rfid.js"
+        let rfidWaveletPath = getDocumentsDirectory().appendingPathComponent(rfidWaveletName)
+
+        if !FileManager.default.fileExists(atPath: rfidWaveletPath.path) {
+            saveScript(rfidWaveletName, content: waveletRFIDScript())
+            print("Created default RFID wavelet script")
+        }
+
+        let waveletISMName = "wavelet_ism.js"
+        let waveletISMPath = getDocumentsDirectory().appendingPathComponent(waveletISMName)
+
+        if !FileManager.default.fileExists(atPath: waveletISMPath.path) {
+            saveScript(waveletISMName, content: waveletISMScript())
+            print("Created default ISM wavelet script")
+        }
+
         loadRecentScripts()
     }
     
@@ -841,52 +963,40 @@ struct ConsoleView: View {
     // MARK: - External Storage & Network Operations
     
     private func importScriptFromExternalStorage(url: URL) {
-        do {
-            // Start accessing security-scoped resource
-            guard url.startAccessingSecurityScopedResource() else {
-                print("Failed to access security-scoped resource")
-                return
-            }
-            
-            defer {
-                // Make sure to release the security-scoped resource when done
-                url.stopAccessingSecurityScopedResource()
-            }
-            
-            // Use file coordination for safer file access
-            var error: NSError?
-            var content = ""
-            
-            NSFileCoordinator().coordinate(readingItemAt: url, error: &error) { coordinatedURL in
-                do {
-                    content = try String(contentsOf: coordinatedURL)
-                } catch {
-                    print("Error reading file contents: \(error.localizedDescription)")
-                }
-            }
-            
-            if let fileError = error {
-                print("File coordination error: \(fileError.localizedDescription)")
-                return
-            }
-            
-            if content.isEmpty {
-                print("Failed to read file content")
-                return
-            }
-            
-            let filename = url.lastPathComponent
-            
-            // Save to internal storage
-            saveScript(filename, content: content)
-            
-            // Load the script
-            loadScript(filename)
-            
-            print("Imported script: \(filename)")
-        } catch {
-            print("Error importing script: \(error.localizedDescription)")
+        guard url.startAccessingSecurityScopedResource() else {
+            print("Failed to access security-scoped resource")
+            return
         }
+
+        defer {
+            url.stopAccessingSecurityScopedResource()
+        }
+
+        var coordinationError: NSError?
+        var content = ""
+
+        NSFileCoordinator().coordinate(readingItemAt: url, error: &coordinationError) { coordinatedURL in
+            do {
+                content = try String(contentsOf: coordinatedURL, encoding: .utf8)
+            } catch {
+                print("Error reading file contents: \(error.localizedDescription)")
+            }
+        }
+
+        if let fileError = coordinationError {
+            print("File coordination error: \(fileError.localizedDescription)")
+            return
+        }
+
+        if content.isEmpty {
+            print("Failed to read file content")
+            return
+        }
+
+        let filename = url.lastPathComponent
+        saveScript(filename, content: content)
+        loadScript(filename)
+        print("Imported script: \(filename)")
     }
     
     private func downloadScriptFromURL(_ urlString: String) {
@@ -928,7 +1038,598 @@ struct ConsoleView: View {
         
         task.resume()
     }
+
+
+    // MARK: - Wavelet Support
+
+    private func setupWaveletEngineIfNeeded() {
+        guard waveletEngine == nil else {
+            Swift.print("[Wavelet] WaveletEngine already initialized")
+            return
+        }
+        Swift.print("[Wavelet] Initializing WaveletEngine")
+        let engine = WaveletEngine()
+        engine.setup(printHandler: { message in
+            let tagged = "[Wavelet] \(message)"
+            self.print(tagged)
+            Swift.print(tagged)
+        }, renderHandler: { tree in
+            self.activeWaveletTree = tree
+            self.isRenderingWavelet = false
+            if self.selectedTab != .wavelets {
+                self.selectedTab = .wavelets
+            }
+        })
+        waveletEngine = engine
+    }
+
+    private func renderWavelet() {
+        let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            Swift.print("[Wavelet] Script is empty; nothing to render")
+            return
+        }
+
+        Swift.print("[Wavelet] renderWavelet invoked with script length \(scriptContent.count)")
+        setupWaveletEngineIfNeeded()
+        guard let engine = waveletEngine else {
+            Swift.print("[Wavelet] Aborting render: waveletEngine not initialized")
+            return
+        }
+
+        if selectedTab != .wavelets {
+            selectedTab = .wavelets
+        }
+
+        isRenderingWavelet = true
+        activeWaveletTree = nil
+        Swift.print("[Wavelet] Rendering preview...")
+
+        engine.execute(script: trimmed) {
+            Swift.print("[Wavelet] Render completion callback")
+            self.isRenderingWavelet = false
+        }
+    }
+
+    private func isWaveletScript(_ script: String) -> Bool {
+        let lowered = script.lowercased()
+        return lowered.contains("ui.render(") || lowered.contains("ui.column(") || lowered.contains("ui.row(")
+    }
+
+    private func handleWaveletCallback(_ token: String, arguments: [Any]) {
+        print("[Wavelet] Invoking handler \(token) with arguments: \(arguments)")
+        waveletEngine?.invoke(handler: token, arguments: arguments)
+    }
+
+    private func waveletDemoScript() -> String {
+        return """
+        const root = UI.column({
+            spacing: 12,
+            padding: 8,
+            children: [
+                UI.text({ text: "Wavelet Demo" }),
+                UI.text({ text: "Use UI.button, UI.row, and UI.column to compose layouts." }),
+                UI.row({
+                    spacing: 8,
+                    children: [
+                        UI.button({
+                            label: "Pulse LED",
+                            onTap: () => {
+                                print('Pulse LED requested');
+                            }
+                        }),
+                        UI.button({
+                            label: "Log Message",
+                            onTap: () => {
+                                print('Wavelet button pressed');
+                            }
+                        })
+                    ]
+                }),
+                UI.logViewer({ text: "Console messages will appear below." })
+            ]
+        });
+
+        UI.render(root);
+        """
+    }
+
+    private func waveletRFIDScript() -> String {
+        return """
+        const state = {
+            blockAddress: "",
+            authMode: "A",
+            keyInputs: Array.from({ length: 6 }, () => ""),
+            data: "",
+            result: null
+        };
+
+        function formatHexInput(input, maxLength) {
+            if (!input) {
+                return "";
+            }
+            const sanitized = String(input).toUpperCase().replace(/[^0-9A-F ]/g, "");
+            return sanitized.slice(0, maxLength);
+        }
+
+        function updateBlockAddress(value) {
+            setState({ blockAddress: formatHexInput(value, 2) });
+        }
+
+        function updateKey(index, value) {
+            const nextKeys = state.keyInputs.slice();
+            nextKeys[index] = formatHexInput(value, 2);
+            setState({ keyInputs: nextKeys });
+        }
+
+        function updateData(value) {
+            setState({ data: formatHexInput(value, 47) });
+        }
+
+        function handleRead() {
+            const block = state.blockAddress || "00";
+            print(`[Wavelet/RFID] Read block ${block} using Key ${state.authMode}`);
+            setState({
+                result: {
+                    kind: "info",
+                    text: `Read command queued for block ${block} (Key ${state.authMode}).`
+                }
+            });
+        }
+
+        function handleWrite() {
+            const block = state.blockAddress || "00";
+            const byteCount = state.data.trim().length === 0
+                ? 0
+                : state.data.trim().split(/\\s+/).filter(Boolean).length;
+            print(`[Wavelet/RFID] Write block ${block} using Key ${state.authMode}`);
+            setState({
+                result: {
+                    kind: "success",
+                    text: `Write command queued with ${byteCount} byte(s) for block ${block}.`
+                }
+            });
+        }
+
+        function setState(patch) {
+            Object.assign(state, patch);
+            render();
+        }
+
+        function render() {
+            UI.render(
+                UI.scroll({
+                    padding: 16,
+                    spacing: 16,
+                    children: [
+                        UI.column({
+                            spacing: 16,
+                            children: [
+                                UI.text({
+                                    text: "RFID Tools",
+                                    font: "title2",
+                                    fontWeight: "semibold"
+                                }),
+                                UI.text({
+                                    text: "Send quick read/write commands to nearby tags using the EMWaver RFID module.",
+                                    foregroundColor: "#6B7280"
+                                }),
+                                UI.textField({
+                                    label: "Block Address",
+                                    placeholder: "00",
+                                    value: state.blockAddress,
+                                    keyboard: "ascii",
+                                    autocapitalize: "none",
+                                    onChange: updateBlockAddress
+                                }),
+                                UI.picker({
+                                    label: "Authentication Mode",
+                                    style: "segmented",
+                                    selected: state.authMode,
+                                    options: [
+                                        { label: "Key A", value: "A" },
+                                        { label: "Key B", value: "B" }
+                                    ],
+                                    onChange: function(value) {
+                                        setState({ authMode: value });
+                                    }
+                                }),
+                                UI.column({
+                                    spacing: 8,
+                                    children: [
+                                        UI.text({ text: "Key (6 bytes)", font: "headline" }),
+                                        UI.grid({
+                                            columns: 3,
+                                            spacing: 8,
+                                            children: state.keyInputs.map(function(keyValue, index) {
+                                                return UI.textField({
+                                                    placeholder: "00",
+                                                    value: keyValue,
+                                                    keyboard: "ascii",
+                                                    autocapitalize: "none",
+                                                    onChange: function(nextValue) {
+                                                        updateKey(index, nextValue);
+                                                    }
+                                                });
+                                            })
+                                        })
+                                    ]
+                                }),
+                                UI.textEditor({
+                                    label: "Data (16 bytes)",
+                                    placeholder: "Enter 16 bytes of data (e.g. FF FF ...)",
+                                    value: state.data,
+                                    onChange: updateData
+                                }),
+                                UI.row({
+                                    spacing: 12,
+                                    children: [
+                                        UI.button({
+                                            label: "Read",
+                                            icon: "arrow.down.doc.fill",
+                                            backgroundColor: "#1D4ED8",
+                                            foregroundColor: "#FFFFFF",
+                                            cornerRadius: 10,
+                                            onTap: handleRead
+                                        }),
+                                        UI.button({
+                                            label: "Write",
+                                            icon: "arrow.up.doc.fill",
+                                            backgroundColor: "#15803D",
+                                            foregroundColor: "#FFFFFF",
+                                            cornerRadius: 10,
+                                            onTap: handleWrite
+                                        })
+                                    ]
+                                }),
+                                state.result ? UI.text({
+                                    text: state.result.text,
+                                    backgroundColor: state.result.kind === "info" ? "#DBEAFE" : "#DCFCE7",
+                                    foregroundColor: state.result.kind === "info" ? "#1D4ED8" : "#166534",
+                                    padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                                    cornerRadius: 8
+                                }) : null
+                            ]
+                        })
+                    ]
+                })
+            );
+        }
+
+        render();
+        """
+    }
+
+    private func waveletISMScript() -> String {
+        return """
+        const modulationOptions = [
+            { label: "2-FSK", value: "0" },
+            { label: "GFSK", value: "1" },
+            { label: "ASK/OOK", value: "3" },
+            { label: "4-FSK", value: "4" },
+            { label: "MSK", value: "7" }
+        ];
+
+        const powerOptions = [
+            { label: "-30 dBm", value: "-30" },
+            { label: "-20 dBm", value: "-20" },
+            { label: "-15 dBm", value: "-15" },
+            { label: "-10 dBm", value: "-10" },
+            { label: "0 dBm", value: "0" },
+            { label: "5 dBm", value: "5" },
+            { label: "7 dBm", value: "7" },
+            { label: "10 dBm", value: "10" }
+        ];
+
+        const configRegisters = [
+            { key: "00", name: "IOCFG2" }, { key: "01", name: "IOCFG1" }, { key: "02", name: "IOCFG0" },
+            { key: "03", name: "FIFOTHR" }, { key: "04", name: "SYNC1" }, { key: "05", name: "SYNC0" },
+            { key: "06", name: "PKTLEN" }, { key: "07", name: "PKTCTRL1" }, { key: "08", name: "PKTCTRL0" },
+            { key: "09", name: "ADDR" }, { key: "0A", name: "CHANNR" }, { key: "0B", name: "FSCTRL1" },
+            { key: "0C", name: "FSCTRL0" }, { key: "0D", name: "FREQ2" }, { key: "0E", name: "FREQ1" },
+            { key: "0F", name: "FREQ0" }, { key: "10", name: "MDMCFG4" }, { key: "11", name: "MDMCFG3" },
+            { key: "12", name: "MDMCFG2" }, { key: "13", name: "MDMCFG1" }, { key: "14", name: "MDMCFG0" },
+            { key: "15", name: "DEVIATN" }, { key: "16", name: "MCSM2" }, { key: "17", name: "MCSM1" },
+            { key: "18", name: "MCSM0" }, { key: "19", name: "FOCCFG" }, { key: "1A", name: "BSCFG" },
+            { key: "1B", name: "AGCCTRL2" }, { key: "1C", name: "AGCCTRL1" }, { key: "1D", name: "AGCCTRL0" },
+            { key: "1E", name: "WOREVT1" }, { key: "1F", name: "WOREVT0" }, { key: "20", name: "WORCTRL" },
+            { key: "21", name: "FREND1" }, { key: "22", name: "FREND0" }, { key: "23", name: "FSCAL3" },
+            { key: "24", name: "FSCAL2" }, { key: "25", name: "FSCAL1" }, { key: "26", name: "FSCAL0" },
+            { key: "27", name: "RCCTRL1" }, { key: "28", name: "RCCTRL0" }, { key: "29", name: "FSTEST" },
+            { key: "2A", name: "PTEST" }, { key: "2B", name: "AGCTEST" }, { key: "2C", name: "TEST2" },
+            { key: "2D", name: "TEST1" }, { key: "2E", name: "TEST0" }
+        ];
+
+        const statusRegisters = [
+            { key: "30", name: "PARTNUM" }, { key: "31", name: "VERSION" }, { key: "32", name: "FREQEST" },
+            { key: "33", name: "LQI" }, { key: "34", name: "RSSI" }, { key: "35", name: "MARCSTATE" },
+            { key: "36", name: "WORTIME1" }, { key: "37", name: "WORTIME0" }, { key: "38", name: "PKTSTATUS" },
+            { key: "39", name: "VCO_VC_DAC" }, { key: "3A", name: "TXBYTES" }, { key: "3B", name: "RXBYTES" }
+        ];
+
+        const paTable = Array.from({ length: 8 }, (_, index) => ({ key: `PA${index}`, name: `PA[${index}]` }));
+
+        const layout = {
+            gap: 10,
+            rowHeight: 30,
+            labelWidth: 150,
+            controlMinWidth: 120,
+            controlMaxWidth: 180,
+            actionWidth: 60
+        };
+
+        function labelCell(text) {
+            return UI.text({
+                text,
+                fontWeight: "medium",
+                width: layout.labelWidth,
+                alignment: "leading",
+                fillsWidth: false
+            });
+        }
+
+        function emptyCell(width) {
+            return UI.text({ text: "", width, fillsWidth: false });
+        }
+
+        const registerDefaults = [...configRegisters, ...statusRegisters, ...paTable].reduce((map, reg) => {
+            map[reg.key] = "??";
+            return map;
+        }, {});
+
+        const state = {
+            frequency: "",
+            dataRate: "",
+            bandwidth: "",
+            deviation: "",
+            modulation: modulationOptions[0].value,
+            power: powerOptions[4].value,
+            isLoading: false,
+            status: "Idle",
+            registerValues: registerDefaults
+        };
+
+        function setState(patch) {
+            Object.assign(state, patch);
+            render();
+        }
+
+        function updateField(key, rawValue) {
+            const trimmed = String(rawValue || "").trim();
+            setState({ [key]: trimmed });
+        }
+
+        function handleSet(key, label) {
+            const value = state[key];
+            if (!value) {
+                print(`[Wavelet/ISM] ${label} was left empty.`);
+                return;
+            }
+            print(`[Wavelet/ISM] Set ${label} to ${value}`);
+        }
+
+        function toggleLoading() {
+            const next = !state.isLoading;
+            setState({
+                isLoading: next,
+                status: next ? "Polling CC1101 registers…" : "Idle"
+            });
+            print(next ? "[Wavelet/ISM] Refreshing register snapshot" : "[Wavelet/ISM] Cancelled refresh" );
+        }
+
+        function resetRadio() {
+            print("[Wavelet/ISM] Reset radio to defaults");
+        }
+
+        function registerRow(register) {
+            const value = state.registerValues[register.key] || "??";
+            return UI.row({
+                spacing: 8,
+                children: [
+                    UI.text({ text: register.name, fontWeight: "medium" }),
+                    UI.spacer(),
+                    UI.text({ text: `0x${register.key}`, foregroundColor: "#6B7280" }),
+                    UI.spacer(),
+                    UI.text({ text: `0x${value}`, fontDesign: "monospaced" })
+                ]
+            });
+        }
+
+        function sectionHeading(text) {
+            return UI.text({ text, font: "subheadline", fontWeight: "semibold" });
+        }
+
+        function parameterRow(label, key, placeholder, keyboard) {
+            return UI.row({
+                spacing: layout.gap,
+                alignment: "center",
+                children: [
+                    labelCell(label),
+                    UI.row({
+                        spacing: layout.gap,
+                        alignment: "center",
+                        flex: 1,
+                        children: [
+                            UI.textField({
+                                placeholder,
+                                value: state[key],
+                                keyboard,
+                                minWidth: layout.controlMinWidth,
+                                maxWidth: layout.controlMaxWidth,
+                                height: layout.rowHeight,
+                                flex: 1,
+                                fillsWidth: true,
+                                onChange: function(value) {
+                                    updateField(key, value);
+                                }
+                            }),
+                            UI.button({
+                                label: "Set",
+                                buttonStyle: "bordered",
+                                controlSize: "small",
+                                minWidth: layout.actionWidth,
+                                maxWidth: layout.actionWidth,
+                                fillsWidth: false,
+                                onTap: function() {
+                                    handleSet(key, label);
+                                }
+                            })
+                        ]
+                    })
+                ]
+            });
+        }
+
+        function pickerRow(label, key, options) {
+            return UI.row({
+                spacing: layout.gap,
+                alignment: "center",
+                children: [
+                    labelCell(label),
+                    UI.row({
+                        spacing: layout.gap,
+                        alignment: "center",
+                        flex: 1,
+                        children: [
+                            UI.picker({
+                                selected: state[key],
+                                options,
+                                style: "menu",
+                                minWidth: layout.controlMinWidth,
+                                maxWidth: layout.controlMaxWidth,
+                                height: layout.rowHeight,
+                                fillsWidth: false,
+                                onChange: function(value) {
+                                    setState({ [key]: value });
+                                    print(`[Wavelet/ISM] ${label} -> ${value}`);
+                                }
+                            }),
+                            emptyCell(layout.actionWidth)
+                        ]
+                    })
+                ]
+            });
+        }
+
+        function render() {
+            UI.render(
+                UI.scroll({
+                    padding: 16,
+                    spacing: 24,
+                    children: [
+                        UI.column({
+                            spacing: layout.gap,
+                            children: [
+                                UI.text({
+                                    text: "ISM Toolkit",
+                                    font: "title2",
+                                    fontWeight: "semibold"
+                                }),
+                                UI.text({
+                                    text: "Configure CC1101 parameters and inspect live register snapshots.",
+                                    foregroundColor: "#6B7280"
+                                })
+                            ]
+                        }),
+                        UI.column({
+                            spacing: layout.gap,
+                            children: [
+                                parameterRow("Frequency (MHz):", "frequency", "2400", "decimal"),
+                                parameterRow("Data Rate (bps):", "dataRate", "38400", "number"),
+                                parameterRow("Bandwidth (kHz):", "bandwidth", "250", "decimal"),
+                                parameterRow("Deviation (Hz):", "deviation", "5000", "number"),
+                                pickerRow("Modulation Format:", "modulation", modulationOptions),
+                                pickerRow("TX Power:", "power", powerOptions),
+                                UI.row({
+                                    spacing: layout.gap,
+                                    alignment: "center",
+                                    children: [
+                                        emptyCell(layout.labelWidth),
+                                        UI.row({
+                                            spacing: layout.gap,
+                                            alignment: "center",
+                                            flex: 1,
+                                            children: [
+                                                emptyCell(layout.controlMinWidth),
+                                                UI.button({
+                                                    label: "Reset",
+                                                    buttonStyle: "bordered",
+                                                    controlSize: "small",
+                                                    minWidth: layout.actionWidth,
+                                                    maxWidth: layout.actionWidth,
+                                                    fillsWidth: false,
+                                                    icon: "arrow.counterclockwise",
+                                                    onTap: resetRadio
+                                                })
+                                            ]
+                                        })
+                                    ]
+                                })
+                            ]
+                        }),
+                        UI.column({
+                            spacing: 12,
+                            children: [
+                                UI.row({
+                                    spacing: 12,
+                                    children: [
+                                        UI.text({ text: "CC1101 Registers", font: "headline" }),
+                                        UI.spacer(),
+                                        UI.button({
+                                            label: state.isLoading ? "Cancel" : "Refresh",
+                                            buttonStyle: "bordered",
+                                            controlSize: "small",
+                                            fillsWidth: false,
+                                            icon: state.isLoading ? "xmark" : "arrow.clockwise",
+                                            onTap: toggleLoading
+                                        })
+                                    ]
+                                }),
+                                state.isLoading ? UI.progress({
+                                    label: "Loading registers…",
+                                    detail: state.status
+                                }) : null,
+                                UI.column({
+                                    spacing: 8,
+                                    children: [
+                                        sectionHeading("Configuration Registers"),
+                                        ...configRegisters.map(registerRow)
+                                    ]
+                                }),
+                                UI.divider(),
+                                UI.column({
+                                    spacing: 8,
+                                    children: [
+                                        sectionHeading("Status Registers"),
+                                        ...statusRegisters.map(registerRow)
+                                    ]
+                                }),
+                                UI.divider(),
+                                UI.column({
+                                    spacing: 8,
+                                    children: [
+                                        sectionHeading("PA Table"),
+                                        ...paTable.map(registerRow)
+                                    ]
+                                }),
+                                UI.text({
+                                    text: state.status,
+                                    font: "footnote",
+                                    foregroundColor: "#6B7280"
+                                })
+                            ]
+                        })
+                    ]
+                })
+            );
+        }
+
+        render();
+        """
+    }
+
 }
+
 
 // Create a ViewModifier instead of an extension method
 private extension View {
@@ -1008,21 +1709,7 @@ private extension View {
                 switch result {
                 case .success(let urls):
                     if let url = urls.first {
-                        // Try to get persistent access to the file URL
-                        do {
-                            let secureURL = url.startAccessingSecurityScopedResource()
-                            if !secureURL {
-                                print("Failed to get secure access to URL")
-                            }
-                            
-                            // Use the secured URL for import
-                            importScriptFromExternalStorage(url)
-                            
-                            // Always release when done
-                            url.stopAccessingSecurityScopedResource()
-                        } catch {
-                            print("Error securing file access: \(error.localizedDescription)")
-                        }
+                        importScriptFromExternalStorage(url)
                     }
                 case .failure(let error):
                     print("Error importing file: \(error.localizedDescription)")
@@ -1060,6 +1747,18 @@ private extension View {
 func getExportFilename(_ filename: String?) -> String {
     let name = filename ?? "script"
     return name.lowercased().hasSuffix(".js") ? name : name + ".js"
+}
+
+private extension View {
+    func onChangeCompat<Value: Equatable>(of value: Value, perform action: @escaping (Value) -> Void) -> some View {
+        if #available(iOS 17.0, *) {
+            return onChange(of: value) { _, newValue in
+                action(newValue)
+            }
+        } else {
+            return onChange(of: value, perform: action)
+        }
+    }
 }
 
 // MARK: - Script Document
