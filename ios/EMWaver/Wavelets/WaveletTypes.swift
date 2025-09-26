@@ -100,6 +100,22 @@ struct WaveletNodeProps {
         WaveletNodeProps.extractCGFloat(raw["height"])
     }
 
+    var minFrameWidth: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["minWidth"])
+    }
+
+    var maxFrameWidth: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["maxWidth"])
+    }
+
+    var minFrameHeight: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["minHeight"])
+    }
+
+    var maxFrameHeight: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["maxHeight"])
+    }
+
     var cornerRadius: CGFloat? {
         WaveletNodeProps.extractCGFloat(raw["cornerRadius"])
     }
@@ -323,6 +339,16 @@ struct WaveletNodeProps {
         raw["detail"] as? String
     }
 
+    var layoutPriority: Double? {
+        if let explicit = WaveletNodeProps.extractDouble(raw["layoutPriority"]) {
+            return explicit
+        }
+        if let flex = WaveletNodeProps.extractDouble(raw["flex"]) {
+            return flex
+        }
+        return nil
+    }
+
     private static func extractCGFloat(_ value: Any?) -> CGFloat? {
         guard let value = value else { return nil }
         if let number = value as? NSNumber {
@@ -333,6 +359,9 @@ struct WaveletNodeProps {
         }
         if let int = value as? Int {
             return CGFloat(int)
+        }
+        if let string = value as? String, let parsed = Double(string) {
+            return CGFloat(parsed)
         }
         return nil
     }
