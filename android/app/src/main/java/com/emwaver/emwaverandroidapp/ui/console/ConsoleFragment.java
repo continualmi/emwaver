@@ -25,6 +25,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -40,6 +41,7 @@ import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
 import androidx.core.content.ContextCompat;
+import com.google.android.material.tabs.TabLayout;
 
 import com.emwaver.emwaverandroidapp.databinding.FragmentConsoleBinding;
 import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
@@ -47,6 +49,9 @@ import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletRenderView;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletTree;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -60,8 +65,12 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class ConsoleFragment extends Fragment {
+    private static final int TAB_SCRIPTS = 0;
+    private static final int TAB_WAVELETS = 1;
+
     private FragmentConsoleBinding binding;
     private CC1101 cc;
     private BLEService bleService;
@@ -94,6 +103,7 @@ public class ConsoleFragment extends Fragment {
     private static final long AUTO_SAVE_DELAY_MS = 3000; // 1 second delay
     private String currentScriptName;
     private boolean hasUnsavedChanges = false;
+    private int currentTab = TAB_SCRIPTS;
 
     private Utils utils;
     private IrEncoderWrapper irEncoderWrapper;
@@ -105,6 +115,11 @@ public class ConsoleFragment extends Fragment {
     private CardView scriptEditorCard;
     private TextView consoleMonitorTitle;
     private CardView consoleMonitorCard;
+
+    private WaveletEngine waveletEngine;
+    private WaveletTree activeWaveletTree;
+    private boolean isRenderingWavelet = false;
+    private WaveletRenderView waveletRenderView;
 
     private File getScriptsDir() {
         File dir = new File(getContext().getFilesDir(), SCRIPTS_DIR);
@@ -265,6 +280,8 @@ public class ConsoleFragment extends Fragment {
 
         // Setup collapsible sections
         setupCollapsibleSections();
+        setupTabs();
+        updateWaveletPlaceholder();
 
         // Initialize console output
         binding.consoleWindowText.setText("<Console>");
@@ -275,6 +292,173 @@ public class ConsoleFragment extends Fragment {
         updateScriptEditorTitle();
 
         return root;
+    }
+
+    private void setupTabs() {
+        TabLayout tabLayout = binding.modeTabLayout;
+        if (tabLayout.getTabCount() == 0) {
+            tabLayout.addTab(tabLayout.newTab().setText("Scripts"));
+            tabLayout.addTab(tabLayout.newTab().setText("Wavelets"));
+        }
+        tabLayout.selectTab(tabLayout.getTabAt(currentTab));
+        updateTabVisibility();
+
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                currentTab = tab.getPosition();
+                updateTabVisibility();
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+                // no-op
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+                // no-op
+            }
+        });
+    }
+
+    private void updateTabVisibility() {
+        if (currentTab == TAB_SCRIPTS) {
+            showScriptsTab();
+        } else {
+            showWaveletsTab();
+        }
+    }
+
+    private void showScriptsTab() {
+        binding.scriptsGroup.setVisibility(View.VISIBLE);
+        binding.waveletContainer.setVisibility(View.GONE);
+    }
+
+    private void showWaveletsTab() {
+        binding.scriptsGroup.setVisibility(View.GONE);
+        binding.waveletContainer.setVisibility(View.VISIBLE);
+        updateWaveletPlaceholder();
+        if (!isRenderingWavelet && activeWaveletTree == null) {
+            String script = getCurrentScriptText();
+            if (!script.isEmpty() && isWaveletScript(script)) {
+                renderWavelet();
+            }
+        }
+    }
+
+    private void selectWaveletTab() {
+        TabLayout.Tab tab = binding.modeTabLayout.getTabAt(TAB_WAVELETS);
+        if (tab != null) {
+            tab.select();
+        } else {
+            currentTab = TAB_WAVELETS;
+            updateTabVisibility();
+        }
+    }
+
+    private String getCurrentScriptText() {
+        Editable text = binding.jsCodeInput.getText();
+        return text != null ? text.toString().trim() : "";
+    }
+
+    private boolean isWaveletScript(String script) {
+        if (script == null || script.isEmpty()) {
+            return false;
+        }
+        String lowered = script.toLowerCase(Locale.US);
+        return lowered.contains("ui.render(") || lowered.contains("ui.column(") || lowered.contains("ui.row(");
+    }
+
+    private void setupWaveletEngineIfNeeded() {
+        if (waveletEngine != null) {
+            return;
+        }
+        waveletEngine = new WaveletEngine();
+        waveletEngine.setup(message -> print("[Wavelet] " + message), this::handleWaveletTree);
+    }
+
+    private void renderWavelet() {
+        String script = getCurrentScriptText();
+        if (script.isEmpty()) {
+            return;
+        }
+        setupWaveletEngineIfNeeded();
+        if (waveletEngine == null) {
+            return;
+        }
+        Log.d("ConsoleFragment", "Executing wavelet script preview");
+        isRenderingWavelet = true;
+        activeWaveletTree = null;
+        ensureWaveletRenderView();
+        if (waveletRenderView != null) {
+            waveletRenderView.clear();
+        }
+        updateWaveletPlaceholder();
+        waveletEngine.execute(script, () -> {
+            isRenderingWavelet = false;
+            updateWaveletPlaceholder();
+        });
+    }
+
+    private void handleWaveletTree(WaveletTree tree) {
+        if (binding == null) {
+            return;
+        }
+        if (tree == null || tree.getRoot() == null) {
+            Log.w("ConsoleFragment", "Received empty wavelet tree");
+            print("[Wavelet] Render produced no view");
+            isRenderingWavelet = false;
+            updateWaveletPlaceholder();
+            return;
+        }
+        Log.d("ConsoleFragment", "Wavelet tree root=" + tree.getRoot().getType() + " children=" + tree.getRoot().getChildren().size());
+        activeWaveletTree = tree;
+        isRenderingWavelet = false;
+        updateWaveletPlaceholder();
+        if (currentTab != TAB_WAVELETS) {
+            selectWaveletTab();
+        }
+        renderWaveletTree(tree);
+    }
+
+    private void ensureWaveletRenderView() {
+        if (binding == null || waveletRenderView != null) {
+            return;
+        }
+        waveletRenderView = new WaveletRenderView(requireContext());
+        waveletRenderView.setEventListener((token, arguments) -> {
+            if (waveletEngine != null) {
+                waveletEngine.invoke(token, arguments);
+            }
+        });
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        binding.waveletContainer.addView(waveletRenderView, 0, params);
+    }
+
+    private void renderWaveletTree(WaveletTree tree) {
+        ensureWaveletRenderView();
+        if (waveletRenderView != null) {
+            waveletRenderView.render(tree);
+            Log.d("ConsoleFragment", "Wavelet view rendered; children=" + waveletRenderView.getChildCount());
+            waveletRenderView.setVisibility(View.VISIBLE);
+        }
+        binding.waveletEmptyState.setVisibility(View.GONE);
+    }
+
+    private void updateWaveletPlaceholder() {
+        if (binding == null) {
+            return;
+        }
+        binding.waveletProgress.setVisibility(isRenderingWavelet ? View.VISIBLE : View.GONE);
+        boolean showEmpty = !isRenderingWavelet && activeWaveletTree == null;
+        binding.waveletEmptyState.setVisibility(showEmpty ? View.VISIBLE : View.GONE);
+        if (waveletRenderView != null) {
+            if (activeWaveletTree == null && !isRenderingWavelet) {
+                waveletRenderView.clear();
+            }
+            waveletRenderView.setVisibility(activeWaveletTree != null ? View.VISIBLE : View.GONE);
+        }
     }
 
     private void setupCollapsibleSections() {
@@ -321,13 +505,27 @@ public class ConsoleFragment extends Fragment {
     }
 
     private void executeScript(){
+        String script = binding.jsCodeInput.getText().toString();
+        String trimmed = script.trim();
+        if (trimmed.isEmpty()) {
+            print("No script to execute.");
+            return;
+        }
+
+        if (isWaveletScript(trimmed)) {
+            print("[Wavelet] Detected wavelet DSL, rendering preview instead of running in standard engine");
+            selectWaveletTab();
+            renderWavelet();
+            return;
+        }
+
         isScriptRunning = true;
         updateExecuteMenuIcon();
+        final String scriptToRun = script;
         new Thread(() -> {
             try {
-                String jsCode = binding.jsCodeInput.getText().toString();
                 ScriptsEngine scriptsEngine = new ScriptsEngine(cc, utils, bleService, irEncoderWrapper, this::print);
-                String result = scriptsEngine.executeJavaScript(jsCode);
+                String result = scriptsEngine.executeJavaScript(scriptToRun);
                 if(result != null){
                     print(result);
                 }
@@ -398,6 +596,19 @@ public class ConsoleFragment extends Fragment {
     }
     @Override
     public void onDestroyView() {
+        if (waveletEngine != null) {
+            waveletEngine.shutdown();
+            waveletEngine = null;
+        }
+        activeWaveletTree = null;
+        isRenderingWavelet = false;
+        if (binding != null) {
+            binding.waveletContainer.removeAllViews();
+        }
+        if (waveletRenderView != null) {
+            waveletRenderView.setEventListener(null);
+            waveletRenderView = null;
+        }
         super.onDestroyView();
         binding = null; // Important for avoiding memory leaks
     }
@@ -684,7 +895,7 @@ public class ConsoleFragment extends Fragment {
         // RX Continuous Script
         String rxScriptName = "cc1101_rx_continuous.js";
         File rxScript = new File(getScriptsDir(), rxScriptName);
-        
+
         if (!rxScript.exists()) {
             String rxContent = 
                 "CC1101.spiStrobe(CC1101.SRES);\n" +
@@ -743,6 +954,40 @@ public class ConsoleFragment extends Fragment {
             saveScriptToInternalStorage(badUsbScriptName, badUsbContent);
             updateRecentScripts(badUsbScriptName);
             showToastOnUiThread("Default BadUSB hello world script created");
+        }
+
+        ensureWaveletScript("wavelet_demo.js", "Created default wavelet demo script");
+        ensureWaveletScript("wavelet_rfid.js", "Created default RFID wavelet script");
+        ensureWaveletScript("wavelet_ism.js", "Created default ISM wavelet script");
+    }
+
+    private void ensureWaveletScript(String scriptName, String logMessage) {
+        File scriptFile = new File(getScriptsDir(), scriptName);
+        if (scriptFile.exists()) {
+            return;
+        }
+        String content = readAssetFile(scriptName);
+        if (content == null || content.isEmpty()) {
+            Log.e("ConsoleFragment", "Unable to load asset for " + scriptName);
+            return;
+        }
+        saveScriptToInternalStorage(scriptName, content);
+        updateRecentScripts(scriptName);
+        print("[Wavelet] " + logMessage);
+    }
+
+    private String readAssetFile(String assetName) {
+        try (InputStream inputStream = requireContext().getAssets().open(assetName);
+             ByteArrayOutputStream buffer = new ByteArrayOutputStream()) {
+            byte[] data = new byte[4096];
+            int read;
+            while ((read = inputStream.read(data)) != -1) {
+                buffer.write(data, 0, read);
+            }
+            return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Log.e("ConsoleFragment", "Error reading asset " + assetName, e);
+            return null;
         }
     }
 
