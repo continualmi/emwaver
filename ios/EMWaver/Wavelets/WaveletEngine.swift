@@ -248,7 +248,14 @@ private extension WaveletEngine {
                     delete assigned.children;
                     var id = ensureId(type, assigned);
                     assigned.id = id;
-                    return { id: id, props: assigned, children: children };
+                    var cleanedChildren = [];
+                    for (var i = 0; i < children.length; i += 1) {
+                        var child = children[i];
+                        if (child !== null && child !== undefined) {
+                            cleanedChildren.push(child);
+                        }
+                    }
+                    return { id: id, props: assigned, children: cleanedChildren };
                 };
 
                 var collectHandlers = function (id, props) {
@@ -296,6 +303,9 @@ private extension WaveletEngine {
                     textEditor: function (props) { return makeNode('textEditor', props || {}); },
                     picker: function (props) { return makeNode('picker', props || {}); },
                     grid: function (props) { return makeNode('grid', props || {}); },
+                    spacer: function (props) { return makeNode('spacer', props || {}); },
+                    divider: function (props) { return makeNode('divider', props || {}); },
+                    progress: function (props) { return makeNode('progress', props || {}); },
                     render: function (node) {
                         if (!node || typeof node !== 'object') {
                             WaveletBridge.log('UI.render called with invalid node');

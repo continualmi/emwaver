@@ -48,6 +48,11 @@ struct WaveletRenderView: View {
             if let weight = node.props.fontWeight {
                 textView = textView.fontWeight(weight)
             }
+            if let design = node.props.fontDesign {
+                if #available(iOS 17.0, *), let mapped = mapFontDesign(from: design) {
+                    textView = textView.fontDesign(mapped)
+                }
+            }
             if let color = node.props.foregroundColor {
                 textView = textView.foregroundColor(color)
             }
@@ -92,7 +97,31 @@ struct WaveletRenderView: View {
                 WaveletGridView(node: node, renderChild: render)
                     .applyWaveletModifiers(node.props)
             )
+        case .spacer:
+            return AnyView(
+                Spacer(minLength: node.props.spacerMinLength)
+            )
+        case .divider:
+            return AnyView(
+                Divider()
+                    .applyWaveletModifiers(node.props)
+            )
+        case .progress:
+            return AnyView(
+                WaveletProgressView(node: node)
+                    .applyWaveletModifiers(node.props)
+            )
         }
+    }
+}
+
+@available(iOS 17.0, *)
+private func mapFontDesign(from value: String) -> Font.Design? {
+    switch value.lowercased() {
+    case "monospaced": return .monospaced
+    case "rounded": return .rounded
+    case "serif": return .serif
+    default: return nil
     }
 }
 
@@ -108,8 +137,43 @@ private struct WaveletButtonView: View {
                 invokeHandler(token, [])
             }
         }) {
-            WaveletButtonLabel(node: node, labelColor: labelColor)
+            WaveletButtonLabel(
+                node: node,
+                labelColor: labelColor,
+                fillsWidth: node.props.fillsWidth,
+                controlSize: node.props.controlSize
+            )
         }
+        let styledButton = configureButtonStyle(button, backgroundColorProvided: backgroundColorProvided)
+        return styledButton.applyControlSize(node.props.controlSize)
+    }
+
+    private func configureButtonStyle(_ button: Button<WaveletButtonLabel>, backgroundColorProvided: Bool) -> AnyView {
+        if let style = node.props.buttonStyle {
+            switch style {
+            case .plain:
+                return AnyView(button.buttonStyle(PlainButtonStyle()))
+            case .bordered:
+                if #available(iOS 15.0, *) {
+                    return AnyView(button.buttonStyle(.bordered))
+                } else {
+                    return AnyView(button.buttonStyle(DefaultButtonStyle()))
+                }
+            case .borderedProminent:
+                if #available(iOS 15.0, *) {
+                    return AnyView(button.buttonStyle(.borderedProminent))
+                } else {
+                    return AnyView(button.buttonStyle(DefaultButtonStyle()))
+                }
+            case .automatic:
+                if #available(iOS 15.0, *) {
+                    return AnyView(button.buttonStyle(.automatic))
+                } else {
+                    return AnyView(button.buttonStyle(DefaultButtonStyle()))
+                }
+            }
+        }
+
         if backgroundColorProvided {
             return AnyView(button.buttonStyle(PlainButtonStyle()))
         } else {
@@ -125,6 +189,8 @@ private struct WaveletButtonView: View {
 private struct WaveletButtonLabel: View {
     let node: WaveletNode
     let labelColor: Color?
+    let fillsWidth: Bool
+    let controlSize: ControlSize?
 
     var body: some View {
         let baseLabel = HStack(spacing: 8) {
@@ -132,15 +198,52 @@ private struct WaveletButtonLabel: View {
                 Image(systemName: icon)
             }
             Text(node.props.label ?? "Button")
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .center)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
+        .padding(.vertical, verticalPadding)
+        .padding(.horizontal, horizontalPadding)
 
         if let labelColor {
             return AnyView(baseLabel.foregroundColor(labelColor))
         }
         return AnyView(baseLabel)
+    }
+
+    private var verticalPadding: CGFloat {
+        guard let controlSize else { return 12 }
+        switch controlSize {
+        case .mini: return 6
+        case .small: return 8
+        case .regular: return 12
+        case .large: return 14
+        case .extraLarge: return 16
+        @unknown default:
+            return 12
+        }
+    }
+
+    private var horizontalPadding: CGFloat {
+        guard let controlSize else { return 16 }
+        switch controlSize {
+        case .mini: return 10
+        case .small: return 12
+        case .regular: return 16
+        case .large: return 20
+        case .extraLarge:
+            return 24
+        @unknown default:
+            return 16
+        }
+    }
+}
+
+private extension View {
+    func applyControlSize(_ controlSize: ControlSize?) -> AnyView {
+        guard let controlSize else { return AnyView(self) }
+        if #available(iOS 15.0, *) {
+            return AnyView(self.controlSize(controlSize))
+        }
+        return AnyView(self)
     }
 }
 
@@ -402,43 +505,72 @@ private struct WaveletPickerView: View {
                 Text(label)
                     .font(.headline)
             }
-            if node.props.pickerStyle == "segmented" {
-                Picker(node.props.label ?? "Picker", selection: Binding(
-                    get: { selection },
-                    set: { newValue in
-                        selection = newValue
-                        if let token = node.props.handlerId(for: .change) {
-                            invokeHandler(token, [newValue])
-                        }
-                    }
-                )) {
-                    ForEach(node.props.pickerOptions) { option in
-                        Text(option.label).tag(option.value)
+            let binding = Binding(
+                get: { selection },
+                set: { newValue in
+                    selection = newValue
+                    if let token = node.props.handlerId(for: .change) {
+                        invokeHandler(token, [newValue])
                     }
                 }
-                .pickerStyle(.segmented)
-            } else {
-                Picker(node.props.label ?? "Picker", selection: Binding(
-                    get: { selection },
-                    set: { newValue in
-                        selection = newValue
-                        if let token = node.props.handlerId(for: .change) {
-                            invokeHandler(token, [newValue])
-                        }
-                    }
-                )) {
-                    ForEach(node.props.pickerOptions) { option in
-                        Text(option.label).tag(option.value)
-                    }
-                }
-                .pickerStyle(.automatic)
-            }
+            )
+            styledPickerView(selection: binding)
         }
         .modifier(WaveletOnChange(value: node.props.pickerSelection) { newValue in
             if newValue != selection {
                 selection = newValue
             }
         })
+    }
+
+    @ViewBuilder
+    private func styledPickerView(selection: Binding<String>) -> some View {
+        let picker = Picker(node.props.label ?? "Picker", selection: selection) {
+            ForEach(node.props.pickerOptions) { option in
+                Text(option.label).tag(option.value)
+            }
+        }
+
+        if node.props.pickerStyle == "segmented" {
+            picker.pickerStyle(.segmented)
+        } else if node.props.pickerStyle == "menu" {
+            if #available(iOS 14.0, *) {
+                picker.pickerStyle(.menu)
+            } else {
+                picker.pickerStyle(.automatic)
+            }
+        } else {
+            picker.pickerStyle(.automatic)
+        }
+    }
+}
+
+private struct WaveletProgressView: View {
+    let node: WaveletNode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let value = node.props.progressValue {
+                let total = node.props.progressTotal ?? 1.0
+                if let label = node.props.label {
+                    ProgressView(label, value: min(value, total), total: max(total, .leastNonzeroMagnitude))
+                } else {
+                    ProgressView(value: min(value, total), total: max(total, .leastNonzeroMagnitude))
+                }
+            } else {
+                if let label = node.props.label {
+                    ProgressView(label)
+                } else {
+                    ProgressView()
+                }
+            }
+
+            if let detail = node.props.progressDetail, !detail.isEmpty {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+        }
     }
 }
 

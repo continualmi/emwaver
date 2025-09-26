@@ -15,6 +15,9 @@ enum WaveletNodeType: String {
     case textEditor
     case picker
     case grid
+    case spacer
+    case divider
+    case progress
 }
 
 // Supported event types for Wavelet UI nodes.
@@ -109,6 +112,12 @@ struct WaveletNodeProps {
         WaveletNodeProps.parseColor(raw["foregroundColor"])
     }
 
+    var fillsWidth: Bool {
+        if let value = raw["fillsWidth"] as? Bool { return value }
+        if let number = raw["fillsWidth"] as? NSNumber { return number.boolValue }
+        return true
+    }
+
     var font: Font? {
         guard let value = (raw["font"] as? String)?.lowercased() else { return nil }
         switch value {
@@ -141,6 +150,10 @@ struct WaveletNodeProps {
         case "black": return .black
         default: return nil
         }
+    }
+
+    var fontDesign: String? {
+        (raw["fontDesign"] as? String)?.lowercased()
     }
 
     var systemIconName: String? {
@@ -207,6 +220,28 @@ struct WaveletNodeProps {
         (raw["secure"] as? Bool) ?? false
     }
 
+    var buttonStyle: WaveletButtonStyleOption? {
+        guard let value = (raw["buttonStyle"] as? String)?.lowercased() else { return nil }
+        switch value {
+        case "plain": return .plain
+        case "bordered": return .bordered
+        case "borderedprominent", "prominent": return .borderedProminent
+        case "automatic": return .automatic
+        default: return nil
+        }
+    }
+
+    var controlSize: ControlSize? {
+        guard let value = (raw["controlSize"] as? String)?.lowercased() else { return nil }
+        switch value {
+        case "mini": return .mini
+        case "small": return .small
+        case "regular": return .regular
+        case "large": return .large
+        default: return nil
+        }
+    }
+
     var pickerOptions: [WaveletPickerOption] {
         guard let rawOptions = raw["options"] as? [[String: Any]] else { return [] }
         return rawOptions.compactMap { WaveletPickerOption(dictionary: $0) }
@@ -266,6 +301,28 @@ struct WaveletNodeProps {
         eventHandlers[event]
     }
 
+    var spacerMinLength: CGFloat? {
+        WaveletNodeProps.extractCGFloat(raw["minLength"])
+    }
+
+    var progressValue: Double? {
+        WaveletNodeProps.extractDouble(raw["value"])
+    }
+
+    var progressTotal: Double? {
+        if let explicit = WaveletNodeProps.extractDouble(raw["total"]) {
+            return explicit
+        }
+        if let explicit = WaveletNodeProps.extractDouble(raw["max"]) {
+            return explicit
+        }
+        return nil
+    }
+
+    var progressDetail: String? {
+        raw["detail"] as? String
+    }
+
     private static func extractCGFloat(_ value: Any?) -> CGFloat? {
         guard let value = value else { return nil }
         if let number = value as? NSNumber {
@@ -276,6 +333,23 @@ struct WaveletNodeProps {
         }
         if let int = value as? Int {
             return CGFloat(int)
+        }
+        return nil
+    }
+
+    private static func extractDouble(_ value: Any?) -> Double? {
+        guard let value = value else { return nil }
+        if let number = value as? NSNumber {
+            return number.doubleValue
+        }
+        if let double = value as? Double {
+            return double
+        }
+        if let int = value as? Int {
+            return Double(int)
+        }
+        if let string = value as? String {
+            return Double(string)
         }
         return nil
     }
@@ -378,4 +452,10 @@ struct WaveletTree {
         self.root = root
         self.metadata = metadata
     }
+}
+enum WaveletButtonStyleOption {
+    case plain
+    case bordered
+    case borderedProminent
+    case automatic
 }
