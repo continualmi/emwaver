@@ -59,7 +59,7 @@ dependencies {
     implementation 'androidx.preference:preference:1.2.0'
 
     implementation 'org.apache.commons:commons-csv:1.8'
-    implementation 'org.mozilla:rhino:1.7R4'
+    implementation 'org.mozilla:rhino:1.7.15'
     implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
 
     implementation 'com.android.volley:volley:1.2.1'
