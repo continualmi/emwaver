@@ -1349,6 +1349,29 @@ struct ConsoleView: View {
 
         const paTable = Array.from({ length: 8 }, (_, index) => ({ key: `PA${index}`, name: `PA[${index}]` }));
 
+        const layout = {
+            gap: 10,
+            rowHeight: 30,
+            labelWidth: 150,
+            controlMinWidth: 120,
+            controlMaxWidth: 180,
+            actionWidth: 60
+        };
+
+        function labelCell(text) {
+            return UI.text({
+                text,
+                fontWeight: "medium",
+                width: layout.labelWidth,
+                alignment: "leading",
+                fillsWidth: false
+            });
+        }
+
+        function emptyCell(width) {
+            return UI.text({ text: "", width, fillsWidth: false });
+        }
+
         const registerDefaults = [...configRegisters, ...statusRegisters, ...paTable].reduce((map, reg) => {
             map[reg.key] = "??";
             return map;
@@ -1418,26 +1441,40 @@ struct ConsoleView: View {
 
         function parameterRow(label, key, placeholder, keyboard) {
             return UI.row({
-                spacing: 12,
+                spacing: layout.gap,
+                alignment: "center",
                 children: [
-                    UI.text({ text: label, width: 165, fontWeight: "medium" }),
-                    UI.textField({
-                        placeholder,
-                        value: state[key],
-                        keyboard,
-                        width: 140,
-                        onChange: function(value) {
-                            updateField(key, value);
-                        }
-                    }),
-                    UI.button({
-                        label: "Set",
-                        fillsWidth: false,
-                        buttonStyle: "bordered",
-                        controlSize: "small",
-                        onTap: function() {
-                            handleSet(key, label);
-                        }
+                    labelCell(label),
+                    UI.row({
+                        spacing: layout.gap,
+                        alignment: "center",
+                        flex: 1,
+                        children: [
+                            UI.textField({
+                                placeholder,
+                                value: state[key],
+                                keyboard,
+                                minWidth: layout.controlMinWidth,
+                                maxWidth: layout.controlMaxWidth,
+                                height: layout.rowHeight,
+                                flex: 1,
+                                fillsWidth: true,
+                                onChange: function(value) {
+                                    updateField(key, value);
+                                }
+                            }),
+                            UI.button({
+                                label: "Set",
+                                buttonStyle: "bordered",
+                                controlSize: "small",
+                                minWidth: layout.actionWidth,
+                                maxWidth: layout.actionWidth,
+                                fillsWidth: false,
+                                onTap: function() {
+                                    handleSet(key, label);
+                                }
+                            })
+                        ]
                     })
                 ]
             });
@@ -1445,18 +1482,30 @@ struct ConsoleView: View {
 
         function pickerRow(label, key, options) {
             return UI.row({
-                spacing: 12,
+                spacing: layout.gap,
+                alignment: "center",
                 children: [
-                    UI.text({ text: label, width: 165, fontWeight: "medium" }),
-                    UI.picker({
-                        selected: state[key],
-                        options,
-                        style: "menu",
-                        width: 180,
-                        onChange: function(value) {
-                            setState({ [key]: value });
-                            print(`[Wavelet/ISM] ${label} -> ${value}`);
-                        }
+                    labelCell(label),
+                    UI.row({
+                        spacing: layout.gap,
+                        alignment: "center",
+                        flex: 1,
+                        children: [
+                            UI.picker({
+                                selected: state[key],
+                                options,
+                                style: "menu",
+                                minWidth: layout.controlMinWidth,
+                                maxWidth: layout.controlMaxWidth,
+                                height: layout.rowHeight,
+                                fillsWidth: false,
+                                onChange: function(value) {
+                                    setState({ [key]: value });
+                                    print(`[Wavelet/ISM] ${label} -> ${value}`);
+                                }
+                            }),
+                            emptyCell(layout.actionWidth)
+                        ]
                     })
                 ]
             });
@@ -1466,13 +1515,10 @@ struct ConsoleView: View {
             UI.render(
                 UI.scroll({
                     padding: 16,
-                    spacing: 20,
+                    spacing: 24,
                     children: [
                         UI.column({
-                            spacing: 16,
-                            padding: 16,
-                            backgroundColor: "#F2F2F7",
-                            cornerRadius: 12,
+                            spacing: layout.gap,
                             children: [
                                 UI.text({
                                     text: "ISM Toolkit",
@@ -1482,7 +1528,12 @@ struct ConsoleView: View {
                                 UI.text({
                                     text: "Configure CC1101 parameters and inspect live register snapshots.",
                                     foregroundColor: "#6B7280"
-                                }),
+                                })
+                            ]
+                        }),
+                        UI.column({
+                            spacing: layout.gap,
+                            children: [
                                 parameterRow("Frequency (MHz):", "frequency", "2400", "decimal"),
                                 parameterRow("Data Rate (bps):", "dataRate", "38400", "number"),
                                 parameterRow("Bandwidth (kHz):", "bandwidth", "250", "decimal"),
@@ -1490,25 +1541,34 @@ struct ConsoleView: View {
                                 pickerRow("Modulation Format:", "modulation", modulationOptions),
                                 pickerRow("TX Power:", "power", powerOptions),
                                 UI.row({
-                                    spacing: 12,
+                                    spacing: layout.gap,
+                                    alignment: "center",
                                     children: [
-                                        UI.button({
-                                            label: "Reset",
-                                            buttonStyle: "bordered",
-                                            controlSize: "small",
-                                            fillsWidth: false,
-                                            onTap: resetRadio,
-                                            icon: "arrow.counterclockwise"
+                                        emptyCell(layout.labelWidth),
+                                        UI.row({
+                                            spacing: layout.gap,
+                                            alignment: "center",
+                                            flex: 1,
+                                            children: [
+                                                emptyCell(layout.controlMinWidth),
+                                                UI.button({
+                                                    label: "Reset",
+                                                    buttonStyle: "bordered",
+                                                    controlSize: "small",
+                                                    minWidth: layout.actionWidth,
+                                                    maxWidth: layout.actionWidth,
+                                                    fillsWidth: false,
+                                                    icon: "arrow.counterclockwise",
+                                                    onTap: resetRadio
+                                                })
+                                            ]
                                         })
                                     ]
                                 })
                             ]
                         }),
                         UI.column({
-                            spacing: 16,
-                            padding: 16,
-                            backgroundColor: "#F2F2F7",
-                            cornerRadius: 12,
+                            spacing: 12,
                             children: [
                                 UI.row({
                                     spacing: 12,

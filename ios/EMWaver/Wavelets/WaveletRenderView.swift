@@ -203,10 +203,13 @@ private struct WaveletButtonLabel: View {
         .padding(.vertical, verticalPadding)
         .padding(.horizontal, horizontalPadding)
 
+        var labelView: AnyView = AnyView(baseLabel)
+
         if let labelColor {
-            return AnyView(baseLabel.foregroundColor(labelColor))
+            labelView = AnyView(labelView.foregroundColor(labelColor))
         }
-        return AnyView(baseLabel)
+
+        return labelView
     }
 
     private var verticalPadding: CGFloat {
@@ -391,7 +394,14 @@ private struct WaveletTextFieldView: View {
         styled = configured
 #endif
 
-        return AnyView(styled.onSubmit {
+        let sized: AnyView
+        if node.props.fillsWidth {
+            sized = AnyView(styled.frame(maxWidth: .infinity))
+        } else {
+            sized = styled
+        }
+
+        return AnyView(sized.onSubmit {
             if let token = node.props.handlerId(for: .submit) {
                 invokeHandler(token, [value])
             }
@@ -420,7 +430,14 @@ private struct WaveletTextFieldView: View {
         styled = configured
 #endif
 
-        return AnyView(styled.onSubmit {
+        let sized: AnyView
+        if node.props.fillsWidth {
+            sized = AnyView(styled.frame(maxWidth: .infinity))
+        } else {
+            sized = styled
+        }
+
+        return AnyView(sized.onSubmit {
             if let token = node.props.handlerId(for: .submit) {
                 invokeHandler(token, [value])
             }
@@ -523,25 +540,31 @@ private struct WaveletPickerView: View {
         })
     }
 
-    @ViewBuilder
-    private func styledPickerView(selection: Binding<String>) -> some View {
+    private func styledPickerView(selection: Binding<String>) -> AnyView {
         let picker = Picker(node.props.label ?? "Picker", selection: selection) {
             ForEach(node.props.pickerOptions) { option in
                 Text(option.label).tag(option.value)
             }
         }
 
+        let styled: AnyView
         if node.props.pickerStyle == "segmented" {
-            picker.pickerStyle(.segmented)
+            styled = AnyView(picker.pickerStyle(.segmented))
         } else if node.props.pickerStyle == "menu" {
             if #available(iOS 14.0, *) {
-                picker.pickerStyle(.menu)
+                styled = AnyView(picker.pickerStyle(.menu))
             } else {
-                picker.pickerStyle(.automatic)
+                styled = AnyView(picker.pickerStyle(.automatic))
             }
         } else {
-            picker.pickerStyle(.automatic)
+            styled = AnyView(picker.pickerStyle(.automatic))
         }
+
+        if node.props.fillsWidth {
+            return AnyView(styled.frame(maxWidth: .infinity, alignment: .leading))
+        }
+
+        return styled
     }
 }
 
@@ -594,12 +617,44 @@ private extension View {
         if let padding = props.padding {
             modified = AnyView(modified.padding(padding))
         }
-        if let width = props.frameWidth, let height = props.frameHeight {
-            modified = AnyView(modified.frame(width: width, height: height, alignment: .leading))
-        } else if let width = props.frameWidth {
-            modified = AnyView(modified.frame(width: width, alignment: .leading))
-        } else if let height = props.frameHeight {
-            modified = AnyView(modified.frame(height: height, alignment: .leading))
+
+        var minWidth = props.minFrameWidth
+        var idealWidth = props.frameWidth
+        var maxWidth = props.maxFrameWidth
+        var minHeight = props.minFrameHeight
+        var idealHeight = props.frameHeight
+        var maxHeight = props.maxFrameHeight
+
+        if let ideal = idealWidth {
+            minWidth = minWidth ?? ideal
+            maxWidth = maxWidth ?? ideal
+        }
+
+        if let ideal = idealHeight {
+            minHeight = minHeight ?? ideal
+            maxHeight = maxHeight ?? ideal
+        }
+
+        if props.fillsWidth {
+            maxWidth = .infinity
+            if minWidth == nil {
+                minWidth = 0
+            }
+        }
+
+        if minWidth != nil || idealWidth != nil || maxWidth != nil || minHeight != nil || idealHeight != nil || maxHeight != nil || props.fillsWidth {
+            let alignment = Alignment(horizontal: props.alignment ?? .leading, vertical: .center)
+            modified = AnyView(
+                modified.frame(
+                    minWidth: minWidth,
+                    idealWidth: idealWidth,
+                    maxWidth: maxWidth,
+                    minHeight: minHeight,
+                    idealHeight: idealHeight,
+                    maxHeight: maxHeight,
+                    alignment: alignment
+                )
+            )
         }
         if let background = props.backgroundColor {
             modified = AnyView(modified.background(background))
@@ -609,6 +664,9 @@ private extension View {
         }
         if let foreground = props.foregroundColor {
             modified = AnyView(modified.foregroundColor(foreground))
+        }
+        if let priority = props.layoutPriority {
+            modified = AnyView(modified.layoutPriority(priority))
         }
         return modified
     }

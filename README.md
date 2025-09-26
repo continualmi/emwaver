@@ -2,9 +2,9 @@
   <img src="logo.png" alt="EMWaver Logo" width="250">
 </div>
 
-This repository hosts the EMWaver firmware and the Android/iOS companion apps. Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com). The sections below walk through ESP-IDF CLI workflows for the firmware and point to the supported IDE tooling for the mobile apps.
+This repository hosts the EMWaver firmware. Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com). The sections below walk through ESP-IDF CLI workflows for the firmware.
 
-# Firmware
+# EMWaver Firmware
 
 Target device: ESP32-S3 running on ESP-IDF v5.5.1.
 
@@ -97,20 +97,6 @@ idf.py -p COM7 monitor  # Exit with Ctrl+]
 Use `idf.py -p COM7 flash monitor` to combine flashing and serial monitoring. The installer caches downloads in `%USERPROFILE%\.espressif`; remove `%USERPROFILE%\esp\tools\dist` (or `$env:IDF_TOOLS_PATH\dist`) if you need to reclaim disk space.
 
 If you prefer a reusable alias, add `alias get_idf='source ~/emwaver/setup.sh'` to your shell profile so new sessions pick up the toolchain quickly.
-
-# Android App
-
-- The Android source lives in `android/`.
-- Install [Android Studio](https://developer.android.com/studio) for the recommended GUI workflow. The installer bundles current SDK tools and device inspectors, which are required for debugging and Play Store builds.
-- From Android Studio, choose “Open an Existing Project” and select the `android/` directory to build, run, and package the app.
-- If you prefer a fully CLI pipeline, set up the Android SDK/NDK manually and use the provided Gradle wrapper (`./gradlew …`), but the project team primarily supports the Android Studio workflow.
-
-# iOS App
-
-- The iOS project lives in `ios/` (`EMWaver.xcworkspace`).
-- Install the latest [Xcode](https://developer.apple.com/xcode/) from the Mac App Store or Apple Developer site; it includes device simulators, signing tools, and the required SDKs.
-- Open `EMWaver.xcworkspace` in Xcode to build, run on simulators/devices, and submit TestFlight/App Store builds.
-- Advanced users can drive Xcode’s command-line tools after configuring signing assets, but the supported workflow is through the Xcode UI.
 
 # License
 
