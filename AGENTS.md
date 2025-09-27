@@ -23,6 +23,8 @@ pytest -m host_test
 ```
 Replace the serial device as appropriate for your platform. Use `idf.py clean` only when caches become inconsistent.
 
+> **Agent Note:** Do not run `xcodebuild` (or other iOS build commands) from the CLI; leave iOS builds to be run manually in Xcode by the user.
+
 ## Coding Style & Naming Conventions
 Use 4-space indentation, K&R braces, and `snake_case` names for functions, FreeRTOS tasks, and globals. Place ESP-IDF headers before project headers, keep module constants near their use, and mark internals `static`. Expose only clean APIs in headers and document timing-critical code paths with brief comments. Python helper scripts follow Black defaults (88-character lines, lowercase names).
 
