@@ -44,13 +44,13 @@ struct ContentView: View {
                 .tag("Sampler")
                     
                 NavigationView {
-                    ConsoleView()
+                    WaveletsView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Console", systemImage: "text.and.command.macwindow")
+                    Label("Wavelets", systemImage: "text.and.command.macwindow")
                 }
-                .tag("Console")
+                .tag("Wavelets")
                 
                 ButtonsView()
                 .tabItem {
