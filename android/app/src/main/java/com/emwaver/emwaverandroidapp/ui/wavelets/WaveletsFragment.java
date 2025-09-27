@@ -41,6 +41,7 @@ import androidx.core.view.MenuHost;
 import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.R;
@@ -81,6 +82,7 @@ public class WaveletsFragment extends Fragment {
     private String currentScriptName;
     private boolean hasUnsavedChanges;
     private final Handler autoSaveHandler = new Handler(Looper.getMainLooper());
+    private WaveletsViewModel viewModel;
 
     private BLEService bleService;
     private boolean isServiceBound;
@@ -131,6 +133,12 @@ public class WaveletsFragment extends Fragment {
         }
     };
 
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        viewModel = new ViewModelProvider(requireActivity()).get(WaveletsViewModel.class);
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -150,6 +158,7 @@ public class WaveletsFragment extends Fragment {
         showingPreview = false;
         updateViewMode();
         updateWaveletPlaceholder();
+        restoreFromViewModel();
 
         return root;
     }
@@ -174,6 +183,7 @@ public class WaveletsFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        persistStateToViewModel();
         autoSaveHandler.removeCallbacksAndMessages(null);
         if (waveletEngine != null) {
             waveletEngine.shutdown();
@@ -323,6 +333,11 @@ public class WaveletsFragment extends Fragment {
             showToast("Wavelet engine not ready.");
             return;
         }
+        if (viewModel != null) {
+            viewModel.setLastScriptContent(script);
+            viewModel.setLastScriptName(currentScriptName);
+            viewModel.setPreviewActive(true);
+        }
         isRenderingWavelet = true;
         activeWaveletTree = null;
         showingPreview = true;
@@ -413,6 +428,9 @@ public class WaveletsFragment extends Fragment {
         showingPreview = false;
         isRenderingWavelet = false;
         activeWaveletTree = null;
+        if (viewModel != null) {
+            viewModel.setPreviewActive(false);
+        }
         if (waveletRenderView != null) {
             waveletRenderView.clear();
         }
@@ -458,6 +476,41 @@ public class WaveletsFragment extends Fragment {
                 waveletRenderView.clear();
             }
         }
+    }
+
+    private void restoreFromViewModel() {
+        if (viewModel == null || binding == null) {
+            return;
+        }
+        String cachedName = viewModel.getLastScriptName();
+        String cachedContent = viewModel.getLastScriptContent();
+        if (cachedContent != null) {
+            currentScriptName = cachedName;
+            setEditorText(cachedContent);
+            hasUnsavedChanges = false;
+            autoSaveHandler.removeCallbacks(autoSaveRunnable);
+            updateScriptEditorTitle();
+            if (currentScriptName != null) {
+                updateRecentScripts(currentScriptName);
+            }
+        }
+        if (viewModel.isPreviewActive() && cachedContent != null && !cachedContent.trim().isEmpty()) {
+            binding.waveletContainer.post(() -> {
+                if (viewModel.isPreviewActive()) {
+                    renderWavelet(cachedContent);
+                }
+            });
+        }
+    }
+
+    private void persistStateToViewModel() {
+        if (viewModel == null) {
+            return;
+        }
+        String scriptContent = binding != null ? getEditorText() : viewModel.getLastScriptContent();
+        viewModel.setLastScriptContent(scriptContent);
+        viewModel.setLastScriptName(currentScriptName);
+        viewModel.setPreviewActive(showingPreview);
     }
 
     private void scheduleAutoSave() {
