@@ -175,15 +175,52 @@ class JSUtils: NSObject, UtilsJSExport {
 // MARK: - BLE Manager Export
 
 @objc protocol BLEManagerJSExport: JSExport {
-    func getBuffer() -> Data
-    func clearBuffer()
-    func loadBuffer(data: Data)
-    func sendPacket(_ data: Data)
-    func sendCommand(_ command: Data, timeout: Int) -> Data?
-    func transmitBuffer()
+    @objc func getBuffer() -> Data
+    @objc func clearBuffer()
+    @objc func loadBuffer(data: Data)
+    @objc func sendPacket(_ data: Data)
+    @objc func sendCommand(_ command: Data, timeout: Int) -> Data?
+    @objc func transmitBuffer()
 }
 
-// Extension to make BLEManager JavaScript-compatible
+// BLE Service Wrapper for JavaScript compatibility
+@objc class BLEServiceWrapper: NSObject, BLEManagerJSExport {
+    private let bleManager: BLEManager
+    
+    init(bleManager: BLEManager) {
+        self.bleManager = bleManager
+        super.init()
+    }
+    
+    @objc func getBuffer() -> Data {
+        return bleManager.getBuffer()
+    }
+    
+    @objc func clearBuffer() {
+        bleManager.clearBuffer()
+    }
+    
+    @objc func loadBuffer(data: Data) {
+        bleManager.loadBuffer(data: data)
+    }
+    
+    @objc func sendPacket(_ data: Data) {
+        bleManager.sendPacket(data)
+    }
+    
+    @objc func sendCommand(_ command: Data, timeout: Int) -> Data? {
+        print("[BLEServiceWrapper] sendCommand called with \(command.count) bytes, timeout: \(timeout)")
+        let result = bleManager.sendCommand(command, timeout: timeout)
+        print("[BLEServiceWrapper] sendCommand returned \(result?.count ?? 0) bytes")
+        return result
+    }
+    
+    @objc func transmitBuffer() {
+        bleManager.transmitBuffer()
+    }
+}
+
+// Extension to make BLEManager JavaScript-compatible (kept for backward compatibility)
 extension BLEManager: BLEManagerJSExport {}
 
 // MARK: - TextEditor with keyboard toolbar
@@ -336,6 +373,13 @@ struct ConsoleView: View {
                     }) {
                         Image(systemName: "trash")
                     }
+                    
+                    Button(action: {
+                        UIPasteboard.general.string = consoleOutput
+                        print("Console output copied to clipboard (\(consoleOutput.count) chars)")
+                    }) {
+                        Image(systemName: "doc.on.clipboard")
+                    }
 
                     menuButton
                 }
@@ -380,6 +424,9 @@ struct ConsoleView: View {
                 cc1101 = CC1101(bleManager: bleManager)
                 setupJSEngine()
                 setupWaveletEngineIfNeeded()
+            } else {
+                cc1101 = nil
+                ensureWaveletEngineBindings()
             }
         }
         .animation(.easeInOut, value: isScriptsListExpanded)
@@ -1023,6 +1070,7 @@ struct ConsoleView: View {
     private func setupWaveletEngineIfNeeded() {
         guard waveletEngine == nil else {
             Swift.print("[Wavelet] WaveletEngine already initialized")
+            ensureWaveletEngineBindings()
             return
         }
         Swift.print("[Wavelet] Initializing WaveletEngine")
@@ -1037,8 +1085,32 @@ struct ConsoleView: View {
             if self.selectedTab != .wavelets {
                 self.selectedTab = .wavelets
             }
-        })
+        }, bindings: buildBindings())
         waveletEngine = engine
+        Swift.print("[Wavelet] WaveletEngine initialized successfully")
+    }
+
+    private func ensureWaveletEngineBindings() {
+        waveletEngine?.registerGlobalBindings(buildBindings())
+    }
+
+    private func buildBindings() -> [String: Any] {
+        var bindings: [String: Any] = [:]
+        
+        if let cc1101 = cc1101 {
+            bindings["CC1101"] = CC1101Wrapper(cc1101: cc1101)
+            Swift.print("[Wavelet] CC1101 binding added with wrapper")
+        }
+        
+        if bleManager.isConnected {
+            bindings["BLEService"] = BLEServiceWrapper(bleManager: bleManager)
+            Swift.print("[Wavelet] BLEService binding added with wrapper - isConnected: \(bleManager.isConnected)")
+        } else {
+            Swift.print("[Wavelet] BLEService NOT added - isConnected: \(bleManager.isConnected)")
+        }
+        
+        Swift.print("[Wavelet] Built bindings: \(bindings.keys)")
+        return bindings
     }
 
     private func renderWavelet() {

@@ -5,15 +5,18 @@ final class WaveletEngine {
     private let executionQueue = DispatchQueue(label: "com.emwaver.wavelet.engine")
     private var context: JSContext?
     private var callbackRegistry: [String: JSValue] = [:]
+    private var globalBindings: [String: Any] = [:]
     private var printHandler: ((String) -> Void)?
     private var renderHandler: ((WaveletTree) -> Void)?
 
     init() {}
 
     func setup(printHandler: @escaping (String) -> Void,
-               renderHandler: @escaping (WaveletTree) -> Void) {
+               renderHandler: @escaping (WaveletTree) -> Void,
+               bindings: [String: Any] = [:]) {
         self.printHandler = printHandler
         self.renderHandler = renderHandler
+        self.globalBindings = bindings
         executionQueue.sync {
             Swift.print("[WaveletEngine] Setup requested")
             let context = JSContext()
@@ -40,8 +43,58 @@ final class WaveletEngine {
             }
             context?.setObject(registerBlock, forKeyedSubscript: "_waveletRegisterCallback" as NSString)
 
+            let createByteArrayBlock: @convention(block) (JSValue) -> JSValue? = { [weak self] jsArray in
+                guard let context = jsArray.context else { return nil }
+                self?.printHandler?("[WaveletEngine] createByteArray called")
+                
+                if jsArray.isArray {
+                    let length = jsArray.forProperty("length")?.toInt32() ?? 0
+                    var bytes: [UInt8] = []
+                    self?.printHandler?("[WaveletEngine] createByteArray input array length: \(length)")
+                    
+                    for i in 0..<length {
+                        if let element = jsArray.atIndex(Int(i)),
+                           element.isNumber {
+                            let byte = UInt8(element.toInt32() & 0xFF)
+                            bytes.append(byte)
+                        }
+                    }
+                    
+                    // Create a Data object that JavaScript can use
+                    let data = Data(bytes)
+                    self?.printHandler?("[WaveletEngine] createByteArray created Data with \(data.count) bytes: \(data.map { String(format: "%02X", $0) }.joined(separator: " "))")
+                    return JSValue(object: data, in: context)
+                }
+                
+                self?.printHandler?("[WaveletEngine] createByteArray called with non-array")
+                return JSValue(undefinedIn: context)
+            }
+            context?.setObject(createByteArrayBlock, forKeyedSubscript: "_waveletCreateByteArray" as NSString)
+
+            // Add manual BLEService.sendCommand method
+            let sendCommandBlock: @convention(block) (JSValue, JSValue) -> JSValue? = { [weak self] commandValue, timeoutValue in
+                guard let context = commandValue.context else { return nil }
+                
+                // Find BLEService wrapper from global bindings
+                if let bleServiceWrapper = self?.globalBindings["BLEService"] as? BLEServiceWrapper,
+                   let command = commandValue.toObject() as? Data,
+                   timeoutValue.isNumber {
+                    
+                    let timeout = timeoutValue.toInt32()
+                    self?.printHandler?("[BLEServiceWrapper] sendCommand called via manual block with \(command.count) bytes, timeout: \(timeout)")
+                    
+                    if let result = bleServiceWrapper.sendCommand(command, timeout: Int(timeout)) {
+                        return JSValue(object: result, in: context)
+                    }
+                }
+                
+                return JSValue(nullIn: context)
+            }
+            context?.setObject(sendCommandBlock, forKeyedSubscript: "_manualSendCommand" as NSString)
+
             if let context {
                 injectDSL(into: context)
+                applyGlobalBindings(to: context)
                 Swift.print("[WaveletEngine] DSL injected during setup")
             }
 
@@ -52,10 +105,25 @@ final class WaveletEngine {
 
     func execute(script: String, completion: (() -> Void)? = nil) {
         executionQueue.async { [weak self] in
-            guard let self, let context = self.context else { return }
+            guard let self, let context = self.context else { 
+                return 
+            }
+            
+            // Debug via print handler so it shows in UI
+            self.printHandler?("DEBUG: execute() called with \(self.globalBindings.keys.count) bindings: \(Array(self.globalBindings.keys))")
+            
             self.callbackRegistry.removeAll()
-            Swift.print("[WaveletEngine] execute(script:) reloading DSL before evaluation")
             self.injectDSL(into: context)
+            self.applyGlobalBindings(to: context)  // Apply bindings again after DSL reload
+            
+            // Check if BLEService is available after binding
+            let bleServiceCheck = context.evaluateScript("typeof BLEService")?.toString() ?? "undefined"
+            let sendCommandCheck = context.evaluateScript("typeof BLEService?.sendCommand")?.toString() ?? "undefined"
+            let manualSendCommandCheck = context.evaluateScript("typeof _manualSendCommand")?.toString() ?? "undefined"
+            self.printHandler?("DEBUG: After binding - typeof BLEService = \(bleServiceCheck)")
+            self.printHandler?("DEBUG: After binding - typeof BLEService.sendCommand = \(sendCommandCheck)")
+            self.printHandler?("DEBUG: After binding - typeof _manualSendCommand = \(manualSendCommandCheck)")
+            
             context.exception = nil
             let wrappedScript = """
 (() => {
@@ -87,11 +155,27 @@ final class WaveletEngine {
         }
     }
 
+    func registerGlobalBindings(_ bindings: [String: Any]) {
+        globalBindings.merge(bindings) { _, new in new }
+        executionQueue.async { [weak self] in
+            guard let self, let context = self.context else { return }
+            self.applyGlobalBindings(to: context)
+        }
+    }
+
     private func injectDSL(into context: JSContext) {
         Swift.print("[WaveletEngine] Injecting DSL bundle")
         context.evaluateScript(Self.dslBootstrap)
         let uiType = context.evaluateScript("typeof UI")?.toString() ?? "undefined"
         Swift.print("[WaveletEngine] After inject typeof UI = \(uiType)")
+    }
+
+    private func applyGlobalBindings(to context: JSContext) {
+        printHandler?("DEBUG: Applying \(globalBindings.count) global bindings...")
+        for (key, value) in globalBindings {
+            context.setObject(value, forKeyedSubscript: key as NSString)
+            printHandler?("DEBUG: Applied binding \(key) = \(type(of: value))")
+        }
     }
 
     private func handleRender(nodeValue: JSValue) {
@@ -107,7 +191,7 @@ final class WaveletEngine {
             metadata = dict
         }
         let tree = WaveletTree(root: rootNode, metadata: metadata)
-        Swift.print("[WaveletEngine] handleRender with root type \(rootNode.type.rawValue)")
+        printHandler?("[WaveletEngine] handleRender with root type \(rootNode.type.rawValue)")
         DispatchQueue.main.async {
             renderHandler(tree)
         }
@@ -228,6 +312,19 @@ private extension WaveletEngine {
             console.error = function () {
                 print.apply(null, arguments);
             };
+        }
+
+        if (typeof createByteArray === 'undefined') {
+            var createByteArray = function (jsArray) {
+                return _waveletCreateByteArray(jsArray);
+            };
+        }
+
+        // Ensure BLEService.sendCommand is available
+        if (typeof BLEService !== 'undefined' && typeof BLEService.sendCommand === 'undefined') {
+            if (typeof _manualSendCommand === 'function') {
+                BLEService.sendCommand = _manualSendCommand;
+            }
         }
 
         if (typeof UI === 'undefined') {
