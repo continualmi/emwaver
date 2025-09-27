@@ -13,6 +13,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
 
@@ -20,15 +23,15 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.navigation.NavController;
-import androidx.navigation.Navigation;
+import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
+import androidx.core.view.MenuProvider;
+import androidx.lifecycle.Lifecycle;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.navigation.NavigationView;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -77,31 +80,35 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        DrawerLayout drawer = binding.drawerLayout;
-        NavigationView navigationView = binding.navView;
-
         // Set up the AppBarConfiguration with BLE replacing USB
         appBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.navigation_cc1101, R.id.navigation_emwaver,
                 R.id.navigation_sampler, R.id.navigation_wavelets, R.id.navigation_buttons)
-                .setOpenableLayout(drawer)
                 .build();
 
-        navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
+        NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.nav_host_fragment_activity_main);
+        if (navHostFragment == null) {
+            throw new IllegalStateException("NavHostFragment not found");
+        }
+        navController = navHostFragment.getNavController();
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
-        
-        // Custom navigation for drawer to fix issues with navigation
-        navigationView.setNavigationItemSelectedListener(item -> {
-            int itemId = item.getItemId();
-            if (itemId == R.id.navigation_settings) {
-                startActivity(new Intent(this, SettingsActivity.class));
-            } else {
-                // Explicitly navigate to the correct destination
-                navController.navigate(itemId);
-                drawer.closeDrawers();
+
+        addMenuProvider(new MenuProvider() {
+            @Override
+            public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+                menuInflater.inflate(R.menu.main_overflow_menu, menu);
             }
-            return true;
-        });
+
+            @Override
+            public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+                if (menuItem.getItemId() == R.id.action_open_settings) {
+                    startActivity(new Intent(MainActivity.this, SettingsActivity.class));
+                    return true;
+                }
+                return false;
+            }
+        }, this, Lifecycle.State.RESUMED);
         
         // Set up Bottom Navigation
         BottomNavigationView bottomNavigationView = binding.bottomNavView;
@@ -187,7 +194,9 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onSupportNavigateUp() {
-        NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_activity_main);
+        if (navController == null) {
+            return super.onSupportNavigateUp();
+        }
         return NavigationUI.navigateUp(navController, appBarConfiguration)
                 || super.onSupportNavigateUp();
     }
