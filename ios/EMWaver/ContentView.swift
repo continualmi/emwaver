@@ -25,12 +25,15 @@ struct ContentView: View {
                 }
                 .tag("EMWaver")
                 
-                ButtonsView()
-                .tabItem {
-                    Label("Buttons", systemImage: "apps.iphone")
+                NavigationView {
+                    ISMView()
                 }
-                .tag("Buttons")
-                    
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("ISM", systemImage: "memorychip")
+                }
+                .tag("ISM")
+
                 NavigationView {
                     SamplerView()
                 }
@@ -49,26 +52,11 @@ struct ContentView: View {
                 }
                 .tag("Console")
                 
-                NavigationView {
-                    ISMView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
+                ButtonsView()
                 .tabItem {
-                    Label("ISM", systemImage: "memorychip")
+                    Label("Buttons", systemImage: "apps.iphone")
                 }
-                .tag("ISM")
-                    
-                RFIDView()
-                .tabItem {
-                    Label("RFID", systemImage: "dot.radiowaves.forward")
-                }
-                .tag("RFID")
-                    
-                GPIOView()
-                .tabItem {
-                    Label("GPIO", systemImage: "cpu")
-                }
-                .tag("GPIO")
+                .tag("Buttons")
             }
             .onAppear {
                 // Set up consistent navigation bar appearance
