@@ -407,6 +407,7 @@ struct ConsoleView: View {
     @State private var activeWaveletTree: WaveletTree?
     @State private var showingPreview: Bool = false
     @State private var waveletDialog: WaveletDialog?
+    @State private var needsWaveletReload: Bool = false
 
     // Auto-save timer
     @State private var autoSaveTimer: Timer?
@@ -502,6 +503,7 @@ struct ConsoleView: View {
             createDefaultScriptsIfNeeded()
             updateDynamicScriptEditorTitle()
             setupWaveletEngineIfNeeded()
+            ensureWaveletEngineBindings()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 refreshUIAfterLoading()
@@ -510,6 +512,18 @@ struct ConsoleView: View {
             if bleManager.isConnected {
                 cc1101 = CC1101(bleManager: bleManager)
                 setupJSEngine()
+            }
+
+            if needsWaveletReload {
+                needsWaveletReload = false
+                if showingPreview {
+                    renderWavelet()
+                }
+            }
+        }
+        .onDisappear {
+            if showingPreview {
+                needsWaveletReload = true
             }
         }
         .onChangeCompat(of: bleManager.isConnected) { connected in
