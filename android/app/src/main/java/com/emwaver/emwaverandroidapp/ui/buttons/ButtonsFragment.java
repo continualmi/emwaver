@@ -42,8 +42,8 @@ import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
-import com.emwaver.emwaverandroidapp.ui.console.ScriptsEngine;
 import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -63,6 +63,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ButtonsFragment extends Fragment {
 
@@ -86,7 +88,7 @@ public class ButtonsFragment extends Fragment {
     );
 
     private ActivityResultLauncher<Intent> openFileLauncher;
-    private ScriptsEngine scriptsEngine;
+    private WaveletEngine waveletEngine;
     private BLEService bleService;
     private CC1101 cc1101;
     private boolean isServiceBound = false;
@@ -106,7 +108,7 @@ public class ButtonsFragment extends Fragment {
             cc1101 = new CC1101(bleService);
             isServiceBound = true;
             Log.i("ButtonsFragment", "BLE Service connected");
-            initializeScriptsEngine();
+            initializeWaveletEngine();
         }
 
         @Override
@@ -146,8 +148,7 @@ public class ButtonsFragment extends Fragment {
 
         Utils utils = new Utils();
         irEncoderWrapper = new IrEncoderWrapper();
-
-        scriptsEngine = new ScriptsEngine(cc1101, utils, bleService, irEncoderWrapper, this::printToConsole);
+        waveletEngine = null;
     }
 
     @Override
@@ -259,13 +260,10 @@ public class ButtonsFragment extends Fragment {
         buttonGrid.setAdapter(buttonAdapter);
 
         buttonAdapter.setOnButtonClickListener((position, script) -> {
-            if (scriptsEngine != null) {
-                String errorMessage = scriptsEngine.executeJavaScript(script);
-                if (errorMessage != null) {
-                    Toast.makeText(requireContext(), "Script error: " + errorMessage, Toast.LENGTH_LONG).show();
-                }
+            if (waveletEngine != null) {
+                waveletEngine.execute(script, null);
             } else {
-                Toast.makeText(requireContext(), "ScriptsEngine not initialized", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), "Wavelet engine not initialized", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -975,16 +973,28 @@ public class ButtonsFragment extends Fragment {
 
     private void printToConsole(String message) {
         Log.d("ButtonsFragment", message);
-        // We might want to update some other UI element here
+        if (message != null && message.startsWith("Wavelet error") && isAdded()) {
+            Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
+        }
     }
 
-    private void initializeScriptsEngine() {
+    private void initializeWaveletEngine() {
         if (isServiceBound && bleService != null) {
             CC1101 cc1101 = new CC1101(bleService);
             Utils utils = new Utils();
             utils.setContext(requireContext());
             irEncoderWrapper = new IrEncoderWrapper();
-            scriptsEngine = new ScriptsEngine(cc1101, utils, bleService, irEncoderWrapper, this::printToConsole);
+            Map<String, Object> bindings = new HashMap<>();
+            bindings.put("CC1101", cc1101);
+            bindings.put("Utils", utils);
+            bindings.put("BLEService", bleService);
+            bindings.put("IrEncoder", irEncoderWrapper);
+
+            if (waveletEngine != null) {
+                waveletEngine.shutdown();
+            }
+            waveletEngine = new WaveletEngine();
+            waveletEngine.setup(this::printToConsole, tree -> {}, bindings);
         }
     }
 
@@ -994,6 +1004,15 @@ public class ButtonsFragment extends Fragment {
         if (isServiceBound && getActivity() != null) {
             getActivity().unbindService(serviceConnection);
             isServiceBound = false;
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (waveletEngine != null) {
+            waveletEngine.shutdown();
+            waveletEngine = null;
         }
     }
 

@@ -40,6 +40,7 @@ public final class WaveletEngine {
     });
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Function> callbackRegistry = new ConcurrentHashMap<>();
+    private final Map<String, Object> globalBindings = new ConcurrentHashMap<>();
 
     private volatile Scriptable scope;
     private volatile boolean initialized;
@@ -47,9 +48,13 @@ public final class WaveletEngine {
     private PrintCallback printCallback;
     private RenderCallback renderCallback;
 
-    public void setup(PrintCallback printCallback, RenderCallback renderCallback) {
+    public void setup(PrintCallback printCallback, RenderCallback renderCallback, Map<String, Object> bindings) {
         this.printCallback = printCallback;
         this.renderCallback = renderCallback;
+        globalBindings.clear();
+        if (bindings != null && !bindings.isEmpty()) {
+            globalBindings.putAll(bindings);
+        }
 
         CountDownLatch latch = new CountDownLatch(1);
         executor.execute(() -> {
@@ -59,6 +64,7 @@ public final class WaveletEngine {
                 cx.setLanguageVersion(Context.VERSION_ES6);
                 ScriptableObject newScope = cx.initStandardObjects();
                 installBridge(newScope);
+                applyGlobalBindings(cx, newScope);
                 scope = newScope;
                 initialized = true;
             } finally {
@@ -72,6 +78,10 @@ public final class WaveletEngine {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    public void setup(PrintCallback printCallback, RenderCallback renderCallback) {
+        setup(printCallback, renderCallback, Collections.emptyMap());
     }
 
     public void execute(String script, Runnable completion) {
@@ -104,6 +114,7 @@ public final class WaveletEngine {
             return;
         }
         executor.execute(() -> {
+            android.util.Log.d("WaveletEngine", "invoke requested for token=" + token + " args=" + arguments);
             Function function = callbackRegistry.get(token);
             if (function == null) {
                 dispatchPrint("No callback registered for token " + token);
@@ -115,6 +126,7 @@ public final class WaveletEngine {
                 cx.setLanguageVersion(Context.VERSION_ES6);
                 ensureScope(cx);
                 Object[] jsArgs = convertArguments(cx, arguments);
+                android.util.Log.d("WaveletEngine", "calling JS function for token=" + token);
                 function.call(cx, scope, scope, jsArgs);
             } catch (RhinoException ex) {
                 dispatchPrint("Wavelet callback error: " + ex.getMessage());
@@ -128,13 +140,59 @@ public final class WaveletEngine {
         executor.shutdownNow();
     }
 
+    public void registerGlobalBinding(String name, Object value) {
+        Objects.requireNonNull(name, "name");
+        if (value == null) {
+            globalBindings.remove(name);
+        } else {
+            globalBindings.put(name, value);
+        }
+        executor.execute(() -> {
+            Context cx = Context.enter();
+            try {
+                ensureScope(cx);
+                if (scope != null) {
+                    if (value == null) {
+                        ScriptableObject.deleteProperty(scope, name);
+                    } else {
+                        ScriptableObject.putProperty(scope, name, Context.javaToJS(value, scope));
+                    }
+                }
+            } finally {
+                Context.exit();
+            }
+        });
+    }
+
+    public void registerGlobalBindings(Map<String, Object> bindings) {
+        if (bindings == null || bindings.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : bindings.entrySet()) {
+            registerGlobalBinding(entry.getKey(), entry.getValue());
+        }
+    }
+
     private void ensureScope(Context cx) {
         cx.setLanguageVersion(Context.VERSION_ES6);
         if (!initialized || scope == null) {
             ScriptableObject newScope = cx.initStandardObjects();
             installBridge(newScope);
+            applyGlobalBindings(cx, newScope);
             scope = newScope;
             initialized = true;
+        }
+    }
+
+    private void applyGlobalBindings(Context cx, Scriptable target) {
+        if (target == null || globalBindings.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : globalBindings.entrySet()) {
+            Object value = entry.getValue();
+            if (value != null) {
+                ScriptableObject.putProperty(target, entry.getKey(), Context.javaToJS(value, target));
+            }
         }
     }
 
@@ -180,6 +238,7 @@ public final class WaveletEngine {
                 String token = (String) tokenObj;
                 Function fn = (Function) fnObj;
                 if (!token.isEmpty()) {
+                    android.util.Log.d("WaveletEngine", "registering callback token=" + token);
                     callbackRegistry.put(token, fn);
                 }
                 return Context.getUndefinedValue();
@@ -410,9 +469,86 @@ public final class WaveletEngine {
         "        }\n" +
         "    },\n" +
         "    log: function (message) {\n" +
-        "        _waveletPrint(String(message));\n" +
+        "        var text = String(message);\n" +
+        "        if (typeof WaveletConsole !== 'undefined' && WaveletConsole && typeof WaveletConsole.append === 'function') {\n" +
+        "            WaveletConsole.append(text);\n" +
+        "        }\n" +
+        "        _waveletPrint(text);\n" +
         "    }\n" +
         "};\n" +
+        "\n" +
+        "if (typeof WaveletConsole === 'undefined') {\n" +
+        "    var WaveletConsole = (function () {\n" +
+        "        var lines = [];\n" +
+        "        var subscribers = [];\n" +
+        "        var limit = 500;\n" +
+        "\n" +
+        "        var notify = function () {\n" +
+        "            for (var i = 0; i < subscribers.length; i += 1) {\n" +
+        "                try {\n" +
+        "                    subscribers[i](lines.slice());\n" +
+        "                } catch (err) {\n" +
+        "                    // ignore subscriber errors\n" +
+        "                }\n" +
+        "            }\n" +
+        "        };\n" +
+        "\n" +
+        "        var trim = function () {\n" +
+        "            if (lines.length > limit) {\n" +
+        "                lines.splice(0, lines.length - limit);\n" +
+        "            }\n" +
+        "        };\n" +
+        "\n" +
+        "        var api = {\n" +
+        "            setLimit: function (value) {\n" +
+        "                if (typeof value === 'number' && value > 0) {\n" +
+        "                    limit = value;\n" +
+        "                    trim();\n" +
+        "                }\n" +
+        "                return limit;\n" +
+        "            },\n" +
+        "            append: function (message) {\n" +
+        "                lines.push(String(message));\n" +
+        "                trim();\n" +
+        "                notify();\n" +
+        "            },\n" +
+        "            clear: function () {\n" +
+        "                lines.length = 0;\n" +
+        "                notify();\n" +
+        "            },\n" +
+        "            subscribe: function (fn) {\n" +
+        "                if (typeof fn !== 'function') {\n" +
+        "                    return function () {};\n" +
+        "                }\n" +
+        "                subscribers.push(fn);\n" +
+        "                try {\n" +
+        "                    fn(lines.slice());\n" +
+        "                } catch (err) {\n" +
+        "                    // ignore initial subscriber error\n" +
+        "                }\n" +
+        "                return function () {\n" +
+        "                    var index = subscribers.indexOf(fn);\n" +
+        "                    if (index >= 0) {\n" +
+        "                        subscribers.splice(index, 1);\n" +
+        "                    }\n" +
+        "                };\n" +
+        "            },\n" +
+        "            lines: function () {\n" +
+        "                return lines.slice();\n" +
+        "            },\n" +
+        "            text: function () {\n" +
+        "                return lines.join('\\n');\n" +
+        "            },\n" +
+        "            view: function (props) {\n" +
+        "                var assigned = props ? Object.assign({}, props) : {};\n" +
+        "                assigned.text = api.text();\n" +
+        "                return UI.logViewer(assigned);\n" +
+        "            }\n" +
+        "        };\n" +
+        "\n" +
+        "        return api;\n" +
+        "    })();\n" +
+        "}\n" +
         "\n" +
         "if (typeof print === 'undefined') {\n" +
         "    var print = function () {\n" +

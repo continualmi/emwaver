@@ -855,6 +855,7 @@ public final class WaveletRenderView extends FrameLayout {
 
     private void dispatchEvent(String token, List<Object> arguments) {
         if (eventListener != null) {
+            android.util.Log.d("WaveletRenderView", "dispatching event token=" + token + " args=" + arguments);
             eventListener.onEvent(token, arguments);
         }
     }
