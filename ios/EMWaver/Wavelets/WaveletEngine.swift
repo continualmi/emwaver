@@ -410,6 +410,22 @@ private extension WaveletEngine {
             };
         }
 
+        if (typeof CC1101 !== 'undefined') {
+            if (CC1101.exposedConstants && typeof CC1101.exposedConstants === 'object') {
+                Object.keys(CC1101.exposedConstants).forEach(function (key) {
+                    if (!(key in CC1101)) {
+                        CC1101[key] = CC1101.exposedConstants[key];
+                    }
+                });
+            }
+
+            if (typeof CC1101.init !== 'function' && typeof CC1101.initialize === 'function') {
+                CC1101.init = function () {
+                    return CC1101.initialize();
+                };
+            }
+        }
+
         if (typeof dialog === 'undefined') {
             var dialog = function (title, message) {
                 _waveletShowDialog(String(title || ''), String(message || ''));
