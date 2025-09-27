@@ -264,25 +264,11 @@ struct KeyboardToolbarTextEditor: View {
 }
 
 struct ConsoleView: View {
-    private enum ConsoleTab: String, CaseIterable, Identifiable {
-        case scripts
-        case wavelets
-
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .scripts: return "Scripts"
-            case .wavelets: return "Wavelets"
-            }
-        }
-    }
-
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
     @State private var jsEngine: JavaScriptEngine?
     @State private var waveletEngine: WaveletEngine?
     @State private var scriptContent: String = ""
-    @State private var consoleOutput: String = "<Console>\n"
     @State private var currentScriptName: String?
     @State private var recentScripts: [String] = []
     @State private var hasUnsavedChanges: Bool = false
@@ -296,8 +282,8 @@ struct ConsoleView: View {
     @State private var showingCopyScriptAlert: Bool = false
     @State private var showingDeleteConfirmation: Bool = false
     @State private var newScriptName: String = ""
-    @State private var selectedTab: ConsoleTab = .scripts
     @State private var activeWaveletTree: WaveletTree?
+    @State private var showingPreview: Bool = false
 
     // Auto-save timer
     @State private var autoSaveTimer: Timer?
@@ -306,7 +292,6 @@ struct ConsoleView: View {
     // State for collapsible sections
     @State private var isScriptsListExpanded: Bool = true
     @State private var isScriptEditorExpanded: Bool = true
-    @State private var isConsoleOutputExpanded: Bool = true
     
     // MARK: - External Storage & Network Operations
     
@@ -317,77 +302,61 @@ struct ConsoleView: View {
     @State private var showingSettingsSheet = false
     
     var body: some View {
-        VStack(spacing: 12) {
-            Picker("Mode", selection: $selectedTab) {
-                ForEach(ConsoleTab.allCases) { tab in
-                    Text(tab.title).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            if selectedTab == .scripts {
-                scriptsListSection
-                scriptEditorSection
-                consoleOutputSection
-                Spacer(minLength: 0)
-            } else {
+        Group {
+            if showingPreview {
                 waveletPreview
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 12) {
+                    scriptsListSection
+                    scriptEditorSection
+                    Spacer(minLength: 0)
+                }
+                .padding()
             }
         }
-        .padding()
-        .navigationTitle("Console")
+        .navigationTitle(showingPreview ? (currentScriptName ?? "Wavelet Preview") : "Console")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarItems(
-            leading: EmptyView(),
-            trailing: HStack {
-                if selectedTab == .scripts {
-                    Button(action: {
-                        if isScriptRunning {
-                            stopScript()
-                        } else {
-                            executeScript()
-                        }
-                    }) {
-                        Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
-                            .foregroundColor(isScriptRunning ? .red : .green)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                if showingPreview {
+                    Button(action: exitPreview) {
+                        Image(systemName: "chevron.left")
                     }
-
-                    Button(action: {
-                        renderWavelet()
-                    }) {
-                        Image(systemName: "square.grid.2x2")
-                            .overlay {
-                                if isRenderingWavelet {
-                                    ProgressView()
-                                        .progressViewStyle(.circular)
-                                        .frame(width: 16, height: 16)
-                                }
-                            }
-                    }
-                    .disabled(isRenderingWavelet || scriptContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityLabel("Render Wavelet Preview")
-
-                    Button(action: {
-                        clearConsole()
-                    }) {
-                        Image(systemName: "trash")
-                    }
-                    
-                    Button(action: {
-                        UIPasteboard.general.string = consoleOutput
-                        print("Console output copied to clipboard (\(consoleOutput.count) chars)")
-                    }) {
-                        Image(systemName: "doc.on.clipboard")
-                    }
-
-                    menuButton
                 }
             }
-        )
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                EmptyView()
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if !showingPreview {
+                    HStack {
+                        Button(action: {
+                            if isScriptRunning {
+                                stopScript()
+                            } else {
+                                executeScript()
+                            }
+                        }) {
+                            Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
+                                .foregroundColor(isScriptRunning ? .red : .green)
+                        }
+
+                        Button(action: {
+                            renderWavelet()
+                        }) {
+                            Image(systemName: "square.grid.2x2")
+                                .overlay {
+                                    if isRenderingWavelet {
+                                        ProgressView()
+                                            .progressViewStyle(.circular)
+                                            .frame(width: 16, height: 16)
+                                    }
+                                }
+                        }
+                        .disabled(isRenderingWavelet || scriptContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel("Render Wavelet Preview")
+
+                        menuButton
+                    }
+                }
             }
         }
         .sheet(isPresented: $showingSettingsSheet) {
@@ -413,12 +382,6 @@ struct ConsoleView: View {
                 setupJSEngine()
             }
         }
-        .onChangeCompat(of: selectedTab) { newValue in
-            if newValue == .wavelets, !isRenderingWavelet, activeWaveletTree == nil {
-                Swift.print("[Wavelet] Wavelets tab selected; triggering preview refresh")
-                renderWavelet()
-            }
-        }
         .onChangeCompat(of: bleManager.isConnected) { connected in
             if connected {
                 cc1101 = CC1101(bleManager: bleManager)
@@ -431,7 +394,6 @@ struct ConsoleView: View {
         }
         .animation(.easeInOut, value: isScriptsListExpanded)
         .animation(.easeInOut, value: isScriptEditorExpanded)
-        .animation(.easeInOut, value: isConsoleOutputExpanded)
         .applyAlerts(
             showingNewScriptAlert: $showingNewScriptAlert,
             newScriptName: $newScriptName,
@@ -529,29 +491,6 @@ struct ConsoleView: View {
         )
         .padding(.horizontal)
     }
-    
-    private var consoleOutputSection: some View {
-        DisclosureGroup(
-            isExpanded: $isConsoleOutputExpanded,
-            content: {
-                ScrollView {
-                    Text(consoleOutput)
-                        .font(.system(.body, design: .monospaced))
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .background(Color.black)
-                .foregroundColor(Color.green)
-                .cornerRadius(8)
-                .frame(minHeight: 100, maxHeight: 200)
-            },
-            label: {
-                Text("Output Console")
-                    .font(.headline)
-            }
-        )
-        .padding(.horizontal)
-    }
 
     private var waveletPreview: some View {
         ZStack(alignment: .topLeading) {
@@ -560,7 +499,7 @@ struct ConsoleView: View {
 
             if activeWaveletTree == nil && !isRenderingWavelet {
                 VStack {
-                    Text("Render a wavelet from the Scripts tab to see it here.")
+                    Text("Render a wavelet to see it here.")
                         .foregroundColor(.secondary)
                         .italic()
                         .multilineTextAlignment(.center)
@@ -750,13 +689,7 @@ struct ConsoleView: View {
     // MARK: - Console & Script Execution
     
     private func print(_ message: String) {
-        DispatchQueue.main.async {
-            self.consoleOutput.append(message + "\n")
-        }
-    }
-    
-    private func clearConsole() {
-        consoleOutput = "<Console>\n"
+        Swift.print(message)
     }
     
     private func setupJSEngine() {
@@ -1078,12 +1011,11 @@ struct ConsoleView: View {
         engine.setup(printHandler: { message in
             let tagged = "[Wavelet] \(message)"
             self.print(tagged)
-            Swift.print(tagged)
         }, renderHandler: { tree in
             self.activeWaveletTree = tree
             self.isRenderingWavelet = false
-            if self.selectedTab != .wavelets {
-                self.selectedTab = .wavelets
+            if !self.showingPreview {
+                self.showingPreview = true
             }
         }, bindings: buildBindings())
         waveletEngine = engine
@@ -1127,10 +1059,7 @@ struct ConsoleView: View {
             return
         }
 
-        if selectedTab != .wavelets {
-            selectedTab = .wavelets
-        }
-
+        showingPreview = true
         isRenderingWavelet = true
         activeWaveletTree = nil
         Swift.print("[Wavelet] Rendering preview...")
@@ -1139,6 +1068,12 @@ struct ConsoleView: View {
             Swift.print("[Wavelet] Render completion callback")
             self.isRenderingWavelet = false
         }
+    }
+
+    private func exitPreview() {
+        showingPreview = false
+        isRenderingWavelet = false
+        activeWaveletTree = nil
     }
 
     private func isWaveletScript(_ script: String) -> Bool {
