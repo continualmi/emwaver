@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:id="@+id/navigation_rfid"
-        android:icon="@drawable/beacon_svgrepo_com"
-        android:title="RFID" />
+        android:id="@+id/navigation_emwaver"
+        android:icon="@drawable/emwaver_vector"
+        android:title="Home" />
         
     <item
         android:id="@+id/navigation_cc1101"

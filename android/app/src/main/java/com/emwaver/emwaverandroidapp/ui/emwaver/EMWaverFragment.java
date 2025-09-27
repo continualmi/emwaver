@@ -48,8 +48,7 @@ import java.util.regex.Pattern;
 
 public class EMWaverFragment extends Fragment {
 
-    private Spinner pinSpinner;
-    private Button readButton, writeHighButton, writeLowButton;
+
     private EditText commandInput;
     private Button sendPacketButton;
     private TextView emwaverStatusText;
@@ -61,23 +60,7 @@ public class EMWaverFragment extends Fragment {
     private BLEService bleService;
     private boolean isServiceBound = false;
 
-    private static final String[] PINS = {
-            "GPIO0 (IO0)",
-            "CC1101 GDO0 (IO1)",
-            "CC1101 GDO2 (IO2)",
-            "IR TX (IO4)",
-            "IR RX (IO5)",
-            "GPIO6 (IO6)",      // Schematic shows GPIO6 with overbar
-            "GPIO7 (IO7)",
-            "GPIO9 (IO9)",
-            "CC1101 NSS (IO10)", // SPI Chip Select
-            "CC1101 MOSI (IO11)",// SPI MOSI
-            "CC1101 SCK (IO12)", // SPI SCK
-            "CC1101 MISO (IO13)",// SPI MISO
-            "GPIO14 (IO14)",
-            "GPIO15 (IO15)",
-            "GPIO16 (IO16)"
-    };
+
 
     private static final String TAG = "EMWaverFragment";
 
@@ -96,17 +79,13 @@ public class EMWaverFragment extends Fragment {
 
     private BLEReceiver bleReceiver;
 
-    private static final String PREF_SELECTED_EMWAVER_PIN_INDEX = "selectedEmwaverPinIndex";
+
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_emwaver, container, false);
 
         // Initialize UI elements
-        pinSpinner = root.findViewById(R.id.pin_spinner);
-        readButton = root.findViewById(R.id.read_button);
-        writeHighButton = root.findViewById(R.id.write_high_button);
-        writeLowButton = root.findViewById(R.id.write_low_button);
         commandInput = root.findViewById(R.id.command_input);
         sendPacketButton = root.findViewById(R.id.send_packet_button);
         serialMonitor = root.findViewById(R.id.serial_monitor);
@@ -118,24 +97,13 @@ public class EMWaverFragment extends Fragment {
         firmwareVersionText = root.findViewById(R.id.firmware_version_text);
         checkVersionButton = root.findViewById(R.id.check_version_button);
 
-        setupSpinner();
-        setupButtons();
+
         setupSendCommandButton();
         setupMonitorUpdates();
         setupStatusUpdates();
         setupDisconnectButton();
         setupConnectButton();
         setupVersionButton();
-
-        // Load saved pin selection or set default
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        int defaultPinIndex = 0; // Default to the first pin in the list
-        int selectedPinIndex = prefs.getInt(PREF_SELECTED_EMWAVER_PIN_INDEX, defaultPinIndex);
-        if (selectedPinIndex >= 0 && selectedPinIndex < pinSpinner.getAdapter().getCount()) {
-            pinSpinner.setSelection(selectedPinIndex);
-        } else {
-            pinSpinner.setSelection(defaultPinIndex); // Fallback to default
-        }
 
         return root;
     }
@@ -281,34 +249,9 @@ public class EMWaverFragment extends Fragment {
         // Utils.updateActionBarStatus(this, statusMessage);
     }
 
-    private void setupSpinner() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
-                android.R.layout.simple_spinner_item, PINS);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        pinSpinner.setAdapter(adapter);
 
-        pinSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                // Save the selected pin index
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-                SharedPreferences.Editor editor = prefs.edit();
-                editor.putInt(PREF_SELECTED_EMWAVER_PIN_INDEX, position);
-                editor.apply();
-            }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // Do nothing
-            }
-        });
-    }
 
-    private void setupButtons() {
-        readButton.setOnClickListener(v -> sendGpioCommand("R", (byte) 0));
-        writeHighButton.setOnClickListener(v -> sendGpioCommand("W", (byte) 1));
-        writeLowButton.setOnClickListener(v -> sendGpioCommand("W", (byte) 0));
-    }
 
     private void setupSendCommandButton() {
         sendPacketButton.setOnClickListener(v -> {
@@ -434,55 +377,7 @@ public class EMWaverFragment extends Fragment {
         return byteList;
     }
 
-    private void sendGpioCommand(String action, byte value) {
-        if (isServiceBound && bleService != null) {
-            String selectedPin = (String) pinSpinner.getSelectedItem();
-            
-            byte pinNumber = getPinNumberFromSelection(selectedPin);
 
-            if (pinNumber == -1) { // Check if pin parsing failed
-                Toast.makeText(getContext(), "GPIO command failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
-                updateResponse("GPIO command failed: Invalid pin selected.", "N/A");
-                return; // Don't proceed
-            }
-
-            // Create command similar to ESP32 code's expectation
-            byte[] command = new byte[]{
-                    'g', 'p', 'i', 'o',
-                    0, // This is ignored in ESP32
-                    pinNumber,
-                    (byte) action.charAt(0),
-                    value
-            };
-
-            // Log the sent GPIO command bytes
-            logTxData(command);
-
-            Log.d(TAG, "Sending GPIO command: " + bytesToHex(command));
-            byte[] response = bleService.sendCommand(command, 2000);
-
-            if (response != null && response.length > 0) {
-                boolean state = response[0] != 0;
-                String resultMessage;
-                if (action.equals("R")) {
-                    resultMessage = selectedPin + " state: " + (state ? "High" : "Low");
-                } else {
-                    boolean writeSuccess = (state == (value != 0));
-                    String writeAction = (value != 0) ? "high" : "low";
-                    resultMessage = "Write " + writeAction + " to " + selectedPin +
-                            (writeSuccess ? " successful" : " failed");
-                }
-                Log.d(TAG, "GPIO command response: " + resultMessage);
-                updateResponse(bytesToHex(response), bytesToAscii(response));
-            } else {
-                Log.e(TAG, "GPIO command failed or timed out");
-                updateResponse("GPIO command failed or timed out", "N/A");
-            }
-        } else {
-            Log.e(TAG, "EMWaver Service not bound");
-            updateResponse("EMWaver Service not connected", "N/A");
-        }
-    }
 
     /**
      * Updates the response TextViews with the provided messages.
@@ -609,22 +504,7 @@ public class EMWaverFragment extends Fragment {
         }
     }
 
-    private byte getPinNumberFromSelection(String selectedPinString) {
-        // Extracts the IO number, e.g., from "IR TX (IO4)" or "GPIO0 (IO0)"
-        Pattern pattern = Pattern.compile("\\(IO(\\d+)\\)");
-        Matcher matcher = pattern.matcher(selectedPinString);
-        if (matcher.find()) {
-            try {
-                // Group 1 contains the number part
-                return (byte) Integer.parseInt(matcher.group(1));
-            } catch (NumberFormatException e) {
-                Log.e(TAG, "Failed to parse IO number from: " + selectedPinString + " extracted part: " + matcher.group(1), e);
-            }
-        }
-        Log.e(TAG, "Could not extract IO number from: " + selectedPinString + ". Check PINS array format and regex.");
-        Toast.makeText(getContext(), "Error: Could not parse pin number from '" + selectedPinString + "'", Toast.LENGTH_LONG).show();
-        return -1; // Indicates an error
-    }
+
 
     private void logTxData(byte[] data) {
         if (getActivity() != null) {

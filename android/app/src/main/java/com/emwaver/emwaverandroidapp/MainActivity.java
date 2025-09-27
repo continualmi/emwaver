@@ -82,9 +82,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Set up the AppBarConfiguration with BLE replacing USB
         appBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.navigation_cc1101, R.id.navigation_rfid,
-                R.id.navigation_sampler, R.id.navigation_wavelets, R.id.navigation_buttons,
-                R.id.navigation_emwaver)
+                R.id.navigation_cc1101, R.id.navigation_emwaver,
+                R.id.navigation_sampler, R.id.navigation_wavelets, R.id.navigation_buttons)
                 .setOpenableLayout(drawer)
                 .build();
 
@@ -117,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
         // Update bottom navigation when destination changes
         navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
             int destinationId = destination.getId();
-            if (destinationId == R.id.navigation_rfid || 
+            if (destinationId == R.id.navigation_emwaver || 
                 destinationId == R.id.navigation_cc1101 || 
                 destinationId == R.id.navigation_sampler || 
                 destinationId == R.id.navigation_wavelets || 

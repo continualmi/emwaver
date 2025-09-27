@@ -18,11 +18,7 @@
         android:label="Buttons"
         tools:layout="@layout/fragment_buttons" />
 
-    <fragment
-        android:id="@+id/navigation_rfid"
-        android:name="com.emwaver.emwaverandroidapp.ui.rfid.rfidFragment"
-        android:label="RFID"
-        tools:layout="@layout/fragment_rfid" />
+
 
     <fragment
         android:id="@+id/navigation_wavelets"
