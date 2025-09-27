@@ -843,121 +843,58 @@ public class WaveletsFragment extends Fragment {
     }
 
     private String buildCc1101RadioConsoleScript() {
-        return "const state = {\n" +
-            "    status: 'Idle',\n" +
-            "    mode: 'Idle',\n" +
-            "    log: [],\n" +
-            "    initialized: false\n" +
-            "};\n\n" +
-            "function pushLog(message) {\n" +
-            "    var stamp = new Date().toLocaleTimeString();\n" +
-            "    state.log.push('[' + stamp + '] ' + message);\n" +
-            "    if (state.log.length > 200) {\n" +
-            "        state.log.shift();\n" +
-            "    }\n" +
-            "    render();\n" +
-            "}\n\n" +
-            "function setStatus(text, mode) {\n" +
-            "    state.status = text;\n" +
-            "    if (mode) {\n" +
-            "        state.mode = mode;\n" +
-            "    }\n" +
-            "    render();\n" +
-            "}\n\n" +
-            "function ensureBridge() {\n" +
-            "    if (typeof CC1101 !== 'object') {\n" +
-            "        throw new Error('CC1101 bridge unavailable');\n" +
-            "    }\n" +
-            "}\n\n" +
-            "function configureRadioBase() {\n" +
-            "    ensureBridge();\n" +
-            "    CC1101.spiStrobe(CC1101.SRES);\n" +
-            "    CC1101.init();\n" +
-            "    CC1101.writeReg(CC1101.PKTCTRL0, 0x32);\n" +
-            "    CC1101.setGDOMode(0x2E, 0x2E, 0x0D);\n" +
-            "    CC1101.setFrequencyMHz(433.92);\n" +
-            "    CC1101.setDataRate(100000);\n" +
-            "    CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);\n" +
-            "}\n\n" +
-            "function startRx() {\n" +
-            "    pushLog('Start RX pressed.');\n" +
+        return "let message = 'Ready';\n\n" +
+            "function initRx() {\n" +
             "    try {\n" +
-            "        configureRadioBase();\n" +
+            "        CC1101.spiStrobe(CC1101.SRES);\n" +
+            "        CC1101.init();\n" +
+            "        CC1101.writeReg(CC1101.PKTCTRL0, 0x32);\n" +
+            "        CC1101.setGDOMode(0x2E, 0x2E, 0x0D);\n" +
+            "        CC1101.setFrequencyMHz(433.92);\n" +
+            "        CC1101.setDataRate(100000);\n" +
+            "        CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);\n" +
             "        CC1101.spiStrobe(CC1101.SRX);\n" +
-            "        setStatus('Receiving packets', 'RX');\n" +
-            "        pushLog('RX active. Listening for packets.');\n" +
+            "        message = 'RX init complete!';\n" +
+            "        render();\n" +
             "    } catch (error) {\n" +
-            "        pushLog('RX error: ' + error);\n" +
+            "        message = 'RX init failed: ' + error;\n" +
+            "        render();\n" +
             "    }\n" +
             "}\n\n" +
-            "function startTx() {\n" +
-            "    pushLog('Start TX pressed.');\n" +
+            "function initTx() {\n" +
             "    try {\n" +
-            "        configureRadioBase();\n" +
+            "        CC1101.spiStrobe(CC1101.SRES);\n" +
+            "        CC1101.init();\n" +
+            "        CC1101.writeReg(CC1101.PKTCTRL0, 0x32);\n" +
+            "        CC1101.setGDOMode(0x2E, 0x2E, 0x0D);\n" +
+            "        CC1101.setFrequencyMHz(433.92);\n" +
+            "        CC1101.setDataRate(100000);\n" +
+            "        CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);\n" +
             "        CC1101.spiStrobe(CC1101.STX);\n" +
-            "        setStatus('Transmitting continuously', 'TX');\n" +
-            "        pushLog('TX active. Broadcasting test signal.');\n" +
+            "        message = 'TX init complete!';\n" +
+            "        render();\n" +
             "    } catch (error) {\n" +
-            "        pushLog('TX error: ' + error);\n" +
+            "        message = 'TX init failed: ' + error;\n" +
+            "        render();\n" +
             "    }\n" +
-            "}\n\n" +
-            "function stopRadio() {\n" +
-            "    pushLog('Stop requested.');\n" +
-            "    try {\n" +
-            "        ensureBridge();\n" +
-            "        CC1101.spiStrobe(CC1101.SIDLE);\n" +
-            "        setStatus('Idle', 'Idle');\n" +
-            "        pushLog('Radio set to IDLE.');\n" +
-            "    } catch (error) {\n" +
-            "        pushLog('Stop error: ' + error);\n" +
-            "    }\n" +
-            "}\n\n" +
-            "function clearLog() {\n" +
-            "    state.log = [];\n" +
-            "    render();\n" +
-            "}\n\n" +
-            "function renderLogEntries() {\n" +
-            "    if (state.log.length === 0) {\n" +
-            "        return [UI.text({ text: 'No activity yet.', foregroundColor: '#6B7280' })];\n" +
-            "    }\n" +
-            "    return state.log.slice().reverse().map(function(entry) {\n" +
-            "        return UI.text({ text: entry, fontDesign: 'monospaced', foregroundColor: '#374151' });\n" +
-            "    });\n" +
             "}\n\n" +
             "function render() {\n" +
             "    UI.render(UI.column({\n" +
             "        padding: 16,\n" +
             "        spacing: 16,\n" +
             "        children: [\n" +
-            "            UI.text({ text: 'CC1101 Radio Console', font: 'title2', fontWeight: 'semibold' }),\n" +
-            "            UI.text({ text: 'Status: ' + state.status, fontWeight: 'medium' }),\n" +
-            "            UI.text({ text: 'Bridge: ' + (typeof CC1101 === 'object' ? 'available' : 'missing'), foregroundColor: '#6B7280' }),\n" +
+            "            UI.text({ text: 'CC1101 Radio', font: 'title2', fontWeight: 'semibold' }),\n" +
             "            UI.row({\n" +
-            "                spacing: 8,\n" +
+            "                spacing: 12,\n" +
             "                children: [\n" +
-            "                    UI.button({ label: 'Start RX', backgroundColor: '#2563EB', foregroundColor: '#FFFFFF', onTap: startRx }),\n" +
-            "                    UI.button({ label: 'Start TX', backgroundColor: '#DC2626', foregroundColor: '#FFFFFF', onTap: startTx }),\n" +
-            "                    UI.button({ label: 'Stop', buttonStyle: 'bordered', onTap: stopRadio }),\n" +
-            "                    UI.button({ label: 'Clear Log', buttonStyle: 'bordered', onTap: clearLog })\n" +
+            "                    UI.button({ label: 'Init RX', backgroundColor: '#2563EB', foregroundColor: '#FFFFFF', onTap: initRx }),\n" +
+            "                    UI.button({ label: 'Init TX', backgroundColor: '#DC2626', foregroundColor: '#FFFFFF', onTap: initTx })\n" +
             "                ]\n" +
             "            }),\n" +
-            "            UI.scroll({\n" +
-            "                minHeight: 200,\n" +
-            "                padding: { top: 8, bottom: 8 },\n" +
-            "                children: [\n" +
-            "                    UI.column({\n" +
-            "                        spacing: 4,\n" +
-            "                        children: renderLogEntries()\n" +
-            "                    })\n" +
-            "                ]\n" +
-            "            })\n" +
+            "            UI.text({ text: message, fontWeight: 'medium', foregroundColor: '#374151' })\n" +
             "        ]\n" +
             "    }));\n" +
             "}\n\n" +
-            "if (!state.initialized) {\n" +
-            "    state.initialized = true;\n" +
-            "    pushLog('Bridge ready: ' + (typeof CC1101));\n" +
-            "}\n" +
             "render();\n";
     }
     private interface ScriptNameCallback {
