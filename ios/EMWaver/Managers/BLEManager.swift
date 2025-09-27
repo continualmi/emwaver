@@ -195,7 +195,7 @@ class BLEManager: NSObject, ObservableObject {
         print("Disconnecting from EMWaver device")
     }
     
-    func sendPacket(_ data: Data) {
+    @objc func sendPacket(_ data: Data) {
         guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
             print("Cannot send packet: Not connected to device")
             return
@@ -206,7 +206,7 @@ class BLEManager: NSObject, ObservableObject {
     }
     
     // MARK: - Buffer Operations
-    func clearBuffer() {
+    @objc func clearBuffer() {
         bufferQueue.sync {
             buffer.removeAll()
         }
@@ -269,7 +269,7 @@ class BLEManager: NSObject, ObservableObject {
 
     /// Replaces the current buffer content with the provided data.
     /// - Parameter data: The new data for the buffer.
-    func loadBuffer(data: Data) {
+    @objc func loadBuffer(data: Data) {
         bufferQueue.sync {
             buffer = data
         }
@@ -287,7 +287,7 @@ class BLEManager: NSObject, ObservableObject {
 
     /// Returns the entire content of the buffer.
     /// - Returns: The buffer data.
-    func getBuffer() -> Data {
+    @objc func getBuffer() -> Data {
         var bufferCopy = Data()
         bufferQueue.sync {
             bufferCopy = buffer
@@ -420,7 +420,7 @@ class BLEManager: NSObject, ObservableObject {
     
     /// Transmits the current buffer content to the connected peripheral.
     /// Implements flow control based on status feedback from the device.
-    func transmitBuffer() {
+    @objc func transmitBuffer() {
         guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
             print("Cannot transmit buffer: Not connected or characteristic not ready.")
             return
@@ -525,7 +525,7 @@ class BLEManager: NSObject, ObservableObject {
     }
 
     // Send a command and wait for response
-    func sendCommand(_ command: Data, timeout: Int) -> Data? {
+    @objc func sendCommand(_ command: Data, timeout: Int) -> Data? {
         guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
             print("Cannot send command: Not connected to device")
             return nil
