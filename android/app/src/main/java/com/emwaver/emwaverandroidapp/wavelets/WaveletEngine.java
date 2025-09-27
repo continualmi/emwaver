@@ -45,8 +45,17 @@ public final class WaveletEngine {
     private volatile Scriptable scope;
     private volatile boolean initialized;
 
+    public interface DialogCallback {
+        void showDialog(String title, String message);
+    }
+
     private PrintCallback printCallback;
     private RenderCallback renderCallback;
+    private DialogCallback dialogCallback;
+
+    public void setDialogCallback(DialogCallback dialogCallback) {
+        this.dialogCallback = dialogCallback;
+    }
 
     public void setup(PrintCallback printCallback, RenderCallback renderCallback, Map<String, Object> bindings) {
         this.printCallback = printCallback;
@@ -241,6 +250,50 @@ public final class WaveletEngine {
                     android.util.Log.d("WaveletEngine", "registering callback token=" + token);
                     callbackRegistry.put(token, fn);
                 }
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_waveletShowDialog", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 2) {
+                    return Context.getUndefinedValue();
+                }
+                String title = String.valueOf(args[0]);
+                String message = String.valueOf(args[1]);
+                
+                if (dialogCallback != null) {
+                    mainHandler.post(() -> dialogCallback.showDialog(title, message));
+                }
+                
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_waveletCreateByteArray", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                
+                Object arrayArg = args[0];
+                if (arrayArg instanceof NativeArray) {
+                    NativeArray jsArray = (NativeArray) arrayArg;
+                    int length = (int) jsArray.getLength();
+                    byte[] byteArray = new byte[length];
+                    
+                    for (int i = 0; i < length; i++) {
+                        Object element = jsArray.get(i, jsArray);
+                        if (element instanceof Number) {
+                            byteArray[i] = ((Number) element).byteValue();
+                        }
+                    }
+                    
+                    return Context.javaToJS(byteArray, scope);
+                }
+                
                 return Context.getUndefinedValue();
             }
         });
@@ -584,6 +637,18 @@ public final class WaveletEngine {
         "            }\n" +
         "        }\n" +
         "        WaveletBridge.log(parts.join(' '));\n" +
+        "    };\n" +
+        "}\n" +
+        "\n" +
+        "if (typeof dialog === 'undefined') {\n" +
+        "    var dialog = function (title, message) {\n" +
+        "        _waveletShowDialog(String(title || ''), String(message || ''));\n" +
+        "    };\n" +
+        "}\n" +
+        "\n" +
+        "if (typeof createByteArray === 'undefined') {\n" +
+        "    var createByteArray = function (jsArray) {\n" +
+        "        return _waveletCreateByteArray(jsArray);\n" +
         "    };\n" +
         "}\n" +
         "\n" +

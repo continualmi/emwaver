@@ -342,6 +342,7 @@ public class WaveletsFragment extends Fragment {
         ensureWaveletEngineBindings();
         if (waveletEngine == null) {
             waveletEngine = new WaveletEngine();
+            waveletEngine.setDialogCallback(this::showDialog);
             waveletEngine.setup(this::printLog, this::handleWaveletTree, buildBindings());
         }
     }
@@ -756,6 +757,21 @@ public class WaveletsFragment extends Fragment {
 
     private void setEditorText(String text) {
         binding.jsCodeInput.setText(text);
+    }
+
+    private void showDialog(String title, String message) {
+        if (!isAdded()) {
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            if (isAdded()) {
+                new AlertDialog.Builder(requireContext())
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setPositiveButton("OK", null)
+                    .show();
+            }
+        });
     }
 
     private void showToast(String message) {
