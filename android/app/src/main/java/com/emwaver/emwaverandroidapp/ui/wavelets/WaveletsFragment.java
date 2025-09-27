@@ -660,7 +660,6 @@ public class WaveletsFragment extends Fragment {
 
         ensureAssetScript("wavelet_demo.js");
         ensureAssetScript("wavelet_rfid.js");
-        ensureAssetScript("wavelet_ism.js");
         ensureScriptExists("cc1101_radio_console.js", buildCc1101RadioConsoleScript());
         ensureScriptExists("hello_world_usb.js", buildDefaultBadUsbScript());
     }
