@@ -3,7 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:background="@color/surfaceBackground">
 
     <!-- EMWaver Connection Status -->
     <LinearLayout
@@ -12,14 +13,15 @@
         android:orientation="horizontal"
         android:layout_marginBottom="8dp"
         android:padding="8dp"
-        android:background="#EFEFEF"
+        android:background="@color/surfaceCard"
         android:gravity="center_vertical">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Status: "
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:textColor="@color/textSecondary" />
 
         <TextView
             android:id="@+id/emwaver_status_text"
@@ -60,14 +62,15 @@
         android:orientation="horizontal"
         android:layout_marginBottom="8dp"
         android:padding="8dp"
-        android:background="#EFEFEF"
+        android:background="@color/surfaceCard"
         android:gravity="center_vertical">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Firmware Version: "
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:textColor="@color/textSecondary" />
 
         <TextView
             android:id="@+id/firmware_version_text"
@@ -76,7 +79,7 @@
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:text="Unknown"
-            android:textColor="#808080"
+            android:textColor="@color/textSecondary"
             android:gravity="center_vertical" />
 
         <ImageButton
@@ -87,7 +90,8 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_rotate"
             android:contentDescription="Check firmware version"
-            android:layout_marginStart="8dp" />
+            android:layout_marginStart="8dp"
+            android:tint="?attr/colorOnSurface" />
 
     </LinearLayout>
 
@@ -96,25 +100,42 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:layout_marginTop="24dp">
 
-        <EditText
-            android:id="@+id/command_input"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:hint="e.g., version[0x00][255][0xFF]"
-            android:inputType="text"
-            android:padding="8dp"
-            android:background="@android:drawable/edit_text" />
-
-        <Button
-            android:id="@+id/send_packet_button"
+        <TextView
+            android:id="@+id/command_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Send Packet"
-            android:layout_marginStart="8dp" />
+            android:text="Command"
+            android:textStyle="bold"
+            android:textColor="@color/textSecondary"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/command_input"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:hint="e.g., version[0x00][255][0xFF]"
+                android:inputType="text"
+                android:padding="8dp"
+                android:textColor="@color/textPrimary"
+                android:textColorHint="@color/textSecondary" />
+
+            <Button
+                android:id="@+id/send_packet_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Send Packet"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Display options -->
@@ -130,7 +151,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="HEX"
-            android:checked="false" />
+            android:checked="false"
+            android:textColor="@color/textPrimary" />
     </LinearLayout>
 
     <!-- Serial Monitor -->
@@ -140,14 +162,14 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="8dp"
-        android:background="#000000">
+        android:background="@color/monitorBackground">
 
         <TextView
             android:id="@+id/serial_monitor"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="8dp"
-            android:textColor="#00FF00"
+            android:textColor="@color/monitorText"
             android:fontFamily="monospace"
             android:textSize="14sp" />
 
