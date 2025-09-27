@@ -782,156 +782,7 @@ struct ConsoleView: View {
     private func createDefaultScriptsIfNeeded() {
         ensureScriptDirectoryExists()
         
-        // RX Continuous Script
-        let rxScriptName = "cc1101_rx_continuous.js"
-        let rxScriptPath = getDocumentsDirectory().appendingPathComponent(rxScriptName)
-        
-        if !FileManager.default.fileExists(atPath: rxScriptPath.path) {
-            let rxContent = """
-                // Reset the chip
-                CC1101.spiStrobe(CC1101.SRES);
-                CC1101.initialize();
-                
-                // Configure for continuous mode
-                CC1101.writeReg(CC1101.PKTCTRL0, 0x32);
-                CC1101.setGDOMode(0x2E, 0x2E, 0x0D);
-                
-                // Set frequency and data rate
-                CC1101.setFrequencyMHz(433.92);
-                CC1101.setDataRate(100000);
-                
-                // Set modulation and power
-                CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);
-                
-                // Enter RX mode
-                CC1101.spiStrobe(CC1101.SRX);
-                print("init rx continuous successful!");
-                """
-            
-            saveScript(rxScriptName, content: rxContent)
-            print("Created default RX script")
-        }
-        
-        // TX Continuous Script
-        let txScriptName = "cc1101_tx_continuous.js"
-        let txScriptPath = getDocumentsDirectory().appendingPathComponent(txScriptName)
-        
-        if !FileManager.default.fileExists(atPath: txScriptPath.path) {
-            let txContent = """
-                // Reset the chip
-                CC1101.spiStrobe(CC1101.SRES);
-                CC1101.initialize();
-                
-                // Configure for continuous mode
-                CC1101.writeReg(CC1101.PKTCTRL0, 0x32);
-                CC1101.setGDOMode(0x2E, 0x2E, 0x0D);
-                
-                // Set frequency and data rate
-                CC1101.setFrequencyMHz(433.92);
-                CC1101.setDataRate(100000);
-                
-                // Set modulation and power
-                CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);
-                
-                // Enter TX mode
-                CC1101.spiStrobe(CC1101.STX);
-                print("init tx continuous successful!");
-                """
-            
-            saveScript(txScriptName, content: txContent)
-            print("Created default TX script")
-        }
-        
-        // IR Test Script
-        let irTestScriptName = "ir_test.js"
-        let irTestScriptPath = getDocumentsDirectory().appendingPathComponent(irTestScriptName)
-        
-        if !FileManager.default.fileExists(atPath: irTestScriptPath.path) {
-            let irTestContent = """
-                // Simple IR Test Script
-                // Tests encoding common IR protocols
-
-                print("Starting IR Encoding Test");
-                print("-----------------------");
-
-                // Test NEC protocol (common for many TVs and devices)
-                var protocol = "nec1";
-                var device = 0;   // Device address
-                var subdevice = -1; // -1 means no subdevice/use default
-                var funcCode = 16;  // Function code (e.g., power button)
-
-                print("Encoding " + protocol + " signal: device=" + device + ", function=" + funcCode);
-                var timings = IRService.encodeIR(protocol, device, subdevice, funcCode);
-
-                if (timings && timings.length > 0) {
-                    print("Success! Generated " + timings.length + " timing values");
-                    
-                    // Show the first few timings
-                    var output = "First 10 timings (µs): ";
-                    var count = Math.min(timings.length, 10);
-                    
-                    for (var i = 0; i < count; i++) {
-                        output += timings[i].toFixed(1);
-                        if (i < count - 1) output += ", ";
-                    }
-                    
-                    print(output);
-                    print("Total sequence length: " + timings.length);
-                    
-                    // Convert timings to binary signal
-                    print("Converting timings to binary signal...");
-                    var signal = Utils.convertTimingsToBinary(timings);
-                    print("Binary signal size: " + signal.length + " bytes");
-                    
-                    // Apply IR carrier modulation
-                    print("Applying 38kHz IR carrier modulation...");
-                    var irSignal = Utils.convertToIRBuffer(signal);
-                    print("IR signal size: " + irSignal.length + " bytes");
-                    
-                    // Define the transmit command for IR - use pin 4 (IR TX) in binary format
-                    var transmitCommand = new Uint8Array([
-                        0x74, 0x72, 0x61, 0x6E, 0x73, 0x6D, 0x69, 0x74, 0x20, 0x04 // "transmit " + raw pin 4 (IR TX)
-                    ]);
-                    
-                    print("To send this signal:");
-                    print("1. BLEService.loadBuffer(irSignal);");
-                    print("2. BLEService.sendPacket(transmitCommand);");
-                    
-                    // Actually send the signal - following SamplerView pattern
-                    print("\\nSending IR signal now...");
-                    
-                    // Load the buffer with the IR signal
-                    BLEService.loadBuffer(irSignal);
-                    
-                    // Send the transmit command (type 4 = IR)
-                    BLEService.sendPacket(transmitCommand);
-                    
-                    // Transmit the buffer
-                    BLEService.transmitBuffer();
-                    print("Transmission complete");
-                } else {
-                    print("Error: Failed to encode " + protocol + " signal");
-                }
-
-                print("\\nTesting Samsung protocol");
-                var samsung = IRService.encodeIR(IRService.PROTOCOL_SAMSUNG, 7, -1, 11);
-                if (samsung) {
-                    print("Success! Generated " + samsung.length + " timing values for Samsung");
-                    
-                    // Convert and show payload size
-                    var samsungSignal = Utils.convertTimingsToBinary(samsung);
-                    print("Samsung binary signal size: " + samsungSignal.length + " bytes");
-                } else {
-                    print("Error: Failed to encode Samsung signal");
-                }
-
-                print("\\nIR Test Complete");
-                """
-            
-            saveScript(irTestScriptName, content: irTestContent)
-            print("Created default IR test script")
-        }
-
+        // Create all 5 scripts that match Android exactly
         let waveletDemoName = "wavelet_demo.js"
         let waveletDemoPath = getDocumentsDirectory().appendingPathComponent(waveletDemoName)
 
@@ -948,15 +799,132 @@ struct ConsoleView: View {
             print("Created default RFID wavelet script")
         }
 
-        let waveletISMName = "wavelet_ism.js"
-        let waveletISMPath = getDocumentsDirectory().appendingPathComponent(waveletISMName)
+        let waveletGPIOName = "wavelet_gpio.js"
+        let waveletGPIOPath = getDocumentsDirectory().appendingPathComponent(waveletGPIOName)
 
-        if !FileManager.default.fileExists(atPath: waveletISMPath.path) {
-            saveScript(waveletISMName, content: waveletISMScript())
-            print("Created default ISM wavelet script")
+        if !FileManager.default.fileExists(atPath: waveletGPIOPath.path) {
+            saveScript(waveletGPIOName, content: waveletGPIOScript())
+            print("Created default GPIO wavelet script")
+        }
+
+        let cc1101RadioName = "cc1101_radio_console.js"
+        let cc1101RadioPath = getDocumentsDirectory().appendingPathComponent(cc1101RadioName)
+
+        if !FileManager.default.fileExists(atPath: cc1101RadioPath.path) {
+            saveScript(cc1101RadioName, content: cc1101RadioConsoleScript())
+            print("Created default CC1101 radio console script")
+        }
+
+        let helloWorldUsbName = "hello_world_usb.js"
+        let helloWorldUsbPath = getDocumentsDirectory().appendingPathComponent(helloWorldUsbName)
+
+        if !FileManager.default.fileExists(atPath: helloWorldUsbPath.path) {
+            saveScript(helloWorldUsbName, content: helloWorldUsbScript())
+            print("Created default Hello World USB script")
         }
 
         loadRecentScripts()
+    }
+
+    private func cc1101RadioConsoleScript() -> String {
+        return """
+        let message = 'Ready';
+
+        function initRx() {
+            try {
+                CC1101.spiStrobe(CC1101.SRES);
+                CC1101.init();
+                CC1101.writeReg(CC1101.PKTCTRL0, 0x32);
+                CC1101.setGDOMode(0x2E, 0x2E, 0x0D);
+                CC1101.setFrequencyMHz(433.92);
+                CC1101.setDataRate(100000);
+                CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);
+                CC1101.spiStrobe(CC1101.SRX);
+                message = 'RX init complete!';
+                render();
+            } catch (error) {
+                message = 'RX init failed: ' + error;
+                render();
+            }
+        }
+
+        function initTx() {
+            try {
+                CC1101.spiStrobe(CC1101.SRES);
+                CC1101.init();
+                CC1101.writeReg(CC1101.PKTCTRL0, 0x32);
+                CC1101.setGDOMode(0x2E, 0x2E, 0x0D);
+                CC1101.setFrequencyMHz(433.92);
+                CC1101.setDataRate(100000);
+                CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);
+                CC1101.spiStrobe(CC1101.STX);
+                message = 'TX init complete!';
+                render();
+            } catch (error) {
+                message = 'TX init failed: ' + error;
+                render();
+            }
+        }
+
+        function render() {
+            UI.render(UI.column({
+                padding: 16,
+                spacing: 16,
+                children: [
+                    UI.text({ text: 'CC1101 Radio', font: 'title2', fontWeight: 'semibold' }),
+                    UI.row({
+                        spacing: 12,
+                        children: [
+                            UI.button({ label: 'Init RX', backgroundColor: '#2563EB', foregroundColor: '#FFFFFF', onTap: initRx }),
+                            UI.button({ label: 'Init TX', backgroundColor: '#DC2626', foregroundColor: '#FFFFFF', onTap: initTx })
+                        ]
+                    }),
+                    UI.text({ text: message, fontWeight: 'medium', foregroundColor: '#374151' })
+                ]
+            }));
+        }
+
+        render();
+        """
+    }
+
+    private func helloWorldUsbScript() -> String {
+        return """
+        WaveletConsole.subscribe(render);
+        render();
+
+        function render() {
+            UI.render(UI.column({
+                padding: 16,
+                spacing: 12,
+                children: [
+                    UI.text({ text: 'BadUSB Hello World', font: 'title2', fontWeight: 'semibold' }),
+                    UI.text({ text: 'Send a simple HID payload to the connected host.', foregroundColor: '#6B7280' }),
+                    UI.button({ label: 'Execute Payload', backgroundColor: '#1D4ED8', foregroundColor: '#FFFFFF', onTap: runDemo }),
+                    WaveletConsole.view({
+                        minHeight: 160,
+                        backgroundColor: '#111827',
+                        foregroundColor: '#F9FAFB',
+                        padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                        cornerRadius: 8
+                    })
+                ]
+            }));
+        }
+
+        function runDemo() {
+            print('[BadUSB] Setting up HID attack mode...');
+            BLEService.sendString('usb ATTACKMODE HID');
+            Utils.delay(2000);
+            BLEService.sendString('usb STRING_DELAY 10');
+            Utils.delay(500);
+            BLEService.sendString('usb STRING Hello, World!');
+            Utils.delay(500);
+            BLEService.sendString('usb ENTER');
+            Utils.delay(500);
+            print('[BadUSB] Payload complete.');
+        }
+        """
     }
     
     // MARK: - Lifecycle methods
@@ -1146,164 +1114,518 @@ struct ConsoleView: View {
 
     private func waveletRFIDScript() -> String {
         return """
-        const state = {
-            blockAddress: "",
-            authMode: "A",
-            keyInputs: Array.from({ length: 6 }, () => ""),
-            data: "",
-            result: null
-        };
+        // State matching the original RFID fragment exactly
+        let blockAddress = "00";
+        let authMode = 0; // 0 = Key A, 1 = Key B
+        let keyInputs = ["FF", "FF", "FF", "FF", "FF", "FF"];
+        let combinedData = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
+        let resultText = "";
 
-        function formatHexInput(input, maxLength) {
-            if (!input) {
-                return "";
+        function isKeyComplete() {
+            for (let i = 0; i < 6; i++) {
+                if (!keyInputs[i] || keyInputs[i].trim().length === 0) {
+                    return false;
+                }
             }
-            const sanitized = String(input).toUpperCase().replace(/[^0-9A-F ]/g, "");
-            return sanitized.slice(0, maxLength);
+            return true;
         }
 
-        function updateBlockAddress(value) {
-            setState({ blockAddress: formatHexInput(value, 2) });
+        function isCombinedDataComplete() {
+            if (!combinedData || combinedData.trim().length === 0) {
+                return false;
+            }
+            let dataBytes = combinedData.trim().split(/\\s+/).filter(Boolean);
+            return dataBytes.length === 16;
         }
 
-        function updateKey(index, value) {
-            const nextKeys = state.keyInputs.slice();
-            nextKeys[index] = formatHexInput(value, 2);
-            setState({ keyInputs: nextKeys });
-        }
-
-        function updateData(value) {
-            setState({ data: formatHexInput(value, 47) });
-        }
-
-        function handleRead() {
-            const block = state.blockAddress || "00";
-            print(`[Wavelet/RFID] Read block ${block} using Key ${state.authMode}`);
-            setState({
-                result: {
-                    kind: "info",
-                    text: `Read command queued for block ${block} (Key ${state.authMode}).`
+        function processReadResponse(response) {
+            if (!response || response.length === 0) {
+                showError("No response received.");
+                return;
+            }
+            
+            // Check for text error messages first
+            let responseString = "";
+            try {
+                for (let i = 0; i < response.length; i++) {
+                    responseString += String.fromCharCode(response[i]);
                 }
-            });
-        }
-
-        function handleWrite() {
-            const block = state.blockAddress || "00";
-            const byteCount = state.data.trim().length === 0
-                ? 0
-                : state.data.trim().split(/\\s+/).filter(Boolean).length;
-            print(`[Wavelet/RFID] Write block ${block} using Key ${state.authMode}`);
-            setState({
-                result: {
-                    kind: "success",
-                    text: `Write command queued with ${byteCount} byte(s) for block ${block}.`
+            } catch (e) {
+                responseString = "";
+            }
+            
+            if (responseString.includes("No card detected")) {
+                showError("Error: No card detected");
+                return;
+            }
+            if (responseString.includes("RFID module not connected")) {
+                showError("Error: RFID module not connected");
+                return;
+            }
+            
+            if (response.length >= 2) {
+                let cardType = getTagType(response[0], response[1]);
+                let result = "Card Type: " + cardType + "\\n";
+                
+                // Extract UID if present
+                if (response.length > 6) {
+                    let uid = "";
+                    for (let i = 2; i < 6; i++) {
+                        uid += ((response[i] & 0xFF).toString(16).toUpperCase().padStart(2, '0')) + " ";
+                    }
+                    result += "UID: " + uid.trim() + "\\n";
                 }
-            });
+                
+                if (response.length > 6) {
+                    if ((response[6] & 0xFF) === 0xFF) {
+                        // Error occurred
+                        let errorMsg = "";
+                        for (let i = 7; i < response.length; i++) {
+                            errorMsg += String.fromCharCode(response[i]);
+                        }
+                        result += "Error: " + errorMsg;
+                        showError(result);
+                    } else if ((response[6] & 0xFF) === 0x00 && response.length >= 23) {
+                        // Successful read
+                        let data = "";
+                        for (let i = 7; i < 23; i++) {
+                            data += ((response[i] & 0xFF).toString(16).toUpperCase().padStart(2, '0')) + " ";
+                        }
+                        result += "Data: " + data.trim();
+                        showResultDialog(result, data.trim());
+                    } else {
+                        showError("Unexpected response format. See logs for details.");
+                    }
+                } else {
+                    showError("Incomplete response received (length: " + response.length + ")");
+                }
+            } else {
+                showError("Invalid response format (length: " + response.length + ")");
+            }
         }
 
-        function setState(patch) {
-            Object.assign(state, patch);
+        function getTagType(byte0, byte1) {
+            // Exact tag type detection from original fragment
+            let tagType = ((byte0 & 0xFF) << 8) | (byte1 & 0xFF);
+            switch (tagType) {
+                case 0x4400:
+                    return "Mifare_UltraLight";
+                case 0x0400:
+                    return "Mifare_One(S50)";
+                case 0x0200:
+                    return "Mifare_One(S70)";
+                case 0x0800:
+                    return "Mifare_Pro(X)";
+                case 0x4403:
+                    return "Mifare_DESFire";
+                default:
+                    return "Unknown";
+            }
+        }
+
+        function showError(errorMessage) {
+            resultText = errorMessage;
+            render();
+        }
+
+        function showResultDialog(result, data) {
+            resultText = ""; // Clear result text since we're showing dialog
+            render();
+            
+            // Show dialog with "COPY to write" option for reads
+            if (data && data.trim().length > 0) {
+                // For reads with data - show dialog with copy option
+                // Note: This is a simplified version - real implementation would need custom dialog with two buttons
+                dialog("Result", result + "\\n\\nData has been copied to write field.");
+                
+                // Copy data to write field
+                let dataBytes = data.trim().split(' ');
+                while (dataBytes.length < 16) {
+                    dataBytes.push("00");
+                }
+                combinedData = dataBytes.slice(0, 16).join(" ");
+                render();
+            } else {
+                // For writes or reads without data
+                dialog("Result", result);
+            }
+        }
+
+        function sendReadCommand() {
+            if (!BLEService) {
+                showError("BLE Service not bound. Please reconnect.");
+                return;
+            }
+            
+            if (blockAddress.trim().length === 0 || !isKeyComplete()) {
+                showError("Please enter block address and complete key.");
+                return;
+            }
+            
+            try {
+                // Create command exactly like the original fragment
+                let command = new Array(21);
+                let cmdPrefix = "mfrc522 read ";
+                
+                // Copy prefix
+                for (let i = 0; i < cmdPrefix.length; i++) {
+                    command[i] = cmdPrefix.charCodeAt(i);
+                }
+                
+                // Add block address
+                command[cmdPrefix.length] = parseInt(blockAddress, 16);
+                
+                // Add auth mode byte (0x60 for Key A, 0x61 for Key B)
+                command[cmdPrefix.length + 1] = authMode === 0 ? 0x60 : 0x61;
+                
+                // Add 6-byte key
+                for (let i = 0; i < 6; i++) {
+                    command[cmdPrefix.length + 2 + i] = parseInt(keyInputs[i], 16);
+                }
+                
+                // Convert to Java byte array
+                let byteArray = createByteArray(command);
+                let response = BLEService.sendCommand(byteArray, 2000);
+                
+                processReadResponse(response);
+                
+            } catch (error) {
+                showError("Read error: " + error);
+            }
+        }
+
+        function processWriteResponse(response) {
+            if (!response || response.length === 0) {
+                showError("No response received.");
+                return;
+            }
+            
+            // Check for text error messages first
+            let responseString = "";
+            try {
+                for (let i = 0; i < response.length; i++) {
+                    responseString += String.fromCharCode(response[i]);
+                }
+            } catch (e) {
+                responseString = "";
+            }
+            
+            if (responseString.includes("No card detected")) {
+                showError("Error: No card detected");
+                return;
+            }
+            if (responseString.includes("RFID module not connected")) {
+                showError("Error: RFID module not connected");
+                return;
+            }
+            
+            if (responseString.includes("Success")) {
+                showResultDialog("Write successful", "");
+                resultText = ""; // Clear any previous error message
+                render();
+            } else {
+                // More detailed error reporting
+                let errorDetails = "Error: " + responseString + "\\nRaw response size: " + response.length + " bytes";
+                showError(errorDetails);
+            }
+        }
+
+        function sendWriteCommand() {
+            if (!BLEService) {
+                showError("BLE Service not bound. Please reconnect.");
+                return;
+            }
+            
+            if (blockAddress.trim().length === 0 || !isKeyComplete() || !isCombinedDataComplete()) {
+                showError("Please enter block address, complete key, and data.");
+                return;
+            }
+            
+            try {
+                // Parse combined data - remove spaces and validate length
+                let cleanData = combinedData.replace(/\\s/g, "");
+                if (cleanData.length !== 32) {
+                    showError("Data must be exactly 16 bytes (32 hex characters)");
+                    return;
+                }
+                
+                // Create command exactly like the original fragment
+                let command = new Array(38);
+                let cmdPrefix = "mfrc522 write ";
+                
+                // Copy prefix  
+                for (let i = 0; i < cmdPrefix.length; i++) {
+                    command[i] = cmdPrefix.charCodeAt(i);
+                }
+                
+                // Add block address
+                command[cmdPrefix.length] = parseInt(blockAddress, 16);
+                
+                // Add auth mode byte
+                command[cmdPrefix.length + 1] = authMode === 0 ? 0x60 : 0x61;
+                
+                // Add 6-byte key
+                for (let i = 0; i < 6; i++) {
+                    command[cmdPrefix.length + 2 + i] = parseInt(keyInputs[i], 16);
+                }
+                
+                // Add 16-byte data (parse from hex string)
+                for (let i = 0; i < 16; i++) {
+                    let hexByte = cleanData.substring(i * 2, i * 2 + 2);
+                    command[cmdPrefix.length + 8 + i] = parseInt(hexByte, 16);
+                }
+                
+                // Convert to Java byte array
+                let byteArray = createByteArray(command);
+                let response = BLEService.sendCommand(byteArray, 2000);
+                
+                processWriteResponse(response);
+                
+            } catch (error) {
+                showError("Write error: " + error);
+            }
+        }
+
+        function render() {
+            UI.render(UI.scroll({
+                padding: 16,
+                spacing: 16,
+                children: [
+                    UI.column({
+                        spacing: 16,
+                        children: [
+                            UI.text({ text: "RFID Tools", font: "title2", fontWeight: "semibold" }),
+                            
+                            // Block Address
+                            UI.text({ text: "Block Address", fontWeight: "medium" }),
+                            UI.textField({
+                                placeholder: "00",
+                                value: blockAddress,
+                                onChange: function(value) { 
+                                    blockAddress = value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 2);
+                                }
+                            }),
+                            
+                            // Authentication Mode
+                            UI.text({ text: "Authentication Mode", fontWeight: "medium" }),
+                            UI.picker({
+                                style: "segmented",
+                                selected: authMode,
+                                options: [
+                                    { label: "Key A", value: 0 },
+                                    { label: "Key B", value: 1 }
+                                ],
+                                onChange: function(value) {
+                                    authMode = value;
+                                }
+                            }),
+                            
+                            // Key inputs (6 fields)
+                            UI.column({
+                                spacing: 8,
+                                children: [
+                                    UI.text({ text: "Key (6 bytes)", fontWeight: "medium" }),
+                                    UI.grid({
+                                        columns: 3,
+                                        spacing: 8,
+                                        children: keyInputs.map(function(keyValue, index) {
+                                            return UI.textField({
+                                                placeholder: "FF",
+                                                value: keyValue,
+                                                onChange: function(value) {
+                                                    keyInputs[index] = value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 2);
+                                                }
+                                            });
+                                        })
+                                    })
+                                ]
+                            }),
+                            
+                            // Combined data input
+                            UI.text({ text: "Data (16 bytes)", fontWeight: "medium" }),
+                            UI.textEditor({
+                                placeholder: "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+                                value: combinedData,
+                                onChange: function(value) {
+                                    combinedData = value.toUpperCase().replace(/[^0-9A-F ]/g, "");
+                                }
+                            }),
+                            
+                            // Read and Write buttons
+                            UI.row({
+                                spacing: 12,
+                                children: [
+                                    UI.button({
+                                        label: "Read",
+                                        backgroundColor: "#2563EB",
+                                        foregroundColor: "#FFFFFF",
+                                        onTap: sendReadCommand
+                                    }),
+                                    UI.button({
+                                        label: "Write", 
+                                        backgroundColor: "#DC2626",
+                                        foregroundColor: "#FFFFFF",
+                                        onTap: sendWriteCommand
+                                    })
+                                ]
+                            }),
+                            
+                            // Result display
+                            resultText ? UI.text({
+                                text: resultText,
+                                backgroundColor: resultText.includes("successful") ? "#DCFCE7" : "#FEE2E2",
+                                foregroundColor: resultText.includes("successful") ? "#166534" : "#DC2626",
+                                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                                cornerRadius: 8
+                            }) : null
+                        ]
+                    })
+                ]
+            }));
+        }
+
+        render();
+        """
+    }
+
+    private func waveletGPIOScript() -> String {
+        return """
+        // Simple GPIO control wavelet
+        let selectedPin = 0;
+        let resultText = "";
+
+        const PINS = [
+            { label: "GPIO0 (IO0)", value: "0" },
+            { label: "CC1101 GDO0 (IO1)", value: "1" },
+            { label: "CC1101 GDO2 (IO2)", value: "2" },
+            { label: "IR TX (IO4)", value: "4" },
+            { label: "IR RX (IO5)", value: "5" },
+            { label: "GPIO6 (IO6)", value: "6" },
+            { label: "GPIO7 (IO7)", value: "7" },
+            { label: "GPIO9 (IO9)", value: "9" },
+            { label: "CC1101 NSS (IO10)", value: "10" },
+            { label: "CC1101 MOSI (IO11)", value: "11" },
+            { label: "CC1101 SCK (IO12)", value: "12" },
+            { label: "CC1101 MISO (IO13)", value: "13" },
+            { label: "GPIO14 (IO14)", value: "14" },
+            { label: "GPIO15 (IO15)", value: "15" },
+            { label: "GPIO16 (IO16)", value: "16" }
+        ];
+
+        // Initialize selectedPin to first pin's value  
+        selectedPin = PINS[0].value;
+
+        function gpioRead() {
+            console.log("gpioRead called with selectedPin: " + selectedPin);
+            
+            if (!BLEService) {
+                resultText = "BLE Service not connected";
+                render();
+                return;
+            }
+            
+            try {
+                // Create GPIO read command: "gpio" + null + pin + 'R' + 0
+                let pinNumber = parseInt(selectedPin);
+                let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x52, 0x00]); // 'g','p','i','o',0,pin,'R',0
+                let response = BLEService.sendCommand(command, 2000);
+                
+                if (response && response.length > 0) {
+                    let state = response[0] !== 0;
+                    let pinInfo = PINS.find(p => p.value === selectedPin);
+                    let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
+                    resultText = "Read " + pinName + ": " + (state ? "HIGH" : "LOW");
+                } else {
+                    resultText = "GPIO read failed or timed out";
+                }
+                
+            } catch (error) {
+                resultText = "GPIO read error: " + error;
+            }
+            
+            render();
+        }
+
+        function gpioWriteHigh() {
+            gpioWrite(1);
+        }
+
+        function gpioWriteLow() {
+            gpioWrite(0);
+        }
+
+        function gpioWrite(value) {
+            console.log("gpioWrite called with value: " + value + " selectedPin: " + selectedPin);
+            
+            if (!BLEService) {
+                resultText = "BLE Service not connected";
+                render();
+                return;
+            }
+            
+            try {
+                // Create GPIO write command: "gpio" + null + pin + 'W' + value
+                let pinNumber = parseInt(selectedPin);
+                let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x57, value]); // 'g','p','i','o',0,pin,'W',value
+                let response = BLEService.sendCommand(command, 2000);
+                
+                if (response && response.length > 0) {
+                    let state = response[0] !== 0;
+                    let writeAction = value ? "HIGH" : "LOW";
+                    let pinInfo = PINS.find(p => p.value === selectedPin);
+                    let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
+                    let success = (state === (value !== 0));
+                    resultText = "Write " + writeAction + " to " + pinName + (success ? " successful" : " failed");
+                } else {
+                    resultText = "GPIO write failed or timed out";
+                }
+                
+            } catch (error) {
+                resultText = "GPIO write error: " + error;
+            }
+            
             render();
         }
 
         function render() {
-            UI.render(
-                UI.scroll({
-                    padding: 16,
-                    spacing: 16,
-                    children: [
-                        UI.column({
-                            spacing: 16,
-                            children: [
-                                UI.text({
-                                    text: "RFID Tools",
-                                    font: "title2",
-                                    fontWeight: "semibold"
-                                }),
-                                UI.text({
-                                    text: "Send quick read/write commands to nearby tags using the EMWaver RFID module.",
-                                    foregroundColor: "#6B7280"
-                                }),
-                                UI.textField({
-                                    label: "Block Address",
-                                    placeholder: "00",
-                                    value: state.blockAddress,
-                                    keyboard: "ascii",
-                                    autocapitalize: "none",
-                                    onChange: updateBlockAddress
-                                }),
-                                UI.picker({
-                                    label: "Authentication Mode",
-                                    style: "segmented",
-                                    selected: state.authMode,
-                                    options: [
-                                        { label: "Key A", value: "A" },
-                                        { label: "Key B", value: "B" }
-                                    ],
-                                    onChange: function(value) {
-                                        setState({ authMode: value });
-                                    }
-                                }),
-                                UI.column({
-                                    spacing: 8,
-                                    children: [
-                                        UI.text({ text: "Key (6 bytes)", font: "headline" }),
-                                        UI.grid({
-                                            columns: 3,
-                                            spacing: 8,
-                                            children: state.keyInputs.map(function(keyValue, index) {
-                                                return UI.textField({
-                                                    placeholder: "00",
-                                                    value: keyValue,
-                                                    keyboard: "ascii",
-                                                    autocapitalize: "none",
-                                                    onChange: function(nextValue) {
-                                                        updateKey(index, nextValue);
-                                                    }
-                                                });
-                                            })
-                                        })
-                                    ]
-                                }),
-                                UI.textEditor({
-                                    label: "Data (16 bytes)",
-                                    placeholder: "Enter 16 bytes of data (e.g. FF FF ...)",
-                                    value: state.data,
-                                    onChange: updateData
-                                }),
-                                UI.row({
-                                    spacing: 12,
-                                    children: [
-                                        UI.button({
-                                            label: "Read",
-                                            icon: "arrow.down.doc.fill",
-                                            backgroundColor: "#1D4ED8",
-                                            foregroundColor: "#FFFFFF",
-                                            cornerRadius: 10,
-                                            onTap: handleRead
-                                        }),
-                                        UI.button({
-                                            label: "Write",
-                                            icon: "arrow.up.doc.fill",
-                                            backgroundColor: "#15803D",
-                                            foregroundColor: "#FFFFFF",
-                                            cornerRadius: 10,
-                                            onTap: handleWrite
-                                        })
-                                    ]
-                                }),
-                                state.result ? UI.text({
-                                    text: state.result.text,
-                                    backgroundColor: state.result.kind === "info" ? "#DBEAFE" : "#DCFCE7",
-                                    foregroundColor: state.result.kind === "info" ? "#1D4ED8" : "#166534",
-                                    padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-                                    cornerRadius: 8
-                                }) : null
-                            ]
-                        })
-                    ]
-                })
-            );
+            UI.render(UI.column({
+                padding: 16,
+                spacing: 16,
+                children: [
+                    UI.text({ text: "GPIO Control", font: "title2", fontWeight: "semibold" }),
+                    
+                    // Pin selection
+                    UI.text({ text: "Select Pin", fontWeight: "medium" }),
+                    UI.picker({
+                        style: "menu",
+                        selected: String(selectedPin),
+                        options: PINS,
+                        onChange: function(value) {
+                            selectedPin = value;
+                            console.log("Pin changed to value: " + selectedPin + " (type: " + typeof value + ")");
+                        }
+                    }),
+                    
+                    // GPIO operations
+                    UI.row({
+                        spacing: 12,
+                        children: [
+                            UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: gpioRead }),
+                            UI.button({ label: "Write HIGH", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: gpioWriteHigh }),
+                            UI.button({ label: "Write LOW", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: gpioWriteLow })
+                        ]
+                    }),
+                    
+                    // Result display
+                    resultText ? UI.text({
+                        text: resultText,
+                        backgroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#DCFCE7" : "#FEE2E2",
+                        foregroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#166534" : "#DC2626",
+                        padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                        cornerRadius: 8
+                    }) : null
+                ]
+            }));
         }
 
         render();

@@ -715,8 +715,8 @@ public class WaveletsFragment extends Fragment {
         ensureAssetScript("wavelet_demo.js");
         ensureAssetScript("wavelet_rfid.js");
         ensureAssetScript("wavelet_gpio.js");
-        ensureScriptExists("cc1101_radio_console.js", buildCc1101RadioConsoleScript());
-        ensureScriptExists("hello_world_usb.js", buildDefaultBadUsbScript());
+        ensureAssetScript("cc1101_radio_console.js");
+        ensureAssetScript("hello_world_usb.js");
     }
 
     private void ensureScriptExists(String name, String content) {
