@@ -10,6 +10,7 @@ import android.text.InputType;
 import android.text.TextWatcher;
 import android.text.method.PasswordTransformationMethod;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -419,11 +420,14 @@ public final class WaveletRenderView extends FrameLayout {
             applyCommonStyles(group, props);
             return group;
         } else {
+            final String tag = "WaveletRenderView";
+            Log.d(tag, "picker selectedValue=" + selectedValue + " options=" + options.size());
             Spinner spinner = new Spinner(getContext());
             List<String> labels = new ArrayList<>();
             int selectedIndex = 0;
             for (int i = 0; i < options.size(); i++) {
                 PickerOption option = options.get(i);
+                Log.d(tag, "picker option[" + i + "] value=" + option.value + " label=" + option.label + " type=" + (option.value != null ? option.value.getClass().getSimpleName() : "null"));
                 labels.add(option.label);
                 if (option.value.equals(selectedValue)) {
                     selectedIndex = i;
@@ -433,15 +437,21 @@ public final class WaveletRenderView extends FrameLayout {
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
             spinner.setAdapter(adapter);
             spinner.setSelection(selectedIndex, false);
+            Log.d(tag, "picker resolved selectedIndex=" + selectedIndex);
             if (token != null) {
                 final boolean[] suppress = {true};
+                final int initialIndex = selectedIndex;
                 spinner.setOnItemSelectedListener(new SimpleItemSelectedListener() {
                     @Override
                     public void onItemSelected(int position) {
                         if (suppress[0]) {
                             suppress[0] = false;
-                            return;
+                            if (position == initialIndex) {
+                                Log.d(tag, "picker initial selection event ignored");
+                                return;
+                            }
                         }
+                        Log.d(tag, "picker onItemSelected position=" + position + " value=" + options.get(position).value);
                         dispatchEvent(token, Collections.singletonList(options.get(position).value));
                     }
                 });
