@@ -8,14 +8,17 @@ final class WaveletEngine {
     private var globalBindings: [String: Any] = [:]
     private var printHandler: ((String) -> Void)?
     private var renderHandler: ((WaveletTree) -> Void)?
+    private var dialogHandler: ((String, String) -> Void)?
 
     init() {}
 
     func setup(printHandler: @escaping (String) -> Void,
                renderHandler: @escaping (WaveletTree) -> Void,
+               dialogHandler: ((String, String) -> Void)? = nil,
                bindings: [String: Any] = [:]) {
         self.printHandler = printHandler
         self.renderHandler = renderHandler
+        self.dialogHandler = dialogHandler
         self.globalBindings = bindings
         executionQueue.sync {
             Swift.print("[WaveletEngine] Setup requested")
@@ -92,6 +95,15 @@ final class WaveletEngine {
                 return JSValue(nullIn: context)
             }
             context?.setObject(sendCommandBlock, forKeyedSubscript: "_manualSendCommand" as NSString)
+
+            let dialogBlock: @convention(block) (String, String) -> Void = { [weak self] title, message in
+                guard let self else { return }
+                self.printHandler?("[WaveletEngine] dialog requested: \(title)")
+                DispatchQueue.main.async {
+                    self.dialogHandler?(title, message)
+                }
+            }
+            context?.setObject(dialogBlock, forKeyedSubscript: "_waveletShowDialog" as NSString)
 
             if let context {
                 injectDSL(into: context)
@@ -270,9 +282,86 @@ private extension WaveletEngine {
                 }
             },
             log(message) {
-                _waveletPrint(String(message));
+                var text = String(message);
+                if (typeof WaveletConsole !== 'undefined' && WaveletConsole && typeof WaveletConsole.append === 'function') {
+                    WaveletConsole.append(text);
+                }
+                _waveletPrint(text);
             }
         };
+
+        if (typeof WaveletConsole === 'undefined') {
+            var WaveletConsole = (function () {
+                var lines = [];
+                var subscribers = [];
+                var limit = 500;
+
+                var notify = function () {
+                    for (var i = 0; i < subscribers.length; i += 1) {
+                        try {
+                            subscribers[i](lines.slice());
+                        } catch (err) {
+                            // ignore subscriber errors
+                        }
+                    }
+                };
+
+                var trim = function () {
+                    if (lines.length > limit) {
+                        lines.splice(0, lines.length - limit);
+                    }
+                };
+
+                var api = {
+                    setLimit: function (value) {
+                        if (typeof value === 'number' && value > 0) {
+                            limit = value;
+                            trim();
+                        }
+                        return limit;
+                    },
+                    append: function (message) {
+                        lines.push(String(message));
+                        trim();
+                        notify();
+                    },
+                    clear: function () {
+                        lines.length = 0;
+                        notify();
+                    },
+                    subscribe: function (fn) {
+                        if (typeof fn !== 'function') {
+                            return function () {};
+                        }
+                        subscribers.push(fn);
+                        try {
+                            fn(lines.slice());
+                        } catch (err) {
+                            // ignore initial subscriber error
+                        }
+                        return function () {
+                            var index = subscribers.indexOf(fn);
+                            if (index >= 0) {
+                                subscribers.splice(index, 1);
+                            }
+                        };
+                    },
+                    lines: function () {
+                        return lines.slice();
+                    },
+                    text: function () {
+                        return lines.join('\\n');
+                    },
+                    view: function (props) {
+                        var assigned = props ? Object.assign({}, props) : {};
+                        assigned.text = api.text();
+                        return UI.logViewer(assigned);
+                    }
+                };
+
+                return api;
+            })();
+        }
 
         if (typeof print === 'undefined') {
             var print = function () {
@@ -318,6 +407,12 @@ private extension WaveletEngine {
         if (typeof createByteArray === 'undefined') {
             var createByteArray = function (jsArray) {
                 return _waveletCreateByteArray(jsArray);
+            };
+        }
+
+        if (typeof dialog === 'undefined') {
+            var dialog = function (title, message) {
+                _waveletShowDialog(String(title || ''), String(message || ''));
             };
         }
 

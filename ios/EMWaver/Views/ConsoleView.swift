@@ -263,6 +263,12 @@ struct KeyboardToolbarTextEditor: View {
     }
 }
 
+private struct WaveletDialog: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 struct ConsoleView: View {
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
@@ -284,6 +290,7 @@ struct ConsoleView: View {
     @State private var newScriptName: String = ""
     @State private var activeWaveletTree: WaveletTree?
     @State private var showingPreview: Bool = false
+    @State private var waveletDialog: WaveletDialog?
 
     // Auto-save timer
     @State private var autoSaveTimer: Timer?
@@ -361,6 +368,13 @@ struct ConsoleView: View {
         }
         .sheet(isPresented: $showingSettingsSheet) {
             SettingsSheet()
+        }
+        .alert(item: $waveletDialog) { dialog in
+            Alert(
+                title: Text(dialog.title.isEmpty ? "Wavelet" : dialog.title),
+                message: Text(dialog.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .onAppear {
             let appearance = UINavigationBarAppearance()
@@ -1017,6 +1031,8 @@ struct ConsoleView: View {
             if !self.showingPreview {
                 self.showingPreview = true
             }
+        }, dialogHandler: { title, message in
+            self.waveletDialog = WaveletDialog(title: title, message: message)
         }, bindings: buildBindings())
         waveletEngine = engine
         Swift.print("[Wavelet] WaveletEngine initialized successfully")
