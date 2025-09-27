@@ -309,10 +309,48 @@ public final class WaveletEngine {
         }
         Object[] converted = new Object[arguments.size()];
         for (int i = 0; i < arguments.size(); i++) {
-            Object value = arguments.get(i);
-            converted[i] = Context.javaToJS(value, scope);
+            converted[i] = convertArgument(cx, arguments.get(i));
         }
         return converted;
+    }
+
+    private Object convertArgument(Context cx, Object value) {
+        if (value == null) {
+            return Context.getUndefinedValue();
+        }
+        if (value instanceof CharSequence) {
+            return value.toString();
+        }
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        if (value instanceof Boolean) {
+            return value;
+        }
+        if (value instanceof List<?>) {
+            List<?> list = (List<?>) value;
+            Object[] items = new Object[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                items[i] = convertArgument(cx, list.get(i));
+            }
+            return cx.newArray(scope, items);
+        }
+        if (value instanceof Map<?, ?>) {
+            @SuppressWarnings("unchecked")
+            Map<Object, Object> map = (Map<Object, Object>) value;
+            Scriptable object = cx.newObject(scope);
+            for (Map.Entry<Object, Object> entry : map.entrySet()) {
+                Object key = entry.getKey();
+                if (key != null) {
+                    ScriptableObject.putProperty(object, String.valueOf(key), convertArgument(cx, entry.getValue()));
+                }
+            }
+            return object;
+        }
+        if (value.getClass().isArray()) {
+            return Context.javaToJS(value, scope);
+        }
+        return Context.javaToJS(value, scope);
     }
 
     private WaveletTree buildTreeFromJs(Scriptable value) {
