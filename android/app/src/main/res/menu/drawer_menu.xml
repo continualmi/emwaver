@@ -26,10 +26,7 @@
             android:icon="@drawable/ic_console_black_24dp"
             android:title="Wavelets" />
 
-        <item
-            android:id="@+id/navigation_rfid"
-            android:icon="@drawable/beacon_svgrepo_com"
-            android:title="RFID" />
+
     </group>
 
     <item
