@@ -385,7 +385,7 @@ private struct WaveletDialog: Identifiable {
     let message: String
 }
 
-struct ConsoleView: View {
+struct WaveletsView: View {
     @EnvironmentObject var bleManager: BLEManager
     @State private var cc1101: CC1101?
     @State private var jsEngine: JavaScriptEngine?
@@ -439,7 +439,7 @@ struct ConsoleView: View {
                 .padding()
             }
         }
-        .navigationTitle(showingPreview ? (currentScriptName ?? "Wavelet Preview") : "Console")
+        .navigationTitle(showingPreview ? (currentScriptName ?? "Wavelet Preview") : "Wavelets")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -2272,7 +2272,7 @@ struct ScriptDocument: FileDocument {
 
 #Preview {
     NavigationView {
-        ConsoleView()
+        WaveletsView()
             .environmentObject(BLEManager())
     }
 } 
