@@ -75,7 +75,6 @@ final class WaveletEngine {
             let sendCommandBlock: @convention(block) (JSValue, JSValue) -> JSValue? = { [weak self] commandValue, timeoutValue in
                 guard let context = commandValue.context else { return nil }
                 
-                // Find BLEService wrapper from global bindings
                 if let bleServiceWrapper = self?.globalBindings["BLEService"] as? BLEServiceWrapper,
                    let command = commandValue.toObject() as? Data,
                    timeoutValue.isNumber {
@@ -84,7 +83,9 @@ final class WaveletEngine {
                     self?.printHandler?("[BLEServiceWrapper] sendCommand called via manual block with \(command.count) bytes, timeout: \(timeout)")
                     
                     if let result = bleServiceWrapper.sendCommand(command, timeout: Int(timeout)) {
-                        return JSValue(object: result, in: context)
+                        let bytes = Array(result)
+                        self?.printHandler?("[BLEServiceWrapper] manual block returning \(bytes.count) bytes: \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))")
+                        return JSValue(object: bytes, in: context)
                     }
                 }
                 
