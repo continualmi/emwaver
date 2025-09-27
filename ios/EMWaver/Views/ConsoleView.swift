@@ -277,6 +277,7 @@ struct ConsoleView: View {
     @State private var showingFileExporter = false
     @State private var showingURLPrompt = false
     @State private var downloadURL = ""
+    @State private var showingSettingsSheet = false
     
     var body: some View {
         VStack(spacing: 12) {
@@ -344,6 +345,9 @@ struct ConsoleView: View {
             ToolbarItem(placement: .principal) {
                 EmptyView()
             }
+        }
+        .sheet(isPresented: $showingSettingsSheet) {
+            SettingsSheet()
         }
         .onAppear {
             let appearance = UINavigationBarAppearance()
@@ -561,6 +565,12 @@ struct ConsoleView: View {
             
             Button("Download from URL") {
                 showingURLPrompt = true
+            }
+
+            Divider()
+
+            Button("Settings") {
+                showingSettingsSheet = true
             }
         } label: {
             Image(systemName: "ellipsis.circle")

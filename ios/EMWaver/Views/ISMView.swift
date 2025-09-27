@@ -26,6 +26,7 @@ struct ISMView: View {
     @State private var registerLoadingProgress: Double = 0.0
     @State private var loadingRegistersCancelled: Bool = false
     @State private var loadingAlertMessage: String = "Loading CC1101 parameters..."
+    @State private var showingSettingsSheet = false
     
     // Define modulation types
     private let modulationFormats = ["2-FSK", "GFSK", "ASK/OOK", "4-FSK", "MSK"]
@@ -121,16 +122,9 @@ struct ISMView: View {
             // Cancel any ongoing register loading
             loadingRegistersCancelled = true
         }
-        // Only setup CC1101 when both view is active AND we get connected
         .onChange(of: bleManager.isConnected) { connected in
             if connected && isViewActive {
                 setupCC1101()
-            }
-        }
-        // Alert for loading parameters
-        .alert(loadingAlertMessage, isPresented: $showLoadingAlert) {
-            Button("Cancel", role: .cancel) {
-                loadingRegistersCancelled = true
             }
         }
         .onChange(of: showLoadingAlert) { show in
@@ -141,13 +135,27 @@ struct ISMView: View {
                 loadAllSettings()
             }
         }
+        .navigationTitle("ISM")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button("Settings") {
+                        showingSettingsSheet = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("Done") {
                     focusedField = nil
                 }
             }
+        }
+        .sheet(isPresented: $showingSettingsSheet) {
+            SettingsSheet()
         }
     }
     

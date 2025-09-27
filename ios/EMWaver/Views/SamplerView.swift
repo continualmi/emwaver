@@ -232,6 +232,7 @@ struct SamplerView: View {
     @State private var exportFileName = "signal.raw"
     
     // Match Android's PINS array exactly
+    @State private var showingSettingsSheet = false
     let PINS = [
         "GPIO0 (IO0)",
         "CC1101 GDO0 (IO1)",
@@ -456,6 +457,10 @@ struct SamplerView: View {
                         }) {
                             Label("Export to Files", systemImage: "square.and.arrow.up")
                         }
+                        Divider()
+                        Button("Settings") {
+                            showingSettingsSheet = true
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .imageScale(.large)
@@ -516,6 +521,9 @@ struct SamplerView: View {
                 }
             } message: {
                 Text("Enter a name for the signal file")
+            }
+            .sheet(isPresented: $showingSettingsSheet) {
+                SettingsSheet()
             }
         }
     }

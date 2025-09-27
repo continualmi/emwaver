@@ -31,6 +31,7 @@ struct ButtonsView: View {
     @State private var editingButtonIndex: Int?
     @State private var showingExportSheet = false
     @State private var exportContent: String = ""
+    @State private var showingSettingsSheet = false
     
     // IRDB loading states
     @State private var showingIRDBAlert = false
@@ -77,6 +78,8 @@ struct ButtonsView: View {
                         Divider()
                         Button("Load from IRDB", action: showLoadFromIRDBAlert)
                         Button("Load from Storage", action: loadFromStorage)
+                        Divider()
+                        Button("Settings", action: { showingSettingsSheet = true })
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -192,6 +195,9 @@ struct ButtonsView: View {
             }
             .sheet(isPresented: $showingExportSheet) {
                 ExportView(content: exportContent)
+            }
+            .sheet(isPresented: $showingSettingsSheet) {
+                SettingsSheet()
             }
             .actionSheet(isPresented: $showingActionSheet) {
                 ActionSheet(
