@@ -10,17 +10,17 @@
     <color name="colorPrimaryDark">#004C8C</color>
     <color name="colorAccent">#0288D1</color>
 
-    <color name="surfaceBackground">#F5F5F5</color>
-    <color name="surfaceCard">#FFFFFF</color>
-    <color name="surfaceMuted">#E0E0E0</color>
+    <color name="surfaceBackground">#121212</color>
+    <color name="surfaceCard">#1E1E1E</color>
+    <color name="surfaceMuted">#1A1A1A</color>
 
-    <color name="textPrimary">#1F1F1F</color>
-    <color name="textSecondary">#4F4F4F</color>
+    <color name="textPrimary">#F2F2F2</color>
+    <color name="textSecondary">#B3B3B3</color>
 
-    <color name="accentBlue">#01579B</color>
-    <color name="accentBlueDark">#004C8C</color>
+    <color name="accentBlue">#4C9FD9</color>
+    <color name="accentBlueDark">#1F7BB6</color>
 
     <color name="monitorBackground">#000000</color>
-    <color name="monitorText">#00FF00</color>
-    <color name="codeText">#003D99</color>
+    <color name="monitorText">#6CFF7F</color>
+    <color name="codeText">#8AB4F8</color>
 </resources>

@@ -36,6 +36,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
@@ -503,20 +504,42 @@ public class SamplerFragment extends Fragment {
     }
 
     public void initChart() {
+        if (chart == null || !isAdded()) {
+            return;
+        }
+
         // Configure the chart (optional, based on your needs)
         chart.getDescription().setEnabled(false);
         chart.setTouchEnabled(true);
         chart.setPinchZoom(true);
         chart.setScaleYEnabled(false); // Disable Y-axis scaling
         chart.setScaleXEnabled(true);  // Enable X-axis scaling
+        chart.setDrawGridBackground(false);
+
+        int textColor = ContextCompat.getColor(requireContext(), R.color.textPrimary);
+        int secondaryTextColor = ContextCompat.getColor(requireContext(), R.color.textSecondary);
+        int gridColor = ContextCompat.getColor(requireContext(), R.color.surfaceMuted);
+        int surfaceColor = ContextCompat.getColor(requireContext(), R.color.surfaceCard);
+
+        chart.setNoDataTextColor(textColor);
+        chart.setBackgroundColor(surfaceColor);
+        chart.getLegend().setTextColor(textColor);
 
         XAxis xAxis = chart.getXAxis();
         xAxis.setAxisMinimum(chartMinX); // Start at 0 microseconds
         xAxis.setAxisMaximum(chartMaxX); // End at the maximum X value
+        xAxis.setTextColor(textColor);
+        xAxis.setAxisLineColor(textColor);
+        xAxis.setGridColor(gridColor);
+        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
 
         YAxis leftAxis = chart.getAxisLeft();
         leftAxis.setAxisMinimum(-128); // Set minimum value for the left Y-axis
         leftAxis.setAxisMaximum(256+128); // Set maximum value for the left Y-axis
+        leftAxis.setTextColor(textColor);
+        leftAxis.setAxisLineColor(textColor);
+        leftAxis.setGridColor(gridColor);
+        leftAxis.setZeroLineColor(secondaryTextColor);
 
         YAxis rightAxis = chart.getAxisRight();
         rightAxis.setEnabled(false); // This will hide the right Y-axis
@@ -553,8 +576,20 @@ public class SamplerFragment extends Fragment {
         LineDataSet lineDataSet = new LineDataSet(entries, "Signal");
         lineDataSet.setDrawValues(false);
         lineDataSet.setLineWidth(3f);
-        lineDataSet.setColor(Color.parseColor("#0087FF"));
-        lineDataSet.setCircleColor(Color.parseColor("#0087FF"));
+        Context context = getContext();
+        int accentColor = Color.parseColor("#01579B");
+        int accentDark = Color.parseColor("#004C8C");
+        if (context == null && chart != null) {
+            context = chart.getContext();
+        }
+        if (context != null) {
+            accentColor = ContextCompat.getColor(context, R.color.accentBlue);
+            accentDark = ContextCompat.getColor(context, R.color.accentBlueDark);
+        }
+        lineDataSet.setColor(accentColor);
+        lineDataSet.setCircleColor(accentColor);
+        lineDataSet.setHighLightColor(accentDark);
+        lineDataSet.setDrawCircles(false);
 
         // If there is exactly one pulse (two transitions), update the legend
         if (transitionCount == 2) {
