@@ -39,3 +39,19 @@
 - Plan moderation + update channel for third-party Wavelets.
 - Document CLI tooling (`emwaver wavelet build`, `emwaver wavelet push`).
 - Determine UX for selecting/activating Wavelets and fallbacks when none are installed.
+
+## Next-Gen Runtime Goals
+- **Capability Graph**: expose all firmware bridges (BLE, IR, CC1101), sandbox filesystem, network client, diagnostics, and task runners through a unified capability registry that Wavelets and AI agents can invoke without bespoke bindings.
+- **Sandboxed Filesystem & Data Providers**: provide scoped storage APIs so scripts can persist captured signals, read/write payloads, and access datasets (e.g., IR libraries) via capability providers instead of hard-coded databases.
+- **Diagnostics Bus & Console**: deliver structured logs/warnings/errors from Wavelet execution into an in-app console with metadata that LLM tooling can consume for automated debugging.
+- **Hot Reload Pipeline**: enable fast Wavelet reloads while preserving hardware sessions when safe, to support on-the-fly edits from desktop tooling or AI-generated scripts.
+- **Security Sandbox**: enforce per-capability permissions and policy hooks to keep the expanded runtime safe while still feeling like a “Wavelet OS.”
+
+## UI/UX Overhaul
+- Replace the Buttons fragment with an AI-powered Wavelet workbench that:
+  - Provides a chat-centric interface for generating/editing Wavelet scripts (e.g., IR remotes) via the capability layer.
+  - Streams diagnostics and diff previews, and coordinates with a cloud code-interpreter when heavy signal analysis is required.
+- Redesign the Wavelets fragment so it’s a browsing surface:
+  - Tap opens the Wavelet preview only.
+  - Long-press surfaces a dialog with source code and advanced actions (no inline editing).
+
