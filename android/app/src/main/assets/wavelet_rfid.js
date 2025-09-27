@@ -89,11 +89,22 @@ function processReadResponse(response) {
 }
 
 function getTagType(byte0, byte1) {
-    // Simplified tag type detection
-    if (byte0 === 0x44 && byte1 === 0x00) return "MIFARE Classic 1K";
-    if (byte0 === 0x42 && byte1 === 0x00) return "MIFARE Classic 4K";
-    if (byte0 === 0x44 && byte1 === 0x03) return "MIFARE DESFire";
-    return "Unknown (" + ((byte0 & 0xFF).toString(16).toUpperCase().padStart(2, '0')) + " " + ((byte1 & 0xFF).toString(16).toUpperCase().padStart(2, '0')) + ")";
+    // Exact tag type detection from original fragment
+    let tagType = ((byte0 & 0xFF) << 8) | (byte1 & 0xFF);
+    switch (tagType) {
+        case 0x4400:
+            return "Mifare_UltraLight";
+        case 0x0400:
+            return "Mifare_One(S50)";
+        case 0x0200:
+            return "Mifare_One(S70)";
+        case 0x0800:
+            return "Mifare_Pro(X)";
+        case 0x4403:
+            return "Mifare_DESFire";
+        default:
+            return "Unknown";
+    }
 }
 
 function showError(errorMessage) {
@@ -270,19 +281,18 @@ function render() {
                     UI.text({ text: "RFID Tools", font: "title2", fontWeight: "semibold" }),
                     
                     // Block Address
+                    UI.text({ text: "Block Address", fontWeight: "medium" }),
                     UI.textField({
-                        label: "Block Address",
                         placeholder: "00",
                         value: blockAddress,
                         onChange: function(value) { 
                             blockAddress = value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 2);
-                            render(); 
                         }
                     }),
                     
                     // Authentication Mode
+                    UI.text({ text: "Authentication Mode", fontWeight: "medium" }),
                     UI.picker({
-                        label: "Authentication Mode",
                         style: "segmented",
                         selected: authMode,
                         options: [
@@ -291,7 +301,6 @@ function render() {
                         ],
                         onChange: function(value) {
                             authMode = value;
-                            render();
                         }
                     }),
                     
@@ -309,7 +318,6 @@ function render() {
                                         value: keyValue,
                                         onChange: function(value) {
                                             keyInputs[index] = value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 2);
-                                            render();
                                         }
                                     });
                                 })
@@ -318,13 +326,12 @@ function render() {
                     }),
                     
                     // Combined data input
+                    UI.text({ text: "Data (16 bytes)", fontWeight: "medium" }),
                     UI.textEditor({
-                        label: "Data (16 bytes)",
                         placeholder: "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
                         value: combinedData,
                         onChange: function(value) {
                             combinedData = value.toUpperCase().replace(/[^0-9A-F ]/g, "");
-                            render();
                         }
                     }),
                     
