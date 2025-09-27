@@ -232,10 +232,10 @@ public final class WaveletEngine {
                 }
                 Object tokenObj = args[0];
                 Object fnObj = args[1];
-                if (!(tokenObj instanceof String) || !(fnObj instanceof Function)) {
+                if (tokenObj == null || !(fnObj instanceof Function)) {
                     return Context.getUndefinedValue();
                 }
-                String token = (String) tokenObj;
+                String token = String.valueOf(tokenObj);
                 Function fn = (Function) fnObj;
                 if (!token.isEmpty()) {
                     android.util.Log.d("WaveletEngine", "registering callback token=" + token);
@@ -286,6 +286,9 @@ public final class WaveletEngine {
 
         Map<String, Object> rawProps = extractProps(value);
         Map<WaveletEventType, String> handlers = extractHandlers(value, stableId, type);
+        if (!handlers.isEmpty()) {
+            rawProps = attachHandlerMetadata(rawProps, handlers);
+        }
         WaveletNodeProps props = new WaveletNodeProps(rawProps, handlers);
 
         List<WaveletNode> children = extractChildren(value, path, type);
@@ -301,6 +304,19 @@ public final class WaveletEngine {
         return new HashMap<>();
     }
 
+    private Map<String, Object> attachHandlerMetadata(Map<String, Object> props, Map<WaveletEventType, String> handlers) {
+        if (props == null || props.isEmpty() || handlers == null || handlers.isEmpty()) {
+            return props;
+        }
+        Map<String, Object> extended = new HashMap<>(props);
+        Map<String, String> serialized = new HashMap<>();
+        for (Map.Entry<WaveletEventType, String> entry : handlers.entrySet()) {
+            serialized.put(entry.getKey().getRawValue(), entry.getValue());
+        }
+        extended.put(WaveletNodeProps.HANDLER_METADATA_KEY, serialized);
+        return extended;
+    }
+
     private Map<WaveletEventType, String> extractHandlers(Scriptable value, String nodeId, WaveletNodeType type) {
         Object handlersObj = ScriptableObject.getProperty(value, "handlers");
         if (!(handlersObj instanceof Scriptable)) {
@@ -314,10 +330,12 @@ public final class WaveletEngine {
         Map<WaveletEventType, String> handlers = new HashMap<>();
         for (Object id : ids) {
             Object rawValue = scriptable.get(id instanceof String ? (String) id : String.valueOf(id), scriptable);
-            if (rawValue instanceof String) {
-                WaveletEventType eventType = WaveletEventType.fromRaw(String.valueOf(id));
+            if (rawValue != null) {
+                String eventKey = String.valueOf(id);
+                String handlerToken = String.valueOf(rawValue);
+                WaveletEventType eventType = WaveletEventType.fromRaw(eventKey);
                 if (eventType != null) {
-                    handlers.put(eventType, (String) rawValue);
+                    handlers.put(eventType, handlerToken);
                 }
             }
         }

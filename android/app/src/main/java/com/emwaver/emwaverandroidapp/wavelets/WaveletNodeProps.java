@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 public final class WaveletNodeProps {
+    public static final String HANDLER_METADATA_KEY = "_waveletHandlers";
+
     private final Map<String, Object> raw;
     private final EnumMap<WaveletEventType, String> eventHandlers;
 
@@ -23,7 +25,21 @@ public final class WaveletNodeProps {
     }
 
     public String getHandlerToken(WaveletEventType type) {
-        return eventHandlers.get(type);
+        if (type == null) {
+            return null;
+        }
+        String token = eventHandlers.get(type);
+        if (token != null) {
+            return token;
+        }
+        Map<String, Object> metadata = getMap(HANDLER_METADATA_KEY);
+        if (metadata != null) {
+            Object fallback = metadata.get(type.getRawValue());
+            if (fallback != null) {
+                return String.valueOf(fallback);
+            }
+        }
+        return null;
     }
 
     public Map<WaveletEventType, String> getEventHandlers() {
