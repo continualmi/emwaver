@@ -49,8 +49,10 @@ struct ContentView: View {
                 }
                 .tag("Console")
                 
-                // "More" tab views - use different approach to avoid duplicate navigation bars
-                ISMView()
+                NavigationView {
+                    ISMView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
                     Label("ISM", systemImage: "memorychip")
                 }
@@ -67,12 +69,6 @@ struct ContentView: View {
                     Label("GPIO", systemImage: "cpu")
                 }
                 .tag("GPIO")
-                    
-                SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .tag("Settings")
             }
             .onAppear {
                 // Set up consistent navigation bar appearance

@@ -124,3 +124,21 @@ struct SettingsView: View {
         SettingsView()
     }
 }
+
+struct SettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            SettingsView()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+    }
+}

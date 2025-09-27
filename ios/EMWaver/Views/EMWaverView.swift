@@ -13,6 +13,7 @@ struct EMWaverView: View {
     // Add auto-connect state variables
     @State private var autoConnectEnabled = true
     @State private var isPerformingAutoConnect = false
+    @State private var showingSettingsSheet = false
 
     // Use a timer publisher without autoconnect
     private let timerPublisher = Timer.publish(every: 0.1, on: .main, in: .common)
@@ -189,6 +190,20 @@ struct EMWaverView: View {
         }
         .navigationTitle("EMWaver")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button("Settings") {
+                        showingSettingsSheet = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $showingSettingsSheet) {
+            SettingsSheet()
+        }
         .onAppear {
             // Start the timer when view appears
             timerSubscription = timerPublisher
