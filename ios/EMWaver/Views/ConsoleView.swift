@@ -19,6 +19,7 @@ extension UTType {
     // This isn't a direct method on CC1101, but we implement it in the wrapper
     // to provide a JavaScript-facing initialize() method
     @objc func initialize()
+    @objc var exposedConstants: [String: Any] { get }
     
     // Register operations
     @objc func writeReg(_ addr: UInt8, _ value: UInt8)
@@ -54,6 +55,117 @@ extension UTType {
 
 @objc class CC1101Wrapper: NSObject, CC1101JSExport {
     private let cc1101: CC1101
+    private static let constantMap: [String: Any] = {
+        var map: [String: Any] = [:]
+        map["IOCFG2"] = CC1101.IOCFG2
+        map["IOCFG1"] = CC1101.IOCFG1
+        map["IOCFG0"] = CC1101.IOCFG0
+        map["FIFOTHR"] = CC1101.FIFOTHR
+        map["SYNC1"] = CC1101.SYNC1
+        map["SYNC0"] = CC1101.SYNC0
+        map["PKTLEN"] = CC1101.PKTLEN
+        map["PKTCTRL1"] = CC1101.PKTCTRL1
+        map["PKTCTRL0"] = CC1101.PKTCTRL0
+        map["ADDR"] = CC1101.ADDR
+        map["CHANNR"] = CC1101.CHANNR
+        map["FSCTRL1"] = CC1101.FSCTRL1
+        map["FSCTRL0"] = CC1101.FSCTRL0
+        map["FREQ2"] = CC1101.FREQ2
+        map["FREQ1"] = CC1101.FREQ1
+        map["FREQ0"] = CC1101.FREQ0
+        map["MDMCFG4"] = CC1101.MDMCFG4
+        map["MDMCFG3"] = CC1101.MDMCFG3
+        map["MDMCFG2"] = CC1101.MDMCFG2
+        map["MDMCFG1"] = CC1101.MDMCFG1
+        map["MDMCFG0"] = CC1101.MDMCFG0
+        map["DEVIATN"] = CC1101.DEVIATN
+        map["MCSM2"] = CC1101.MCSM2
+        map["MCSM1"] = CC1101.MCSM1
+        map["MCSM0"] = CC1101.MCSM0
+        map["FOCCFG"] = CC1101.FOCCFG
+        map["BSCFG"] = CC1101.BSCFG
+        map["AGCCTRL2"] = CC1101.AGCCTRL2
+        map["AGCCTRL1"] = CC1101.AGCCTRL1
+        map["AGCCTRL0"] = CC1101.AGCCTRL0
+        map["WOREVT1"] = CC1101.WOREVT1
+        map["WORCTRL"] = CC1101.WORCTRL
+        map["FREND1"] = CC1101.FREND1
+        map["FREND0"] = CC1101.FREND0
+        map["FSCAL3"] = CC1101.FSCAL3
+        map["FSCAL2"] = CC1101.FSCAL2
+        map["FSCAL1"] = CC1101.FSCAL1
+        map["FSCAL0"] = CC1101.FSCAL0
+        map["RCCTRL1"] = CC1101.RCCTRL1
+        map["RCCTRL0"] = CC1101.RCCTRL0
+        map["FSTEST"] = CC1101.FSTEST
+        map["PTEST"] = CC1101.PTEST
+        map["AGCTEST"] = CC1101.AGCTEST
+        map["TEST2"] = CC1101.TEST2
+        map["TEST1"] = CC1101.TEST1
+        map["TEST0"] = CC1101.TEST0
+        map["SRES"] = CC1101.SRES
+        map["SFSTXON"] = CC1101.SFSTXON
+        map["SXOFF"] = CC1101.SXOFF
+        map["SCAL"] = CC1101.SCAL
+        map["SRX"] = CC1101.SRX
+        map["STX"] = CC1101.STX
+        map["SIDLE"] = CC1101.SIDLE
+        map["SAFC"] = CC1101.SAFC
+        map["SWOR"] = CC1101.SWOR
+        map["SPWD"] = CC1101.SPWD
+        map["SFRX"] = CC1101.SFRX
+        map["SFTX"] = CC1101.SFTX
+        map["SWORRST"] = CC1101.SWORRST
+        map["SNOP"] = CC1101.SNOP
+        map["PARTNUM"] = CC1101.PARTNUM
+        map["VERSION"] = CC1101.VERSION
+        map["FREQEST"] = CC1101.FREQEST
+        map["LQI"] = CC1101.LQI
+        map["RSSI"] = CC1101.RSSI
+        map["MARCSTATE"] = CC1101.MARCSTATE
+        map["WORTIME1"] = CC1101.WORTIME1
+        map["WORTIME0"] = CC1101.WORTIME0
+        map["PKTSTATUS"] = CC1101.PKTSTATUS
+        map["VCO_VC_DAC"] = CC1101.VCO_VC_DAC
+        map["TXBYTES"] = CC1101.TXBYTES
+        map["RXBYTES"] = CC1101.RXBYTES
+        map["PATABLE"] = CC1101.PATABLE
+        map["TXFIFO"] = CC1101.TXFIFO
+        map["RXFIFO"] = CC1101.RXFIFO
+        map["MOD_2FSK"] = CC1101.MOD_2FSK
+        map["MOD_GFSK"] = CC1101.MOD_GFSK
+        map["MOD_ASK"] = CC1101.MOD_ASK
+        map["MOD_4FSK"] = CC1101.MOD_4FSK
+        map["MOD_MSK"] = CC1101.MOD_MSK
+        map["WRITE_BURST"] = CC1101.WRITE_BURST
+        map["READ_SINGLE"] = CC1101.READ_SINGLE
+        map["READ_BURST"] = CC1101.READ_BURST
+        map["BYTES_IN_RXFIFO"] = CC1101.BYTES_IN_RXFIFO
+        map["GDO_INPUT"] = CC1101.GDO_INPUT
+        map["GDO_OUTPUT"] = CC1101.GDO_OUTPUT
+        map["GDO_0"] = CC1101.GDO_0
+        map["GDO_2"] = CC1101.GDO_2
+        map["POWER_LEVELS"] = CC1101.POWER_LEVELS
+        map["MODE_PACKET"] = CC1101.MODE_PACKET
+        map["MODE_CONTINUOUS"] = CC1101.MODE_CONTINUOUS
+        map["SYNC_MODE_NONE"] = CC1101.SYNC_MODE_NONE
+        map["SYNC_MODE_15_16"] = CC1101.SYNC_MODE_15_16
+        map["SYNC_MODE_16_16"] = CC1101.SYNC_MODE_16_16
+        map["SYNC_MODE_30_32"] = CC1101.SYNC_MODE_30_32
+        map["SYNC_MODE_NONE_CS"] = CC1101.SYNC_MODE_NONE_CS
+        map["SYNC_MODE_15_16_CS"] = CC1101.SYNC_MODE_15_16_CS
+        map["SYNC_MODE_16_16_CS"] = CC1101.SYNC_MODE_16_16_CS
+        map["SYNC_MODE_30_32_CS"] = CC1101.SYNC_MODE_30_32_CS
+        map["POWER_MINUS_30_DBM"] = CC1101.POWER_MINUS_30_DBM
+        map["POWER_MINUS_20_DBM"] = CC1101.POWER_MINUS_20_DBM
+        map["POWER_MINUS_15_DBM"] = CC1101.POWER_MINUS_15_DBM
+        map["POWER_MINUS_10_DBM"] = CC1101.POWER_MINUS_10_DBM
+        map["POWER_0_DBM"] = CC1101.POWER_0_DBM
+        map["POWER_5_DBM"] = CC1101.POWER_5_DBM
+        map["POWER_7_DBM"] = CC1101.POWER_7_DBM
+        map["POWER_10_DBM"] = CC1101.POWER_10_DBM
+        return map
+    }()
     
     init(cc1101: CC1101) {
         self.cc1101 = cc1101
@@ -68,6 +180,10 @@ extension UTType {
         // Call init() in JavaScript, but we map it to a reset and setup sequence
         spiStrobe(0x30) // SRES - Reset chip
         Thread.sleep(forTimeInterval: 0.1) // Wait for reset to complete
+    }
+    
+    @objc var exposedConstants: [String: Any] {
+        CC1101Wrapper.constantMap
     }
     
     @objc func writeReg(_ addr: UInt8, _ value: UInt8) {
