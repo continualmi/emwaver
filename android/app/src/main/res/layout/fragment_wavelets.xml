@@ -4,19 +4,9 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".ui.console.ConsoleFragment"
     android:padding="8dp"
-    android:background="#E0E0E0">
-
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/mode_tab_layout"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        app:tabMode="fixed"
-        app:tabGravity="fill"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+    android:background="#E0E0E0"
+    tools:context=".ui.wavelets.WaveletsFragment">
 
     <TextView
         android:id="@+id/scripts_list_title"
@@ -28,7 +18,7 @@
         android:background="?attr/selectableItemBackground"
         android:drawableEnd="@drawable/ic_arrow_down_black"
         android:drawablePadding="8dp"
-        app:layout_constraintTop_toBottomOf="@id/mode_tab_layout"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
@@ -37,18 +27,18 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:maxHeight="150dp"
+        android:layout_marginTop="4dp"
         app:cardElevation="2dp"
         app:cardCornerRadius="4dp"
-        android:layout_marginTop="4dp"
         app:layout_constraintTop_toBottomOf="@id/scripts_list_title"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" >
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <ListView
             android:id="@+id/script_list_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@android:color/white"/>
+            android:background="@android:color/white" />
     </androidx.cardview.widget.CardView>
 
     <TextView
@@ -73,17 +63,19 @@
     <androidx.cardview.widget.CardView
         android:id="@+id/script_editor_card"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:maxHeight="200dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"
         app:cardElevation="2dp"
         app:cardCornerRadius="4dp"
-        android:layout_marginTop="4dp"
         app:layout_constraintTop_toBottomOf="@id/script_editor_title"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintBottom_toTopOf="@id/wavelet_container"
+        app:layout_constraintHeight_default="wrap"
+        app:layout_constraintHeight_percent="0.4">
 
         <ScrollView
-            android:id="@+id/scrollView2"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#FFFFFF">
@@ -96,7 +88,7 @@
                     android:id="@+id/jsCodeInput"
                     android:layout_width="wrap_content"
                     android:layout_height="match_parent"
-                    android:autofillHints="null"
+                    android:autofillHints=""
                     android:fontFamily="monospace"
                     android:gravity="start|top"
                     android:hint="// Your script here..."
@@ -113,56 +105,14 @@
         </ScrollView>
     </androidx.cardview.widget.CardView>
 
-    <TextView
-        android:id="@+id/console_monitor_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Output Console"
-        android:textAppearance="?attr/textAppearanceListItemSmall"
-        android:padding="8dp"
-        android:layout_marginTop="8dp"
-        android:background="?attr/selectableItemBackground"
-        android:drawableEnd="@drawable/ic_arrow_down_black"
-        android:drawablePadding="8dp"
-        app:layout_constraintTop_toBottomOf="@id/script_editor_card"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <androidx.cardview.widget.CardView
-        android:id="@+id/cardView"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:cardElevation="2dp"
-        app:cardCornerRadius="4dp"
-        android:layout_marginTop="4dp"
-        app:layout_constraintTop_toBottomOf="@id/console_monitor_title"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <ScrollView
-            android:id="@+id/consoleWindowScrollView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="#000000">
-
-            <TextView
-                android:id="@+id/consoleWindowText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="4dp"
-                android:scrollbars="vertical"
-                android:textColor="#00FF00"
-                android:fontFamily="monospace"/>
-        </ScrollView>
-    </androidx.cardview.widget.CardView>
-
     <FrameLayout
         android:id="@+id/wavelet_container"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:foregroundGravity="center"
+        android:layout_marginBottom="8dp"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@id/mode_tab_layout"
+        app:layout_constraintTop_toBottomOf="@id/script_editor_card"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -171,7 +121,7 @@
             android:id="@+id/wavelet_empty_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Render a wavelet from the Scripts tab to see it here."
+            android:text="Render a wavelet to preview it here."
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
             android:textColor="@android:color/darker_gray"
             android:gravity="center"
@@ -190,10 +140,9 @@
     </FrameLayout>
 
     <androidx.constraintlayout.widget.Group
-        android:id="@+id/scripts_group"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="visible"
-        app:constraint_referenced_ids="scripts_list_title,script_list_card,script_editor_title,script_editor_card,console_monitor_title,cardView" />
+        android:id="@+id/editor_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:constraint_referenced_ids="scripts_list_title,script_list_card,script_editor_title,script_editor_card" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

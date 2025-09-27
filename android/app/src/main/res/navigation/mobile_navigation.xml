@@ -25,10 +25,10 @@
         tools:layout="@layout/fragment_rfid" />
 
     <fragment
-        android:id="@+id/navigation_console"
-        android:name="com.emwaver.emwaverandroidapp.ui.console.ConsoleFragment"
-        android:label="Console"
-        tools:layout="@layout/fragment_console" />
+        android:id="@+id/navigation_wavelets"
+        android:name="com.emwaver.emwaverandroidapp.ui.wavelets.WaveletsFragment"
+        android:label="Wavelets"
+        tools:layout="@layout/fragment_wavelets" />
 
     <fragment
         android:id="@+id/navigation_sampler"
