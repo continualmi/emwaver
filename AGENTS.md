@@ -36,3 +36,11 @@ Write imperative, scoped commit subjects (`driver: fix cc1101 init`) and keep un
 
 ## Security & Configuration Notes
 Never commit credentials, BLE pairing keys, or Wi-Fi secrets; use Kconfig defaults or NVS at runtime. Mirror intentional configuration changes in `sdkconfig.ci` and document new persistent layouts in `docs/` so downstream tooling stays aligned.
+
+## Continuous Backend Single Sign-On
+- The `continuous-mattermost` fork (cloned under `/Users/luispl/continuous-mattermost`) runs the Continuous Society platform using Mattermost’s authentication stack.
+- Azure PostgreSQL flexible server `continuousocietysql` stores all Mattermost user accounts; Microsoft Entra ID (Azure AD) is enabled alongside password auth, with firewall rules granting access to the AKS cluster and developer IPs.
+- The AKS cluster `continuousocietycluster` (UK South) hosts the customized Mattermost deployment; once started it exposes the same API and database as the web UI.
+- All clients—web, desktop, and smartphone apps—should point to this server so accounts are shared across platforms. Native mobile SSO (OpenID/Office365/Entra) can be enabled by registering the mobile redirect URIs in Azure and updating `config.json`.
+- Deployment flow: GitHub Actions builds the Docker image and pushes to GHCR; manual `az webapp config container set` commands update the Free-tier Azure Web App (`emwaver-backend`) using the image tag and GHCR PAT (`GHCR_PAT`).
+- Whenever login requirements change (e.g., enforcing Entra-only auth, rotating secrets), update the Mattermost config stored in Kubernetes/`config.json` and ensure the mobile apps follow the same SSO endpoints.
