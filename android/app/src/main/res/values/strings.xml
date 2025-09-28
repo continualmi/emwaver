@@ -70,4 +70,5 @@
     <string name="login_button">Log in</string>
     <string name="login_error_missing_fields">Enter both email and password to continue.</string>
     <string name="login_logo_content_description">Continuous Society logo</string>
+    <string name="login_error_generic">Unable to log in. Please try again.</string>
 </resources>
