@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+def openAiApiKey = "REDACTED_OPENAI_PROJECT_KEY"
+def escapedOpenAiKey = openAiApiKey.replace("\\", "\\\\").replace('"', '\\"')
+
 android {
     namespace 'com.emwaver.emwaverandroidapp'
     compileSdk 35
@@ -14,6 +17,7 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "OPENAI_API_KEY", '"' + escapedOpenAiKey + '"'
     }
 
     buildTypes {
@@ -38,6 +42,7 @@ android {
     }
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 }
 

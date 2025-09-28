@@ -39,6 +39,7 @@
 - Plan moderation + update channel for third-party Wavelets.
 - Document CLI tooling (`emwaver wavelet build`, `emwaver wavelet push`).
 - Determine UX for selecting/activating Wavelets and fallbacks when none are installed.
+- Stand up a managed backend proxy for OpenAI usage with per-user auth, rate limits (5h / weekly caps), and app-issued tokens so API keys never ship in the APK; migrate Android client to that layer and drop direct curl usage.
 
 ## Next-Gen Runtime Goals
 - **Capability Graph**: expose all firmware bridges (BLE, IR, CC1101), sandbox filesystem, network client, diagnostics, and task runners through a unified capability registry that Wavelets and AI agents can invoke without bespoke bindings.
