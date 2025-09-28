@@ -40,6 +40,13 @@
 - Document CLI tooling (`emwaver wavelet build`, `emwaver wavelet push`).
 - Determine UX for selecting/activating Wavelets and fallbacks when none are installed.
 - Stand up a managed backend proxy for OpenAI usage with per-user auth, rate limits (5h / weekly caps), and app-issued tokens so API keys never ship in the APK; migrate Android client to that layer and drop direct curl usage.
+- System architecture targets:
+  - PostgreSQL: persist user data, Mattermost chat logs, and file metadata.
+  - Blob storage: hold user Wavelet scripts (`.js`) and captured signal `.raw` blobs.
+  - `emwaver-firmware` GitHub repo: source of ESP32 firmware plus CLI tool that can clone, sync, and push app assets.
+  - `emwaver` mobile app: hosts the custom agent fragment which talks to the backend; integrates MCP client for backend-driven file edits.
+  - `emwaver` backend: single entry point for app/CLI to interact with databases and blobs, exposing an MCP server so LLM agents can list/edit/create files securely.
+  - Continuous Identity Provider: acts as the IdP, with Mattermost federated via OIDC under the Continuous Society Platform.
 
 ## Next-Gen Runtime Goals
 - **Capability Graph**: expose all firmware bridges (BLE, IR, CC1101), sandbox filesystem, network client, diagnostics, and task runners through a unified capability registry that Wavelets and AI agents can invoke without bespoke bindings.
