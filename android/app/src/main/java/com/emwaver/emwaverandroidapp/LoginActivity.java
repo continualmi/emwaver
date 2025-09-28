@@ -34,6 +34,7 @@ public class LoginActivity extends AppCompatActivity {
     private TextView errorText;
     private ProgressBar progressBar;
     private Button loginButton;
+    private TextView createAccountText;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -48,8 +49,10 @@ public class LoginActivity extends AppCompatActivity {
         errorText = findViewById(R.id.text_error);
         progressBar = findViewById(R.id.progress_login);
         loginButton = findViewById(R.id.button_login);
+        createAccountText = findViewById(R.id.text_create_account);
 
         loginButton.setOnClickListener(v -> attemptLogin());
+        createAccountText.setOnClickListener(v -> openRegister());
     }
 
     private void attemptLogin() {
@@ -96,6 +99,11 @@ public class LoginActivity extends AppCompatActivity {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();
+    }
+
+    private void openRegister() {
+        Intent intent = new Intent(this, RegisterActivity.class);
+        startActivity(intent);
     }
 
     private void showError(String message) {

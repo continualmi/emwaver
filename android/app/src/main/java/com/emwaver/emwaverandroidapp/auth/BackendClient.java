@@ -112,6 +112,61 @@ public class BackendClient {
         }
     }
 
+    public LoginResult register(String email, String username, String password, String firstName, String lastName)
+            throws BackendException {
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("email", email);
+            payload.put("username", username);
+            payload.put("password", password);
+            if (!TextUtils.isEmpty(firstName)) {
+                payload.put("first_name", firstName);
+            }
+            if (!TextUtils.isEmpty(lastName)) {
+                payload.put("last_name", lastName);
+            }
+        } catch (JSONException e) {
+            throw new BackendException("Failed to build register payload", e);
+        }
+
+        RequestBody body = RequestBody.create(payload.toString(), JSON_MEDIA_TYPE);
+        Request request = new Request.Builder()
+                .url(baseUrl + "/auth/register")
+                .post(body)
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                String errorBody = response.body() != null ? response.body().string() : null;
+                String message = parseErrorMessage(errorBody);
+                if (TextUtils.isEmpty(message)) {
+                    message = "Registration failed with status " + response.code();
+                }
+                throw new BackendException(message);
+            }
+
+            if (response.body() == null) {
+                throw new BackendException("Empty response from server");
+            }
+
+            String bodyString = response.body().string();
+            try {
+                JSONObject json = new JSONObject(bodyString);
+                String accessToken = json.optString("access_token", null);
+                String refreshToken = json.optString("refresh_token", null);
+                JSONObject user = json.optJSONObject("user");
+                if (TextUtils.isEmpty(accessToken) || TextUtils.isEmpty(refreshToken) || user == null) {
+                    throw new BackendException("Malformed response from server");
+                }
+                return new LoginResult(accessToken, refreshToken, user);
+            } catch (JSONException e) {
+                throw new BackendException("Invalid response from server", e);
+            }
+        } catch (IOException e) {
+            throw new BackendException("Unable to reach backend", e);
+        }
+    }
+
     private String parseErrorMessage(String rawBody) {
         if (TextUtils.isEmpty(rawBody)) {
             return null;

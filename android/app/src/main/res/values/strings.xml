@@ -71,4 +71,16 @@
     <string name="login_error_missing_fields">Enter both email and password to continue.</string>
     <string name="login_logo_content_description">Continuous Society logo</string>
     <string name="login_error_generic">Unable to log in. Please try again.</string>
+    <string name="login_create_account_button">Create an account</string>
+    <string name="register_title">Create account</string>
+    <string name="register_description">Sign up with your email to start using EMWaver.</string>
+    <string name="register_email_hint">Email address</string>
+    <string name="register_username_hint">Username</string>
+    <string name="register_password_hint">Password</string>
+    <string name="register_first_name_hint">First name (optional)</string>
+    <string name="register_last_name_hint">Last name (optional)</string>
+    <string name="register_button">Create account</string>
+    <string name="register_error_missing_fields">Email, username, and password are required.</string>
+    <string name="register_error_generic">Unable to create account. Please try again.</string>
+    <string name="register_have_account">Already have an account? Sign in</string>
 </resources>

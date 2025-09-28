@@ -52,6 +52,11 @@
                 android:value=".MainActivity" />
         </activity>
         <activity
+            android:name=".RegisterActivity"
+            android:label="@string/register_title"
+            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
+            android:exported="false" />
+        <activity
             android:name=".LoginActivity"
             android:label="@string/login_title"
             android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
