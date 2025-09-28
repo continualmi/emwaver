@@ -12,7 +12,9 @@ import android.text.TextUtils;
 public class AuthenticationManager {
 
     private static final String PREF_NAME = "auth_prefs";
-    private static final String KEY_SESSION_TOKEN = "session_token";
+    private static final String KEY_ACCESS_TOKEN = "access_token";
+    private static final String KEY_REFRESH_TOKEN = "refresh_token";
+    private static final String KEY_USER_JSON = "user_json";
 
     private static AuthenticationManager instance;
 
@@ -31,18 +33,34 @@ public class AuthenticationManager {
     }
 
     public boolean isLoggedIn() {
-        return !TextUtils.isEmpty(sharedPreferences.getString(KEY_SESSION_TOKEN, ""));
+        return !TextUtils.isEmpty(sharedPreferences.getString(KEY_ACCESS_TOKEN, ""));
     }
 
-    public void saveSession(String token) {
-        sharedPreferences.edit().putString(KEY_SESSION_TOKEN, token).apply();
+    public void saveSession(String accessToken, String refreshToken, String userJson) {
+        sharedPreferences.edit()
+                .putString(KEY_ACCESS_TOKEN, accessToken)
+                .putString(KEY_REFRESH_TOKEN, refreshToken)
+                .putString(KEY_USER_JSON, userJson)
+                .apply();
     }
 
     public void clearSession() {
-        sharedPreferences.edit().remove(KEY_SESSION_TOKEN).apply();
+        sharedPreferences.edit()
+                .remove(KEY_ACCESS_TOKEN)
+                .remove(KEY_REFRESH_TOKEN)
+                .remove(KEY_USER_JSON)
+                .apply();
     }
 
-    public String getSessionToken() {
-        return sharedPreferences.getString(KEY_SESSION_TOKEN, null);
+    public String getAccessToken() {
+        return sharedPreferences.getString(KEY_ACCESS_TOKEN, null);
+    }
+
+    public String getRefreshToken() {
+        return sharedPreferences.getString(KEY_REFRESH_TOKEN, null);
+    }
+
+    public String getUserJson() {
+        return sharedPreferences.getString(KEY_USER_JSON, null);
     }
 }
