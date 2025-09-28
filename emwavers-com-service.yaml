@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: emwavers-com-public
+  namespace: mattermost-operator
+spec:
+  type: LoadBalancer
+  selector:
+    app: mattermost
+    installation.mattermost.com/installation: emwavers-com
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8065
+      protocol: TCP
