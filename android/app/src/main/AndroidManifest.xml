@@ -51,6 +51,11 @@
                 android:value=".MainActivity" />
         </activity>
         <activity
+            android:name=".LoginActivity"
+            android:label="@string/login_title"
+            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
+            android:exported="false" />
+        <activity
             android:name=".WelcomeActivity"
             android:label="Welcome"
             android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"

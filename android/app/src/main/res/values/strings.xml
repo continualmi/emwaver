@@ -63,4 +63,11 @@
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="action_open_settings">Settings</string>
+    <string name="login_title">Sign in</string>
+    <string name="login_description">Use your Continuous account to access EMWaver.</string>
+    <string name="login_email_hint">Email address</string>
+    <string name="login_password_hint">Password</string>
+    <string name="login_button">Log in</string>
+    <string name="login_error_missing_fields">Enter both email and password to continue.</string>
+    <string name="login_logo_content_description">Continuous Society logo</string>
 </resources>
