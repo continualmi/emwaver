@@ -6,10 +6,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
-import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
+
+import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
 
 public class WelcomeActivity extends AppCompatActivity {
 
@@ -24,8 +25,8 @@ public class WelcomeActivity extends AppCompatActivity {
         boolean hasSeenWelcome = prefs.getBoolean(PREF_HAS_SEEN_WELCOME, false);
         
         if (hasSeenWelcome) {
-            // User has seen welcome, go directly to main activity
-            startMainActivity();
+            // User has seen welcome, continue based on login state
+            startNextStep();
             return;
         }
         
@@ -52,13 +53,27 @@ public class WelcomeActivity extends AppCompatActivity {
                 SharedPreferences.Editor editor = prefs.edit();
                 editor.putBoolean(PREF_HAS_SEEN_WELCOME, true);
                 editor.apply();
-                
-                // Go to main activity
-                startMainActivity();
+
+                startNextStep();
             }
         });
     }
     
+    private void startNextStep() {
+        if (AuthenticationManager.getInstance(this).isLoggedIn()) {
+            startMainActivity();
+        } else {
+            startLoginActivity();
+        }
+    }
+
+    private void startLoginActivity() {
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
+    }
+
     private void startMainActivity() {
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
