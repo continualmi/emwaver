@@ -1,11 +1,15 @@
 package com.emwaver.emwaverandroidapp;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.MenuItem;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.Preference;
+
+import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -38,6 +42,21 @@ public class SettingsActivity extends AppCompatActivity {
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+            Preference logoutPreference = findPreference("logout");
+            if (logoutPreference != null) {
+                logoutPreference.setOnPreferenceClickListener(preference -> {
+                    performLogout();
+                    return true;
+                });
+            }
+        }
+
+        private void performLogout() {
+            AuthenticationManager.getInstance(requireContext()).clearSession();
+            Intent intent = new Intent(requireContext(), LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            requireActivity().finish();
         }
     }
 } 
