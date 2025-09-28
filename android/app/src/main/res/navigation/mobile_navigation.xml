@@ -21,6 +21,14 @@
 
 
     <fragment
+        android:id="@+id/navigation_agent"
+        android:name="com.emwaver.emwaverandroidapp.ui.agent.AgentFragment"
+        android:label="Agent"
+        tools:layout="@layout/fragment_agent" />
+
+
+
+    <fragment
         android:id="@+id/navigation_wavelets"
         android:name="com.emwaver.emwaverandroidapp.ui.wavelets.WaveletsFragment"
         android:label="Wavelets"

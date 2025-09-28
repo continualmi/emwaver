@@ -21,7 +21,7 @@
         android:title="Wavelets" />
 
     <item
-        android:id="@+id/navigation_buttons"
-        android:icon="@drawable/ic_dial_pad_black"
-        android:title="Buttons" />
+        android:id="@+id/navigation_agent"
+        android:icon="@drawable/llm"
+        android:title="Agent" />
 </menu> 
