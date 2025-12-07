@@ -1,16 +1,23 @@
 package com.emwaver.emwaverandroidapp.ui.ism;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.Log;
+
+import androidx.preference.PreferenceManager;
 
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.function.Consumer;
 
 public class CC1101 {
 
     private static final String TAG = "CC1101";
     private final BLEService bleService;
+    private final Context context;
 
     //region CC1101 REGISTERS
     // CC1101 Configuration Registers
@@ -147,73 +154,249 @@ public class CC1101 {
     public static final int[] POWER_LEVELS = {-30, -20, -15, -10, 0, 5, 7, 10};
     //endregion
     
+    // SPI device name for RFM69
+    private static final String DEVICE_NAME = "rfm69";
+    private boolean deviceOpen = false;
+    private Consumer<String> commandObserver;
+    
     public CC1101(BLEService bleService) {
         this.bleService = bleService;
+        this.context = bleService.getApplicationContext();
+    }
+
+    public void setCommandObserver(Consumer<String> observer) {
+        this.commandObserver = observer;
+    }
+
+    public void clearCommandObserver(Consumer<String> observer) {
+        if (this.commandObserver == observer) {
+            this.commandObserver = null;
+        }
+    }
+    
+    /**
+     * Open the SPI device for CC1101 communication.
+     * Must be called before any register operations.
+     */
+    public boolean openDevice() {
+        if (deviceOpen) {
+            Log.i(TAG, "CC1101 device already open");
+            return true;
+        }
+
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        String csPin = preferences.getString("rfm69_cs_pin", "10");
+        boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", false);
+
+        String command = "spi open --name=" + DEVICE_NAME +
+                        " --host=2 --miso=13 --mosi=11 --sck=12 --cs=" + csPin + 
+                        " --mode=0 --clock=8000000 --cs_active_high=" + (csActiveHigh ? "1" : "0");
+
+        String responseStr = executeOpenCommand(command);
+        if (responseStr != null && responseStr.startsWith("ok")) {
+            deviceOpen = true;
+            Log.i(TAG, "CC1101 SPI device opened successfully with CS pin " + csPin + 
+                  " (active " + (csActiveHigh ? "high" : "low") + ")");
+            return true;
+        }
+
+        if (responseStr != null && responseStr.contains("spi open: exists")) {
+            Log.w(TAG, "SPI device already open on firmware; attempting to close and retry");
+            sendCloseCommandToFirmware();
+            responseStr = executeOpenCommand(command);
+            if (responseStr != null && responseStr.startsWith("ok")) {
+                deviceOpen = true;
+                Log.i(TAG, "CC1101 SPI device opened successfully after retry with CS pin " + csPin + 
+                      " (active " + (csActiveHigh ? "high" : "low") + ")");
+                return true;
+            }
+        }
+
+        Log.e(TAG, "Failed to open CC1101 SPI device" +
+                (responseStr != null ? (": " + responseStr) : " (no response)"));
+        return false;
+    }
+    
+    /**
+     * Close the SPI device for CC1101.
+     * Should be called when done with all operations.
+     */
+    public boolean closeDevice() {
+        boolean success = sendCloseCommandToFirmware();
+        if (success) {
+            deviceOpen = false;
+            Log.i(TAG, "CC1101 SPI device closed successfully");
+            return true;
+        }
+
+        if (!deviceOpen) {
+            return true;
+        }
+
+        Log.e(TAG, "Failed to close CC1101 SPI device");
+        return false;
+    }
+    
+    /**
+     * Helper to format byte array as hex string for --tx argument
+     * e.g., [0x80, 0x0D] -> "0x80,0x0D"
+     */
+    private String formatHexBytes(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(String.format("0x%02X", bytes[i] & 0xFF));
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * Parse response from "ok 0xAB 0xCD" format
+     */
+    private byte[] parseOkResponse(byte[] response) {
+        if (response == null || response.length < 2) {
+            return new byte[0];
+        }
+        
+        String responseStr = new String(response).trim();
+        if (!responseStr.startsWith("ok")) {
+            Log.e(TAG, "Command failed: " + responseStr);
+            return new byte[0];
+        }
+        
+        // Parse hex values after "ok"
+        String[] parts = responseStr.split("\\s+");
+        byte[] result = new byte[parts.length - 1]; // Exclude "ok"
+        
+        for (int i = 1; i < parts.length; i++) {
+            try {
+                String hexStr = parts[i].replace("0x", "").replace("0X", "");
+                result[i - 1] = (byte) Integer.parseInt(hexStr, 16);
+            } catch (NumberFormatException e) {
+                Log.e(TAG, "Failed to parse hex value: " + parts[i]);
+            }
+        }
+        
+        return result;
+    }
+
+    private void notifyCommandObserver(String command) {
+        if (commandObserver != null) {
+            commandObserver.accept(command);
+        }
+    }
+
+    private byte[] sendSpiCommand(String command, int timeoutMs) {
+        notifyCommandObserver(command);
+        return bleService.sendCommand((command + "\n").getBytes(StandardCharsets.UTF_8), timeoutMs);
+    }
+
+    private String executeOpenCommand(String command) {
+        byte[] response = sendSpiCommand(command, 1000);
+        if (response == null || response.length == 0) {
+            Log.e(TAG, "spi open returned empty response");
+            return null;
+        }
+        String responseStr = new String(response).trim();
+        Log.d(TAG, "spi open response: " + responseStr);
+        return responseStr;
+    }
+
+    private boolean sendCloseCommandToFirmware() {
+        String command = "spi close --name=" + DEVICE_NAME;
+        byte[] response = sendSpiCommand(command, 1000);
+        if (response == null || response.length == 0) {
+            Log.w(TAG, "spi close returned empty response");
+            return false;
+        }
+        String responseStr = new String(response).trim();
+        Log.d(TAG, "spi close response: " + responseStr);
+        if (responseStr.startsWith("ok")) {
+            return true;
+        }
+        return responseStr.contains("spi close: not open");
     }
 
     //region SPI functions
     public void spiStrobe(byte commandStrobe) {
-        byte[] command = new byte[15]; // Increased size to accommodate new format
-        byte[] response;
+        // CC1101 protocol: send [strobe], receive [status]
+        byte[] txData = {commandStrobe};
+        String command = "spi xfer --name=" + DEVICE_NAME +
+                        " --tx=" + formatHexBytes(txData) + " --rx=1";
         
-        // Format: "cc1101 strobe X" where X is the commandStrobe byte
-        String cmdStr = "cc1101 strobe " + (char)commandStrobe;
-        System.arraycopy(cmdStr.getBytes(), 0, command, 0, cmdStr.length());
+        byte[] response = sendSpiCommand(command, 1000);
+        byte[] parsed = parseOkResponse(response);
         
-        response = bleService.sendCommand(command, 1000);
-        Log.i("spiStrobe", Utils.toHexStringWithHexPrefix(response));  //response is the status byte
+        Log.i("spiStrobe", "Sent: 0x" + String.format("%02X", commandStrobe & 0xFF) + 
+              ", Status: " + (parsed.length > 0 ? String.format("0x%02X", parsed[0] & 0xFF) : "none"));
     }
     
     public void writeBurstReg(byte addr, byte[] data, byte len){
-        byte[] command = new byte[data.length + 20]; // Increased size to accommodate new format
-        byte[] response;
+        // CC1101 protocol: send [WRITE_BURST | addr, data1, data2, ...], receive [status, dont_care...]
+        byte[] txData = new byte[len + 1];
+        txData[0] = (byte)(WRITE_BURST | addr);
+        System.arraycopy(data, 0, txData, 1, len);
         
-        // Format: "cc1101 burstwrite X Y data..." where X is addr, Y is len
-        String cmdPrefix = "cc1101 burstwrite ";
-        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
-        command[cmdPrefix.length()] = addr;
-        command[cmdPrefix.length() + 1] = len;
-        System.arraycopy(data, 0, command, cmdPrefix.length() + 2, data.length);
+        String command = "spi xfer --name=" + DEVICE_NAME +
+                        " --tx=" + formatHexBytes(txData) + " --rx=" + (len + 1);
         
-        response = bleService.sendCommand(command, 1000);
-        Log.i("writeBurstReg", Utils.toHexStringWithHexPrefix(response)); //response is the status byte
+        byte[] response = sendSpiCommand(command, 1000);
+        byte[] parsed = parseOkResponse(response);
+        
+        Log.i("writeBurstReg", "Addr: 0x" + String.format("%02X", addr & 0xFF) + 
+              ", Len: " + len + ", Status: " + 
+              (parsed.length > 0 ? String.format("0x%02X", parsed[0] & 0xFF) : "none"));
     }
     
     public byte[] readBurstReg(byte addr, int len){
-        byte[] command = new byte[20]; // Increased size to accommodate new format
-        byte[] response;
+        // CC1101 protocol: send [READ_BURST | addr, dummy, dummy, ...], receive [status, data1, data2, ...]
+        // Need to send (len+1) bytes to receive (len+1) bytes in full-duplex SPI
+        byte[] txData = new byte[len + 1];
+        txData[0] = (byte)(READ_BURST | addr);
+        // Rest are dummy bytes (0x00)
         
-        // Format: "cc1101 burstread X Y" where X is addr, Y is len
-        String cmdPrefix = "cc1101 burstread ";
-        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
-        command[cmdPrefix.length()] = addr;
-        command[cmdPrefix.length() + 1] = (byte)len;
+        String command = "spi xfer --name=" + DEVICE_NAME +
+                        " --tx=" + formatHexBytes(txData) + " --rx=" + (len + 1);
         
-        response = bleService.sendCommand(command, 1000);
-        Log.i("readBurstReg", Utils.toHexStringWithHexPrefix(response));
-        return response;
+        byte[] response = sendSpiCommand(command, 1000);
+        byte[] parsed = parseOkResponse(response);
+        
+        // Skip status byte, return only data
+        if (parsed.length > 1) {
+            byte[] result = new byte[parsed.length - 1];
+            System.arraycopy(parsed, 1, result, 0, result.length);
+            Log.i("readBurstReg", "Addr: 0x" + String.format("%02X", addr & 0xFF) + 
+                  ", Read " + result.length + " bytes");
+            return result;
+        }
+        
+        Log.e("readBurstReg", "Failed to read burst register");
+        return new byte[0];
     }
     
     public byte readReg(byte addr){
         long startTime = System.currentTimeMillis();
         
-        byte[] command = new byte[20]; // Increased size to accommodate new format
+        // CC1101 protocol: send [READ_SINGLE | addr, dummy], receive [status, data]
+        // Need to send 2 bytes to receive 2 bytes in full-duplex SPI
+        byte[] txData = {(byte)(READ_SINGLE | addr), 0x00};
         
-        // Format: "cc1101 readreg X" where X is addr
-        String cmdPrefix = "cc1101 readreg ";
-        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
-        command[cmdPrefix.length()] = addr;
+        String command = "spi xfer --name=" + DEVICE_NAME +
+                        " --tx=" + formatHexBytes(txData) + " --rx=2";
         
-        byte[] response = bleService.sendCommand(command, 1000);
+        byte[] response = sendSpiCommand(command, 1000);
+        byte[] parsed = parseOkResponse(response);
         
         long endTime = System.currentTimeMillis();
         long elapsedTime = endTime - startTime;
-        Log.i(TAG, "Register read (addr: 0x" + String.format("%02X", addr) + ") took " + elapsedTime + "ms");
         
-        if (response != null && response.length > 0) {
-            return response[0];
+        if (parsed.length >= 2) {
+            byte value = parsed[1]; // Skip status byte
+            Log.i(TAG, "Register read (addr: 0x" + String.format("%02X", addr & 0xFF) + 
+                  ") = 0x" + String.format("%02X", value & 0xFF) + " (" + elapsedTime + "ms)");
+            return value;
         } else {
-            Log.e(TAG, "Failed to read register: " + addr);
+            Log.e(TAG, "Failed to read register: 0x" + String.format("%02X", addr & 0xFF));
             return 0;
         }
     }
@@ -221,20 +404,19 @@ public class CC1101 {
     public void writeReg(byte addr, byte data){
         long startTime = System.currentTimeMillis();
         
-        byte[] command = new byte[20]; // Increased size to accommodate new format
+        // CC1101 protocol: send [addr, data], receive [status, dont_care]
+        byte[] txData = {addr, data};
         
-        // Format: "cc1101 writereg X Y" where X is addr, Y is data
-        String cmdPrefix = "cc1101 writereg ";
-        System.arraycopy(cmdPrefix.getBytes(), 0, command, 0, cmdPrefix.length());
-        command[cmdPrefix.length()] = addr;
-        command[cmdPrefix.length() + 1] = data;
+        String command = "spi xfer --name=" + DEVICE_NAME +
+                        " --tx=" + formatHexBytes(txData) + " --rx=2";
         
-        bleService.sendCommand(command, 1000);
+        byte[] response = sendSpiCommand(command, 1000);
+        byte[] parsed = parseOkResponse(response);
         
         long endTime = System.currentTimeMillis();
         long elapsedTime = endTime - startTime;
-        Log.i(TAG, "Register write (addr: 0x" + String.format("%02X", addr) + ", value: 0x" + 
-              String.format("%02X", data) + ") took " + elapsedTime + "ms");
+        Log.i(TAG, "Register write (addr: 0x" + String.format("%02X", addr & 0xFF) + 
+              ", value: 0x" + String.format("%02X", data & 0xFF) + ") took " + elapsedTime + "ms");
     }
     
     public void sendData(byte [] txBuffer, int size, int t) {

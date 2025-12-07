@@ -1,2278 +1,806 @@
 import SwiftUI
-import JavaScriptCore
-import UniformTypeIdentifiers
-import Combine
-
-// MARK: - Extension for UTType
-extension UTType {
-    static var javascript: UTType {
-        UTType(filenameExtension: "js") ?? .plainText
-    }
-}
-
-// MARK: - JavaScript Export Protocols
-
-@objc protocol CC1101JSExport: JSExport {
-    // Command strobes
-    @objc func spiStrobe(_ commandStrobe: UInt8)
-    
-    // This isn't a direct method on CC1101, but we implement it in the wrapper
-    // to provide a JavaScript-facing initialize() method
-    @objc func initialize()
-    @objc var exposedConstants: [String: Any] { get }
-    
-    // Register operations
-    @objc func writeReg(_ addr: UInt8, _ value: UInt8)
-    @objc func readReg(_ addr: UInt8) -> UInt8
-    @objc func writeBurstReg(_ addr: UInt8, _ data: [UInt8], _ len: UInt8)
-    @objc func readBurstReg(_ addr: UInt8, _ len: Int) -> [UInt8]
-    
-    // Configuration
-    @objc func setFrequencyMHz(_ frequencyMHz: Double) -> Bool
-    @objc func getFrequency() -> Double
-    @objc func setDataRate(_ bitRate: Int) -> Bool
-    @objc func getDataRate() -> Int
-    @objc func setBandwidth(_ bandwidth: Double) -> Bool
-    @objc func getBandwidth() -> Double
-    @objc func setDeviation(_ deviation: Int) -> Bool
-    @objc func getDeviation() -> Int
-    @objc func setModulation(_ modulation: UInt8) -> Bool
-    @objc func getModulation() -> Int
-    @objc func setPowerLevel(_ powerLevel: Int) -> Bool
-    @objc func getPowerLevel() -> Int
-    
-    // GDO configuration
-    @objc func setGDOMode(_ gdo2: UInt8, _ gdo1: UInt8, _ gdo0: UInt8)
-    
-    // Calibration and reset
-    @objc func calibrate()
-    @objc func select315MHzAntenna()
-    @objc func select433MHzAntenna()
-    
-    // Convenience methods
-    @objc func setModulationAndPower(_ modulation: UInt8, _ dbm: Int) -> Bool
-}
-
-@objc class CC1101Wrapper: NSObject, CC1101JSExport {
-    private let cc1101: CC1101
-    private static let constantMap: [String: Any] = {
-        var map: [String: Any] = [:]
-        map["IOCFG2"] = CC1101.IOCFG2
-        map["IOCFG1"] = CC1101.IOCFG1
-        map["IOCFG0"] = CC1101.IOCFG0
-        map["FIFOTHR"] = CC1101.FIFOTHR
-        map["SYNC1"] = CC1101.SYNC1
-        map["SYNC0"] = CC1101.SYNC0
-        map["PKTLEN"] = CC1101.PKTLEN
-        map["PKTCTRL1"] = CC1101.PKTCTRL1
-        map["PKTCTRL0"] = CC1101.PKTCTRL0
-        map["ADDR"] = CC1101.ADDR
-        map["CHANNR"] = CC1101.CHANNR
-        map["FSCTRL1"] = CC1101.FSCTRL1
-        map["FSCTRL0"] = CC1101.FSCTRL0
-        map["FREQ2"] = CC1101.FREQ2
-        map["FREQ1"] = CC1101.FREQ1
-        map["FREQ0"] = CC1101.FREQ0
-        map["MDMCFG4"] = CC1101.MDMCFG4
-        map["MDMCFG3"] = CC1101.MDMCFG3
-        map["MDMCFG2"] = CC1101.MDMCFG2
-        map["MDMCFG1"] = CC1101.MDMCFG1
-        map["MDMCFG0"] = CC1101.MDMCFG0
-        map["DEVIATN"] = CC1101.DEVIATN
-        map["MCSM2"] = CC1101.MCSM2
-        map["MCSM1"] = CC1101.MCSM1
-        map["MCSM0"] = CC1101.MCSM0
-        map["FOCCFG"] = CC1101.FOCCFG
-        map["BSCFG"] = CC1101.BSCFG
-        map["AGCCTRL2"] = CC1101.AGCCTRL2
-        map["AGCCTRL1"] = CC1101.AGCCTRL1
-        map["AGCCTRL0"] = CC1101.AGCCTRL0
-        map["WOREVT1"] = CC1101.WOREVT1
-        map["WORCTRL"] = CC1101.WORCTRL
-        map["FREND1"] = CC1101.FREND1
-        map["FREND0"] = CC1101.FREND0
-        map["FSCAL3"] = CC1101.FSCAL3
-        map["FSCAL2"] = CC1101.FSCAL2
-        map["FSCAL1"] = CC1101.FSCAL1
-        map["FSCAL0"] = CC1101.FSCAL0
-        map["RCCTRL1"] = CC1101.RCCTRL1
-        map["RCCTRL0"] = CC1101.RCCTRL0
-        map["FSTEST"] = CC1101.FSTEST
-        map["PTEST"] = CC1101.PTEST
-        map["AGCTEST"] = CC1101.AGCTEST
-        map["TEST2"] = CC1101.TEST2
-        map["TEST1"] = CC1101.TEST1
-        map["TEST0"] = CC1101.TEST0
-        map["SRES"] = CC1101.SRES
-        map["SFSTXON"] = CC1101.SFSTXON
-        map["SXOFF"] = CC1101.SXOFF
-        map["SCAL"] = CC1101.SCAL
-        map["SRX"] = CC1101.SRX
-        map["STX"] = CC1101.STX
-        map["SIDLE"] = CC1101.SIDLE
-        map["SAFC"] = CC1101.SAFC
-        map["SWOR"] = CC1101.SWOR
-        map["SPWD"] = CC1101.SPWD
-        map["SFRX"] = CC1101.SFRX
-        map["SFTX"] = CC1101.SFTX
-        map["SWORRST"] = CC1101.SWORRST
-        map["SNOP"] = CC1101.SNOP
-        map["PARTNUM"] = CC1101.PARTNUM
-        map["VERSION"] = CC1101.VERSION
-        map["FREQEST"] = CC1101.FREQEST
-        map["LQI"] = CC1101.LQI
-        map["RSSI"] = CC1101.RSSI
-        map["MARCSTATE"] = CC1101.MARCSTATE
-        map["WORTIME1"] = CC1101.WORTIME1
-        map["WORTIME0"] = CC1101.WORTIME0
-        map["PKTSTATUS"] = CC1101.PKTSTATUS
-        map["VCO_VC_DAC"] = CC1101.VCO_VC_DAC
-        map["TXBYTES"] = CC1101.TXBYTES
-        map["RXBYTES"] = CC1101.RXBYTES
-        map["PATABLE"] = CC1101.PATABLE
-        map["TXFIFO"] = CC1101.TXFIFO
-        map["RXFIFO"] = CC1101.RXFIFO
-        map["MOD_2FSK"] = CC1101.MOD_2FSK
-        map["MOD_GFSK"] = CC1101.MOD_GFSK
-        map["MOD_ASK"] = CC1101.MOD_ASK
-        map["MOD_4FSK"] = CC1101.MOD_4FSK
-        map["MOD_MSK"] = CC1101.MOD_MSK
-        map["WRITE_BURST"] = CC1101.WRITE_BURST
-        map["READ_SINGLE"] = CC1101.READ_SINGLE
-        map["READ_BURST"] = CC1101.READ_BURST
-        map["BYTES_IN_RXFIFO"] = CC1101.BYTES_IN_RXFIFO
-        map["GDO_INPUT"] = CC1101.GDO_INPUT
-        map["GDO_OUTPUT"] = CC1101.GDO_OUTPUT
-        map["GDO_0"] = CC1101.GDO_0
-        map["GDO_2"] = CC1101.GDO_2
-        map["POWER_LEVELS"] = CC1101.POWER_LEVELS
-        map["MODE_PACKET"] = CC1101.MODE_PACKET
-        map["MODE_CONTINUOUS"] = CC1101.MODE_CONTINUOUS
-        map["SYNC_MODE_NONE"] = CC1101.SYNC_MODE_NONE
-        map["SYNC_MODE_15_16"] = CC1101.SYNC_MODE_15_16
-        map["SYNC_MODE_16_16"] = CC1101.SYNC_MODE_16_16
-        map["SYNC_MODE_30_32"] = CC1101.SYNC_MODE_30_32
-        map["SYNC_MODE_NONE_CS"] = CC1101.SYNC_MODE_NONE_CS
-        map["SYNC_MODE_15_16_CS"] = CC1101.SYNC_MODE_15_16_CS
-        map["SYNC_MODE_16_16_CS"] = CC1101.SYNC_MODE_16_16_CS
-        map["SYNC_MODE_30_32_CS"] = CC1101.SYNC_MODE_30_32_CS
-        map["POWER_MINUS_30_DBM"] = CC1101.POWER_MINUS_30_DBM
-        map["POWER_MINUS_20_DBM"] = CC1101.POWER_MINUS_20_DBM
-        map["POWER_MINUS_15_DBM"] = CC1101.POWER_MINUS_15_DBM
-        map["POWER_MINUS_10_DBM"] = CC1101.POWER_MINUS_10_DBM
-        map["POWER_0_DBM"] = CC1101.POWER_0_DBM
-        map["POWER_5_DBM"] = CC1101.POWER_5_DBM
-        map["POWER_7_DBM"] = CC1101.POWER_7_DBM
-        map["POWER_10_DBM"] = CC1101.POWER_10_DBM
-        return map
-    }()
-    
-    init(cc1101: CC1101) {
-        self.cc1101 = cc1101
-        super.init()
-    }
-    
-    @objc func spiStrobe(_ commandStrobe: UInt8) {
-        cc1101.spiStrobe(commandStrobe: commandStrobe)
-    }
-    
-    @objc func initialize() {
-        // Call init() in JavaScript, but we map it to a reset and setup sequence
-        spiStrobe(0x30) // SRES - Reset chip
-        Thread.sleep(forTimeInterval: 0.1) // Wait for reset to complete
-    }
-    
-    @objc var exposedConstants: [String: Any] {
-        CC1101Wrapper.constantMap
-    }
-    
-    @objc func writeReg(_ addr: UInt8, _ value: UInt8) {
-        cc1101.writeReg(addr: addr, value: value)
-    }
-    
-    @objc func readReg(_ addr: UInt8) -> UInt8 {
-        return cc1101.readReg(addr: addr)
-    }
-    
-    @objc func writeBurstReg(_ addr: UInt8, _ data: [UInt8], _ len: UInt8) {
-        cc1101.writeBurstReg(addr: addr, data: data, len: len)
-    }
-    
-    @objc func readBurstReg(_ addr: UInt8, _ len: Int) -> [UInt8] {
-        return cc1101.readBurstReg(addr: addr, len: len)
-    }
-    
-    @objc func setFrequencyMHz(_ frequencyMHz: Double) -> Bool {
-        return cc1101.setFrequencyMHz(frequencyMHz: frequencyMHz)
-    }
-    
-    @objc func getFrequency() -> Double {
-        return cc1101.getFrequency()
-    }
-    
-    @objc func setDataRate(_ bitRate: Int) -> Bool {
-        return cc1101.setDataRate(bitRate: bitRate)
-    }
-    
-    @objc func getDataRate() -> Int {
-        return cc1101.getDataRate()
-    }
-    
-    @objc func setBandwidth(_ bandwidth: Double) -> Bool {
-        return cc1101.setBandwidth(bandwidth: bandwidth)
-    }
-    
-    @objc func getBandwidth() -> Double {
-        return cc1101.getBandwidth()
-    }
-    
-    @objc func setDeviation(_ deviation: Int) -> Bool {
-        return cc1101.setDeviation(deviation: deviation)
-    }
-    
-    @objc func getDeviation() -> Int {
-        return cc1101.getDeviation()
-    }
-    
-    @objc func setModulation(_ modulation: UInt8) -> Bool {
-        return cc1101.setModulation(modulation: modulation)
-    }
-    
-    @objc func getModulation() -> Int {
-        return cc1101.getModulation()
-    }
-    
-    @objc func setPowerLevel(_ powerLevel: Int) -> Bool {
-        return cc1101.setPowerLevel(powerLevel: powerLevel)
-    }
-    
-    @objc func getPowerLevel() -> Int {
-        return cc1101.getPowerLevel()
-    }
-    
-    @objc func setGDOMode(_ gdo2: UInt8, _ gdo1: UInt8, _ gdo0: UInt8) {
-        cc1101.setGDOMode(gdo2: gdo2, gdo1: gdo1, gdo0: gdo0)
-    }
-    
-    @objc func calibrate() {
-        cc1101.calibrate()
-    }
-    
-    @objc func select315MHzAntenna() {
-        cc1101.select315MHzAntenna()
-    }
-    
-    @objc func select433MHzAntenna() {
-        cc1101.select433MHzAntenna()
-    }
-    
-    @objc func setModulationAndPower(_ modulation: UInt8, _ dbm: Int) -> Bool {
-        return cc1101.setModulationAndPower(modulation: modulation, dbm: dbm)
-    }
-}
-
-// MARK: - JavaScript Utils Export
-
-@objc protocol UtilsJSExport: JSExport {
-    func sleep(_ milliseconds: Int)
-    func delay(_ milliseconds: Int)
-}
-
-class JSUtils: NSObject, UtilsJSExport {
-    func sleep(_ milliseconds: Int) {
-        Thread.sleep(forTimeInterval: Double(milliseconds) / 1000.0)
-    }
-    
-    func delay(_ milliseconds: Int) {
-        Thread.sleep(forTimeInterval: Double(milliseconds) / 1000.0)
-    }
-}
-
-// MARK: - BLE Manager Export
-
-@objc protocol BLEManagerJSExport: JSExport {
-    @objc func getBuffer() -> Data
-    @objc func clearBuffer()
-    @objc func loadBuffer(data: Data)
-    @objc func sendPacket(_ data: Data)
-    @objc func sendCommand(_ command: Data, timeout: Int) -> Data?
-    @objc func transmitBuffer()
-}
-
-// BLE Service Wrapper for JavaScript compatibility
-@objc class BLEServiceWrapper: NSObject, BLEManagerJSExport {
-    private let bleManager: BLEManager
-    
-    init(bleManager: BLEManager) {
-        self.bleManager = bleManager
-        super.init()
-    }
-    
-    @objc func getBuffer() -> Data {
-        return bleManager.getBuffer()
-    }
-    
-    @objc func clearBuffer() {
-        bleManager.clearBuffer()
-    }
-    
-    @objc func loadBuffer(data: Data) {
-        bleManager.loadBuffer(data: data)
-    }
-    
-    @objc func sendPacket(_ data: Data) {
-        bleManager.sendPacket(data)
-    }
-    
-    @objc func sendCommand(_ command: Data, timeout: Int) -> Data? {
-        print("[BLEServiceWrapper] sendCommand called with \(command.count) bytes, timeout: \(timeout)")
-        let result = bleManager.sendCommand(command, timeout: timeout)
-        print("[BLEServiceWrapper] sendCommand returned \(result?.count ?? 0) bytes")
-        return result
-    }
-    
-    @objc func transmitBuffer() {
-        bleManager.transmitBuffer()
-    }
-}
-
-// Extension to make BLEManager JavaScript-compatible (kept for backward compatibility)
-extension BLEManager: BLEManagerJSExport {}
-
-// MARK: - TextEditor with keyboard toolbar
-struct KeyboardToolbarTextEditor: View {
-    @Binding var text: String
-    @State private var showKeyboard = false
-    @FocusState private var isFocused: Bool
-    var font: Font
-    
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            TextEditor(text: $text)
-                .font(font)
-                .disableAutocorrection(true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .focused($isFocused)
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") {
-                            isFocused = false
-                        }
-                    }
-                }
-                .onChangeCompat(of: isFocused) { focused in
-                    showKeyboard = focused
-                }
-            
-            // Optional background tap gesture to dismiss keyboard
-            if showKeyboard {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture {
-                        isFocused = false
-                    }
-                    .ignoresSafeArea()
-            }
-        }
-    }
-}
-
-private struct WaveletDialog: Identifiable {
-    let id = UUID()
-    let title: String
-    let message: String
-}
 
 struct WaveletsView: View {
+    @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var bleManager: BLEManager
-    @State private var cc1101: CC1101?
-    @State private var jsEngine: JavaScriptEngine?
-    @State private var waveletEngine: WaveletEngine?
-    @State private var scriptContent: String = ""
-    @State private var currentScriptName: String?
-    @State private var recentScripts: [String] = []
-    @State private var hasUnsavedChanges: Bool = false
-    @State private var isScriptRunning: Bool = false
-    @State private var isRenderingWavelet: Bool = false
-    @State private var statusMessage: String = "Open a script"
-    @State private var dynamicScriptEditorTitle: String = "Script Editor [No script open]"
-    @State private var showingScriptOptions: Bool = false
-    @State private var selectedScript: String?
-    @State private var showingNewScriptAlert: Bool = false
-    @State private var showingCopyScriptAlert: Bool = false
-    @State private var showingDeleteConfirmation: Bool = false
-    @State private var newScriptName: String = ""
-    @State private var activeWaveletTree: WaveletTree?
-    @State private var showingPreview: Bool = false
-    @State private var waveletDialog: WaveletDialog?
-    @State private var needsWaveletReload: Bool = false
+    @StateObject private var viewModel = WaveletsViewModel()
+    @StateObject private var previewManager = WaveletPreviewManager()
+    @State private var editorSession: EditorSession?
+    @State private var showingPreview = false
+    @State private var showingIRDBSheet = false
+    @State private var namePrompt: NamePrompt?
+    @State private var deleteTarget: DeletionTarget?
+    @State private var showingDeleteConfirmation = false
+    @State private var searchQuery: String = ""
 
-    // Auto-save timer
-    @State private var autoSaveTimer: Timer?
-    private let autoSaveDelay: TimeInterval = 3.0
-    
-    // State for collapsible sections
-    @State private var isScriptsListExpanded: Bool = true
-    @State private var isScriptEditorExpanded: Bool = true
-    
-    // MARK: - External Storage & Network Operations
-    
-    @State private var showingFileImporter = false
-    @State private var showingFileExporter = false
-    @State private var showingURLPrompt = false
-    @State private var downloadURL = ""
-    @State private var showingSettingsSheet = false
-    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                content
+
+                if viewModel.isPerformingAction {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .padding(24)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .shadow(radius: 12)
+                }
+            }
+            .navigationTitle("Wavelets")
+            .toolbar { toolbarContent() }
+            .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search scripts")
+            .alert(item: $viewModel.notice) { notice in
+                Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
+            }
+            .sheet(item: $editorSession) { session in
+                editorSheet(for: session)
+            }
+            .sheet(isPresented: $showingPreview) {
+                WaveletPreviewSheet(previewManager: previewManager) {
+                    showingPreview = false
+                }
+            }
+            .sheet(isPresented: $showingIRDBSheet) {
+                if let token = authManager.accessToken, !token.isEmpty {
+                    IRDBImportView(
+                        accessToken: token,
+                        service: IRDBService.shared,
+                        onDismiss: { showingIRDBSheet = false },
+                        onWaveletImported: { wavelet in
+                            Task {
+                                await viewModel.importWavelet(wavelet: wavelet, accessToken: token)
+                            }
+                        }
+                    )
+                } else {
+                    Text("Authentication required")
+                        .padding()
+                }
+            }
+            .sheet(item: $namePrompt) { prompt in
+                NamePromptSheet(prompt: prompt)
+            }
+            .confirmationDialog(
+                "Delete script?",
+                isPresented: $showingDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    guard let target = deleteTarget else { return }
+                    guard let token = authManager.accessToken, !token.isEmpty else {
+                        viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
+                        return
+                    }
+                    editorSession = nil
+                    Task {
+                        await viewModel.deleteScript(id: target.id, accessToken: token)
+                    }
+                    deleteTarget = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    deleteTarget = nil
+                }
+            } message: {
+                if let target = deleteTarget {
+                    Text("Are you sure you want to delete \(target.name)?")
+                }
+            }
+            .onAppear {
+                previewManager.attach(bleManager: bleManager)
+                loadScripts()
+            }
+            .onChange(of: bleManager.isConnected) { connected in
+                previewManager.updateConnectionState(isConnected: connected)
+            }
+        }
+    }
+
+    private var content: some View {
+        Group {
+            if filteredScripts.isEmpty {
+                emptyState
+            } else {
+                List {
+                    Section {
+                        ForEach(filteredScripts) { script in
+                            ScriptRow(
+                                script: script,
+                                isSelected: script.id == viewModel.selectedScriptId,
+                                onPreview: { openPreview(for: script.id) },
+                                onEdit: { openEditor(for: script.id) }
+                            )
+                            .swipeActions(edge: .trailing) {
+                                Button("Preview") {
+                                    openPreview(for: script.id)
+                                }
+                                .tint(.indigo)
+
+                                Button("Edit") {
+                                    openEditor(for: script.id)
+                                }
+                                .tint(.blue)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+    }
+
+    private var filteredScripts: [WaveletsViewModel.ScriptListItem] {
+        let scripts = viewModel.scripts
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return scripts }
+        return scripts.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 44))
+                .foregroundColor(.secondary)
+            Text("No scripts available")
+                .font(.headline)
+            Text("Create a new script or import one from the IRDB catalogue.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Button(action: openNewScriptEditor) {
+                Label("New Script", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    private func loadScripts() {
+        guard let token = authManager.accessToken, !token.isEmpty else { return }
+        Task {
+            await viewModel.loadScripts(accessToken: token)
+        }
+    }
+
+    private func openPreview(for id: String) {
+        guard let token = authManager.accessToken, !token.isEmpty else {
+            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
+            return
+        }
+        viewModel.selectScript(id: id)
+        Task {
+            await viewModel.ensureContent(for: id, accessToken: token)
+            await MainActor.run {
+                let script = viewModel.scriptDraft(for: id)
+                let name = viewModel.scriptName(for: id)
+                let modules = viewModel.moduleSources()
+                previewManager.render(script: script, name: name, moduleSources: modules)
+                showingPreview = true
+            }
+        }
+    }
+
+    private func openEditor(for id: String) {
+        guard let token = authManager.accessToken, !token.isEmpty else {
+            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
+            return
+        }
+        viewModel.selectScript(id: id)
+        Task {
+            await viewModel.ensureContent(for: id, accessToken: token)
+            await MainActor.run {
+                editorSession = EditorSession(id: id)
+            }
+        }
+    }
+
+    private func openNewScriptEditor() {
+        viewModel.selectScript(id: viewModel.unsavedIdentifier)
+        editorSession = EditorSession(id: viewModel.unsavedIdentifier)
+    }
+
+    private func syncScripts() {
+        guard let token = authManager.accessToken, !token.isEmpty else {
+            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
+            return
+        }
+        Task {
+            await viewModel.syncScripts(accessToken: token)
+        }
+    }
+
+    private func editorSheet(for session: EditorSession) -> some View {
+        guard let token = authManager.accessToken, !token.isEmpty else {
+            return AnyView(Text("Authentication required").padding())
+        }
+        return AnyView(
+            ScriptEditorSheet(
+                scriptId: session.id,
+                viewModel: viewModel,
+                accessToken: token,
+                onDismiss: { editorSession = nil },
+                onRequestCreate: { presentNamePrompt(context: .create) },
+                onRequestRename: { presentNamePrompt(context: .rename(id: session.id)) },
+                onRequestCopy: { presentNamePrompt(context: .copy(id: session.id)) },
+                onRequestDelete: {
+                        deleteTarget = DeletionTarget(id: session.id, name: viewModel.scriptName(for: session.id))
+                        showingDeleteConfirmation = true
+                },
+                onRequestPreview: { openPreview(for: session.id) }
+            )
+        )
+    }
+
+    private func presentNamePrompt(context: NamePromptContext) {
+        let initial: String
+        switch context {
+        case .create:
+            initial = "wavelet_script.js"
+        case .rename(let id):
+            initial = viewModel.scriptName(for: id)
+        case .copy(let id):
+            initial = viewModel.scriptName(for: id)
+        }
+        namePrompt = NamePrompt(
+            context: context,
+            title: context.title,
+            message: context.message,
+            initialValue: initial
+        ) { name in
+            handleName(context: context, name: name)
+        }
+    }
+
+    private func handleName(context: NamePromptContext, name: String) {
+        guard let token = authManager.accessToken, !token.isEmpty else {
+            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
+            return
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        Task {
+            switch context {
+            case .create:
+                if let newId = await viewModel.createScript(name: trimmed, accessToken: token) {
+                    await MainActor.run {
+                        editorSession = EditorSession(id: newId)
+                    }
+                }
+            case .rename(let id):
+                await viewModel.renameScript(id: id, newName: trimmed, accessToken: token)
+            case .copy(let id):
+                if let newId = await viewModel.copyScript(id: id, newName: trimmed, accessToken: token) {
+                    await MainActor.run {
+                        editorSession = EditorSession(id: newId)
+                    }
+                }
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Menu {
+                Button {
+                    openNewScriptEditor()
+                } label: {
+                    Label("New Script", systemImage: "plus")
+                }
+
+                Button {
+                    syncScripts()
+                } label: {
+                    Label("Sync Scripts", systemImage: "arrow.triangle.2.circlepath")
+                }
+
+                Button {
+                    showingIRDBSheet = true
+                } label: {
+                    Label("Import from IRDB", systemImage: "antenna.radiowaves.left.and.right")
+                }
+
+                if let selected = viewModel.selectedScriptId, viewModel.isExistingScript(selected) {
+                    Divider()
+
+                    Button {
+                        presentNamePrompt(context: .copy(id: selected))
+                    } label: {
+                        Label("Make Copy", systemImage: "doc.on.doc")
+                    }
+
+                    Button {
+                        presentNamePrompt(context: .rename(id: selected))
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        deleteTarget = DeletionTarget(id: selected, name: viewModel.scriptName(for: selected))
+                        showingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+        }
+    }
+}
+
+private struct EditorSession: Identifiable {
+    let id: String
+}
+
+private enum NamePromptContext {
+    case create
+    case rename(id: String)
+    case copy(id: String)
+
+    var title: String {
+        switch self {
+        case .create:
+            return "Save Script"
+        case .rename:
+            return "Rename Script"
+        case .copy:
+            return "Copy Script"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .create:
+            return "Enter a name for the new script."
+        case .rename:
+            return "Enter a new name for this script."
+        case .copy:
+            return "Enter a name for the duplicated script."
+        }
+    }
+}
+
+private struct NamePrompt: Identifiable {
+    let id = UUID()
+    let context: NamePromptContext
+    let title: String
+    let message: String
+    var initialValue: String
+    let action: (String) -> Void
+}
+
+private struct DeletionTarget: Identifiable {
+    let id: String
+    let name: String
+}
+
+private struct ScriptRow: View {
+    let script: WaveletsViewModel.ScriptListItem
+    let isSelected: Bool
+    let onPreview: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(script.name)
+                    .font(isSelected ? .headline : .body)
+                if script.isDirty {
+                    Text("Unsaved changes")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+            Spacer()
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 8)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onPreview)
+    }
+}
+
+private struct ScriptEditorSheet: View {
+    let scriptId: String
+    @ObservedObject var viewModel: WaveletsViewModel
+    let accessToken: String
+    let onDismiss: () -> Void
+    let onRequestCreate: () -> Void
+    let onRequestRename: () -> Void
+    let onRequestCopy: () -> Void
+    let onRequestDelete: () -> Void
+    let onRequestPreview: () -> Void
+
+    private var isExisting: Bool {
+        viewModel.isExistingScript(scriptId)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                TextEditor(text: viewModel.draftBinding(for: scriptId))
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 280)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.secondary.opacity(0.2))
+                    )
+
+                if viewModel.isScriptDirty(scriptId) {
+                    Label("Changes not yet saved", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundColor(.orange)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle(viewModel.scriptName(for: scriptId))
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { onDismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(isExisting ? "Save" : "Create") {
+                        save()
+                    }
+                }
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button("Preview", action: onRequestPreview)
+                        .disabled(viewModel.scriptDraft(for: scriptId).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Spacer()
+
+                    if isExisting {
+                        Button("Rename", action: onRequestRename)
+                        Button("Copy", action: onRequestCopy)
+                        Button("Delete", role: .destructive, action: onRequestDelete)
+                    }
+                }
+            }
+        }
+    }
+
+    private func save() {
+        if isExisting {
+            Task { await viewModel.saveScript(id: scriptId, accessToken: accessToken) }
+        } else {
+            onRequestCreate()
+        }
+    }
+}
+
+private struct WaveletPreviewSheet: View {
+    @ObservedObject var previewManager: WaveletPreviewManager
+    let onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ZStack {
+                    WaveletRenderView(tree: previewManager.waveletTree) { token, args in
+                        previewManager.invoke(token: token, arguments: args)
+                    }
+                    .opacity(previewManager.waveletTree == nil ? 0 : 1)
+
+                    if previewManager.waveletTree == nil {
+                        VStack {
+                            if previewManager.isRendering {
+                                ProgressView("Rendering…")
+                            } else {
+                                Text("Render a wavelet to preview it here.")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(uiColor: .secondarySystemBackground))
+
+                Divider()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(previewManager.consoleLines.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding()
+                }
+                .frame(maxHeight: 200)
+                .background(Color(uiColor: .systemBackground))
+            }
+            .navigationTitle(previewManager.activeScriptName ?? "Wavelet Preview")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") { onClose() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Clear Console") { previewManager.clearConsole() }
+                        .disabled(previewManager.consoleLines.isEmpty)
+                }
+            }
+            .alert(item: $previewManager.dialog) { dialog in
+                Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
+            }
+        }
+    }
+}
+
+private struct NamePromptSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let prompt: NamePrompt
+    @State private var value: String
+
+    init(prompt: NamePrompt) {
+        self.prompt = prompt
+        _value = State(initialValue: prompt.initialValue)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text(prompt.message)) {
+                    TextField("Script name", text: $value)
+                        .textInputAutocapitalization(.none)
+                        .autocorrectionDisabled()
+                }
+            }
+            .navigationTitle(prompt.title)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        prompt.action(value)
+                        dismiss()
+                    }
+                    .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct IRDBImportView: View {
+    @Environment(\.dismiss) private var dismiss
+    let accessToken: String
+    let service: IRDBService
+    let onDismiss: () -> Void
+    let onWaveletImported: (IRDBImportedWavelet) -> Void
+
+    var body: some View {
+        NavigationStack {
+            BrandListView(
+                accessToken: accessToken,
+                service: service,
+                onWaveletImported: { wavelet in
+                    onWaveletImported(wavelet)
+                    dismiss()
+                    onDismiss()
+                }
+            )
+            .navigationTitle("Select Brand")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        dismiss()
+                        onDismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct BrandListView: View {
+    let accessToken: String
+    let service: IRDBService
+    let onWaveletImported: (IRDBImportedWavelet) -> Void
+
+    @State private var brands: [String] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText: String = ""
+
     var body: some View {
         Group {
-            if showingPreview {
-                waveletPreview
+            if isLoading {
+                ProgressView("Loading brands…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(spacing: 12) {
-                    scriptsListSection
-                    scriptEditorSection
-                    Spacer(minLength: 0)
-                }
-                .padding()
-            }
-        }
-        .navigationTitle(showingPreview ? (currentScriptName ?? "Wavelet Preview") : "Wavelets")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                if showingPreview {
-                    Button(action: exitPreview) {
-                        Image(systemName: "chevron.left")
+                List(filteredBrands, id: \.self) { brand in
+                    NavigationLink(brand) {
+                        RemoteListView(
+                            brand: brand,
+                            accessToken: accessToken,
+                            service: service,
+                            onWaveletImported: onWaveletImported
+                        )
+                        .navigationTitle(brand)
                     }
                 }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if !showingPreview {
-                    HStack {
-                        Button(action: {
-                            if isScriptRunning {
-                                stopScript()
-                            } else {
-                                executeScript()
-                            }
-                        }) {
-                            Image(systemName: isScriptRunning ? "stop.fill" : "play.fill")
-                                .foregroundColor(isScriptRunning ? .red : .green)
-                        }
-
-                        Button(action: {
-                            renderWavelet()
-                        }) {
-                            Image(systemName: "square.grid.2x2")
-                                .overlay {
-                                    if isRenderingWavelet {
-                                        ProgressView()
-                                            .progressViewStyle(.circular)
-                                            .frame(width: 16, height: 16)
-                                    }
-                                }
-                        }
-                        .disabled(isRenderingWavelet || scriptContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .accessibilityLabel("Render Wavelet Preview")
-
-                        menuButton
-                    }
-                }
+                .listStyle(.insetGrouped)
             }
         }
-        .sheet(isPresented: $showingSettingsSheet) {
-            SettingsSheet()
+        .searchable(text: $searchText, prompt: "Search brands")
+        .alert(isPresented: Binding<Bool>(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Alert(title: Text("Error"), message: Text(errorMessage ?? ""), dismissButton: .default(Text("OK")))
         }
-        .alert(item: $waveletDialog) { dialog in
-            Alert(
-                title: Text(dialog.title.isEmpty ? "Wavelet" : dialog.title),
-                message: Text(dialog.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-        .onAppear {
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().compactAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
-            
-            createDefaultScriptsIfNeeded()
-            updateDynamicScriptEditorTitle()
-            setupWaveletEngineIfNeeded()
-            ensureWaveletEngineBindings()
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                refreshUIAfterLoading()
-            }
-            
-            if bleManager.isConnected {
-                cc1101 = CC1101(bleManager: bleManager)
-                setupJSEngine()
-            }
-
-            if needsWaveletReload {
-                needsWaveletReload = false
-                if showingPreview {
-                    renderWavelet()
-                }
-            }
-        }
-        .onDisappear {
-            if showingPreview {
-                needsWaveletReload = true
-            }
-        }
-        .onChangeCompat(of: bleManager.isConnected) { connected in
-            if connected {
-                cc1101 = CC1101(bleManager: bleManager)
-                setupJSEngine()
-                setupWaveletEngineIfNeeded()
-            } else {
-                cc1101 = nil
-                ensureWaveletEngineBindings()
-            }
-        }
-        .animation(.easeInOut, value: isScriptsListExpanded)
-        .animation(.easeInOut, value: isScriptEditorExpanded)
-        .applyAlerts(
-            showingNewScriptAlert: $showingNewScriptAlert,
-            newScriptName: $newScriptName,
-            createNewScript: createNewScript,
-            showingCopyScriptAlert: $showingCopyScriptAlert,
-            copyCurrentScript: copyCurrentScript,
-            showingScriptOptions: $showingScriptOptions,
-            selectedScript: selectedScript,
-            showingDeleteConfirmation: $showingDeleteConfirmation,
-            deleteScript: deleteScript,
-            showingFileImporter: $showingFileImporter,
-            importScriptFromExternalStorage: importScriptFromExternalStorage,
-            showingFileExporter: $showingFileExporter,
-            scriptDocument: ScriptDocument(scriptContent),
-            currentScriptName: currentScriptName,
-            showingURLPrompt: $showingURLPrompt, 
-            downloadURL: $downloadURL,
-            downloadScriptFromURL: downloadScriptFromURL
-        )
+        .task { await loadBrands() }
     }
-    
-    // MARK: - View Components
-    
-    private var scriptsListSection: some View {
-        DisclosureGroup(
-            isExpanded: $isScriptsListExpanded,
-            content: {
-                if recentScripts.isEmpty {
-                    Text("No scripts available")
-                        .italic()
-                        .foregroundColor(.gray)
-                        .padding()
-                } else {
-                    List {
-                        ForEach(recentScripts, id: \.self) { script in
-                            HStack {
-                                Text(script)
-                                Spacer()
-                                if currentScriptName == script && hasUnsavedChanges {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 8, height: 8)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                loadScript(script)
-                                withAnimation {
-                                    isScriptEditorExpanded = true
-                                }
-                            }
-                            .onLongPressGesture {
-                                selectedScript = script
-                                showingScriptOptions = true
-                            }
-                        }
+
+    private var filteredBrands: [String] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return brands }
+        return brands.filter { $0.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    private func loadBrands() async {
+        isLoading = true
+        do {
+            brands = try await service.fetchBrands(accessToken: accessToken).sorted()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
+private struct RemoteListView: View {
+    let brand: String
+    let accessToken: String
+    let service: IRDBService
+    let onWaveletImported: (IRDBImportedWavelet) -> Void
+
+    @State private var remotes: [IRDBRemoteSummary] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText: String = ""
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading remotes…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(filteredRemotes) { remote in
+                    NavigationLink(remote.name) {
+                        VariantListView(
+                            brand: brand,
+                            remote: remote.name,
+                            accessToken: accessToken,
+                            service: service,
+                            onWaveletImported: onWaveletImported
+                        )
+                        .navigationTitle(remote.name)
                     }
-                    .listStyle(PlainListStyle())
-                    .frame(minHeight: 100, maxHeight: 200)
+                    .badge(remote.variantCount)
                 }
-            },
-            label: {
-                HStack {
-                    Text("Available Scripts")
-                        .font(.headline)
-                    if !recentScripts.isEmpty {
-                        Text("(\(recentScripts.count))")
+                .listStyle(.insetGrouped)
+            }
+        }
+        .searchable(text: $searchText, prompt: "Search remotes")
+        .alert(isPresented: Binding<Bool>(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Alert(title: Text("Error"), message: Text(errorMessage ?? ""), dismissButton: .default(Text("OK")))
+        }
+        .task { await loadRemotes() }
+    }
+
+    private var filteredRemotes: [IRDBRemoteSummary] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return remotes }
+        return remotes.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    private func loadRemotes() async {
+        isLoading = true
+        do {
+            remotes = try await service.fetchRemotes(brand: brand, accessToken: accessToken).sorted(by: { $0.name < $1.name })
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
+private struct VariantListView: View {
+    @Environment(\.dismiss) private var dismiss
+    let brand: String
+    let remote: String
+    let accessToken: String
+    let service: IRDBService
+    let onWaveletImported: (IRDBImportedWavelet) -> Void
+
+    @State private var variants: [String] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var searchText: String = ""
+    @State private var importProgress: IRDBImportProgress?
+
+    var body: some View {
+        Group {
+            if isLoading {
+                if let progress = importProgress {
+                    VStack(spacing: 12) {
+                        if progress.total > 0 {
+                            ProgressView(value: Double(progress.processed), total: Double(progress.total))
+                        } else {
+                            ProgressView()
+                        }
+                        Text(progress.formatted)
+                            .font(.footnote)
                             .foregroundColor(.secondary)
                     }
-                }
-            }
-        )
-        .padding(.horizontal)
-    }
-    
-    private var scriptEditorSection: some View {
-        DisclosureGroup(
-            isExpanded: $isScriptEditorExpanded,
-            content: {
-                KeyboardToolbarTextEditor(text: $scriptContent, font: .system(.body, design: .monospaced))
-                    .padding(4)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                    .frame(minHeight: 100, maxHeight: 250)
-                    .onChangeCompat(of: scriptContent) { _ in
-                        hasUnsavedChanges = true
-                        updateDynamicScriptEditorTitle()
-                        setupAutoSave()
-                    }
-            },
-            label: {
-                Text(dynamicScriptEditorTitle)
-                    .font(.headline)
-            }
-        )
-        .padding(.horizontal)
-    }
-
-    private var waveletPreview: some View {
-        ZStack(alignment: .topLeading) {
-            WaveletRenderView(tree: activeWaveletTree, invokeHandler: handleWaveletCallback)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-            if activeWaveletTree == nil && !isRenderingWavelet {
-                VStack {
-                    Text("Render a wavelet to see it here.")
-                        .foregroundColor(.secondary)
-                        .italic()
-                        .multilineTextAlignment(.center)
-                        .padding()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemGroupedBackground))
-            }
-
-            if isRenderingWavelet {
-                VStack {
-                    ProgressView("Rendering wavelet…")
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(12)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var menuButton: some View {
-        Menu {
-            Button("New Script") {
-                showingNewScriptAlert = true
-            }
-            
-            Button("Make Copy") {
-                showingCopyScriptAlert = true
-            }
-            
-            Divider()
-            
-            Button("Import from Files") {
-                showingFileImporter = true
-            }
-            
-            Button("Export to Files") {
-                if currentScriptName != nil {
-                    showingFileExporter = true
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    print("No script open to export")
+                    ProgressView("Loading variants…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            } else {
+                List(filteredVariants, id: \.self) { variant in
+                    Button(action: { importVariant(named: variant) }) {
+                        HStack {
+                            Text(variant)
+                            Spacer()
+                            Image(systemName: "square.and.arrow.down")
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
             }
-            
-            Divider()
-            
-            Button("Download from URL") {
-                showingURLPrompt = true
-            }
-
-            Divider()
-
-            Button("Settings") {
-                showingSettingsSheet = true
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
         }
+        .searchable(text: $searchText, prompt: "Search variants")
+        .alert(isPresented: Binding<Bool>(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Alert(title: Text("Error"), message: Text(errorMessage ?? ""), dismissButton: .default(Text("OK")))
+        }
+        .task { await loadVariants() }
     }
 
-    
-    // MARK: - Script Management
-    
-    private func getDocumentsDirectory() -> URL {
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        return paths[0].appendingPathComponent("scripts", isDirectory: true)
+    private var filteredVariants: [String] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return variants }
+        return variants.filter { $0.localizedCaseInsensitiveContains(trimmed) }
     }
-    
-    private func ensureScriptDirectoryExists() {
-        let scriptsDir = getDocumentsDirectory()
-        if !FileManager.default.fileExists(atPath: scriptsDir.path) {
-            try? FileManager.default.createDirectory(at: scriptsDir, withIntermediateDirectories: true)
-        }
-    }
-    
-    private func loadRecentScripts() {
-        ensureScriptDirectoryExists()
-        
-        let scriptsDir = getDocumentsDirectory()
+
+    private func loadVariants() async {
+        isLoading = true
         do {
-            let scriptFiles = try FileManager.default.contentsOfDirectory(at: scriptsDir, includingPropertiesForKeys: nil)
-            let scriptNames = scriptFiles.map { $0.lastPathComponent }
-            recentScripts = scriptNames.sorted()
+            variants = try await service.fetchVariants(brand: brand, remote: remote, accessToken: accessToken).sorted()
         } catch {
-            print("Error loading scripts: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
         }
-        updateDynamicScriptEditorTitle()
-    }
-    
-    private func saveScript(_ name: String, content: String) {
-        ensureScriptDirectoryExists()
-        
-        let scriptFile = getDocumentsDirectory().appendingPathComponent(name)
-        do {
-            try content.write(to: scriptFile, atomically: true, encoding: .utf8)
-            
-            // Update recent scripts list
-            if !recentScripts.contains(name) {
-                recentScripts.append(name)
-                recentScripts.sort()
-            }
-        } catch {
-            print("Error saving script: \(error.localizedDescription)")
-        }
-        updateDynamicScriptEditorTitle()
-    }
-    
-    private func loadScript(_ name: String) {
-        let scriptFile = getDocumentsDirectory().appendingPathComponent(name)
-        do {
-            scriptContent = try String(contentsOf: scriptFile, encoding: .utf8)
-            currentScriptName = name
-            hasUnsavedChanges = false
-            statusMessage = name
-            updateDynamicScriptEditorTitle()
-        } catch {
-            print("Error loading script: \(error.localizedDescription)")
-        }
-    }
-    
-    private func deleteScript(_ name: String) {
-        let scriptFile = getDocumentsDirectory().appendingPathComponent(name)
-        do {
-            try FileManager.default.removeItem(at: scriptFile)
-            
-            // Update recent scripts list
-            if let index = recentScripts.firstIndex(of: name) {
-                recentScripts.remove(at: index)
-            }
-            
-            // Clear editor if this script was loaded
-            if currentScriptName == name {
-                scriptContent = ""
-                currentScriptName = nil
-                statusMessage = "Open a script"
-            }
-            updateDynamicScriptEditorTitle()
-        } catch {
-            print("Error deleting script: \(error.localizedDescription)")
-        }
-    }
-    
-    private func createNewScript(_ name: String) {
-        guard !name.isEmpty else { return }
-        
-        // Create a new script with default content
-        let filename = getExportFilename(name)
-        saveScript(filename, content: "// New script")
-        loadScript(filename)
-    }
-    
-    private func copyCurrentScript(_ name: String) {
-        guard !name.isEmpty, currentScriptName != nil else { return }
-        
-        // Copy current script content to a new script
-        let filename = getExportFilename(name)
-        saveScript(filename, content: scriptContent)
-        loadScript(filename)
-    }
-    
-    private func setupAutoSave() {
-        // Cancel existing timer
-        autoSaveTimer?.invalidate()
-        
-        // Start new timer
-        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: autoSaveDelay, repeats: false) { _ in
-            if let scriptName = currentScriptName, hasUnsavedChanges {
-                saveScript(scriptName, content: scriptContent)
-                hasUnsavedChanges = false
-                updateDynamicScriptEditorTitle()
-            }
-        }
-    }
-    
-    // MARK: - Dynamic Title Update
-    private func updateDynamicScriptEditorTitle() {
-        if let name = currentScriptName {
-            dynamicScriptEditorTitle = "\(name)\(hasUnsavedChanges ? " *" : "")"
-        } else {
-            dynamicScriptEditorTitle = "Script Editor [No script open]"
-        }
-    }
-    
-    // MARK: - Console & Script Execution
-    
-    private func print(_ message: String) {
-        Swift.print(message)
-    }
-    
-    private func setupJSEngine() {
-        // Initialize JavaScript engine with BLEManager
-        jsEngine = JavaScriptEngine(bleManager: bleManager)
-        jsEngine?.setupContext(printCallback: { message in
-            self.print(message)
-        })
-        
-        // Set up CC1101 if available (create instance if connected and not already created)
-        if bleManager.isConnected && cc1101 == nil {
-            cc1101 = CC1101(bleManager: bleManager)
-        }
-        
-        if let cc1101 = cc1101 {
-            jsEngine?.setupCC1101(cc1101)
-        }
-        
-        // Set up IR encoder
-        jsEngine?.setupIR()
-        
-        // Register script loading function
-        jsEngine?.registerLoadFunction(scriptDirectoryURL: getDocumentsDirectory())
-    }
-    
-    private func executeScript() {
-        // Initialize JS engine if not already done (allows script execution even when disconnected)
-        if jsEngine == nil {
-            setupJSEngine()
-        }
-
-        let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            self.print("No script to execute.")
-            return
-        }
-
-        if isWaveletScript(trimmed) {
-            let infoMessage = "[Wavelet] Detected wavelet DSL, rendering preview instead of running in standard engine"
-            self.print(infoMessage)
-            Swift.print(infoMessage)
-            renderWavelet()
-            return
-        }
-
-        guard jsEngine != nil else {
-            self.print("JavaScript engine not initialized.")
-            return
-        }
-
-        isScriptRunning = true
-
-        // Execute the script
-        jsEngine?.evaluateScript(trimmed) {
-            DispatchQueue.main.async {
-                self.isScriptRunning = false
-            }
-        }
-    }
-    
-    private func stopScript() {
-        // Currently we can't easily interrupt the script execution in JSContext
-        // Just update UI state
-        isScriptRunning = false
-        print("Script execution stopping...")
-    }
-    
-    // MARK: - Default Scripts
-    
-    private func createDefaultScriptsIfNeeded() {
-        ensureScriptDirectoryExists()
-        
-        // Create all 5 scripts that match Android exactly
-        let waveletDemoName = "wavelet_demo.js"
-        let waveletDemoPath = getDocumentsDirectory().appendingPathComponent(waveletDemoName)
-
-        if !FileManager.default.fileExists(atPath: waveletDemoPath.path) {
-            saveScript(waveletDemoName, content: waveletDemoScript())
-            print("Created default wavelet demo script")
-        }
-
-        let rfidWaveletName = "wavelet_rfid.js"
-        let rfidWaveletPath = getDocumentsDirectory().appendingPathComponent(rfidWaveletName)
-
-        if !FileManager.default.fileExists(atPath: rfidWaveletPath.path) {
-            saveScript(rfidWaveletName, content: waveletRFIDScript())
-            print("Created default RFID wavelet script")
-        }
-
-        let waveletGPIOName = "wavelet_gpio.js"
-        let waveletGPIOPath = getDocumentsDirectory().appendingPathComponent(waveletGPIOName)
-
-        if !FileManager.default.fileExists(atPath: waveletGPIOPath.path) {
-            saveScript(waveletGPIOName, content: waveletGPIOScript())
-            print("Created default GPIO wavelet script")
-        }
-
-        let cc1101RadioName = "cc1101_radio_console.js"
-        let cc1101RadioPath = getDocumentsDirectory().appendingPathComponent(cc1101RadioName)
-
-        if !FileManager.default.fileExists(atPath: cc1101RadioPath.path) {
-            saveScript(cc1101RadioName, content: cc1101RadioConsoleScript())
-            print("Created default CC1101 radio console script")
-        }
-
-        let helloWorldUsbName = "hello_world_usb.js"
-        let helloWorldUsbPath = getDocumentsDirectory().appendingPathComponent(helloWorldUsbName)
-
-        if !FileManager.default.fileExists(atPath: helloWorldUsbPath.path) {
-            saveScript(helloWorldUsbName, content: helloWorldUsbScript())
-            print("Created default Hello World USB script")
-        }
-
-        loadRecentScripts()
+        isLoading = false
     }
 
-    private func cc1101RadioConsoleScript() -> String {
-        return """
-        let message = 'Ready';
-
-        function initRx() {
-            try {
-                CC1101.spiStrobe(CC1101.SRES);
-                CC1101.init();
-                CC1101.writeReg(CC1101.PKTCTRL0, 0x32);
-                CC1101.setGDOMode(0x2E, 0x2E, 0x0D);
-                CC1101.setFrequencyMHz(433.92);
-                CC1101.setDataRate(100000);
-                CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);
-                CC1101.spiStrobe(CC1101.SRX);
-                message = 'RX init complete!';
-                render();
-            } catch (error) {
-                message = 'RX init failed: ' + error;
-                render();
-            }
-        }
-
-        function initTx() {
-            try {
-                CC1101.spiStrobe(CC1101.SRES);
-                CC1101.init();
-                CC1101.writeReg(CC1101.PKTCTRL0, 0x32);
-                CC1101.setGDOMode(0x2E, 0x2E, 0x0D);
-                CC1101.setFrequencyMHz(433.92);
-                CC1101.setDataRate(100000);
-                CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);
-                CC1101.spiStrobe(CC1101.STX);
-                message = 'TX init complete!';
-                render();
-            } catch (error) {
-                message = 'TX init failed: ' + error;
-                render();
-            }
-        }
-
-        function render() {
-            UI.render(UI.column({
-                padding: 16,
-                spacing: 16,
-                children: [
-                    UI.text({ text: 'CC1101 Radio', font: 'title2', fontWeight: 'semibold' }),
-                    UI.row({
-                        spacing: 12,
-                        children: [
-                            UI.button({ label: 'Init RX', backgroundColor: '#2563EB', foregroundColor: '#FFFFFF', onTap: initRx }),
-                            UI.button({ label: 'Init TX', backgroundColor: '#DC2626', foregroundColor: '#FFFFFF', onTap: initTx })
-                        ]
-                    }),
-                    UI.text({ text: message, fontWeight: 'medium', foregroundColor: '#374151' })
-                ]
-            }));
-        }
-
-        render();
-        """
-    }
-
-    private func helloWorldUsbScript() -> String {
-        return """
-        WaveletConsole.subscribe(render);
-        render();
-
-        function render() {
-            UI.render(UI.column({
-                padding: 16,
-                spacing: 12,
-                children: [
-                    UI.text({ text: 'BadUSB Hello World', font: 'title2', fontWeight: 'semibold' }),
-                    UI.text({ text: 'Send a simple HID payload to the connected host.', foregroundColor: '#6B7280' }),
-                    UI.button({ label: 'Execute Payload', backgroundColor: '#1D4ED8', foregroundColor: '#FFFFFF', onTap: runDemo }),
-                    WaveletConsole.view({
-                        minHeight: 160,
-                        backgroundColor: '#111827',
-                        foregroundColor: '#F9FAFB',
-                        padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-                        cornerRadius: 8
-                    })
-                ]
-            }));
-        }
-
-        function runDemo() {
-            print('[BadUSB] Setting up HID attack mode...');
-            BLEService.sendString('usb ATTACKMODE HID');
-            Utils.delay(2000);
-            BLEService.sendString('usb STRING_DELAY 10');
-            Utils.delay(500);
-            BLEService.sendString('usb STRING Hello, World!');
-            Utils.delay(500);
-            BLEService.sendString('usb ENTER');
-            Utils.delay(500);
-            print('[BadUSB] Payload complete.');
-        }
-        """
-    }
-    
-    // MARK: - Lifecycle methods
-
-    // Add an explicit method to be called at the end of onAppear
-    private func refreshUIAfterLoading() {
-        // Force update the recent scripts list
-        loadRecentScripts()
-        
-        // Ensure the UI reflects the current state
-        updateDynamicScriptEditorTitle()
-    }
-    
-    // MARK: - External Storage & Network Operations
-    
-    private func importScriptFromExternalStorage(url: URL) {
-        guard url.startAccessingSecurityScopedResource() else {
-            print("Failed to access security-scoped resource")
-            return
-        }
-
-        defer {
-            url.stopAccessingSecurityScopedResource()
-        }
-
-        var coordinationError: NSError?
-        var content = ""
-
-        NSFileCoordinator().coordinate(readingItemAt: url, error: &coordinationError) { coordinatedURL in
+    private func importVariant(named fileName: String) {
+        isLoading = true
+        importProgress = IRDBImportProgress(processed: 0, total: 0)
+        Task {
             do {
-                content = try String(contentsOf: coordinatedURL, encoding: .utf8)
+                let wavelet = try await service.importRemote(
+                    brand: brand,
+                    remote: remote,
+                    fileName: fileName,
+                    accessToken: accessToken
+                ) { progress in
+                    importProgress = progress
+                }
+                onWaveletImported(wavelet)
+                dismiss()
             } catch {
-                print("Error reading file contents: \(error.localizedDescription)")
+                errorMessage = error.localizedDescription
+                isLoading = false
             }
-        }
-
-        if let fileError = coordinationError {
-            print("File coordination error: \(fileError.localizedDescription)")
-            return
-        }
-
-        if content.isEmpty {
-            print("Failed to read file content")
-            return
-        }
-
-        let filename = url.lastPathComponent
-        saveScript(filename, content: content)
-        loadScript(filename)
-        print("Imported script: \(filename)")
-    }
-    
-    private func downloadScriptFromURL(_ urlString: String) {
-        guard let url = URL(string: urlString) else {
-            print("Invalid URL")
-            return
-        }
-        
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            if let error = error {
-                DispatchQueue.main.async {
-                    print("Download error: \(error.localizedDescription)")
-                }
-                return
-            }
-            
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                DispatchQueue.main.async {
-                    print("Server error: \(response.debugDescription)")
-                }
-                return
-            }
-            
-            if let data = data, let content = String(data: data, encoding: .utf8) {
-                DispatchQueue.main.async {
-                    // Use the URL's last path component as the filename
-                    let filename = url.lastPathComponent
-                    
-                    // Save to internal storage
-                    saveScript(filename, content: content)
-                    
-                    // Load the script
-                    loadScript(filename)
-                    
-                    print("Downloaded and imported script: \(filename)")
-                }
-            }
-        }
-        
-        task.resume()
-    }
-
-
-    // MARK: - Wavelet Support
-
-    private func setupWaveletEngineIfNeeded() {
-        guard waveletEngine == nil else {
-            Swift.print("[Wavelet] WaveletEngine already initialized")
-            ensureWaveletEngineBindings()
-            return
-        }
-        Swift.print("[Wavelet] Initializing WaveletEngine")
-        let engine = WaveletEngine()
-        engine.setup(printHandler: { message in
-            let tagged = "[Wavelet] \(message)"
-            self.print(tagged)
-        }, renderHandler: { tree in
-            self.activeWaveletTree = tree
-            self.isRenderingWavelet = false
-            if !self.showingPreview {
-                self.showingPreview = true
-            }
-        }, dialogHandler: { title, message in
-            self.waveletDialog = WaveletDialog(title: title, message: message)
-        }, bindings: buildBindings())
-        waveletEngine = engine
-        Swift.print("[Wavelet] WaveletEngine initialized successfully")
-    }
-
-    private func ensureWaveletEngineBindings() {
-        waveletEngine?.registerGlobalBindings(buildBindings())
-    }
-
-    private func buildBindings() -> [String: Any] {
-        var bindings: [String: Any] = [:]
-        
-        if let cc1101 = cc1101 {
-            bindings["CC1101"] = CC1101Wrapper(cc1101: cc1101)
-            Swift.print("[Wavelet] CC1101 binding added with wrapper")
-        }
-        
-        if bleManager.isConnected {
-            bindings["BLEService"] = BLEServiceWrapper(bleManager: bleManager)
-            Swift.print("[Wavelet] BLEService binding added with wrapper - isConnected: \(bleManager.isConnected)")
-        } else {
-            Swift.print("[Wavelet] BLEService NOT added - isConnected: \(bleManager.isConnected)")
-        }
-        
-        Swift.print("[Wavelet] Built bindings: \(bindings.keys)")
-        return bindings
-    }
-
-    private func renderWavelet() {
-        let trimmed = scriptContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            Swift.print("[Wavelet] Script is empty; nothing to render")
-            return
-        }
-
-        Swift.print("[Wavelet] renderWavelet invoked with script length \(scriptContent.count)")
-        setupWaveletEngineIfNeeded()
-        guard let engine = waveletEngine else {
-            Swift.print("[Wavelet] Aborting render: waveletEngine not initialized")
-            return
-        }
-
-        showingPreview = true
-        isRenderingWavelet = true
-        activeWaveletTree = nil
-        Swift.print("[Wavelet] Rendering preview...")
-
-        engine.execute(script: trimmed) {
-            Swift.print("[Wavelet] Render completion callback")
-            self.isRenderingWavelet = false
-        }
-    }
-
-    private func exitPreview() {
-        showingPreview = false
-        isRenderingWavelet = false
-        activeWaveletTree = nil
-    }
-
-    private func isWaveletScript(_ script: String) -> Bool {
-        let lowered = script.lowercased()
-        return lowered.contains("ui.render(") || lowered.contains("ui.column(") || lowered.contains("ui.row(")
-    }
-
-    private func handleWaveletCallback(_ token: String, arguments: [Any]) {
-        print("[Wavelet] Invoking handler \(token) with arguments: \(arguments)")
-        waveletEngine?.invoke(handler: token, arguments: arguments)
-    }
-
-    private func waveletDemoScript() -> String {
-        return """
-        const root = UI.column({
-            spacing: 12,
-            padding: 8,
-            children: [
-                UI.text({ text: "Wavelet Demo" }),
-                UI.text({ text: "Use UI.button, UI.row, and UI.column to compose layouts." }),
-                UI.row({
-                    spacing: 8,
-                    children: [
-                        UI.button({
-                            label: "Pulse LED",
-                            onTap: () => {
-                                print('Pulse LED requested');
-                            }
-                        }),
-                        UI.button({
-                            label: "Log Message",
-                            onTap: () => {
-                                print('Wavelet button pressed');
-                            }
-                        })
-                    ]
-                }),
-                UI.logViewer({ text: "Console messages will appear below." })
-            ]
-        });
-
-        UI.render(root);
-        """
-    }
-
-    private func waveletRFIDScript() -> String {
-        return """
-        // State matching the original RFID fragment exactly
-        let blockAddress = "00";
-        let authMode = 0; // 0 = Key A, 1 = Key B
-        let keyInputs = ["FF", "FF", "FF", "FF", "FF", "FF"];
-        let combinedData = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
-        let resultText = "";
-
-        function isKeyComplete() {
-            for (let i = 0; i < 6; i++) {
-                if (!keyInputs[i] || keyInputs[i].trim().length === 0) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        function isCombinedDataComplete() {
-            if (!combinedData || combinedData.trim().length === 0) {
-                return false;
-            }
-            let dataBytes = combinedData.trim().split(/\\s+/).filter(Boolean);
-            return dataBytes.length === 16;
-        }
-
-        function processReadResponse(response) {
-            if (!response || response.length === 0) {
-                showError("No response received.");
-                return;
-            }
-            
-            // Check for text error messages first
-            let responseString = "";
-            try {
-                for (let i = 0; i < response.length; i++) {
-                    responseString += String.fromCharCode(response[i]);
-                }
-            } catch (e) {
-                responseString = "";
-            }
-            
-            if (responseString.includes("No card detected")) {
-                showError("Error: No card detected");
-                return;
-            }
-            if (responseString.includes("RFID module not connected")) {
-                showError("Error: RFID module not connected");
-                return;
-            }
-            
-            if (response.length >= 2) {
-                let cardType = getTagType(response[0], response[1]);
-                let result = "Card Type: " + cardType + "\\n";
-                
-                // Extract UID if present
-                if (response.length > 6) {
-                    let uid = "";
-                    for (let i = 2; i < 6; i++) {
-                        uid += ((response[i] & 0xFF).toString(16).toUpperCase().padStart(2, '0')) + " ";
-                    }
-                    result += "UID: " + uid.trim() + "\\n";
-                }
-                
-                if (response.length > 6) {
-                    if ((response[6] & 0xFF) === 0xFF) {
-                        // Error occurred
-                        let errorMsg = "";
-                        for (let i = 7; i < response.length; i++) {
-                            errorMsg += String.fromCharCode(response[i]);
-                        }
-                        result += "Error: " + errorMsg;
-                        showError(result);
-                    } else if ((response[6] & 0xFF) === 0x00 && response.length >= 23) {
-                        // Successful read
-                        let data = "";
-                        for (let i = 7; i < 23; i++) {
-                            data += ((response[i] & 0xFF).toString(16).toUpperCase().padStart(2, '0')) + " ";
-                        }
-                        result += "Data: " + data.trim();
-                        showResultDialog(result, data.trim());
-                    } else {
-                        showError("Unexpected response format. See logs for details.");
-                    }
-                } else {
-                    showError("Incomplete response received (length: " + response.length + ")");
-                }
-            } else {
-                showError("Invalid response format (length: " + response.length + ")");
-            }
-        }
-
-        function getTagType(byte0, byte1) {
-            // Exact tag type detection from original fragment
-            let tagType = ((byte0 & 0xFF) << 8) | (byte1 & 0xFF);
-            switch (tagType) {
-                case 0x4400:
-                    return "Mifare_UltraLight";
-                case 0x0400:
-                    return "Mifare_One(S50)";
-                case 0x0200:
-                    return "Mifare_One(S70)";
-                case 0x0800:
-                    return "Mifare_Pro(X)";
-                case 0x4403:
-                    return "Mifare_DESFire";
-                default:
-                    return "Unknown";
-            }
-        }
-
-        function showError(errorMessage) {
-            resultText = errorMessage;
-            render();
-        }
-
-        function showResultDialog(result, data) {
-            resultText = ""; // Clear result text since we're showing dialog
-            render();
-            
-            // Show dialog with "COPY to write" option for reads
-            if (data && data.trim().length > 0) {
-                // For reads with data - show dialog with copy option
-                // Note: This is a simplified version - real implementation would need custom dialog with two buttons
-                dialog("Result", result + "\\n\\nData has been copied to write field.");
-                
-                // Copy data to write field
-                let dataBytes = data.trim().split(' ');
-                while (dataBytes.length < 16) {
-                    dataBytes.push("00");
-                }
-                combinedData = dataBytes.slice(0, 16).join(" ");
-                render();
-            } else {
-                // For writes or reads without data
-                dialog("Result", result);
-            }
-        }
-
-        function sendReadCommand() {
-            if (!BLEService) {
-                showError("BLE Service not bound. Please reconnect.");
-                return;
-            }
-            
-            if (blockAddress.trim().length === 0 || !isKeyComplete()) {
-                showError("Please enter block address and complete key.");
-                return;
-            }
-            
-            try {
-                // Create command exactly like the original fragment
-                let command = new Array(21);
-                let cmdPrefix = "mfrc522 read ";
-                
-                // Copy prefix
-                for (let i = 0; i < cmdPrefix.length; i++) {
-                    command[i] = cmdPrefix.charCodeAt(i);
-                }
-                
-                // Add block address
-                command[cmdPrefix.length] = parseInt(blockAddress, 16);
-                
-                // Add auth mode byte (0x60 for Key A, 0x61 for Key B)
-                command[cmdPrefix.length + 1] = authMode === 0 ? 0x60 : 0x61;
-                
-                // Add 6-byte key
-                for (let i = 0; i < 6; i++) {
-                    command[cmdPrefix.length + 2 + i] = parseInt(keyInputs[i], 16);
-                }
-                
-                // Convert to Java byte array
-                let byteArray = createByteArray(command);
-                let response = BLEService.sendCommand(byteArray, 2000);
-                
-                processReadResponse(response);
-                
-            } catch (error) {
-                showError("Read error: " + error);
-            }
-        }
-
-        function processWriteResponse(response) {
-            if (!response || response.length === 0) {
-                showError("No response received.");
-                return;
-            }
-            
-            // Check for text error messages first
-            let responseString = "";
-            try {
-                for (let i = 0; i < response.length; i++) {
-                    responseString += String.fromCharCode(response[i]);
-                }
-            } catch (e) {
-                responseString = "";
-            }
-            
-            if (responseString.includes("No card detected")) {
-                showError("Error: No card detected");
-                return;
-            }
-            if (responseString.includes("RFID module not connected")) {
-                showError("Error: RFID module not connected");
-                return;
-            }
-            
-            if (responseString.includes("Success")) {
-                showResultDialog("Write successful", "");
-                resultText = ""; // Clear any previous error message
-                render();
-            } else {
-                // More detailed error reporting
-                let errorDetails = "Error: " + responseString + "\\nRaw response size: " + response.length + " bytes";
-                showError(errorDetails);
-            }
-        }
-
-        function sendWriteCommand() {
-            if (!BLEService) {
-                showError("BLE Service not bound. Please reconnect.");
-                return;
-            }
-            
-            if (blockAddress.trim().length === 0 || !isKeyComplete() || !isCombinedDataComplete()) {
-                showError("Please enter block address, complete key, and data.");
-                return;
-            }
-            
-            try {
-                // Parse combined data - remove spaces and validate length
-                let cleanData = combinedData.replace(/\\s/g, "");
-                if (cleanData.length !== 32) {
-                    showError("Data must be exactly 16 bytes (32 hex characters)");
-                    return;
-                }
-                
-                // Create command exactly like the original fragment
-                let command = new Array(38);
-                let cmdPrefix = "mfrc522 write ";
-                
-                // Copy prefix  
-                for (let i = 0; i < cmdPrefix.length; i++) {
-                    command[i] = cmdPrefix.charCodeAt(i);
-                }
-                
-                // Add block address
-                command[cmdPrefix.length] = parseInt(blockAddress, 16);
-                
-                // Add auth mode byte
-                command[cmdPrefix.length + 1] = authMode === 0 ? 0x60 : 0x61;
-                
-                // Add 6-byte key
-                for (let i = 0; i < 6; i++) {
-                    command[cmdPrefix.length + 2 + i] = parseInt(keyInputs[i], 16);
-                }
-                
-                // Add 16-byte data (parse from hex string)
-                for (let i = 0; i < 16; i++) {
-                    let hexByte = cleanData.substring(i * 2, i * 2 + 2);
-                    command[cmdPrefix.length + 8 + i] = parseInt(hexByte, 16);
-                }
-                
-                // Convert to Java byte array
-                let byteArray = createByteArray(command);
-                let response = BLEService.sendCommand(byteArray, 2000);
-                
-                processWriteResponse(response);
-                
-            } catch (error) {
-                showError("Write error: " + error);
-            }
-        }
-
-        function render() {
-            UI.render(UI.scroll({
-                padding: 16,
-                spacing: 16,
-                children: [
-                    UI.column({
-                        spacing: 16,
-                        children: [
-                            UI.text({ text: "RFID Tools", font: "title2", fontWeight: "semibold" }),
-                            
-                            // Block Address
-                            UI.text({ text: "Block Address", fontWeight: "medium" }),
-                            UI.textField({
-                                placeholder: "00",
-                                value: blockAddress,
-                                onChange: function(value) { 
-                                    blockAddress = value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 2);
-                                }
-                            }),
-                            
-                            // Authentication Mode
-                            UI.text({ text: "Authentication Mode", fontWeight: "medium" }),
-                            UI.picker({
-                                style: "segmented",
-                                selected: authMode,
-                                options: [
-                                    { label: "Key A", value: 0 },
-                                    { label: "Key B", value: 1 }
-                                ],
-                                onChange: function(value) {
-                                    authMode = value;
-                                }
-                            }),
-                            
-                            // Key inputs (6 fields)
-                            UI.column({
-                                spacing: 8,
-                                children: [
-                                    UI.text({ text: "Key (6 bytes)", fontWeight: "medium" }),
-                                    UI.grid({
-                                        columns: 3,
-                                        spacing: 8,
-                                        children: keyInputs.map(function(keyValue, index) {
-                                            return UI.textField({
-                                                placeholder: "FF",
-                                                value: keyValue,
-                                                onChange: function(value) {
-                                                    keyInputs[index] = value.toUpperCase().replace(/[^0-9A-F]/g, "").slice(0, 2);
-                                                }
-                                            });
-                                        })
-                                    })
-                                ]
-                            }),
-                            
-                            // Combined data input
-                            UI.text({ text: "Data (16 bytes)", fontWeight: "medium" }),
-                            UI.textEditor({
-                                placeholder: "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
-                                value: combinedData,
-                                onChange: function(value) {
-                                    combinedData = value.toUpperCase().replace(/[^0-9A-F ]/g, "");
-                                }
-                            }),
-                            
-                            // Read and Write buttons
-                            UI.row({
-                                spacing: 12,
-                                children: [
-                                    UI.button({
-                                        label: "Read",
-                                        backgroundColor: "#2563EB",
-                                        foregroundColor: "#FFFFFF",
-                                        onTap: sendReadCommand
-                                    }),
-                                    UI.button({
-                                        label: "Write", 
-                                        backgroundColor: "#DC2626",
-                                        foregroundColor: "#FFFFFF",
-                                        onTap: sendWriteCommand
-                                    })
-                                ]
-                            }),
-                            
-                            // Result display
-                            resultText ? UI.text({
-                                text: resultText,
-                                backgroundColor: resultText.includes("successful") ? "#DCFCE7" : "#FEE2E2",
-                                foregroundColor: resultText.includes("successful") ? "#166534" : "#DC2626",
-                                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-                                cornerRadius: 8
-                            }) : null
-                        ]
-                    })
-                ]
-            }));
-        }
-
-        render();
-        """
-    }
-
-    private func waveletGPIOScript() -> String {
-        return """
-        // Simple GPIO control wavelet
-        let selectedPin = 0;
-        let resultText = "";
-
-        const PINS = [
-            { label: "GPIO0 (IO0)", value: "0" },
-            { label: "CC1101 GDO0 (IO1)", value: "1" },
-            { label: "CC1101 GDO2 (IO2)", value: "2" },
-            { label: "IR TX (IO4)", value: "4" },
-            { label: "IR RX (IO5)", value: "5" },
-            { label: "GPIO6 (IO6)", value: "6" },
-            { label: "GPIO7 (IO7)", value: "7" },
-            { label: "GPIO9 (IO9)", value: "9" },
-            { label: "CC1101 NSS (IO10)", value: "10" },
-            { label: "CC1101 MOSI (IO11)", value: "11" },
-            { label: "CC1101 SCK (IO12)", value: "12" },
-            { label: "CC1101 MISO (IO13)", value: "13" },
-            { label: "GPIO14 (IO14)", value: "14" },
-            { label: "GPIO15 (IO15)", value: "15" },
-            { label: "GPIO16 (IO16)", value: "16" }
-        ];
-
-        // Initialize selectedPin to first pin's value  
-        selectedPin = PINS[0].value;
-
-        function gpioRead() {
-            console.log("gpioRead called with selectedPin: " + selectedPin);
-            
-            if (!BLEService) {
-                resultText = "BLE Service not connected";
-                render();
-                return;
-            }
-            
-            try {
-                // Create GPIO read command: "gpio" + null + pin + 'R' + 0
-                let pinNumber = parseInt(selectedPin);
-                let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x52, 0x00]); // 'g','p','i','o',0,pin,'R',0
-                let response = BLEService.sendCommand(command, 2000);
-                
-                if (response && response.length > 0) {
-                    let state = response[0] !== 0;
-                    let pinInfo = PINS.find(p => p.value === selectedPin);
-                    let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
-                    resultText = "Read " + pinName + ": " + (state ? "HIGH" : "LOW");
-                } else {
-                    resultText = "GPIO read failed or timed out";
-                }
-                
-            } catch (error) {
-                resultText = "GPIO read error: " + error;
-            }
-            
-            render();
-        }
-
-        function gpioWriteHigh() {
-            gpioWrite(1);
-        }
-
-        function gpioWriteLow() {
-            gpioWrite(0);
-        }
-
-        function gpioWrite(value) {
-            console.log("gpioWrite called with value: " + value + " selectedPin: " + selectedPin);
-            
-            if (!BLEService) {
-                resultText = "BLE Service not connected";
-                render();
-                return;
-            }
-            
-            try {
-                // Create GPIO write command: "gpio" + null + pin + 'W' + value
-                let pinNumber = parseInt(selectedPin);
-                let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x57, value]); // 'g','p','i','o',0,pin,'W',value
-                let response = BLEService.sendCommand(command, 2000);
-                
-                if (response && response.length > 0) {
-                    let state = response[0] !== 0;
-                    let writeAction = value ? "HIGH" : "LOW";
-                    let pinInfo = PINS.find(p => p.value === selectedPin);
-                    let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
-                    let success = (state === (value !== 0));
-                    resultText = "Write " + writeAction + " to " + pinName + (success ? " successful" : " failed");
-                } else {
-                    resultText = "GPIO write failed or timed out";
-                }
-                
-            } catch (error) {
-                resultText = "GPIO write error: " + error;
-            }
-            
-            render();
-        }
-
-        function render() {
-            UI.render(UI.column({
-                padding: 16,
-                spacing: 16,
-                children: [
-                    UI.text({ text: "GPIO Control", font: "title2", fontWeight: "semibold" }),
-                    
-                    // Pin selection
-                    UI.text({ text: "Select Pin", fontWeight: "medium" }),
-                    UI.picker({
-                        style: "menu",
-                        selected: String(selectedPin),
-                        options: PINS,
-                        onChange: function(value) {
-                            selectedPin = value;
-                            console.log("Pin changed to value: " + selectedPin + " (type: " + typeof value + ")");
-                        }
-                    }),
-                    
-                    // GPIO operations
-                    UI.row({
-                        spacing: 12,
-                        children: [
-                            UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: gpioRead }),
-                            UI.button({ label: "Write HIGH", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: gpioWriteHigh }),
-                            UI.button({ label: "Write LOW", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: gpioWriteLow })
-                        ]
-                    }),
-                    
-                    // Result display
-                    resultText ? UI.text({
-                        text: resultText,
-                        backgroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#DCFCE7" : "#FEE2E2",
-                        foregroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#166534" : "#DC2626",
-                        padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-                        cornerRadius: 8
-                    }) : null
-                ]
-            }));
-        }
-
-        render();
-        """
-    }
-
-    private func waveletISMScript() -> String {
-        return """
-        const modulationOptions = [
-            { label: "2-FSK", value: "0" },
-            { label: "GFSK", value: "1" },
-            { label: "ASK/OOK", value: "3" },
-            { label: "4-FSK", value: "4" },
-            { label: "MSK", value: "7" }
-        ];
-
-        const powerOptions = [
-            { label: "-30 dBm", value: "-30" },
-            { label: "-20 dBm", value: "-20" },
-            { label: "-15 dBm", value: "-15" },
-            { label: "-10 dBm", value: "-10" },
-            { label: "0 dBm", value: "0" },
-            { label: "5 dBm", value: "5" },
-            { label: "7 dBm", value: "7" },
-            { label: "10 dBm", value: "10" }
-        ];
-
-        const configRegisters = [
-            { key: "00", name: "IOCFG2" }, { key: "01", name: "IOCFG1" }, { key: "02", name: "IOCFG0" },
-            { key: "03", name: "FIFOTHR" }, { key: "04", name: "SYNC1" }, { key: "05", name: "SYNC0" },
-            { key: "06", name: "PKTLEN" }, { key: "07", name: "PKTCTRL1" }, { key: "08", name: "PKTCTRL0" },
-            { key: "09", name: "ADDR" }, { key: "0A", name: "CHANNR" }, { key: "0B", name: "FSCTRL1" },
-            { key: "0C", name: "FSCTRL0" }, { key: "0D", name: "FREQ2" }, { key: "0E", name: "FREQ1" },
-            { key: "0F", name: "FREQ0" }, { key: "10", name: "MDMCFG4" }, { key: "11", name: "MDMCFG3" },
-            { key: "12", name: "MDMCFG2" }, { key: "13", name: "MDMCFG1" }, { key: "14", name: "MDMCFG0" },
-            { key: "15", name: "DEVIATN" }, { key: "16", name: "MCSM2" }, { key: "17", name: "MCSM1" },
-            { key: "18", name: "MCSM0" }, { key: "19", name: "FOCCFG" }, { key: "1A", name: "BSCFG" },
-            { key: "1B", name: "AGCCTRL2" }, { key: "1C", name: "AGCCTRL1" }, { key: "1D", name: "AGCCTRL0" },
-            { key: "1E", name: "WOREVT1" }, { key: "1F", name: "WOREVT0" }, { key: "20", name: "WORCTRL" },
-            { key: "21", name: "FREND1" }, { key: "22", name: "FREND0" }, { key: "23", name: "FSCAL3" },
-            { key: "24", name: "FSCAL2" }, { key: "25", name: "FSCAL1" }, { key: "26", name: "FSCAL0" },
-            { key: "27", name: "RCCTRL1" }, { key: "28", name: "RCCTRL0" }, { key: "29", name: "FSTEST" },
-            { key: "2A", name: "PTEST" }, { key: "2B", name: "AGCTEST" }, { key: "2C", name: "TEST2" },
-            { key: "2D", name: "TEST1" }, { key: "2E", name: "TEST0" }
-        ];
-
-        const statusRegisters = [
-            { key: "30", name: "PARTNUM" }, { key: "31", name: "VERSION" }, { key: "32", name: "FREQEST" },
-            { key: "33", name: "LQI" }, { key: "34", name: "RSSI" }, { key: "35", name: "MARCSTATE" },
-            { key: "36", name: "WORTIME1" }, { key: "37", name: "WORTIME0" }, { key: "38", name: "PKTSTATUS" },
-            { key: "39", name: "VCO_VC_DAC" }, { key: "3A", name: "TXBYTES" }, { key: "3B", name: "RXBYTES" }
-        ];
-
-        const paTable = Array.from({ length: 8 }, (_, index) => ({ key: `PA${index}`, name: `PA[${index}]` }));
-
-        const layout = {
-            gap: 10,
-            rowHeight: 30,
-            labelWidth: 150,
-            controlMinWidth: 120,
-            controlMaxWidth: 180,
-            actionWidth: 60
-        };
-
-        function labelCell(text) {
-            return UI.text({
-                text,
-                fontWeight: "medium",
-                width: layout.labelWidth,
-                alignment: "leading",
-                fillsWidth: false
-            });
-        }
-
-        function emptyCell(width) {
-            return UI.text({ text: "", width, fillsWidth: false });
-        }
-
-        const registerDefaults = [...configRegisters, ...statusRegisters, ...paTable].reduce((map, reg) => {
-            map[reg.key] = "??";
-            return map;
-        }, {});
-
-        const state = {
-            frequency: "",
-            dataRate: "",
-            bandwidth: "",
-            deviation: "",
-            modulation: modulationOptions[0].value,
-            power: powerOptions[4].value,
-            isLoading: false,
-            status: "Idle",
-            registerValues: registerDefaults
-        };
-
-        function setState(patch) {
-            Object.assign(state, patch);
-            render();
-        }
-
-        function updateField(key, rawValue) {
-            const trimmed = String(rawValue || "").trim();
-            setState({ [key]: trimmed });
-        }
-
-        function handleSet(key, label) {
-            const value = state[key];
-            if (!value) {
-                print(`[Wavelet/ISM] ${label} was left empty.`);
-                return;
-            }
-            print(`[Wavelet/ISM] Set ${label} to ${value}`);
-        }
-
-        function toggleLoading() {
-            const next = !state.isLoading;
-            setState({
-                isLoading: next,
-                status: next ? "Polling CC1101 registers…" : "Idle"
-            });
-            print(next ? "[Wavelet/ISM] Refreshing register snapshot" : "[Wavelet/ISM] Cancelled refresh" );
-        }
-
-        function resetRadio() {
-            print("[Wavelet/ISM] Reset radio to defaults");
-        }
-
-        function registerRow(register) {
-            const value = state.registerValues[register.key] || "??";
-            return UI.row({
-                spacing: 8,
-                children: [
-                    UI.text({ text: register.name, fontWeight: "medium" }),
-                    UI.spacer(),
-                    UI.text({ text: `0x${register.key}`, foregroundColor: "#6B7280" }),
-                    UI.spacer(),
-                    UI.text({ text: `0x${value}`, fontDesign: "monospaced" })
-                ]
-            });
-        }
-
-        function sectionHeading(text) {
-            return UI.text({ text, font: "subheadline", fontWeight: "semibold" });
-        }
-
-        function parameterRow(label, key, placeholder, keyboard) {
-            return UI.row({
-                spacing: layout.gap,
-                alignment: "center",
-                children: [
-                    labelCell(label),
-                    UI.row({
-                        spacing: layout.gap,
-                        alignment: "center",
-                        flex: 1,
-                        children: [
-                            UI.textField({
-                                placeholder,
-                                value: state[key],
-                                keyboard,
-                                minWidth: layout.controlMinWidth,
-                                maxWidth: layout.controlMaxWidth,
-                                height: layout.rowHeight,
-                                flex: 1,
-                                fillsWidth: true,
-                                onChange: function(value) {
-                                    updateField(key, value);
-                                }
-                            }),
-                            UI.button({
-                                label: "Set",
-                                buttonStyle: "bordered",
-                                controlSize: "small",
-                                minWidth: layout.actionWidth,
-                                maxWidth: layout.actionWidth,
-                                fillsWidth: false,
-                                onTap: function() {
-                                    handleSet(key, label);
-                                }
-                            })
-                        ]
-                    })
-                ]
-            });
-        }
-
-        function pickerRow(label, key, options) {
-            return UI.row({
-                spacing: layout.gap,
-                alignment: "center",
-                children: [
-                    labelCell(label),
-                    UI.row({
-                        spacing: layout.gap,
-                        alignment: "center",
-                        flex: 1,
-                        children: [
-                            UI.picker({
-                                selected: state[key],
-                                options,
-                                style: "menu",
-                                minWidth: layout.controlMinWidth,
-                                maxWidth: layout.controlMaxWidth,
-                                height: layout.rowHeight,
-                                fillsWidth: false,
-                                onChange: function(value) {
-                                    setState({ [key]: value });
-                                    print(`[Wavelet/ISM] ${label} -> ${value}`);
-                                }
-                            }),
-                            emptyCell(layout.actionWidth)
-                        ]
-                    })
-                ]
-            });
-        }
-
-        function render() {
-            UI.render(
-                UI.scroll({
-                    padding: 16,
-                    spacing: 24,
-                    children: [
-                        UI.column({
-                            spacing: layout.gap,
-                            children: [
-                                UI.text({
-                                    text: "ISM Toolkit",
-                                    font: "title2",
-                                    fontWeight: "semibold"
-                                }),
-                                UI.text({
-                                    text: "Configure CC1101 parameters and inspect live register snapshots.",
-                                    foregroundColor: "#6B7280"
-                                })
-                            ]
-                        }),
-                        UI.column({
-                            spacing: layout.gap,
-                            children: [
-                                parameterRow("Frequency (MHz):", "frequency", "2400", "decimal"),
-                                parameterRow("Data Rate (bps):", "dataRate", "38400", "number"),
-                                parameterRow("Bandwidth (kHz):", "bandwidth", "250", "decimal"),
-                                parameterRow("Deviation (Hz):", "deviation", "5000", "number"),
-                                pickerRow("Modulation Format:", "modulation", modulationOptions),
-                                pickerRow("TX Power:", "power", powerOptions),
-                                UI.row({
-                                    spacing: layout.gap,
-                                    alignment: "center",
-                                    children: [
-                                        emptyCell(layout.labelWidth),
-                                        UI.row({
-                                            spacing: layout.gap,
-                                            alignment: "center",
-                                            flex: 1,
-                                            children: [
-                                                emptyCell(layout.controlMinWidth),
-                                                UI.button({
-                                                    label: "Reset",
-                                                    buttonStyle: "bordered",
-                                                    controlSize: "small",
-                                                    minWidth: layout.actionWidth,
-                                                    maxWidth: layout.actionWidth,
-                                                    fillsWidth: false,
-                                                    icon: "arrow.counterclockwise",
-                                                    onTap: resetRadio
-                                                })
-                                            ]
-                                        })
-                                    ]
-                                })
-                            ]
-                        }),
-                        UI.column({
-                            spacing: 12,
-                            children: [
-                                UI.row({
-                                    spacing: 12,
-                                    children: [
-                                        UI.text({ text: "CC1101 Registers", font: "headline" }),
-                                        UI.spacer(),
-                                        UI.button({
-                                            label: state.isLoading ? "Cancel" : "Refresh",
-                                            buttonStyle: "bordered",
-                                            controlSize: "small",
-                                            fillsWidth: false,
-                                            icon: state.isLoading ? "xmark" : "arrow.clockwise",
-                                            onTap: toggleLoading
-                                        })
-                                    ]
-                                }),
-                                state.isLoading ? UI.progress({
-                                    label: "Loading registers…",
-                                    detail: state.status
-                                }) : null,
-                                UI.column({
-                                    spacing: 8,
-                                    children: [
-                                        sectionHeading("Configuration Registers"),
-                                        ...configRegisters.map(registerRow)
-                                    ]
-                                }),
-                                UI.divider(),
-                                UI.column({
-                                    spacing: 8,
-                                    children: [
-                                        sectionHeading("Status Registers"),
-                                        ...statusRegisters.map(registerRow)
-                                    ]
-                                }),
-                                UI.divider(),
-                                UI.column({
-                                    spacing: 8,
-                                    children: [
-                                        sectionHeading("PA Table"),
-                                        ...paTable.map(registerRow)
-                                    ]
-                                }),
-                                UI.text({
-                                    text: state.status,
-                                    font: "footnote",
-                                    foregroundColor: "#6B7280"
-                                })
-                            ]
-                        })
-                    ]
-                })
-            );
-        }
-
-        render();
-        """
-    }
-
-}
-
-
-// Create a ViewModifier instead of an extension method
-private extension View {
-    func applyAlerts(
-        showingNewScriptAlert: Binding<Bool>,
-        newScriptName: Binding<String>,
-        createNewScript: @escaping (String) -> Void,
-        showingCopyScriptAlert: Binding<Bool>,
-        copyCurrentScript: @escaping (String) -> Void,
-        showingScriptOptions: Binding<Bool>,
-        selectedScript: String?,
-        showingDeleteConfirmation: Binding<Bool>,
-        deleteScript: @escaping (String) -> Void,
-        showingFileImporter: Binding<Bool>,
-        importScriptFromExternalStorage: @escaping (URL) -> Void,
-        showingFileExporter: Binding<Bool>,
-        scriptDocument: ScriptDocument,
-        currentScriptName: String?,
-        showingURLPrompt: Binding<Bool>,
-        downloadURL: Binding<String>,
-        downloadScriptFromURL: @escaping (String) -> Void
-    ) -> some View {
-        self
-            .alert("New Script", isPresented: showingNewScriptAlert) {
-                TextField("Script Name", text: newScriptName)
-                Button("Cancel", role: .cancel) {
-                    newScriptName.wrappedValue = ""
-                }
-                Button("Create") {
-                    createNewScript(newScriptName.wrappedValue)
-                    newScriptName.wrappedValue = ""
-                }
-            } message: {
-                Text("Enter a name for the new script")
-            }
-            .alert("Copy Script", isPresented: showingCopyScriptAlert) {
-                TextField("Script Name", text: newScriptName)
-                Button("Cancel", role: .cancel) {
-                    newScriptName.wrappedValue = ""
-                }
-                Button("Copy") {
-                    copyCurrentScript(newScriptName.wrappedValue)
-                    newScriptName.wrappedValue = ""
-                }
-            } message: {
-                Text("Enter a name for the copy")
-            }
-            .confirmationDialog(selectedScript != nil ? "Options for \"\(selectedScript!)\"" : "Script Options", isPresented: showingScriptOptions, titleVisibility: .visible) {
-                Button("Rename") {
-                    if let scriptName = selectedScript {
-                        newScriptName.wrappedValue = scriptName
-                        print("Rename action for \(selectedScript ?? "nil")")
-                    }
-                }
-                
-                Button("Delete", role: .destructive) {
-                    showingDeleteConfirmation.wrappedValue = true
-                }
-                
-                Button("Cancel", role: .cancel) {}
-            }
-            .alert("Delete Script", isPresented: showingDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    if let script = selectedScript {
-                        deleteScript(script)
-                    }
-                }
-            } message: {
-                Text("Are you sure you want to delete \(selectedScript ?? "this script")?")
-            }
-            .fileImporter(
-                isPresented: showingFileImporter,
-                allowedContentTypes: [.plainText, .javascript],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    if let url = urls.first {
-                        importScriptFromExternalStorage(url)
-                    }
-                case .failure(let error):
-                    print("Error importing file: \(error.localizedDescription)")
-                }
-            }
-            .fileExporter(
-                isPresented: showingFileExporter,
-                document: scriptDocument,
-                contentType: .plainText,
-                defaultFilename: getExportFilename(currentScriptName)
-            ) { result in
-                switch result {
-                case .success(let url):
-                    print("Script exported to: \(url.path)")
-                case .failure(let error):
-                    print("Error exporting script: \(error.localizedDescription)")
-                }
-            }
-            .alert("Download Script", isPresented: showingURLPrompt) {
-                TextField("URL", text: downloadURL)
-                Button("Cancel", role: .cancel) {
-                    downloadURL.wrappedValue = ""
-                }
-                Button("Download") {
-                    downloadScriptFromURL(downloadURL.wrappedValue)
-                    downloadURL.wrappedValue = ""
-                }
-            } message: {
-                Text("Enter the URL of the script to download")
-            }
-    }
-}
-
-// Add this helper function in the View extension
-func getExportFilename(_ filename: String?) -> String {
-    let name = filename ?? "script"
-    return name.lowercased().hasSuffix(".js") ? name : name + ".js"
-}
-
-private extension View {
-    func onChangeCompat<Value: Equatable>(of value: Value, perform action: @escaping (Value) -> Void) -> some View {
-        if #available(iOS 17.0, *) {
-            return onChange(of: value) { _, newValue in
-                action(newValue)
-            }
-        } else {
-            return onChange(of: value, perform: action)
         }
     }
 }
-
-// MARK: - Script Document
-struct ScriptDocument: FileDocument {
-    var text: String
-    
-    init(_ text: String) {
-        self.text = text
-    }
-    
-    static var readableContentTypes: [UTType] { [.plainText] }
-    
-    init(configuration: ReadConfiguration) throws {
-        if let data = configuration.file.regularFileContents {
-            text = String(decoding: data, as: UTF8.self)
-        } else {
-            text = ""
-        }
-    }
-    
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        let data = Data(text.utf8)
-        return FileWrapper(regularFileWithContents: data)
-    }
-}
-
-#Preview {
-    NavigationView {
-        WaveletsView()
-            .environmentObject(BLEManager())
-    }
-} 

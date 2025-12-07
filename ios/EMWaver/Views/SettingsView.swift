@@ -5,6 +5,7 @@ struct SettingsView: View {
     @State private var showingRefreshTimePicker = false
     @State private var showingBufferSizePicker = false
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject private var authManager: AuthenticationManager
     
     var body: some View {
         List {
@@ -85,6 +86,14 @@ struct SettingsView: View {
                 }
                 .foregroundColor(.primary)
             }
+
+            Section("Account") {
+                Button(role: .destructive) {
+                    authManager.logout()
+                } label: {
+                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -122,6 +131,7 @@ struct SettingsView: View {
 #Preview {
     NavigationView {
         SettingsView()
+            .environmentObject(AuthenticationManager())
     }
 }
 

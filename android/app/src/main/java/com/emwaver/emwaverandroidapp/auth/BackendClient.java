@@ -32,11 +32,13 @@ public class BackendClient {
         public final String accessToken;
         public final String refreshToken;
         public final JSONObject user;
+        public final JSONObject entitlement;
 
-        LoginResult(String accessToken, String refreshToken, JSONObject user) {
+        LoginResult(String accessToken, String refreshToken, JSONObject user, JSONObject entitlement) {
             this.accessToken = accessToken;
             this.refreshToken = refreshToken;
             this.user = user;
+            this.entitlement = entitlement;
         }
     }
 
@@ -100,10 +102,11 @@ public class BackendClient {
                 String accessToken = json.optString("access_token", null);
                 String refreshToken = json.optString("refresh_token", null);
                 JSONObject user = json.optJSONObject("user");
+                JSONObject entitlement = json.optJSONObject("entitlement");
                 if (TextUtils.isEmpty(accessToken) || TextUtils.isEmpty(refreshToken) || user == null) {
                     throw new BackendException("Malformed response from server");
                 }
-                return new LoginResult(accessToken, refreshToken, user);
+                return new LoginResult(accessToken, refreshToken, user, entitlement);
             } catch (JSONException e) {
                 throw new BackendException("Invalid response from server", e);
             }
@@ -112,7 +115,14 @@ public class BackendClient {
         }
     }
 
-    public LoginResult register(String email, String username, String password, String firstName, String lastName)
+    public LoginResult register(
+            String email,
+            String username,
+            String password,
+            String firstName,
+            String lastName,
+            String accessCode
+    )
             throws BackendException {
         JSONObject payload = new JSONObject();
         try {
@@ -124,6 +134,9 @@ public class BackendClient {
             }
             if (!TextUtils.isEmpty(lastName)) {
                 payload.put("last_name", lastName);
+            }
+            if (!TextUtils.isEmpty(accessCode)) {
+                payload.put("access_code", accessCode);
             }
         } catch (JSONException e) {
             throw new BackendException("Failed to build register payload", e);
@@ -155,10 +168,11 @@ public class BackendClient {
                 String accessToken = json.optString("access_token", null);
                 String refreshToken = json.optString("refresh_token", null);
                 JSONObject user = json.optJSONObject("user");
+                JSONObject entitlement = json.optJSONObject("entitlement");
                 if (TextUtils.isEmpty(accessToken) || TextUtils.isEmpty(refreshToken) || user == null) {
                     throw new BackendException("Malformed response from server");
                 }
-                return new LoginResult(accessToken, refreshToken, user);
+                return new LoginResult(accessToken, refreshToken, user, entitlement);
             } catch (JSONException e) {
                 throw new BackendException("Invalid response from server", e);
             }

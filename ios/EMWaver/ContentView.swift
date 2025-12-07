@@ -9,78 +9,84 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var authManager: AuthenticationManager
     @State private var selection: String = "EMWaver"
     @State private var showWelcome: Bool = false
     
     var body: some View {
-        ZStack {
-            TabView(selection: $selection) {
-                // Main Views - these always appear in the tab bar
-                NavigationView {
-                    EMWaverView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Label("EMWaver", systemImage: "house")
-                }
-                .tag("EMWaver")
-                
-                NavigationView {
-                    ISMView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Label("ISM", systemImage: "memorychip")
-                }
-                .tag("ISM")
+        Group {
+            if authManager.isAuthenticated {
+                ZStack {
+                    TabView(selection: $selection) {
+                        NavigationView {
+                            EMWaverView()
+                        }
+                        .navigationViewStyle(StackNavigationViewStyle())
+                        .tabItem {
+                            Label("EMWaver", systemImage: "house")
+                        }
+                        .tag("EMWaver")
 
-                NavigationView {
-                    SamplerView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Label("Sampler", systemImage: "waveform")
-                }
-                .tag("Sampler")
-                    
-                NavigationView {
-                    WaveletsView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Label("Wavelets", systemImage: "text.and.command.macwindow")
-                }
-                .tag("Wavelets")
-                
-                ButtonsView()
-                .tabItem {
-                    Label("Buttons", systemImage: "apps.iphone")
-                }
-                .tag("Buttons")
-            }
-            .onAppear {
-                // Set up consistent navigation bar appearance
-                let appearance = UINavigationBarAppearance()
-                appearance.configureWithOpaqueBackground()
-                UINavigationBar.appearance().standardAppearance = appearance
-                UINavigationBar.appearance().compactAppearance = appearance
-                UINavigationBar.appearance().scrollEdgeAppearance = appearance
-                
-                // Check if this is the first launch
-                checkFirstLaunch()
-            }
-            
-            // Show welcome screen if it's the first launch
-            if showWelcome {
-                WelcomeView(onDismiss: {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        showWelcome = false
+                        NavigationView {
+                            ISMView()
+                        }
+                        .navigationViewStyle(StackNavigationViewStyle())
+                        .tabItem {
+                            Label("ISM", systemImage: "memorychip")
+                        }
+                        .tag("ISM")
+
+                        NavigationView {
+                            SamplerView()
+                        }
+                        .navigationViewStyle(StackNavigationViewStyle())
+                        .tabItem {
+                            Label("Sampler", systemImage: "waveform")
+                        }
+                        .tag("Sampler")
+
+                        NavigationView {
+                            WaveletsView()
+                        }
+                        .navigationViewStyle(StackNavigationViewStyle())
+                        .tabItem {
+                            Label("Wavelets", systemImage: "text.and.command.macwindow")
+                        }
+                        .tag("Wavelets")
+
+                        NavigationView {
+                            AgentsView(authManager: authManager)
+                        }
+                        .navigationViewStyle(StackNavigationViewStyle())
+                        .tabItem {
+                            Label("Agents", systemImage: "bubble.left.and.sparkles")
+                        }
+                        .tag("Agents")
                     }
-                    // Mark that user has seen the welcome screen
-                    UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
-                })
-                .transition(.opacity)
-                .zIndex(1)
+                    .onAppear {
+                        let appearance = UINavigationBarAppearance()
+                        appearance.configureWithOpaqueBackground()
+                        UINavigationBar.appearance().standardAppearance = appearance
+                        UINavigationBar.appearance().compactAppearance = appearance
+                        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                        checkFirstLaunch()
+                    }
+
+                    if showWelcome {
+                        WelcomeView(onDismiss: {
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                showWelcome = false
+                            }
+                            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+                        })
+                        .transition(.opacity)
+                        .zIndex(1)
+                    }
+                }
+            } else {
+                NavigationStack {
+                    LoginView()
+                }
             }
         }
     }
@@ -96,4 +102,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(BLEManager())
+        .environmentObject(AuthenticationManager())
 }

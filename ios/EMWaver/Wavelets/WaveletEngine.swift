@@ -6,6 +6,9 @@ final class WaveletEngine {
     private var context: JSContext?
     private var callbackRegistry: [String: JSValue] = [:]
     private var globalBindings: [String: Any] = [:]
+    private var moduleSources: [String: ModuleSource] = [:]
+    private var moduleCache: [String: JSValue] = [:]
+    private var moduleLoadingStack: Set<String> = []
     private var printHandler: ((String) -> Void)?
     private var renderHandler: ((WaveletTree) -> Void)?
     private var dialogHandler: ((String, String) -> Void)?
@@ -45,6 +48,13 @@ final class WaveletEngine {
                 self.callbackRegistry[token] = callback
             }
             context?.setObject(registerBlock, forKeyedSubscript: "_waveletRegisterCallback" as NSString)
+
+            let importBlock: @convention(block) (String) -> JSValue? = { [weak self] moduleName in
+                guard let self else { return nil }
+                guard let activeContext = self.context ?? context else { return nil }
+                return self.importModule(named: moduleName, context: activeContext)
+            }
+            context?.setObject(importBlock, forKeyedSubscript: "_waveletImportModule" as NSString)
 
             let createByteArrayBlock: @convention(block) (JSValue) -> JSValue? = { [weak self] jsArray in
                 guard let context = jsArray.context else { return nil }
@@ -128,6 +138,7 @@ final class WaveletEngine {
             self.callbackRegistry.removeAll()
             self.injectDSL(into: context)
             self.applyGlobalBindings(to: context)  // Apply bindings again after DSL reload
+            self.moduleLoadingStack.removeAll()
             
             // Check if BLEService is available after binding
             let bleServiceCheck = context.evaluateScript("typeof BLEService")?.toString() ?? "undefined"
@@ -175,6 +186,24 @@ final class WaveletEngine {
             self.applyGlobalBindings(to: context)
         }
     }
+    func updateModuleSources(_ sources: [String: String]) {
+        executionQueue.async { [weak self] in
+            guard let self else { return }
+            var prepared: [String: ModuleSource] = [:]
+            for (name, content) in sources {
+                let normalized = self.normalizeModuleName(name)
+                guard !normalized.isEmpty else { continue }
+                prepared[normalized] = ModuleSource(name: name, content: content)
+            }
+            self.moduleSources = prepared
+            self.moduleCache.removeAll()
+            self.moduleLoadingStack.removeAll()
+            if let context = self.context {
+                context.setObject(nil, forKeyedSubscript: "WaveletModules" as NSString)
+                context.setObject(nil, forKeyedSubscript: "require" as NSString)
+            }
+        }
+    }
 
     private func injectDSL(into context: JSContext) {
         Swift.print("[WaveletEngine] Injecting DSL bundle")
@@ -189,6 +218,88 @@ final class WaveletEngine {
             context.setObject(value, forKeyedSubscript: key as NSString)
             printHandler?("DEBUG: Applied binding \(key) = \(type(of: value))")
         }
+    }
+
+    private func importModule(named rawName: String, context: JSContext) -> JSValue? {
+        let normalized = normalizeModuleName(rawName)
+        guard !normalized.isEmpty else {
+            return moduleError("Module name is required", context: context)
+        }
+        guard let source = moduleSources[normalized] else {
+            return moduleError("Module '\(rawName)' not found", context: context)
+        }
+        if let cached = moduleCache[normalized] {
+            return cached
+        }
+        if moduleLoadingStack.contains(normalized) {
+            return moduleError("Circular module dependency detected for '\(source.name)'", context: context)
+        }
+
+        moduleLoadingStack.insert(normalized)
+        defer { moduleLoadingStack.remove(normalized) }
+
+        let wrapped = "(function(exports, module, WaveletModules, require) {\n\(source.content)\n})"
+        guard let factoryValue = context.evaluateScript(wrapped) else {
+            if let exception = context.exception?.toString() {
+                printHandler?("Failed to evaluate module '\(source.name)': \(exception)")
+            }
+            return moduleError("Module '\(source.name)' did not evaluate to a function", context: context)
+        }
+        guard factoryValue.isObject else {
+            return moduleError("Module '\(source.name)' evaluation did not return a function", context: context)
+        }
+        guard let exportsObject = JSValue(newObjectIn: context),
+              let moduleObject = JSValue(newObjectIn: context) else {
+            return moduleError("Unable to allocate module scaffolding for '\(source.name)'", context: context)
+        }
+        moduleObject.setObject(exportsObject, forKeyedSubscript: "exports" as NSString)
+        moduleObject.setObject(source.name, forKeyedSubscript: "id" as NSString)
+        moduleObject.setObject(source.name, forKeyedSubscript: "filename" as NSString)
+
+        let requireBlock: @convention(block) (String) -> JSValue? = { [weak self] moduleName in
+            guard let self, let ctx = self.context else { return JSValue(undefinedIn: context) }
+            return self.importModule(named: moduleName, context: ctx)
+        }
+        let requireValue = JSValue(object: requireBlock, in: context) ?? JSValue(undefinedIn: context)
+        let waveletModules = context.objectForKeyedSubscript("WaveletModules") ?? JSValue(undefinedIn: context)
+
+        _ = factoryValue.call(withArguments: [exportsObject, moduleObject, waveletModules, requireValue])
+
+        if let exception = context.exception {
+            let message = exception.toString() ?? "Unknown module error"
+            printHandler?("Failed to load module '\(source.name)': \(message)")
+            Swift.print("[WaveletEngine] Module exception: \(message)")
+            return nil
+        }
+
+        let exportedValue = moduleObject.forProperty("exports") ?? exportsObject
+        moduleCache[normalized] = exportedValue
+        return exportedValue
+    }
+
+    private func normalizeModuleName(_ rawName: String) -> String {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        var lower = trimmed.lowercased()
+        if !lower.hasSuffix(".js") {
+            lower.append(".js")
+        }
+        return lower
+    }
+
+    private func moduleError(_ message: String, context: JSContext) -> JSValue? {
+        let prefixed = "Module error: \(message)"
+        printHandler?(prefixed)
+        Swift.print("[WaveletEngine] \(prefixed)")
+        if let error = JSValue(newErrorFromMessage: message, in: context) {
+            context.exception = error
+        }
+        return nil
+    }
+
+    private struct ModuleSource {
+        let name: String
+        let content: String
     }
 
     private func handleRender(nodeValue: JSValue) {
@@ -361,6 +472,39 @@ private extension WaveletEngine {
 
                 return api;
             })();
+        }
+
+        if (typeof WaveletModules === 'undefined') {
+            var WaveletModules = (function () {
+                var cache = {};
+                var normalize = function (name) {
+                    return String(name || '').trim();
+                };
+                return {
+                    import: function (name) {
+                        if (typeof _waveletImportModule !== 'function') {
+                            throw new Error('Module loader unavailable');
+                        }
+                        var key = normalize(name);
+                        if (!key) {
+                            throw new Error('Module name is required');
+                        }
+                        if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+                            cache[key] = _waveletImportModule(key);
+                        }
+                        return cache[key];
+                    },
+                    clear: function () {
+                        cache = {};
+                    }
+                };
+            })();
+        }
+
+        if (typeof require !== 'function') {
+            var require = function (name) {
+                return WaveletModules.import(name);
+            };
         }
 
         if (typeof print === 'undefined') {
