@@ -12,8 +12,7 @@ if [[ -z "${REPO_ROOT}" ]]; then
   exit 1
 fi
 
-WORKTREE_NAME="$(basename "${REPO_ROOT}")"
-SESSION_NAME="${WORKTREE_NAME}-android"
+SESSION_NAME="android"
 
 ANDROID_DIR="${REPO_ROOT}/android"
 
@@ -32,12 +31,15 @@ tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${ANDROID_DIR}'" C-m
 
 tmux split-window -h -t "${SESSION_NAME}:work" -c "${ANDROID_DIR}"
 tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${ANDROID_DIR}'" C-m
+tmux send-keys -t "${SESSION_NAME}:work.1" "git status"
 
-tmux new-window -t "${SESSION_NAME}" -n "build" -c "${ANDROID_DIR}"
-tmux send-keys -t "${SESSION_NAME}:build.0" "cd '${ANDROID_DIR}'" C-m
+tmux new-window -t "${SESSION_NAME}" -n "dev" -c "${ANDROID_DIR}"
+tmux send-keys -t "${SESSION_NAME}:dev.0" "cd '${ANDROID_DIR}'" C-m
+tmux send-keys -t "${SESSION_NAME}:dev.0" "./gradlew installDebug"
 
-tmux split-window -v -t "${SESSION_NAME}:build" -c "${ANDROID_DIR}"
-tmux send-keys -t "${SESSION_NAME}:build.1" "cd '${ANDROID_DIR}'" C-m
+tmux split-window -h -t "${SESSION_NAME}:dev" -c "${ANDROID_DIR}"
+tmux send-keys -t "${SESSION_NAME}:dev.1" "cd '${ANDROID_DIR}'" C-m
+tmux send-keys -t "${SESSION_NAME}:dev.1" "adb logcat"
 
 tmux select-window -t "${SESSION_NAME}:work"
 tmux select-pane -t "${SESSION_NAME}:work.0"

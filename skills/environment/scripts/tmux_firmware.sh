@@ -35,7 +35,6 @@ tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
 tmux new-window -t "${SESSION_NAME}" -n "firmware" -c "${REPO_ROOT}"
 tmux send-keys -t "${SESSION_NAME}:firmware.0" "cd '${REPO_ROOT}'" C-m
 tmux send-keys -t "${SESSION_NAME}:firmware.0" "source setup.sh" C-m
-tmux send-keys -t "${SESSION_NAME}:firmware.0" "idf.py build" C-m
 
 tmux split-window -v -t "${SESSION_NAME}:firmware" -c "${REPO_ROOT}"
 tmux send-keys -t "${SESSION_NAME}:firmware.1" "cd '${REPO_ROOT}'" C-m
