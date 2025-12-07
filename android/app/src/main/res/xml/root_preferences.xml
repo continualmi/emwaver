@@ -52,18 +52,6 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Account"
-        app:iconSpaceReserved="false">
-
-        <Preference
-            android:key="logout"
-            android:title="Log out"
-            android:summary="Sign out and return to the login screen"
-            app:iconSpaceReserved="false" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
         android:title="Support &amp; Information"
         app:iconSpaceReserved="false">
 

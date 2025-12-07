@@ -47,6 +47,8 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 
 > **Agent Note:** Do not run `xcodebuild` (or other iOS build commands) from the CLI; leave iOS builds to be run manually in Xcode by the user.
 
+> **Agent Note:** Do not run `./gradlew assembleDebug`, `./gradlew installDebug`, or other Android build commands from the CLI; the user builds manually. Exception: if the user explicitly requests a build for debugging purposes when troubleshooting errors.
+
 ### Android (`/android`)
 - Gradle project; run `./gradlew installDebug` for device builds. Keep `local.properties` pointing at the SDK (typically `~/Library/Android/sdk` or `~/Android/Sdk`).
 - Wavelet console/sampler can sync `.js` and `.raw` assets locally or through future cloud sync capabilities.

@@ -31,7 +31,6 @@ import androidx.core.view.MenuProvider;
 import androidx.lifecycle.Lifecycle;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
-import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.io.File;
@@ -69,21 +68,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Check if we should show welcome screen first
-        if (WelcomeActivity.shouldShowWelcome(this)) {
-            Intent welcomeIntent = new Intent(this, WelcomeActivity.class);
-            startActivity(welcomeIntent);
-            finish();
-            return;
-        }
-
-        if (!AuthenticationManager.getInstance(this).isLoggedIn()) {
-            Intent loginIntent = new Intent(this, LoginActivity.class);
-            startActivity(loginIntent);
-            finish();
-            return;
-        }
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
