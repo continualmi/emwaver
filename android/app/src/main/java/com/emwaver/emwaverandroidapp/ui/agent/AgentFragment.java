@@ -1013,16 +1013,7 @@ public class AgentFragment extends Fragment {
 			for (int i = 0; i < parts.length; i++) {
 				if (i % 2 == 0) {
 					if (!parts[i].trim().isEmpty()) {
-						TextView textView = new TextView(context);
-						textView.setTextColor(context.getResources().getColor(R.color.agentMessageText, null));
-						textView.setTextSize(16);
-						textView.setMovementMethod(LinkMovementMethod.getInstance());
-						if (markwon != null) {
-							markwon.setMarkdown(textView, parts[i]);
-						} else {
-							textView.setText(parts[i]);
-						}
-						container.addView(textView);
+						renderTextWithTables(container, context, parts[i]);
 					}
 				} else {
 					String[] codeLines = parts[i].split("\n", 2);
@@ -1032,13 +1023,23 @@ public class AgentFragment extends Fragment {
 					codeBlock.setOrientation(LinearLayout.VERTICAL);
 					codeBlock.setBackgroundColor(0xFF2B2B2B);
 					codeBlock.setPadding(20, 20, 20, 20);
+					LinearLayout.LayoutParams codeParams = new LinearLayout.LayoutParams(
+						LinearLayout.LayoutParams.MATCH_PARENT,
+						LinearLayout.LayoutParams.WRAP_CONTENT
+					);
+					codeParams.setMargins(0, 10, 0, 10);
+					codeBlock.setLayoutParams(codeParams);
+					
+					android.widget.HorizontalScrollView codeScroll = new android.widget.HorizontalScrollView(context);
 					
 					TextView codeTextView = new TextView(context);
 					codeTextView.setText(code);
 					codeTextView.setTextColor(0xFFE0E0E0);
 					codeTextView.setTextSize(14);
 					codeTextView.setTypeface(android.graphics.Typeface.MONOSPACE);
-					codeBlock.addView(codeTextView);
+					
+					codeScroll.addView(codeTextView);
+					codeBlock.addView(codeScroll);
 					
 					com.google.android.material.button.MaterialButton copyButton = 
 						new com.google.android.material.button.MaterialButton(context);
@@ -1063,6 +1064,95 @@ public class AgentFragment extends Fragment {
 					container.addView(codeBlock);
 				}
 			}
+		}
+		
+		private void renderTextWithTables(LinearLayout container, Context context, String text) {
+			String[] lines = text.split("\n");
+			java.util.ArrayList<String> tableLines = new java.util.ArrayList<>();
+			StringBuilder normalText = new StringBuilder();
+			boolean inTable = false;
+			
+			for (String line : lines) {
+				if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+					if (!inTable && normalText.length() > 0) {
+						addNormalText(container, context, normalText.toString());
+						normalText.setLength(0);
+					}
+					inTable = true;
+					tableLines.add(line);
+				} else {
+					if (inTable) {
+						renderTable(container, context, tableLines);
+						tableLines.clear();
+						inTable = false;
+					}
+					normalText.append(line).append("\n");
+				}
+			}
+			
+			if (normalText.length() > 0) {
+				addNormalText(container, context, normalText.toString());
+			}
+			if (!tableLines.isEmpty()) {
+				renderTable(container, context, tableLines);
+			}
+		}
+		
+		private void addNormalText(LinearLayout container, Context context, String text) {
+			TextView textView = new TextView(context);
+			textView.setTextColor(context.getResources().getColor(R.color.agentMessageText, null));
+			textView.setTextSize(16);
+			textView.setMovementMethod(LinkMovementMethod.getInstance());
+			if (markwon != null) {
+				markwon.setMarkdown(textView, text);
+			} else {
+				textView.setText(text);
+			}
+			container.addView(textView);
+		}
+		
+		private void renderTable(LinearLayout container, Context context, java.util.ArrayList<String> tableLines) {
+			if (tableLines.size() < 2) return;
+			
+			android.widget.HorizontalScrollView scrollView = new android.widget.HorizontalScrollView(context);
+			LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+				LinearLayout.LayoutParams.MATCH_PARENT,
+				LinearLayout.LayoutParams.WRAP_CONTENT
+			);
+			scrollParams.setMargins(0, 10, 0, 10);
+			scrollView.setLayoutParams(scrollParams);
+			
+			android.widget.TableLayout table = new android.widget.TableLayout(context);
+			table.setBackgroundColor(0xFF1E1E1E);
+			table.setPadding(10, 10, 10, 10);
+			
+			for (int i = 0; i < tableLines.size(); i++) {
+				if (i == 1 && tableLines.get(i).contains("---")) continue;
+				
+				String[] cells = tableLines.get(i).split("\\|");
+				android.widget.TableRow row = new android.widget.TableRow(context);
+				
+				for (int j = 1; j < cells.length - 1; j++) {
+					TextView cell = new TextView(context);
+					cell.setText(cells[j].trim());
+					cell.setTextColor(0xFFE0E0E0);
+					cell.setTextSize(14);
+					cell.setPadding(15, 10, 15, 10);
+					cell.setMinWidth(150);
+					
+					if (i == 0) {
+						cell.setTypeface(null, android.graphics.Typeface.BOLD);
+						cell.setTextColor(0xFFFFFFFF);
+					}
+					
+					row.addView(cell);
+				}
+				
+				table.addView(row);
+			}
+			
+			scrollView.addView(table);
+			container.addView(scrollView);
 		}
 
         @Override
