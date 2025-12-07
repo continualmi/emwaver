@@ -8,32 +8,15 @@
     android:background="@color/surfaceBackground"
     tools:context=".ui.wavelets.WaveletsFragment">
 
-    <TextView
-        android:id="@+id/scripts_list_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Available Scripts"
-        android:textAppearance="?attr/textAppearanceListItemSmall"
-        android:padding="8dp"
-        android:background="?attr/selectableItemBackground"
-        android:drawableEnd="@drawable/ic_arrow_down_black"
-        android:drawablePadding="8dp"
-        android:textColor="@color/textPrimary"
-        android:drawableTint="?attr/colorOnSurface"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
     <androidx.cardview.widget.CardView
         android:id="@+id/script_list_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:maxHeight="150dp"
-        android:layout_marginTop="4dp"
         app:cardElevation="2dp"
         app:cardCornerRadius="4dp"
         app:cardBackgroundColor="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/scripts_list_title"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 

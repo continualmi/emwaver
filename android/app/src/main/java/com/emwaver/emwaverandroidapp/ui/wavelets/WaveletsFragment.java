@@ -45,16 +45,12 @@ import androidx.lifecycle.ViewModelProvider;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
-import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
 import com.emwaver.emwaverandroidapp.databinding.FragmentWaveletsBinding;
-import com.emwaver.emwaverandroidapp.files.FileRepository;
+import com.emwaver.emwaverandroidapp.files.FileRepositoryLocal;
 import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
-import com.emwaver.emwaverandroidapp.ui.wavelets.irdb.IrdBrandSelectionActivity;
-import com.emwaver.emwaverandroidapp.ui.wavelets.irdb.IrdCsvSelectionActivity;
-import com.emwaver.emwaverandroidapp.wavelets.WaveletCloudClient;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletRenderView;
@@ -90,7 +86,7 @@ public class WaveletsFragment extends Fragment {
     private String pendingPreviewScriptId;
 
     private WaveletsViewModel viewModel;
-    private FileRepository fileRepository;
+    private FileRepositoryLocal fileRepository;
 
     private BLEService bleService;
     private boolean isServiceBound;
@@ -104,8 +100,6 @@ public class WaveletsFragment extends Fragment {
     private boolean showingPreview;
 
     private ActivityResultLauncher<String[]> openFileLauncher;
-    private ActivityResultLauncher<Intent> importFromIrdLauncher;
-    private final WaveletCloudClient waveletCloudClient = new WaveletCloudClient();
 
     private TextView scriptsListTitle;
     private CardView scriptListCard;
@@ -161,12 +155,7 @@ public class WaveletsFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(WaveletsViewModel.class);
-        fileRepository = FileRepository.getInstance(requireContext());
-        importFromIrdLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-            if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                handleIrdImportResult(result.getData());
-            }
-        });
+        fileRepository = FileRepositoryLocal.getInstance(requireContext());
     }
 
     @Nullable
@@ -242,13 +231,7 @@ public class WaveletsFragment extends Fragment {
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
                 int itemId = menuItem.getItemId();
-                if (itemId == R.id.sync_scripts) {
-                    startSync();
-                    return true;
-                } else if (itemId == R.id.add_remote_from_irdb) {
-                    launchIrdImportFlow();
-                    return true;
-                } else if (itemId == R.id.open) {
+                if (itemId == R.id.open) {
                     openFile();
                     return true;
                 } else if (itemId == R.id.save_to_storage) {
@@ -275,12 +258,12 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void setupScriptList() {
-        scriptsListTitle = binding.scriptsListTitle;
         scriptListCard = binding.scriptListCard;
         scriptAdapter = new ScriptListAdapter();
         binding.scriptListView.setAdapter(scriptAdapter);
 
         binding.scriptListView.setOnItemClickListener((parent, view, position, id) -> {
+            Log.d(TAG, "ListView clicked at position " + position + ", scriptFiles.size=" + scriptFiles.size());
             if (position >= 0 && position < scriptFiles.size()) {
                 previewScript(scriptFiles.get(position));
             }
@@ -331,14 +314,17 @@ public class WaveletsFragment extends Fragment {
 
     private void refreshScriptList() {
         if (scriptAdapter != null) {
+            Log.d(TAG, "refreshScriptList: notifying adapter with " + scriptFiles.size() + " items");
             scriptAdapter.notifyDataSetChanged();
         }
     }
 
     private void previewScript(UserFileMetadata metadata) {
         if (!isAdded() || metadata == null || TextUtils.isEmpty(metadata.getId())) {
+            Log.w(TAG, "previewScript: invalid state or metadata");
             return;
         }
+        Log.d(TAG, "previewScript: " + metadata.getName() + " (id=" + metadata.getId() + ")");
         pendingPreviewScriptId = metadata.getId();
         loadScript(metadata);
     }
@@ -360,7 +346,10 @@ public class WaveletsFragment extends Fragment {
             UserFileMetadata metadata = getItem(position);
             if (metadata != null) {
                 nameView.setText(metadata.getName());
-                editButton.setOnClickListener(v -> showScriptEditorDialog(metadata));
+                editButton.setOnClickListener(v -> {
+                    v.setPressed(false);
+                    showScriptEditorDialog(metadata);
+                });
             } else {
                 nameView.setText("-");
                 editButton.setOnClickListener(null);
@@ -383,11 +372,12 @@ public class WaveletsFragment extends Fragment {
                 if (value != null) {
                     scriptFiles.addAll(value);
                 }
-                Collections.sort(scriptFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
-                refreshScriptList();
+                
                 if (scriptFiles.isEmpty()) {
-                    handlePostListLoad();
+                    loadDefaultWaveletsFromAssets();
                 } else {
+                    Collections.sort(scriptFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+                    refreshScriptList();
                     primeScriptCache(new ArrayList<>(scriptFiles), WaveletsFragment.this::handlePostListLoad);
                 }
             }
@@ -399,6 +389,89 @@ public class WaveletsFragment extends Fragment {
                 }
                 showToast(message != null ? message : "Failed to load scripts");
                 handlePostListLoad();
+            }
+        });
+    }
+    
+    private void loadDefaultWaveletsFromAssets() {
+        if (!isAdded()) {
+            return;
+        }
+        
+        String[] defaultWavelets = {
+            "cc1101.js",
+            "cc1101_radio_console.js",
+            "cc1101_radio_module.js",
+            "hello_world_usb.js",
+            "wavelet_console_demo.js",
+            "wavelet_demo.js",
+            "wavelet_gpio.js",
+            "wavelet_rfid.js"
+        };
+        
+        AtomicInteger remaining = new AtomicInteger(defaultWavelets.length);
+        AtomicInteger successCount = new AtomicInteger(0);
+        
+        for (String filename : defaultWavelets) {
+            try {
+                InputStream is = requireContext().getAssets().open(filename);
+                String content = readTextFromInputStream(is);
+                is.close();
+                
+                String name = filename.replace(".js", "");
+                createScriptInBackground(name, content, () -> {
+                    successCount.incrementAndGet();
+                    if (remaining.decrementAndGet() == 0) {
+                        onDefaultWaveletsLoaded(successCount.get());
+                    }
+                }, () -> {
+                    if (remaining.decrementAndGet() == 0) {
+                        onDefaultWaveletsLoaded(successCount.get());
+                    }
+                });
+            } catch (IOException e) {
+                Log.w(TAG, "Could not load default wavelet: " + filename, e);
+                if (remaining.decrementAndGet() == 0) {
+                    onDefaultWaveletsLoaded(successCount.get());
+                }
+            }
+        }
+    }
+    
+    private void onDefaultWaveletsLoaded(int count) {
+        if (!isAdded()) {
+            return;
+        }
+        requireActivity().runOnUiThread(() -> {
+            if (count > 0) {
+                showToast("Loaded " + count + " default wavelets");
+            }
+            loadScriptsFromCloud();
+        });
+    }
+    
+    private void createScriptInBackground(String name, String content, Runnable onSuccess, Runnable onError) {
+        if (fileRepository == null) {
+            if (onError != null) {
+                onError.run();
+            }
+            return;
+        }
+        fileRepository.createTextFile(normalizeScriptName(name), content, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata metadata) {
+                Log.d(TAG, "Created default wavelet: " + name);
+                if (onSuccess != null) {
+                    onSuccess.run();
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                Log.w(TAG, "Failed to create default wavelet " + name + ": " + message);
+                if (onError != null) {
+                    onError.run();
+                }
             }
         });
     }
@@ -1095,12 +1168,8 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void setupCollapsibleSections() {
-        if (scriptsListTitle != null && scriptListCard != null) {
-            updateArrow(scriptsListTitle, scriptListCard.getVisibility() == View.VISIBLE);
-            scriptsListTitle.setOnClickListener(v -> {
-                toggleVisibility(scriptListCard);
-                updateArrow((TextView) v, scriptListCard.getVisibility() == View.VISIBLE);
-            });
+        if (scriptListCard != null) {
+            scriptListCard.setVisibility(View.VISIBLE);
         }
 
         if (consoleTitle != null && consoleCard != null) {
@@ -1113,8 +1182,10 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void renderWavelet(String script) {
+        Log.d(TAG, "renderWavelet called with script length: " + (script != null ? script.length() : 0));
         setupWaveletEngineIfNeeded();
         if (waveletEngine == null) {
+            Log.e(TAG, "Wavelet engine is null!");
             showToast("Wavelet engine not ready.");
             return;
         }
@@ -1221,6 +1292,12 @@ public class WaveletsFragment extends Fragment {
         if (waveletRenderView != null) {
             waveletRenderView.clear();
         }
+        if (getActivity() != null) {
+            androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();
+            if (activity.getSupportActionBar() != null) {
+                activity.getSupportActionBar().setDisplayHomeAsUpEnabled(false);
+            }
+        }
         updateViewMode();
     }
 
@@ -1228,11 +1305,9 @@ public class WaveletsFragment extends Fragment {
         if (binding == null) {
             return;
         }
-        if (scriptsListTitle != null) {
-            scriptsListTitle.setVisibility(showingPreview ? View.GONE : View.VISIBLE);
-        }
         if (scriptListCard != null) {
             scriptListCard.setVisibility(showingPreview ? View.GONE : View.VISIBLE);
+            Log.d(TAG, "updateViewMode: scriptListCard visibility = " + (showingPreview ? "GONE" : "VISIBLE"));
         }
         binding.waveletContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         if (consoleTitle != null) {
@@ -1247,6 +1322,20 @@ public class WaveletsFragment extends Fragment {
         if (consoleClearButton != null) {
             consoleClearButton.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         }
+        
+        if (getActivity() != null) {
+            androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();
+            if (activity.getSupportActionBar() != null) {
+                if (showingPreview && currentScriptName != null) {
+                    activity.getSupportActionBar().setTitle(currentScriptName);
+                    activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+                } else {
+                    activity.getSupportActionBar().setTitle("Wavelets");
+                    activity.getSupportActionBar().setDisplayHomeAsUpEnabled(false);
+                }
+            }
+        }
+        
         updateWaveletPlaceholder();
     }
 
@@ -1331,13 +1420,7 @@ public class WaveletsFragment extends Fragment {
         }
     }
 
-    private void launchIrdImportFlow() {
-        if (!isAdded()) {
-            return;
-        }
-        Intent intent = new Intent(requireContext(), IrdBrandSelectionActivity.class);
-        importFromIrdLauncher.launch(intent);
-    }
+
 
     private void importScriptFromUri(Uri uri) {
         try (InputStream inputStream = requireContext().getContentResolver().openInputStream(uri)) {
@@ -1932,98 +2015,7 @@ public class WaveletsFragment extends Fragment {
         requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show());
     }
 
-    private void handleIrdImportResult(Intent data) {
-        if (fileRepository == null) {
-            showToast("Storage not available");
-            return;
-        }
-        String rawName = data.getStringExtra(IrdCsvSelectionActivity.EXTRA_SCRIPT_NAME);
-        String scriptContent = data.getStringExtra(IrdCsvSelectionActivity.EXTRA_SCRIPT_CONTENT);
-        String metadataJson = data.getStringExtra(IrdCsvSelectionActivity.EXTRA_SCRIPT_METADATA);
-        if (rawName == null || scriptContent == null) {
-            showToast("Failed to import IRDB remote.");
-            return;
-        }
-        final String normalizedName = normalizeScriptFileName(rawName);
-        final String finalName = resolveUniqueScriptName(normalizedName);
-        fileRepository.createTextFile(finalName, scriptContent, new RepositoryCallback<UserFileMetadata>() {
-            @Override
-            public void onSuccess(UserFileMetadata metadata) {
-                if (!isAdded()) {
-                    return;
-                }
-                onScriptCreated(metadata, scriptContent);
-                showToast("Imported IRDB remote: " + metadata.getName());
-                uploadWaveletToCloud(metadata.getName(), scriptContent, metadataJson);
-            }
 
-            @Override
-            public void onError(String message) {
-                if (!isAdded()) {
-                    return;
-                }
-                showToast(message != null ? message : "Failed to import IRDB remote");
-            }
-        });
-    }
-
-    private String normalizeScriptFileName(String rawName) {
-        String candidate = rawName == null ? "" : rawName.trim();
-        if (candidate.isEmpty()) {
-            candidate = "irdb_remote";
-        }
-        String sanitized = candidate.replaceAll("[\\\\/:*?\"<>|]", "_");
-        if (!sanitized.toLowerCase(Locale.US).endsWith(".js")) {
-            sanitized += ".js";
-        }
-        return sanitized;
-    }
-
-    private String resolveUniqueScriptName(String proposed) {
-        String candidate = proposed;
-        int counter = 1;
-        int dotIndex = candidate.lastIndexOf('.');
-        String base = dotIndex >= 0 ? candidate.substring(0, dotIndex) : candidate;
-        String extension = dotIndex >= 0 ? candidate.substring(dotIndex) : "";
-        while (scriptNameExists(candidate)) {
-            candidate = base + "_" + counter + extension;
-            counter++;
-        }
-        return candidate;
-    }
-
-    private boolean scriptNameExists(String name) {
-        for (UserFileMetadata metadata : scriptFiles) {
-            if (metadata.getName() != null && metadata.getName().equalsIgnoreCase(name)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void uploadWaveletToCloud(String scriptName, String scriptContent, @Nullable String metadataJson) {
-        if (!isAdded()) {
-            return;
-        }
-        AuthenticationManager authManager = AuthenticationManager.getInstance(requireContext());
-        String accessToken = authManager.getAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
-            Log.w(TAG, "Skipping wavelet cloud sync: no access token");
-            return;
-        }
-        waveletCloudClient.uploadWavelet(accessToken, scriptName, scriptContent, metadataJson, new WaveletCloudClient.UploadCallback() {
-            @Override
-            public void onSuccess() {
-                Log.d(TAG, "Wavelet synced to cloud");
-            }
-
-            @Override
-            public void onFailure(String message) {
-                Log.e(TAG, "Wavelet sync failed: " + message);
-                showToast("Failed to sync wavelet to cloud");
-            }
-        });
-    }
 
     private static String getFileNameFromUri(Context context, Uri uri) {
         String fileName = null;

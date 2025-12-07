@@ -39,7 +39,7 @@ tmux send-keys -t "${SESSION_NAME}:dev.0" "./gradlew installDebug"
 
 tmux split-window -h -t "${SESSION_NAME}:dev" -c "${ANDROID_DIR}"
 tmux send-keys -t "${SESSION_NAME}:dev.1" "cd '${ANDROID_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:dev.1" "adb logcat"
+tmux send-keys -t "${SESSION_NAME}:dev.1" "adb logcat --pid=\$(adb shell pidof -s com.emwaver.emwaverandroidapp) -T 0"
 
 tmux select-window -t "${SESSION_NAME}:work"
 tmux select-pane -t "${SESSION_NAME}:work.0"
