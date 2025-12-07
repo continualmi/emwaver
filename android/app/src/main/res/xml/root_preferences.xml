@@ -37,7 +37,7 @@
             android:key="rfm69_cs_pin"
             android:title="RFM69 CS Pin"
             android:summary="Chip Select pin for RFM69 SPI communication"
-            android:defaultValue="10"
+            android:defaultValue="36"
             android:inputType="number"
             app:iconSpaceReserved="false"
             app:useSimpleSummaryProvider="true" />
@@ -46,7 +46,7 @@
             android:key="rfm69_cs_active_high"
             android:title="RFM69 CS Active High"
             android:summary="Enable if CS is active high (select=high, deselect=low)"
-            android:defaultValue="false"
+            android:defaultValue="true"
             app:iconSpaceReserved="false" />
 
     </PreferenceCategory>
