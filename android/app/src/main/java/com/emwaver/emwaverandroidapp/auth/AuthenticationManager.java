@@ -15,6 +15,7 @@ public class AuthenticationManager {
     private static final String KEY_ACCESS_TOKEN = "access_token";
     private static final String KEY_REFRESH_TOKEN = "refresh_token";
     private static final String KEY_USER_JSON = "user_json";
+    private static final String KEY_ENTITLEMENT_JSON = "entitlement_json";
 
     private static AuthenticationManager instance;
 
@@ -36,11 +37,12 @@ public class AuthenticationManager {
         return !TextUtils.isEmpty(sharedPreferences.getString(KEY_ACCESS_TOKEN, ""));
     }
 
-    public void saveSession(String accessToken, String refreshToken, String userJson) {
+    public void saveSession(String accessToken, String refreshToken, String userJson, String entitlementJson) {
         sharedPreferences.edit()
                 .putString(KEY_ACCESS_TOKEN, accessToken)
                 .putString(KEY_REFRESH_TOKEN, refreshToken)
                 .putString(KEY_USER_JSON, userJson)
+                .putString(KEY_ENTITLEMENT_JSON, entitlementJson)
                 .apply();
     }
 
@@ -49,6 +51,7 @@ public class AuthenticationManager {
                 .remove(KEY_ACCESS_TOKEN)
                 .remove(KEY_REFRESH_TOKEN)
                 .remove(KEY_USER_JSON)
+                .remove(KEY_ENTITLEMENT_JSON)
                 .apply();
     }
 
@@ -62,5 +65,9 @@ public class AuthenticationManager {
 
     public String getUserJson() {
         return sharedPreferences.getString(KEY_USER_JSON, null);
+    }
+
+    public String getEntitlementJson() {
+        return sharedPreferences.getString(KEY_ENTITLEMENT_JSON, null);
     }
 }

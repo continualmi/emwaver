@@ -43,6 +43,7 @@ import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
 import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 
 import org.json.JSONArray;
@@ -972,8 +973,12 @@ public class ButtonsFragment extends Fragment {
     }
 
     private void printToConsole(String message) {
+        if (message == null) {
+            return;
+        }
+        WaveletConsoleState.getInstance().append(message);
         Log.d("ButtonsFragment", message);
-        if (message != null && message.startsWith("Wavelet error") && isAdded()) {
+        if (message.startsWith("Wavelet error") && isAdded()) {
             Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show();
         }
     }

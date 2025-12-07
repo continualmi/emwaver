@@ -8,6 +8,7 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "host/ble_att.h"
 #include "ble_server.h"
+#include "command_registry.h"
 
 static const char *TAG = "BLE_SERVER";
 static const char *DEVICE_NAME = "EMWaver";
@@ -161,12 +162,6 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                         // Send buffer status back
                         BLE_SendStatusPacket();
                     } else {
-                        // Create command structure like in main.c
-                        typedef struct {
-                            uint8_t data[256]; // Increase size here too
-                            uint16_t length;
-                        } command_t;
-                        
                         command_t cmd;
                         cmd.length = len;
                         memcpy(cmd.data, data, len); // Use actual received len

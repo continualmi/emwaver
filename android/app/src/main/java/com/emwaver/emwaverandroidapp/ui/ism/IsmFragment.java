@@ -9,7 +9,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.text.Editable;
-import android.text.InputFilter;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -17,9 +16,9 @@ import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.graphics.drawable.Drawable;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -27,6 +26,10 @@ import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.view.Gravity;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -34,6 +37,10 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.ConstraintSet;
 import androidx.fragment.app.Fragment;
+import androidx.core.content.ContextCompat;
+import androidx.core.view.MenuHost;
+import androidx.core.view.MenuProvider;
+import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.emwaver.emwaverandroidapp.R;
@@ -52,11 +59,38 @@ import java.util.function.Consumer;
 public class IsmFragment extends Fragment {
 
     private FragmentIsmBinding binding;
-    private CC1101 cc1101;
+    private RFM69 rfm69;
     private BLEService bleService;
     private boolean isServiceBound = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private IsmViewModel viewModel;
     private Map<String, TextView> registerTextViews = new HashMap<>();
+    private Thread loadingThread;
+    private AlertDialog loadingDialog;
+    private TextView loadingDialogCommandText;
+    private TextView loadingDialogCountText;
+    private ProgressBar loadingDialogProgressBar;
+    private volatile boolean loadingCancelled = false;
+    private int totalLoadSteps = 0;
+    private int completedSteps = 0;
+
+    private static final List<String> CONFIG_REGISTERS = Arrays.asList(
+            "OPMODE", "DATAMODUL", "BITRATEMSB", "BITRATELSB", "FDEVMSB", "FDEVLSB",
+            "FRFMSB", "FRFMID", "FRFLSB", "OSC1", "AFCCTRL", "LOWBAT",
+            "LISTEN1", "LISTEN2", "LISTEN3", "PALEVEL", "PARAMP", "OCP",
+            "LNA", "RXBW", "AFCBW", "OOKPEAK", "OOKAVG", "OOKFIX",
+            "AFCFEI", "AFCMSB", "AFCLSB", "FEIMSB", "FEILSB", "RSSICONFIG",
+            "DIOMAPPING1", "DIOMAPPING2", "IRQFLAGS1", "IRQFLAGS2", "RSSITHRESH",
+            "RXTIMEOUT1", "RXTIMEOUT2", "PREAMBLEMSB", "PREAMBLELSB", "SYNCCONFIG",
+            "PACKETCONFIG1", "PAYLOADLENGTH", "NODEADRS", "BROADCASTADRS",
+            "AUTOMODES", "FIFOTHRESH", "PACKETCONFIG2"
+    );
+
+    private static final List<String> STATUS_REGISTERS = Arrays.asList(
+            "VERSION", "RSSIVALUE", "TEMP1", "TEMP2"
+    );
+
+    private static final int RF_PARAMETER_STEPS = 6;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -64,12 +98,19 @@ public class IsmFragment extends Fragment {
             BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
             bleService = binder.getService();
             isServiceBound = true;
-            cc1101 = new CC1101(bleService);
+            rfm69 = new RFM69(bleService);
             Log.i("service binding", "onServiceConnected");
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isServiceBound && bleService != null && bleService.checkConnection()) {
-                    loadRegisters();
-                    loadRFParameters(); // This calls loadCC1101Registers internally
+                    // Open SPI device before any operations
+                    if (rfm69.openDevice()) {
+                        Log.i("IsmFragment", "RFM69 SPI device opened successfully");
+                        startInitialLoad();
+                    } else {
+                        Log.e("IsmFragment", "Failed to open RFM69 SPI device");
+                        showDisconnectedState();
+                        showToast("Failed to initialize RFM69");
+                    }
                 } else {
                     showDisconnectedState();
                     showToast("Please connect to the BLE device first");
@@ -80,12 +121,24 @@ public class IsmFragment extends Fragment {
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
             isServiceBound = false;
+            if (rfm69 != null) {
+                rfm69.setCommandObserver(null);
+            }
+            cancelLoadingThread();
+            dismissLoadingDialog();
+            loadingCancelled = false;
             Log.i("service binding", "onServiceDisconnected");
         }
     };
 
     public static IsmFragment newInstance() {
         return new IsmFragment();
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        viewModel = new ViewModelProvider(requireActivity()).get(IsmViewModel.class);
     }
 
     @Override
@@ -107,16 +160,17 @@ public class IsmFragment extends Fragment {
         // Set up spinners
         setupSpinners();
 
+        buildRegisterViews();
+        setupMenu();
+        setupObservers();
+        restoreCachedStateIfAvailable();
         setupClickListeners();
     }
 
     private class ModulationAdapter extends ArrayAdapter<String> {
         private final int[] MOD_VALUES = {
-            CC1101.MOD_2FSK,  // 2-FSK
-            CC1101.MOD_GFSK,  // GFSK
-            CC1101.MOD_ASK,   // ASK/OOK
-            CC1101.MOD_4FSK,  // 4-FSK
-            CC1101.MOD_MSK    // MSK
+            RFM69.MOD_FSK,  // FSK
+            RFM69.MOD_OOK   // ASK/OOK
         };
 
         public ModulationAdapter(Context context, int resource) {
@@ -149,14 +203,7 @@ public class IsmFragment extends Fragment {
 
     private class PowerAdapter extends ArrayAdapter<String> {
         private final int[] POWER_VALUES = {
-            CC1101.POWER_MINUS_30_DBM,  // -30 dBm
-            CC1101.POWER_MINUS_20_DBM,  // -20 dBm
-            CC1101.POWER_MINUS_15_DBM,  // -15 dBm
-            CC1101.POWER_MINUS_10_DBM,  // -10 dBm
-            CC1101.POWER_0_DBM,         // 0 dBm
-            CC1101.POWER_5_DBM,         // 5 dBm
-            CC1101.POWER_7_DBM,         // 7 dBm
-            CC1101.POWER_10_DBM         // 10 dBm
+            -30, -20, -15, -10, 0, 5, 7, 10
         };
 
         public PowerAdapter(Context context, int resource) {
@@ -165,7 +212,6 @@ public class IsmFragment extends Fragment {
 
         @Override
         public int getPosition(String item) {
-            // Parse the dBm value from the string (e.g., "-30 dBm" -> -30)
             try {
                 int dbm = Integer.parseInt(item.split(" ")[0]);
                 return getPositionForPowerValue(dbm);
@@ -178,7 +224,7 @@ public class IsmFragment extends Fragment {
             if (position >= 0 && position < POWER_VALUES.length) {
                 return POWER_VALUES[position];
             }
-            return POWER_VALUES[0]; // Default to lowest power if invalid position
+            return POWER_VALUES[0];
         }
 
         public int getPositionForPowerValue(int powerValue) {
@@ -187,7 +233,6 @@ public class IsmFragment extends Fragment {
                     return i;
                 }
             }
-            // If no exact match is found, find the closest value
             int closestPosition = 0;
             int minDifference = Math.abs(POWER_VALUES[0] - powerValue);
             
@@ -228,53 +273,6 @@ public class IsmFragment extends Fragment {
         binding.txPowerSpinner.setAdapter(powerAdapter);
     }
 
-    private void loadRFParameters() {
-        if (!isServiceBound || bleService == null || !bleService.checkConnection() || cc1101 == null) {
-            Log.e("ismFragment", "Not connected or CC1101 not initialized when trying to load RF parameters.");
-            showDisconnectedState();
-            return;
-        }
-
-        try {
-            // Frequency
-            double frequency = cc1101.getFrequency();
-            binding.frequencyTextView.setText(String.format(Locale.US, "%.6f", frequency));
-
-            // Data Rate
-            int dataRate = cc1101.getDataRate();
-            binding.dataRateTextView.setText(String.format(Locale.US, "%d", dataRate));
-
-            // Bandwidth
-            double bandwidth = cc1101.getBandwidth();
-            binding.bandwidthTextView.setText(String.format(Locale.US, "%.1f", bandwidth));
-
-            // Deviation
-            int deviation = cc1101.getDeviation();
-            binding.deviationTextView.setText(String.format(Locale.US, "%d", deviation));
-
-            // Modulation Format
-            int modulation = cc1101.getModulation();
-            ModulationAdapter adapter = (ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
-            binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(modulation));
-
-            // TX Power
-            int txPower = cc1101.getPowerLevel();
-            PowerAdapter powerAdapter = (PowerAdapter) binding.txPowerSpinner.getAdapter();
-            binding.txPowerSpinner.setSelection(powerAdapter.getPositionForPowerValue(txPower));
-
-            // Load CC1101 Registers
-            loadCC1101Registers();
-
-            // After loading all parameters, hide progress bar and show content
-            binding.rfParametersProgressBar.setVisibility(View.GONE);
-            binding.rfParametersContainer.setVisibility(View.VISIBLE);
-        } catch (Exception e) {
-            Log.e("ismFragment", "Error loading RF parameters", e);
-            showToast("Error loading RF parameters. Check connection.");
-            showDisconnectedState();
-        }
-    }
-
     @Override
     public void onStart() {
         super.onStart();
@@ -287,287 +285,22 @@ public class IsmFragment extends Fragment {
     @Override
     public void onStop() {
         super.onStop();
+        cancelLoadingThread();
+        // Close RFM69 SPI device
+        if (rfm69 != null) {
+            rfm69.setCommandObserver(null);
+            rfm69.closeDevice();
+            Log.i("IsmFragment", "RFM69 SPI device closed");
+        }
+        dismissLoadingDialog();
+        loadingCancelled = false;
         if (isServiceBound && getActivity() != null) {
             getActivity().unbindService(serviceConnection);
             isServiceBound = false;
         }
     }
 
-    private void loadCC1101Registers() {
-        if (binding == null) {
-            Log.e("ismFragment", "Binding is null in loadCC1101Registers");
-            return;
-        }
-        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
-            Log.e("ismFragment", "Not connected or CC1101 not initialized when trying to load CC1101 registers.");
-            return;
-        }
 
-        try {
-            List<String> registers = Arrays.asList(
-                    "IOCFG2", "IOCFG1", "IOCFG0", "FIFOTHR", "SYNC1", "SYNC0", "PKTLEN", "PKTCTRL1", "PKTCTRL0",
-                    "ADDR", "CHANNR", "FSCTRL1", "FSCTRL0", "FREQ2", "FREQ1", "FREQ0", "MDMCFG4", "MDMCFG3",
-                    "MDMCFG2", "MDMCFG1", "MDMCFG0", "DEVIATN", "MCSM2", "MCSM1", "MCSM0", "FOCCFG", "BSCFG",
-                    "AGCTRL2", "AGCTRL1", "AGCTRL0", "WOREVT1", "WOREVT0", "WORCTRL", "FREND1", "FREND0",
-                    "FSCAL3", "FSCAL2", "FSCAL1", "FSCAL0", "RCCTRL1", "RCCTRL0", "FSTEST", "PTEST", "AGCTEST",
-                    "TEST2", "TEST1", "TEST0"
-            );
-
-            for (int i = 0; i < registers.size(); i++) {
-                String register = registers.get(i);
-                TextView textView = registerTextViews.get(register);
-                if (textView != null) {
-                    byte value = cc1101.readReg((byte) i);
-                    String hexValue = String.format("%02X", value);
-                    textView.setText(hexValue);
-                    Log.d("ismFragment", "Setting " + register + " to " + hexValue);
-                } else {
-                    Log.e("ismFragment", "TextView not found for " + register);
-                }
-            }
-
-            // Handle status registers separately
-            List<String> statusRegisters = Arrays.asList(
-                    "PARTNUM", "VERSION", "FREQEST", "LQI", "RSSI", "MARCSTATE",
-                    "WORTIME1", "WORTIME0", "PKTSTATUS", "VCO_VC_DAC", "TXBYTES", "RXBYTES"
-            );
-
-            for (int i = 0; i < statusRegisters.size(); i++) {
-                String register = statusRegisters.get(i);
-                TextView textView = registerTextViews.get(register);
-                if (textView != null) {
-                    byte value = cc1101.readReg((byte) (CC1101.PARTNUM + i | CC1101.READ_BURST));
-                    String hexValue = String.format("%02X", value);
-                    textView.setText(hexValue);
-                    Log.d("ismFragment", "Setting status register " + register + " to " + hexValue);
-                } else {
-                    Log.e("ismFragment", "TextView not found for status register " + register);
-                }
-            }
-
-            // Handle PA_TABLE separately as it requires burst read
-            byte[] paTableValues = cc1101.readBurstReg(CC1101.PATABLE, 8);
-            for (int i = 0; i < 8; i++) {
-                String register = "PA_TABLE" + i;
-                TextView textView = registerTextViews.get(register);
-                if (textView != null) {
-                    String hexValue = String.format("%02X", paTableValues[i]);
-                    textView.setText(hexValue);
-                    Log.d("ismFragment", "Setting " + register + " to " + hexValue);
-                } else {
-                    Log.e("ismFragment", "TextView not found for " + register);
-                }
-            }
-        } catch (Exception e) {
-            Log.e("ismFragment", "Error reading CC1101 registers", e);
-            showToast("Error reading registers. Check connection.");
-        }
-    }
-
-    private void loadRegisters() {
-        if (binding == null) {
-            Log.e("ismFragment", "Binding is null");
-            return;
-        }
-
-        // Check connection status before proceeding
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            Log.e("ismFragment", "Not connected when trying to load registers UI.");
-            showDisconnectedState();
-            return;
-        }
-
-        // Clear existing views
-        binding.registersContainer.removeAllViews();
-        registerTextViews.clear();
-
-        List<String> registers = Arrays.asList(
-                "IOCFG2", "IOCFG1", "IOCFG0", "FIFOTHR", "SYNC1", "SYNC0", "PKTLEN", "PKTCTRL1", "PKTCTRL0",
-                "ADDR", "CHANNR", "FSCTRL1", "FSCTRL0", "FREQ2", "FREQ1", "FREQ0", "MDMCFG4", "MDMCFG3",
-                "MDMCFG2", "MDMCFG1", "MDMCFG0", "DEVIATN", "MCSM2", "MCSM1", "MCSM0", "FOCCFG", "BSCFG",
-                "AGCTRL2", "AGCTRL1", "AGCTRL0", "WOREVT1", "WOREVT0", "WORCTRL", "FREND1", "FREND0",
-                "FSCAL3", "FSCAL2", "FSCAL1", "FSCAL0", "RCCTRL1", "RCCTRL0", "FSTEST", "PTEST", "AGCTEST",
-                "TEST2", "TEST1", "TEST0"
-        );
-
-        ConstraintLayout registersContainer = binding.registersContainer;
-        TextView previousTextView = binding.registersTitle; // Assuming you have a title TextView
-
-        int marginInPixels = (int) (8 * getResources().getDisplayMetrics().density); // 8dp margin
-
-        for (String register : registers) {
-            TextView registerAddressTextView = new TextView(requireContext());
-            registerAddressTextView.setId(View.generateViewId());
-            registerAddressTextView.setText(register);
-            ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
-                    ConstraintLayout.LayoutParams.WRAP_CONTENT,
-                    ConstraintLayout.LayoutParams.WRAP_CONTENT
-            );
-            layoutParams.topMargin = marginInPixels;
-            registerAddressTextView.setLayoutParams(layoutParams);
-
-            TextView registerValueTextView = new TextView(requireContext());
-            registerValueTextView.setId(View.generateViewId());
-            registerValueTextView.setText("00"); // Set text instead of hint
-            registerValueTextView.setClickable(true);
-            registerValueTextView.setBackground(getResources().getDrawable(android.R.drawable.list_selector_background));
-            registerValueTextView.setOnClickListener(v -> showEditDialog(register, registerValueTextView.getText().toString(), newValue -> {
-                if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
-                    showToast("Not connected. Cannot write register.");
-                    return;
-                }
-                try {
-                    byte value = (byte) Integer.parseInt(newValue, 16);
-                    cc1101.writeReg((byte) registers.indexOf(register), value);
-                    registerValueTextView.setText(newValue);
-                } catch (NumberFormatException e) {
-                    showToast("Invalid hexadecimal value");
-                }
-            }));
-
-            registerTextViews.put(register, registerValueTextView);
-
-            registersContainer.addView(registerAddressTextView);
-            registersContainer.addView(registerValueTextView);
-
-            ConstraintSet constraintSet = new ConstraintSet();
-            constraintSet.clone(registersContainer);
-
-            // Constrain TextView
-            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
-            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.TOP, previousTextView.getId(), ConstraintSet.BOTTOM);
-
-            // Constrain TextView
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.TOP, registerAddressTextView.getId(), ConstraintSet.TOP);
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.BOTTOM, registerAddressTextView.getId(), ConstraintSet.BOTTOM);
-
-            constraintSet.applyTo(registersContainer);
-
-            previousTextView = registerAddressTextView; // Update for the next iteration
-        }
-
-        // Handle status registers separately
-        List<String> statusRegisters = Arrays.asList(
-                "PARTNUM", "VERSION", "FREQEST", "LQI", "RSSI", "MARCSTATE",
-                "WORTIME1", "WORTIME0", "PKTSTATUS", "VCO_VC_DAC", "TXBYTES", "RXBYTES"
-        );
-
-        for (String register : statusRegisters) {
-            TextView registerAddressTextView = new TextView(requireContext());
-            registerAddressTextView.setId(View.generateViewId());
-            registerAddressTextView.setText(register);
-            ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
-                    ConstraintLayout.LayoutParams.WRAP_CONTENT,
-                    ConstraintLayout.LayoutParams.WRAP_CONTENT
-            );
-            layoutParams.topMargin = marginInPixels;
-            registerAddressTextView.setLayoutParams(layoutParams);
-
-            TextView registerValueTextView = new TextView(requireContext());
-            registerValueTextView.setId(View.generateViewId());
-            registerValueTextView.setText("00"); // Set text instead of hint
-            registerValueTextView.setClickable(true);
-            registerValueTextView.setBackground(getResources().getDrawable(android.R.drawable.list_selector_background));
-            registerValueTextView.setOnClickListener(v -> showEditDialog(register, registerValueTextView.getText().toString(), newValue -> {
-                if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
-                    showToast("Not connected. Cannot write register.");
-                    return;
-                }
-                try {
-                    byte value = (byte) Integer.parseInt(newValue, 16);
-                    cc1101.writeReg((byte) (registers.size() + statusRegisters.indexOf(register)), value);
-                    registerValueTextView.setText(newValue);
-                } catch (NumberFormatException e) {
-                    showToast("Invalid hexadecimal value");
-                }
-            }));
-
-            registerTextViews.put(register, registerValueTextView);
-
-            registersContainer.addView(registerAddressTextView);
-            registersContainer.addView(registerValueTextView);
-
-            ConstraintSet constraintSet = new ConstraintSet();
-            constraintSet.clone(registersContainer);
-
-            // Constrain TextView
-            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
-            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.TOP, previousTextView.getId(), ConstraintSet.BOTTOM);
-
-            // Constrain TextView
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.TOP, registerAddressTextView.getId(), ConstraintSet.TOP);
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.BOTTOM, registerAddressTextView.getId(), ConstraintSet.BOTTOM);
-
-            constraintSet.applyTo(registersContainer);
-
-            previousTextView = registerAddressTextView; // Update for the next iteration
-        }
-
-        // Handle PA_TABLE separately
-        for (int i = 0; i < 8; i++) {
-            final int index = i;  // Create a final variable to use in the lambda
-            String register = "PA_TABLE" + index;
-            TextView registerAddressTextView = new TextView(requireContext());
-            registerAddressTextView.setId(View.generateViewId());
-            registerAddressTextView.setText(register);
-            ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
-                    ConstraintLayout.LayoutParams.WRAP_CONTENT,
-                    ConstraintLayout.LayoutParams.WRAP_CONTENT
-            );
-            layoutParams.topMargin = marginInPixels;
-            registerAddressTextView.setLayoutParams(layoutParams);
-
-            TextView registerValueTextView = new TextView(requireContext());
-            registerValueTextView.setId(View.generateViewId());
-            registerValueTextView.setText("00"); // Set text instead of hint
-            registerValueTextView.setClickable(true);
-            registerValueTextView.setBackground(getResources().getDrawable(android.R.drawable.list_selector_background));
-            registerValueTextView.setOnClickListener(v -> showEditDialog(register, registerValueTextView.getText().toString(), newValue -> {
-                if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
-                    showToast("Not connected. Cannot write register.");
-                    return;
-                }
-                try {
-                    byte value = (byte) Integer.parseInt(newValue, 16);
-                    cc1101.writeReg((byte) (CC1101.PATABLE + index), value);
-                    registerValueTextView.setText(newValue);
-                } catch (NumberFormatException e) {
-                    showToast("Invalid hexadecimal value");
-                }
-            }));
-
-            registerTextViews.put(register, registerValueTextView);
-
-            registersContainer.addView(registerAddressTextView);
-            registersContainer.addView(registerValueTextView);
-
-            ConstraintSet constraintSet = new ConstraintSet();
-            constraintSet.clone(registersContainer);
-
-            // Constrain TextView
-            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
-            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.TOP, previousTextView.getId(), ConstraintSet.BOTTOM);
-
-            // Constrain TextView
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.TOP, registerAddressTextView.getId(), ConstraintSet.TOP);
-            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.BOTTOM, registerAddressTextView.getId(), ConstraintSet.BOTTOM);
-
-            constraintSet.applyTo(registersContainer);
-
-            previousTextView = registerAddressTextView; // Update for the next iteration
-        }
-
-        // After adding all views, update their values
-        loadCC1101Registers();
-
-        // Hide progress wheel and show registers container
-        binding.registersProgressBar.setVisibility(View.GONE);
-        binding.registersContainer.setVisibility(View.VISIBLE);
-        Log.d("ismFragment", "Registers container set to visible");
-    }
 
     private void setupClickListeners() {
         binding.frequencyTextView.setOnClickListener(v -> {
@@ -594,6 +327,586 @@ public class IsmFragment extends Fragment {
              }
             showEditDialog("Deviation", binding.deviationTextView.getText().toString(), this::updateDeviation);
         });
+    }
+
+    private void setupMenu() {
+        MenuHost menuHost = requireActivity();
+        menuHost.addMenuProvider(new MenuProvider() {
+            @Override
+            public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+                menuInflater.inflate(R.menu.ism_menu, menu);
+            }
+
+            @Override
+            public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
+                if (menuItem.getItemId() == R.id.action_refresh_ism) {
+                    refreshData(true);
+                    return true;
+                }
+                return false;
+            }
+        }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
+    }
+
+    private void setupObservers() {
+        viewModel.getRegisterValues().observe(getViewLifecycleOwner(), this::applyRegisterValues);
+        viewModel.getRfParameters().observe(getViewLifecycleOwner(), this::applyRfParameters);
+        viewModel.hasLoaded().observe(getViewLifecycleOwner(), loaded -> {
+            if (Boolean.TRUE.equals(loaded)) {
+                showContent();
+            }
+        });
+    }
+
+    private void restoreCachedStateIfAvailable() {
+        if (viewModel == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(viewModel.hasLoaded().getValue())) {
+            Map<String, String> cachedRegisters = viewModel.getRegisterValues().getValue();
+            if (cachedRegisters != null) {
+                applyRegisterValues(cachedRegisters);
+            }
+            IsmViewModel.RfParameters params = viewModel.getRfParameters().getValue();
+            if (params != null) {
+                applyRfParameters(params);
+            }
+            showContent();
+        }
+    }
+
+    private void applyRegisterValues(Map<String, String> values) {
+        if (values == null || binding == null || registerTextViews.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            TextView textView = registerTextViews.get(entry.getKey());
+            if (textView != null && entry.getValue() != null) {
+                textView.setText(entry.getValue());
+            }
+        }
+    }
+
+    private void applyRfParameters(IsmViewModel.RfParameters params) {
+        if (params == null || binding == null) {
+            return;
+        }
+        binding.frequencyTextView.setText(String.format(Locale.US, "%.6f", params.getFrequencyMHz()));
+        binding.dataRateTextView.setText(String.format(Locale.US, "%d", params.getDataRate()));
+        binding.bandwidthTextView.setText(String.format(Locale.US, "%.1f", params.getBandwidthKHz()));
+        binding.deviationTextView.setText(String.format(Locale.US, "%d", params.getDeviationHz()));
+
+        if (binding.modulationFormatSpinner.getAdapter() instanceof ModulationAdapter) {
+            ModulationAdapter adapter = (ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
+            binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(params.getModulation()));
+        }
+        if (binding.txPowerSpinner.getAdapter() instanceof PowerAdapter) {
+            PowerAdapter powerAdapter = (PowerAdapter) binding.txPowerSpinner.getAdapter();
+            binding.txPowerSpinner.setSelection(powerAdapter.getPositionForPowerValue(params.getTxPowerDbm()));
+        }
+    }
+
+    private void showContent() {
+        if (binding == null) {
+            return;
+        }
+        binding.registersProgressBar.setVisibility(View.GONE);
+        binding.registersContainer.setVisibility(View.VISIBLE);
+        binding.rfParametersProgressBar.setVisibility(View.GONE);
+        binding.rfParametersContainer.setVisibility(View.VISIBLE);
+    }
+
+    private void startInitialLoad() {
+        if (!isAdded() || rfm69 == null) {
+            return;
+        }
+        if (viewModel != null && Boolean.TRUE.equals(viewModel.hasLoaded().getValue())) {
+            showContent();
+            return;
+        }
+        refreshData(true);
+    }
+
+    private void showLoadingDialog() {
+        if (!isAdded()) {
+            return;
+        }
+
+        if (loadingDialog != null && loadingDialog.isShowing()) {
+            return;
+        }
+
+        LinearLayout container = new LinearLayout(requireContext());
+        container.setOrientation(LinearLayout.VERTICAL);
+        int padding = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 16,
+                getResources().getDisplayMetrics());
+        container.setPadding(padding, padding, padding, padding);
+
+        ProgressBar progressBar = new ProgressBar(requireContext(), null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setIndeterminate(false);
+        progressBar.setMax(Math.max(totalLoadSteps, 1));
+        progressBar.setProgress(completedSteps);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        progressParams.topMargin = 0;
+        progressParams.bottomMargin = padding / 2;
+        container.addView(progressBar, progressParams);
+
+        TextView countText = new TextView(requireContext());
+        countText.setText(String.format(Locale.US, "%d / %d", completedSteps, totalLoadSteps));
+        countText.setGravity(Gravity.END);
+        countText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        countParams.bottomMargin = padding / 4;
+        container.addView(countText, countParams);
+
+        TextView commandText = new TextView(requireContext());
+        commandText.setText("Preparing...");
+        container.addView(commandText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("Initializing RFM69");
+        builder.setView(container);
+        builder.setNegativeButton("Cancel", null);
+        builder.setCancelable(false);
+
+        loadingDialog = builder.create();
+        loadingDialog.show();
+
+        Button cancelButton = loadingDialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        if (cancelButton != null) {
+            cancelButton.setOnClickListener(v -> {
+                loadingCancelled = true;
+                cancelLoadingThread();
+                showDisconnectedState();
+            });
+        }
+
+        loadingDialogCommandText = commandText;
+        loadingDialogProgressBar = progressBar;
+        loadingDialogCountText = countText;
+        updateLoadingProgressUI();
+    }
+
+    private void initializeProgressTracking() {
+        totalLoadSteps = calculateTotalLoadSteps();
+        if (totalLoadSteps <= 0) {
+            totalLoadSteps = 1;
+        }
+        completedSteps = 0;
+        if (viewModel != null) {
+            viewModel.resetLoadingState();
+        }
+        updateLoadingProgressUI();
+    }
+
+    private int calculateTotalLoadSteps() {
+        return CONFIG_REGISTERS.size() + STATUS_REGISTERS.size() + RF_PARAMETER_STEPS;
+    }
+
+    private void updateLoadingProgressUI() {
+        final int total = Math.max(totalLoadSteps, 1);
+        final int progress = Math.min(completedSteps, total);
+        handler.post(() -> {
+            if (loadingDialogProgressBar != null) {
+                loadingDialogProgressBar.setMax(total);
+                loadingDialogProgressBar.setProgress(progress);
+            }
+            if (loadingDialogCountText != null) {
+                loadingDialogCountText.setText(String.format(Locale.US, "%d / %d", progress, total));
+            }
+        });
+    }
+
+    private void incrementProgress() {
+        synchronized (this) {
+            if (completedSteps < totalLoadSteps) {
+                completedSteps++;
+            }
+        }
+        updateLoadingProgressUI();
+    }
+
+    private void updateLoadingCommand(String command) {
+        handler.post(() -> {
+            if (loadingDialogCommandText != null) {
+                loadingDialogCommandText.setText(command);
+            }
+        });
+    }
+
+    private void dismissLoadingDialog() {
+        handler.post(() -> {
+            if (loadingDialog != null) {
+                if (loadingDialog.isShowing()) {
+                    loadingDialog.dismiss();
+                }
+                loadingDialog = null;
+            }
+            loadingDialogCommandText = null;
+            loadingDialogProgressBar = null;
+            loadingDialogCountText = null;
+        });
+    }
+
+    private void cancelLoadingThread() {
+        loadingCancelled = true;
+        Thread thread = loadingThread;
+        if (thread != null && thread.isAlive()) {
+            thread.interrupt();
+        }
+    }
+
+    private void refreshData(boolean showDialog) {
+        if (!isAdded() || binding == null) {
+            return;
+        }
+
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+            handler.post(this::showDisconnectedState);
+            return;
+        }
+
+        // Ensure SPI device is open before any operations
+        if (!rfm69.openDevice()) {
+            Log.e("IsmFragment", "Failed to open RFM69 SPI device");
+            handler.post(this::showDisconnectedState);
+            showToast("Failed to initialize RFM69");
+            return;
+        }
+
+        cancelLoadingThread();
+        loadingCancelled = false;
+        initializeProgressTracking();
+
+        if (showDialog) {
+            showLoadingDialog();
+        }
+
+        binding.registersProgressBar.setVisibility(View.VISIBLE);
+        binding.registersContainer.setVisibility(View.GONE);
+        binding.rfParametersProgressBar.setVisibility(View.VISIBLE);
+        binding.rfParametersContainer.setVisibility(View.GONE);
+
+        buildRegisterViews();
+        final Consumer<String> commandObserver = this::updateLoadingCommand;
+        rfm69.setCommandObserver(commandObserver);
+
+        loadingThread = new Thread(() -> {
+            boolean registersLoaded = populateRegisterValues();
+            boolean rfLoaded = false;
+            if (!loadingCancelled && registersLoaded) {
+                rfLoaded = loadRfParametersData();
+            }
+            final boolean success = !loadingCancelled && registersLoaded && rfLoaded;
+            rfm69.clearCommandObserver(commandObserver);
+            if (viewModel != null) {
+                viewModel.setLoaded(success);
+            }
+            handler.post(() -> {
+                if (loadingCancelled || !success) {
+                    showDisconnectedState();
+                } else {
+                    dismissLoadingDialog();
+                    showContent();
+                }
+                loadingCancelled = false;
+            });
+            loadingThread = null;
+        }, "RFM69-LoadThread");
+        loadingThread.start();
+    }
+
+    private void buildRegisterViews() {
+        if (binding == null) {
+            return;
+        }
+
+        ConstraintLayout registersContainer = binding.registersContainer;
+        int childCount = registersContainer.getChildCount();
+        if (childCount > 1) {
+            registersContainer.removeViews(1, childCount - 1);
+        }
+        registerTextViews.clear();
+
+        TextView previousTextView = binding.registersTitle;
+        int marginInPixels = (int) (8 * getResources().getDisplayMetrics().density);
+
+        for (int i = 0; i < CONFIG_REGISTERS.size(); i++) {
+            final String registerName = CONFIG_REGISTERS.get(i);
+            final int registerAddress = i;
+
+            TextView registerAddressTextView = new TextView(requireContext());
+            registerAddressTextView.setId(View.generateViewId());
+            registerAddressTextView.setText(registerName);
+            ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
+                    ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                    ConstraintLayout.LayoutParams.WRAP_CONTENT
+            );
+            layoutParams.topMargin = marginInPixels;
+            registerAddressTextView.setLayoutParams(layoutParams);
+
+            TextView registerValueTextView = new TextView(requireContext());
+            registerValueTextView.setId(View.generateViewId());
+            registerValueTextView.setText("--");
+            registerValueTextView.setClickable(true);
+            Drawable configBackground = ContextCompat.getDrawable(requireContext(), android.R.drawable.list_selector_background);
+            if (configBackground != null) {
+                registerValueTextView.setBackground(configBackground);
+            }
+            registerValueTextView.setOnClickListener(v -> showEditDialog(registerName, registerValueTextView.getText().toString(), newValue -> {
+                if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+                    showToast("Not connected. Cannot write register.");
+                    return;
+                }
+                try {
+                    byte value = (byte) Integer.parseInt(newValue, 16);
+                    rfm69.writeReg((byte) registerAddress, value);
+                    String formatted = String.format(Locale.US, "%02X", value & 0xFF);
+                    registerValueTextView.setText(formatted);
+                    if (viewModel != null) {
+                        viewModel.postRegisterValue(registerName, formatted);
+                    }
+                } catch (NumberFormatException e) {
+                    showToast("Invalid hexadecimal value");
+                } catch (Exception e) {
+                    Log.e("ismFragment", "Failed to update register", e);
+                    showToast("Failed to update register");
+                }
+            }));
+
+            registerTextViews.put(registerName, registerValueTextView);
+
+            registersContainer.addView(registerAddressTextView);
+            registersContainer.addView(registerValueTextView);
+
+            ConstraintSet constraintSet = new ConstraintSet();
+            constraintSet.clone(registersContainer);
+            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.TOP, previousTextView.getId(), ConstraintSet.BOTTOM);
+            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.TOP, registerAddressTextView.getId(), ConstraintSet.TOP);
+            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.BOTTOM, registerAddressTextView.getId(), ConstraintSet.BOTTOM);
+            constraintSet.applyTo(registersContainer);
+
+            previousTextView = registerAddressTextView;
+        }
+
+        for (int i = 0; i < STATUS_REGISTERS.size(); i++) {
+            final String registerName = STATUS_REGISTERS.get(i);
+
+            TextView registerAddressTextView = new TextView(requireContext());
+            registerAddressTextView.setId(View.generateViewId());
+            registerAddressTextView.setText(registerName);
+            ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
+                    ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                    ConstraintLayout.LayoutParams.WRAP_CONTENT
+            );
+            layoutParams.topMargin = marginInPixels;
+            registerAddressTextView.setLayoutParams(layoutParams);
+
+            TextView registerValueTextView = new TextView(requireContext());
+            registerValueTextView.setId(View.generateViewId());
+            registerValueTextView.setText("--");
+            registerValueTextView.setClickable(false);
+
+            registerTextViews.put(registerName, registerValueTextView);
+
+            registersContainer.addView(registerAddressTextView);
+            registersContainer.addView(registerValueTextView);
+
+            ConstraintSet constraintSet = new ConstraintSet();
+            constraintSet.clone(registersContainer);
+            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+            constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.TOP, previousTextView.getId(), ConstraintSet.BOTTOM);
+            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.TOP, registerAddressTextView.getId(), ConstraintSet.TOP);
+            constraintSet.connect(registerValueTextView.getId(), ConstraintSet.BOTTOM, registerAddressTextView.getId(), ConstraintSet.BOTTOM);
+            constraintSet.applyTo(registersContainer);
+
+            previousTextView = registerAddressTextView;
+        }
+    }
+
+    private boolean populateRegisterValues() {
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+            return false;
+        }
+
+        try {
+            for (int i = 0; i < CONFIG_REGISTERS.size(); i++) {
+                if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                    return false;
+                }
+                final String registerName = CONFIG_REGISTERS.get(i);
+                byte value = rfm69.readReg((byte) (i + 1));
+                final String hexValue = String.format(Locale.US, "%02X", value & 0xFF);
+                TextView textView = registerTextViews.get(registerName);
+                if (textView != null) {
+                    handler.post(() -> {
+                        if (binding != null) {
+                            textView.setText(hexValue);
+                        }
+                    });
+                }
+                if (viewModel != null) {
+                    viewModel.postRegisterValue(registerName, hexValue);
+                }
+                incrementProgress();
+            }
+
+            byte version = rfm69.readReg(RFM69.REG_VERSION);
+            handler.post(() -> {
+                if (binding != null) {
+                    TextView textView = registerTextViews.get("VERSION");
+                    if (textView != null) {
+                        textView.setText(String.format(Locale.US, "%02X", version & 0xFF));
+                    }
+                }
+            });
+            if (viewModel != null) {
+                viewModel.postRegisterValue("VERSION", String.format(Locale.US, "%02X", version & 0xFF));
+            }
+            incrementProgress();
+
+            byte rssiValue = rfm69.readReg(RFM69.REG_RSSIVALUE);
+            handler.post(() -> {
+                if (binding != null) {
+                    TextView textView = registerTextViews.get("RSSIVALUE");
+                    if (textView != null) {
+                        textView.setText(String.format(Locale.US, "%02X", rssiValue & 0xFF));
+                    }
+                }
+            });
+            if (viewModel != null) {
+                viewModel.postRegisterValue("RSSIVALUE", String.format(Locale.US, "%02X", rssiValue & 0xFF));
+            }
+            incrementProgress();
+
+            byte temp1 = rfm69.readReg(RFM69.REG_TEMP1);
+            handler.post(() -> {
+                if (binding != null) {
+                    TextView textView = registerTextViews.get("TEMP1");
+                    if (textView != null) {
+                        textView.setText(String.format(Locale.US, "%02X", temp1 & 0xFF));
+                    }
+                }
+            });
+            if (viewModel != null) {
+                viewModel.postRegisterValue("TEMP1", String.format(Locale.US, "%02X", temp1 & 0xFF));
+            }
+            incrementProgress();
+
+            byte temp2 = rfm69.readReg(RFM69.REG_TEMP2);
+            handler.post(() -> {
+                if (binding != null) {
+                    TextView textView = registerTextViews.get("TEMP2");
+                    if (textView != null) {
+                        textView.setText(String.format(Locale.US, "%02X", temp2 & 0xFF));
+                    }
+                }
+            });
+            if (viewModel != null) {
+                viewModel.postRegisterValue("TEMP2", String.format(Locale.US, "%02X", temp2 & 0xFF));
+            }
+            incrementProgress();
+            return true;
+        } catch (Exception e) {
+            Log.e("ismFragment", "Error reading RFM69 registers", e);
+            handler.post(() -> showToast("Error reading registers. Check connection."));
+            return false;
+        }
+    }
+
+    private boolean loadRfParametersData() {
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+            return false;
+        }
+
+        try {
+            double frequency = rfm69.getFrequency();
+            if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            handler.post(() -> {
+                if (binding != null) {
+                    binding.frequencyTextView.setText(String.format(Locale.US, "%.6f", frequency));
+                }
+            });
+            incrementProgress();
+
+            int dataRate = rfm69.getDataRate();
+            if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            handler.post(() -> {
+                if (binding != null) {
+                    binding.dataRateTextView.setText(String.format(Locale.US, "%d", dataRate));
+                }
+            });
+            incrementProgress();
+
+            double bandwidth = rfm69.getBandwidth();
+            if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            handler.post(() -> {
+                if (binding != null) {
+                    binding.bandwidthTextView.setText(String.format(Locale.US, "%.1f", bandwidth));
+                }
+            });
+            incrementProgress();
+
+            int deviation = rfm69.getDeviation();
+            if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            handler.post(() -> {
+                if (binding != null) {
+                    binding.deviationTextView.setText(String.format(Locale.US, "%d", deviation));
+                }
+            });
+            incrementProgress();
+
+            int modulation = rfm69.getModulation();
+            if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            handler.post(() -> {
+                if (binding != null) {
+                    ModulationAdapter adapter = (ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
+                    binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(modulation));
+                }
+            });
+            incrementProgress();
+
+            int txPower = rfm69.getPowerLevel();
+            if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            handler.post(() -> {
+                if (binding != null) {
+                    PowerAdapter powerAdapter = (PowerAdapter) binding.txPowerSpinner.getAdapter();
+                    binding.txPowerSpinner.setSelection(powerAdapter.getPositionForPowerValue(txPower));
+                }
+            });
+            incrementProgress();
+
+            if (viewModel != null) {
+                viewModel.postRfParameters(frequency, dataRate, bandwidth, deviation, modulation, txPower);
+            }
+
+            return true;
+        } catch (Exception e) {
+            Log.e("ismFragment", "Error loading RF parameters", e);
+            handler.post(() -> showToast("Error loading RF parameters. Check connection."));
+            return false;
+        }
     }
 
     private void showEditDialog(String title, String currentValue, Consumer<String> updateFunction) {
@@ -644,77 +957,63 @@ public class IsmFragment extends Fragment {
 
     private void updateFrequency(String newValue) {
         Log.d("updateFrequency", "update freq");
-        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
-            double frequency = Double.parseDouble(newValue);
-            if (cc1101.setFrequencyMHz(frequency)) {
-                reloadCardViews();
-            } else {
-                showToast("Failed to set frequency");
-            }
+            float frequency = Float.parseFloat(newValue);
+            rfm69.setFrequencyMHz(frequency);
+            reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid frequency value");
         }
     }
 
     private void updateDataRate(String newValue) {
-        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
             int dataRate = Integer.parseInt(newValue);
-            if (cc1101.setDataRate(dataRate)) {
-                reloadCardViews();
-            } else {
-                showToast("Failed to set data rate");
-            }
+            rfm69.setDataRate(dataRate);
+            reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid data rate value");
         }
     }
 
     private void updateBandwidth(String newValue) {
-        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
-            double bandwidth = Double.parseDouble(newValue);
-            if (cc1101.setBandwidth(bandwidth)) {
-                reloadCardViews();
-            } else {
-                showToast("Failed to set bandwidth");
-            }
+            byte bandwidth = (byte) Integer.parseInt(newValue, 16);
+            rfm69.setBandwidth(bandwidth);
+            reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid bandwidth value");
         }
     }
 
     private void updateDeviation(String newValue) {
-        if (!isServiceBound || cc1101 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
             int deviation = Integer.parseInt(newValue);
-            if (cc1101.setDeviation(deviation)) {
-                reloadCardViews();
-            } else {
-                showToast("Failed to set deviation");
-            }
+            rfm69.setDeviation(deviation);
+            reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid deviation value");
         }
     }
 
     private void reloadCardViews() {
-        Log.i("reloadCardViews", "here");
-        loadRFParameters();
-        loadRegisters();
+        refreshData(false);
     }
 
     private void showToast(String message) {
@@ -744,6 +1043,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void showDisconnectedState() {
+        dismissLoadingDialog();
         if (binding != null) {
             binding.registersProgressBar.setVisibility(View.GONE);
             binding.registersContainer.setVisibility(View.GONE);

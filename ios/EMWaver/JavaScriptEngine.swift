@@ -1,6 +1,21 @@
 import SwiftUI
 import JavaScriptCore
 
+@objc protocol JSUtilsExport: JSExport {
+    func sleep(_ milliseconds: Int)
+    func delay(_ milliseconds: Int)
+}
+
+final class JSUtils: NSObject, JSUtilsExport {
+    func sleep(_ milliseconds: Int) {
+        Thread.sleep(forTimeInterval: TimeInterval(milliseconds) / 1000.0)
+    }
+
+    func delay(_ milliseconds: Int) {
+        Thread.sleep(forTimeInterval: TimeInterval(milliseconds) / 1000.0)
+    }
+}
+
 // MARK: - JavaScript Engine
 
 typealias JSPrintCallback = (String) -> Void

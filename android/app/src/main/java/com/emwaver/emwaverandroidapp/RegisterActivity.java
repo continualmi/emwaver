@@ -26,6 +26,7 @@ public class RegisterActivity extends AppCompatActivity {
     private TextInputEditText emailInput;
     private TextInputEditText usernameInput;
     private TextInputEditText passwordInput;
+    private TextInputEditText accessCodeInput;
     private TextInputEditText firstNameInput;
     private TextInputEditText lastNameInput;
     private TextView errorText;
@@ -43,6 +44,7 @@ public class RegisterActivity extends AppCompatActivity {
         emailInput = findViewById(R.id.input_register_email);
         usernameInput = findViewById(R.id.input_register_username);
         passwordInput = findViewById(R.id.input_register_password);
+        accessCodeInput = findViewById(R.id.input_register_access_code);
         firstNameInput = findViewById(R.id.input_register_first_name);
         lastNameInput = findViewById(R.id.input_register_last_name);
         errorText = findViewById(R.id.text_register_error);
@@ -61,6 +63,7 @@ public class RegisterActivity extends AppCompatActivity {
         String email = getTrimmedText(emailInput);
         String username = getTrimmedText(usernameInput);
         String password = getTrimmedText(passwordInput);
+        String accessCode = getTrimmedText(accessCodeInput);
         String firstName = getTrimmedText(firstNameInput);
         String lastName = getTrimmedText(lastNameInput);
 
@@ -72,17 +75,25 @@ public class RegisterActivity extends AppCompatActivity {
         progressBar.setVisibility(View.VISIBLE);
         registerButton.setEnabled(false);
 
-        executor.execute(() -> performRegister(email, username, password, firstName, lastName));
+        executor.execute(() -> performRegister(email, username, password, firstName, lastName, accessCode));
     }
 
-    private void performRegister(String email, String username, String password, String firstName, String lastName) {
+    private void performRegister(
+            String email,
+            String username,
+            String password,
+            String firstName,
+            String lastName,
+            String accessCode
+    ) {
         BackendClient client = BackendClient.getInstance(RegisterActivity.this);
         try {
-            BackendClient.LoginResult result = client.register(email, username, password, firstName, lastName);
+            BackendClient.LoginResult result = client.register(email, username, password, firstName, lastName, accessCode);
             JSONObject user = result.user;
             String userJson = user != null ? user.toString() : null;
+            String entitlementJson = result.entitlement != null ? result.entitlement.toString() : null;
             AuthenticationManager.getInstance(RegisterActivity.this)
-                    .saveSession(result.accessToken, result.refreshToken, userJson);
+                    .saveSession(result.accessToken, result.refreshToken, userJson, entitlementJson);
             mainHandler.post(() -> {
                 progressBar.setVisibility(View.GONE);
                 registerButton.setEnabled(true);

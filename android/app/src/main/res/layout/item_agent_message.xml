@@ -5,18 +5,34 @@
     android:orientation="vertical"
     android:padding="8dp">
 
-    <TextView
-        android:id="@+id/message_role"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textStyle="bold"
-        android:textColor="@android:color/black" />
-
-    <TextView
-        android:id="@+id/message_content"
+    <LinearLayout
+        android:id="@+id/message_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="4dp"
-        android:textColor="@android:color/black" />
+        android:orientation="horizontal"
+        android:gravity="start"
+        android:baselineAligned="false">
+
+        <ImageView
+            android:id="@+id/message_icon"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@null"
+            android:src="@drawable/llm"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/message_content"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@android:color/black"
+            android:textSize="16sp"
+            android:lineSpacingExtra="2dp"
+            android:paddingVertical="4dp"
+            android:gravity="start"
+            android:textAlignment="viewStart" />
+    </LinearLayout>
 
 </LinearLayout>

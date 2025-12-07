@@ -5,20 +5,24 @@ import android.os.Looper;
 
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.NativeArray;
+import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.Wrapper;
-import org.mozilla.javascript.RhinoException;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -41,6 +45,9 @@ public final class WaveletEngine {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Function> callbackRegistry = new ConcurrentHashMap<>();
     private final Map<String, Object> globalBindings = new ConcurrentHashMap<>();
+    private final Map<String, ModuleSource> moduleSources = new ConcurrentHashMap<>();
+    private final Map<String, Object> moduleCache = new ConcurrentHashMap<>();
+    private final ThreadLocal<Set<String>> moduleLoadingStack = ThreadLocal.withInitial(HashSet::new);
 
     private volatile Scriptable scope;
     private volatile boolean initialized;
@@ -102,12 +109,15 @@ public final class WaveletEngine {
                 ensureScope(cx);
                 callbackRegistry.clear();
                 injectDsl(cx, scope);
+                moduleLoadingStack.get().clear();
 
                 String wrapped = "(function() {\n" + script + "\n})();";
                 try {
                     cx.evaluateString(scope, wrapped, "WaveletScript", 1, null);
                 } catch (RhinoException ex) {
-                    dispatchPrint("Wavelet error: " + ex.getMessage());
+                    String message = "Wavelet error: " + formatRhinoException(ex);
+                    WaveletConsoleState.getInstance().append(message);
+                    dispatchPrint(message);
                 }
             } finally {
                 Context.exit();
@@ -126,7 +136,9 @@ public final class WaveletEngine {
             android.util.Log.d("WaveletEngine", "invoke requested for token=" + token + " args=" + arguments);
             Function function = callbackRegistry.get(token);
             if (function == null) {
-                dispatchPrint("No callback registered for token " + token);
+                String message = "No callback registered for token " + token;
+                WaveletConsoleState.getInstance().append(message);
+                dispatchPrint(message);
                 return;
             }
             Context cx = Context.enter();
@@ -138,7 +150,9 @@ public final class WaveletEngine {
                 android.util.Log.d("WaveletEngine", "calling JS function for token=" + token);
                 function.call(cx, scope, scope, jsArgs);
             } catch (RhinoException ex) {
-                dispatchPrint("Wavelet callback error: " + ex.getMessage());
+                String message = "Wavelet callback error: " + formatRhinoException(ex);
+                WaveletConsoleState.getInstance().append(message);
+                dispatchPrint(message);
             } finally {
                 Context.exit();
             }
@@ -182,6 +196,41 @@ public final class WaveletEngine {
         }
     }
 
+    public void updateModuleSources(Map<String, String> sources) {
+        Map<String, ModuleSource> prepared = new HashMap<>();
+        if (sources != null) {
+            for (Map.Entry<String, String> entry : sources.entrySet()) {
+                String name = entry.getKey();
+                if (name == null) {
+                    continue;
+                }
+                String normalized = normalizeModuleName(name);
+                if (normalized.isEmpty()) {
+                    continue;
+                }
+                String content = entry.getValue() != null ? entry.getValue() : "";
+                prepared.put(normalized, new ModuleSource(name, content));
+            }
+        }
+
+        executor.execute(() -> {
+            moduleSources.clear();
+            moduleSources.putAll(prepared);
+            moduleCache.clear();
+            moduleLoadingStack.get().clear();
+            Context cx = Context.enter();
+            try {
+                ensureScope(cx);
+                if (scope != null) {
+                    ScriptableObject.deleteProperty(scope, "WaveletModules");
+                    ScriptableObject.deleteProperty(scope, "require");
+                }
+            } finally {
+                Context.exit();
+            }
+        });
+    }
+
     private void ensureScope(Context cx) {
         cx.setLanguageVersion(Context.VERSION_ES6);
         if (!initialized || scope == null) {
@@ -220,14 +269,18 @@ public final class WaveletEngine {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 if (args.length == 0 || !(args[0] instanceof Scriptable)) {
-                    dispatchPrint("Wavelet render called with invalid node");
+                    String message = "Wavelet render called with invalid node";
+                    WaveletConsoleState.getInstance().append(message);
+                    dispatchPrint(message);
                     return Context.getUndefinedValue();
                 }
                 WaveletTree tree = buildTreeFromJs((Scriptable) args[0]);
                 if (tree != null) {
                     dispatchRender(tree);
                 } else {
-                    dispatchPrint("Wavelet render received malformed node");
+                    String message = "Wavelet render received malformed node";
+                    WaveletConsoleState.getInstance().append(message);
+                    dispatchPrint(message);
                 }
                 return Context.getUndefinedValue();
             }
@@ -297,10 +350,194 @@ public final class WaveletEngine {
                 return Context.getUndefinedValue();
             }
         });
+
+        ScriptableObject.putProperty(scope, "_waveletConsoleAppend", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length > 0 && args[0] != null && args[0] != Undefined.instance) {
+                    String message = String.valueOf(args[0]);
+                    WaveletConsoleState.getInstance().append(message);
+                }
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_waveletConsoleClear", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                WaveletConsoleState.getInstance().clear();
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_waveletConsoleSetLimit", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length > 0 && args[0] instanceof Number) {
+                    int requested = ((Number) args[0]).intValue();
+                    int applied = WaveletConsoleState.getInstance().setLimit(requested);
+                    return applied;
+                }
+                return WaveletConsoleState.getInstance().getLimit();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_waveletImportModule", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length == 0 || args[0] == null) {
+                    return Context.getUndefinedValue();
+                }
+                return importModule(cx, String.valueOf(args[0]));
+            }
+        });
     }
 
     private void injectDsl(Context cx, Scriptable scope) {
         cx.evaluateString(scope, DSL_BOOTSTRAP, "WaveletDSL", 1, null);
+    }
+
+    private Object importModule(Context cx, String rawName) {
+        if (rawName == null) {
+            return Context.getUndefinedValue();
+        }
+        String normalized = normalizeModuleName(rawName);
+        if (normalized.isEmpty()) {
+            throw new EvaluatorException("Module name is required");
+        }
+        ModuleSource source = moduleSources.get(normalized);
+        if (source == null) {
+            throw new EvaluatorException("Module '" + rawName + "' not found");
+        }
+        Object cached = moduleCache.get(normalized);
+        if (cached != null) {
+            return cached;
+        }
+
+        Set<String> loading = moduleLoadingStack.get();
+        if (loading.contains(normalized)) {
+            throw new EvaluatorException("Circular module dependency detected for '" + source.name + "'");
+        }
+
+        loading.add(normalized);
+        try {
+            ensureScope(cx);
+            String wrapped = "(function(exports, module, WaveletModules, require) {\n" + source.content + "\n})";
+            Object evaluated = cx.evaluateString(scope, wrapped, source.name, 1, null);
+            if (!(evaluated instanceof Function)) {
+                throw new EvaluatorException("Module '" + source.name + "' did not evaluate to a function");
+            }
+
+            Function factory = (Function) evaluated;
+            Scriptable moduleScope = cx.newObject(scope);
+            moduleScope.setPrototype(scope);
+            moduleScope.setParentScope(scope);
+
+            Scriptable exportsObject = cx.newObject(scope);
+            Scriptable moduleObject = cx.newObject(scope);
+            ScriptableObject.putProperty(moduleObject, "exports", exportsObject);
+            ScriptableObject.putProperty(moduleObject, "id", source.name);
+            ScriptableObject.putProperty(moduleObject, "filename", source.name);
+
+            Function requireFunction = new BaseFunction() {
+                @Override
+                public Object call(Context innerCx, Scriptable innerScope, Scriptable thisObj, Object[] args) {
+                    if (args.length == 0 || args[0] == null) {
+                        return Context.getUndefinedValue();
+                    }
+                    return importModule(innerCx, String.valueOf(args[0]));
+                }
+            };
+
+            Object library = scope != null ? scope.get("WaveletModules", scope) : Scriptable.NOT_FOUND;
+
+            factory.call(
+                cx,
+                moduleScope,
+                moduleScope,
+                new Object[]{
+                    exportsObject,
+                    moduleObject,
+                    library != Scriptable.NOT_FOUND ? library : Context.getUndefinedValue(),
+                    requireFunction
+                }
+            );
+
+            Object exportsValue = ScriptableObject.getProperty(moduleObject, "exports");
+            if (exportsValue == Scriptable.NOT_FOUND || exportsValue == null) {
+                exportsValue = exportsObject;
+            }
+            moduleCache.put(normalized, exportsValue);
+            return exportsValue;
+        } catch (RhinoException ex) {
+            String message = "Failed to load module '" + source.name + "': " + formatRhinoException(ex);
+            WaveletConsoleState.getInstance().append(message);
+            dispatchPrint(message);
+            throw ex;
+        } catch (Exception ex) {
+            String message = "Failed to load module '" + source.name + "': " + ex.getMessage();
+            WaveletConsoleState.getInstance().append(message);
+            dispatchPrint(message);
+            EvaluatorException evaluatorException = new EvaluatorException(message);
+            evaluatorException.initCause(ex);
+            throw evaluatorException;
+        } finally {
+            loading.remove(normalized);
+        }
+    }
+
+    private String formatRhinoException(RhinoException ex) {
+        StringBuilder builder = new StringBuilder();
+        String rawMessage = ex.getMessage();
+        builder.append(rawMessage != null ? rawMessage : ex.toString());
+
+        String sourceName = ex.sourceName();
+        int lineNumber = ex.lineNumber();
+        int columnNumber = ex.columnNumber();
+        if (sourceName != null && !sourceName.isEmpty() && lineNumber >= 0) {
+            builder.append(" (").append(sourceName).append(':').append(lineNumber);
+            if (columnNumber >= 0) {
+                builder.append(':').append(columnNumber);
+            }
+            builder.append(')');
+        }
+
+        String lineSource = ex.lineSource();
+        if (lineSource != null && !lineSource.isEmpty()) {
+            builder.append("\n").append(lineSource.trim());
+        }
+
+        String stack = ex.getScriptStackTrace();
+        if (stack != null && !stack.isEmpty()) {
+            builder.append("\n").append(stack.trim());
+        }
+
+        return builder.toString();
+    }
+
+    private String normalizeModuleName(String rawName) {
+        if (rawName == null) {
+            return "";
+        }
+        String trimmed = rawName.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (!lower.endsWith(".js")) {
+            lower = lower + ".js";
+        }
+        return lower;
+    }
+
+    private static final class ModuleSource {
+        final String name;
+        final String content;
+
+        ModuleSource(String name, String content) {
+            this.name = name;
+            this.content = content != null ? content : "";
+        }
     }
 
     private Object[] convertArguments(Context cx, List<Object> arguments) {
@@ -612,18 +849,31 @@ public final class WaveletEngine {
         "            setLimit: function (value) {\n" +
         "                if (typeof value === 'number' && value > 0) {\n" +
         "                    limit = value;\n" +
+        "                    if (typeof _waveletConsoleSetLimit === 'function') {\n" +
+        "                        var applied = _waveletConsoleSetLimit(value);\n" +
+        "                        if (typeof applied === 'number' && applied > 0) {\n" +
+        "                            limit = applied;\n" +
+        "                        }\n" +
+        "                    }\n" +
         "                    trim();\n" +
         "                }\n" +
         "                return limit;\n" +
         "            },\n" +
         "            append: function (message) {\n" +
-        "                lines.push(String(message));\n" +
+        "                var text = String(message);\n" +
+        "                lines.push(text);\n" +
         "                trim();\n" +
         "                notify();\n" +
+        "                if (typeof _waveletConsoleAppend === 'function') {\n" +
+        "                    _waveletConsoleAppend(text);\n" +
+        "                }\n" +
         "            },\n" +
         "            clear: function () {\n" +
         "                lines.length = 0;\n" +
         "                notify();\n" +
+        "                if (typeof _waveletConsoleClear === 'function') {\n" +
+        "                    _waveletConsoleClear();\n" +
+        "                }\n" +
         "            },\n" +
         "            subscribe: function (fn) {\n" +
         "                if (typeof fn !== 'function') {\n" +
@@ -657,6 +907,39 @@ public final class WaveletEngine {
         "\n" +
         "        return api;\n" +
         "    })();\n" +
+        "}\n" +
+        "\n" +
+        "if (typeof WaveletModules === 'undefined') {\n" +
+        "    var WaveletModules = (function () {\n" +
+        "        var cache = {};\n" +
+        "        var normalize = function (name) {\n" +
+        "            return String(name || '').trim();\n" +
+        "        };\n" +
+        "        return {\n" +
+        "            import: function (name) {\n" +
+        "                if (typeof _waveletImportModule !== 'function') {\n" +
+        "                    throw new Error('Module loader unavailable');\n" +
+        "                }\n" +
+        "                var key = normalize(name);\n" +
+        "                if (!key) {\n" +
+        "                    throw new Error('Module name is required');\n" +
+        "                }\n" +
+        "                if (!Object.prototype.hasOwnProperty.call(cache, key)) {\n" +
+        "                    cache[key] = _waveletImportModule(key);\n" +
+        "                }\n" +
+        "                return cache[key];\n" +
+        "            },\n" +
+        "            clear: function () {\n" +
+        "                cache = {};\n" +
+        "            }\n" +
+        "        };\n" +
+        "    })();\n" +
+        "}\n" +
+        "\n" +
+        "if (typeof require !== 'function') {\n" +
+        "    var require = function (name) {\n" +
+        "        return WaveletModules.import(name);\n" +
+        "    };\n" +
         "}\n" +
         "\n" +
         "if (typeof print === 'undefined') {\n" +

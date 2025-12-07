@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">EMWaver</string>
+    <string name="edit">Edit</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
     <string name="nav_header_desc">Navigation header</string>
     <string name="nav_header_title">EMWaver</string>
     <string-array name="modulations">
@@ -29,11 +32,8 @@
     </string-array>
     <string name="device_status">Hold the flash button on the IR Waver and connect the device.\nOnce completed, grant permission to access de STM32 BOOTLOADER device.</string>
     <string-array name="modulation_formats">
-        <item>2-FSK</item>
-        <item>GFSK</item>
+        <item>FSK</item>
         <item>ASK/OOK</item>
-        <item>4-FSK</item>
-        <item>MSK</item>
     </string-array>
     <string-array name="tx_power_levels">
         <item>-30 dBm</item>
@@ -63,6 +63,7 @@
     <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
     <string name="action_open_settings">Settings</string>
+    <string name="action_refresh">Refresh</string>
     <string name="login_title">Sign in</string>
     <string name="login_description">Use your Continuous account to access EMWaver.</string>
     <string name="login_email_hint">Email address</string>
@@ -73,10 +74,12 @@
     <string name="login_error_generic">Unable to log in. Please try again.</string>
     <string name="login_create_account_button">Create an account</string>
     <string name="register_title">Create account</string>
-    <string name="register_description">Sign up with your email to start using EMWaver.</string>
+    <string name="register_description">Sign up with your email to start using EMWaver. Add your purchase code now or later to unlock Pro access.</string>
     <string name="register_email_hint">Email address</string>
     <string name="register_username_hint">Username</string>
     <string name="register_password_hint">Password</string>
+    <string name="register_access_code_hint">Purchase code (optional)</string>
+    <string name="register_access_code_helper">Redeem your EMWaver purchase code now or add it later from settings.</string>
     <string name="register_first_name_hint">First name (optional)</string>
     <string name="register_last_name_hint">Last name (optional)</string>
     <string name="register_button">Create account</string>

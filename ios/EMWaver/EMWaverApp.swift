@@ -10,10 +10,12 @@ import SwiftUI
 @main
 struct EMWaverApp: App {
     @StateObject private var bleManager = BLEManager()
+    @StateObject private var authManager = AuthenticationManager()
     var body: some Scene {
         WindowGroup {
             ContentView()
-            .environmentObject(bleManager)
+                .environmentObject(bleManager)
+                .environmentObject(authManager)
         }
     }
 }

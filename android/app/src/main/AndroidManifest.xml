@@ -66,6 +66,18 @@
             android:label="Welcome"
             android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
             android:exported="false" />
+        <activity
+            android:name=".ui.wavelets.irdb.IrdBrandSelectionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
+        <activity
+            android:name=".ui.wavelets.irdb.IrdRemoteSelectionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
+        <activity
+            android:name=".ui.wavelets.irdb.IrdCsvSelectionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
     </application>
 
 </manifest>

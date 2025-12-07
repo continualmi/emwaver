@@ -1,0 +1,593 @@
+#include "sampler.h"
+
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "ble_server.h"
+#include "command_registry.h"
+#include "driver/gpio.h"
+#include "driver/timer.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "esp_intr_alloc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "soc/timer_group_reg.h"
+#include "soc/timer_group_struct.h"
+
+#define SAMPLER_BUFFER_SIZE 256
+#define SAMPLER_TIMER_GROUP TIMER_GROUP_0
+#define SAMPLER_TIMER TIMER_0
+#define TRANSMIT_TIMER TIMER_1
+#define SAMPLER_TIMER_INTERVAL_US 10
+#define TRANSMIT_INTERVAL_US 10
+#define TRANSMISSION_TIMEOUT_MS 2000
+#define MONITOR_CHECK_INTERVAL_MS 10
+#define BLE_RX_BUFFER_SIZE 4096
+
+static const char *TAG = "SAMPLER";
+
+static volatile uint8_t *buffer_a = NULL;
+static volatile uint8_t *buffer_b = NULL;
+static volatile uint8_t *current_buffer = NULL;
+static volatile uint8_t *transmit_buffer = NULL;
+static volatile int buffer_index = 0;
+static SemaphoreHandle_t buffer_ready_sem = NULL;
+static TaskHandle_t sampler_task_handle = NULL;
+
+static intr_handle_t sampling_timer_isr_handle = NULL;
+static intr_handle_t transmission_timer_isr_handle = NULL;
+static TaskHandle_t transmission_monitor_task_handle = NULL;
+
+static uint16_t sampler_pin = 0;
+static bool sampling_active = false;
+static bool transmission_active = false;
+
+static void sampler_start_command(int pin);
+static void sampler_stop_command(void);
+static void transmit_start_command(int pin);
+static void transmit_stop_command(void);
+static void sampler_task(void *pv_parameters);
+static void transmission_monitor_task(void *pv_parameters);
+
+static void IRAM_ATTR sampling_isr(void *arg);
+static void IRAM_ATTR transmission_isr(void *arg);
+static bool sampler_start_impl(int pin, const char **err_msg);
+static bool sampler_stop_impl(const char **err_msg);
+static bool transmit_start_impl(int pin, const char **err_msg);
+static bool transmit_stop_impl(const char **err_msg);
+
+void sampler_module_init(void)
+{
+    buffer_ready_sem = NULL;
+    sampler_task_handle = NULL;
+    sampling_timer_isr_handle = NULL;
+    transmission_timer_isr_handle = NULL;
+    transmission_monitor_task_handle = NULL;
+    sampling_active = false;
+    transmission_active = false;
+}
+
+void sampler_register_commands(void)
+{
+    bool ok = true;
+    ok &= register_command(
+        "sample start",
+        (void *)sampler_start_command,
+        (const cmd_arg_spec_t[]){
+            {"pin", CMD_ARG_INT, true},
+            {NULL, CMD_ARG_DONE, false},
+        });
+    ok &= register_command(
+        "sample stop",
+        (void *)sampler_stop_command,
+        (const cmd_arg_spec_t[]){
+            {NULL, CMD_ARG_DONE, false},
+        });
+    ok &= register_command(
+        "transmit start",
+        (void *)transmit_start_command,
+        (const cmd_arg_spec_t[]){
+            {"pin", CMD_ARG_INT, true},
+            {NULL, CMD_ARG_DONE, false},
+        });
+    ok &= register_command(
+        "transmit stop",
+        (void *)transmit_stop_command,
+        (const cmd_arg_spec_t[]){
+            {NULL, CMD_ARG_DONE, false},
+        });
+    if (!ok) {
+        ESP_LOGE(TAG, "failed to register sampler commands");
+    }
+}
+
+bool sampler_is_sampling(void)
+{
+    return sampling_active;
+}
+
+bool sampler_is_transmitting(void)
+{
+    return transmission_active;
+}
+
+void sampler_stop_all(void)
+{
+    sampler_stop_sampling();
+    sampler_stop_transmission();
+}
+
+static void configure_timer(timer_group_t group,
+                            timer_idx_t timer,
+                            uint32_t interval_us,
+                            bool auto_reload)
+{
+    timer_config_t config = {
+        .divider = 80,
+        .counter_dir = TIMER_COUNT_UP,
+        .counter_en = TIMER_PAUSE,
+        .alarm_en = TIMER_ALARM_EN,
+        .auto_reload = auto_reload,
+    };
+
+    timer_init(group, timer, &config);
+    timer_set_counter_value(group, timer, 0);
+    timer_set_alarm_value(group, timer, interval_us);
+    timer_enable_intr(group, timer);
+}
+
+static void sampler_start_command(int pin)
+{
+    const char *err = NULL;
+    if (sampler_start_impl(pin, &err)) {
+        command_send_ok(NULL, 0);
+    } else {
+        command_send_err(err ? err : "sample start");
+    }
+}
+
+static void sampler_stop_command(void)
+{
+    const char *err = NULL;
+    if (sampler_stop_impl(&err)) {
+        command_send_ok(NULL, 0);
+    } else {
+        command_send_err(err ? err : "sample stop");
+    }
+}
+
+static void transmit_start_command(int pin)
+{
+    const char *err = NULL;
+    if (transmit_start_impl(pin, &err)) {
+        command_send_ok(NULL, 0);
+    } else {
+        command_send_err(err ? err : "transmit start");
+    }
+}
+
+static void transmit_stop_command(void)
+{
+    const char *err = NULL;
+    if (transmit_stop_impl(&err)) {
+        command_send_ok(NULL, 0);
+    } else {
+        command_send_err(err ? err : "transmit stop");
+    }
+}
+
+static void sampler_task(void *pv_parameters)
+{
+    bool stop_requested = false;
+
+    while (!stop_requested) {
+        uint32_t notification = 0;
+        if (xTaskNotifyWait(0, ULONG_MAX, &notification, 0) == pdTRUE) {
+            if (notification == 1) {
+                stop_requested = true;
+                break;
+            }
+        }
+
+        if (buffer_ready_sem && xSemaphoreTake(buffer_ready_sem, pdMS_TO_TICKS(1)) == pdTRUE) {
+            if (transmit_buffer) {
+                ble_server_notify((uint8_t *)transmit_buffer, SAMPLER_BUFFER_SIZE);
+                vTaskDelay(pdMS_TO_TICKS(15));
+            }
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+    }
+
+    sampler_task_handle = NULL;
+    if (buffer_ready_sem) {
+        vSemaphoreDelete(buffer_ready_sem);
+        buffer_ready_sem = NULL;
+    }
+
+    vTaskDelete(NULL);
+}
+
+static void transmission_monitor_task(void *pv_parameters)
+{
+    uint16_t last_bytes_available = 0;
+    uint16_t current_bytes_available = 0;
+    uint32_t elapsed_time_ms = 0;
+    bool timer_started = false;
+
+    while (transmission_active) {
+        current_bytes_available = ble_get_rx_bytes_available();
+
+        if (!timer_started && current_bytes_available >= (BLE_RX_BUFFER_SIZE / 2)) {
+            timer_start(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+            timer_started = true;
+        }
+
+        if (timer_started) {
+            if (current_bytes_available != last_bytes_available) {
+                elapsed_time_ms = 0;
+                last_bytes_available = current_bytes_available;
+            } else {
+                elapsed_time_ms += MONITOR_CHECK_INTERVAL_MS;
+                if (elapsed_time_ms >= TRANSMISSION_TIMEOUT_MS) {
+                    ESP_LOGI(TAG, "Transmission timeout");
+                    transmit_stop_impl(NULL);
+                    break;
+                }
+            }
+        } else {
+            last_bytes_available = current_bytes_available;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(MONITOR_CHECK_INTERVAL_MS));
+    }
+
+    transmission_monitor_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+static void IRAM_ATTR sampling_isr(void *arg)
+{
+    timer_group_clr_intr_status_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+
+    static uint8_t bit_index = 0;
+    static uint8_t current_byte = 0;
+
+    uint8_t level = gpio_get_level(sampler_pin);
+    if (level) {
+        current_byte |= (1U << bit_index);
+    } else {
+        current_byte &= ~(1U << bit_index);
+    }
+
+    bit_index++;
+    if (bit_index >= 8) {
+        current_buffer[buffer_index] = current_byte;
+        buffer_index++;
+        bit_index = 0;
+        current_byte = 0;
+
+        if (buffer_index >= SAMPLER_BUFFER_SIZE) {
+            transmit_buffer = current_buffer;
+            current_buffer = (current_buffer == buffer_a) ? buffer_b : buffer_a;
+            buffer_index = 0;
+            BaseType_t woken = pdFALSE;
+            if (buffer_ready_sem) {
+                xSemaphoreGiveFromISR(buffer_ready_sem, &woken);
+            }
+            if (woken == pdTRUE) {
+                portYIELD_FROM_ISR();
+            }
+        }
+    }
+
+    timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+}
+
+static void IRAM_ATTR transmission_isr(void *arg)
+{
+    timer_group_clr_intr_status_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+
+    static uint8_t bit_index = 0;
+    static uint8_t current_byte = 0;
+    static bool need_new_byte = true;
+
+    if (bit_index == 0 && need_new_byte) {
+        if (ble_get_rx_bytes_available() > 0) {
+            ble_read_rx_buffer(&current_byte, 1);
+            need_new_byte = false;
+        } else {
+            gpio_set_level(sampler_pin, 0);
+            timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+            return;
+        }
+    }
+
+    if (current_byte & (1U << bit_index)) {
+        gpio_set_level(sampler_pin, 1);
+    } else {
+        gpio_set_level(sampler_pin, 0);
+    }
+
+    bit_index++;
+    if (bit_index >= 8) {
+        bit_index = 0;
+        need_new_byte = true;
+    }
+
+    timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+}
+
+static bool sampler_start_impl(int pin, const char **err_msg)
+{
+    if (err_msg) {
+        *err_msg = NULL;
+    }
+
+    if (pin < 0) {
+        if (err_msg) {
+            *err_msg = "sample start: pin";
+        }
+        return false;
+    }
+
+    if (sampling_active) {
+        if (err_msg) {
+            *err_msg = "sample start: active";
+        }
+        return false;
+    }
+
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << pin,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
+
+    buffer_a = (uint8_t *)malloc(SAMPLER_BUFFER_SIZE);
+    buffer_b = (uint8_t *)malloc(SAMPLER_BUFFER_SIZE);
+    if (!buffer_a || !buffer_b) {
+        free((void *)buffer_a);
+        free((void *)buffer_b);
+        buffer_a = buffer_b = NULL;
+        if (err_msg) {
+            *err_msg = "sample start: mem";
+        }
+        return false;
+    }
+
+    memset((void *)buffer_a, 0, SAMPLER_BUFFER_SIZE);
+    memset((void *)buffer_b, 0, SAMPLER_BUFFER_SIZE);
+
+    current_buffer = buffer_a;
+    transmit_buffer = NULL;
+    buffer_index = 0;
+    sampler_pin = (uint16_t)pin;
+
+    if (buffer_ready_sem == NULL) {
+        buffer_ready_sem = xSemaphoreCreateBinary();
+        if (!buffer_ready_sem) {
+            free((void *)buffer_a);
+            free((void *)buffer_b);
+            buffer_a = buffer_b = NULL;
+            if (err_msg) {
+                *err_msg = "sample start: sem";
+            }
+            return false;
+        }
+    }
+
+    configure_timer(SAMPLER_TIMER_GROUP, SAMPLER_TIMER, SAMPLER_TIMER_INTERVAL_US, true);
+
+    esp_err_t err = timer_isr_register(SAMPLER_TIMER_GROUP,
+                                       SAMPLER_TIMER,
+                                       sampling_isr,
+                                       NULL,
+                                       ESP_INTR_FLAG_IRAM,
+                                       &sampling_timer_isr_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "timer_isr_register failed: %s", esp_err_to_name(err));
+        timer_disable_intr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+        timer_pause(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+        free((void *)buffer_a);
+        free((void *)buffer_b);
+        buffer_a = buffer_b = NULL;
+        current_buffer = NULL;
+        transmit_buffer = NULL;
+        buffer_index = 0;
+        if (err_msg) {
+            *err_msg = "sample start: isr";
+        }
+        return false;
+    }
+
+    timer_start(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+
+    if (sampler_task_handle == NULL) {
+        if (xTaskCreate(sampler_task, "sampler", 4096, NULL, 5, &sampler_task_handle) != pdPASS) {
+            timer_pause(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+            timer_disable_intr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+            esp_intr_free(sampling_timer_isr_handle);
+            sampling_timer_isr_handle = NULL;
+            free((void *)buffer_a);
+            free((void *)buffer_b);
+            buffer_a = buffer_b = NULL;
+            current_buffer = NULL;
+            transmit_buffer = NULL;
+            buffer_index = 0;
+            if (err_msg) {
+                *err_msg = "sample start: task";
+            }
+            return false;
+        }
+    }
+
+    sampling_active = true;
+    ESP_LOGI(TAG, "Sampling started on pin %d", pin);
+    return true;
+}
+
+static bool sampler_stop_impl(const char **err_msg)
+{
+    if (err_msg) {
+        *err_msg = NULL;
+    }
+
+    if (!sampling_active) {
+        return true;
+    }
+
+    timer_pause(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+    timer_disable_intr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+
+    if (sampling_timer_isr_handle) {
+        esp_intr_free(sampling_timer_isr_handle);
+        sampling_timer_isr_handle = NULL;
+    }
+
+    if (sampler_task_handle) {
+        xTaskNotify(sampler_task_handle, 1, eSetValueWithOverwrite);
+    }
+
+    if (buffer_ready_sem) {
+        xSemaphoreGive(buffer_ready_sem);
+    }
+
+    free((void *)buffer_a);
+    free((void *)buffer_b);
+    buffer_a = buffer_b = NULL;
+    current_buffer = NULL;
+    transmit_buffer = NULL;
+    buffer_index = 0;
+
+    sampling_active = false;
+    ESP_LOGI(TAG, "Sampling stopped");
+    return true;
+}
+
+static bool transmit_start_impl(int pin, const char **err_msg)
+{
+    if (err_msg) {
+        *err_msg = NULL;
+    }
+
+    if (pin < 0) {
+        if (err_msg) {
+            *err_msg = "transmit start: pin";
+        }
+        return false;
+    }
+
+    if (transmission_active) {
+        if (err_msg) {
+            *err_msg = "transmit start: active";
+        }
+        return false;
+    }
+
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << pin,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
+
+    sampler_pin = (uint16_t)pin;
+    ble_set_transmitter_mode(1);
+
+    configure_timer(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER, TRANSMIT_INTERVAL_US, true);
+
+    esp_err_t err = timer_isr_register(SAMPLER_TIMER_GROUP,
+                                       TRANSMIT_TIMER,
+                                       transmission_isr,
+                                       NULL,
+                                       ESP_INTR_FLAG_IRAM,
+                                       &transmission_timer_isr_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "transmit isr register failed: %s", esp_err_to_name(err));
+        timer_disable_intr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+        timer_pause(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+        ble_set_transmitter_mode(0);
+        if (err_msg) {
+            *err_msg = "transmit start: isr";
+        }
+        return false;
+    }
+
+    transmission_active = true;
+
+    if (transmission_monitor_task_handle == NULL) {
+        if (xTaskCreate(transmission_monitor_task, "tx_monitor", 4096, NULL, 5,
+                        &transmission_monitor_task_handle) != pdPASS) {
+            timer_pause(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+            timer_disable_intr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+            esp_intr_free(transmission_timer_isr_handle);
+            transmission_timer_isr_handle = NULL;
+            ble_set_transmitter_mode(0);
+            transmission_active = false;
+            if (err_msg) {
+                *err_msg = "transmit start: task";
+            }
+            return false;
+        }
+    }
+
+    ESP_LOGI(TAG, "Transmission initialized on pin %d", pin);
+    return true;
+}
+
+static bool transmit_stop_impl(const char **err_msg)
+{
+    if (err_msg) {
+        *err_msg = NULL;
+    }
+
+    if (!transmission_active) {
+        return true;
+    }
+
+    timer_pause(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+    timer_disable_intr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+
+    if (transmission_timer_isr_handle) {
+        esp_intr_free(transmission_timer_isr_handle);
+        transmission_timer_isr_handle = NULL;
+    }
+
+    gpio_set_level(sampler_pin, 0);
+    ble_set_transmitter_mode(0);
+    transmission_active = false;
+
+    ESP_LOGI(TAG, "Transmission stopped");
+    return true;
+}
+
+bool sampler_start_sampling(int pin)
+{
+    return sampler_start_impl(pin, NULL);
+}
+
+bool sampler_stop_sampling(void)
+{
+    return sampler_stop_impl(NULL);
+}
+
+bool sampler_start_transmission(int pin)
+{
+    return transmit_start_impl(pin, NULL);
+}
+
+bool sampler_stop_transmission(void)
+{
+    return transmit_stop_impl(NULL);
+}

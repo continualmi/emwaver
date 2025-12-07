@@ -17,7 +17,8 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField "String", "BACKEND_BASE_URL", '"http://192.168.1.219:8000"'
+        // buildConfigField "String", "BACKEND_BASE_URL", '"https://emwaver-backend.azurewebsites.net"'
+        buildConfigField "String", "BACKEND_BASE_URL", '"http://192.168.1.209:8000"'
         buildConfigField "String", "OPENAI_API_KEY", '"' + escapedOpenAiKey + '"'
     }
 
@@ -70,6 +71,8 @@ dependencies {
 
     implementation 'com.android.volley:volley:1.2.1'
     implementation 'com.squareup.okhttp3:okhttp:4.9.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.9.0'
+    implementation 'io.noties.markwon:core:4.6.2'
  
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
 }

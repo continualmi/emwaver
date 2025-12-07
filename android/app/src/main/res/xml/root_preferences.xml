@@ -30,6 +30,28 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="ISM Settings"
+        app:iconSpaceReserved="false">
+
+        <EditTextPreference
+            android:key="rfm69_cs_pin"
+            android:title="RFM69 CS Pin"
+            android:summary="Chip Select pin for RFM69 SPI communication"
+            android:defaultValue="10"
+            android:inputType="number"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreferenceCompat
+            android:key="rfm69_cs_active_high"
+            android:title="RFM69 CS Active High"
+            android:summary="Enable if CS is active high (select=high, deselect=low)"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="Account"
         app:iconSpaceReserved="false">
 

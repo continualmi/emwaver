@@ -10,11 +10,10 @@ import android.content.ServiceConnection;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.text.Editable;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -24,9 +23,11 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.FrameLayout;
-import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -35,8 +36,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.cardview.widget.CardView;
-import androidx.constraintlayout.widget.Group;
-import androidx.core.content.ContextCompat;
 import androidx.core.view.MenuHost;
 import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
@@ -46,22 +45,25 @@ import androidx.lifecycle.ViewModelProvider;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
+import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
 import com.emwaver.emwaverandroidapp.databinding.FragmentWaveletsBinding;
+import com.emwaver.emwaverandroidapp.files.FileRepository;
+import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
+import com.emwaver.emwaverandroidapp.files.UserFileData;
+import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
-import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
+import com.emwaver.emwaverandroidapp.ui.wavelets.irdb.IrdBrandSelectionActivity;
+import com.emwaver.emwaverandroidapp.ui.wavelets.irdb.IrdCsvSelectionActivity;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletCloudClient;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletRenderView;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletTree;
+import com.google.android.material.button.MaterialButton;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -69,24 +71,29 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class WaveletsFragment extends Fragment {
 
     private static final String TAG = "WaveletsFragment";
-    private static final String SCRIPTS_DIR = "scripts";
-    private static final long AUTO_SAVE_DELAY_MS = 3000L;
+    private static final String SCRIPT_EXTENSION = ".js";
 
     private FragmentWaveletsBinding binding;
-    private final List<String> recentScripts = new ArrayList<>();
-    private ArrayAdapter<String> scriptAdapter;
+    private final List<UserFileMetadata> scriptFiles = new ArrayList<>();
+    private ScriptListAdapter scriptAdapter;
+    private UserFileMetadata currentScriptMetadata;
     private String currentScriptName;
-    private boolean hasUnsavedChanges;
-    private final Handler autoSaveHandler = new Handler(Looper.getMainLooper());
+    private String currentScriptEtag;
+    private String currentDraftContent;
+    private String pendingPreviewScriptId;
+
     private WaveletsViewModel viewModel;
+    private FileRepository fileRepository;
 
     private BLEService bleService;
     private boolean isServiceBound;
-    private CC1101 cc1101;
     private Utils utils;
     private IrEncoderWrapper irEncoderWrapper;
 
@@ -96,23 +103,42 @@ public class WaveletsFragment extends Fragment {
     private boolean isRenderingWavelet;
     private boolean showingPreview;
 
-    private ActivityResultLauncher<Intent> createFileLauncher;
     private ActivityResultLauncher<String[]> openFileLauncher;
-    private MenuItem executeMenuItem;
+    private ActivityResultLauncher<Intent> importFromIrdLauncher;
+    private final WaveletCloudClient waveletCloudClient = new WaveletCloudClient();
 
     private TextView scriptsListTitle;
     private CardView scriptListCard;
-    private TextView scriptEditorTitle;
-    private CardView scriptEditorCard;
-    private Group editorGroup;
+    private TextView consoleTitle;
+    private CardView consoleCard;
+    private MaterialButton consoleBackButton;
+    private MaterialButton consoleClearButton;
+    private ScrollView consoleScrollView;
+    private TextView consoleTextView;
+    private AlertDialog loadingDialog;
 
-    private final Runnable autoSaveRunnable = () -> {
-        if (hasUnsavedChanges && currentScriptName != null) {
-            saveScriptToInternalStorage(currentScriptName, getEditorText());
-            hasUnsavedChanges = false;
-            updateScriptEditorTitle();
+    private String getCurrentRecordId() {
+        if (currentScriptMetadata != null && currentScriptMetadata.getId() != null) {
+            return currentScriptMetadata.getId();
         }
-    };
+        return WaveletsViewModel.UNSAVED_KEY;
+    }
+
+    private void updateDraftState(String content, boolean dirty) {
+        if (viewModel == null) {
+            return;
+        }
+        String id = getCurrentRecordId();
+        String name = currentScriptName != null ? currentScriptName : "Unsaved Script";
+        viewModel.updateDraft(id, name, content, dirty);
+    }
+
+    private boolean isCurrentScriptDirty() {
+        if (viewModel == null) {
+            return false;
+        }
+        return viewModel.isDirty(getCurrentRecordId());
+    }
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -120,7 +146,6 @@ public class WaveletsFragment extends Fragment {
             BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
             bleService = binder.getService();
             isServiceBound = true;
-            cc1101 = new CC1101(bleService);
             ensureWaveletEngineBindings();
         }
 
@@ -128,7 +153,6 @@ public class WaveletsFragment extends Fragment {
         public void onServiceDisconnected(ComponentName name) {
             isServiceBound = false;
             bleService = null;
-            cc1101 = null;
             ensureWaveletEngineBindings();
         }
     };
@@ -137,6 +161,12 @@ public class WaveletsFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(WaveletsViewModel.class);
+        fileRepository = FileRepository.getInstance(requireContext());
+        importFromIrdLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                handleIrdImportResult(result.getData());
+            }
+        });
     }
 
     @Nullable
@@ -151,14 +181,14 @@ public class WaveletsFragment extends Fragment {
 
         setupMenu();
         setupFileLaunchers();
-        setupEditor();
         setupScriptList();
+        setupConsoleSection();
         setupCollapsibleSections();
-        editorGroup = binding.editorGroup;
         showingPreview = false;
         updateViewMode();
         updateWaveletPlaceholder();
         restoreFromViewModel();
+        loadScriptsFromCloud();
 
         return root;
     }
@@ -184,14 +214,19 @@ public class WaveletsFragment extends Fragment {
     @Override
     public void onDestroyView() {
         persistStateToViewModel();
-        autoSaveHandler.removeCallbacksAndMessages(null);
         if (waveletEngine != null) {
             waveletEngine.shutdown();
             waveletEngine = null;
         }
         waveletRenderView = null;
         showingPreview = false;
-        executeMenuItem = null;
+        consoleTitle = null;
+        consoleCard = null;
+        consoleBackButton = null;
+        consoleClearButton = null;
+        consoleScrollView = null;
+        consoleTextView = null;
+        hideLoadingDialog();
         binding = null;
         super.onDestroyView();
     }
@@ -202,25 +237,22 @@ public class WaveletsFragment extends Fragment {
             @Override
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
                 menuInflater.inflate(R.menu.console_menu, menu);
-                executeMenuItem = menu.findItem(R.id.execute);
-                updateExecuteMenuIcon();
             }
 
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
                 int itemId = menuItem.getItemId();
-                if (itemId == R.id.execute) {
-                    if (showingPreview) {
-                        exitPreview();
-                    } else {
-                        executeScript();
-                    }
+                if (itemId == R.id.sync_scripts) {
+                    startSync();
+                    return true;
+                } else if (itemId == R.id.add_remote_from_irdb) {
+                    launchIrdImportFlow();
                     return true;
                 } else if (itemId == R.id.open) {
                     openFile();
                     return true;
                 } else if (itemId == R.id.save_to_storage) {
-                    saveAsFile();
+                    saveCurrentScript();
                     return true;
                 } else if (itemId == R.id.make_copy) {
                     showNameInputDialog("Copy Script", "Enter a name for the copy:", WaveletsFragment.this::copyCurrentScript);
@@ -235,96 +267,849 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void setupFileLaunchers() {
-        createFileLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-            if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                Uri uri = result.getData().getData();
-                if (uri != null) {
-                    int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
-                    requireContext().getContentResolver().takePersistableUriPermission(uri, takeFlags);
-                    saveFileToUri(uri);
-                    currentScriptName = getFileNameFromUri(requireContext(), uri);
-                    hasUnsavedChanges = false;
-                    updateScriptEditorTitle();
-                }
-            }
-        });
-
         openFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
             if (uri != null) {
-                readScriptFromUri(uri);
-                currentScriptName = getFileNameFromUri(requireContext(), uri);
-                hasUnsavedChanges = false;
-                updateScriptEditorTitle();
+                importScriptFromUri(uri);
             }
-        });
-    }
-
-    private void setupEditor() {
-        binding.jsCodeInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                hasUnsavedChanges = true;
-                updateScriptEditorTitle();
-                scheduleAutoSave();
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {}
         });
     }
 
     private void setupScriptList() {
         scriptsListTitle = binding.scriptsListTitle;
         scriptListCard = binding.scriptListCard;
-        scriptEditorTitle = binding.scriptEditorTitle;
-        scriptEditorCard = binding.scriptEditorCard;
-
-        scriptAdapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_list_item_1, recentScripts);
+        scriptAdapter = new ScriptListAdapter();
         binding.scriptListView.setAdapter(scriptAdapter);
 
-        createDefaultScriptsIfNeeded();
-        recentScripts.clear();
-        recentScripts.addAll(getInternalScriptsList());
-        Collections.sort(recentScripts, String.CASE_INSENSITIVE_ORDER);
-        scriptAdapter.notifyDataSetChanged();
-
         binding.scriptListView.setOnItemClickListener((parent, view, position, id) -> {
-            String scriptName = recentScripts.get(position);
-            loadScript(scriptName);
+            if (position >= 0 && position < scriptFiles.size()) {
+                previewScript(scriptFiles.get(position));
+            }
         });
 
         binding.scriptListView.setOnItemLongClickListener((parent, view, position, id) -> {
-            String scriptName = recentScripts.get(position);
-            showScriptOptionsDialog(scriptName);
+            if (position >= 0 && position < scriptFiles.size()) {
+                showScriptOptionsDialog(scriptFiles.get(position));
+            }
             return true;
         });
     }
 
-    private void setupCollapsibleSections() {
-        updateArrow(scriptsListTitle, scriptListCard.getVisibility() == View.VISIBLE);
-        updateArrow(scriptEditorTitle, scriptEditorCard.getVisibility() == View.VISIBLE);
+    private void setupConsoleSection() {
+        consoleTitle = binding.consoleTitle;
+        consoleCard = binding.consoleCard;
+        consoleBackButton = binding.consoleBackButton;
+        consoleClearButton = binding.consoleClearButton;
+        consoleScrollView = binding.consoleScroll;
+        consoleTextView = binding.consoleText;
 
-        scriptsListTitle.setOnClickListener(v -> {
-            toggleVisibility(scriptListCard);
-            updateArrow((TextView) v, scriptListCard.getVisibility() == View.VISIBLE);
-        });
+        if (consoleBackButton != null) {
+            consoleBackButton.setOnClickListener(v -> exitPreview());
+        }
+        if (consoleClearButton != null) {
+            consoleClearButton.setOnClickListener(v -> WaveletConsoleState.getInstance().clear());
+        }
 
-        scriptEditorTitle.setOnClickListener(v -> {
-            toggleVisibility(scriptEditorCard);
-            updateArrow((TextView) v, scriptEditorCard.getVisibility() == View.VISIBLE);
+        updateConsoleText(WaveletConsoleState.getInstance().snapshot());
+        WaveletConsoleState.getInstance().observe().observe(getViewLifecycleOwner(), this::updateConsoleText);
+    }
+
+    private void updateConsoleText(List<String> lines) {
+        if (consoleTextView == null) {
+            return;
+        }
+        String text;
+        if (lines == null || lines.isEmpty()) {
+            text = "Console is empty.";
+        } else {
+            text = TextUtils.join("\n", lines);
+        }
+        consoleTextView.setText(text);
+        if (consoleScrollView != null && lines != null && !lines.isEmpty()) {
+            consoleScrollView.post(() -> consoleScrollView.fullScroll(View.FOCUS_DOWN));
+        }
+    }
+
+    private void refreshScriptList() {
+        if (scriptAdapter != null) {
+            scriptAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void previewScript(UserFileMetadata metadata) {
+        if (!isAdded() || metadata == null || TextUtils.isEmpty(metadata.getId())) {
+            return;
+        }
+        pendingPreviewScriptId = metadata.getId();
+        loadScript(metadata);
+    }
+
+    private class ScriptListAdapter extends ArrayAdapter<UserFileMetadata> {
+        ScriptListAdapter() {
+            super(requireContext(), 0, scriptFiles);
+        }
+
+        @NonNull
+        @Override
+        public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+            View view = convertView;
+            if (view == null) {
+                view = LayoutInflater.from(getContext()).inflate(R.layout.item_script_entry, parent, false);
+            }
+            TextView nameView = view.findViewById(R.id.script_name);
+            ImageButton editButton = view.findViewById(R.id.script_edit_button);
+            UserFileMetadata metadata = getItem(position);
+            if (metadata != null) {
+                nameView.setText(metadata.getName());
+                editButton.setOnClickListener(v -> showScriptEditorDialog(metadata));
+            } else {
+                nameView.setText("-");
+                editButton.setOnClickListener(null);
+            }
+            return view;
+        }
+    }
+
+    private void loadScriptsFromCloud() {
+        if (fileRepository == null) {
+            return;
+        }
+        fileRepository.listFiles(SCRIPT_EXTENSION, new RepositoryCallback<List<UserFileMetadata>>() {
+            @Override
+            public void onSuccess(List<UserFileMetadata> value) {
+                if (!isAdded()) {
+                    return;
+                }
+                scriptFiles.clear();
+                if (value != null) {
+                    scriptFiles.addAll(value);
+                }
+                Collections.sort(scriptFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+                refreshScriptList();
+                if (scriptFiles.isEmpty()) {
+                    handlePostListLoad();
+                } else {
+                    primeScriptCache(new ArrayList<>(scriptFiles), WaveletsFragment.this::handlePostListLoad);
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to load scripts");
+                handlePostListLoad();
+            }
         });
     }
 
-    private void executeScript() {
-        String script = getEditorText();
-        if (script.trim().isEmpty()) {
-            showToast("No script to execute.");
+    private void renameScript(UserFileMetadata metadata, String newName) {
+        renameScript(metadata, newName, null);
+    }
+
+    private void renameScript(UserFileMetadata metadata, String newName, @Nullable Consumer<UserFileMetadata> onSuccess) {
+        if (fileRepository == null) {
             return;
         }
-        renderWavelet(script);
+        final String normalizedName = normalizeScriptName(newName);
+        fileRepository.renameFile(metadata.getId(), normalizedName, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata updated) {
+                if (!isAdded()) {
+                    return;
+                }
+                addOrReplaceMetadata(updated);
+                if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(updated.getId())) {
+                    currentScriptMetadata = updated;
+                    currentScriptName = updated.getName();
+                    currentScriptEtag = updated.getEtag();
+                }
+                if (viewModel != null) {
+                    String draft = viewModel.getDraftContent(updated.getId());
+                    boolean dirty = viewModel.isDirty(updated.getId());
+                    String reference = draft != null ? draft : viewModel.getRemoteContent(updated.getId());
+                    if (reference == null) {
+                        reference = "";
+                    }
+                    viewModel.updateDraft(updated.getId(), updated.getName(), reference, dirty);
+                    if (TextUtils.equals(viewModel.getLastScriptId(), updated.getId())) {
+                        viewModel.setLastScriptName(updated.getName());
+                        viewModel.setLastScriptContent(reference);
+                    }
+                }
+                if (onSuccess != null) {
+                    onSuccess.accept(updated);
+                }
+                showToast("Script renamed to: " + updated.getName());
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to rename script");
+            }
+        });
+    }
+
+    private void handlePostListLoad() {
+        if (!isAdded()) {
+            return;
+        }
+
+        if (scriptFiles.isEmpty()) {
+            if (binding != null) {
+                String content = null;
+                boolean dirty = false;
+                if (viewModel != null) {
+                    content = viewModel.getDraftContent(WaveletsViewModel.UNSAVED_KEY);
+                    dirty = viewModel.isDirty(WaveletsViewModel.UNSAVED_KEY);
+                }
+                if (content == null) {
+                    content = buildNewScriptTemplate();
+                }
+                currentScriptMetadata = null;
+                currentScriptName = null;
+                currentScriptEtag = null;
+                setEditorText(content);
+                updateDraftState(content, dirty);
+            }
+            return;
+        }
+
+        UserFileMetadata target = null;
+        if (currentScriptMetadata != null) {
+            target = findScriptById(currentScriptMetadata.getId());
+        }
+        if (target == null && viewModel != null) {
+            String lastId = viewModel.getLastScriptId();
+            if (!TextUtils.isEmpty(lastId)) {
+                target = findScriptById(lastId);
+            }
+        }
+        if (target == null) {
+            target = scriptFiles.get(0);
+        }
+        if (target != null) {
+            loadScript(target);
+        }
+    }
+
+    private UserFileMetadata findScriptById(String id) {
+        if (id == null) {
+            return null;
+        }
+        for (UserFileMetadata metadata : scriptFiles) {
+            if (metadata != null && TextUtils.equals(id, metadata.getId())) {
+                return metadata;
+            }
+        }
+        return null;
+    }
+
+    private void addOrReplaceMetadata(UserFileMetadata metadata) {
+        if (metadata == null) {
+            return;
+        }
+        boolean replaced = false;
+        for (int i = 0; i < scriptFiles.size(); i++) {
+            UserFileMetadata existing = scriptFiles.get(i);
+            if (existing != null && TextUtils.equals(existing.getId(), metadata.getId())) {
+                scriptFiles.set(i, metadata);
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            scriptFiles.add(metadata);
+        }
+        Collections.sort(scriptFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        refreshScriptList();
+    }
+
+    private void removeMetadataById(String id) {
+        for (int i = 0; i < scriptFiles.size(); i++) {
+            if (scriptFiles.get(i).getId().equals(id)) {
+                scriptFiles.remove(i);
+                break;
+            }
+        }
+    }
+
+    private void onScriptCreated(UserFileMetadata metadata, String content) {
+        if (binding == null) {
+            return;
+        }
+        addOrReplaceMetadata(metadata);
+        currentScriptMetadata = metadata;
+        currentScriptName = metadata.getName();
+        currentScriptEtag = metadata.getEtag();
+        setEditorText(content);
+        updateDraftState(content, false);
+        if (viewModel != null) {
+            viewModel.removeRecord(WaveletsViewModel.UNSAVED_KEY);
+            viewModel.markClean(metadata.getId(), content, metadata.getEtag());
+            viewModel.setLastScriptId(metadata.getId());
+            viewModel.setLastScriptName(metadata.getName());
+            viewModel.setLastScriptContent(content);
+        }
+        showScriptEditorDialog(metadata);
+    }
+
+    private void loadScript(UserFileMetadata metadata) {
+        if (!isAdded() || metadata == null) {
+            return;
+        }
+
+        currentScriptMetadata = metadata;
+        currentScriptName = metadata.getName();
+        currentScriptEtag = metadata.getEtag();
+
+        final String scriptId = metadata.getId();
+        final boolean hasRepository = fileRepository != null;
+
+        boolean needsFetch = true;
+        if (viewModel != null && scriptId != null) {
+            String cachedDraft = viewModel.getDraftContent(scriptId);
+            boolean dirty = viewModel.isDirty(scriptId);
+            if (cachedDraft != null) {
+                setEditorText(cachedDraft);
+                updateDraftState(cachedDraft, dirty);
+                completePendingPreview(scriptId);
+            }
+            String cachedEtag = viewModel.getRemoteEtag(scriptId);
+            String cachedRemote = viewModel.getRemoteContent(scriptId);
+            if (!TextUtils.isEmpty(cachedEtag) && cachedRemote != null && TextUtils.equals(cachedEtag, metadata.getEtag())) {
+                needsFetch = false;
+                if (!dirty) {
+                    setEditorText(cachedRemote);
+                    updateDraftState(cachedRemote, false);
+                }
+                viewModel.updateDraft(scriptId, metadata.getName(), getEditorText(), dirty);
+                viewModel.setLastScriptId(scriptId);
+                viewModel.setLastScriptName(metadata.getName());
+                viewModel.setLastScriptContent(getEditorText());
+                completePendingPreview(scriptId);
+            }
+        }
+
+        if (!hasRepository || !needsFetch || scriptId == null) {
+            completePendingPreview(scriptId);
+            return;
+        }
+
+        fileRepository.getFile(scriptId, new RepositoryCallback<UserFileData>() {
+            @Override
+            public void onSuccess(UserFileData data) {
+                if (!isAdded() || binding == null) {
+                    return;
+                }
+                String content = data != null && data.hasTextContent() ? data.getTextContent() : "";
+                if (viewModel != null) {
+                    viewModel.updateRemoteSnapshot(scriptId, metadata.getName(), metadata.getEtag(), content);
+                    if (!viewModel.isDirty(scriptId)) {
+                        viewModel.updateDraft(scriptId, metadata.getName(), content, false);
+                    }
+                    String draft = viewModel.getDraftContent(scriptId);
+                    String display = draft != null ? draft : content;
+                    setEditorText(display);
+                    updateDraftState(display, viewModel.isDirty(scriptId));
+                    viewModel.setLastScriptId(scriptId);
+                    viewModel.setLastScriptName(metadata.getName());
+                    viewModel.setLastScriptContent(display);
+                    completePendingPreview(scriptId);
+                } else {
+                    setEditorText(content);
+                    completePendingPreview(scriptId);
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                if (TextUtils.equals(pendingPreviewScriptId, scriptId)) {
+                    pendingPreviewScriptId = null;
+                }
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to load script");
+            }
+        });
+    }
+
+    private void createNewScript(String name) {
+        createScriptWithContent(name, buildNewScriptTemplate(), "Script created: ");
+    }
+
+    private void createScriptWithContent(String name, String content, String successPrefix) {
+        if (fileRepository == null) {
+            return;
+        }
+        final String normalizedName = normalizeScriptName(name);
+        final String resolvedContent = content != null ? content : "";
+        fileRepository.createTextFile(normalizedName, resolvedContent, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata metadata) {
+                if (!isAdded()) {
+                    return;
+                }
+                onScriptCreated(metadata, resolvedContent);
+                String message = successPrefix != null ? successPrefix + metadata.getName() : "Script created: " + metadata.getName();
+                showToast(message);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to create script");
+            }
+        });
+    }
+
+    private void copyCurrentScript(String name) {
+        if (fileRepository == null || currentScriptMetadata == null) {
+            showToast("No script to copy");
+            return;
+        }
+        final String normalizedName = normalizeScriptName(name);
+        fileRepository.copyFile(currentScriptMetadata.getId(), normalizedName, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata metadata) {
+                if (!isAdded()) {
+                    return;
+                }
+                addOrReplaceMetadata(metadata);
+                showScriptEditorDialog(metadata);
+                showToast("Script copied: " + metadata.getName());
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to copy script");
+            }
+        });
+    }
+
+    private void saveCurrentScript() {
+        if (fileRepository == null) {
+            return;
+        }
+        if (currentScriptMetadata == null) {
+            showNameInputDialog(
+                "Save Script",
+                "Enter a name for the script:",
+                currentScriptName != null ? currentScriptName : "wavelet_script.js",
+                name -> createScriptWithContent(name, getEditorText(), "Script saved: ")
+            );
+            return;
+        }
+        if (!isCurrentScriptDirty()) {
+            showToast("No changes to save");
+            return;
+        }
+        final String etag = currentScriptEtag;
+        if (TextUtils.isEmpty(etag)) {
+            showToast("Please reload the script before saving");
+            return;
+        }
+        final String content = getEditorText();
+        fileRepository.updateTextFile(currentScriptMetadata.getId(), etag, content, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata metadata) {
+                if (!isAdded()) {
+                    return;
+                }
+                addOrReplaceMetadata(metadata);
+                currentScriptMetadata = metadata;
+                currentScriptName = metadata.getName();
+                currentScriptEtag = metadata.getEtag();
+                updateDraftState(content, false);
+                if (viewModel != null) {
+                    viewModel.setLastScriptId(metadata.getId());
+                    viewModel.setLastScriptName(metadata.getName());
+                    viewModel.setLastScriptContent(content);
+                    viewModel.markClean(metadata.getId(), content, metadata.getEtag());
+                }
+                showToast("Script saved");
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to save script");
+            }
+        });
+    }
+
+    private void showScriptOptionsDialog(UserFileMetadata metadata) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("Rename Script");
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_rename_script, null);
+        EditText input = dialogView.findViewById(R.id.edit_script_name);
+        input.setText(metadata.getName());
+        builder.setView(dialogView);
+
+        builder.setPositiveButton("OK", null);
+        builder.setNegativeButton("Cancel", null);
+        builder.setNeutralButton("Delete", null);
+
+        AlertDialog dialog = builder.create();
+        dialog.show();
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String newName = input.getText().toString().trim();
+            if (newName.isEmpty()) {
+                input.setError("Script name cannot be empty");
+                return;
+            }
+            renameScript(metadata, newName);
+            dialog.dismiss();
+        });
+
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            showDeleteConfirmationDialog(metadata);
+            dialog.dismiss();
+        });
+    }
+
+    private void showScriptEditorDialog(@Nullable UserFileMetadata metadata) {
+        if (!isAdded()) {
+            return;
+        }
+
+        pendingPreviewScriptId = null;
+        final String scriptId = metadata != null ? metadata.getId() : WaveletsViewModel.UNSAVED_KEY;
+        final String[] dialogScriptName = {metadata != null ? metadata.getName() : (currentScriptName != null ? currentScriptName : "Unsaved Script")};
+
+        if (metadata != null) {
+            currentScriptMetadata = metadata;
+            currentScriptName = metadata.getName();
+            currentScriptEtag = metadata.getEtag();
+        } else {
+            currentScriptMetadata = null;
+            currentScriptName = dialogScriptName[0];
+            currentScriptEtag = null;
+        }
+
+        String content = null;
+        boolean dirty = false;
+        if (viewModel != null) {
+            content = viewModel.getDraftContent(scriptId);
+            dirty = viewModel.isDirty(scriptId);
+            if (content == null) {
+                content = viewModel.getRemoteContent(scriptId);
+            }
+        }
+        if (content == null) {
+            content = metadata != null ? "" : buildNewScriptTemplate();
+        }
+
+        if (metadata != null && viewModel != null && TextUtils.isEmpty(viewModel.getRemoteEtag(scriptId)) && fileRepository != null) {
+            showLoadingDialog("Loading script...");
+            fileRepository.getFile(scriptId, new RepositoryCallback<UserFileData>() {
+                @Override
+                public void onSuccess(UserFileData data) {
+                    hideLoadingDialog();
+                    if (!isAdded()) {
+                        return;
+                    }
+                    String remoteContent = data != null && data.hasTextContent() ? data.getTextContent() : "";
+                    viewModel.updateRemoteSnapshot(scriptId, dialogScriptName[0], metadata.getEtag(), remoteContent);
+                    if (!viewModel.isDirty(scriptId)) {
+                        viewModel.updateDraft(scriptId, dialogScriptName[0], remoteContent, false);
+                    }
+                    setEditorText(remoteContent);
+                    showScriptEditorDialog(metadata);
+                }
+
+                @Override
+                public void onError(String message) {
+                    hideLoadingDialog();
+                    if (isAdded()) {
+                        showToast(message != null ? message : "Failed to load script");
+                    }
+                }
+            });
+            return;
+        }
+
+        setEditorText(content);
+        updateDraftState(content, dirty);
+        if (viewModel != null) {
+            viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
+            viewModel.setLastScriptName(dialogScriptName[0]);
+            viewModel.setLastScriptContent(content);
+        }
+
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_script, null);
+        EditText editText = dialogView.findViewById(R.id.edit_script_content);
+        MaterialButton renameButton = dialogView.findViewById(R.id.button_rename);
+        MaterialButton deleteButton = dialogView.findViewById(R.id.button_delete);
+        editText.setText(content);
+        editText.setSelection(content.length());
+        editText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String updated = s != null ? s.toString() : "";
+                setEditorText(updated);
+                updateDraftState(updated, true);
+                if (viewModel != null) {
+                    viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
+                    viewModel.setLastScriptName(dialogScriptName[0]);
+                    viewModel.setLastScriptContent(updated);
+                }
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+            .setTitle(dialogScriptName[0])
+            .setView(dialogView)
+            .setPositiveButton(metadata != null ? "Save" : "Create", null)
+            .setNeutralButton("Preview", null)
+            .setNegativeButton("Close", null)
+            .create();
+
+        if (metadata == null) {
+            renameButton.setVisibility(View.GONE);
+            deleteButton.setVisibility(View.GONE);
+        } else {
+            renameButton.setOnClickListener(v -> showNameInputDialog(
+                "Rename Script",
+                "Enter a new name for the script:",
+                currentScriptMetadata != null ? currentScriptMetadata.getName() : metadata.getName(),
+                newName -> {
+                    UserFileMetadata target = currentScriptMetadata != null ? currentScriptMetadata : metadata;
+                    renameScript(target, newName, updated -> {
+                        currentScriptMetadata = updated;
+                        currentScriptName = updated.getName();
+                        currentScriptEtag = updated.getEtag();
+                        dialogScriptName[0] = updated.getName();
+                        dialog.setTitle(updated.getName());
+                    });
+                }
+            ));
+            deleteButton.setOnClickListener(v -> {
+                dialog.dismiss();
+                UserFileMetadata target = currentScriptMetadata != null ? currentScriptMetadata : metadata;
+                showDeleteConfirmationDialog(target);
+            });
+        }
+
+        dialog.setOnShowListener(d -> {
+            Button saveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            Button previewButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+
+            saveButton.setOnClickListener(v -> {
+                String updated = editText.getText() != null ? editText.getText().toString() : "";
+                setEditorText(updated);
+                if (metadata != null) {
+                    if (!isCurrentScriptDirty()) {
+                        showToast("No changes to save");
+                        dialog.dismiss();
+                        return;
+                    }
+                    saveCurrentScript();
+                    dialog.dismiss();
+                } else {
+                    showNameInputDialog(
+                        "Save Script",
+                        "Enter a name for the script:",
+                        "wavelet_script.js",
+                        name -> {
+                            String trimmed = name != null ? name.trim() : "";
+                            if (trimmed.isEmpty()) {
+                                showToast("Script name cannot be empty");
+                                return;
+                            }
+                            createScriptWithContent(trimmed, updated, "Script saved: ");
+                            dialog.dismiss();
+                        }
+                    );
+                }
+            });
+
+            previewButton.setOnClickListener(v -> {
+                String updated = editText.getText() != null ? editText.getText().toString() : "";
+                if (updated.trim().isEmpty()) {
+                    showToast("No script to preview.");
+                    return;
+                }
+                setEditorText(updated);
+                updateDraftState(updated, true);
+                if (viewModel != null) {
+                    viewModel.setLastScriptContent(updated);
+                    viewModel.setLastScriptName(dialogScriptName[0]);
+                    viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
+                }
+                pendingPreviewScriptId = null;
+                renderWavelet(updated);
+                dialog.dismiss();
+            });
+        });
+
+        dialog.show();
+    }
+
+    private void showDeleteConfirmationDialog(UserFileMetadata metadata) {
+        if (!isAdded() || metadata == null) {
+            return;
+        }
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Delete Script")
+            .setMessage("Are you sure you want to delete " + metadata.getName() + "?")
+            .setPositiveButton("Delete", (dialog, which) -> deleteScript(metadata))
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void deleteScript(UserFileMetadata metadata) {
+        if (fileRepository == null || metadata == null) {
+            return;
+        }
+        showLoadingDialog("Deleting script...");
+        fileRepository.deleteFile(metadata.getId(), metadata.getEtag(), new RepositoryCallback<Void>() {
+            @Override
+            public void onSuccess(Void value) {
+                hideLoadingDialog();
+                if (!isAdded()) {
+                    return;
+                }
+                String deletedId = metadata.getId();
+                removeMetadataById(deletedId);
+                refreshScriptList();
+                if (viewModel != null && !TextUtils.isEmpty(deletedId)) {
+                    viewModel.removeRecord(deletedId);
+                    if (TextUtils.equals(viewModel.getLastScriptId(), deletedId)) {
+                        viewModel.setLastScriptId(null);
+                        viewModel.setLastScriptName(null);
+                        viewModel.setLastScriptContent(null);
+                    }
+                }
+                if (currentScriptMetadata != null && TextUtils.equals(currentScriptMetadata.getId(), deletedId)) {
+                    currentScriptMetadata = null;
+                    currentScriptName = null;
+                    currentScriptEtag = null;
+                    setEditorText("");
+                    updateDraftState("", false);
+                }
+                handlePostListLoad();
+                showToast("Script deleted: " + metadata.getName());
+            }
+
+            @Override
+            public void onError(String message) {
+                hideLoadingDialog();
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to delete script");
+            }
+        });
+    }
+
+    private void primeScriptCache(List<UserFileMetadata> metadataList, @Nullable Runnable completion) {
+        if (!isAdded() || viewModel == null || fileRepository == null || metadataList == null || metadataList.isEmpty()) {
+            if (completion != null) {
+                runOnUiThreadSafe(completion);
+            }
+            return;
+        }
+        boolean needsRefresh = false;
+        for (UserFileMetadata metadata : metadataList) {
+            if (metadata == null || TextUtils.isEmpty(metadata.getId())) {
+                continue;
+            }
+            String cachedEtag = viewModel.getRemoteEtag(metadata.getId());
+            String cachedContent = viewModel.getRemoteContent(metadata.getId());
+            if (TextUtils.isEmpty(cachedEtag) || cachedContent == null || !TextUtils.equals(cachedEtag, metadata.getEtag())) {
+                needsRefresh = true;
+                break;
+            }
+        }
+        if (!needsRefresh) {
+            if (completion != null) {
+                runOnUiThreadSafe(completion);
+            }
+            return;
+        }
+
+        showLoadingDialog("Loading files...");
+        fileRepository.listFilesWithContent(SCRIPT_EXTENSION, new RepositoryCallback<List<UserFileData>>() {
+            @Override
+            public void onSuccess(List<UserFileData> value) {
+                if (!isAdded() || viewModel == null) {
+                    hideLoadingDialog();
+                    if (completion != null) {
+                        completion.run();
+                    }
+                    return;
+                }
+                if (value != null) {
+                    for (UserFileData data : value) {
+                        if (data == null || data.getMetadata() == null) {
+                            continue;
+                        }
+                        UserFileMetadata metadata = data.getMetadata();
+                        String scriptId = metadata.getId();
+                        if (TextUtils.isEmpty(scriptId)) {
+                            continue;
+                        }
+                        String remoteContent = data.hasTextContent() ? data.getTextContent() : "";
+                        viewModel.updateRemoteSnapshot(scriptId, metadata.getName(), metadata.getEtag(), remoteContent);
+                        if (!viewModel.isDirty(scriptId)) {
+                            viewModel.updateDraft(scriptId, metadata.getName(), remoteContent, false);
+                        }
+                    }
+                }
+                hideLoadingDialog();
+                if (completion != null) {
+                    completion.run();
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                hideLoadingDialog();
+                if (isAdded() && !TextUtils.isEmpty(message)) {
+                    showToast(message);
+                }
+                if (completion != null) {
+                    completion.run();
+                }
+            }
+        });
+    }
+
+    private void setupCollapsibleSections() {
+        if (scriptsListTitle != null && scriptListCard != null) {
+            updateArrow(scriptsListTitle, scriptListCard.getVisibility() == View.VISIBLE);
+            scriptsListTitle.setOnClickListener(v -> {
+                toggleVisibility(scriptListCard);
+                updateArrow((TextView) v, scriptListCard.getVisibility() == View.VISIBLE);
+            });
+        }
+
+        if (consoleTitle != null && consoleCard != null) {
+            updateArrow(consoleTitle, consoleCard.getVisibility() == View.VISIBLE);
+            consoleTitle.setOnClickListener(v -> {
+                toggleVisibility(consoleCard);
+                updateArrow((TextView) v, consoleCard.getVisibility() == View.VISIBLE);
+            });
+        }
     }
 
     private void renderWavelet(String script) {
@@ -333,9 +1118,11 @@ public class WaveletsFragment extends Fragment {
             showToast("Wavelet engine not ready.");
             return;
         }
+        waveletEngine.updateModuleSources(moduleSources());
         if (viewModel != null) {
             viewModel.setLastScriptContent(script);
             viewModel.setLastScriptName(currentScriptName);
+            viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
             viewModel.setPreviewActive(true);
         }
         isRenderingWavelet = true;
@@ -359,20 +1146,19 @@ public class WaveletsFragment extends Fragment {
             waveletEngine = new WaveletEngine();
             waveletEngine.setDialogCallback(this::showDialog);
             waveletEngine.setup(this::printLog, this::handleWaveletTree, buildBindings());
+            waveletEngine.updateModuleSources(moduleSources());
         }
     }
 
     private void ensureWaveletEngineBindings() {
         if (waveletEngine != null) {
             waveletEngine.registerGlobalBindings(buildBindings());
+            waveletEngine.updateModuleSources(moduleSources());
         }
     }
 
     private Map<String, Object> buildBindings() {
         Map<String, Object> bindings = new HashMap<>();
-        if (cc1101 != null) {
-            bindings.put("CC1101", cc1101);
-        }
         if (utils != null) {
             bindings.put("Utils", utils);
         }
@@ -428,6 +1214,7 @@ public class WaveletsFragment extends Fragment {
         showingPreview = false;
         isRenderingWavelet = false;
         activeWaveletTree = null;
+        pendingPreviewScriptId = null;
         if (viewModel != null) {
             viewModel.setPreviewActive(false);
         }
@@ -441,21 +1228,26 @@ public class WaveletsFragment extends Fragment {
         if (binding == null) {
             return;
         }
-        if (editorGroup != null) {
-            editorGroup.setVisibility(showingPreview ? View.GONE : View.VISIBLE);
+        if (scriptsListTitle != null) {
+            scriptsListTitle.setVisibility(showingPreview ? View.GONE : View.VISIBLE);
+        }
+        if (scriptListCard != null) {
+            scriptListCard.setVisibility(showingPreview ? View.GONE : View.VISIBLE);
         }
         binding.waveletContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
-        updateExecuteMenuIcon();
-        updateWaveletPlaceholder();
-    }
-
-    private void updateExecuteMenuIcon() {
-        if (executeMenuItem == null || !isAdded()) {
-            return;
+        if (consoleTitle != null) {
+            consoleTitle.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         }
-        int iconRes = showingPreview ? R.drawable.ic_arrow_back_black : R.drawable.ai_play;
-        executeMenuItem.setIcon(ContextCompat.getDrawable(requireContext(), iconRes));
-        executeMenuItem.setTitle(showingPreview ? "Back" : "Execute");
+        if (consoleCard != null) {
+            consoleCard.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
+        }
+        if (consoleBackButton != null) {
+            consoleBackButton.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
+        }
+        if (consoleClearButton != null) {
+            consoleClearButton.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
+        }
+        updateWaveletPlaceholder();
     }
 
     private void updateWaveletPlaceholder() {
@@ -485,18 +1277,13 @@ public class WaveletsFragment extends Fragment {
         String cachedName = viewModel.getLastScriptName();
         String cachedContent = viewModel.getLastScriptContent();
         if (cachedContent != null) {
-            currentScriptName = cachedName;
             setEditorText(cachedContent);
-            hasUnsavedChanges = false;
-            autoSaveHandler.removeCallbacks(autoSaveRunnable);
-            updateScriptEditorTitle();
-            if (currentScriptName != null) {
-                updateRecentScripts(currentScriptName);
-            }
+            currentScriptName = cachedName;
+            updateDraftState(cachedContent, true);
         }
         if (viewModel.isPreviewActive() && cachedContent != null && !cachedContent.trim().isEmpty()) {
             binding.waveletContainer.post(() -> {
-                if (viewModel.isPreviewActive()) {
+                if (viewModel != null && viewModel.isPreviewActive()) {
                     renderWavelet(cachedContent);
                 }
             });
@@ -510,149 +1297,26 @@ public class WaveletsFragment extends Fragment {
         String scriptContent = binding != null ? getEditorText() : viewModel.getLastScriptContent();
         viewModel.setLastScriptContent(scriptContent);
         viewModel.setLastScriptName(currentScriptName);
+        viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
         viewModel.setPreviewActive(showingPreview);
     }
 
-    private void scheduleAutoSave() {
-        autoSaveHandler.removeCallbacks(autoSaveRunnable);
-        if (currentScriptName != null) {
-            autoSaveHandler.postDelayed(autoSaveRunnable, AUTO_SAVE_DELAY_MS);
-        }
-    }
-
-    private void loadScript(String scriptName) {
-        String content = loadScriptFromInternalStorage(scriptName);
-        setEditorText(content);
-        currentScriptName = scriptName;
-        hasUnsavedChanges = false;
-        updateScriptEditorTitle();
-        updateRecentScripts(scriptName);
-    }
-
-    private void createNewScript(String name) {
-        saveScriptToInternalStorage(name, buildNewScriptTemplate());
-        updateRecentScripts(name);
-        loadScript(name);
-        showToast("New script created: " + name);
-    }
-
-    private void copyCurrentScript(String name) {
-        if (currentScriptName == null) {
-            showToast("No script to copy");
-            return;
-        }
-        saveScriptToInternalStorage(name, getEditorText());
-        updateRecentScripts(name);
-        loadScript(name);
-        showToast("Script copied: " + name);
-    }
-
-    private void updateRecentScripts(String scriptName) {
-        if (!recentScripts.contains(scriptName)) {
-            recentScripts.add(scriptName);
-            Collections.sort(recentScripts, String.CASE_INSENSITIVE_ORDER);
-        }
-        scriptAdapter.notifyDataSetChanged();
-    }
-
-    private void updateScriptEditorTitle() {
-        if (binding == null) {
-            return;
-        }
-        String name = currentScriptName != null ? currentScriptName : "Unsaved Script";
-        if (hasUnsavedChanges) {
-            name = name + " *";
-        }
-        binding.scriptEditorTitle.setText(String.format(Locale.US, "Script Editor (%s)", name));
-    }
-
-    private void showScriptOptionsDialog(String scriptName) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Rename Script");
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_rename_script, null);
-        EditText input = dialogView.findViewById(R.id.edit_script_name);
-        input.setText(scriptName);
-        builder.setView(dialogView);
-
-        builder.setPositiveButton("OK", null);
-        builder.setNegativeButton("Cancel", null);
-        builder.setNeutralButton("Delete", null);
-
-        AlertDialog dialog = builder.create();
-        dialog.show();
-
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String newName = input.getText().toString();
-            if (newName.isEmpty()) {
-                input.setError("Script name cannot be empty");
-                return;
-            }
-            if (!newName.equals(scriptName)) {
-                renameScript(scriptName, newName);
-            }
-            dialog.dismiss();
-        });
-
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-            showDeleteConfirmationDialog(scriptName);
-            dialog.dismiss();
-        });
-    }
-
-    private void renameScript(String oldName, String newName) {
-        File oldFile = new File(getScriptsDir(), oldName);
-        File newFile = new File(getScriptsDir(), newName);
-        if (oldFile.renameTo(newFile)) {
-            recentScripts.remove(oldName);
-            if (!recentScripts.contains(newName)) {
-                recentScripts.add(newName);
-            }
-            Collections.sort(recentScripts, String.CASE_INSENSITIVE_ORDER);
-            scriptAdapter.notifyDataSetChanged();
-            if (oldName.equals(currentScriptName)) {
-                currentScriptName = newName;
-                updateScriptEditorTitle();
-            }
-            showToast("Script renamed to: " + newName);
-        } else {
-            showToast("Failed to rename script");
-        }
-    }
-
-    private void showDeleteConfirmationDialog(String scriptName) {
-        new AlertDialog.Builder(requireContext())
-            .setTitle("Delete Script")
-            .setMessage("Are you sure you want to delete " + scriptName + "?")
-            .setPositiveButton("Delete", (dialog, which) -> deleteScript(scriptName))
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void deleteScript(String scriptName) {
-        File file = new File(getScriptsDir(), scriptName);
-        if (file.delete()) {
-            recentScripts.remove(scriptName);
-            scriptAdapter.notifyDataSetChanged();
-            if (scriptName.equals(currentScriptName)) {
-                setEditorText("");
-                currentScriptName = null;
-                hasUnsavedChanges = false;
-                updateScriptEditorTitle();
-            }
-            showToast("Script deleted: " + scriptName);
-        } else {
-            showToast("Failed to delete script");
-        }
-    }
-
     private void showNameInputDialog(String title, String message, ScriptNameCallback callback) {
+        showNameInputDialog(title, message, null, callback);
+    }
+
+    private void showNameInputDialog(String title, String message, @Nullable String defaultValue, ScriptNameCallback callback) {
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
         builder.setTitle(title);
         builder.setMessage(message);
         final EditText input = new EditText(requireContext());
+        if (!TextUtils.isEmpty(defaultValue)) {
+            input.setText(defaultValue);
+            input.setSelection(defaultValue.length());
+        }
         builder.setView(input);
         builder.setPositiveButton("OK", (dialog, which) -> {
-            String name = input.getText().toString();
+            String name = input.getText().toString().trim();
             if (!name.isEmpty()) {
                 callback.onNameEntered(name);
             }
@@ -662,36 +1326,36 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void openFile() {
-        openFileLauncher.launch(new String[]{"*/*"});
-    }
-
-    private void saveAsFile() {
-        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("text/javascript");
-        intent.putExtra(Intent.EXTRA_TITLE, currentScriptName != null ? currentScriptName : "wavelet_script.js");
-        createFileLauncher.launch(intent);
-    }
-
-    private void saveFileToUri(Uri uri) {
-        try (OutputStream out = requireContext().getContentResolver().openOutputStream(uri)) {
-            out.write(getEditorText().getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            Log.e(TAG, "Error writing to uri", e);
-            showToast("Failed to save script");
+        if (openFileLauncher != null) {
+            openFileLauncher.launch(new String[]{"text/javascript", "application/javascript", "*/*"});
         }
     }
 
-    private void readScriptFromUri(Uri uri) {
-        try (InputStream in = requireContext().getContentResolver().openInputStream(uri)) {
-            if (in == null) {
+    private void launchIrdImportFlow() {
+        if (!isAdded()) {
+            return;
+        }
+        Intent intent = new Intent(requireContext(), IrdBrandSelectionActivity.class);
+        importFromIrdLauncher.launch(intent);
+    }
+
+    private void importScriptFromUri(Uri uri) {
+        try (InputStream inputStream = requireContext().getContentResolver().openInputStream(uri)) {
+            if (inputStream == null) {
+                showToast("Unable to open file");
                 return;
             }
-            String content = readTextFromInputStream(in);
-            setEditorText(content);
+            String content = readTextFromInputStream(inputStream);
+            String defaultName = getFileNameFromUri(requireContext(), uri);
+            showNameInputDialog(
+                "Import Script",
+                "Enter a name for the imported script:",
+                defaultName,
+                enteredName -> createScriptWithContent(enteredName, content, "Imported script: ")
+            );
         } catch (IOException e) {
-            Log.e(TAG, "Error reading script", e);
-            showToast("Failed to read script");
+            Log.e(TAG, "Error importing script", e);
+            showToast("Failed to import script");
         }
     }
 
@@ -703,89 +1367,6 @@ public class WaveletsFragment extends Fragment {
             result.write(buffer, 0, length);
         }
         return result.toString(StandardCharsets.UTF_8.name());
-    }
-
-    private void createDefaultScriptsIfNeeded() {
-        File scriptsDir = getScriptsDir();
-        if (!scriptsDir.exists() && !scriptsDir.mkdirs()) {
-            Log.e(TAG, "Unable to create scripts directory");
-            return;
-        }
-
-        ensureAssetScript("wavelet_demo.js");
-        ensureAssetScript("wavelet_rfid.js");
-        ensureAssetScript("wavelet_gpio.js");
-        ensureAssetScript("cc1101_radio_console.js");
-        ensureAssetScript("hello_world_usb.js");
-    }
-
-    private void ensureScriptExists(String name, String content) {
-        File file = new File(getScriptsDir(), name);
-        if (!file.exists()) {
-            saveScriptToInternalStorage(name, content);
-        }
-    }
-
-    private void ensureAssetScript(String assetName) {
-        File target = new File(getScriptsDir(), assetName);
-        if (target.exists()) {
-            return;
-        }
-        if (!isAdded()) {
-            return;
-        }
-        try (InputStream in = requireContext().getAssets().open(assetName);
-             FileOutputStream out = new FileOutputStream(target)) {
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Unable to copy asset script: " + assetName, e);
-        }
-    }
-
-    private File getScriptsDir() {
-        File dir = new File(requireContext().getFilesDir(), SCRIPTS_DIR);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-        return dir;
-    }
-
-    private List<String> getInternalScriptsList() {
-        File[] files = getScriptsDir().listFiles();
-        List<String> names = new ArrayList<>();
-        if (files != null) {
-            for (File file : files) {
-                names.add(file.getName());
-            }
-        }
-        return names;
-    }
-
-    private void saveScriptToInternalStorage(String fileName, String content) {
-        File file = new File(getScriptsDir(), fileName);
-        try (FileOutputStream fos = new FileOutputStream(file)) {
-            fos.write(content.getBytes(StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            Log.e(TAG, "Error saving script", e);
-        }
-    }
-
-    private String loadScriptFromInternalStorage(String fileName) {
-        File file = new File(getScriptsDir(), fileName);
-        StringBuilder content = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                content.append(line).append('\n');
-            }
-        } catch (IOException e) {
-            Log.e(TAG, "Error loading script", e);
-        }
-        return content.toString();
     }
 
     private void printLog(String message) {
@@ -805,19 +1386,535 @@ public class WaveletsFragment extends Fragment {
     }
 
     private String getEditorText() {
-        Editable text = binding.jsCodeInput.getText();
-        return text != null ? text.toString() : "";
+        return currentDraftContent != null ? currentDraftContent : "";
     }
 
     private void setEditorText(String text) {
-        binding.jsCodeInput.setText(text);
+        currentDraftContent = text != null ? text : "";
+    }
+
+    private void completePendingPreview(String scriptId) {
+        if (TextUtils.isEmpty(pendingPreviewScriptId) || !TextUtils.equals(pendingPreviewScriptId, scriptId)) {
+            return;
+        }
+        String script = getEditorText();
+        if (script.trim().isEmpty()) {
+            showToast("No script to preview.");
+            pendingPreviewScriptId = null;
+            return;
+        }
+        renderWavelet(script);
+        pendingPreviewScriptId = null;
+    }
+
+    private void runOnUiThreadSafe(Runnable task) {
+        if (task == null || !isAdded()) {
+            return;
+        }
+        requireActivity().runOnUiThread(task);
+    }
+
+    private void showLoadingDialog(String message) {
+        if (!isAdded()) {
+            return;
+        }
+        hideLoadingDialog();
+        View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_loading, null);
+        TextView textView = view.findViewById(R.id.loading_message);
+        textView.setText(message != null ? message : "Loading...");
+        loadingDialog = new AlertDialog.Builder(requireContext())
+            .setView(view)
+            .setCancelable(false)
+            .create();
+        loadingDialog.show();
+    }
+
+    private void hideLoadingDialog() {
+        if (loadingDialog != null) {
+            if (loadingDialog.isShowing()) {
+                loadingDialog.dismiss();
+            }
+            loadingDialog = null;
+        }
+    }
+
+    private void startSync() {
+        if (!isAdded() || fileRepository == null) {
+            return;
+        }
+        showToast("Syncing scripts...");
+        fileRepository.listFiles(SCRIPT_EXTENSION, new RepositoryCallback<List<UserFileMetadata>>() {
+            @Override
+            public void onSuccess(List<UserFileMetadata> value) {
+                if (!isAdded()) {
+                    return;
+                }
+                List<UserFileMetadata> list = value != null ? value : Collections.emptyList();
+                collectRemoteData(list);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to list scripts");
+            }
+        });
+    }
+
+    private void collectRemoteData(List<UserFileMetadata> metadataList) {
+        if (!isAdded()) {
+            return;
+        }
+        final List<UserFileMetadata> list = metadataList != null ? metadataList : Collections.emptyList();
+        final Map<String, UserFileMetadata> metadataMap = new HashMap<>();
+        for (UserFileMetadata metadata : list) {
+            metadataMap.put(metadata.getId(), metadata);
+        }
+        if (list.isEmpty()) {
+            onRemoteDataCollected(metadataMap, Collections.emptyMap());
+            return;
+        }
+        final Map<String, UserFileData> dataMap = new HashMap<>();
+        final AtomicInteger remaining = new AtomicInteger(list.size());
+        final AtomicBoolean failed = new AtomicBoolean(false);
+        for (UserFileMetadata metadata : list) {
+            final String scriptId = metadata.getId();
+            fileRepository.getFile(scriptId, new RepositoryCallback<UserFileData>() {
+                @Override
+                public void onSuccess(UserFileData data) {
+                    if (failed.get()) {
+                        return;
+                    }
+                    synchronized (dataMap) {
+                        dataMap.put(scriptId, data);
+                    }
+                    if (remaining.decrementAndGet() == 0 && !failed.get()) {
+                        Map<String, UserFileData> snapshot;
+                        synchronized (dataMap) {
+                            snapshot = new HashMap<>(dataMap);
+                        }
+                        if (isAdded()) {
+                            requireActivity().runOnUiThread(() -> onRemoteDataCollected(metadataMap, snapshot));
+                        }
+                    }
+                }
+
+                @Override
+                public void onError(String message) {
+                    if (failed.compareAndSet(false, true) && isAdded()) {
+                        showToast(message != null ? message : "Failed to fetch script content");
+                    }
+                }
+            });
+        }
+    }
+
+    private void onRemoteDataCollected(Map<String, UserFileMetadata> metadataMap, Map<String, UserFileData> dataMap) {
+        if (!isAdded() || viewModel == null) {
+            return;
+        }
+        Map<String, WaveletsViewModel.ScriptRecord> snapshot = viewModel.snapshotRecords();
+        List<ScriptChange> changes = new ArrayList<>();
+        for (Map.Entry<String, UserFileMetadata> entry : metadataMap.entrySet()) {
+            String scriptId = entry.getKey();
+            UserFileMetadata metadata = entry.getValue();
+            UserFileData data = dataMap.get(scriptId);
+            String remoteContent = data != null && data.hasTextContent() ? data.getTextContent() : "";
+            WaveletsViewModel.ScriptRecord record = snapshot.get(scriptId);
+            String name = metadata.getName();
+            String previousRemote = record != null && record.remoteContent != null ? record.remoteContent : "";
+            if (record == null || TextUtils.isEmpty(record.remoteEtag)) {
+                changes.add(ScriptChange.remoteAdded(scriptId, name, remoteContent, metadata));
+                continue;
+            }
+            boolean remoteChanged = !TextUtils.equals(record.remoteEtag, metadata.getEtag()) || !TextUtils.equals(previousRemote, remoteContent);
+            boolean localDirty = record.dirty;
+            if (!remoteChanged && !localDirty) {
+                continue;
+            }
+            String resolvedName = record.name != null ? record.name : name;
+            if (localDirty && remoteChanged) {
+                changes.add(ScriptChange.conflict(scriptId, resolvedName, previousRemote, remoteContent, record.draftContent, metadata));
+            } else if (localDirty) {
+                String draftContent = record.draftContent != null ? record.draftContent : previousRemote;
+                changes.add(ScriptChange.localModified(scriptId, resolvedName, previousRemote, draftContent));
+            } else if (remoteChanged) {
+                changes.add(ScriptChange.remoteModified(scriptId, resolvedName, previousRemote, remoteContent, metadata));
+            }
+        }
+
+        for (Map.Entry<String, WaveletsViewModel.ScriptRecord> entry : snapshot.entrySet()) {
+            String scriptId = entry.getKey();
+            if (WaveletsViewModel.UNSAVED_KEY.equals(scriptId)) {
+                continue;
+            }
+            if (!metadataMap.containsKey(scriptId) && !TextUtils.isEmpty(entry.getValue().remoteEtag)) {
+                WaveletsViewModel.ScriptRecord record = entry.getValue();
+                String name = record.name != null ? record.name : (currentScriptName != null ? currentScriptName : "Script");
+                String previousRemote = record.remoteContent != null ? record.remoteContent : "";
+                changes.add(ScriptChange.remoteDeleted(scriptId, name, previousRemote));
+            }
+        }
+
+        WaveletsViewModel.ScriptRecord unsaved = snapshot.get(WaveletsViewModel.UNSAVED_KEY);
+        if (unsaved != null && unsaved.dirty && unsaved.draftContent != null && unsaved.draftContent.trim().length() > 0) {
+            changes.add(ScriptChange.unsavedLocal(unsaved.draftContent));
+        }
+
+        if (changes.isEmpty()) {
+            showToast("Scripts already in sync");
+            return;
+        }
+
+        showSyncDialog(changes, metadataMap, dataMap);
+    }
+
+    private void showSyncDialog(List<ScriptChange> changes, Map<String, UserFileMetadata> metadataMap, Map<String, UserFileData> dataMap) {
+        if (!isAdded()) {
+            return;
+        }
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_sync_changes, null);
+        TextView summaryView = dialogView.findViewById(R.id.sync_summary);
+        summaryView.setText(buildSyncSummary(changes));
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
+            .setTitle("Script Sync")
+            .setView(dialogView)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Apply", (dialog, which) -> applySyncChanges(changes, dataMap));
+
+        if (!isAdded()) {
+            return;
+        }
+        builder.show();
+    }
+
+    private String buildSyncSummary(List<ScriptChange> changes) {
+        StringBuilder summary = new StringBuilder();
+        for (int i = 0; i < changes.size(); i++) {
+            ScriptChange change = changes.get(i);
+            summary.append(labelForChange(change.type)).append(" — ");
+            String name = change.name != null ? change.name : (change.scriptId != null ? change.scriptId : "Unsaved Script");
+            summary.append(name).append('\n');
+            switch (change.type) {
+                case LOCAL_MODIFIED:
+                    summary.append("Diff (local vs remote):\n");
+                    summary.append(generateUnifiedDiff(safe(change.before), safe(change.after)));
+                    break;
+                case REMOTE_MODIFIED:
+                    summary.append("Diff (remote update):\n");
+                    summary.append(generateUnifiedDiff(safe(change.before), safe(change.after)));
+                    break;
+                case REMOTE_ADDED:
+                    summary.append("New remote script content:\n");
+                    summary.append(generateUnifiedDiff("", safe(change.after)));
+                    break;
+                case REMOTE_DELETED:
+                    summary.append("Remote script removed. Local snapshot:\n");
+                    summary.append(generateUnifiedDiff(safe(change.before), ""));
+                    break;
+                case CONFLICT:
+                    summary.append("Conflict detected. Remote update:\n");
+                    summary.append(generateUnifiedDiff(safe(change.before), safe(change.after)));
+                    if (change.localDraft != null) {
+                        summary.append("\nLocal draft:\n");
+                        summary.append(generateUnifiedDiff(safe(change.before), safe(change.localDraft)));
+                    }
+                    break;
+                case LOCAL_UNTRACKED:
+                    summary.append("Unsaved local draft must be saved before syncing.\n");
+                    break;
+            }
+            if (i < changes.size() - 1) {
+                summary.append("\n-----------------------------\n");
+            }
+        }
+        return summary.toString();
+    }
+
+    private void applySyncChanges(List<ScriptChange> changes, Map<String, UserFileData> dataMap) {
+        if (!isAdded() || fileRepository == null || viewModel == null) {
+            return;
+        }
+        List<ScriptChange> localChanges = new ArrayList<>();
+        List<ScriptChange> remoteAdds = new ArrayList<>();
+        List<ScriptChange> remoteMods = new ArrayList<>();
+        List<ScriptChange> remoteDeletes = new ArrayList<>();
+        boolean hasConflict = false;
+        boolean hasUnsaved = false;
+
+        for (ScriptChange change : changes) {
+            switch (change.type) {
+                case LOCAL_MODIFIED:
+                    localChanges.add(change);
+                    break;
+                case REMOTE_MODIFIED:
+                    remoteMods.add(change);
+                    break;
+                case REMOTE_ADDED:
+                    remoteAdds.add(change);
+                    break;
+                case REMOTE_DELETED:
+                    remoteDeletes.add(change);
+                    break;
+                case CONFLICT:
+                    hasConflict = true;
+                    break;
+                case LOCAL_UNTRACKED:
+                    hasUnsaved = true;
+                    break;
+            }
+        }
+
+        if (hasConflict) {
+            showToast("Conflicts detected. Resolve manually before syncing.");
+        }
+        if (hasUnsaved) {
+            showToast("Unsaved drafts found. Save them before syncing.");
+        }
+
+        processLocalUpdates(localChanges, 0, () -> {
+            applyRemoteAdditions(remoteAdds, dataMap);
+            applyRemoteModifications(remoteMods, dataMap);
+            applyRemoteDeletions(remoteDeletes);
+            showToast("Sync complete");
+        });
+    }
+
+    private void processLocalUpdates(List<ScriptChange> localChanges, int index, Runnable completion) {
+        if (index >= localChanges.size()) {
+            completion.run();
+            return;
+        }
+        ScriptChange change = localChanges.get(index);
+        if (viewModel == null) {
+            completion.run();
+            return;
+        }
+        String etag = viewModel.getRemoteEtag(change.scriptId);
+        if (TextUtils.isEmpty(etag)) {
+            processLocalUpdates(localChanges, index + 1, completion);
+            return;
+        }
+        fileRepository.updateTextFile(change.scriptId, etag, change.after, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata metadata) {
+                if (!isAdded()) {
+                    return;
+                }
+                addOrReplaceMetadata(metadata);
+                viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), change.after);
+                viewModel.markClean(metadata.getId(), change.after, metadata.getEtag());
+                viewModel.updateDraft(metadata.getId(), metadata.getName(), change.after, false);
+                if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(metadata.getId())) {
+                    currentScriptMetadata = metadata;
+                    currentScriptName = metadata.getName();
+                    currentScriptEtag = metadata.getEtag();
+                    setEditorText(change.after);
+                    updateDraftState(change.after, false);
+                }
+                processLocalUpdates(localChanges, index + 1, completion);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (isAdded()) {
+                    showToast(message != null ? message : ("Failed to push changes for " + change.name));
+                }
+                processLocalUpdates(localChanges, index + 1, completion);
+            }
+        });
+    }
+
+    private void applyRemoteAdditions(List<ScriptChange> remoteAdds, Map<String, UserFileData> dataMap) {
+        if (viewModel == null) {
+            return;
+        }
+        for (ScriptChange change : remoteAdds) {
+            UserFileMetadata metadata = change.metadata;
+            if (metadata == null) {
+                continue;
+            }
+            UserFileData data = dataMap.get(metadata.getId());
+            String content = data != null && data.hasTextContent() ? data.getTextContent() : "";
+            addOrReplaceMetadata(metadata);
+            viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), content);
+            viewModel.markClean(metadata.getId(), content, metadata.getEtag());
+        }
+    }
+
+    private void applyRemoteModifications(List<ScriptChange> remoteMods, Map<String, UserFileData> dataMap) {
+        if (viewModel == null) {
+            return;
+        }
+        for (ScriptChange change : remoteMods) {
+            UserFileMetadata metadata = change.metadata;
+            if (metadata == null) {
+                continue;
+            }
+            UserFileData data = dataMap.get(metadata.getId());
+            String content = data != null && data.hasTextContent() ? data.getTextContent() : safe(change.after);
+            addOrReplaceMetadata(metadata);
+            viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), content);
+            viewModel.markClean(metadata.getId(), content, metadata.getEtag());
+            if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(metadata.getId())) {
+                currentScriptMetadata = metadata;
+                currentScriptName = metadata.getName();
+                currentScriptEtag = metadata.getEtag();
+                setEditorText(content);
+                updateDraftState(content, false);
+            }
+        }
+    }
+
+    private void applyRemoteDeletions(List<ScriptChange> remoteDeletes) {
+        if (viewModel == null) {
+            return;
+        }
+        for (ScriptChange change : remoteDeletes) {
+            viewModel.removeRecord(change.scriptId);
+            removeMetadataById(change.scriptId);
+            refreshScriptList();
+            if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(change.scriptId)) {
+                currentScriptMetadata = null;
+                currentScriptName = null;
+                currentScriptEtag = null;
+                setEditorText("");
+                updateDraftState("", false);
+                if (!scriptFiles.isEmpty()) {
+                    loadScript(scriptFiles.get(0));
+                }
+            }
+        }
+    }
+
+    private String generateUnifiedDiff(String before, String after) {
+        String[] original = before != null ? before.split("\n", -1) : new String[0];
+        String[] revised = after != null ? after.split("\n", -1) : new String[0];
+        int[][] lcs = new int[original.length + 1][revised.length + 1];
+        for (int i = original.length - 1; i >= 0; i--) {
+            for (int j = revised.length - 1; j >= 0; j--) {
+                if (original[i].equals(revised[j])) {
+                    lcs[i][j] = lcs[i + 1][j + 1] + 1;
+                } else {
+                    lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+                }
+            }
+        }
+        List<String> lines = new ArrayList<>();
+        int i = 0;
+        int j = 0;
+        while (i < original.length && j < revised.length) {
+            if (original[i].equals(revised[j])) {
+                lines.add("  " + original[i]);
+                i++;
+                j++;
+            } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+                lines.add("- " + original[i]);
+                i++;
+            } else {
+                lines.add("+ " + revised[j]);
+                j++;
+            }
+        }
+        while (i < original.length) {
+            lines.add("- " + original[i]);
+            i++;
+        }
+        while (j < revised.length) {
+            lines.add("+ " + revised[j]);
+            j++;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String line : lines) {
+            builder.append(line).append('\n');
+        }
+        return builder.toString();
+    }
+
+    private String labelForChange(SyncChangeType type) {
+        switch (type) {
+            case LOCAL_MODIFIED:
+                return "Local changes";
+            case REMOTE_MODIFIED:
+                return "Remote updates";
+            case REMOTE_ADDED:
+                return "Remote additions";
+            case REMOTE_DELETED:
+                return "Remote deletions";
+            case CONFLICT:
+                return "Conflicts";
+            case LOCAL_UNTRACKED:
+                return "Unsaved drafts";
+            default:
+                return "Changes";
+        }
+    }
+
+    private static String safe(String value) {
+        return value != null ? value : "";
+    }
+
+    private enum SyncChangeType {
+        LOCAL_MODIFIED,
+        REMOTE_MODIFIED,
+        REMOTE_ADDED,
+        REMOTE_DELETED,
+        CONFLICT,
+        LOCAL_UNTRACKED
+    }
+
+    private static final class ScriptChange {
+        final SyncChangeType type;
+        final String scriptId;
+        final String name;
+        final String before;
+        final String after;
+        final String localDraft;
+        final UserFileMetadata metadata;
+
+        private ScriptChange(SyncChangeType type, String scriptId, String name, String before, String after, String localDraft, UserFileMetadata metadata) {
+            this.type = type;
+            this.scriptId = scriptId;
+            this.name = name;
+            this.before = before;
+            this.after = after;
+            this.localDraft = localDraft;
+            this.metadata = metadata;
+        }
+
+        static ScriptChange localModified(String scriptId, String name, String before, String draft) {
+            return new ScriptChange(SyncChangeType.LOCAL_MODIFIED, scriptId, name, before, draft, null, null);
+        }
+
+        static ScriptChange remoteModified(String scriptId, String name, String before, String after, UserFileMetadata metadata) {
+            return new ScriptChange(SyncChangeType.REMOTE_MODIFIED, scriptId, name, before, after, null, metadata);
+        }
+
+        static ScriptChange remoteAdded(String scriptId, String name, String content, UserFileMetadata metadata) {
+            return new ScriptChange(SyncChangeType.REMOTE_ADDED, scriptId, name, "", content, null, metadata);
+        }
+
+        static ScriptChange remoteDeleted(String scriptId, String name, String content) {
+            return new ScriptChange(SyncChangeType.REMOTE_DELETED, scriptId, name, content, "", null, null);
+        }
+
+        static ScriptChange conflict(String scriptId, String name, String before, String remoteAfter, String localDraft, UserFileMetadata metadata) {
+            return new ScriptChange(SyncChangeType.CONFLICT, scriptId, name, before, remoteAfter, localDraft, metadata);
+        }
+
+        static ScriptChange unsavedLocal(String draft) {
+            return new ScriptChange(SyncChangeType.LOCAL_UNTRACKED, null, null, "", draft, draft, null);
+        }
     }
 
     private void showDialog(String title, String message) {
         if (!isAdded()) {
             return;
         }
-        getActivity().runOnUiThread(() -> {
+        requireActivity().runOnUiThread(() -> {
             if (isAdded()) {
                 new AlertDialog.Builder(requireContext())
                     .setTitle(title)
@@ -829,15 +1926,103 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void showToast(String message) {
-        if (!isAdded() || getActivity() == null) {
+        if (!isAdded()) {
             return;
         }
-        getActivity().runOnUiThread(() -> {
-            if (isAdded()) {
-                Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
+        requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show());
+    }
+
+    private void handleIrdImportResult(Intent data) {
+        if (fileRepository == null) {
+            showToast("Storage not available");
+            return;
+        }
+        String rawName = data.getStringExtra(IrdCsvSelectionActivity.EXTRA_SCRIPT_NAME);
+        String scriptContent = data.getStringExtra(IrdCsvSelectionActivity.EXTRA_SCRIPT_CONTENT);
+        String metadataJson = data.getStringExtra(IrdCsvSelectionActivity.EXTRA_SCRIPT_METADATA);
+        if (rawName == null || scriptContent == null) {
+            showToast("Failed to import IRDB remote.");
+            return;
+        }
+        final String normalizedName = normalizeScriptFileName(rawName);
+        final String finalName = resolveUniqueScriptName(normalizedName);
+        fileRepository.createTextFile(finalName, scriptContent, new RepositoryCallback<UserFileMetadata>() {
+            @Override
+            public void onSuccess(UserFileMetadata metadata) {
+                if (!isAdded()) {
+                    return;
+                }
+                onScriptCreated(metadata, scriptContent);
+                showToast("Imported IRDB remote: " + metadata.getName());
+                uploadWaveletToCloud(metadata.getName(), scriptContent, metadataJson);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (!isAdded()) {
+                    return;
+                }
+                showToast(message != null ? message : "Failed to import IRDB remote");
+            }
+        });
+    }
+
+    private String normalizeScriptFileName(String rawName) {
+        String candidate = rawName == null ? "" : rawName.trim();
+        if (candidate.isEmpty()) {
+            candidate = "irdb_remote";
+        }
+        String sanitized = candidate.replaceAll("[\\\\/:*?\"<>|]", "_");
+        if (!sanitized.toLowerCase(Locale.US).endsWith(".js")) {
+            sanitized += ".js";
+        }
+        return sanitized;
+    }
+
+    private String resolveUniqueScriptName(String proposed) {
+        String candidate = proposed;
+        int counter = 1;
+        int dotIndex = candidate.lastIndexOf('.');
+        String base = dotIndex >= 0 ? candidate.substring(0, dotIndex) : candidate;
+        String extension = dotIndex >= 0 ? candidate.substring(dotIndex) : "";
+        while (scriptNameExists(candidate)) {
+            candidate = base + "_" + counter + extension;
+            counter++;
+        }
+        return candidate;
+    }
+
+    private boolean scriptNameExists(String name) {
+        for (UserFileMetadata metadata : scriptFiles) {
+            if (metadata.getName() != null && metadata.getName().equalsIgnoreCase(name)) {
+                return true;
             }
         }
-        );
+        return false;
+    }
+
+    private void uploadWaveletToCloud(String scriptName, String scriptContent, @Nullable String metadataJson) {
+        if (!isAdded()) {
+            return;
+        }
+        AuthenticationManager authManager = AuthenticationManager.getInstance(requireContext());
+        String accessToken = authManager.getAccessToken();
+        if (TextUtils.isEmpty(accessToken)) {
+            Log.w(TAG, "Skipping wavelet cloud sync: no access token");
+            return;
+        }
+        waveletCloudClient.uploadWavelet(accessToken, scriptName, scriptContent, metadataJson, new WaveletCloudClient.UploadCallback() {
+            @Override
+            public void onSuccess() {
+                Log.d(TAG, "Wavelet synced to cloud");
+            }
+
+            @Override
+            public void onFailure(String message) {
+                Log.e(TAG, "Wavelet sync failed: " + message);
+                showToast("Failed to sync wavelet to cloud");
+            }
+        });
     }
 
     private static String getFileNameFromUri(Context context, Uri uri) {
@@ -876,96 +2061,24 @@ public class WaveletsFragment extends Fragment {
             "}\n";
     }
 
-    private String buildDefaultBadUsbScript() {
-        return "WaveletConsole.subscribe(render);\n" +
-            "render();\n\n" +
-            "function render() {\n" +
-            "    UI.render(UI.column({\n" +
-            "        padding: 16,\n" +
-            "        spacing: 12,\n" +
-            "        children: [\n" +
-            "            UI.text({ text: 'BadUSB Hello World', font: 'title2', fontWeight: 'semibold' }),\n" +
-            "            UI.text({ text: 'Send a simple HID payload to the connected host.', foregroundColor: '#6B7280' }),\n" +
-            "            UI.button({ label: 'Execute Payload', backgroundColor: '#1D4ED8', foregroundColor: '#FFFFFF', onTap: runDemo }),\n" +
-            "            WaveletConsole.view({\n" +
-            "                minHeight: 160,\n" +
-            "                backgroundColor: '#111827',\n" +
-            "                foregroundColor: '#F9FAFB',\n" +
-            "                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },\n" +
-            "                cornerRadius: 8\n" +
-            "            })\n" +
-            "        ]\n" +
-            "    }));\n" +
-            "}\n\n" +
-            "function runDemo() {\n" +
-            "    print('[BadUSB] Setting up HID attack mode...');\n" +
-            "    BLEService.sendString('usb ATTACKMODE HID');\n" +
-            "    Utils.delay(2000);\n" +
-            "    BLEService.sendString('usb STRING_DELAY 10');\n" +
-            "    Utils.delay(500);\n" +
-            "    BLEService.sendString('usb STRING Hello, World!');\n" +
-            "    Utils.delay(500);\n" +
-            "    BLEService.sendString('usb ENTER');\n" +
-            "    Utils.delay(500);\n" +
-            "    print('[BadUSB] Payload complete.');\n" +
-            "}\n";
+    private Map<String, String> moduleSources() {
+        if (viewModel == null) {
+            return Collections.emptyMap();
+        }
+        return viewModel.getModuleSources();
     }
 
-    private String buildCc1101RadioConsoleScript() {
-        return "let message = 'Ready';\n\n" +
-            "function initRx() {\n" +
-            "    try {\n" +
-            "        CC1101.spiStrobe(CC1101.SRES);\n" +
-            "        CC1101.init();\n" +
-            "        CC1101.writeReg(CC1101.PKTCTRL0, 0x32);\n" +
-            "        CC1101.setGDOMode(0x2E, 0x2E, 0x0D);\n" +
-            "        CC1101.setFrequencyMHz(433.92);\n" +
-            "        CC1101.setDataRate(100000);\n" +
-            "        CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);\n" +
-            "        CC1101.spiStrobe(CC1101.SRX);\n" +
-            "        message = 'RX init complete!';\n" +
-            "        render();\n" +
-            "    } catch (error) {\n" +
-            "        message = 'RX init failed: ' + error;\n" +
-            "        render();\n" +
-            "    }\n" +
-            "}\n\n" +
-            "function initTx() {\n" +
-            "    try {\n" +
-            "        CC1101.spiStrobe(CC1101.SRES);\n" +
-            "        CC1101.init();\n" +
-            "        CC1101.writeReg(CC1101.PKTCTRL0, 0x32);\n" +
-            "        CC1101.setGDOMode(0x2E, 0x2E, 0x0D);\n" +
-            "        CC1101.setFrequencyMHz(433.92);\n" +
-            "        CC1101.setDataRate(100000);\n" +
-            "        CC1101.setModulationAndPower(CC1101.MOD_ASK, CC1101.POWER_10_DBM);\n" +
-            "        CC1101.spiStrobe(CC1101.STX);\n" +
-            "        message = 'TX init complete!';\n" +
-            "        render();\n" +
-            "    } catch (error) {\n" +
-            "        message = 'TX init failed: ' + error;\n" +
-            "        render();\n" +
-            "    }\n" +
-            "}\n\n" +
-            "function render() {\n" +
-            "    UI.render(UI.column({\n" +
-            "        padding: 16,\n" +
-            "        spacing: 16,\n" +
-            "        children: [\n" +
-            "            UI.text({ text: 'CC1101 Radio', font: 'title2', fontWeight: 'semibold' }),\n" +
-            "            UI.row({\n" +
-            "                spacing: 12,\n" +
-            "                children: [\n" +
-            "                    UI.button({ label: 'Init RX', backgroundColor: '#2563EB', foregroundColor: '#FFFFFF', onTap: initRx }),\n" +
-            "                    UI.button({ label: 'Init TX', backgroundColor: '#DC2626', foregroundColor: '#FFFFFF', onTap: initTx })\n" +
-            "                ]\n" +
-            "            }),\n" +
-            "            UI.text({ text: message, fontWeight: 'medium', foregroundColor: '#374151' })\n" +
-            "        ]\n" +
-            "    }));\n" +
-            "}\n\n" +
-            "render();\n";
+    private String normalizeScriptName(String rawName) {
+        String name = rawName != null ? rawName.trim() : "";
+        if (name.isEmpty()) {
+            name = "wavelet_script";
+        }
+        if (!name.toLowerCase(Locale.US).endsWith(SCRIPT_EXTENSION)) {
+            name = name + SCRIPT_EXTENSION;
+        }
+        return name;
     }
+
     private interface ScriptNameCallback {
         void onNameEntered(String name);
     }

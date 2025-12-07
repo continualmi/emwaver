@@ -3,6 +3,7 @@ package com.emwaver.emwaverandroidapp;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
@@ -28,6 +29,8 @@ import android.os.Looper;
  * endpoint is available.
  */
 public class LoginActivity extends AppCompatActivity {
+
+    private static final String TAG = "LoginActivity";
 
     private TextInputEditText emailInput;
     private TextInputEditText passwordInput;
@@ -76,16 +79,19 @@ public class LoginActivity extends AppCompatActivity {
         BackendClient client = BackendClient.getInstance(LoginActivity.this);
         try {
             BackendClient.LoginResult result = client.login(email, password);
+            Log.i(TAG, "Login successful, received user payload");
             JSONObject user = result.user;
             String userJson = user != null ? user.toString() : null;
+            String entitlementJson = result.entitlement != null ? result.entitlement.toString() : null;
             AuthenticationManager.getInstance(LoginActivity.this)
-                    .saveSession(result.accessToken, result.refreshToken, userJson);
+                    .saveSession(result.accessToken, result.refreshToken, userJson, entitlementJson);
             mainHandler.post(() -> {
                 progressBar.setVisibility(View.GONE);
                 loginButton.setEnabled(true);
                 navigateToMain();
             });
         } catch (BackendClient.BackendException error) {
+            Log.e(TAG, "Login failed", error);
             mainHandler.post(() -> {
                 progressBar.setVisibility(View.GONE);
                 loginButton.setEnabled(true);
