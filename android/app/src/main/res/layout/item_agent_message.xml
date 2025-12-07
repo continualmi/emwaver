@@ -22,17 +22,13 @@
             android:src="@drawable/llm"
             android:visibility="gone" />
 
-        <TextView
+        <LinearLayout
             android:id="@+id/message_content"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="@android:color/black"
-            android:textSize="16sp"
-            android:lineSpacingExtra="2dp"
-            android:paddingVertical="4dp"
-            android:gravity="start"
-            android:textAlignment="viewStart" />
+            android:orientation="vertical"
+            android:paddingVertical="4dp" />
     </LinearLayout>
 
 </LinearLayout>

@@ -52,6 +52,48 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:title="Agent Settings"
+        app:iconSpaceReserved="false">
+
+        <EditTextPreference
+            android:key="agent_base_url"
+            android:title="Base URL"
+            android:summary="API endpoint (OpenRouter or compatible)"
+            android:defaultValue="https://openrouter.ai/api/v1"
+            android:inputType="textUri"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="agent_api_key"
+            android:title="API Key"
+            android:summary="Your API key for the Agent feature"
+            android:defaultValue=""
+            android:inputType="textPassword"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="false" />
+
+        <EditTextPreference
+            android:key="agent_model"
+            android:title="Model"
+            android:summary="Model identifier"
+            android:defaultValue="openai/gpt-oss-20b"
+            android:inputType="text"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            android:key="agent_instructions"
+            android:title="Custom Instructions"
+            android:summary="Additional instructions for the AI agent"
+            android:defaultValue=""
+            android:inputType="textMultiLine"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="false" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:title="Support &amp; Information"
         app:iconSpaceReserved="false">
 
