@@ -34,7 +34,7 @@ public class AuthenticationManager {
     }
 
     public boolean isLoggedIn() {
-        return !TextUtils.isEmpty(sharedPreferences.getString(KEY_ACCESS_TOKEN, ""));
+        return true;
     }
 
     public void saveSession(String accessToken, String refreshToken, String userJson, String entitlementJson) {
@@ -56,7 +56,7 @@ public class AuthenticationManager {
     }
 
     public String getAccessToken() {
-        return sharedPreferences.getString(KEY_ACCESS_TOKEN, null);
+        return "local-only-token";
     }
 
     public String getRefreshToken() {

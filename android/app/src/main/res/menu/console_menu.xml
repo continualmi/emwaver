@@ -1,17 +1,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/sync_scripts"
-        android:icon="@drawable/ai_sync"
-        android:title="Sync"
-        android:orderInCategory="100"
-        app:showAsAction="ifRoom" />
-    <item
-        android:id="@+id/add_remote_from_irdb"
-        android:title="Add Remote from IRDB"
-        android:orderInCategory="150"
-        app:showAsAction="ifRoom|withText" />
-    <item
         android:id="@+id/open"
         android:title="Open from Storage" />
     <item
