@@ -26,11 +26,11 @@ if [[ ! -d "${ANDROID_DIR}" ]]; then
   exit 1
 fi
 
-tmux new-session -d -s "${SESSION_NAME}" -c "${ANDROID_DIR}" -n "work"
-tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${ANDROID_DIR}'" C-m
+tmux new-session -d -s "${SESSION_NAME}" -c "${REPO_ROOT}" -n "work"
+tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${REPO_ROOT}'" C-m
 
-tmux split-window -h -t "${SESSION_NAME}:work" -c "${ANDROID_DIR}"
-tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${ANDROID_DIR}'" C-m
+tmux split-window -h -t "${SESSION_NAME}:work" -c "${REPO_ROOT}"
+tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
 tmux send-keys -t "${SESSION_NAME}:work.1" "git status"
 
 tmux new-window -t "${SESSION_NAME}" -n "dev" -c "${ANDROID_DIR}"
