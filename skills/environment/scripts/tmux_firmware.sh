@@ -12,15 +12,9 @@ if [[ -z "${REPO_ROOT}" ]]; then
   exit 1
 fi
 
-WORKTREE_NAME="$(basename "${REPO_ROOT}")"
-SESSION_NAME="${WORKTREE_NAME}-session"
+SESSION_NAME="firmware"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/common.sh"
-ensure_env_script
-
-ENV_SCRIPT="$HOME/setup/emwaver-env.sh"
-FIRMWARE_DIR="${REPO_ROOT}/emwaver-firmware/main"
+FIRMWARE_DIR="${REPO_ROOT}/main"
 
 if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
   echo "tmux session '${SESSION_NAME}' already exists; nothing to do."
@@ -34,22 +28,17 @@ fi
 
 tmux new-session -d -s "${SESSION_NAME}" -c "${REPO_ROOT}" -n "work"
 tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${REPO_ROOT}'" C-m
-tmux send-keys -t "${SESSION_NAME}:work.0" "droid" C-m
 
 tmux split-window -h -t "${SESSION_NAME}:work" -c "${REPO_ROOT}"
+tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
 
-tmux split-window -v -t "${SESSION_NAME}:work.1" -c "${REPO_ROOT}"
-
-tmux new-window -t "${SESSION_NAME}" -n "firmware" -c "${FIRMWARE_DIR}"
-tmux send-keys -t "${SESSION_NAME}:firmware.0" "cd '${FIRMWARE_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:firmware.0" "source ../../setup.sh" C-m
+tmux new-window -t "${SESSION_NAME}" -n "firmware" -c "${REPO_ROOT}"
+tmux send-keys -t "${SESSION_NAME}:firmware.0" "cd '${REPO_ROOT}'" C-m
+tmux send-keys -t "${SESSION_NAME}:firmware.0" "source setup.sh" C-m
 tmux send-keys -t "${SESSION_NAME}:firmware.0" "idf.py build" C-m
 
-tmux split-window -h -t "${SESSION_NAME}:firmware" -c "${FIRMWARE_DIR}"
-tmux send-keys -t "${SESSION_NAME}:firmware.1" "cd '${FIRMWARE_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:firmware.1" "idf.py monitor" C-m
-
-tmux split-window -v -t "${SESSION_NAME}:firmware.1" -c "${FIRMWARE_DIR}"
+tmux split-window -v -t "${SESSION_NAME}:firmware" -c "${REPO_ROOT}"
+tmux send-keys -t "${SESSION_NAME}:firmware.1" "cd '${REPO_ROOT}'" C-m
 
 tmux select-window -t "${SESSION_NAME}:work"
 tmux select-pane -t "${SESSION_NAME}:work.0"

@@ -12,23 +12,10 @@ if [[ -z "${REPO_ROOT}" ]]; then
   exit 1
 fi
 
-TEMP_FILE="${REPO_ROOT}/temp.txt"
-if [[ ! -f "${TEMP_FILE}" ]]; then
-  cat <<'EOF' > "${TEMP_FILE}"
-# Temporary instructions for this worktree.
-# Replace this note with tasks for the current session.
-EOF
-fi
-
 WORKTREE_NAME="$(basename "${REPO_ROOT}")"
 SESSION_NAME="${WORKTREE_NAME}-cli"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/common.sh"
-ensure_env_script
-
-ENV_SCRIPT="$HOME/setup/emwaver-env.sh"
-CLI_DIR="${REPO_ROOT}/emwaver-cli"
+CLI_DIR="${REPO_ROOT}/cli"
 
 if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
   echo "tmux session '${SESSION_NAME}' already exists; nothing to do."
@@ -36,33 +23,21 @@ if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
 fi
 
 if [[ ! -d "${CLI_DIR}" ]]; then
-  echo "CLI project directory not found at '${CLI_DIR}'" >&2
+  echo "CLI directory not found at '${CLI_DIR}'" >&2
   exit 1
 fi
 
-tmux new-session -d -s "${SESSION_NAME}" -c "${REPO_ROOT}" -n "work"
-tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${REPO_ROOT}'" C-m
-tmux send-keys -t "${SESSION_NAME}:work.0" "droid" C-m
+tmux new-session -d -s "${SESSION_NAME}" -c "${CLI_DIR}" -n "work"
+tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${CLI_DIR}'" C-m
 
-tmux split-window -h -t "${SESSION_NAME}:work" -c "${REPO_ROOT}"
-tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
-tmux send-keys -t "${SESSION_NAME}:work.1" "git status" C-m
+tmux split-window -h -t "${SESSION_NAME}:work" -c "${CLI_DIR}"
+tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${CLI_DIR}'" C-m
 
-tmux split-window -v -t "${SESSION_NAME}:work.1" -c "${REPO_ROOT}"
-tmux send-keys -t "${SESSION_NAME}:work.2" "cd '${REPO_ROOT}'" C-m
-tmux send-keys -t "${SESSION_NAME}:work.2" "${EDITOR:-vim}" C-m
+tmux new-window -t "${SESSION_NAME}" -n "build" -c "${CLI_DIR}"
+tmux send-keys -t "${SESSION_NAME}:build.0" "cd '${CLI_DIR}'" C-m
 
-tmux new-window -t "${SESSION_NAME}" -n "cli" -c "${CLI_DIR}"
-tmux send-keys -t "${SESSION_NAME}:cli.0" "cd '${CLI_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:cli.0" "cargo check" C-m
-
-tmux split-window -h -t "${SESSION_NAME}:cli" -c "${CLI_DIR}"
-tmux send-keys -t "${SESSION_NAME}:cli.1" "cd '${CLI_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:cli.1" "cargo test" C-m
-
-tmux split-window -v -t "${SESSION_NAME}:cli.1" -c "${CLI_DIR}"
-tmux send-keys -t "${SESSION_NAME}:cli.2" "cd '${CLI_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:cli.2" "${EDITOR:-vim}" C-m
+tmux split-window -v -t "${SESSION_NAME}:build" -c "${CLI_DIR}"
+tmux send-keys -t "${SESSION_NAME}:build.1" "cd '${CLI_DIR}'" C-m
 
 tmux select-window -t "${SESSION_NAME}:work"
 tmux select-pane -t "${SESSION_NAME}:work.0"
