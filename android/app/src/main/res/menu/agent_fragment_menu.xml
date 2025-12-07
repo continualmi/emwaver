@@ -2,6 +2,10 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/action_agent_settings"
+        android:title="Agent Settings"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_rename_conversation"
         android:title="Rename"
         app:showAsAction="never" />
