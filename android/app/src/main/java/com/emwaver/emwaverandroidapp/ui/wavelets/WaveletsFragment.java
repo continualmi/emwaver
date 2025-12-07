@@ -2,6 +2,8 @@ package com.emwaver.emwaverandroidapp.ui.wavelets;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -27,10 +29,13 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -98,6 +103,9 @@ public class WaveletsFragment extends Fragment {
     private WaveletTree activeWaveletTree;
     private boolean isRenderingWavelet;
     private boolean showingPreview;
+    private boolean showingEditor;
+    private EditText scriptEditorContent;
+    private FrameLayout scriptEditorContainer;
 
     private ActivityResultLauncher<String[]> openFileLauncher;
 
@@ -109,6 +117,10 @@ public class WaveletsFragment extends Fragment {
     private MaterialButton consoleClearButton;
     private ScrollView consoleScrollView;
     private TextView consoleTextView;
+    private ScrollView editorScrollViewWrap;
+    private HorizontalScrollView editorScrollViewNoWrap;
+    private EditText scriptEditorContentWrap;
+    private boolean lineWrapEnabled = false;
     private AlertDialog loadingDialog;
 
     private String getCurrentRecordId() {
@@ -151,11 +163,25 @@ public class WaveletsFragment extends Fragment {
         }
     };
 
+    private OnBackPressedCallback backPressedCallback;
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(WaveletsViewModel.class);
         fileRepository = FileRepositoryLocal.getInstance(requireContext());
+        
+        backPressedCallback = new OnBackPressedCallback(false) {
+            @Override
+            public void handleOnBackPressed() {
+                if (showingEditor) {
+                    exitEditor();
+                } else if (showingPreview) {
+                    exitPreview();
+                }
+            }
+        };
+        requireActivity().getOnBackPressedDispatcher().addCallback(this, backPressedCallback);
     }
 
     @Nullable
@@ -226,6 +252,25 @@ public class WaveletsFragment extends Fragment {
             @Override
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
                 menuInflater.inflate(R.menu.console_menu, menu);
+                
+                // Show/hide editor-specific menu items
+                MenuItem copyItem = menu.findItem(R.id.editor_copy);
+                MenuItem pasteItem = menu.findItem(R.id.editor_paste);
+                MenuItem previewItem = menu.findItem(R.id.editor_preview);
+                MenuItem renameItem = menu.findItem(R.id.editor_rename);
+                MenuItem deleteItem = menu.findItem(R.id.editor_delete);
+                MenuItem lineWrapItem = menu.findItem(R.id.editor_line_wrap);
+                
+                boolean showEditorItems = showingEditor;
+                if (copyItem != null) copyItem.setVisible(showEditorItems);
+                if (pasteItem != null) pasteItem.setVisible(showEditorItems);
+                if (previewItem != null) previewItem.setVisible(showEditorItems);
+                if (renameItem != null) renameItem.setVisible(showEditorItems && currentScriptMetadata != null);
+                if (deleteItem != null) deleteItem.setVisible(showEditorItems && currentScriptMetadata != null);
+                if (lineWrapItem != null) {
+                    lineWrapItem.setVisible(showEditorItems);
+                    lineWrapItem.setChecked(lineWrapEnabled);
+                }
             }
 
             @Override
@@ -242,6 +287,35 @@ public class WaveletsFragment extends Fragment {
                     return true;
                 } else if (itemId == R.id.new_script) {
                     showNameInputDialog("New Script", "Enter a name for the new script:", WaveletsFragment.this::createNewScript);
+                    return true;
+                } else if (itemId == R.id.editor_copy) {
+                    copyEditorContent();
+                    return true;
+                } else if (itemId == R.id.editor_paste) {
+                    pasteEditorContent();
+                    return true;
+                } else if (itemId == R.id.editor_preview) {
+                    previewEditorContent();
+                    return true;
+                } else if (itemId == R.id.editor_rename) {
+                    if (currentScriptMetadata != null) {
+                        showNameInputDialog(
+                            "Rename Script",
+                            "Enter a new name for the script:",
+                            currentScriptMetadata.getName(),
+                            newName -> renameScript(currentScriptMetadata, newName)
+                        );
+                    }
+                    return true;
+                } else if (itemId == R.id.editor_delete) {
+                    if (currentScriptMetadata != null) {
+                        showDeleteConfirmationDialog(currentScriptMetadata);
+                    }
+                    return true;
+                } else if (itemId == R.id.editor_line_wrap) {
+                    lineWrapEnabled = !lineWrapEnabled;
+                    menuItem.setChecked(lineWrapEnabled);
+                    updateLineWrap();
                     return true;
                 }
                 return false;
@@ -285,12 +359,76 @@ public class WaveletsFragment extends Fragment {
         consoleScrollView = binding.consoleScroll;
         consoleTextView = binding.consoleText;
 
+        scriptEditorContainer = binding.scriptEditorContainer;
+        scriptEditorContent = binding.scriptEditorContent;
+        editorScrollViewWrap = binding.editorScrollViewWrap;
+        editorScrollViewNoWrap = binding.editorScrollViewNowrap;
+        scriptEditorContentWrap = binding.scriptEditorContentWrap;
+        
+        // Set up text watcher for both EditTexts
+        scriptEditorContent.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String updated = s != null ? s.toString() : "";
+                setEditorText(updated);
+                updateDraftState(updated, true);
+                // Sync to wrap version
+                if (scriptEditorContentWrap != null && !scriptEditorContentWrap.getText().toString().equals(updated)) {
+                    scriptEditorContentWrap.setText(updated);
+                }
+            }
+            
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+        
+        if (scriptEditorContentWrap != null) {
+            scriptEditorContentWrap.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    String updated = s != null ? s.toString() : "";
+                    setEditorText(updated);
+                    updateDraftState(updated, true);
+                    // Sync to no-wrap version
+                    if (scriptEditorContent != null && !scriptEditorContent.getText().toString().equals(updated)) {
+                        scriptEditorContent.setText(updated);
+                    }
+                }
+                
+                @Override
+                public void afterTextChanged(Editable s) {}
+            });
+        }
+        
+        scriptEditorContent.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String updated = s != null ? s.toString() : "";
+                setEditorText(updated);
+                updateDraftState(updated, true);
+            }
+            
+            @Override
+            public void afterTextChanged(Editable s) {}
+        });
+
         if (consoleBackButton != null) {
             consoleBackButton.setOnClickListener(v -> exitPreview());
         }
         if (consoleClearButton != null) {
             consoleClearButton.setOnClickListener(v -> WaveletConsoleState.getInstance().clear());
         }
+        
+        updateLineWrap();
 
         updateConsoleText(WaveletConsoleState.getInstance().snapshot());
         WaveletConsoleState.getInstance().observe().observe(getViewLifecycleOwner(), this::updateConsoleText);
@@ -853,14 +991,23 @@ public class WaveletsFragment extends Fragment {
         });
     }
 
+    private void exitEditor() {
+        showingEditor = false;
+        currentScriptMetadata = null;
+        currentScriptName = null;
+        currentScriptEtag = null;
+        updateViewMode();
+    }
+
     private void showScriptEditorDialog(@Nullable UserFileMetadata metadata) {
         if (!isAdded()) {
             return;
         }
-
+        
+        showingEditor = true;
         pendingPreviewScriptId = null;
         final String scriptId = metadata != null ? metadata.getId() : WaveletsViewModel.UNSAVED_KEY;
-        final String[] dialogScriptName = {metadata != null ? metadata.getName() : (currentScriptName != null ? currentScriptName : "Unsaved Script")};
+        final String scriptName = metadata != null ? metadata.getName() : (currentScriptName != null ? currentScriptName : "Unsaved Script");
 
         if (metadata != null) {
             currentScriptMetadata = metadata;
@@ -868,7 +1015,7 @@ public class WaveletsFragment extends Fragment {
             currentScriptEtag = metadata.getEtag();
         } else {
             currentScriptMetadata = null;
-            currentScriptName = dialogScriptName[0];
+            currentScriptName = scriptName;
             currentScriptEtag = null;
         }
 
@@ -895,9 +1042,9 @@ public class WaveletsFragment extends Fragment {
                         return;
                     }
                     String remoteContent = data != null && data.hasTextContent() ? data.getTextContent() : "";
-                    viewModel.updateRemoteSnapshot(scriptId, dialogScriptName[0], metadata.getEtag(), remoteContent);
+                    viewModel.updateRemoteSnapshot(scriptId, scriptName, metadata.getEtag(), remoteContent);
                     if (!viewModel.isDirty(scriptId)) {
-                        viewModel.updateDraft(scriptId, dialogScriptName[0], remoteContent, false);
+                        viewModel.updateDraft(scriptId, scriptName, remoteContent, false);
                     }
                     setEditorText(remoteContent);
                     showScriptEditorDialog(metadata);
@@ -918,123 +1065,20 @@ public class WaveletsFragment extends Fragment {
         updateDraftState(content, dirty);
         if (viewModel != null) {
             viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
-            viewModel.setLastScriptName(dialogScriptName[0]);
+            viewModel.setLastScriptName(scriptName);
             viewModel.setLastScriptContent(content);
         }
 
-        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_script, null);
-        EditText editText = dialogView.findViewById(R.id.edit_script_content);
-        MaterialButton renameButton = dialogView.findViewById(R.id.button_rename);
-        MaterialButton deleteButton = dialogView.findViewById(R.id.button_delete);
-        editText.setText(content);
-        editText.setSelection(content.length());
-        editText.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String updated = s != null ? s.toString() : "";
-                setEditorText(updated);
-                updateDraftState(updated, true);
-                if (viewModel != null) {
-                    viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
-                    viewModel.setLastScriptName(dialogScriptName[0]);
-                    viewModel.setLastScriptContent(updated);
-                }
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {}
-        });
-
-        AlertDialog dialog = new AlertDialog.Builder(requireContext())
-            .setTitle(dialogScriptName[0])
-            .setView(dialogView)
-            .setPositiveButton(metadata != null ? "Save" : "Create", null)
-            .setNeutralButton("Preview", null)
-            .setNegativeButton("Close", null)
-            .create();
-
-        if (metadata == null) {
-            renameButton.setVisibility(View.GONE);
-            deleteButton.setVisibility(View.GONE);
-        } else {
-            renameButton.setOnClickListener(v -> showNameInputDialog(
-                "Rename Script",
-                "Enter a new name for the script:",
-                currentScriptMetadata != null ? currentScriptMetadata.getName() : metadata.getName(),
-                newName -> {
-                    UserFileMetadata target = currentScriptMetadata != null ? currentScriptMetadata : metadata;
-                    renameScript(target, newName, updated -> {
-                        currentScriptMetadata = updated;
-                        currentScriptName = updated.getName();
-                        currentScriptEtag = updated.getEtag();
-                        dialogScriptName[0] = updated.getName();
-                        dialog.setTitle(updated.getName());
-                    });
-                }
-            ));
-            deleteButton.setOnClickListener(v -> {
-                dialog.dismiss();
-                UserFileMetadata target = currentScriptMetadata != null ? currentScriptMetadata : metadata;
-                showDeleteConfirmationDialog(target);
-            });
+        // Set text on the appropriate EditText based on line wrap state
+        if (lineWrapEnabled && scriptEditorContentWrap != null) {
+            scriptEditorContentWrap.setText(content);
+            scriptEditorContentWrap.setSelection(content.length());
+        } else if (!lineWrapEnabled && scriptEditorContent != null) {
+            scriptEditorContent.setText(content);
+            scriptEditorContent.setSelection(content.length());
         }
-
-        dialog.setOnShowListener(d -> {
-            Button saveButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            Button previewButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
-
-            saveButton.setOnClickListener(v -> {
-                String updated = editText.getText() != null ? editText.getText().toString() : "";
-                setEditorText(updated);
-                if (metadata != null) {
-                    if (!isCurrentScriptDirty()) {
-                        showToast("No changes to save");
-                        dialog.dismiss();
-                        return;
-                    }
-                    saveCurrentScript();
-                    dialog.dismiss();
-                } else {
-                    showNameInputDialog(
-                        "Save Script",
-                        "Enter a name for the script:",
-                        "wavelet_script.js",
-                        name -> {
-                            String trimmed = name != null ? name.trim() : "";
-                            if (trimmed.isEmpty()) {
-                                showToast("Script name cannot be empty");
-                                return;
-                            }
-                            createScriptWithContent(trimmed, updated, "Script saved: ");
-                            dialog.dismiss();
-                        }
-                    );
-                }
-            });
-
-            previewButton.setOnClickListener(v -> {
-                String updated = editText.getText() != null ? editText.getText().toString() : "";
-                if (updated.trim().isEmpty()) {
-                    showToast("No script to preview.");
-                    return;
-                }
-                setEditorText(updated);
-                updateDraftState(updated, true);
-                if (viewModel != null) {
-                    viewModel.setLastScriptContent(updated);
-                    viewModel.setLastScriptName(dialogScriptName[0]);
-                    viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
-                }
-                pendingPreviewScriptId = null;
-                renderWavelet(updated);
-                dialog.dismiss();
-            });
-        });
-
-        dialog.show();
+        updateLineWrap();
+        updateViewMode();
     }
 
     private void showDeleteConfirmationDialog(UserFileMetadata metadata) {
@@ -1305,11 +1349,19 @@ public class WaveletsFragment extends Fragment {
         if (binding == null) {
             return;
         }
+        boolean hideMainView = showingPreview || showingEditor;
+        
+        if (backPressedCallback != null) {
+            backPressedCallback.setEnabled(hideMainView);
+        }
+        
         if (scriptListCard != null) {
-            scriptListCard.setVisibility(showingPreview ? View.GONE : View.VISIBLE);
-            Log.d(TAG, "updateViewMode: scriptListCard visibility = " + (showingPreview ? "GONE" : "VISIBLE"));
+            scriptListCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
+            Log.d(TAG, "updateViewMode: scriptListCard visibility = " + (hideMainView ? "GONE" : "VISIBLE"));
         }
         binding.waveletContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
+        scriptEditorContainer.setVisibility(showingEditor ? View.VISIBLE : View.GONE);
+        
         if (consoleTitle != null) {
             consoleTitle.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         }
@@ -1319,14 +1371,11 @@ public class WaveletsFragment extends Fragment {
         if (consoleBackButton != null) {
             consoleBackButton.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         }
-        if (consoleClearButton != null) {
-            consoleClearButton.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
-        }
         
         if (getActivity() != null) {
             androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();
             if (activity.getSupportActionBar() != null) {
-                if (showingPreview && currentScriptName != null) {
+                if (hideMainView && currentScriptName != null) {
                     activity.getSupportActionBar().setTitle(currentScriptName);
                     activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
                 } else {
@@ -1337,6 +1386,82 @@ public class WaveletsFragment extends Fragment {
         }
         
         updateWaveletPlaceholder();
+        
+        // Invalidate menu to update visibility of editor items
+        if (getActivity() != null) {
+            getActivity().invalidateOptionsMenu();
+        }
+    }
+
+    private void copyEditorContent() {
+        String code = getEditorText();
+        ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+        ClipData clip = ClipData.newPlainText("wavelet", code);
+        clipboard.setPrimaryClip(clip);
+        Toast.makeText(requireContext(), "Copied to clipboard", Toast.LENGTH_SHORT).show();
+    }
+
+    private void pasteEditorContent() {
+        ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard.hasPrimaryClip()) {
+            ClipData.Item item = clipboard.getPrimaryClip().getItemAt(0);
+            CharSequence text = item.getText();
+            if (text != null) {
+                String content = text.toString();
+                setEditorText(content);
+                updateDraftState(content, true);
+                // Update the visible EditText
+                if (lineWrapEnabled && scriptEditorContentWrap != null) {
+                    scriptEditorContentWrap.setText(content);
+                } else if (!lineWrapEnabled && scriptEditorContent != null) {
+                    scriptEditorContent.setText(content);
+                }
+                Toast.makeText(requireContext(), "Pasted from clipboard", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void previewEditorContent() {
+        String content = getEditorText();
+        if (content.trim().isEmpty()) {
+            showToast("No script to preview.");
+            return;
+        }
+        setEditorText(content);
+        updateDraftState(content, true);
+        if (viewModel != null) {
+            viewModel.setLastScriptContent(content);
+            viewModel.setLastScriptName(currentScriptName);
+            viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
+        }
+        pendingPreviewScriptId = null;
+        renderWavelet(content);
+        exitEditor();
+    }
+
+    private void updateLineWrap() {
+        if (editorScrollViewWrap == null || editorScrollViewNoWrap == null) {
+            return;
+        }
+        if (lineWrapEnabled) {
+            // Enable line wrap - show ScrollView with wrapping EditText
+            editorScrollViewWrap.setVisibility(View.VISIBLE);
+            editorScrollViewNoWrap.setVisibility(View.GONE);
+            // Sync content to wrap version
+            if (scriptEditorContentWrap != null && scriptEditorContent != null) {
+                String content = scriptEditorContent.getText() != null ? scriptEditorContent.getText().toString() : "";
+                scriptEditorContentWrap.setText(content);
+            }
+        } else {
+            // Disable line wrap - show HorizontalScrollView with non-wrapping EditText
+            editorScrollViewWrap.setVisibility(View.GONE);
+            editorScrollViewNoWrap.setVisibility(View.VISIBLE);
+            // Sync content to no-wrap version
+            if (scriptEditorContent != null && scriptEditorContentWrap != null) {
+                String content = scriptEditorContentWrap.getText() != null ? scriptEditorContentWrap.getText().toString() : "";
+                scriptEditorContent.setText(content);
+            }
+        }
     }
 
     private void updateWaveletPlaceholder() {
@@ -1469,6 +1594,12 @@ public class WaveletsFragment extends Fragment {
     }
 
     private String getEditorText() {
+        // Get text from the currently visible EditText
+        if (lineWrapEnabled && scriptEditorContentWrap != null) {
+            return scriptEditorContentWrap.getText() != null ? scriptEditorContentWrap.getText().toString() : "";
+        } else if (!lineWrapEnabled && scriptEditorContent != null) {
+            return scriptEditorContent.getText() != null ? scriptEditorContent.getText().toString() : "";
+        }
         return currentDraftContent != null ? currentDraftContent : "";
     }
 
