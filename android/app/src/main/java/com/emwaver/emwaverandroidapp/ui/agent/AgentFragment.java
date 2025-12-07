@@ -17,8 +17,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -32,6 +32,7 @@ import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.emwaver.emwaverandroidapp.R;
+import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentAgentBinding;
 
 import org.json.JSONArray;
@@ -69,6 +70,7 @@ public class AgentFragment extends Fragment {
     private static final String DEFAULT_MODEL = "openai/gpt-oss-20b";
     private static final String CONVERSATIONS_DIR = "agent_conversations";
     private static final String CONVERSATIONS_INDEX = "conversations_index.json";
+    private static final String PREF_LAST_SELECTED_CONVERSATION = "agent_last_selected_conversation";
     private static final String SYSTEM_PROMPT_TEMPLATE = 
         "You are an AI assistant embedded in the EMWaver application. " +
         "EMWaver is a hardware hacking and security research tool with capabilities for RF analysis, " +
@@ -80,7 +82,6 @@ public class AgentFragment extends Fragment {
     private FragmentAgentBinding binding;
     private final List<ConversationSummary> conversations = new ArrayList<>();
     private final List<MessageItem> messages = new ArrayList<>();
-    private ArrayAdapter<String> conversationAdapter;
     private AgentMessageAdapter messageAdapter;
     private OkHttpClient httpClient;
     private String selectedConversationId;
@@ -101,10 +102,12 @@ public class AgentFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         binding = FragmentAgentBinding.inflate(inflater, container, false);
-        setupConversationSpinner();
         setupRecycler();
         setupSendActions();
+        setupEmptyState();
         loadStoredConversations();
+        updateStatusBar();
+        updateEmptyStateVisibility();
         return binding.getRoot();
     }
 
@@ -113,6 +116,19 @@ public class AgentFragment extends Fragment {
         super.onDestroyView();
         binding = null;
         optionsMenu = null;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateStatusBar();
+        updateEmptyStateVisibility();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        Utils.updateActionBarStatus(this, "");
     }
 
 	@Override
@@ -133,7 +149,13 @@ public class AgentFragment extends Fragment {
 	@Override
 	public boolean onOptionsItemSelected(@NonNull MenuItem item) {
 		int itemId = item.getItemId();
-		if (itemId == R.id.action_agent_settings) {
+		if (itemId == R.id.action_new_chat) {
+			promptForConversationTopic();
+			return true;
+		} else if (itemId == R.id.action_chats) {
+			showChatsDialog();
+			return true;
+		} else if (itemId == R.id.action_agent_settings) {
 			showAgentSettingsDialog();
 			return true;
 		} else if (itemId == R.id.action_rename_conversation) {
@@ -146,37 +168,51 @@ public class AgentFragment extends Fragment {
 		return super.onOptionsItemSelected(item);
 	}
 
-    private void setupConversationSpinner() {
-        Context context = requireContext();
-        conversationAdapter = new ArrayAdapter<>(context,
-                android.R.layout.simple_spinner_dropdown_item, new ArrayList<>());
-        binding.conversationSpinner.setAdapter(conversationAdapter);
-        binding.conversationSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position < conversations.size()) {
-                    ConversationSummary summary = conversations.get(position);
-                    selectedConversationId = summary.id;
-                    messages.clear();
-                    if (messageAdapter != null) {
-                        messageAdapter.notifyDataSetChanged();
-                    }
-                    loadConversationItems(summary.id);
-                }
-                updateConversationActionButtons();
+    private void updateStatusBar() {
+        if (TextUtils.isEmpty(selectedConversationId)) {
+            Utils.updateActionBarStatus(this, "No chat selected");
+        } else {
+            int index = findConversationIndex(selectedConversationId);
+            if (index >= 0 && index < conversations.size()) {
+                Utils.updateActionBarStatus(this, conversations.get(index).title);
+            } else {
+                Utils.updateActionBarStatus(this, "No chat selected");
             }
+        }
+    }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                selectedConversationId = null;
-                messages.clear();
-                messageAdapter.notifyDataSetChanged();
-                updateConversationActionButtons();
+    private void showChatsDialog() {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_chats, null);
+        ListView chatsList = dialogView.findViewById(R.id.chats_list);
+        com.google.android.material.button.MaterialButton newChatButton = dialogView.findViewById(R.id.new_chat_button);
+
+        List<String> chatTitles = new ArrayList<>();
+        for (ConversationSummary summary : conversations) {
+            chatTitles.add(summary.title);
+        }
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1, chatTitles);
+        chatsList.setAdapter(adapter);
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .create();
+
+        chatsList.setOnItemClickListener((parent, view, position, id) -> {
+            if (position < conversations.size()) {
+                ConversationSummary summary = conversations.get(position);
+                selectConversation(summary.id);
+                dialog.dismiss();
             }
         });
 
-        binding.createConversationButton.setOnClickListener(v -> promptForConversationTopic());
-		updateConversationActionButtons();
+        newChatButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            promptForConversationTopic();
+        });
+
+        dialog.show();
     }
 
     private void setupRecycler() {
@@ -195,6 +231,10 @@ public class AgentFragment extends Fragment {
         });
 
         binding.sendButton.setOnClickListener(v -> sendCurrentMessage());
+    }
+
+    private void setupEmptyState() {
+        binding.emptyStateNewChatButton.setOnClickListener(v -> promptForConversationTopic());
     }
 
     private void sendCurrentMessage() {
@@ -278,7 +318,9 @@ public class AgentFragment extends Fragment {
         
         conversations.set(index, newSummary);
         persistConversationIndex();
-        addConversationToSpinnerListOnly();
+        updateStatusBar();
+        updateConversationActionButtons();
+        updateEmptyStateVisibility();
         showToast("Conversation renamed");
     }
 
@@ -321,15 +363,7 @@ public class AgentFragment extends Fragment {
         persistConversationIndex();
         saveConversationMessages(conversationId, new ArrayList<>());
         
-        selectedConversationId = conversationId;
-        messages.clear();
-        messageAdapter.notifyDataSetChanged();
-        addConversationToSpinnerListOnly();
-        
-        int index = findConversationIndex(conversationId);
-        if (index >= 0 && binding != null) {
-            binding.conversationSpinner.setSelection(index);
-        }
+        selectConversation(conversationId);
     }
 
     private void createConversationWithInitialMessage(String message) {
@@ -342,15 +376,7 @@ public class AgentFragment extends Fragment {
         persistConversationIndex();
         saveConversationMessages(conversationId, new ArrayList<>());
         
-        selectedConversationId = conversationId;
-        messages.clear();
-        messageAdapter.notifyDataSetChanged();
-        addConversationToSpinnerListOnly();
-        
-        int index = findConversationIndex(conversationId);
-        if (index >= 0 && binding != null) {
-            binding.conversationSpinner.setSelection(index);
-        }
+        selectConversation(conversationId);
         
         appendLocalMessage(new MessageItem("user", message));
         sendMessageToConversation(conversationId, message);
@@ -548,6 +574,7 @@ public class AgentFragment extends Fragment {
         messages.clear();
         messages.addAll(loaded);
         messageAdapter.notifyDataSetChanged();
+        updateStatusBar();
     }
 
     private int appendLocalMessage(MessageItem item) {
@@ -616,38 +643,6 @@ public class AgentFragment extends Fragment {
         requireActivity().runOnUiThread(runnable);
     }
 
-    private void addConversationToSpinner(ConversationSummary summary, boolean select) {
-        int existingIndex = -1;
-        for (int i = 0; i < conversations.size(); i++) {
-            if (conversations.get(i).id.equals(summary.id)) {
-                existingIndex = i;
-                break;
-            }
-        }
-        if (existingIndex >= 0) {
-            conversations.set(existingIndex, summary);
-        } else {
-            conversations.add(summary);
-        }
-
-        sortConversationsByRecency();
-
-        List<String> labels = new ArrayList<>();
-        for (ConversationSummary conversation : conversations) {
-            labels.add(conversation.label);
-        }
-        conversationAdapter.clear();
-        conversationAdapter.addAll(labels);
-        conversationAdapter.notifyDataSetChanged();
-
-        if (select) {
-            int index = conversations.indexOf(summary);
-            if (index >= 0 && binding != null) {
-                binding.conversationSpinner.setSelection(index);
-            }
-        }
-        updateConversationActionButtons();
-    }
 
     private void loadStoredConversations() {
         File indexFile = new File(getConversationsDir(), CONVERSATIONS_INDEX);
@@ -676,28 +671,52 @@ public class AgentFragment extends Fragment {
                 }
             }
             sortConversationsByRecency();
-            addConversationToSpinnerListOnly();
+            
+            // Load last selected conversation
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            String lastSelectedId = prefs.getString(PREF_LAST_SELECTED_CONVERSATION, null);
+            if (!TextUtils.isEmpty(lastSelectedId) && findConversationIndex(lastSelectedId) >= 0) {
+                selectConversation(lastSelectedId);
+            } else if (!conversations.isEmpty()) {
+                // If last selected doesn't exist, select the most recent
+                selectConversation(conversations.get(0).id);
+            } else {
+                updateStatusBar();
+                updateConversationActionButtons();
+            }
         } catch (IOException | JSONException ignored) {
         }
     }
 
-    private void addConversationToSpinnerListOnly() {
-        sortConversationsByRecency();
-        List<String> labels = new ArrayList<>();
-        for (ConversationSummary conversation : conversations) {
-            labels.add(conversation.label);
+    private void selectConversation(String conversationId) {
+        selectedConversationId = conversationId;
+        saveLastSelectedConversation(conversationId);
+        messages.clear();
+        if (messageAdapter != null) {
+            messageAdapter.notifyDataSetChanged();
         }
-        conversationAdapter.clear();
-        conversationAdapter.addAll(labels);
-        conversationAdapter.notifyDataSetChanged();
-
-        if (binding != null && !TextUtils.isEmpty(selectedConversationId)) {
-            int index = findConversationIndex(selectedConversationId);
-            if (index >= 0) {
-                binding.conversationSpinner.setSelection(index);
-            }
-        }
+        loadConversationItems(conversationId);
+        updateStatusBar();
         updateConversationActionButtons();
+        updateEmptyStateVisibility();
+    }
+
+    private void saveLastSelectedConversation(String conversationId) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        if (TextUtils.isEmpty(conversationId)) {
+            prefs.edit().remove(PREF_LAST_SELECTED_CONVERSATION).apply();
+        } else {
+            prefs.edit().putString(PREF_LAST_SELECTED_CONVERSATION, conversationId).apply();
+        }
+    }
+
+    private void updateEmptyStateVisibility() {
+        if (binding == null) {
+            return;
+        }
+        boolean isEmpty = conversations.isEmpty();
+        binding.emptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        binding.messageList.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
     }
 
     private int findConversationIndex(String conversationId) {
@@ -718,24 +737,24 @@ public class AgentFragment extends Fragment {
         if (TextUtils.equals(conversationId, selectedConversationId)) {
             if (conversations.isEmpty()) {
                 selectedConversationId = null;
+                saveLastSelectedConversation(null);
                 messages.clear();
                 if (messageAdapter != null) {
                     messageAdapter.notifyDataSetChanged();
                 }
+                updateStatusBar();
+                updateConversationActionButtons();
             } else {
                 int nextIndex = Math.min(index, conversations.size() - 1);
                 if (nextIndex < 0) {
                     nextIndex = 0;
                 }
-                selectedConversationId = conversations.get(nextIndex).id;
+                selectConversation(conversations.get(nextIndex).id);
             }
         }
 
         persistConversationIndex();
-        addConversationToSpinnerListOnly();
-        if (TextUtils.isEmpty(selectedConversationId)) {
-            updateConversationActionButtons();
-        }
+        updateEmptyStateVisibility();
     }
 
     private File getConversationsDir() {
