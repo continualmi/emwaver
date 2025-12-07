@@ -998,10 +998,18 @@ public class AgentFragment extends Fragment {
 				holder.messageContent.removeAllViews();
 				TextView textView = new TextView(holder.messageContent.getContext());
 				textView.setText(item.getContent());
-				textView.setTextColor(holder.messageContent.getContext().getResources().getColor(R.color.agentMessageText, null));
+				textView.setTextColor(holder.messageContent.getContext().getResources().getColor(R.color.white, null));
 				textView.setTextSize(16);
 				textView.setGravity(Gravity.END);
 				textView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
+				textView.setBackgroundResource(R.drawable.user_message_bubble);
+				textView.setPadding(20, 14, 20, 14);
+				LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+					LinearLayout.LayoutParams.WRAP_CONTENT,
+					LinearLayout.LayoutParams.WRAP_CONTENT
+				);
+				params.gravity = Gravity.END;
+				textView.setLayoutParams(params);
 				holder.messageContent.addView(textView);
 			}
 		}
