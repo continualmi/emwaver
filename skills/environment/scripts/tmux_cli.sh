@@ -27,19 +27,19 @@ if [[ ! -d "${CLI_DIR}" ]]; then
   exit 1
 fi
 
-tmux new-session -d -s "${SESSION_NAME}" -c "${CLI_DIR}" -n "work"
-tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${CLI_DIR}'" C-m
+tmux new-session -d -s "${SESSION_NAME}" -c "${REPO_ROOT}" -n "work"
+tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${REPO_ROOT}'" C-m
 
-tmux split-window -h -t "${SESSION_NAME}:work" -c "${CLI_DIR}"
-tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${CLI_DIR}'" C-m
+tmux split-window -h -t "${SESSION_NAME}:work" -c "${REPO_ROOT}"
+tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
 
 tmux new-window -t "${SESSION_NAME}" -n "build" -c "${CLI_DIR}"
 tmux send-keys -t "${SESSION_NAME}:build.0" "cd '${CLI_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:build.0" "cargo build" C-m
+tmux send-keys -t "${SESSION_NAME}:build.0" "cargo build"
 
 tmux split-window -v -t "${SESSION_NAME}:build" -c "${CLI_DIR}"
 tmux send-keys -t "${SESSION_NAME}:build.1" "cd '${CLI_DIR}'" C-m
-tmux send-keys -t "${SESSION_NAME}:build.1" "cargo run" 
+tmux send-keys -t "${SESSION_NAME}:build.1" "cargo run -- shell"
 
 
 tmux select-window -t "${SESSION_NAME}:work"
