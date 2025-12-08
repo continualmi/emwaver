@@ -21,11 +21,8 @@ pub enum Commands {
         verbose: bool,
     },
 
-    /// Clone all files from device to a directory (creates .emwaver folder)
+    /// Clone all files from device to emwaver_files/ (creates .emwaver folder)
     Clone {
-        /// Directory to clone into
-        directory: PathBuf,
-
         /// Force overwrite if directory exists
         #[arg(short, long)]
         force: bool,
@@ -39,24 +36,25 @@ pub enum Commands {
         long: bool,
     },
 
-    /// Push a file to the device
+    /// Push all local changes to device (overwrites remote)
     Push {
-        /// File to push
-        file: PathBuf,
-
-        /// Force overwrite if file exists
-        #[arg(short, long)]
-        force: bool,
+        /// Skip confirmation prompt
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
-    /// Pull a file from the device
+    /// Pull all remote changes from device (overwrites local)
     Pull {
-        /// File name to pull
-        name: String,
+        /// Skip confirmation prompt
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 
-        /// Output path (default: current directory)
+    /// Show sync status (like git status)
+    Status {
+        /// Show verbose status
         #[arg(short, long)]
-        output: Option<PathBuf>,
+        verbose: bool,
     },
 
     /// Remove a file from the device
@@ -68,12 +66,5 @@ pub enum Commands {
         /// Force removal without confirmation
         #[arg(short, long)]
         force: bool,
-    },
-
-    /// Show sync status
-    Status {
-        /// Show verbose status
-        #[arg(short, long)]
-        verbose: bool,
     },
 }
