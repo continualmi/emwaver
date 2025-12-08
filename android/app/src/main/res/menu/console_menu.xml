@@ -12,4 +12,35 @@
     <item
         android:id="@+id/new_script"
         android:title="New script" />
+    <item
+        android:id="@+id/editor_copy"
+        android:title="Copy"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/editor_paste"
+        android:title="Paste"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/editor_preview"
+        android:icon="@drawable/ai_play"
+        android:title="Preview"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/editor_rename"
+        android:title="Rename"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/editor_delete"
+        android:title="Delete"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/editor_line_wrap"
+        android:title="Line Wrap"
+        app:showAsAction="never"
+        android:checkable="true" />
+    <item
+        android:id="@+id/action_clear_console"
+        android:icon="@drawable/ai_discard"
+        android:title="Clear Console"
+        app:showAsAction="ifRoom" />
 </menu>

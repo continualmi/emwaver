@@ -188,6 +188,27 @@ public class MainActivity extends AppCompatActivity {
         if (navController == null) {
             return super.onSupportNavigateUp();
         }
+        
+        // Check if we're on the wavelets fragment and handle preview/editor mode
+        if (navController.getCurrentDestination() != null && 
+            navController.getCurrentDestination().getId() == R.id.navigation_wavelets) {
+            androidx.fragment.app.Fragment navHost = getSupportFragmentManager()
+                .findFragmentById(R.id.nav_host_fragment_activity_main);
+            if (navHost instanceof NavHostFragment) {
+                androidx.fragment.app.Fragment currentFragment = ((NavHostFragment) navHost)
+                    .getChildFragmentManager().getPrimaryNavigationFragment();
+                if (currentFragment instanceof com.emwaver.emwaverandroidapp.ui.wavelets.WaveletsFragment) {
+                    com.emwaver.emwaverandroidapp.ui.wavelets.WaveletsFragment waveletsFragment = 
+                        (com.emwaver.emwaverandroidapp.ui.wavelets.WaveletsFragment) currentFragment;
+                    if (waveletsFragment.isShowingPreview() || waveletsFragment.isShowingEditor()) {
+                        // Trigger the back pressed callback manually
+                        getOnBackPressedDispatcher().onBackPressed();
+                        return true;
+                    }
+                }
+            }
+        }
+        
         return NavigationUI.navigateUp(navController, appBarConfiguration)
                 || super.onSupportNavigateUp();
     }
