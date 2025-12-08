@@ -5,12 +5,16 @@ class SettingsManager: ObservableObject {
     
     @Published var refreshTime: Int = 50
     @Published var bufferSizeLimit: Int = 393216
+    @Published var rfm69CsPin: String = "36"
+    @Published var rfm69CsActiveHigh: Bool = true
     
     private let userDefaults = UserDefaults.standard
     
     // Keys for UserDefaults
     private let refreshTimeKey = "refresh_time"
     private let bufferSizeLimitKey = "buffer_size_limit"
+    private let rfm69CsPinKey = "rfm69_cs_pin"
+    private let rfm69CsActiveHighKey = "rfm69_cs_active_high"
     
     // Available options for refresh time (in milliseconds)
     let refreshTimeOptions = [
@@ -55,6 +59,22 @@ class SettingsManager: ObservableObject {
             bufferSizeLimit = 393216
             userDefaults.set(bufferSizeLimit, forKey: bufferSizeLimitKey)
         }
+        
+        // Load RFM69 CS pin with default of 36
+        if let csPin = userDefaults.string(forKey: rfm69CsPinKey) {
+            rfm69CsPin = csPin
+        } else {
+            rfm69CsPin = "36"
+            userDefaults.set(rfm69CsPin, forKey: rfm69CsPinKey)
+        }
+        
+        // Load RFM69 CS active high with default of true
+        if userDefaults.object(forKey: rfm69CsActiveHighKey) != nil {
+            rfm69CsActiveHigh = userDefaults.bool(forKey: rfm69CsActiveHighKey)
+        } else {
+            rfm69CsActiveHigh = true
+            userDefaults.set(rfm69CsActiveHigh, forKey: rfm69CsActiveHighKey)
+        }
     }
     
     func updateRefreshTime(_ newValue: Int) {
@@ -73,6 +93,16 @@ class SettingsManager: ObservableObject {
     
     func getBufferSizeLimitDisplay() -> String {
         return bufferSizeLimitOptions.first { $0.value == bufferSizeLimit }?.display ?? "384 KB (~30 seconds)"
+    }
+    
+    func updateRfm69CsPin(_ newValue: String) {
+        rfm69CsPin = newValue
+        userDefaults.set(newValue, forKey: rfm69CsPinKey)
+    }
+    
+    func updateRfm69CsActiveHigh(_ newValue: Bool) {
+        rfm69CsActiveHigh = newValue
+        userDefaults.set(newValue, forKey: rfm69CsActiveHighKey)
     }
 }
 
