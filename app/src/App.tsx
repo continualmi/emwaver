@@ -3,10 +3,8 @@ import type { ChangeEvent, MouseEvent as ReactMouseEvent, ReactNode } from "reac
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
-import { invoke } from "@tauri-apps/api/core";
+import { safeInvoke, safeListen, safeJoin, isTauriAvailable } from "./utils/tauri";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { join } from "@tauri-apps/api/path";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
@@ -329,9 +327,12 @@ function App() {
       const { silent = false, initialName, removeOnFailure = true } = options;
 
       try {
-        const entries = await invoke<DirectoryEntry[]>("read_directory", {
+        const entries = await safeInvoke<DirectoryEntry[]>("read_directory", {
           payload: { path: directory },
         });
+        if (entries === null) {
+          throw new Error("Tauri not available - cannot read directory");
+        }
         const tree = normaliseTree(entries);
         const projectName = initialName ?? deriveProjectName(directory);
 
@@ -366,7 +367,6 @@ function App() {
         setActiveFileId(null);
         setShouldRestoreProject(false);
         setActivePane("explorer");
-        setIsExplorerVisible(true);
         updateRecentProjects((prev) => {
           const filtered = prev.filter((entry) => entry.path !== directory);
           return [
@@ -467,9 +467,12 @@ function App() {
       );
 
       try {
-        await invoke<void>("write_file", {
+        const result = await safeInvoke<void>("write_file", {
           payload: { path, content },
         });
+        if (result === null) {
+          throw new Error("Tauri not available - cannot write file");
+        }
         setOpenFiles((prev) =>
           prev.map((file) =>
             file.id === fileId ? { ...file, content, isDirty: false, isSaving: false } : file,
@@ -516,7 +519,6 @@ function App() {
         return;
       }
       if (activeFileId === node.id) {
-        setIsExplorerVisible(true);
         setActivePane("explorer");
         return;
       }
@@ -526,15 +528,17 @@ function App() {
         setSelectedFileId(node.id);
         setActiveFileId(existing.id);
         setActivePane("explorer");
-        setIsExplorerVisible(true);
         return;
       }
       setIsLoadingFile(true);
       try {
-        const absolutePath = await join(selectedProject.path, node.path);
-        const content = await invoke<string>("read_file", {
+        const absolutePath = await safeJoin(selectedProject.path, node.path);
+        const content = await safeInvoke<string>("read_file", {
           payload: { path: absolutePath },
         });
+        if (content === null) {
+          throw new Error("Tauri not available - cannot read file");
+        }
         const language = detectLanguage(node.name);
         setSelectedFileId(node.id);
         const file: OpenFile = {
@@ -555,7 +559,6 @@ function App() {
         });
         setActiveFileId(file.id);
         setActivePane("explorer");
-        setIsExplorerVisible(true);
       } catch (error) {
         console.error(error);
         window.alert(String(error));
@@ -616,12 +619,15 @@ function App() {
       setIsCreatingProject(true);
       try {
         await commitPendingSave();
-        const response = await invoke<CreateProjectResponse>("create_project", {
+        const response = await safeInvoke<CreateProjectResponse>("create_project", {
           payload: {
             name: name.trim(),
             location: location.trim(),
           },
         });
+        if (response === null) {
+          throw new Error("Tauri not available - cannot create project");
+        }
 
         const projectPath = response.path;
         setIsModalOpen(false);
@@ -637,6 +643,10 @@ function App() {
   );
 
   const handleOpenProject = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      alert("Tauri not available - file dialogs require Tauri environment");
+      return;
+    }
     try {
       const directory = await openDialog({ directory: true });
       if (typeof directory !== "string") {
@@ -744,7 +754,6 @@ function App() {
     setActiveFileId(fileId);
     setSelectedFileId(fileId);
     setActivePane("explorer");
-    setIsExplorerVisible(true);
   }, []);
 
   const handleCloseTab = useCallback(
@@ -770,64 +779,67 @@ function App() {
   );
 
   useEffect(() => {
-    const disposers: UnlistenFn[] = [];
+    if (!isTauriAvailable()) {
+      // Skip event listener registration if Tauri is not available
+      return;
+    }
+
+    const disposers: (() => void)[] = [];
 
     const register = async () => {
       try {
         // menu-close-folder is handled by WaveletsFragment now
 
         disposers.push(
-          await listen("menu-new-project", () => {
+          await safeListen("menu-new-project", () => {
             setIsModalOpen(true);
           }),
         );
 
         disposers.push(
-          await listen("menu-open-project", () => {
+          await safeListen("menu-open-project", () => {
             void handleOpenProject();
           }),
         );
 
         disposers.push(
-          await listen("menu-show-wavelets", () => {
+          await safeListen("menu-show-wavelets", () => {
             handleFragmentClick("wavelets");
           }),
         );
 
         disposers.push(
-          await listen("menu-show-ism", () => {
+          await safeListen("menu-show-ism", () => {
             handleFragmentClick("ism");
           }),
         );
 
         disposers.push(
-          await listen("menu-show-sampler", () => {
+          await safeListen("menu-show-sampler", () => {
             handleFragmentClick("sampler");
           }),
         );
 
         disposers.push(
-          await listen("menu-show-emwaver", () => {
+          await safeListen("menu-show-emwaver", () => {
             handleFragmentClick("emwaver");
           }),
         );
 
-
-
         disposers.push(
-          await listen("menu-increase-layout", () => {
+          await safeListen("menu-increase-layout", () => {
             increaseLayoutSize();
           }),
         );
 
         disposers.push(
-          await listen("menu-decrease-layout", () => {
+          await safeListen("menu-decrease-layout", () => {
             decreaseLayoutSize();
           }),
         );
 
         disposers.push(
-          await listen("menu-reset-layout", () => {
+          await safeListen("menu-reset-layout", () => {
             resetLayoutSizes();
           }),
         );
@@ -1272,6 +1284,10 @@ function NewProjectModal({
   };
 
   const handleBrowse = async () => {
+    if (!isTauriAvailable()) {
+      alert("Tauri not available - file dialogs require Tauri environment");
+      return;
+    }
     try {
       const directory = await openDialog({ directory: true });
       if (typeof directory === "string") {
