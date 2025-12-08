@@ -27,11 +27,11 @@ if [[ ! -d "${IOS_DIR}" ]]; then
   exit 1
 fi
 
-tmux new-session -d -s "${SESSION_NAME}" -c "${IOS_DIR}" -n "work"
-tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${IOS_DIR}'" C-m
+tmux new-session -d -s "${SESSION_NAME}" -c "${REPO_ROOT}" -n "work"
+tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${REPO_ROOT}'" C-m
 
-tmux split-window -h -t "${SESSION_NAME}:work" -c "${IOS_DIR}"
-tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${IOS_DIR}'" C-m
+tmux split-window -h -t "${SESSION_NAME}:work" -c "${REPO_ROOT}"
+tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
 
 tmux new-window -t "${SESSION_NAME}" -n "build" -c "${IOS_DIR}"
 tmux send-keys -t "${SESSION_NAME}:build.0" "cd '${IOS_DIR}'" C-m

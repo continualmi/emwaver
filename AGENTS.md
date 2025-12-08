@@ -21,6 +21,36 @@ Wavelets are the user-authored extension bundles (manifest + JavaScript) that pl
 - **Unified scripting engine**: WaveletEngine is the single runtime for both interactive UI wavelets and CLI-style scripts. All native bridges (CC1101, BLE, Utils, IR) must be injected here so scripts do not depend on the deprecated ScriptsEngine.
 - **In-wavelet logging**: scripts surface their output through Wavelet UI components (e.g., `UI.logViewer`) instead of the legacy console text pane. Avoid adding new out-of-band logging surfaces.
 
+## Wavelet Development & File Sync
+The EMWaver ecosystem supports flexible wavelet development through a transparent file sync pipeline that requires only USB connectivity. Developers can write wavelet scripts on their computer and sync them to the mobile app via the EMWaver device acting as a bridge. See `skills/wavelet-sync.md` for the complete architecture, implementation details, and workflow examples.
+
+**Key Design Points**:
+- **Pipeline**: `CLI (Computer) ↔ UART/USB ↔ Firmware ↔ BLE ↔ Android/iOS`
+- **Minimal requirements**: Only USB connection needed (no WiFi, Bluetooth on computer, or internet)
+- **Git-like workflow**: Commands mirror `git` (`push`, `pull`, `status`, `list`)
+- **Chunked streaming**: Files transferred in 128–256KB chunks to respect firmware RAM limits
+- **Stateless firmware**: Device acts as transparent bridge without persisting files
+- **App-side storage**: Mobile apps handle persistence via `FileRepositoryLocal`
+
+**CLI Commands**:
+```bash
+emwaver sync push mywavelet.js    # Upload wavelet to device
+emwaver sync pull mywavelet.js    # Download wavelet from device
+emwaver sync list                  # List remote files
+emwaver sync status                # Show sync state
+```
+
+**Firmware Commands** (via UART):
+```bash
+sync --start --name <file> --size <bytes> --type wavelet
+sync --chunk --seq <n> --data <hex>
+sync --commit --hash <sha256>
+sync --list
+sync --get --name <file>
+```
+
+**BLE Protocol**: New file transfer characteristic (UUID `48c7158e-0c3b-4e90-a847-452a15b14191`) carries JSON-encoded packets (`start`, `chunk`, `commit`) between firmware and app.
+
 ## Cross-Cutting Practices
 - Keep commits scoped and imperative (e.g., `driver: fix cc1101 init`, `android: update wavelet renderer`); never bundle unrelated changes.
 - Secrets must stay out of Git—BLE pairing keys, Wi-Fi credentials use Kconfig defaults or NVS at runtime.
@@ -33,7 +63,8 @@ Wavelets are the user-authored extension bundles (manifest + JavaScript) that pl
 - Firmware lives in `main/` (modules such as `ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`); regenerate ESP-IDF managed components with `idf.py reconfigure` instead of editing generated files.
 - **Environment**: `source setup.sh`, then `idf.py set-target esp32s3`, `idf.py build`, `idf.py -p <port> flash`, `idf.py monitor`; keep hardware ports configurable per developer.
 - **Coding style**: 4-space indent, K&R braces, `snake_case`, `static` internals, ESP-IDF headers before project headers; Python helpers follow Black defaults.
-- **Command protocol**: every control packet is ASCII using Unix-style verbs and flags (e.g., `spi --open --name cc1101 --port 2 --miso 13 --mosi 11 --sck 12 --cs 10 --clock 8000000`). Current firmware supports hardware-agnostic SPI operations (`--open`, `--read`, `--write`, `--close` with `--data` hex payloads) and sampler routing (`sample --start --mode pwm --channel 3 --freq 25000 --duty 0.4`, `sample --stop`). Responses echo the same structure (`ok ...`, `err ...`) so smartphone and CLI clients stay aligned.
+- **Command protocol**: every control packet is ASCII using Unix-style verbs and flags (e.g., `spi --open --name cc1101 --port 2 --miso 13 --mosi 11 --sck 12 --cs 10 --clock 8000000`). Current firmware supports hardware-agnostic SPI operations (`--open`, `--read`, `--write`, `--close` with `--data` hex payloads), sampler routing (`sample --start --mode pwm --channel 3 --freq 25000 --duty 0.4`, `sample --stop`), and file sync operations (`sync --start`, `sync --chunk`, `sync --commit`). Responses echo the same structure (`ok ...`, `err ...`) so smartphone and CLI clients stay aligned.
+- **BLE services**: Custom service (UUID `45c7158e-...`) exposes command characteristic (write), notification characteristic (read), and file transfer characteristic (bidirectional). File sync packets are JSON-encoded for firmware-to-app communication. See `skills/wavelet-sync.md` for packet format.
 - **Testing**: flash to hardware for smoke verification, extend `pytest_hello_world.py` with `@pytest.mark.host_test` suites, and document timing-sensitive paths inline.
 - **Build commands**:
 ```bash
@@ -51,7 +82,8 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 
 ### Android (`/android`)
 - Gradle project; run `./gradlew installDebug` for device builds. Keep `local.properties` pointing at the SDK (typically `~/Library/Android/sdk` or `~/Android/Sdk`).
-- Wavelet console/sampler can sync `.js` and `.raw` assets locally or through future cloud sync capabilities.
+- **File sync integration**: `BLEService` subscribes to file transfer characteristic; `FileSyncManager` coordinates incoming/outgoing transfers; `FileRepositoryLocal` handles persistence. See `skills/wavelet-sync.md` for implementation details.
+- Wavelet console/sampler can sync `.js` and `.raw` assets via BLE bridge or future cloud sync capabilities.
 - Login/registration flows may integrate with future backend services for entitlement management.
 - Mirror iOS feature parity for wavelets, IR tooling, and hardware interaction.
 
@@ -61,8 +93,9 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 - Build and test through Xcode; agents should not invoke `xcodebuild` from CLI.
 
 ### CLI (`/cli`)
-- Rust binary using Clap for `login`, `clone`, `status`, `diff`, `add`, `pull`, `push`, and `logout` flows.
+- Rust binary using Clap for device interaction and file sync workflows.
 - **Shell integration**: the `emwaver shell` command discovers nearby devices, pairs over the same transport as smartphones, and provides an interactive prompt that sends raw Unix-style commands (SPI control, sampler routing) and prints structured `ok ...`/`err ...` responses for scripting or operator use.
+- **Sync integration**: the `emwaver sync` subcommand provides Git-like file management (`push`, `pull`, `list`, `status`) for wavelet scripts and signal files. See `skills/wavelet-sync.md` for architecture and usage.
 - Development: `cargo build`, `cargo run`, `cargo test`
 - Distribution artifacts and installers may be prepared for macOS/Linux/Windows.
 
