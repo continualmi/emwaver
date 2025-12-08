@@ -21,10 +21,10 @@
 
 
     <fragment
-        android:id="@+id/navigation_agent"
-        android:name="com.emwaver.emwaverandroidapp.ui.agent.AgentFragment"
-        android:label="Agent"
-        tools:layout="@layout/fragment_agent" />
+        android:id="@+id/navigation_git"
+        android:name="com.emwaver.emwaverandroidapp.ui.git.GitFragment"
+        android:label="Git"
+        tools:layout="@layout/fragment_git" />
 
 
 
