@@ -4,7 +4,7 @@ title: Wavelets
 
 # Wavelets
 
-Wavelets are JavaScript bundles that let you orchestrate the EMWaver hardware without modifying firmware or shipping bespoke mobile builds. They expose a high-level API that mirrors the device capabilities—Sub-GHz RF, infrared, GPIO, storage, and logging—while remaining portable across the mobile app, CLI, and future surfaces.
+Wavelets are JavaScript bundles that let you orchestrate the EMWaver hardware without modifying firmware or shipping bespoke mobile builds. They expose a high-level API that mirrors the device capabilities—Sub-GHz RF, GPIO, storage, and logging—while remaining portable across the mobile app, CLI, and future surfaces.
 
 ## Goals and Motivation
 
@@ -23,16 +23,6 @@ Wavelets keep the core EMWaver application closed and stable while still giving 
 4. Use the **Agents** fragment to chat with the EMWaver assistant for debugging tips, coding guidance, or walkthroughs of existing scripts.
 
 The runtime surfaces `UI.logViewer` output alongside agent responses so you can inspect execution traces, warnings, and custom diagnostics while iterating.
-
-## Infrared Remote Bundles
-
-Wavelets support importing remotes from the Infrared Database (IRDB). When you import a remote control profile:
-
-- The app generates a UI defined in the wavelet DSL that renders a control surface for every button.
-- Button handlers emit the appropriate learned or cataloged IR signals through the EMWaver hardware.
-- Metadata (brand, model, notes) stays attached so you can document customizations or variations.
-
-If the remote you need is missing, contribute it to IRDB by opening an issue on their GitHub repository and following their capture guidelines. Once merged, you can import the new profile directly into EMWaver and immediately expose the button layout through a wavelet.
 
 ## Sharing and Collaboration
 

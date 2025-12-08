@@ -22,8 +22,8 @@ The EMWaver application guides every interaction with the device—from pairing 
 
 ### Sampler Fragment
 
-- Capture RF and IR signals with timestamped metadata and waveform visualization.
-- Decode infrared payloads via IRP, preview carrier settings, and annotate samples before saving.
+- Capture RF signals with timestamped metadata and waveform visualization.
+- Annotate samples before saving.
 - Promote recordings into reusable assets for wavelets or direct playback from the device.
 
 ![Sampler fragment screenshot placeholder](https://placehold.co/1200x650?text=Sampler+Fragment)
@@ -32,7 +32,6 @@ The EMWaver application guides every interaction with the device—from pairing 
 
 - Browse, edit, and sync JavaScript bundles that render UI with the EMWaver DSL.
 - Run scripts with live console output and integrate `UI.logViewer` panes for inline diagnostics.
-- Import remotes from IRDB to auto-generate button layouts; each button binds to the correct IR payload instantly.
 - Share bundles through backend storage so every device stays in sync.
 
 ![Wavelets fragment screenshot placeholder](https://placehold.co/1200x650?text=Wavelets+Fragment)
@@ -41,13 +40,9 @@ The EMWaver application guides every interaction with the device—from pairing 
 
 - Chat with the EMWaver LLM agent for clarification on hardware behavior, application workflows, or documentation references.
 - Request help generating or debugging wavelet scripts—the agent reads console output and suggests targeted fixes.
-- Trigger context-aware guidance, such as explaining IRP decode results or reviewing sampler traces.
+- Trigger context-aware guidance, such as reviewing sampler traces or debugging signal captures.
 
 ![Agents fragment screenshot placeholder](https://placehold.co/1200x650?text=Agents+Fragment)
-
-## IRDB Contributions
-
-When an infrared remote profile is missing, capture it within the Sampler fragment and submit it to the Infrared Database by opening an issue on the IRDB GitHub repository. Follow their submission checklist so the waveform data is validated quickly. Once merged, you can re-import the profile and immediately expose the full button layout through the Wavelets fragment.
 
 ## Wavelet Console Integration
 
@@ -60,6 +55,6 @@ When an infrared remote profile is missing, capture it within the Sampler fragme
 | --- | --- |
 | Home | Device pairing, live status, quick actions |
 | ISM | Sub-GHz presets, modulation configuration, compliance helpers |
-| Sampler | RF/IR capture, IRP decoding, waveform visualization |
-| Wavelets | Script editor, IRDB imports, console integration |
+| Sampler | RF capture, waveform visualization |
+| Wavelets | Script editor, console integration |
 | Agents | LLM assistance, wavelet debugging, contextual guidance |
