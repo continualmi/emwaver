@@ -53,7 +53,7 @@ struct ContentView: View {
                 .tag("Wavelets")
 
                 NavigationView {
-                    AgentsView(authManager: authManager)
+                    AgentsView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {

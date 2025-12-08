@@ -1,12 +1,8 @@
 import SwiftUI
 
 struct AgentsView: View {
-    @StateObject private var viewModel: AgentViewModel
+    @StateObject private var viewModel = AgentViewModel()
     @FocusState private var isComposerFocused: Bool
-
-    init(authManager: AuthenticationManager) {
-        _viewModel = StateObject(wrappedValue: AgentViewModel(authManager: authManager))
-    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -81,6 +77,9 @@ struct AgentsView: View {
                 }
             }
         }
+        .sheet(isPresented: $viewModel.isPresentingSettingsSheet) {
+            AgentSettingsView(service: AgentService.shared)
+        }
         .confirmationDialog(
             "Delete Conversation?",
             isPresented: $viewModel.isShowingDeleteConfirmation,
@@ -92,6 +91,22 @@ struct AgentsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This conversation will be removed permanently.")
+        }
+        .confirmationDialog(
+            "Select Chat",
+            isPresented: $viewModel.isShowingChatsDialog,
+            titleVisibility: .visible
+        ) {
+            ForEach(viewModel.conversations) { conversation in
+                Button(conversation.title) {
+                    viewModel.selectConversation(id: conversation.id)
+                }
+            }
+            Button("New Chat") {
+                viewModel.newConversationTitle = ""
+                viewModel.isPresentingNewConversationSheet = true
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -216,24 +231,54 @@ struct AgentsView: View {
 
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
-            if viewModel.selectedConversationId != nil {
-                Button("Rename") {
-                    if let selected = viewModel.conversations.first(where: { $0.id == viewModel.selectedConversationId }) {
-                        viewModel.renameConversationTitle = selected.title
-                    } else {
-                        viewModel.renameConversationTitle = ""
-                    }
-                    viewModel.isPresentingRenameSheet = true
-                }
-
-                Button(role: .destructive) {
-                    viewModel.isShowingDeleteConfirmation = true
+            Menu {
+                Button {
+                    viewModel.newConversationTitle = ""
+                    viewModel.isPresentingNewConversationSheet = true
                 } label: {
-                    Image(systemName: "trash")
+                    Label("New Chat", systemImage: "plus")
                 }
+                
+                Button {
+                    viewModel.isShowingChatsDialog = true
+                } label: {
+                    Label("Chats", systemImage: "bubble.left.and.bubble.right")
+                }
+                
+                if viewModel.selectedConversationId != nil {
+                    Divider()
+                    
+                    Button {
+                        if let selected = viewModel.conversations.first(where: { $0.id == viewModel.selectedConversationId }) {
+                            viewModel.renameConversationTitle = selected.title
+                        } else {
+                            viewModel.renameConversationTitle = ""
+                        }
+                        viewModel.isPresentingRenameSheet = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        viewModel.isShowingDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                
+                Divider()
+                
+                Button {
+                    viewModel.isPresentingSettingsSheet = true
+                } label: {
+                    Label("Agent Settings", systemImage: "gearshape")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
         }
     }
+    
 }
 
 private extension AgentViewModel {
