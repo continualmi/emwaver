@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { safeInvoke } from "../utils/tauri";
 import type { FragmentType } from "../App";
 
 type HomePageProps = {
@@ -62,10 +62,14 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   useEffect(() => {
     const initBLE = async () => {
       try {
-        await invoke("ble_initialize");
+        const result = await safeInvoke("ble_initialize");
+        if (result === null) {
+          // Tauri not available, skip initialization
+          return;
+        }
         setIsInitialized(true);
         // Automatically start scanning for devices
-        await invoke("ble_start_scan");
+        await safeInvoke("ble_start_scan");
         setStatus((prev) => ({ ...prev, scanning: true }));
       } catch (error) {
         console.error("Failed to initialize BLE:", error);
@@ -80,7 +84,11 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     const updateStatus = async () => {
       try {
-        const currentStatus = await invoke<BLEStatus>("ble_get_status");
+        const currentStatus = await safeInvoke<BLEStatus>("ble_get_status");
+        if (currentStatus === null) {
+          // Tauri not available, skip status update
+          return;
+        }
         const wasConnected = wasConnectedRef.current;
         wasConnectedRef.current = currentStatus.connected;
         setStatus(currentStatus);
@@ -88,7 +96,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         // Auto-reconnect if we were connected but now disconnected (and not manually disconnected)
         if (wasConnected && !currentStatus.connected && !currentStatus.scanning && !manualDisconnectRef.current) {
           try {
-            await invoke("ble_start_scan");
+            await safeInvoke("ble_start_scan");
             setStatus((prev) => ({ ...prev, scanning: true }));
           } catch (error) {
             console.error("Failed to auto-reconnect:", error);
@@ -120,7 +128,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     const checkNotifications = async () => {
       try {
-        const notification = await invoke<{ data: number[]; timestamp: number } | null>(
+        const notification = await safeInvoke<{ data: number[]; timestamp: number } | null>(
           "ble_get_notification"
         );
         if (notification) {
@@ -215,7 +223,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     try {
       manualDisconnectRef.current = false;
       setStatus((prev) => ({ ...prev, scanning: true }));
-      await invoke("ble_start_scan");
+      await safeInvoke("ble_start_scan");
     } catch (error) {
       console.error("Failed to start scan:", error);
       setStatus((prev) => ({ ...prev, scanning: false }));
@@ -225,7 +233,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   const handleDisconnect = async () => {
     try {
       manualDisconnectRef.current = true;
-      await invoke("ble_disconnect");
+      await safeInvoke("ble_disconnect");
       setFirmwareVersion("Unknown");
     } catch (error) {
       console.error("Failed to disconnect:", error);
@@ -260,7 +268,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       appendToMonitor(commandBytes, timestamp, true);
 
       // Send packet
-      await invoke("ble_send_packet", { data: Array.from(commandBytes) });
+      await safeInvoke("ble_send_packet", { data: Array.from(commandBytes) });
 
       // Clear input
       setCommandInput("");
@@ -286,7 +294,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         fractionalSecondDigits: 3,
       });
       appendToMonitor(versionBytes, timestamp, true);
-      await invoke("ble_send_packet", { data: Array.from(versionBytes) });
+      await safeInvoke("ble_send_packet", { data: Array.from(versionBytes) });
     } catch (error) {
       console.error("Failed to check version:", error);
     }

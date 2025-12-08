@@ -3,10 +3,11 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
-import { invoke } from "@tauri-apps/api/core";
+import { safeInvoke, safeListen, safeJoin } from "../utils/tauri";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { join } from "@tauri-apps/api/path";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { WaveletEngine, type WaveletTree } from "../utils/WaveletEngine";
+import { createBLEServiceWrapper } from "../utils/BLEServiceWrapper";
 
 type DirectoryEntry = {
   name: string;
@@ -189,12 +190,21 @@ export default function WaveletsFragment() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(() =>
     readStoredNumber(SIDEBAR_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH),
   );
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
+  const [renderedTree, setRenderedTree] = useState<WaveletTree | null>(null);
+  
+  // Debug: log when renderedTree changes
+  useEffect(() => {
+    console.log('[WaveletsFragment] renderedTree changed:', renderedTree);
+    console.log('[WaveletsFragment] renderedTree is truthy:', !!renderedTree);
+  }, [renderedTree]);
   const sidebarResizeActive = useRef(false);
   const sidebarStartX = useRef(0);
   const sidebarStartWidth = useRef(0);
   const saveTimeoutRef = useRef<number | null>(null);
   const openFileRef = useRef<OpenFile | null>(null);
   const treeOpenStateRef = useRef<Map<string, Record<string, boolean>>>(new Map());
+  const waveletEngineRef = useRef<WaveletEngine | null>(null);
   const monaco = useMonaco();
 
   const activeFile = useMemo(
@@ -262,6 +272,94 @@ export default function WaveletsFragment() {
     openFileRef.current = activeFile;
   }, [activeFile]);
 
+  // Initialize WaveletEngine
+  useEffect(() => {
+    const engine = new WaveletEngine();
+    
+    const printCallback = (message: string) => {
+      setConsoleOutput((prev) => [...prev, message]);
+    };
+
+    const renderCallback = (tree: WaveletTree) => {
+      console.log('[renderCallback] Called with tree:', tree);
+      setConsoleOutput((prev) => [...prev, `[Render] Received tree: ${tree.type}`]);
+      console.log('[renderCallback] About to call setRenderedTree');
+      setRenderedTree(tree);
+      console.log('[renderCallback] setRenderedTree called');
+      setConsoleOutput((prev) => [...prev, `[Render] State updated`]);
+    };
+
+    const dialogCallback = (title: string, message: string) => {
+      alert(`${title}\n\n${message}`);
+    };
+
+    // Create BLE bindings
+    const bleService = createBLEServiceWrapper();
+
+    engine.setup(
+      printCallback,
+      renderCallback,
+      dialogCallback,
+      {
+        BLEService: bleService,
+      }
+    );
+
+    waveletEngineRef.current = engine;
+
+    return () => {
+      engine.shutdown();
+      waveletEngineRef.current = null;
+    };
+  }, []);
+
+  // Update module sources when project changes
+  useEffect(() => {
+    if (!project || !waveletEngineRef.current) return;
+
+        const updateModules = async () => {
+      try {
+        const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
+          payload: { path: project.path },
+        });
+        
+        if (result === null) return;
+        
+        const entries = result;
+
+        const moduleSources: Record<string, string> = {};
+        
+        const loadModules = async (dirEntries: DirectoryEntry[], basePath: string = "") => {
+          for (const entry of dirEntries) {
+            if (entry.kind === "file" && entry.name.endsWith(".js")) {
+              const filePath = basePath ? `${basePath}/${entry.name}` : entry.name;
+              try {
+                const fullPath = await safeJoin(project.path, entry.path);
+                const content = await safeInvoke<string>("read_file", {
+                  payload: { path: fullPath },
+                });
+                if (content !== null) {
+                  moduleSources[entry.name] = content;
+                }
+              } catch (error) {
+                console.error(`Failed to load module ${entry.name}:`, error);
+              }
+            } else if (entry.kind === "directory" && entry.children) {
+              await loadModules(entry.children, entry.name);
+            }
+          }
+        };
+
+        await loadModules(entries);
+        waveletEngineRef.current?.updateModuleSources(moduleSources);
+      } catch (error) {
+        console.error("Failed to update module sources:", error);
+      }
+    };
+
+    void updateModules();
+  }, [project]);
+
   useEffect(
     () => () => {
       if (saveTimeoutRef.current) {
@@ -299,9 +397,10 @@ export default function WaveletsFragment() {
     try {
       let entries: DirectoryEntry[];
       try {
-        entries = await invoke<DirectoryEntry[]>("read_directory", {
+        const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
           payload: { path: projectPath },
         });
+        entries = result || [];
       } catch {
         // Directory doesn't exist, will be created when writing files
         entries = [];
@@ -316,8 +415,8 @@ export default function WaveletsFragment() {
             const response = await fetch(`/default-scripts/${scriptName}`);
             if (response.ok) {
               const content = await response.text();
-              const filePath = await join(projectPath, scriptName);
-              await invoke<void>("write_file", {
+              const filePath = await safeJoin(projectPath, scriptName);
+              await safeInvoke<void>("write_file", {
                 payload: { path: filePath, content },
               });
             }
@@ -341,10 +440,10 @@ export default function WaveletsFragment() {
       } else {
         // Check if project directory has JS files
         try {
-          const entries = await invoke<DirectoryEntry[]>("read_directory", {
+          const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
             payload: { path: directory },
           });
-          const jsFiles = entries.filter((e) => e.kind === "file" && e.name.endsWith(".js"));
+          const jsFiles = (result || []).filter((e) => e.kind === "file" && e.name.endsWith(".js"));
           if (jsFiles.length === 0) {
             // Empty, load defaults
             await ensureDefaultScripts(directory);
@@ -356,9 +455,12 @@ export default function WaveletsFragment() {
       }
 
       // Now read the directory structure
-      const entries = await invoke<DirectoryEntry[]>("read_directory", {
+      const entries = await safeInvoke<DirectoryEntry[]>("read_directory", {
         payload: { path: directory },
       });
+      if (entries === null) {
+        throw new Error("Failed to read directory");
+      }
       const tree = normaliseTree(entries);
       const projectName = initialName ?? deriveProjectName(directory);
 
@@ -423,9 +525,12 @@ export default function WaveletsFragment() {
 
         // Verify the directory still exists before trying to open it
         try {
-          await invoke<DirectoryEntry[]>("read_directory", {
+          const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
             payload: { path: lastProjectPath },
           });
+          if (result === null) {
+            throw new Error("Directory not found");
+          }
           // Directory exists, restore it using the ref to avoid dependency issues
           const openFn = openProjectAtPathRef.current;
           if (openFn) {
@@ -456,7 +561,12 @@ export default function WaveletsFragment() {
       await openProjectAtPath(directory);
     } catch (error) {
       console.error("Failed to open project:", error);
-      alert(String(error));
+      // If it's a Tauri API error, show helpful message
+      if (error instanceof Error && error.message.includes("Tauri")) {
+        alert("Tauri API error. Make sure you're running with: npm run tauri dev");
+      } else {
+        alert(String(error));
+      }
     }
   }, [openProjectAtPath]);
 
@@ -479,23 +589,23 @@ export default function WaveletsFragment() {
       const projectPath = selectedPath;
       const folderName = projectPath.split(/[/\\]/).pop() || "My Wavelet Project";
       
-      // Check if directory exists
-      try {
-        const entries = await invoke<DirectoryEntry[]>("read_directory", {
-          payload: { path: projectPath },
-        });
-        if (entries.length > 0) {
-          alert("Project directory already exists and is not empty");
-          return;
+        // Check if directory exists
+        try {
+          const entries = await safeInvoke<DirectoryEntry[]>("read_directory", {
+            payload: { path: projectPath },
+          });
+          if (entries && entries.length > 0) {
+            alert("Project directory already exists and is not empty");
+            return;
+          }
+        } catch {
+          // Directory doesn't exist, create it by writing a file
+          // write_file creates parent directories automatically
+          const initFile = await safeJoin(projectPath, ".gitkeep");
+          await safeInvoke<void>("write_file", {
+            payload: { path: initFile, content: "" },
+          });
         }
-      } catch {
-        // Directory doesn't exist, create it by writing a file
-        // write_file creates parent directories automatically
-        const initFile = await join(projectPath, ".gitkeep");
-        await invoke<void>("write_file", {
-          payload: { path: initFile, content: "" },
-        });
-      }
       
       await openProjectAtPath(projectPath, { initialName: folderName, isNewProject: true });
     } catch (error) {
@@ -513,9 +623,12 @@ export default function WaveletsFragment() {
       );
 
       try {
-        await invoke<void>("write_file", {
+        const result = await safeInvoke<void>("write_file", {
           payload: { path, content },
         });
+        if (result === null) {
+          throw new Error("Failed to write file");
+        }
         setOpenFiles((prev) =>
           prev.map((file) =>
             file.id === fileId ? { ...file, content, isDirty: false, isSaving: false } : file,
@@ -562,11 +675,11 @@ export default function WaveletsFragment() {
 
   // Listen for menu-close-folder event
   useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
+    let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
       try {
-        unlisten = await listen("menu-close-folder", () => {
+        unlisten = await safeListen("menu-close-folder", () => {
           void handleCloseProject();
         });
       } catch (error) {
@@ -600,10 +713,13 @@ export default function WaveletsFragment() {
       }
       setIsLoadingFile(true);
       try {
-        const absolutePath = await join(project.path, node.path);
-        const content = await invoke<string>("read_file", {
+        const absolutePath = await safeJoin(project.path, node.path);
+        const content = await safeInvoke<string>("read_file", {
           payload: { path: absolutePath },
         });
+        if (content === null) {
+          throw new Error("Failed to read file");
+        }
         const language = detectLanguage(node.name);
         setSelectedFileId(node.id);
         const file: OpenFile = {
@@ -679,6 +795,34 @@ export default function WaveletsFragment() {
     setActiveFileId(fileId);
     setSelectedFileId(fileId);
   }, []);
+
+  const handleRunWavelet = useCallback(() => {
+    console.log('[handleRunWavelet] Button clicked');
+    console.log('[handleRunWavelet] activeFile:', activeFile?.name);
+    console.log('[handleRunWavelet] waveletEngineRef.current:', waveletEngineRef.current);
+    
+    if (!activeFile || !waveletEngineRef.current) {
+      console.log('[handleRunWavelet] Early return - missing activeFile or engine');
+      return;
+    }
+
+    // Clear previous output
+    setConsoleOutput([]);
+    setRenderedTree(null);
+    
+    console.log('[handleRunWavelet] About to execute script');
+    console.log('[handleRunWavelet] Script content:', activeFile.content.substring(0, 100));
+
+    // Execute the wavelet
+    try {
+      waveletEngineRef.current.execute(activeFile.content, () => {
+        console.log('[handleRunWavelet] Execution completion callback called');
+        setConsoleOutput((prev) => [...prev, "Wavelet execution completed."]);
+      });
+    } catch (error) {
+      console.error('[handleRunWavelet] Error:', error);
+    }
+  }, [activeFile]);
 
   const handleCloseTab = useCallback(
     (fileId: string) => {
@@ -780,6 +924,37 @@ export default function WaveletsFragment() {
         </div>
         <div className="flex flex-1 flex-col min-h-0">
           <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRunWavelet}
+                disabled={!activeFile || !waveletEngineRef.current}
+                className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded transition-colors"
+                title="Run wavelet"
+              >
+                ▶ Run
+              </button>
+              <button
+                onClick={() => {
+                  setConsoleOutput([]);
+                  setRenderedTree(null);
+                }}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                title="Clear output and return to editor"
+              >
+                Clear
+              </button>
+              {renderedTree && (
+                <button
+                  onClick={() => {
+                    setRenderedTree(null);
+                  }}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                  title="Return to editor"
+                >
+                  ← Editor
+                </button>
+              )}
+            </div>
             <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
               {openFiles.map((file) => {
                 const isActive = file.id === activeFileId;
@@ -827,25 +1002,67 @@ export default function WaveletsFragment() {
               )}
             </div>
           </div>
-          <div className="flex-1 min-h-0 bg-slate-950">
+          <div className="flex-1 min-h-0 bg-slate-950 flex flex-col">
+            {(() => {
+              console.log('[Render] activeFile:', !!activeFile, 'renderedTree:', !!renderedTree);
+              return null;
+            })()}
             {activeFile ? (
-              <div className="flex h-full w-full min-h-0">
-                <MonacoEditor
-                  key={activeFile.id}
-                  path={activeFile.relativePath}
-                  value={activeFile.content}
-                  language={activeFile.language}
-                  onChange={handleEditorChange}
-                  options={MONACO_EDITOR_OPTIONS}
-                  theme="vs-dark"
-                  height="100%"
-                  loading={
-                    <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-                      Loading editor...
+              renderedTree ? (
+                // Show preview when wavelet has rendered UI
+                <div className="flex h-full w-full min-h-0 flex-col">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                    <WaveletUIRenderer 
+                      tree={renderedTree} 
+                      consoleOutput={consoleOutput}
+                      onInvokeCallback={(token, args) => {
+                        waveletEngineRef.current?.invoke(token, args);
+                      }}
+                    />
+                  </div>
+                  {consoleOutput.length > 0 && (
+                    <div className="h-48 border-t border-slate-800 overflow-y-auto p-4 bg-slate-900">
+                      <div className="text-xs font-semibold text-slate-400 mb-2">Console</div>
+                      <div className="font-mono text-xs text-slate-300 space-y-1">
+                        {consoleOutput.map((line, index) => (
+                          <div key={index}>{line}</div>
+                        ))}
+                      </div>
                     </div>
-                  }
-                />
-              </div>
+                  )}
+                </div>
+              ) : (
+                // Show editor when no preview is rendered
+                <div className="flex h-full w-full min-h-0">
+                  <div className="flex-1 min-h-0">
+                    <MonacoEditor
+                      key={activeFile.id}
+                      path={activeFile.relativePath}
+                      value={activeFile.content}
+                      language={activeFile.language}
+                      onChange={handleEditorChange}
+                      options={MONACO_EDITOR_OPTIONS}
+                      theme="vs-dark"
+                      height="100%"
+                      loading={
+                        <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+                          Loading editor...
+                        </div>
+                      }
+                    />
+                  </div>
+                  {consoleOutput.length > 0 && (
+                    <div className="w-96 border-l border-slate-800 overflow-y-auto p-4 bg-slate-900">
+                      <div className="text-xs font-semibold text-slate-400 mb-2">Console</div>
+                      <div className="font-mono text-xs text-slate-300 space-y-1">
+                        {consoleOutput.map((line, index) => (
+                          <div key={index}>{line}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
             ) : isLoadingFile ? (
               <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
                 Loading file...
@@ -894,7 +1111,7 @@ function Sidebar({
     }
     setContextMenu(null);
     try {
-      await invoke<void>("reveal_in_finder", {
+      await safeInvoke<void>("reveal_in_finder", {
         payload: { path: project.path },
       });
     } catch (error) {
@@ -1068,11 +1285,11 @@ function FileTreeNode({ node, style, projectPath }: NodeRendererProps<TreeNode> 
     }
     setContextMenu(null);
     try {
-      // If path is empty or just the folder name, it's the root project folder
-      const absolutePath = node.data.path === "" || node.data.path === node.data.name
-        ? projectPath
-        : await join(projectPath, node.data.path);
-      await invoke<void>("reveal_in_finder", {
+        // If path is empty or just the folder name, it's the root project folder
+        const absolutePath = node.data.path === "" || node.data.path === node.data.name
+          ? projectPath
+          : await safeJoin(projectPath, node.data.path);
+      await safeInvoke<void>("reveal_in_finder", {
         payload: { path: absolutePath },
       });
     } catch (error) {
@@ -1162,4 +1379,292 @@ function FileIcon() {
       <path d="M11 3v4h4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+function WaveletUIRenderer({ 
+  tree, 
+  consoleOutput = [], 
+  onInvokeCallback 
+}: { 
+  tree: WaveletTree; 
+  consoleOutput?: string[]; 
+  onInvokeCallback?: (token: string, args: unknown[]) => void;
+}) {
+
+  const [inputValues, setInputValues] = useState<Record<string, any>>({});
+
+  const handleEvent = (nodeId: string, eventType: string, value?: any) => {
+    const handlers = (tree as any).handlers || {};
+    const token = handlers[eventType];
+    if (token && onInvokeCallback) {
+      onInvokeCallback(token, value !== undefined ? [value] : []);
+    }
+  };
+
+  const renderNode = (node: WaveletTree): ReactNode => {
+    const props = node.props || {};
+    const children = node.children || [];
+    const handlers = (node as any).handlers || {};
+    const nodeId = (props.id as string) || 'node';
+
+    switch (node.type) {
+      case 'column': {
+        const spacing = (props.spacing as number) || 12;
+        const padding = (props.padding as number) || 0;
+        return (
+          <div 
+            className="flex flex-col" 
+            style={{ 
+              gap: `${spacing}px`,
+              padding: `${padding}px`
+            }}
+          >
+            {children.map((child, index) => (
+              <div key={index}>{renderNode(child)}</div>
+            ))}
+          </div>
+        );
+      }
+
+      case 'row': {
+        const spacing = (props.spacing as number) || 8;
+        return (
+          <div 
+            className="flex"
+            style={{ gap: `${spacing}px` }}
+          >
+            {children.map((child, index) => (
+              <div key={index}>{renderNode(child)}</div>
+            ))}
+          </div>
+        );
+      }
+
+      case 'button': {
+        const handleClick = () => {
+          if (handlers.tap && onInvokeCallback) {
+            onInvokeCallback(handlers.tap, []);
+          }
+        };
+        return (
+          <button
+            onClick={handleClick}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+          >
+            {(props.label as string) || 'Button'}
+          </button>
+        );
+      }
+
+      case 'text':
+        return (
+          <div className="text-slate-200 text-sm">
+            {(props.text as string) || ''}
+          </div>
+        );
+
+      case 'slider': {
+        const min = (props.min as number) || 0;
+        const max = (props.max as number) || 100;
+        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as number) || 0);
+        const step = (props.step as number) || 1;
+        
+        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+          const newValue = parseFloat(e.target.value);
+          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+          if (handlers.change && onInvokeCallback) {
+            onInvokeCallback(handlers.change, [newValue]);
+          }
+        };
+
+        return (
+          <div className="flex flex-col gap-2">
+            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={value}
+              onChange={handleChange}
+              className="w-full accent-blue-600"
+            />
+            <div className="text-slate-400 text-xs">{value}</div>
+          </div>
+        );
+      }
+
+      case 'textField': {
+        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || '');
+        const placeholder = (props.placeholder as string) || '';
+        
+        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+          const newValue = e.target.value;
+          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+          if (handlers.change && onInvokeCallback) {
+            onInvokeCallback(handlers.change, [newValue]);
+          }
+        };
+
+        const handleSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+          if (e.key === 'Enter' && handlers.submit && onInvokeCallback) {
+            onInvokeCallback(handlers.submit, [value]);
+          }
+        };
+
+        return (
+          <div className="flex flex-col gap-2">
+            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            <input
+              type="text"
+              value={value}
+              placeholder={placeholder}
+              onChange={handleChange}
+              onKeyDown={handleSubmit}
+              className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+        );
+      }
+
+      case 'textEditor': {
+        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || '');
+        const placeholder = (props.placeholder as string) || '';
+        const rows = (props.rows as number) || 4;
+        
+        const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+          const newValue = e.target.value;
+          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+          if (handlers.change && onInvokeCallback) {
+            onInvokeCallback(handlers.change, [newValue]);
+          }
+        };
+
+        return (
+          <div className="flex flex-col gap-2">
+            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            <textarea
+              value={value}
+              placeholder={placeholder}
+              onChange={handleChange}
+              rows={rows}
+              className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+            />
+          </div>
+        );
+      }
+
+      case 'picker': {
+        const options = (props.options as string[]) || [];
+        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || options[0] || '');
+        
+        const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+          const newValue = e.target.value;
+          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+          if (handlers.change && onInvokeCallback) {
+            onInvokeCallback(handlers.change, [newValue]);
+          }
+        };
+
+        return (
+          <div className="flex flex-col gap-2">
+            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            <select
+              value={value}
+              onChange={handleChange}
+              className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              {options.map((option, index) => (
+                <option key={index} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+        );
+      }
+
+      case 'scroll': {
+        const maxHeight = (props.maxHeight as number) || 400;
+        return (
+          <div 
+            className="overflow-y-auto"
+            style={{ maxHeight: `${maxHeight}px` }}
+          >
+            {children.map((child, index) => (
+              <div key={index}>{renderNode(child)}</div>
+            ))}
+          </div>
+        );
+      }
+
+      case 'grid': {
+        const columns = (props.columns as number) || 2;
+        const spacing = (props.spacing as number) || 8;
+        return (
+          <div 
+            className="grid"
+            style={{ 
+              gridTemplateColumns: `repeat(${columns}, 1fr)`,
+              gap: `${spacing}px`
+            }}
+          >
+            {children.map((child, index) => (
+              <div key={index}>{renderNode(child)}</div>
+            ))}
+          </div>
+        );
+      }
+
+      case 'spacer': {
+        const height = (props.height as number) || 16;
+        return <div style={{ height: `${height}px` }} />;
+      }
+
+      case 'divider': {
+        return <hr className="border-slate-700 my-2" />;
+      }
+
+      case 'progress': {
+        const value = (props.value as number) || 0;
+        const max = (props.max as number) || 100;
+        const percentage = (value / max) * 100;
+        
+        return (
+          <div className="flex flex-col gap-2">
+            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            <div className="w-full bg-slate-800 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+          </div>
+        );
+      }
+
+      case 'logViewer': {
+        // Show console output if available, otherwise show placeholder text
+        const hasOutput = consoleOutput.length > 0;
+        return (
+          <div className="bg-slate-900 rounded p-3 font-mono text-xs text-slate-300 min-h-[100px] max-h-[300px] overflow-y-auto">
+            {hasOutput ? (
+              <div className="space-y-1">
+                {consoleOutput.map((line, index) => (
+                  <div key={index}>{line}</div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-slate-500">
+                {(props.text as string) || 'Console messages will appear here...'}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      default:
+        return <div className="text-slate-500 text-xs">Unknown UI type: {node.type}</div>;
+    }
+  };
+
+  return <div>{renderNode(tree)}</div>;
 }
