@@ -1,22 +1,28 @@
 import SwiftUI
 
 struct WaveletsView: View {
-    @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var bleManager: BLEManager
     @StateObject private var viewModel = WaveletsViewModel()
     @StateObject private var previewManager = WaveletPreviewManager()
-    @State private var editorSession: EditorSession?
+    @State private var showingEditor = false
     @State private var showingPreview = false
+    @State private var currentScriptId: String?
+    @State private var editorContent: String = ""
+    @State private var lineWrapEnabled = false
+    @State private var consoleExpanded = false
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
-    @State private var searchQuery: String = ""
 
     var body: some View {
         NavigationStack {
             ZStack {
-                content
-
+                if showingEditor {
+                    editorView
+                } else {
+                    mainView
+                }
+                
                 if viewModel.isPerformingAction {
                     ProgressView()
                         .progressViewStyle(.circular)
@@ -25,19 +31,15 @@ struct WaveletsView: View {
                         .shadow(radius: 12)
                 }
             }
-            .navigationTitle("Wavelets")
+            .navigationTitle(showingEditor ? (currentScriptName ?? "Wavelet") : (showingPreview ? (currentScriptName ?? "Wavelet Preview") : "Wavelets"))
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(showingPreview)
             .toolbar { toolbarContent() }
-            .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search scripts")
             .alert(item: $viewModel.notice) { notice in
                 Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
             }
-            .sheet(item: $editorSession) { session in
-                editorSheet(for: session)
-            }
-            .sheet(isPresented: $showingPreview) {
-                WaveletPreviewSheet(previewManager: previewManager) {
-                    showingPreview = false
-                }
+            .alert(item: $previewManager.dialog) { dialog in
+                Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
             }
             .sheet(item: $namePrompt) { prompt in
                 NamePromptSheet(prompt: prompt)
@@ -49,9 +51,8 @@ struct WaveletsView: View {
             ) {
                 Button("Delete", role: .destructive) {
                     guard let target = deleteTarget else { return }
-                    editorSession = nil
                     Task {
-                        await viewModel.deleteScript(id: target.id, accessToken: authManager.accessToken ?? "local-only-token")
+                        await viewModel.deleteScript(id: target.id)
                     }
                     deleteTarget = nil
                 }
@@ -72,125 +73,243 @@ struct WaveletsView: View {
             }
         }
     }
-
-    private var content: some View {
+    
+    private var mainView: some View {
         Group {
-            if filteredScripts.isEmpty {
-                emptyState
-            } else {
-                List {
-                    Section {
-                        ForEach(filteredScripts) { script in
-                            ScriptRow(
-                                script: script,
-                                isSelected: script.id == viewModel.selectedScriptId,
-                                onPreview: { openPreview(for: script.id) },
-                                onEdit: { openEditor(for: script.id) }
-                            )
-                            .swipeActions(edge: .trailing) {
-                                Button("Preview") {
-                                    openPreview(for: script.id)
+            if showingPreview {
+                // Preview mode: full screen preview with console at bottom
+                VStack(spacing: 0) {
+                    // Wavelet preview fills available space
+                    ZStack {
+                        WaveletRenderView(tree: previewManager.waveletTree) { token, args in
+                            previewManager.invoke(token: token, arguments: args)
+                        }
+                        .opacity(previewManager.waveletTree == nil ? 0 : 1)
+                        
+                        if previewManager.waveletTree == nil {
+                            VStack {
+                                if previewManager.isRendering {
+                                    ProgressView("Rendering…")
+                                } else {
+                                    Text("Render a wavelet to preview it here.")
+                                        .foregroundColor(.secondary)
                                 }
-                                .tint(.indigo)
-
-                                Button("Edit") {
-                                    openEditor(for: script.id)
-                                }
-                                .tint(.blue)
                             }
                         }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    
+                    // Console section at bottom
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text("Console Output")
+                                .font(.headline)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                            Spacer()
+                            Button(action: { consoleExpanded.toggle() }) {
+                                Image(systemName: consoleExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.trailing, 8)
+                        }
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .onTapGesture {
+                            consoleExpanded.toggle()
+                        }
+                        
+                        if consoleExpanded {
+                            Divider()
+                            
+                            ScrollViewReader { proxy in
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        if previewManager.consoleLines.isEmpty {
+                                            Text("Console is empty.")
+                                                .foregroundColor(.secondary)
+                                                .padding()
+                                        } else {
+                                            ForEach(Array(previewManager.consoleLines.enumerated()), id: \.offset) { index, line in
+                                                Text(line)
+                                                    .font(.system(.caption, design: .monospaced))
+                                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                                    .id(index)
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 12)
+                                        }
+                                    }
+                                }
+                                .frame(maxHeight: 200)
+                                .background(Color(uiColor: .systemBackground))
+                                .onChange(of: previewManager.consoleLines.count) { _, _ in
+                                    if !previewManager.consoleLines.isEmpty {
+                                        withAnimation {
+                                            proxy.scrollTo(previewManager.consoleLines.count - 1, anchor: .bottom)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .background(Color(uiColor: .secondarySystemBackground))
                 }
-                .listStyle(.insetGrouped)
+            } else {
+                // Normal mode: scripts list fills the view
+                if viewModel.scripts.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("No scripts available")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Button(action: openNewScriptEditor) {
+                            Label("New Script", systemImage: "plus")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(viewModel.scripts) { script in
+                            ScriptRow(
+                                script: script,
+                                isSelected: script.id == viewModel.selectedScriptId,
+                                onTap: { previewScript(script.id) },
+                                onEdit: { openEditor(for: script.id) }
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                }
             }
         }
     }
-
-    private var filteredScripts: [WaveletsViewModel.ScriptListItem] {
-        let scripts = viewModel.scripts
-        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return scripts }
-        return scripts.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 44))
-                .foregroundColor(.secondary)
-            Text("No scripts available")
-                .font(.headline)
-            Text("Create a new script to get started.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            Button(action: openNewScriptEditor) {
-                Label("New Script", systemImage: "plus")
+    
+    private var editorView: some View {
+        VStack(spacing: 0) {
+            if lineWrapEnabled {
+                ScrollView {
+                    TextEditor(text: $editorContent)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 300)
+                        .padding()
+                        .onChange(of: editorContent) { _, newValue in
+                            if let id = currentScriptId {
+                                viewModel.updateDraft(for: id, content: newValue)
+                            }
+                        }
+                }
+            } else {
+                ScrollView(.horizontal) {
+                    TextEditor(text: $editorContent)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minWidth: 300, minHeight: 300)
+                        .padding()
+                        .onChange(of: editorContent) { _, newValue in
+                            if let id = currentScriptId {
+                                viewModel.updateDraft(for: id, content: newValue)
+                            }
+                        }
+                }
             }
-            .buttonStyle(.borderedProminent)
+            
+            if let id = currentScriptId, viewModel.isScriptDirty(id) {
+                HStack {
+                    Label("Changes not yet saved", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundColor(.orange)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .background(Color(uiColor: .systemBackground))
     }
-
+    
+    private var currentScriptName: String? {
+        guard let id = currentScriptId else { return nil }
+        return viewModel.scriptName(for: id)
+    }
+    
     private func loadScripts() {
         Task {
-            await viewModel.loadScripts(accessToken: authManager.accessToken ?? "local-only-token")
+            await viewModel.loadScripts()
         }
     }
-
-    private func openPreview(for id: String) {
+    
+    private func previewScript(_ id: String) {
+        // Save current editor content if editing
+        if showingEditor, let currentId = currentScriptId {
+            viewModel.updateDraft(for: currentId, content: editorContent)
+        }
+        
         viewModel.selectScript(id: id)
+        currentScriptId = id
         Task {
-            await viewModel.ensureContent(for: id, accessToken: authManager.accessToken ?? "local-only-token")
+            await viewModel.ensureContent(for: id)
             await MainActor.run {
                 let script = viewModel.scriptDraft(for: id)
                 let name = viewModel.scriptName(for: id)
                 let modules = viewModel.moduleSources()
                 previewManager.render(script: script, name: name, moduleSources: modules)
                 showingPreview = true
+                showingEditor = false
+                consoleExpanded = false
             }
         }
     }
-
+    
     private func openEditor(for id: String) {
         viewModel.selectScript(id: id)
+        currentScriptId = id
         Task {
-            await viewModel.ensureContent(for: id, accessToken: authManager.accessToken ?? "local-only-token")
+            await viewModel.ensureContent(for: id)
             await MainActor.run {
-                editorSession = EditorSession(id: id)
+                editorContent = viewModel.scriptDraft(for: id)
+                showingEditor = true
+                showingPreview = false
             }
         }
     }
-
+    
     private func openNewScriptEditor() {
         viewModel.selectScript(id: viewModel.unsavedIdentifier)
-        editorSession = EditorSession(id: viewModel.unsavedIdentifier)
+        currentScriptId = viewModel.unsavedIdentifier
+        editorContent = viewModel.scriptDraft(for: viewModel.unsavedIdentifier)
+        showingEditor = true
+        showingPreview = false
     }
-
-    private func syncScripts() {
-        Task {
-            await viewModel.syncScripts(accessToken: authManager.accessToken ?? "local-only-token")
+    
+    private func exitEditor() {
+        showingEditor = false
+        currentScriptId = nil
+        editorContent = ""
+    }
+    
+    private func exitPreview() {
+        showingPreview = false
+        currentScriptId = nil
+        previewManager.exitPreview()
+        consoleExpanded = false
+    }
+    
+    private func saveCurrentScript() {
+        guard let id = currentScriptId else { return }
+        if viewModel.isExistingScript(id) {
+            Task {
+                await viewModel.saveScript(id: id)
+            }
+        } else {
+            presentNamePrompt(context: .create)
         }
     }
-
-    private func editorSheet(for session: EditorSession) -> some View {
-        ScriptEditorSheet(
-            scriptId: session.id,
-            viewModel: viewModel,
-            accessToken: authManager.accessToken ?? "local-only-token",
-            onDismiss: { editorSession = nil },
-            onRequestCreate: { presentNamePrompt(context: .create) },
-            onRequestRename: { presentNamePrompt(context: .rename(id: session.id)) },
-            onRequestCopy: { presentNamePrompt(context: .copy(id: session.id)) },
-            onRequestDelete: {
-                    deleteTarget = DeletionTarget(id: session.id, name: viewModel.scriptName(for: session.id))
-                    showingDeleteConfirmation = true
-            },
-            onRequestPreview: { openPreview(for: session.id) }
-        )
-    }
-
+    
     private func presentNamePrompt(context: NamePromptContext) {
         let initial: String
         switch context {
@@ -210,87 +329,204 @@ struct WaveletsView: View {
             handleName(context: context, name: name)
         }
     }
-
+    
     private func handleName(context: NamePromptContext, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let token = authManager.accessToken ?? "local-only-token"
-
+        
         Task {
             switch context {
             case .create:
-                if let newId = await viewModel.createScript(name: trimmed, accessToken: token) {
+                if let newId = await viewModel.createScript(name: trimmed) {
                     await MainActor.run {
-                        editorSession = EditorSession(id: newId)
+                        currentScriptId = newId
+                        editorContent = viewModel.scriptDraft(for: newId)
                     }
                 }
             case .rename(let id):
-                await viewModel.renameScript(id: id, newName: trimmed, accessToken: token)
+                await viewModel.renameScript(id: id, newName: trimmed)
             case .copy(let id):
-                if let newId = await viewModel.copyScript(id: id, newName: trimmed, accessToken: token) {
+                if let newId = await viewModel.copyScript(id: id, newName: trimmed) {
                     await MainActor.run {
-                        editorSession = EditorSession(id: newId)
+                        currentScriptId = newId
+                        editorContent = viewModel.scriptDraft(for: newId)
                     }
                 }
             }
         }
     }
-
+    
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Menu {
-                Button {
-                    openNewScriptEditor()
-                } label: {
-                    Label("New Script", systemImage: "plus")
+        if showingEditor {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Close") {
+                    exitEditor()
                 }
-
-                Button {
-                    syncScripts()
-                } label: {
-                    Label("Sync Scripts", systemImage: "arrow.triangle.2.circlepath")
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) ? "Save" : "Create") {
+                    saveCurrentScript()
                 }
-
-
-                if let selected = viewModel.selectedScriptId, viewModel.isExistingScript(selected) {
-                    Divider()
-
-                    Button {
-                        presentNamePrompt(context: .copy(id: selected))
-                    } label: {
-                        Label("Make Copy", systemImage: "doc.on.doc")
+            }
+            
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button("Preview") {
+                    guard let id = currentScriptId else { return }
+                    // Save editor content before previewing
+                    viewModel.updateDraft(for: id, content: editorContent)
+                    previewScript(id)
+                }
+                .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                
+                Spacer()
+                
+                Button(action: {
+                    let pasteboard = UIPasteboard.general
+                    if let string = pasteboard.string {
+                        editorContent = string
                     }
-
-                    Button {
-                        presentNamePrompt(context: .rename(id: selected))
-                    } label: {
+                }) {
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                }
+                
+                Button(action: {
+                    let pasteboard = UIPasteboard.general
+                    pasteboard.string = editorContent
+                }) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                
+                if currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) {
+                    Button(action: {
+                        guard let id = currentScriptId else { return }
+                        presentNamePrompt(context: .rename(id: id))
+                    }) {
                         Label("Rename", systemImage: "pencil")
                     }
-
-                    Button(role: .destructive) {
-                        deleteTarget = DeletionTarget(id: selected, name: viewModel.scriptName(for: selected))
+                    
+                    Button(action: {
+                        guard let id = currentScriptId else { return }
+                        presentNamePrompt(context: .copy(id: id))
+                    }) {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                    
+                    Button(role: .destructive, action: {
+                        guard let id = currentScriptId else { return }
+                        deleteTarget = DeletionTarget(id: id, name: viewModel.scriptName(for: id))
                         showingDeleteConfirmation = true
-                    } label: {
+                    }) {
                         Label("Delete", systemImage: "trash")
                     }
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
+                
+                Button(action: { lineWrapEnabled.toggle() }) {
+                    Label("Wrap", systemImage: lineWrapEnabled ? "text.word.spacing" : "text.alignleft")
+                }
+            }
+        } else if showingPreview {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    exitPreview()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                }
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Clear Console") {
+                    previewManager.clearConsole()
+                }
+                .disabled(previewManager.consoleLines.isEmpty)
+            }
+        } else {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button {
+                        openNewScriptEditor()
+                    } label: {
+                        Label("New Script", systemImage: "plus")
+                    }
+                    
+                    Button {
+                        // Open file picker
+                        // TODO: Implement file import
+                    } label: {
+                        Label("Open", systemImage: "folder")
+                    }
+                    
+                    if let selected = viewModel.selectedScriptId, viewModel.isExistingScript(selected) {
+                        Divider()
+                        
+                        Button {
+                            presentNamePrompt(context: .copy(id: selected))
+                        } label: {
+                            Label("Make Copy", systemImage: "doc.on.doc")
+                        }
+                        
+                        Button {
+                            presentNamePrompt(context: .rename(id: selected))
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        
+                        Button(role: .destructive) {
+                            deleteTarget = DeletionTarget(id: selected, name: viewModel.scriptName(for: selected))
+                            showingDeleteConfirmation = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
             }
         }
     }
 }
 
-private struct EditorSession: Identifiable {
-    let id: String
+private struct ScriptRow: View {
+    let script: WaveletsViewModel.ScriptListItem
+    let isSelected: Bool
+    let onTap: () -> Void
+    let onEdit: () -> Void
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(script.name)
+                    .font(isSelected ? .headline : .body)
+                if script.isDirty {
+                    Text("Unsaved changes")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+            Spacer()
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 8)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
 }
 
 private enum NamePromptContext {
     case create
     case rename(id: String)
     case copy(id: String)
-
+    
     var title: String {
         switch self {
         case .create:
@@ -301,7 +537,7 @@ private enum NamePromptContext {
             return "Copy Script"
         }
     }
-
+    
     var message: String {
         switch self {
         case .create:
@@ -328,174 +564,16 @@ private struct DeletionTarget: Identifiable {
     let name: String
 }
 
-private struct ScriptRow: View {
-    let script: WaveletsViewModel.ScriptListItem
-    let isSelected: Bool
-    let onPreview: () -> Void
-    let onEdit: () -> Void
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(script.name)
-                    .font(isSelected ? .headline : .body)
-                if script.isDirty {
-                    Text("Unsaved changes")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-            }
-            Spacer()
-            Button(action: onEdit) {
-                Image(systemName: "pencil")
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 8)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onPreview)
-    }
-}
-
-private struct ScriptEditorSheet: View {
-    let scriptId: String
-    @ObservedObject var viewModel: WaveletsViewModel
-    let accessToken: String
-    let onDismiss: () -> Void
-    let onRequestCreate: () -> Void
-    let onRequestRename: () -> Void
-    let onRequestCopy: () -> Void
-    let onRequestDelete: () -> Void
-    let onRequestPreview: () -> Void
-
-    private var isExisting: Bool {
-        viewModel.isExistingScript(scriptId)
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                TextEditor(text: viewModel.draftBinding(for: scriptId))
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 280)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.secondary.opacity(0.2))
-                    )
-
-                if viewModel.isScriptDirty(scriptId) {
-                    Label("Changes not yet saved", systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundColor(.orange)
-                }
-
-                Spacer()
-            }
-            .padding()
-            .navigationTitle(viewModel.scriptName(for: scriptId))
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") { onDismiss() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(isExisting ? "Save" : "Create") {
-                        save()
-                    }
-                }
-                ToolbarItemGroup(placement: .bottomBar) {
-                    Button("Preview", action: onRequestPreview)
-                        .disabled(viewModel.scriptDraft(for: scriptId).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    Spacer()
-
-                    if isExisting {
-                        Button("Rename", action: onRequestRename)
-                        Button("Copy", action: onRequestCopy)
-                        Button("Delete", role: .destructive, action: onRequestDelete)
-                    }
-                }
-            }
-        }
-    }
-
-    private func save() {
-        if isExisting {
-            Task { await viewModel.saveScript(id: scriptId, accessToken: accessToken) }
-        } else {
-            onRequestCreate()
-        }
-    }
-}
-
-private struct WaveletPreviewSheet: View {
-    @ObservedObject var previewManager: WaveletPreviewManager
-    let onClose: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ZStack {
-                    WaveletRenderView(tree: previewManager.waveletTree) { token, args in
-                        previewManager.invoke(token: token, arguments: args)
-                    }
-                    .opacity(previewManager.waveletTree == nil ? 0 : 1)
-
-                    if previewManager.waveletTree == nil {
-                        VStack {
-                            if previewManager.isRendering {
-                                ProgressView("Rendering…")
-                            } else {
-                                Text("Render a wavelet to preview it here.")
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(uiColor: .secondarySystemBackground))
-
-                Divider()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(previewManager.consoleLines.enumerated()), id: \.offset) { _, line in
-                            Text(line)
-                                .font(.system(.caption, design: .monospaced))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding()
-                }
-                .frame(maxHeight: 200)
-                .background(Color(uiColor: .systemBackground))
-            }
-            .navigationTitle(previewManager.activeScriptName ?? "Wavelet Preview")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") { onClose() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Clear Console") { previewManager.clearConsole() }
-                        .disabled(previewManager.consoleLines.isEmpty)
-                }
-            }
-            .alert(item: $previewManager.dialog) { dialog in
-                Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
-            }
-        }
-    }
-}
-
 private struct NamePromptSheet: View {
     @Environment(\.dismiss) private var dismiss
     let prompt: NamePrompt
     @State private var value: String
-
+    
     init(prompt: NamePrompt) {
         self.prompt = prompt
         _value = State(initialValue: prompt.initialValue)
     }
-
+    
     var body: some View {
         NavigationStack {
             Form {
@@ -521,4 +599,3 @@ private struct NamePromptSheet: View {
         }
     }
 }
-
