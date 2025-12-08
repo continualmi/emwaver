@@ -4,15 +4,15 @@
 - **Firmware**: ESP32-S3 firmware at repository root with modules in `main/`
 - **Android**: Native Android companion app in `android/`
 - **iOS**: SwiftUI companion app in `ios/`
-- **CLI**: Rust command-line tool in `cli/` for device interaction and file sync
-- **IDE**: Cross-platform EMWaver programmer in `ide/`
+- **Desktop App**: Cross-platform EMWaver app in `app/` (formerly `ide/`) - mirrors all mobile views/fragments
+- **CLI**: Rust command-line tool in `cli/` for device interaction
 - **Docs**: MkDocs-based documentation in `docs/`
 
 ## Environment Skills & Worktrees
 When the user asks to start or restart any environment, refer to `skills/environment/setup.md` for detailed orchestration steps. Launch necessary tmux helpers directly from their roots and only escalate to troubleshooting when something fails.
 
 ## Project Structure & Module Organization
-Firmware for the ESP32-S3 resides in `main/` and is split into modules (`ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`) with matching headers. ESP-IDF managed components live in `managed_components/`; regenerate them with `idf.py reconfigure` rather than editing by hand. Companion apps sit under `android/` and `ios/`, while `docs/` with `mkdocs.yml` drives the user-facing site. CLI tool lives in `cli/` and IDE in `ide/`. Treat `build/` and generated `.elf`/`.bin` files as temporary artifacts.
+Firmware for the ESP32-S3 resides in `main/` and is split into modules (`ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`) with matching headers. ESP-IDF managed components live in `managed_components/`; regenerate them with `idf.py reconfigure` rather than editing by hand. Companion apps sit under `android/`, `ios/`, and `app/` (desktop), while `docs/` with `mkdocs.yml` drives the user-facing site. CLI tool lives in `cli/`. Treat `build/` and generated `.elf`/`.bin` files as temporary artifacts.
 
 ## Wavelet Feature
 Wavelets are the user-authored extension bundles (manifest + JavaScript) that plug into the Wavelet Engine sandbox to broaden EMWaver beyond the built-in fragments. They combine UI declarations with scripted logic that talks to firmware through the EMWaver Script SDK. Refer to `TODO.md` for the evolving roadmap, packaging details, and open questions.
@@ -22,27 +22,26 @@ Wavelets are the user-authored extension bundles (manifest + JavaScript) that pl
 - **In-wavelet logging**: scripts surface their output through Wavelet UI components (e.g., `UI.logViewer`) instead of the legacy console text pane. Avoid adding new out-of-band logging surfaces.
 
 ## Wavelet Development & File Sync
-The EMWaver CLI provides Git-like file management for wavelets stored on the mobile app. The CLI connects **directly to the Android/iOS app via BLE** (no firmware involved in file sync).
+Wavelets and signal assets are managed via **Git/GitHub as the source of truth**. Both mobile apps and desktop app sync with a configured GitHub repository.
 
 **Key Design Points**:
-- **Pipeline**: `CLI (Computer) ↔ BLE ↔ Android/iOS App`
-- **Direct BLE**: Computer connects directly to smartphone via Bluetooth
-- **Git-like workflow**: Commands like `git` (`clone`, `push`, `pull`, `list`, `rm`)
-- **Android as peripheral**: Android app advertises BLE GATT server with file sync service
-- **App-side storage**: Mobile apps handle persistence via `FileRepositoryLocal`
-- **`.emwaver` folder**: Clone creates Git-like `.emwaver` directory for metadata
+- **Git as source of truth**: Wavelet `.js` files and signal assets live in a GitHub repository
+- **Mobile Git fragment**: UI section in Android/iOS for GitHub repo operations (clone, pull, push)
+- **Desktop authoring**: Desktop app (`app/`) clones repo locally, provides rich editor + preview, mirrors all mobile views/fragments
+- **Workflow**: Desktop authors → commits/pushes to GitHub → mobile apps pull when needed
+- **No accounts/backend**: Uses GitHub REST API with token-based auth; no custom cloud service
 
-**CLI Commands**:
-```bash
-emwaver clone wavelets        # Clone all files (creates .emwaver folder)
-emwaver list                  # List files on device
-emwaver push mywavelet.js     # Upload wavelet to device
-emwaver pull mywavelet.js     # Download wavelet from device
-emwaver rm oldfile.js         # Remove file from device
-emwaver status                # Show sync state
-```
+**Mobile Git Operations** (via Git fragment UI):
+- Configure GitHub repository and personal access token
+- Clone/pull wavelet assets from repo
+- Push local changes to repo
+- Status indicators and conflict resolution
 
-**BLE Protocol**: File sync service (UUID `FILE_SYNC_SERVICE_UUID`) with characteristic for JSON packets (`list`, `push`, `pull`, `remove`) between CLI and app.
+**Desktop Workflow**:
+- Clone GitHub repo locally
+- Edit wavelets with syntax highlighting, linting, templates
+- Live preview before committing
+- Commit and push changes to GitHub
 
 ## Cross-Cutting Practices
 - Keep commits scoped and imperative (e.g., `driver: fix cc1101 init`, `android: update wavelet renderer`); never bundle unrelated changes.
@@ -75,27 +74,27 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 
 ### Android (`/android`)
 - Gradle project; run `./gradlew installDebug` for device builds. Keep `local.properties` pointing at the SDK (typically `~/Library/Android/sdk` or `~/Android/Sdk`).
-- **File sync integration**: `BLEService` subscribes to file transfer characteristic; `FileSyncManager` coordinates incoming/outgoing transfers; `FileRepositoryLocal` handles persistence. See `skills/wavelet-sync.md` for implementation details.
-- Wavelet console/sampler can sync `.js` and `.raw` assets via BLE bridge or future cloud sync capabilities.
-- Login/registration flows may integrate with future backend services for entitlement management.
+- **Git fragment**: UI section for GitHub repo operations (clone, pull, push) using GitHub REST API with token-based auth.
+- Wavelet console/sampler loads `.js` and `.raw` assets from local storage (synced via Git fragment).
 - Mirror iOS feature parity for wavelets, IR tooling, and hardware interaction.
 
 ### iOS (`/ios`)
 - SwiftUI app opened via `EMWaver.xcodeproj`; mirror Android feature parity.
+- **Git fragment**: UI section for GitHub repo operations (clone, pull, push) using GitHub REST API with token-based auth.
 - Wavelet renderers, IR tooling, and hardware communication must stay aligned with the Android app.
 - Build and test through Xcode; agents should not invoke `xcodebuild` from CLI.
 
 ### CLI (`/cli`)
-- Rust binary using Clap for device interaction and file sync workflows.
+- Rust binary using Clap for device interaction workflows.
 - **Shell integration**: the `emwaver shell` command discovers nearby devices, pairs over the same transport as smartphones, and provides an interactive prompt that sends raw Unix-style commands (SPI control, sampler routing) and prints structured `ok ...`/`err ...` responses for scripting or operator use.
-- **Sync integration**: the `emwaver sync` subcommand provides Git-like file management (`push`, `pull`, `list`, `status`) for wavelet scripts and signal files. See `skills/wavelet-sync.md` for architecture and usage.
 - Development: `cargo build`, `cargo run`, `cargo test`
 - Distribution artifacts and installers may be prepared for macOS/Linux/Windows.
 
-### IDE (`/ide`)
-- Cross-platform EMWaver programmer that automates ESP-IDF setup, firmware builds/flashing, wavelet preview and syncing, and account integration without relying on a general-purpose code editor.
-- Development environment and build instructions specific to the IDE tooling.
-- Integrates with firmware flashing workflows and wavelet development cycle.
+### Desktop App (`/app`, formerly `/ide`)
+- Cross-platform EMWaver app that mirrors all mobile views/fragments (same UI components as Android/iOS).
+- **UI Parity**: All mobile fragments/views (wavelets, IR, sampler, Git fragment, etc.) available on desktop.
+- **Features**: Rich editor (syntax highlighting, linting, templates), live preview, local Git repo clone, commit/push to GitHub, full hardware interaction capabilities.
+- Development environment and build instructions specific to the desktop app tooling.
 
 ### Docs (`/docs`)
 - MkDocs project with user-facing documentation.
