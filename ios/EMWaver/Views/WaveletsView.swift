@@ -191,45 +191,63 @@ struct WaveletsView: View {
     }
     
     private var editorView: some View {
-        VStack(spacing: 0) {
-            if lineWrapEnabled {
-                ScrollView {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if lineWrapEnabled {
+                    // Line wrap enabled: TextEditor fills width, wraps naturally
                     TextEditor(text: $editorContent)
                         .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 300)
-                        .padding()
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                         .onChange(of: editorContent) { _, newValue in
                             if let id = currentScriptId {
                                 viewModel.updateDraft(for: id, content: newValue)
                             }
                         }
-                }
-            } else {
-                ScrollView(.horizontal) {
-                    TextEditor(text: $editorContent)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minWidth: 300, minHeight: 300)
-                        .padding()
-                        .onChange(of: editorContent) { _, newValue in
-                            if let id = currentScriptId {
-                                viewModel.updateDraft(for: id, content: newValue)
-                            }
+                } else {
+                    // Line wrap disabled: Horizontal scrolling with wide TextEditor
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        HStack(spacing: 0) {
+                            TextEditor(text: $editorContent)
+                                .font(.system(.body, design: .monospaced))
+                                .scrollContentBackground(.hidden)
+                                .frame(width: calculateTextWidth(editorContent))
+                                .frame(minHeight: geometry.size.height)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .onChange(of: editorContent) { _, newValue in
+                                    if let id = currentScriptId {
+                                        viewModel.updateDraft(for: id, content: newValue)
+                                    }
+                                }
+                            Spacer(minLength: 0)
                         }
+                    }
+                }
+                
+                if let id = currentScriptId, viewModel.isScriptDirty(id) {
+                    HStack {
+                        Label("Changes not yet saved", systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundColor(.orange)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
                 }
             }
-            
-            if let id = currentScriptId, viewModel.isScriptDirty(id) {
-                HStack {
-                    Label("Changes not yet saved", systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundColor(.orange)
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-            }
+            .background(Color(uiColor: .systemBackground))
         }
-        .background(Color(uiColor: .systemBackground))
+    }
+    
+    private func calculateTextWidth(_ text: String) -> CGFloat {
+        let lines = text.components(separatedBy: .newlines)
+        let longestLine = lines.max(by: { $0.count < $1.count }) ?? ""
+        // Approximate width: ~10 pixels per character for monospaced font at body size
+        // Minimum width ensures editor is usable even with short lines
+        let calculatedWidth = CGFloat(longestLine.count) * 10 + 200
+        return max(600, calculatedWidth)
     }
     
     private var currentScriptName: String? {
@@ -365,65 +383,76 @@ struct WaveletsView: View {
                 }
             }
             
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) ? "Save" : "Create") {
-                    saveCurrentScript()
-                }
-            }
-            
-            ToolbarItemGroup(placement: .bottomBar) {
-                Button("Preview") {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                // Preview button in toolbar
+                Button(action: {
                     guard let id = currentScriptId else { return }
                     // Save editor content before previewing
                     viewModel.updateDraft(for: id, content: editorContent)
                     previewScript(id)
+                }) {
+                    Image(systemName: "play.fill")
                 }
                 .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 
-                Spacer()
-                
-                Button(action: {
-                    let pasteboard = UIPasteboard.general
-                    if let string = pasteboard.string {
-                        editorContent = string
-                    }
-                }) {
-                    Label("Paste", systemImage: "doc.on.clipboard")
-                }
-                
-                Button(action: {
-                    let pasteboard = UIPasteboard.general
-                    pasteboard.string = editorContent
-                }) {
-                    Label("Copy", systemImage: "doc.on.doc")
-                }
-                
-                if currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) {
+                // Menu with other actions
+                Menu {
                     Button(action: {
-                        guard let id = currentScriptId else { return }
-                        presentNamePrompt(context: .rename(id: id))
-                    }) {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    
-                    Button(action: {
-                        guard let id = currentScriptId else { return }
-                        presentNamePrompt(context: .copy(id: id))
+                        let pasteboard = UIPasteboard.general
+                        pasteboard.string = editorContent
                     }) {
                         Label("Copy", systemImage: "doc.on.doc")
                     }
                     
-                    Button(role: .destructive, action: {
-                        guard let id = currentScriptId else { return }
-                        deleteTarget = DeletionTarget(id: id, name: viewModel.scriptName(for: id))
-                        showingDeleteConfirmation = true
+                    Button(action: {
+                        let pasteboard = UIPasteboard.general
+                        if let string = pasteboard.string {
+                            editorContent = string
+                        }
                     }) {
-                        Label("Delete", systemImage: "trash")
+                        Label("Paste", systemImage: "doc.on.clipboard")
                     }
+                    
+                    if currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) {
+                        Divider()
+                        
+                        Button(action: {
+                            guard let id = currentScriptId else { return }
+                            presentNamePrompt(context: .rename(id: id))
+                        }) {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        
+                        Button(action: {
+                            guard let id = currentScriptId else { return }
+                            presentNamePrompt(context: .copy(id: id))
+                        }) {
+                            Label("Make Copy", systemImage: "doc.on.doc")
+                        }
+                        
+                        Button(role: .destructive, action: {
+                            guard let id = currentScriptId else { return }
+                            deleteTarget = DeletionTarget(id: id, name: viewModel.scriptName(for: id))
+                            showingDeleteConfirmation = true
+                        }) {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    Button(action: {
+                        lineWrapEnabled.toggle()
+                    }) {
+                        Label("Line Wrap", systemImage: lineWrapEnabled ? "text.word.spacing" : "text.alignleft")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
                 
-                Button(action: { lineWrapEnabled.toggle() }) {
-                    Label("Wrap", systemImage: lineWrapEnabled ? "text.word.spacing" : "text.alignleft")
+                // Save/Create button
+                Button(currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) ? "Save" : "Create") {
+                    saveCurrentScript()
                 }
             }
         } else if showingPreview {
