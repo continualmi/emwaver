@@ -53,6 +53,49 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
             }
             
+            Section("ISM Settings") {
+                // RFM69 CS Pin Setting
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("RFM69 CS Pin")
+                            .font(.body)
+                        Text("Chip Select pin for RFM69 SPI communication")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    TextField("36", text: Binding(
+                        get: { settingsManager.rfm69CsPin },
+                        set: { settingsManager.updateRfm69CsPin($0) }
+                    ))
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 60)
+                }
+                .padding(.vertical, 4)
+                
+                // RFM69 CS Active High Setting
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("RFM69 CS Active High")
+                            .font(.body)
+                        Text("Enable if CS is active high (select=high, deselect=low)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: Binding(
+                        get: { settingsManager.rfm69CsActiveHigh },
+                        set: { settingsManager.updateRfm69CsActiveHigh($0) }
+                    ))
+                }
+                .padding(.vertical, 4)
+            }
+            
             Section("Support & Information") {
                 // Help Documentation
                 Button(action: {
@@ -87,13 +130,6 @@ struct SettingsView: View {
                 .foregroundColor(.primary)
             }
 
-            Section("Account") {
-                Button(role: .destructive) {
-                    authManager.logout()
-                } label: {
-                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)

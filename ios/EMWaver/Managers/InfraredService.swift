@@ -1,7 +1,6 @@
 import Foundation
 
 enum InfraredServiceError: LocalizedError {
-    case missingAccessToken
     case invalidURL
     case invalidResponse
     case server(message: String)
@@ -9,8 +8,6 @@ enum InfraredServiceError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingAccessToken:
-            return "Please sign in to use infrared tools"
         case .invalidURL:
             return "Invalid request URL"
         case .invalidResponse:
@@ -155,16 +152,11 @@ final class InfraredService {
         accessToken: String,
         body: [String: Any]? = nil
     ) throws -> URLRequest {
-        guard !accessToken.isEmpty else {
-            throw InfraredServiceError.missingAccessToken
-        }
-
         let trimmedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
         let url = baseURL.appendingPathComponent(trimmedPath)
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.addValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
         if let body {
             guard JSONSerialization.isValidJSONObject(body) else {

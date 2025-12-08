@@ -12,25 +12,24 @@ final class AgentViewModel: ObservableObject {
     @Published var isShowingErrorAlert: Bool = false
     @Published var isPresentingNewConversationSheet: Bool = false
     @Published var isPresentingRenameSheet: Bool = false
+    @Published var isPresentingSettingsSheet: Bool = false
     @Published var newConversationTitle: String = ""
     @Published var renameConversationTitle: String = ""
     @Published var isShowingDeleteConfirmation: Bool = false
+    @Published var isShowingChatsDialog: Bool = false
 
     private let service: AgentService
-    private let authManager: AuthenticationManager
     private let defaults: UserDefaults
-    private let conversationStorageKey = "agent.conversations"
+    private let lastSelectedConversationKey = "agent_last_selected_conversation"
 
     private var hasLoaded = false
     private var streamTask: Task<Void, Never>?
 
     init(
         service: AgentService = .shared,
-        authManager: AuthenticationManager,
         defaults: UserDefaults = .standard
     ) {
         self.service = service
-        self.authManager = authManager
         self.defaults = defaults
         loadStoredConversations()
     }
@@ -42,139 +41,116 @@ final class AgentViewModel: ObservableObject {
     func loadIfNeeded() {
         guard !hasLoaded else { return }
         hasLoaded = true
-        Task {
-            await refreshConversations()
-        }
+        refreshConversations()
     }
 
-    func refreshConversations() async {
-        guard let token = tokenOrNotify() else { return }
-
-        do {
-            let remote = try await service.fetchConversations(accessToken: token)
-            conversations = sort(remote)
-            persist(conversations: conversations)
-
-            if let selected = selectedConversationId,
-               !conversations.contains(where: { $0.id == selected }) {
-                selectedConversationId = conversations.first?.id
-            } else if selectedConversationId == nil {
-                selectedConversationId = conversations.first?.id
-            }
-
-            if let conversationId = selectedConversationId {
-                await loadMessages(for: conversationId)
-            } else {
-                messages = []
-            }
-        } catch {
-            present(error: error)
+    func refreshConversations() {
+        conversations = service.loadConversations()
+        
+        if let selected = selectedConversationId,
+           !conversations.contains(where: { $0.id == selected }) {
+            selectedConversationId = conversations.first?.id
+        } else if selectedConversationId == nil {
+            selectedConversationId = conversations.first?.id
         }
+
+        if let conversationId = selectedConversationId {
+            loadMessages(for: conversationId)
+        } else {
+            messages = []
+        }
+        
+        saveLastSelectedConversation()
     }
 
-    func loadMessages(for conversationId: String) async {
-        guard let token = tokenOrNotify() else { return }
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let loaded = try await service.fetchMessages(conversationId: conversationId, accessToken: token)
-            messages = loaded.sorted(by: { $0.createdAt < $1.createdAt })
-        } catch {
-            present(error: error)
-        }
+    func loadMessages(for conversationId: String) {
+        messages = service.loadMessages(conversationId: conversationId)
+            .sorted(by: { $0.createdAt < $1.createdAt })
     }
 
     func selectConversation(id: String?) {
         guard selectedConversationId != id else { return }
         selectedConversationId = id
+        saveLastSelectedConversation()
         messages = []
 
         guard let id else { return }
-        Task {
-            await loadMessages(for: id)
-        }
+        loadMessages(for: id)
     }
 
     func createConversation(with title: String) {
-        guard let token = tokenOrNotify() else { return }
-
-        Task {
-            do {
-                let conversation = try await service.createConversation(title: title, accessToken: token)
-                update(conversation: conversation, select: true)
-                await loadMessages(for: conversation.id)
-            } catch {
-                present(error: error)
-            }
-        }
+        let conversationId = UUID().uuidString
+        let conversationTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalTitle = conversationTitle.isEmpty ? "New Chat" : conversationTitle
+        
+        let conversation = AgentConversationSummary(
+            id: conversationId,
+            title: finalTitle,
+            updatedAt: Date()
+        )
+        
+        conversations.append(conversation)
+        service.saveConversations(conversations)
+        service.saveMessages(conversationId: conversationId, messages: [])
+        
+        selectConversation(id: conversationId)
     }
 
     func renameSelectedConversation(to title: String) {
-        guard let conversationId = selectedConversationId,
-              let token = tokenOrNotify()
-        else { return }
-
-        Task {
-            do {
-                let updated = try await service.renameConversation(id: conversationId, title: title, accessToken: token)
-                update(conversation: updated, select: true)
-            } catch {
-                present(error: error)
-            }
-        }
+        guard let conversationId = selectedConversationId else { return }
+        
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalTitle = trimmed.isEmpty ? "Agent Chat" : trimmed
+        
+        guard let index = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
+        
+        let updated = AgentConversationSummary(
+            id: conversationId,
+            title: finalTitle,
+            updatedAt: Date()
+        )
+        
+        conversations[index] = updated
+        service.saveConversations(conversations)
+        refreshConversations()
     }
 
     func deleteSelectedConversation() {
-        guard let conversationId = selectedConversationId,
-              let token = tokenOrNotify()
-        else { return }
+        guard let conversationId = selectedConversationId else { return }
+        
+        service.deleteConversation(id: conversationId)
+        conversations.removeAll { $0.id == conversationId }
+        service.saveConversations(conversations)
 
-        Task {
-            do {
-                try await service.deleteConversation(id: conversationId, accessToken: token)
-                conversations.removeAll { $0.id == conversationId }
-                persist(conversations: conversations)
-
-                if let first = conversations.first {
-                    selectedConversationId = first.id
-                    await loadMessages(for: first.id)
-                } else {
-                    selectedConversationId = nil
-                    messages = []
-                }
-            } catch {
-                present(error: error)
-            }
+        if let first = conversations.first {
+            selectedConversationId = first.id
+            loadMessages(for: first.id)
+        } else {
+            selectedConversationId = nil
+            messages = []
         }
+        
+        saveLastSelectedConversation()
     }
 
     func sendMessage() {
         let trimmed = messageInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        guard let token = tokenOrNotify() else { return }
-
         messageInput = ""
         streamTask?.cancel()
 
         Task { [weak self] in
-            await self?.performSendMessage(trimmed: trimmed, token: token)
+            await self?.performSendMessage(trimmed: trimmed)
         }
     }
 
-    private func performSendMessage(trimmed message: String, token: String) async {
+    private func performSendMessage(trimmed message: String) async {
         var conversationId = selectedConversationId
 
         if conversationId == nil {
-            do {
-                let conversation = try await service.createConversation(title: "Agent Chat", accessToken: token)
-                update(conversation: conversation, select: true)
-                conversationId = conversation.id
-            } catch {
-                present(error: error)
-                return
-            }
+            createConversation(with: "")
+            conversationId = selectedConversationId
         }
 
         guard let conversationId else { return }
@@ -188,13 +164,15 @@ final class AgentViewModel: ObservableObject {
         let assistantId = assistantMessage.id
         isStreaming = true
 
+        let conversationHistory = messages.filter { $0.id != assistantId }
+        
         streamTask = Task { [weak self] in
             guard let self else { return }
             await self.processStream(
                 conversationId: conversationId,
                 prompt: message,
                 assistantId: assistantId,
-                token: token
+                conversationHistory: conversationHistory
             )
         }
     }
@@ -203,10 +181,14 @@ final class AgentViewModel: ObservableObject {
         conversationId: String,
         prompt: String,
         assistantId: UUID,
-        token: String
+        conversationHistory: [AgentMessage]
     ) async {
         do {
-            let stream = service.streamMessage(conversationId: conversationId, message: prompt, accessToken: token)
+            let stream = service.streamMessage(
+                conversationId: conversationId,
+                message: prompt,
+                conversationHistory: conversationHistory
+            )
             var accumulated = ""
 
             for try await event in stream {
@@ -218,8 +200,9 @@ final class AgentViewModel: ObservableObject {
                 case .final(let text):
                     accumulated = text
                     updateAssistantMessage(id: assistantId, with: accumulated)
-                    await refreshConversations()
+                    saveConversation(conversationId: conversationId)
                 case .completed:
+                    saveConversation(conversationId: conversationId)
                     break
                 case .error(let message):
                     accumulated = message
@@ -245,12 +228,19 @@ final class AgentViewModel: ObservableObject {
         messages[index].content = content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func tokenOrNotify() -> String? {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            present(error: AgentServiceError.missingAccessToken)
-            return nil
+    private func saveConversation(conversationId: String) {
+        service.saveMessages(conversationId: conversationId, messages: messages)
+        
+        if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
+            let oldSummary = conversations[index]
+            let updated = AgentConversationSummary(
+                id: conversationId,
+                title: oldSummary.title,
+                updatedAt: Date()
+            )
+            conversations[index] = updated
+            service.saveConversations(conversations)
         }
-        return token
     }
 
     private func present(error: Error) {
@@ -262,39 +252,24 @@ final class AgentViewModel: ObservableObject {
         isShowingErrorAlert = true
     }
 
-    private func update(conversation: AgentConversationSummary, select: Bool) {
-        if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
-            conversations[index] = conversation
-        } else {
-            conversations.append(conversation)
-        }
-
-        conversations = sort(conversations)
-        persist(conversations: conversations)
-
-        if select {
-            selectedConversationId = conversation.id
-        }
-    }
-
-    private func sort(_ items: [AgentConversationSummary]) -> [AgentConversationSummary] {
-        items.sorted(by: { $0.updatedAt > $1.updatedAt })
-    }
-
     private func loadStoredConversations() {
-        guard let data = defaults.data(forKey: conversationStorageKey) else { return }
-        let decoder = JSONDecoder()
-        if let stored = try? decoder.decode([AgentConversationSummary].self, from: data) {
-            conversations = sort(stored)
-            selectedConversationId = conversations.first?.id
+        conversations = service.loadConversations()
+        
+        if let lastSelectedId = defaults.string(forKey: lastSelectedConversationKey),
+           conversations.contains(where: { $0.id == lastSelectedId }) {
+            selectedConversationId = lastSelectedId
+            loadMessages(for: lastSelectedId)
+        } else if let first = conversations.first {
+            selectedConversationId = first.id
+            loadMessages(for: first.id)
         }
     }
 
-    private func persist(conversations: [AgentConversationSummary]) {
-        let encoder = JSONEncoder()
-        if let data = try? encoder.encode(conversations) {
-            defaults.set(data, forKey: conversationStorageKey)
+    private func saveLastSelectedConversation() {
+        if let id = selectedConversationId {
+            defaults.set(id, forKey: lastSelectedConversationKey)
+        } else {
+            defaults.removeObject(forKey: lastSelectedConversationKey)
         }
     }
-
 }

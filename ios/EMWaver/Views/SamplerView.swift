@@ -142,11 +142,11 @@ struct LineChartViewController: UIViewControllerRepresentable {
 }
 
 struct SamplerView: View {
-    @EnvironmentObject var authManager: AuthenticationManager
     @EnvironmentObject var bleManager: BLEManager
     @StateObject private var viewModel = SamplerViewModel()
 
-    @State private var selectedPinIndex = 4
+    @State private var selectedPinIndex = 10 // Default to GPIO6 (IO6) to match Android
+    @State private var selectedSignalIndex = 0
     @State private var isRecording = false
 
     @State private var chartEntries: [ChartDataEntry] = []
@@ -164,28 +164,36 @@ struct SamplerView: View {
     @State private var exportFileName = "signal.raw"
     @State private var namePrompt: NamePrompt?
     @State private var showingDeleteConfirmation = false
+    @State private var showingRenameDialog = false
+    @State private var renameText = ""
 
-    @State private var irpProtocol = "NEC1"
-    @State private var irpDevice = "0"
-    @State private var irpSubdevice = "0"
-    @State private var irpFunction = "170"
 
     private let pins = [
-        "GPIO0 (IO0)",
-        "CC1101 GDO0 (IO1)",
-        "CC1101 GDO2 (IO2)",
-        "IR TX (IO4)",
-        "IR RX (IO5)",
+        "RFM69 DIO0 (IO1)",
+        "RFM69 DIO1 (IO2)",
+        "RFM69 DIO2 (IO42)",
+        "RFM69 DIO3 (IO41)",
+        "RFM69 DIO4 (IO40)",
+        "RFM69 DIO5 (IO39)",
+        "IR RX (IO38)",
+        "IR TX (IO37)",
+        "GPIO4 (IO4)",
+        "GPIO5 (IO5)",
         "GPIO6 (IO6)",
         "GPIO7 (IO7)",
-        "GPIO9 (IO9)",
-        "CC1101 NSS (IO10)",
-        "CC1101 MOSI (IO11)",
-        "CC1101 SCK (IO12)",
-        "CC1101 MISO (IO13)",
-        "GPIO14 (IO14)",
         "GPIO15 (IO15)",
-        "GPIO16 (IO16)"
+        "GPIO16 (IO16)",
+        "GPIO17 (IO17)",
+        "GPIO18 (IO18)",
+        "GPIO8 (IO8)",
+        "GPIO3 (IO3)",
+        "GPIO46 (IO46)",
+        "GPIO9 (IO9)",
+        "GPIO10 (IO10)",
+        "GPIO11 (IO11)",
+        "GPIO12 (IO12)",
+        "GPIO13 (IO13)",
+        "GPIO14 (IO14)"
     ]
 
     var body: some View {
@@ -197,18 +205,36 @@ struct SamplerView: View {
                     }
 
                     chartSection
-                    signalsSection
-                    infraredSection
+                    signalPickerSection
+                    controlsSection
                 }
                 .padding(.vertical, 16)
             }
-            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Sampler")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
-            .onAppear { handleAppear() }
+            .onAppear { 
+                handleAppear()
+                viewModel.refreshSignalList()
+                loadLastSelectedSignal()
+            }
             .onChange(of: bleManager.isConnected) { handleConnectionChange($0) }
-            .onChange(of: authManager.accessToken) { _ in loadSignals() }
             .onDisappear { stopScheduler() }
+            .onChange(of: selectedSignalIndex) { newValue in
+                handleSignalSelection(index: newValue)
+            }
+            .onChange(of: viewModel.signalNames) { _ in
+                // Update picker selection when signal list changes
+                if let currentName = viewModel.currentSignalName,
+                   let index = viewModel.signalNames.firstIndex(of: currentName) {
+                    if selectedSignalIndex != index + 1 {
+                        selectedSignalIndex = index + 1
+                    }
+                } else if viewModel.signalNames.isEmpty && selectedSignalIndex != 0 {
+                    selectedSignalIndex = 0
+                }
+            }
             .alert(item: $viewModel.notice) { notice in
                 Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
             }
@@ -343,7 +369,6 @@ struct SamplerView: View {
                 }
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
             }
         }
         .padding(.vertical, 12)
@@ -351,149 +376,93 @@ struct SamplerView: View {
         .padding(.horizontal)
     }
 
-    private var signalsSection: some View {
+    private var signalPickerSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Saved Signals")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    loadSignals()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+            Text("Signal")
+                .font(.headline)
+            
+            Picker("", selection: $selectedSignalIndex) {
+                Text("New signal...").tag(0)
+                ForEach(Array(viewModel.signalNames.enumerated()), id: \.offset) { index, name in
+                    Text(name).tag(index + 1)
                 }
-                .labelStyle(.iconOnly)
-                .disabled(!(authManager.accessToken?.isEmpty == false))
             }
-
-            Text(viewModel.currentSignalSummary())
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            let state = viewModel.saveButtonState(isAuthenticated: authManager.accessToken?.isEmpty == false)
-            Button(state.title) {
-                handleSaveTapped()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!state.isEnabled)
-
-            if viewModel.isSavingSignal {
-                ProgressView()
-            }
-
-            if viewModel.isLoadingSignals {
-                ProgressView("Loading...")
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else if authManager.accessToken?.isEmpty != false {
-                Text("Sign in to access saved signals.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } else if viewModel.signals.isEmpty {
-                Text("No signals saved yet.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(viewModel.signals) { item in
-                        SignalRow(item: item) {
-                            loadSignal(from: item.metadata)
-                        }
-                        if item.id != viewModel.signals.last?.id {
-                            Divider()
-                        }
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            if let currentName = viewModel.currentSignalName {
+                HStack {
+                    Text(currentName)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    if viewModel.hasUnsavedChanges {
+                        Text("*")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(.secondarySystemBackground))
-                )
             }
         }
         .padding()
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
     }
-
-    private var infraredSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Infrared Tools")
-                .font(.headline)
-
+    
+    private var controlsSection: some View {
+        VStack(spacing: 12) {
             HStack(spacing: 12) {
-                Button("Get Timings") {
-                    getTimings()
+                Button(action: startRecording) {
+                    Label("Record", systemImage: "record.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isRecording || !bleManager.isConnected)
+                
+                Button(action: stopRecording) {
+                    Label("Stop", systemImage: "stop.circle")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-
-                Button("Decode IRP") {
-                    decodeIrp()
+                .disabled(!isRecording)
+                
+                Button(action: retransmitSignal) {
+                    Label("Retransmit", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .disabled(bleManager.getBuffer().isEmpty || authManager.accessToken?.isEmpty != false)
-
-                Button("Convert to IR") {
-                    convertToIR()
-                }
-                .buttonStyle(.bordered)
-                .disabled(bleManager.getBuffer().isEmpty)
+                .disabled(bleManager.getBuffer().isEmpty || !bleManager.isConnected)
             }
-
-            VStack(spacing: 8) {
-                TextField("Protocol", text: $irpProtocol)
-                    .textInputAutocapitalization(.characters)
-                    .disableAutocorrection(true)
-
-                HStack {
-                    TextField("Device (D)", text: $irpDevice)
-                        .keyboardType(.numbersAndPunctuation)
-                    TextField("Subdevice (S)", text: $irpSubdevice)
-                        .keyboardType(.numbersAndPunctuation)
-                    TextField("Function (F)", text: $irpFunction)
-                        .keyboardType(.numbersAndPunctuation)
-                }
+            
+            Button(action: getTimings) {
+                Label("Get Timings", systemImage: "waveform")
+                    .frame(maxWidth: .infinity)
             }
-
-            Button("Render IRP") {
-                renderIrp()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(authManager.accessToken?.isEmpty != false)
-
-            TextEditor(text: $viewModel.outputText)
-                .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 160)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(.separator), lineWidth: 1)
-                )
+            .buttonStyle(.bordered)
+            .disabled(bleManager.getBuffer().isEmpty)
         }
         .padding()
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
     }
+
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
             Menu {
                 Button("New Signal", action: createNewSignal)
+                Button("Save Signal", action: showSavePrompt)
+                    .disabled(bleManager.getBuffer().isEmpty)
                 Button("Rename Signal", action: showRenamePrompt)
-                    .disabled(viewModel.currentSignalMetadata == nil || viewModel.hasUnsavedChanges)
+                    .disabled(viewModel.currentSignalName == nil || viewModel.hasUnsavedChanges)
                 Button("Delete Signal", action: { showingDeleteConfirmation = true })
-                    .disabled(viewModel.currentSignalMetadata == nil || viewModel.hasUnsavedChanges)
+                    .disabled(viewModel.currentSignalName == nil || viewModel.hasUnsavedChanges)
                 Divider()
                 Button("Clear Buffer", action: clearBufferAndChart)
-                Button("Import from Files") { showingFileImporter = true }
-                Button("Export to Files") {
-                    let buffer = bleManager.getBuffer()
-                    if buffer.isEmpty {
-                        showToast("Buffer is empty, nothing to export")
-                    } else {
-                        exportFileName = generateDefaultFileName()
-                        showingExportDialog = true
-                    }
-                }
-                Button("Settings") { showingSettingsSheet = true }
+                Button("Import from Storage", action: { showingFileImporter = true })
+                Button("Export to Storage", action: showExportPrompt)
+                    .disabled(bleManager.getBuffer().isEmpty)
+                Button("Settings", action: { showingSettingsSheet = true })
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -502,7 +471,7 @@ struct SamplerView: View {
 
     private func handleAppear() {
         viewModel.attachBLEManager(bleManager)
-        loadSignals()
+        viewModel.refreshSignalList()
         if bleManager.isConnected {
             initScheduler()
         }
@@ -517,13 +486,29 @@ struct SamplerView: View {
         }
     }
 
-    private func loadSignals() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.clearSignals()
-            return
+    private func handleSignalSelection(index: Int) {
+        if index == 0 {
+            // "New signal..." selected
+            createNewSignal()
+        } else {
+            let signalIndex = index - 1
+            if signalIndex < viewModel.signalNames.count {
+                let signalName = viewModel.signalNames[signalIndex]
+                // Only load if it's different from current
+                if viewModel.currentSignalName != signalName || viewModel.hasUnsavedChanges {
+                    loadSignal(name: signalName)
+                }
+            }
         }
-        Task {
-            await viewModel.refreshSignals(accessToken: token)
+    }
+    
+    private func loadLastSelectedSignal() {
+        if let lastSelected = viewModel.loadLastSelectedSignal(),
+           let index = viewModel.signalNames.firstIndex(of: lastSelected) {
+            selectedSignalIndex = index + 1 // +1 because index 0 is "New signal..."
+            loadSignal(name: lastSelected)
+        } else {
+            selectedSignalIndex = 0
         }
     }
 
@@ -534,32 +519,20 @@ struct SamplerView: View {
         updateChartWithCompression(rangeStart: chartView.lowestVisibleX, rangeEnd: chartView.highestVisibleX)
     }
 
-    private func handleSaveTapped() {
-        let state = viewModel.saveButtonState(isAuthenticated: authManager.accessToken?.isEmpty == false)
-        guard state.isEnabled else { return }
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
+    private func showSavePrompt() {
         let buffer = bleManager.getBuffer()
         if buffer.isEmpty {
             viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Buffer is empty")
             return
         }
-
-        if viewModel.currentSignalMetadata == nil {
-            let initial = viewModel.normalizeSignalName(viewModel.currentSignalName.isEmpty ? viewModel.generateNewSignalName() : viewModel.currentSignalName)
-            namePrompt = NamePrompt(
-                mode: .create(buffer),
-                title: "Save Signal",
-                message: "Enter a name for the signal.",
-                initialValue: initial
-            )
-        } else {
-            Task {
-                await viewModel.saveSignal(buffer: buffer, accessToken: token)
-            }
-        }
+        
+        let initial = viewModel.currentSignalName ?? viewModel.generateNewSignalName()
+        namePrompt = NamePrompt(
+            mode: .save(buffer),
+            title: "Save Signal",
+            message: "Enter a name for the signal.",
+            initialValue: initial
+        )
     }
 
     private func handleNamePrompt(prompt: NamePrompt, value: String) {
@@ -568,23 +541,29 @@ struct SamplerView: View {
             namePrompt = nil
             return
         }
+        
         switch prompt.mode {
-        case .create(let buffer):
-            guard let token = authManager.accessToken, !token.isEmpty else {
-                viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-                break
-            }
-            viewModel.markBufferDirty(resetMetadata: true, suggestedName: trimmed)
-            Task {
-                await viewModel.saveSignal(buffer: buffer, accessToken: token)
+        case .save(let buffer):
+            viewModel.saveSignal(name: trimmed, buffer: buffer)
+            viewModel.refreshSignalList()
+            // Update picker after a short delay to allow refresh to complete
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                let normalized = viewModel.normalizeSignalName(trimmed)
+                if let index = viewModel.signalNames.firstIndex(of: normalized) {
+                    selectedSignalIndex = index + 1
+                }
             }
         case .rename:
-            guard let token = authManager.accessToken, !token.isEmpty else {
-                viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-                break
-            }
-            Task {
-                await viewModel.renameCurrentSignal(to: trimmed, accessToken: token)
+            if let currentName = viewModel.currentSignalName {
+                viewModel.renameSignal(from: currentName, to: trimmed)
+                viewModel.refreshSignalList()
+                // Update picker after rename
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    let normalized = viewModel.normalizeSignalName(trimmed)
+                    if let index = viewModel.signalNames.firstIndex(of: normalized) {
+                        selectedSignalIndex = index + 1
+                    }
+                }
             }
         }
         namePrompt = nil
@@ -592,12 +571,25 @@ struct SamplerView: View {
 
     private func performDelete() {
         showingDeleteConfirmation = false
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
+        guard let signalName = viewModel.currentSignalName else {
+            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "No signal selected")
             return
         }
-        Task {
-            await viewModel.deleteCurrentSignal(accessToken: token)
+        viewModel.deleteSignal(name: signalName)
+        
+        // Select next signal or "New signal..."
+        if let deletedIndex = viewModel.signalNames.firstIndex(of: signalName) {
+            viewModel.refreshSignalList()
+            if deletedIndex < viewModel.signalNames.count {
+                selectedSignalIndex = deletedIndex + 1
+                loadSignal(name: viewModel.signalNames[deletedIndex])
+            } else if !viewModel.signalNames.isEmpty {
+                selectedSignalIndex = 1
+                loadSignal(name: viewModel.signalNames[0])
+            } else {
+                selectedSignalIndex = 0
+                createNewSignal()
+            }
         }
     }
 
@@ -614,7 +606,7 @@ struct SamplerView: View {
             bleManager.sendPacket(command)
         }
         isRecording = false
-        viewModel.markBufferDirty(resetMetadata: true, suggestedName: SamplerViewModel.defaultSignalName)
+        viewModel.markBufferDirty()
     }
 
     private func retransmitSignal() {
@@ -634,36 +626,6 @@ struct SamplerView: View {
         viewModel.outputText = viewModel.buildSignedRawTimings(from: buffer)
     }
 
-    private func decodeIrp() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
-        let buffer = bleManager.getBuffer()
-        Task {
-            await viewModel.decode(buffer: buffer, accessToken: token)
-        }
-    }
-
-    private func renderIrp() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
-        let protocolName = irpProtocol.trimmingCharacters(in: .whitespacesAndNewlines)
-        var parameters: [String: Int] = [:]
-        if let value = parseNumericValue(irpDevice) { parameters["D"] = value }
-        if let value = parseNumericValue(irpSubdevice) { parameters["S"] = value }
-        if let value = parseNumericValue(irpFunction) { parameters["F"] = value }
-
-        Task {
-            if let data = await viewModel.renderSignal(protocolName: protocolName, parameters: parameters, accessToken: token) {
-                bleManager.loadBuffer(data: data)
-                viewModel.markBufferDirty(resetMetadata: false, suggestedName: nil)
-                refreshChart(force: true)
-            }
-        }
-    }
 
     private func convertToIR() {
         let buffer = bleManager.getBuffer()
@@ -671,43 +633,62 @@ struct SamplerView: View {
         let utils = Utils()
         let converted = utils.convertToIRBuffer(buffer)
         bleManager.loadBuffer(data: converted)
-        viewModel.markBufferDirty(resetMetadata: false, suggestedName: nil)
+        viewModel.markBufferDirty()
         refreshChart(force: true)
         showToast("Signal converted to 38kHz IR format")
     }
 
     private func clearBufferAndChart() {
         bleManager.clearBuffer()
-        viewModel.markBufferDirty(resetMetadata: false, suggestedName: nil)
+        viewModel.markBufferDirty()
         refreshChart(force: true)
     }
 
     private func createNewSignal() {
         bleManager.clearBuffer()
-        let name = viewModel.generateNewSignalName()
-        viewModel.markBufferDirty(resetMetadata: true, suggestedName: name)
+        viewModel.createNewSignal()
+        selectedSignalIndex = 0
         refreshChart(force: true)
     }
 
     private func showRenamePrompt() {
-        guard let metadata = viewModel.currentSignalMetadata else { return }
+        guard let currentName = viewModel.currentSignalName else {
+            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "No signal loaded")
+            return
+        }
+        let nameWithoutExt = currentName.replacingOccurrences(of: ".raw", with: "", options: .caseInsensitive)
         namePrompt = NamePrompt(
             mode: .rename,
             title: "Rename Signal",
             message: "Enter a new name.",
-            initialValue: metadata.name
+            initialValue: nameWithoutExt
         )
     }
-
-    private func loadSignal(from metadata: UserFileMetadata) {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
+    
+    private func showExportPrompt() {
+        let buffer = bleManager.getBuffer()
+        if buffer.isEmpty {
+            showToast("Buffer is empty, nothing to export")
             return
         }
-        Task {
-            if let data = await viewModel.loadSignal(id: metadata.id, accessToken: token) {
-                bleManager.loadBuffer(data: data)
-                refreshChart(force: true)
+        exportFileName = viewModel.currentSignalName ?? generateDefaultFileName()
+        showingExportDialog = true
+    }
+
+    private func loadSignal(name: String) {
+        // Prevent loading the same signal if it's already loaded and clean
+        if name == viewModel.currentSignalName && !viewModel.hasUnsavedChanges {
+            return
+        }
+        
+        guard let data = viewModel.loadSignal(name: name) else { return }
+        bleManager.loadBuffer(data: data)
+        refreshChart(force: true)
+        
+        // Update picker selection (without triggering onChange)
+        if let index = viewModel.signalNames.firstIndex(of: name) {
+            DispatchQueue.main.async {
+                self.selectedSignalIndex = index + 1 // +1 because index 0 is "New signal..."
             }
         }
     }
@@ -768,10 +749,24 @@ struct SamplerView: View {
 
         do {
             let data = try Data(contentsOf: url)
+            let fileName = url.lastPathComponent
+            let normalizedName = viewModel.normalizeSignalName(fileName)
+            
+            // Save to local signals directory
+            viewModel.saveSignal(name: normalizedName, buffer: data)
+            
+            // Load into buffer
             bleManager.loadBuffer(data: data)
-            viewModel.markBufferDirty(resetMetadata: true, suggestedName: viewModel.normalizeSignalName(url.lastPathComponent))
+            viewModel.markBufferDirty()
             refreshChart(force: true)
-            showToast("Imported \(url.lastPathComponent)")
+            
+            // Update picker selection
+            viewModel.refreshSignalList()
+            if let index = viewModel.signalNames.firstIndex(of: normalizedName) {
+                selectedSignalIndex = index + 1
+            }
+            
+            showToast("Imported \(normalizedName)")
         } catch {
             showToast("Error importing file: \(error.localizedDescription)")
         }
@@ -839,42 +834,10 @@ struct SamplerView: View {
     }
 }
 
-private struct SignalRow: View {
-    let item: SamplerViewModel.SignalListItem
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name)
-                        .font(item.isActive ? .headline : .body)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Image(systemName: "arrow.down.circle")
-                    .foregroundColor(.accentColor)
-            }
-            .padding(12)
-        }
-        .buttonStyle(.plain)
-        .background(item.isActive ? Color.accentColor.opacity(0.1) : Color.clear)
-    }
-
-    private var subtitle: String {
-        var base = item.sizeDescription
-        if item.isActive {
-            base += item.isDirty ? " • Unsaved changes" : " • Active"
-        }
-        return base
-    }
-}
 
 private struct NamePrompt: Identifiable {
     enum Mode {
-        case create(Data)
+        case save(Data)
         case rename
     }
 
