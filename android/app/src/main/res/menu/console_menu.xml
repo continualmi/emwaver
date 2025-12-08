@@ -38,4 +38,9 @@
         android:title="Line Wrap"
         app:showAsAction="never"
         android:checkable="true" />
+    <item
+        android:id="@+id/action_clear_console"
+        android:icon="@drawable/ai_discard"
+        android:title="Clear Console"
+        app:showAsAction="ifRoom" />
 </menu>

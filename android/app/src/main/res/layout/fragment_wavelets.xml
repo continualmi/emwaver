@@ -27,103 +27,17 @@
             android:background="@color/surfaceCard" />
     </androidx.cardview.widget.CardView>
 
-    <TextView
-        android:id="@+id/console_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Console Output"
-        android:textStyle="bold"
-        android:textSize="15sp"
-        android:padding="8dp"
-        android:layout_marginTop="12dp"
-        android:drawableEnd="@drawable/ic_arrow_down_black"
-        android:drawablePadding="8dp"
-        android:textColor="@color/textPrimary"
-        android:drawableTint="?attr/colorOnSurface"
-        android:background="?attr/selectableItemBackground"
-        app:layout_constraintTop_toBottomOf="@id/script_list_card"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <androidx.cardview.widget.CardView
-        android:id="@+id/console_card"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="8dp"
-        app:cardElevation="2dp"
-        app:cardCornerRadius="4dp"
-        app:cardBackgroundColor="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/console_title"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/wavelet_container">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="12dp"
-            android:background="@color/surfaceCard">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="end"
-                android:layout_marginBottom="8dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/console_back_button"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Back"
-                    android:textColor="@color/accentBlue" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/console_clear_button"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Clear"
-                    android:textColor="@color/accentBlue"
-                    android:layout_marginStart="12dp" />
-
-            </LinearLayout>
-
-            <ScrollView
-                android:id="@+id/console_scroll"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fillViewport="true"
-                android:background="@color/surfaceBackground">
-
-                <TextView
-                    android:id="@+id/console_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="120dp"
-                    android:padding="12dp"
-                    android:fontFamily="monospace"
-                    android:textColor="@color/textPrimary"
-                    android:textSize="12sp"
-                    android:text="Console is empty." />
-
-            </ScrollView>
-        </LinearLayout>
-    </androidx.cardview.widget.CardView>
-
     <FrameLayout
         android:id="@+id/wavelet_container"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:foregroundGravity="center"
+        android:layout_marginTop="8dp"
         android:layout_marginBottom="8dp"
         android:visibility="gone"
         android:background="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/console_card"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/script_list_card"
+        app:layout_constraintBottom_toTopOf="@id/console_title"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -148,6 +62,66 @@
             android:visibility="gone"
             android:layout_gravity="center" />
     </FrameLayout>
+
+    <TextView
+        android:id="@+id/console_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Console Output"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:padding="8dp"
+        android:layout_marginBottom="4dp"
+        android:drawableEnd="@drawable/ic_arrow_down_black"
+        android:drawablePadding="8dp"
+        android:textColor="@color/textPrimary"
+        android:drawableTint="?attr/colorOnSurface"
+        android:background="?attr/selectableItemBackground"
+        app:layout_constraintBottom_toTopOf="@id/console_card"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/console_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        app:cardElevation="2dp"
+        app:cardCornerRadius="4dp"
+        app:cardBackgroundColor="@color/surfaceCard"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:background="@color/surfaceCard">
+
+            <ScrollView
+                android:id="@+id/console_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fillViewport="true"
+                android:background="@color/surfaceBackground">
+
+                <TextView
+                    android:id="@+id/console_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="120dp"
+                    android:padding="12dp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/textPrimary"
+                    android:textSize="12sp"
+                    android:text="Console is empty." />
+
+            </ScrollView>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
 
     <FrameLayout
         android:id="@+id/script_editor_container"

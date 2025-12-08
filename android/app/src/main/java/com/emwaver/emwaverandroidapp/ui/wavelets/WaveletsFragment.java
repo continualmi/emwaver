@@ -104,6 +104,14 @@ public class WaveletsFragment extends Fragment {
     private boolean isRenderingWavelet;
     private boolean showingPreview;
     private boolean showingEditor;
+    
+    public boolean isShowingPreview() {
+        return showingPreview;
+    }
+    
+    public boolean isShowingEditor() {
+        return showingEditor;
+    }
     private EditText scriptEditorContent;
     private FrameLayout scriptEditorContainer;
 
@@ -113,8 +121,6 @@ public class WaveletsFragment extends Fragment {
     private CardView scriptListCard;
     private TextView consoleTitle;
     private CardView consoleCard;
-    private MaterialButton consoleBackButton;
-    private MaterialButton consoleClearButton;
     private ScrollView consoleScrollView;
     private TextView consoleTextView;
     private ScrollView editorScrollViewWrap;
@@ -182,6 +188,9 @@ public class WaveletsFragment extends Fragment {
             }
         };
         requireActivity().getOnBackPressedDispatcher().addCallback(this, backPressedCallback);
+        
+        // Handle action bar back button
+        setHasOptionsMenu(true);
     }
 
     @Nullable
@@ -200,6 +209,13 @@ public class WaveletsFragment extends Fragment {
         setupConsoleSection();
         setupCollapsibleSections();
         showingPreview = false;
+        // Ensure console is hidden by default
+        if (consoleTitle != null) {
+            consoleTitle.setVisibility(View.GONE);
+        }
+        if (consoleCard != null) {
+            consoleCard.setVisibility(View.GONE);
+        }
         updateViewMode();
         updateWaveletPlaceholder();
         restoreFromViewModel();
@@ -237,8 +253,6 @@ public class WaveletsFragment extends Fragment {
         showingPreview = false;
         consoleTitle = null;
         consoleCard = null;
-        consoleBackButton = null;
-        consoleClearButton = null;
         consoleScrollView = null;
         consoleTextView = null;
         hideLoadingDialog();
@@ -260,6 +274,7 @@ public class WaveletsFragment extends Fragment {
                 MenuItem renameItem = menu.findItem(R.id.editor_rename);
                 MenuItem deleteItem = menu.findItem(R.id.editor_delete);
                 MenuItem lineWrapItem = menu.findItem(R.id.editor_line_wrap);
+                MenuItem clearConsoleItem = menu.findItem(R.id.action_clear_console);
                 
                 boolean showEditorItems = showingEditor;
                 if (copyItem != null) copyItem.setVisible(showEditorItems);
@@ -271,11 +286,18 @@ public class WaveletsFragment extends Fragment {
                     lineWrapItem.setVisible(showEditorItems);
                     lineWrapItem.setChecked(lineWrapEnabled);
                 }
+                // Show clear console menu item only when previewing
+                if (clearConsoleItem != null) clearConsoleItem.setVisible(showingPreview);
             }
 
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
                 int itemId = menuItem.getItemId();
+                // Handle action bar home/back button when previewing
+                if (itemId == android.R.id.home && showingPreview) {
+                    exitPreview();
+                    return true;
+                }
                 if (itemId == R.id.open) {
                     openFile();
                     return true;
@@ -317,6 +339,9 @@ public class WaveletsFragment extends Fragment {
                     menuItem.setChecked(lineWrapEnabled);
                     updateLineWrap();
                     return true;
+                } else if (itemId == R.id.action_clear_console) {
+                    WaveletConsoleState.getInstance().clear();
+                    return true;
                 }
                 return false;
             }
@@ -354,8 +379,6 @@ public class WaveletsFragment extends Fragment {
     private void setupConsoleSection() {
         consoleTitle = binding.consoleTitle;
         consoleCard = binding.consoleCard;
-        consoleBackButton = binding.consoleBackButton;
-        consoleClearButton = binding.consoleClearButton;
         consoleScrollView = binding.consoleScroll;
         consoleTextView = binding.consoleText;
 
@@ -420,13 +443,6 @@ public class WaveletsFragment extends Fragment {
             @Override
             public void afterTextChanged(Editable s) {}
         });
-
-        if (consoleBackButton != null) {
-            consoleBackButton.setOnClickListener(v -> exitPreview());
-        }
-        if (consoleClearButton != null) {
-            consoleClearButton.setOnClickListener(v -> WaveletConsoleState.getInstance().clear());
-        }
         
         updateLineWrap();
 
@@ -781,12 +797,14 @@ public class WaveletsFragment extends Fragment {
         final boolean hasRepository = fileRepository != null;
 
         boolean needsFetch = true;
+        boolean hasContent = false;
         if (viewModel != null && scriptId != null) {
             String cachedDraft = viewModel.getDraftContent(scriptId);
             boolean dirty = viewModel.isDirty(scriptId);
-            if (cachedDraft != null) {
+            if (cachedDraft != null && !cachedDraft.trim().isEmpty()) {
                 setEditorText(cachedDraft);
                 updateDraftState(cachedDraft, dirty);
+                hasContent = true;
                 completePendingPreview(scriptId);
             }
             String cachedEtag = viewModel.getRemoteEtag(scriptId);
@@ -797,16 +815,34 @@ public class WaveletsFragment extends Fragment {
                     setEditorText(cachedRemote);
                     updateDraftState(cachedRemote, false);
                 }
-                viewModel.updateDraft(scriptId, metadata.getName(), getEditorText(), dirty);
+                String contentToUse = getEditorText();
+                if (contentToUse == null || contentToUse.trim().isEmpty()) {
+                    contentToUse = cachedRemote;
+                    setEditorText(cachedRemote);
+                }
+                viewModel.updateDraft(scriptId, metadata.getName(), contentToUse, dirty);
                 viewModel.setLastScriptId(scriptId);
                 viewModel.setLastScriptName(metadata.getName());
-                viewModel.setLastScriptContent(getEditorText());
+                viewModel.setLastScriptContent(contentToUse);
+                hasContent = true;
                 completePendingPreview(scriptId);
             }
         }
 
-        if (!hasRepository || !needsFetch || scriptId == null) {
-            completePendingPreview(scriptId);
+        // Only complete preview if we have content, otherwise wait for fetch
+        if (!hasRepository || scriptId == null) {
+            if (hasContent) {
+                completePendingPreview(scriptId);
+            } else {
+                // No content and can't fetch - clear pending preview
+                pendingPreviewScriptId = null;
+                showToast("Failed to load script content");
+            }
+            return;
+        }
+        
+        // If we don't need to fetch and have content, we've already called completePendingPreview above
+        if (!needsFetch && hasContent) {
             return;
         }
 
@@ -1217,11 +1253,15 @@ public class WaveletsFragment extends Fragment {
         }
 
         if (consoleTitle != null && consoleCard != null) {
-            updateArrow(consoleTitle, consoleCard.getVisibility() == View.VISIBLE);
+            // Only allow collapsing/expanding when previewing
             consoleTitle.setOnClickListener(v -> {
-                toggleVisibility(consoleCard);
-                updateArrow((TextView) v, consoleCard.getVisibility() == View.VISIBLE);
+                if (showingPreview) {
+                    toggleVisibility(consoleCard);
+                    updateArrow((TextView) v, consoleCard.getVisibility() == View.VISIBLE);
+                }
             });
+            // Initialize arrow state based on current visibility
+            updateArrow(consoleTitle, consoleCard.getVisibility() == View.VISIBLE);
         }
     }
 
@@ -1243,6 +1283,16 @@ public class WaveletsFragment extends Fragment {
         isRenderingWavelet = true;
         activeWaveletTree = null;
         showingPreview = true;
+        // Show console title when previewing, but collapse console card by default
+        if (consoleTitle != null) {
+            consoleTitle.setVisibility(View.VISIBLE);
+        }
+        if (consoleCard != null) {
+            consoleCard.setVisibility(View.GONE); // Collapsed by default
+        }
+        if (consoleTitle != null) {
+            updateArrow(consoleTitle, false); // Update arrow to show collapsed state
+        }
         updateViewMode();
         ensureWaveletRenderView();
         if (waveletRenderView != null) {
@@ -1362,25 +1412,35 @@ public class WaveletsFragment extends Fragment {
         binding.waveletContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         scriptEditorContainer.setVisibility(showingEditor ? View.VISIBLE : View.GONE);
         
+        // Console title and card should ONLY be visible when previewing
         if (consoleTitle != null) {
             consoleTitle.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         }
         if (consoleCard != null) {
-            consoleCard.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
-        }
-        if (consoleBackButton != null) {
-            consoleBackButton.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
+            // Only show console card when previewing
+            if (showingPreview) {
+                // Console card starts collapsed (GONE) when preview begins, user can expand it via console title click
+                // Don't change visibility here if it's already set (allows user to expand/collapse)
+                // But ensure it's hidden if we're exiting preview
+            } else {
+                // Hide console card completely when not previewing
+                consoleCard.setVisibility(View.GONE);
+            }
         }
         
         if (getActivity() != null) {
             androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();
             if (activity.getSupportActionBar() != null) {
-                if (hideMainView && currentScriptName != null) {
-                    activity.getSupportActionBar().setTitle(currentScriptName);
+                if (hideMainView) {
+                    // Show back button when previewing or editing
+                    String title = currentScriptName != null ? currentScriptName : "Wavelet Preview";
+                    activity.getSupportActionBar().setTitle(title);
                     activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+                    activity.getSupportActionBar().setHomeButtonEnabled(true);
                 } else {
                     activity.getSupportActionBar().setTitle("Wavelets");
                     activity.getSupportActionBar().setDisplayHomeAsUpEnabled(false);
+                    activity.getSupportActionBar().setHomeButtonEnabled(false);
                 }
             }
         }
@@ -1594,13 +1654,18 @@ public class WaveletsFragment extends Fragment {
     }
 
     private String getEditorText() {
-        // Get text from the currently visible EditText
+        // Get text from the currently visible EditText, but fall back to currentDraftContent if EditText is empty
+        String editorText = "";
         if (lineWrapEnabled && scriptEditorContentWrap != null) {
-            return scriptEditorContentWrap.getText() != null ? scriptEditorContentWrap.getText().toString() : "";
+            editorText = scriptEditorContentWrap.getText() != null ? scriptEditorContentWrap.getText().toString() : "";
         } else if (!lineWrapEnabled && scriptEditorContent != null) {
-            return scriptEditorContent.getText() != null ? scriptEditorContent.getText().toString() : "";
+            editorText = scriptEditorContent.getText() != null ? scriptEditorContent.getText().toString() : "";
         }
-        return currentDraftContent != null ? currentDraftContent : "";
+        // If EditText is empty or null, use currentDraftContent
+        if (editorText == null || editorText.trim().isEmpty()) {
+            editorText = currentDraftContent != null ? currentDraftContent : "";
+        }
+        return editorText;
     }
 
     private void setEditorText(String text) {
@@ -1612,7 +1677,19 @@ public class WaveletsFragment extends Fragment {
             return;
         }
         String script = getEditorText();
+        // Also check currentDraftContent directly as fallback
+        if ((script == null || script.trim().isEmpty()) && (currentDraftContent == null || currentDraftContent.trim().isEmpty())) {
+            Log.w(TAG, "completePendingPreview: No script content available for " + scriptId);
+            showToast("No script to preview.");
+            pendingPreviewScriptId = null;
+            return;
+        }
+        // Use currentDraftContent if script is empty
+        if (script == null || script.trim().isEmpty()) {
+            script = currentDraftContent != null ? currentDraftContent : "";
+        }
         if (script.trim().isEmpty()) {
+            Log.w(TAG, "completePendingPreview: Script content is empty for " + scriptId);
             showToast("No script to preview.");
             pendingPreviewScriptId = null;
             return;
