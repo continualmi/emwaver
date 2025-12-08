@@ -24,6 +24,4 @@
     <color name="monitorText">#00FF00</color>
     <color name="codeText">#003D99</color>
     <color name="codeBlockBackground">#F0F4F8</color>
-    
-    <color name="agentMessageText">#1F1F1F</color>
 </resources>

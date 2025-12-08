@@ -17,9 +17,9 @@
             android:title="Sampler" />
 
         <item
-            android:id="@+id/navigation_agent"
+            android:id="@+id/navigation_git"
             android:icon="@drawable/llm"
-            android:title="Agent" />
+            android:title="Git" />
 
         <item
             android:id="@+id/navigation_wavelets"
