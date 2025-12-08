@@ -53,8 +53,7 @@ final class WaveletsViewModel: ObservableObject {
 
     // MARK: - Loading
 
-    func loadScripts(accessToken: String) async {
-        guard !accessToken.isEmpty else { return }
+    func loadScripts() async {
         isLoading = true
         defer { isLoading = false }
 
@@ -62,9 +61,22 @@ final class WaveletsViewModel: ObservableObject {
             let data = try await fileService.listFiles(
                 withExtension: scriptExtension,
                 includeContent: true,
-                accessToken: accessToken
+                accessToken: ""
             )
             mergeRemote(data)
+            
+            // If no scripts exist, load default scripts from bundle
+            if scripts.isEmpty {
+                await loadDefaultScriptsFromBundle()
+                // Reload after creating defaults
+                let updatedData = try await fileService.listFiles(
+                    withExtension: scriptExtension,
+                    includeContent: true,
+                    accessToken: ""
+                )
+                mergeRemote(updatedData)
+            }
+            
             if scripts.isEmpty {
                 selectedScriptId = unsavedKey
             } else if let selected = selectedScriptId, records[selected] == nil {
@@ -79,25 +91,61 @@ final class WaveletsViewModel: ObservableObject {
             showError(message: error.localizedDescription)
         }
     }
-
-    func syncScripts(accessToken: String) async {
-        guard !accessToken.isEmpty else { return }
-        isPerformingAction = true
-        defer { isPerformingAction = false }
-
-        do {
-            let data = try await fileService.listFiles(
-                withExtension: scriptExtension,
-                includeContent: true,
-                accessToken: accessToken
-            )
-            mergeRemote(data)
-            if let selected = selectedScriptId {
-                defaults.set(selected, forKey: lastScriptDefaultsKey)
+    
+    private func loadDefaultScriptsFromBundle() async {
+        let defaultScripts = [
+            "cc1101.js",
+            "cc1101_radio_console.js",
+            "cc1101_radio_module.js",
+            "hello_world_usb.js",
+            "wavelet_console_demo.js",
+            "wavelet_demo.js",
+            "wavelet_gpio.js",
+            "wavelet_rfid.js"
+        ]
+        
+        var successCount = 0
+        
+        for filename in defaultScripts {
+            let nameWithoutExt = filename.replacingOccurrences(of: ".js", with: "")
+            
+            // Try to find the file in bundle - first try with subdirectory, then without
+            var url: URL?
+            if let subdirUrl = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js", subdirectory: "DefaultScripts") {
+                url = subdirUrl
+            } else if let directUrl = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js") {
+                url = directUrl
             }
-            showInfo(title: "Sync Complete", message: "Scripts updated from cloud")
-        } catch {
-            showError(message: error.localizedDescription)
+            
+            guard let fileUrl = url,
+                  let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
+                continue
+            }
+            
+            let normalized = resolveUniqueScriptName(normalizeScriptName(filename))
+            
+            do {
+                let metadata = try await fileService.createTextFile(name: normalized, content: content, accessToken: "")
+                let id = metadata.id
+                let record = ScriptRecord(
+                    id: id,
+                    metadata: metadata,
+                    name: metadata.name,
+                    draftContent: content,
+                    remoteContent: content,
+                    remoteEtag: metadata.etag,
+                    isDirty: false
+                )
+                records[id] = record
+                successCount += 1
+            } catch {
+                // Ignore errors for individual scripts
+            }
+        }
+        
+        if successCount > 0 {
+            rebuildScriptItems()
+            showInfo(title: "Default Scripts Loaded", message: "Loaded \(successCount) default wavelets")
         }
     }
 
@@ -151,12 +199,12 @@ final class WaveletsViewModel: ObservableObject {
         rebuildScriptItems()
     }
 
-    func ensureContent(for id: String, accessToken: String) async {
+    func ensureContent(for id: String) async {
         guard var record = records[id], record.remoteContent == nil, let metadata = record.metadata else {
             return
         }
         do {
-            let data = try await fileService.getFile(id: metadata.id, accessToken: accessToken)
+            let data = try await fileService.getFile(id: metadata.id, accessToken: "")
             let text = data.textContent ?? ""
             record.remoteContent = text
             record.remoteEtag = data.metadata.etag
@@ -171,7 +219,7 @@ final class WaveletsViewModel: ObservableObject {
 
     // MARK: - CRUD
 
-    func saveScript(id: String, accessToken: String) async {
+    func saveScript(id: String) async {
         guard var record = records[id] else { return }
 
         if record.metadata == nil {
@@ -193,7 +241,7 @@ final class WaveletsViewModel: ObservableObject {
                 id: metadata.id,
                 etag: etag,
                 content: record.draftContent,
-                accessToken: accessToken
+                accessToken: ""
             )
             record.metadata = updatedMetadata
             record.remoteEtag = updatedMetadata.etag
@@ -208,7 +256,7 @@ final class WaveletsViewModel: ObservableObject {
         }
     }
 
-    func createScript(name rawName: String, accessToken: String) async -> String? {
+    func createScript(name rawName: String) async -> String? {
         let normalized = resolveUniqueScriptName(normalizeScriptName(rawName))
         let content = scriptDraft(for: unsavedKey)
 
@@ -216,7 +264,7 @@ final class WaveletsViewModel: ObservableObject {
         defer { isPerformingAction = false }
 
         do {
-            let metadata = try await fileService.createTextFile(name: normalized, content: content, accessToken: accessToken)
+            let metadata = try await fileService.createTextFile(name: normalized, content: content, accessToken: "")
             let id = metadata.id
             let record = ScriptRecord(
                 id: id,
@@ -240,7 +288,7 @@ final class WaveletsViewModel: ObservableObject {
         }
     }
 
-    func renameScript(id: String, newName rawName: String, accessToken: String) async {
+    func renameScript(id: String, newName rawName: String) async {
         guard var record = records[id], let metadata = record.metadata else { return }
         let normalized = resolveUniqueScriptName(normalizeScriptName(rawName), excluding: id)
 
@@ -248,7 +296,7 @@ final class WaveletsViewModel: ObservableObject {
         defer { isPerformingAction = false }
 
         do {
-            let updatedMetadata = try await fileService.renameFile(id: metadata.id, name: normalized, accessToken: accessToken)
+            let updatedMetadata = try await fileService.renameFile(id: metadata.id, name: normalized, accessToken: "")
             record.metadata = updatedMetadata
             record.name = updatedMetadata.name
             records[id] = record
@@ -259,14 +307,14 @@ final class WaveletsViewModel: ObservableObject {
         }
     }
 
-    func deleteScript(id: String, accessToken: String) async {
+    func deleteScript(id: String) async {
         guard let record = records[id], let metadata = record.metadata else { return }
 
         isPerformingAction = true
         defer { isPerformingAction = false }
 
         do {
-            try await fileService.deleteFile(id: metadata.id, etag: metadata.etag, accessToken: accessToken)
+            try await fileService.deleteFile(id: metadata.id, etag: metadata.etag, accessToken: "")
             records.removeValue(forKey: id)
             if selectedScriptId == id {
                 selectedScriptId = scripts.first(where: { records[$0.id]?.metadata != nil })?.id ?? unsavedKey
@@ -279,7 +327,7 @@ final class WaveletsViewModel: ObservableObject {
         }
     }
 
-    func copyScript(id: String, newName rawName: String, accessToken: String) async -> String? {
+    func copyScript(id: String, newName rawName: String) async -> String? {
         guard let record = records[id], let metadata = record.metadata else { return nil }
         let normalized = resolveUniqueScriptName(normalizeScriptName(rawName))
         let content = record.draftContent
@@ -288,7 +336,7 @@ final class WaveletsViewModel: ObservableObject {
         defer { isPerformingAction = false }
 
         do {
-            let newMetadata = try await fileService.copyFile(sourceId: metadata.id, name: normalized, accessToken: accessToken)
+            let newMetadata = try await fileService.copyFile(sourceId: metadata.id, name: normalized, accessToken: "")
             let newId = newMetadata.id
             let newRecord = ScriptRecord(
                 id: newId,
