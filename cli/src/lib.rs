@@ -1,15 +1,14 @@
-mod backend;
 mod cli;
-mod commands;
 mod shell;
-mod state;
 
 use anyhow::Result;
 use clap::Parser;
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
-    commands::dispatch(cli)
+    match cli.command {
+        cli::Commands::Shell { verbose } => shell::run_shell(verbose),
+    }
 }
 
 #[cfg(test)]
