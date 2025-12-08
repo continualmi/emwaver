@@ -1,7 +1,10 @@
 package com.emwaver.emwaverandroidapp.ui.agent;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
@@ -14,8 +17,10 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.ListView;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -23,29 +28,28 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
+import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
-
-import com.emwaver.emwaverandroidapp.BuildConfig;
 import com.emwaver.emwaverandroidapp.R;
-import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
+import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentAgentBinding;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import okhttp3.Call;
@@ -56,24 +60,30 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
-import okio.BufferedSource;
 
 import io.noties.markwon.Markwon;
 
 public class AgentFragment extends Fragment {
 
     private static final MediaType JSON_MEDIA_TYPE = MediaType.parse("application/json; charset=utf-8");
-    private static final String PREFS_NAME = "agent_fragment_prefs";
-    private static final String PREF_CONVERSATIONS = "conversations";
+    private static final String DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
+    private static final String DEFAULT_MODEL = "openai/gpt-oss-20b";
+    private static final String CONVERSATIONS_DIR = "agent_conversations";
+    private static final String CONVERSATIONS_INDEX = "conversations_index.json";
+    private static final String PREF_LAST_SELECTED_CONVERSATION = "agent_last_selected_conversation";
+    private static final String SYSTEM_PROMPT_TEMPLATE = 
+        "You are an AI assistant embedded in the EMWaver application. " +
+        "EMWaver is a hardware hacking and security research tool with capabilities for RF analysis, " +
+        "infrared control, sub-GHz communication, and signal manipulation. " +
+        "Your primary role is to help users create wavelets—modular extensions that add new functionality to EMWaver. " +
+        "Wavelets consist of a manifest and JavaScript code that interact with the device's hardware through the EMWaver Script SDK. " +
+        "Provide clear, actionable guidance on wavelet development, hardware interaction, and EMWaver features.\n\n";
 
     private FragmentAgentBinding binding;
     private final List<ConversationSummary> conversations = new ArrayList<>();
     private final List<MessageItem> messages = new ArrayList<>();
-    private ArrayAdapter<String> conversationAdapter;
     private AgentMessageAdapter messageAdapter;
     private OkHttpClient httpClient;
-    private AuthenticationManager authenticationManager;
-    private String backendBaseUrl;
     private String selectedConversationId;
     private Menu optionsMenu;
     private Markwon markwon;
@@ -83,15 +93,8 @@ public class AgentFragment extends Fragment {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         httpClient = new OkHttpClient();
-        authenticationManager = AuthenticationManager.getInstance(requireContext());
-        backendBaseUrl = BuildConfig.BACKEND_BASE_URL;
-        if (TextUtils.isEmpty(backendBaseUrl)) {
-            backendBaseUrl = "http://10.0.2.2:8000";
-        }
-        if (backendBaseUrl.endsWith("/")) {
-            backendBaseUrl = backendBaseUrl.substring(0, backendBaseUrl.length() - 1);
-        }
         markwon = Markwon.builder(requireContext()).build();
+        ensureConversationsDirectory();
     }
 
     @Nullable
@@ -99,11 +102,12 @@ public class AgentFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         binding = FragmentAgentBinding.inflate(inflater, container, false);
-        setupConversationSpinner();
         setupRecycler();
         setupSendActions();
+        setupEmptyState();
         loadStoredConversations();
-        fetchConversationsFromBackend();
+        // Status bar will be updated by loadStoredConversations() -> selectConversation()
+        updateEmptyStateVisibility();
         return binding.getRoot();
     }
 
@@ -112,6 +116,19 @@ public class AgentFragment extends Fragment {
         super.onDestroyView();
         binding = null;
         optionsMenu = null;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        updateStatusBar();
+        updateEmptyStateVisibility();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        Utils.updateActionBarStatus(this, "");
     }
 
 	@Override
@@ -132,7 +149,16 @@ public class AgentFragment extends Fragment {
 	@Override
 	public boolean onOptionsItemSelected(@NonNull MenuItem item) {
 		int itemId = item.getItemId();
-		if (itemId == R.id.action_rename_conversation) {
+		if (itemId == R.id.action_new_chat) {
+			promptForConversationTopic();
+			return true;
+		} else if (itemId == R.id.action_chats) {
+			showChatsDialog();
+			return true;
+		} else if (itemId == R.id.action_agent_settings) {
+			showAgentSettingsDialog();
+			return true;
+		} else if (itemId == R.id.action_rename_conversation) {
 			promptRenameConversation();
 			return true;
 		} else if (itemId == R.id.action_delete_conversation) {
@@ -142,37 +168,51 @@ public class AgentFragment extends Fragment {
 		return super.onOptionsItemSelected(item);
 	}
 
-    private void setupConversationSpinner() {
-        Context context = requireContext();
-        conversationAdapter = new ArrayAdapter<>(context,
-                android.R.layout.simple_spinner_dropdown_item, new ArrayList<>());
-        binding.conversationSpinner.setAdapter(conversationAdapter);
-        binding.conversationSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position < conversations.size()) {
-                    ConversationSummary summary = conversations.get(position);
-                    selectedConversationId = summary.id;
-                    messages.clear();
-                    if (messageAdapter != null) {
-                        messageAdapter.notifyDataSetChanged();
-                    }
-                    loadConversationItems(summary.id);
-                }
-                updateConversationActionButtons();
+    private void updateStatusBar() {
+        if (TextUtils.isEmpty(selectedConversationId)) {
+            Utils.updateActionBarStatus(this, "No chat selected");
+        } else {
+            int index = findConversationIndex(selectedConversationId);
+            if (index >= 0 && index < conversations.size()) {
+                Utils.updateActionBarStatus(this, conversations.get(index).title);
+            } else {
+                Utils.updateActionBarStatus(this, "No chat selected");
             }
+        }
+    }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                selectedConversationId = null;
-                messages.clear();
-                messageAdapter.notifyDataSetChanged();
-                updateConversationActionButtons();
+    private void showChatsDialog() {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_chats, null);
+        ListView chatsList = dialogView.findViewById(R.id.chats_list);
+        com.google.android.material.button.MaterialButton newChatButton = dialogView.findViewById(R.id.new_chat_button);
+
+        List<String> chatTitles = new ArrayList<>();
+        for (ConversationSummary summary : conversations) {
+            chatTitles.add(summary.title);
+        }
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_list_item_1, chatTitles);
+        chatsList.setAdapter(adapter);
+
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(dialogView)
+                .create();
+
+        chatsList.setOnItemClickListener((parent, view, position, id) -> {
+            if (position < conversations.size()) {
+                ConversationSummary summary = conversations.get(position);
+                selectConversation(summary.id);
+                dialog.dismiss();
             }
         });
 
-        binding.createConversationButton.setOnClickListener(v -> promptForConversationTopic());
-		updateConversationActionButtons();
+        newChatButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            promptForConversationTopic();
+        });
+
+        dialog.show();
     }
 
     private void setupRecycler() {
@@ -191,6 +231,10 @@ public class AgentFragment extends Fragment {
         });
 
         binding.sendButton.setOnClickListener(v -> sendCurrentMessage());
+    }
+
+    private void setupEmptyState() {
+        binding.emptyStateNewChatButton.setOnClickListener(v -> promptForConversationTopic());
     }
 
     private void sendCurrentMessage() {
@@ -219,7 +263,8 @@ public class AgentFragment extends Fragment {
     private void promptForConversationTopic() {
         final EditTextDialogBuilder builder = new EditTextDialogBuilder(requireContext())
                 .setTitle("New Conversation")
-                .setHint("Topic (optional)");
+                .setHint("Topic (optional)")
+                .setInitialText("New Chat");
 
         builder.setPositiveButton("Create", (dialog, which, text) -> createConversation(text));
         builder.setNegativeButton("Cancel", null);
@@ -250,10 +295,6 @@ public class AgentFragment extends Fragment {
     }
 
     private void renameConversation(String conversationId, String newTitle) {
-        String accessToken = requireAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
-            return;
-        }
         final String sanitizedTitle;
         if (TextUtils.isEmpty(newTitle)) {
             sanitizedTitle = "Agent Chat";
@@ -262,78 +303,25 @@ public class AgentFragment extends Fragment {
             sanitizedTitle = TextUtils.isEmpty(trimmed) ? "Agent Chat" : trimmed;
         }
 
-        JSONObject body = new JSONObject();
-        try {
-            body.put("title", sanitizedTitle);
-        } catch (JSONException e) {
-            showToast("Failed to build request");
+        int index = findConversationIndex(conversationId);
+        if (index < 0) {
+            showToast("Conversation not found");
             return;
         }
 
-        Request request = new Request.Builder()
-                .url(backendBaseUrl + "/llm/conversations/" + conversationId)
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .addHeader("Content-Type", "application/json")
-                .patch(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
-                .build();
-
-        toggleLoading(true);
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                runOnUiThread(() -> {
-                    toggleLoading(false);
-                    showToast("Failed to rename conversation");
-                });
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String responseBody = response.body() != null ? response.body().string() : "";
-                if (!response.isSuccessful()) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        showToast(extractErrorMessage(responseBody, response.code()));
-                    });
-                    response.close();
-                    return;
-                }
-
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    JSONObject conversationJson = json.optJSONObject("conversation");
-                    if (conversationJson == null) {
-                        runOnUiThread(() -> {
-                            toggleLoading(false);
-                            showToast("Conversation payload missing");
-                        });
-                        return;
-                    }
-                    final String id = conversationJson.optString("id", conversationId);
-                    final String responseTitle = conversationJson.optString("title", sanitizedTitle);
-                    long updatedAt = parseIsoTimestamp(conversationJson.optString("updated_at"));
-                    if (updatedAt == 0L) {
-                        updatedAt = System.currentTimeMillis();
-                    }
-                    ConversationSummary summary = new ConversationSummary(id, responseTitle, updatedAt);
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        selectedConversationId = summary.id;
-                        addConversationToSpinner(summary, true);
-                        persistConversation(summary);
-                        showToast("Conversation renamed");
-                        fetchConversationsFromBackend();
-                    });
-                } catch (JSONException e) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        showToast("Invalid rename response");
-                    });
-                } finally {
-                    response.close();
-                }
-            }
-        });
+        ConversationSummary oldSummary = conversations.get(index);
+        ConversationSummary newSummary = new ConversationSummary(
+            conversationId, 
+            sanitizedTitle, 
+            System.currentTimeMillis()
+        );
+        
+        conversations.set(index, newSummary);
+        persistConversationIndex();
+        updateStatusBar();
+        updateConversationActionButtons();
+        updateEmptyStateVisibility();
+        showToast("Conversation renamed");
     }
 
     private void confirmDeleteConversation() {
@@ -356,169 +344,106 @@ public class AgentFragment extends Fragment {
     }
 
     private void deleteConversation(String conversationId) {
-        String accessToken = requireAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
-            return;
+        File conversationFile = new File(getConversationsDir(), conversationId + ".json");
+        if (conversationFile.exists()) {
+            conversationFile.delete();
         }
-
-        Request request = new Request.Builder()
-                .url(backendBaseUrl + "/llm/conversations/" + conversationId)
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .delete()
-                .build();
-
-        toggleLoading(true);
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                runOnUiThread(() -> {
-                    toggleLoading(false);
-                    showToast("Failed to delete conversation");
-                });
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String responseBody = response.body() != null ? response.body().string() : "";
-                if (!response.isSuccessful()) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        showToast(extractErrorMessage(responseBody, response.code()));
-                    });
-                    response.close();
-                    return;
-                }
-
-                runOnUiThread(() -> {
-                    toggleLoading(false);
-                    handleConversationDeleted(conversationId);
-                    showToast("Conversation deleted");
-                    fetchConversationsFromBackend();
-                });
-                response.close();
-            }
-        });
+        
+        handleConversationDeleted(conversationId);
+        showToast("Conversation deleted");
     }
 
     private void createConversation(String topic) {
-        JSONObject body = new JSONObject();
-        try {
-            body.put("title", TextUtils.isEmpty(topic) ? "Agent Chat" : topic);
-        } catch (JSONException e) {
-            showToast("Failed to build request");
-            return;
-        }
-
-        sendConversationCreateRequest(body, null);
+        String conversationId = UUID.randomUUID().toString();
+        String title = TextUtils.isEmpty(topic) ? "New Chat" : topic;
+        ConversationSummary summary = new ConversationSummary(conversationId, title, System.currentTimeMillis());
+        
+        conversations.add(summary);
+        sortConversationsByRecency();
+        persistConversationIndex();
+        saveConversationMessages(conversationId, new ArrayList<>());
+        
+        selectConversation(conversationId);
     }
 
     private void createConversationWithInitialMessage(String message) {
-        JSONObject body = new JSONObject();
-        try {
-            body.put("title", "Agent Chat");
-        } catch (JSONException e) {
-            showToast("Failed to build request");
-            return;
-        }
-
-        sendConversationCreateRequest(body, message);
-    }
-
-    private void sendConversationCreateRequest(JSONObject body, @Nullable String initialMessage) {
-        String accessToken = requireAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
-            return;
-        }
-
-        Request request = new Request.Builder()
-                .url(backendBaseUrl + "/llm/conversations")
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .addHeader("Content-Type", "application/json")
-                .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
-                .build();
-
-        toggleLoading(true);
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                runOnUiThread(() -> {
-                    toggleLoading(false);
-                    showToast("Failed to create conversation");
-                });
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String responseBody = response.body() != null ? response.body().string() : "";
-                if (!response.isSuccessful()) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        String message = extractErrorMessage(responseBody, response.code());
-                        showToast(message);
-                    });
-                    return;
-                }
-
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    JSONObject conversationJson = json.optJSONObject("conversation");
-                    if (conversationJson == null) {
-                        runOnUiThread(() -> {
-                            toggleLoading(false);
-                            showToast("Conversation payload missing");
-                        });
-                        return;
-                    }
-                    String conversationId = conversationJson.optString("id");
-                    if (TextUtils.isEmpty(conversationId)) {
-                        runOnUiThread(() -> {
-                            toggleLoading(false);
-                            showToast("Conversation id missing");
-                        });
-                        return;
-                    }
-
-                    String topic = conversationJson.optString("title", "Agent Chat");
-                    ConversationSummary summary = new ConversationSummary(conversationId, topic, System.currentTimeMillis());
-                    persistConversation(summary);
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        addConversationToSpinner(summary, true);
-                        if (!TextUtils.isEmpty(initialMessage)) {
-                            appendLocalMessage(new MessageItem("user", initialMessage));
-                            sendMessageToConversation(conversationId, initialMessage);
-                        }
-                        fetchConversationsFromBackend();
-                    });
-                } catch (JSONException e) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        showToast("Invalid conversation response");
-                    });
-                }
-            }
-        });
+        String conversationId = UUID.randomUUID().toString();
+        String title = "New Chat";
+        ConversationSummary summary = new ConversationSummary(conversationId, title, System.currentTimeMillis());
+        
+        conversations.add(summary);
+        sortConversationsByRecency();
+        persistConversationIndex();
+        saveConversationMessages(conversationId, new ArrayList<>());
+        
+        selectConversation(conversationId);
+        
+        appendLocalMessage(new MessageItem("user", message));
+        sendMessageToConversation(conversationId, message);
     }
 
     private void sendMessageToConversation(String conversationId, String message) {
-        String accessToken = requireAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        String baseUrl = prefs.getString("agent_base_url", DEFAULT_BASE_URL);
+        String apiKey = prefs.getString("agent_api_key", "");
+        String model = prefs.getString("agent_model", DEFAULT_MODEL);
+        String customInstructions = prefs.getString("agent_instructions", "");
+
+        if (TextUtils.isEmpty(baseUrl)) {
+            baseUrl = DEFAULT_BASE_URL;
+        }
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+
+        if (TextUtils.isEmpty(apiKey)) {
+            showToast("Please set your API key in Agent Settings");
             return;
         }
 
+        String systemPrompt = SYSTEM_PROMPT_TEMPLATE;
+        if (!TextUtils.isEmpty(customInstructions)) {
+            systemPrompt += "User Instructions:\n" + customInstructions;
+        }
+
+        List<MessageItem> conversationHistory = loadConversationMessages(conversationId);
+        
         JSONObject body = new JSONObject();
         try {
-            body.put("message", message);
+            body.put("model", model);
             body.put("stream", true);
+            
+            JSONArray messagesArray = new JSONArray();
+            
+            JSONObject systemMessage = new JSONObject();
+            systemMessage.put("role", "system");
+            systemMessage.put("content", systemPrompt);
+            messagesArray.put(systemMessage);
+            
+            for (MessageItem item : conversationHistory) {
+                JSONObject msg = new JSONObject();
+                msg.put("role", item.role);
+                msg.put("content", item.getContent());
+                messagesArray.put(msg);
+            }
+            
+            JSONObject userMessage = new JSONObject();
+            userMessage.put("role", "user");
+            userMessage.put("content", message);
+            messagesArray.put(userMessage);
+            
+            body.put("messages", messagesArray);
         } catch (JSONException e) {
             showToast("Failed to build request");
             return;
         }
 
         Request request = new Request.Builder()
-                .url(backendBaseUrl + "/llm/conversations/" + conversationId + "/messages")
-                .addHeader("Authorization", "Bearer " + accessToken)
+                .url(baseUrl + "/chat/completions")
+                .addHeader("Authorization", "Bearer " + apiKey)
                 .addHeader("Content-Type", "application/json")
+                .addHeader("HTTP-Referer", "https://emwaver.com")
+                .addHeader("X-Title", "EMWaver Agent")
                 .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
                 .build();
 
@@ -533,7 +458,7 @@ public class AgentFragment extends Fragment {
                     if (binding != null) {
                         binding.sendButton.setEnabled(true);
                     }
-                    showToast("Failed to send message");
+                    showToast("Failed to send message: " + e.getMessage());
                 });
             }
 
@@ -568,8 +493,6 @@ public class AgentFragment extends Fragment {
                 });
 
                 StringBuilder accumulatedText = new StringBuilder();
-                StringBuilder dataBuilder = new StringBuilder();
-                String currentEvent = null;
                 ResponseBody responseBody = response.body();
 
                 try {
@@ -582,34 +505,55 @@ public class AgentFragment extends Fragment {
                         });
                         return;
                     }
-                    BufferedSource source = responseBody.source();
-                    while (true) {
-                        String line;
-                        try {
-                            line = source.readUtf8Line();
-                        } catch (IOException readError) {
-                            runOnUiThread(() -> showToast("Streaming interrupted"));
-                            break;
-                        }
-                        if (line == null) {
-                            handleSseChunk(currentEvent, dataBuilder.toString(), assistantMessage, assistantIndex, accumulatedText);
-                            break;
-                        }
-                        if (line.isEmpty()) {
-                            handleSseChunk(currentEvent, dataBuilder.toString(), assistantMessage, assistantIndex, accumulatedText);
-                            currentEvent = null;
-                            dataBuilder.setLength(0);
-                            continue;
-                        }
-                        if (line.startsWith("event:")) {
-                            currentEvent = line.substring(6).trim();
-                        } else if (line.startsWith("data:")) {
-                            if (dataBuilder.length() > 0) {
-                                dataBuilder.append('\n');
+                    
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("data: ")) {
+                            String data = line.substring(6);
+                            if ("[DONE]".equals(data)) {
+                                break;
                             }
-                            dataBuilder.append(line.substring(5).trim());
+                            
+                            try {
+                                JSONObject json = new JSONObject(data);
+                                JSONArray choices = json.optJSONArray("choices");
+                                if (choices != null && choices.length() > 0) {
+                                    JSONObject choice = choices.getJSONObject(0);
+                                    JSONObject delta = choice.optJSONObject("delta");
+                                    if (delta != null) {
+                                        String content = delta.optString("content", "");
+                                        if (!TextUtils.isEmpty(content)) {
+                                            accumulatedText.append(content);
+                                            final String currentText = accumulatedText.toString();
+                                            runOnUiThread(() -> updateMessageContent(assistantMessage, assistantIndex.get(), currentText));
+                                        }
+                                    }
+                                }
+                            } catch (JSONException ignored) {
+                            }
                         }
                     }
+                    
+                    List<MessageItem> allMessages = new ArrayList<>(conversationHistory);
+                    allMessages.add(new MessageItem("user", message));
+                    allMessages.add(new MessageItem("assistant", accumulatedText.toString()));
+                    saveConversationMessages(conversationId, allMessages);
+                    
+                    int convIndex = findConversationIndex(conversationId);
+                    if (convIndex >= 0) {
+                        ConversationSummary oldSummary = conversations.get(convIndex);
+                        ConversationSummary newSummary = new ConversationSummary(
+                            conversationId,
+                            oldSummary.title,
+                            System.currentTimeMillis()
+                        );
+                        conversations.set(convIndex, newSummary);
+                        persistConversationIndex();
+                    }
+                    
+                } catch (IOException e) {
+                    runOnUiThread(() -> showToast("Streaming interrupted: " + e.getMessage()));
                 } finally {
                     if (responseBody != null) {
                         responseBody.close();
@@ -626,85 +570,11 @@ public class AgentFragment extends Fragment {
     }
 
     private void loadConversationItems(String conversationId) {
-        String accessToken = requireAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
-            return;
-        }
-
-        Request request = new Request.Builder()
-                .url(backendBaseUrl + "/llm/conversations/" + conversationId + "/messages?limit=50")
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .get()
-                .build();
-
-        toggleLoading(true);
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                runOnUiThread(() -> {
-                    toggleLoading(false);
-                    showToast("Failed to load conversation");
-                });
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String responseBody = response.body() != null ? response.body().string() : "";
-                if (!response.isSuccessful()) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        String message = extractErrorMessage(responseBody, response.code());
-                        showToast(message);
-                    });
-                    return;
-                }
-
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    JSONArray data = json.optJSONArray("messages");
-                    List<MessageItem> loaded = new ArrayList<>();
-                    if (data != null) {
-                        for (int i = 0; i < data.length(); i++) {
-                            JSONObject item = data.getJSONObject(i);
-                            String role = item.optString("role", "assistant");
-                            JSONArray contentArray = item.optJSONArray("content");
-                            if (contentArray == null) {
-                                continue;
-                            }
-                            StringBuilder builder = new StringBuilder();
-                            for (int j = 0; j < contentArray.length(); j++) {
-                                Object contentNode = contentArray.opt(j);
-                                if (contentNode instanceof String) {
-                                    builder.append((String) contentNode);
-                                } else if (contentNode instanceof JSONObject) {
-                                    builder.append(((JSONObject) contentNode).optString("text"));
-                                }
-                            }
-                            String text = builder.toString().trim();
-                            if (!text.isEmpty()) {
-                                long created = parseIsoTimestamp(item.optString("created_at"));
-                                if (created == 0L) {
-                                    created = System.currentTimeMillis();
-                                }
-                                loaded.add(new MessageItem(role, text, created));
-                            }
-                        }
-                    }
-                    Collections.sort(loaded, Comparator.comparingLong(a -> a.createdAt));
-                    runOnUiThread(() -> {
-                        messages.clear();
-                        messages.addAll(loaded);
-                        messageAdapter.notifyDataSetChanged();
-                        toggleLoading(false);
-                    });
-                } catch (JSONException e) {
-                    runOnUiThread(() -> {
-                        toggleLoading(false);
-                        showToast("Invalid conversation history");
-                    });
-                }
-            }
-        });
+        List<MessageItem> loaded = loadConversationMessages(conversationId);
+        messages.clear();
+        messages.addAll(loaded);
+        messageAdapter.notifyDataSetChanged();
+        // Status bar will be updated by selectConversation() after this method returns
     }
 
     private int appendLocalMessage(MessageItem item) {
@@ -725,91 +595,7 @@ public class AgentFragment extends Fragment {
         binding.sendButton.setEnabled(!loading);
     }
 
-    private void handleSseChunk(@Nullable String eventType, String data, MessageItem assistantMessage,
-                                AtomicInteger assistantIndex, StringBuilder accumulatedText) {
-        if (TextUtils.isEmpty(data) || assistantMessage == null) {
-            return;
-        }
-        try {
-            JSONObject payload = new JSONObject(data);
-            String resolvedType = !TextUtils.isEmpty(eventType) ? eventType : payload.optString("type");
-            if ("response.output_text.delta".equals(resolvedType)) {
-                String delta = extractDeltaText(payload);
-                if (!TextUtils.isEmpty(delta)) {
-                    accumulatedText.append(delta);
-                    final String text = accumulatedText.toString();
-                    runOnUiThread(() -> updateMessageContent(assistantMessage, assistantIndex.get(), text));
-                }
-            } else if ("final".equals(resolvedType)) {
-                String finalText = payload.optString("output_text");
-                if (!TextUtils.isEmpty(finalText)) {
-                    accumulatedText.setLength(0);
-                    accumulatedText.append(finalText);
-                }
-                final String text = accumulatedText.toString().trim();
-                runOnUiThread(() -> updateMessageContent(assistantMessage, assistantIndex.get(), text));
-                runOnUiThread(this::fetchConversationsFromBackend);
-            } else if ("response.completed".equals(resolvedType)) {
-                if (accumulatedText.length() > 0) {
-                    final String text = accumulatedText.toString();
-                    runOnUiThread(() -> updateMessageContent(assistantMessage, assistantIndex.get(), text));
-                }
-            } else if ("error".equals(resolvedType) || "response.error".equals(resolvedType)) {
-                String message = payload.optString("message");
-                if (TextUtils.isEmpty(message)) {
-                    message = payload.optString("error", "Streaming error");
-                }
-                final String errorMessage = TextUtils.isEmpty(message) ? "Streaming error" : message;
-                runOnUiThread(() -> {
-                    updateMessageContent(assistantMessage, assistantIndex.get(), errorMessage);
-                    showToast(errorMessage);
-                });
-            }
-        } catch (JSONException ignored) {
-        }
-    }
 
-    private String extractDeltaText(JSONObject payload) {
-        Object deltaNode = payload.opt("delta");
-        if (deltaNode instanceof String) {
-            return (String) deltaNode;
-        }
-        if (deltaNode instanceof JSONObject) {
-            JSONObject deltaObj = (JSONObject) deltaNode;
-            String value = deltaObj.optString("text");
-            if (!TextUtils.isEmpty(value)) {
-                return value;
-            }
-            return deltaObj.optString("value");
-        }
-        if (deltaNode instanceof JSONArray) {
-            JSONArray array = (JSONArray) deltaNode;
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < array.length(); i++) {
-                Object item = array.opt(i);
-                if (item instanceof String) {
-                    builder.append((String) item);
-                } else if (item instanceof JSONObject) {
-                    builder.append(((JSONObject) item).optString("text"));
-                }
-            }
-            return builder.toString();
-        }
-        JSONArray contentArray = payload.optJSONArray("content");
-        if (contentArray != null) {
-            StringBuilder builder = new StringBuilder();
-            for (int i = 0; i < contentArray.length(); i++) {
-                Object item = contentArray.opt(i);
-                if (item instanceof String) {
-                    builder.append((String) item);
-                } else if (item instanceof JSONObject) {
-                    builder.append(((JSONObject) item).optString("text"));
-                }
-            }
-            return builder.toString();
-        }
-        return payload.optString("text");
-    }
 
     private void updateMessageContent(MessageItem item, int index, String content) {
         if (binding == null || item == null || index < 0 || index >= messages.size()) {
@@ -820,18 +606,7 @@ public class AgentFragment extends Fragment {
         binding.messageList.scrollToPosition(messages.size() - 1);
     }
 
-    @Nullable
-    private String requireAccessToken() {
-        if (authenticationManager == null) {
-            return null;
-        }
-        String token = authenticationManager.getAccessToken();
-        if (TextUtils.isEmpty(token)) {
-            showToast("Please sign in again to use the agent");
-            return null;
-        }
-        return token;
-    }
+
 
     private String extractErrorMessage(String responseBody, int statusCode) {
         if (!TextUtils.isEmpty(responseBody)) {
@@ -852,82 +627,7 @@ public class AgentFragment extends Fragment {
         return "Request failed: " + statusCode;
     }
 
-    private long parseIsoTimestamp(String value) {
-        if (TextUtils.isEmpty(value)) {
-            return 0L;
-        }
-        try {
-            return OffsetDateTime.parse(value).toInstant().toEpochMilli();
-        } catch (DateTimeParseException ignored) {
-            try {
-                return Instant.parse(value).toEpochMilli();
-            } catch (DateTimeParseException ignoredAgain) {
-                return 0L;
-            }
-        }
-    }
 
-    private void fetchConversationsFromBackend() {
-        String accessToken = requireAccessToken();
-        if (TextUtils.isEmpty(accessToken)) {
-            return;
-        }
-
-        Request request = new Request.Builder()
-                .url(backendBaseUrl + "/llm/conversations")
-                .addHeader("Authorization", "Bearer " + accessToken)
-                .get()
-                .build();
-
-        httpClient.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                runOnUiThread(() -> showToast("Failed to load conversations"));
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                String responseBody = response.body() != null ? response.body().string() : "";
-                if (!response.isSuccessful()) {
-                    runOnUiThread(() -> showToast(extractErrorMessage(responseBody, response.code())));
-                    return;
-                }
-
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    JSONArray data = json.optJSONArray("conversations");
-                    List<ConversationSummary> fetched = new ArrayList<>();
-                    if (data != null) {
-                        for (int i = 0; i < data.length(); i++) {
-                            JSONObject item = data.getJSONObject(i);
-                            String id = item.optString("id");
-                            String title = item.optString("title", "Agent Chat");
-                            String updatedIso = item.optString("updated_at");
-                            long updatedAt = parseIsoTimestamp(updatedIso);
-                            if (updatedAt == 0L) {
-                                updatedAt = parseIsoTimestamp(item.optString("created_at"));
-                            }
-                            if (updatedAt == 0L) {
-                                updatedAt = System.currentTimeMillis();
-                            }
-                            if (!TextUtils.isEmpty(id)) {
-                                fetched.add(new ConversationSummary(id, title, updatedAt));
-                            }
-                        }
-                    }
-                    runOnUiThread(() -> {
-                        conversations.clear();
-                        conversations.addAll(fetched);
-                        sortConversationsByRecency();
-                        addConversationToSpinnerListOnly();
-                        persistConversationList(conversations);
-                    });
-                } catch (JSONException e) {
-                    runOnUiThread(() -> showToast("Invalid conversation list"));
-                }
-            }
-        });
-    }
 
     private void showToast(String msg) {
         if (!isAdded()) {
@@ -943,83 +643,90 @@ public class AgentFragment extends Fragment {
         requireActivity().runOnUiThread(runnable);
     }
 
-    private void addConversationToSpinner(ConversationSummary summary, boolean select) {
-        int existingIndex = -1;
-        for (int i = 0; i < conversations.size(); i++) {
-            if (conversations.get(i).id.equals(summary.id)) {
-                existingIndex = i;
-                break;
-            }
-        }
-        if (existingIndex >= 0) {
-            conversations.set(existingIndex, summary);
-        } else {
-            conversations.add(summary);
-        }
-
-        sortConversationsByRecency();
-
-        List<String> labels = new ArrayList<>();
-        for (ConversationSummary conversation : conversations) {
-            labels.add(conversation.label);
-        }
-        conversationAdapter.clear();
-        conversationAdapter.addAll(labels);
-        conversationAdapter.notifyDataSetChanged();
-
-        if (select) {
-            int index = conversations.indexOf(summary);
-            if (index >= 0 && binding != null) {
-                binding.conversationSpinner.setSelection(index);
-            }
-        }
-        updateConversationActionButtons();
-    }
 
     private void loadStoredConversations() {
-        Context context = requireContext();
-        String serialized = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getString(PREF_CONVERSATIONS, null);
-        if (TextUtils.isEmpty(serialized)) {
+        File indexFile = new File(getConversationsDir(), CONVERSATIONS_INDEX);
+        if (!indexFile.exists()) {
+            // No conversations exist yet, ensure status bar shows correct state
+            selectedConversationId = null;
+            updateStatusBar();
+            updateConversationActionButtons();
             return;
         }
+        
         try {
-            JSONArray array = new JSONArray(serialized);
+            FileInputStream fis = new FileInputStream(indexFile);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+            
+            JSONArray array = new JSONArray(sb.toString());
             for (int i = 0; i < array.length(); i++) {
                 JSONObject item = array.getJSONObject(i);
                 String id = item.optString("id");
-                String title = item.optString("title");
-                if (TextUtils.isEmpty(title)) {
-                    title = item.optString("label");
-                }
+                String title = item.optString("title", "New Chat");
                 long updatedAt = item.optLong("updatedAt", 0);
                 if (!TextUtils.isEmpty(id)) {
                     conversations.add(new ConversationSummary(id, title, updatedAt));
                 }
             }
             sortConversationsByRecency();
-            addConversationToSpinnerListOnly();
-        } catch (JSONException ignored) {
+            
+            // Load last selected conversation
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            String lastSelectedId = prefs.getString(PREF_LAST_SELECTED_CONVERSATION, null);
+            if (!TextUtils.isEmpty(lastSelectedId) && findConversationIndex(lastSelectedId) >= 0) {
+                selectConversation(lastSelectedId);
+            } else if (!conversations.isEmpty()) {
+                // If last selected doesn't exist, select the most recent
+                selectConversation(conversations.get(0).id);
+            } else {
+                // No conversations found, ensure status bar is updated
+                selectedConversationId = null;
+                updateStatusBar();
+                updateConversationActionButtons();
+            }
+        } catch (IOException | JSONException e) {
+            // On error, ensure status bar reflects current state
+            selectedConversationId = null;
+            updateStatusBar();
+            updateConversationActionButtons();
         }
     }
 
-    private void addConversationToSpinnerListOnly() {
-        sortConversationsByRecency();
-        List<String> labels = new ArrayList<>();
-        for (ConversationSummary conversation : conversations) {
-            labels.add(conversation.label);
+    private void selectConversation(String conversationId) {
+        selectedConversationId = conversationId;
+        saveLastSelectedConversation(conversationId);
+        messages.clear();
+        if (messageAdapter != null) {
+            messageAdapter.notifyDataSetChanged();
         }
-        conversationAdapter.clear();
-        conversationAdapter.addAll(labels);
-        conversationAdapter.notifyDataSetChanged();
-
-        if (binding != null && !TextUtils.isEmpty(selectedConversationId)) {
-            int index = findConversationIndex(selectedConversationId);
-            if (index >= 0) {
-                binding.conversationSpinner.setSelection(index);
-            }
-        }
+        loadConversationItems(conversationId);
+        updateStatusBar();
         updateConversationActionButtons();
+        updateEmptyStateVisibility();
+    }
+
+    private void saveLastSelectedConversation(String conversationId) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        if (TextUtils.isEmpty(conversationId)) {
+            prefs.edit().remove(PREF_LAST_SELECTED_CONVERSATION).apply();
+        } else {
+            prefs.edit().putString(PREF_LAST_SELECTED_CONVERSATION, conversationId).apply();
+        }
+    }
+
+    private void updateEmptyStateVisibility() {
+        if (binding == null) {
+            return;
+        }
+        boolean isEmpty = conversations.isEmpty();
+        binding.emptyState.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        binding.messageList.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
     }
 
     private int findConversationIndex(String conversationId) {
@@ -1040,23 +747,88 @@ public class AgentFragment extends Fragment {
         if (TextUtils.equals(conversationId, selectedConversationId)) {
             if (conversations.isEmpty()) {
                 selectedConversationId = null;
+                saveLastSelectedConversation(null);
                 messages.clear();
                 if (messageAdapter != null) {
                     messageAdapter.notifyDataSetChanged();
                 }
+                updateStatusBar();
+                updateConversationActionButtons();
             } else {
                 int nextIndex = Math.min(index, conversations.size() - 1);
                 if (nextIndex < 0) {
                     nextIndex = 0;
                 }
-                selectedConversationId = conversations.get(nextIndex).id;
+                selectConversation(conversations.get(nextIndex).id);
             }
         }
 
-        persistConversationList(conversations);
-        addConversationToSpinnerListOnly();
-        if (TextUtils.isEmpty(selectedConversationId)) {
-            updateConversationActionButtons();
+        persistConversationIndex();
+        updateEmptyStateVisibility();
+    }
+
+    private File getConversationsDir() {
+        File dir = new File(requireContext().getFilesDir(), CONVERSATIONS_DIR);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        return dir;
+    }
+
+    private void ensureConversationsDirectory() {
+        getConversationsDir();
+    }
+
+    private List<MessageItem> loadConversationMessages(String conversationId) {
+        List<MessageItem> result = new ArrayList<>();
+        File conversationFile = new File(getConversationsDir(), conversationId + ".json");
+        if (!conversationFile.exists()) {
+            return result;
+        }
+        
+        try {
+            FileInputStream fis = new FileInputStream(conversationFile);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+            
+            JSONArray array = new JSONArray(sb.toString());
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject item = array.getJSONObject(i);
+                String role = item.optString("role", "user");
+                String content = item.optString("content", "");
+                long createdAt = item.optLong("createdAt", System.currentTimeMillis());
+                result.add(new MessageItem(role, content, createdAt));
+            }
+        } catch (IOException | JSONException ignored) {
+        }
+        
+        return result;
+    }
+
+    private void saveConversationMessages(String conversationId, List<MessageItem> messages) {
+        JSONArray array = new JSONArray();
+        for (MessageItem item : messages) {
+            JSONObject obj = new JSONObject();
+            try {
+                obj.put("role", item.role);
+                obj.put("content", item.getContent());
+                obj.put("createdAt", item.createdAt);
+                array.put(obj);
+            } catch (JSONException ignored) {
+            }
+        }
+        
+        File conversationFile = new File(getConversationsDir(), conversationId + ".json");
+        try {
+            FileOutputStream fos = new FileOutputStream(conversationFile);
+            fos.write(array.toString().getBytes());
+            fos.close();
+        } catch (IOException ignored) {
         }
     }
 
@@ -1082,51 +854,32 @@ public class AgentFragment extends Fragment {
 		}
 	}
 
-    private void persistConversation(ConversationSummary summary) {
+    private void persistConversationIndex() {
         if (!isAdded()) {
             return;
         }
-        List<ConversationSummary> copy = new ArrayList<>(conversations);
-        boolean updated = false;
-        for (int i = 0; i < copy.size(); i++) {
-            if (copy.get(i).id.equals(summary.id)) {
-                copy.set(i, summary);
-                updated = true;
-                break;
-            }
-        }
-        if (!updated) {
-            copy.add(summary);
-        }
-        sortSummaries(copy);
-        persistConversationList(copy);
-    }
-
-    private void persistConversationList(List<ConversationSummary> items) {
-        if (!isAdded()) {
-            return;
-        }
-        Context context = requireContext();
-
-        sortSummaries(items);
-
+        
+        sortSummaries(conversations);
+        
         JSONArray array = new JSONArray();
-        for (ConversationSummary item : items) {
+        for (ConversationSummary item : conversations) {
             JSONObject obj = new JSONObject();
             try {
                 obj.put("id", item.id);
                 obj.put("title", item.title);
-                obj.put("label", item.label);
                 obj.put("updatedAt", item.updatedAt);
                 array.put(obj);
             } catch (JSONException ignored) {
             }
         }
-
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(PREF_CONVERSATIONS, array.toString())
-                .apply();
+        
+        File indexFile = new File(getConversationsDir(), CONVERSATIONS_INDEX);
+        try {
+            FileOutputStream fos = new FileOutputStream(indexFile);
+            fos.write(array.toString().getBytes());
+            fos.close();
+        } catch (IOException ignored) {
+        }
     }
 
     private void sortConversationsByRecency() {
@@ -1140,6 +893,60 @@ public class AgentFragment extends Fragment {
         Collections.sort(items, (a, b) -> Long.compare(b.updatedAt, a.updatedAt));
     }
 
+    private void showAgentSettingsDialog() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_agent_settings, null);
+        
+        com.google.android.material.textfield.TextInputEditText baseUrlInput = dialogView.findViewById(R.id.base_url_input);
+        com.google.android.material.textfield.TextInputEditText apiKeyInput = dialogView.findViewById(R.id.api_key_input);
+        com.google.android.material.textfield.TextInputEditText modelInput = dialogView.findViewById(R.id.model_input);
+        com.google.android.material.textfield.TextInputEditText instructionsInput = dialogView.findViewById(R.id.instructions_input);
+        
+        baseUrlInput.setText(prefs.getString("agent_base_url", DEFAULT_BASE_URL));
+        apiKeyInput.setText(prefs.getString("agent_api_key", ""));
+        modelInput.setText(prefs.getString("agent_model", DEFAULT_MODEL));
+        instructionsInput.setText(prefs.getString("agent_instructions", ""));
+        
+        baseUrlInput.setTextColor(0xFFFFFFFF);
+        apiKeyInput.setTextColor(0xFFFFFFFF);
+        modelInput.setTextColor(0xFFFFFFFF);
+        instructionsInput.setTextColor(0xFFFFFFFF);
+        
+        baseUrlInput.setHintTextColor(0xFFAAAAAA);
+        apiKeyInput.setHintTextColor(0xFFAAAAAA);
+        modelInput.setHintTextColor(0xFFAAAAAA);
+        instructionsInput.setHintTextColor(0xFFAAAAAA);
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Agent Settings")
+            .setView(dialogView)
+            .setPositiveButton("Save", (dialog, which) -> {
+                String baseUrl = baseUrlInput.getText() != null ? baseUrlInput.getText().toString().trim() : DEFAULT_BASE_URL;
+                String apiKey = apiKeyInput.getText() != null ? apiKeyInput.getText().toString().trim() : "";
+                String model = modelInput.getText() != null ? modelInput.getText().toString().trim() : DEFAULT_MODEL;
+                String instructions = instructionsInput.getText() != null ? instructionsInput.getText().toString().trim() : "";
+                
+                if (TextUtils.isEmpty(baseUrl)) {
+                    baseUrl = DEFAULT_BASE_URL;
+                }
+                if (TextUtils.isEmpty(model)) {
+                    model = DEFAULT_MODEL;
+                }
+                
+                prefs.edit()
+                    .putString("agent_base_url", baseUrl)
+                    .putString("agent_api_key", apiKey)
+                    .putString("agent_model", model)
+                    .putString("agent_instructions", instructions)
+                    .apply();
+                    
+                showToast("Settings saved");
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
     private static class ConversationSummary {
         final String id;
         final String title;
@@ -1148,9 +955,9 @@ public class AgentFragment extends Fragment {
 
         ConversationSummary(String id, String topic, long updatedAt) {
             this.id = id;
-            String baseTitle = TextUtils.isEmpty(topic) ? "Agent Chat" : topic.trim();
+            String baseTitle = TextUtils.isEmpty(topic) ? "New Chat" : topic.trim();
             if (TextUtils.isEmpty(baseTitle)) {
-                baseTitle = "Agent Chat";
+                baseTitle = "New Chat";
             }
             this.title = baseTitle;
             String sanitized = baseTitle;
@@ -1212,22 +1019,179 @@ public class AgentFragment extends Fragment {
 			if (isAssistant) {
 				holder.messageIcon.setVisibility(View.VISIBLE);
 				holder.messageRow.setGravity(Gravity.START);
-				holder.messageContent.setGravity(Gravity.START);
-				holder.messageContent.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
-				holder.messageContent.setMovementMethod(LinkMovementMethod.getInstance());
-				if (markwon != null) {
-					markwon.setMarkdown(holder.messageContent, item.getContent());
-				} else {
-					holder.messageContent.setText(item.getContent());
-				}
+				holder.messageContent.removeAllViews();
+				renderMarkdownWithCopyButtons(holder.messageContent, item.getContent());
 			} else {
 				holder.messageIcon.setVisibility(View.GONE);
 				holder.messageRow.setGravity(Gravity.END);
-				holder.messageContent.setGravity(Gravity.END);
-				holder.messageContent.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
-				holder.messageContent.setMovementMethod(null);
-				holder.messageContent.setText(item.getContent());
+				holder.messageContent.removeAllViews();
+				TextView textView = new TextView(holder.messageContent.getContext());
+				textView.setText(item.getContent());
+				textView.setTextColor(holder.messageContent.getContext().getResources().getColor(R.color.white, null));
+				textView.setTextSize(16);
+				textView.setGravity(Gravity.END);
+				textView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_END);
+				textView.setBackgroundResource(R.drawable.user_message_bubble);
+				textView.setPadding(20, 14, 20, 14);
+				LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+					LinearLayout.LayoutParams.WRAP_CONTENT,
+					LinearLayout.LayoutParams.WRAP_CONTENT
+				);
+				params.gravity = Gravity.END;
+				textView.setLayoutParams(params);
+				holder.messageContent.addView(textView);
 			}
+		}
+		
+		private void renderMarkdownWithCopyButtons(LinearLayout container, String markdown) {
+			Context context = container.getContext();
+			String[] parts = markdown.split("```");
+			
+			for (int i = 0; i < parts.length; i++) {
+				if (i % 2 == 0) {
+					if (!parts[i].trim().isEmpty()) {
+						renderTextWithTables(container, context, parts[i]);
+					}
+				} else {
+					String[] codeLines = parts[i].split("\n", 2);
+					String code = codeLines.length > 1 ? codeLines[1] : parts[i];
+					
+					LinearLayout codeBlock = new LinearLayout(context);
+					codeBlock.setOrientation(LinearLayout.VERTICAL);
+					int codeBlockBgColor = context.getResources().getColor(R.color.codeBlockBackground, null);
+					codeBlock.setBackgroundColor(codeBlockBgColor);
+					codeBlock.setPadding(20, 20, 20, 20);
+					LinearLayout.LayoutParams codeParams = new LinearLayout.LayoutParams(
+						LinearLayout.LayoutParams.MATCH_PARENT,
+						LinearLayout.LayoutParams.WRAP_CONTENT
+					);
+					codeParams.setMargins(0, 10, 0, 10);
+					codeBlock.setLayoutParams(codeParams);
+					
+					android.widget.HorizontalScrollView codeScroll = new android.widget.HorizontalScrollView(context);
+					
+					TextView codeTextView = new TextView(context);
+					codeTextView.setText(code);
+					codeTextView.setTextColor(0xFFE0E0E0);
+					codeTextView.setTextSize(14);
+					codeTextView.setTypeface(android.graphics.Typeface.MONOSPACE);
+					
+					codeScroll.addView(codeTextView);
+					codeBlock.addView(codeScroll);
+					
+					com.google.android.material.button.MaterialButton copyButton = 
+						new com.google.android.material.button.MaterialButton(context);
+					copyButton.setText("Copy Code");
+					copyButton.setTextSize(12);
+					LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+						LinearLayout.LayoutParams.WRAP_CONTENT,
+						LinearLayout.LayoutParams.WRAP_CONTENT
+					);
+					params.setMargins(0, 10, 0, 0);
+					copyButton.setLayoutParams(params);
+					
+					final String codeContent = code;
+					copyButton.setOnClickListener(v -> {
+						ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+						ClipData clip = ClipData.newPlainText("code", codeContent);
+						clipboard.setPrimaryClip(clip);
+						Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show();
+					});
+					
+					codeBlock.addView(copyButton);
+					container.addView(codeBlock);
+				}
+			}
+		}
+		
+		private void renderTextWithTables(LinearLayout container, Context context, String text) {
+			String[] lines = text.split("\n");
+			java.util.ArrayList<String> tableLines = new java.util.ArrayList<>();
+			StringBuilder normalText = new StringBuilder();
+			boolean inTable = false;
+			
+			for (String line : lines) {
+				if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+					if (!inTable && normalText.length() > 0) {
+						addNormalText(container, context, normalText.toString());
+						normalText.setLength(0);
+					}
+					inTable = true;
+					tableLines.add(line);
+				} else {
+					if (inTable) {
+						renderTable(container, context, tableLines);
+						tableLines.clear();
+						inTable = false;
+					}
+					normalText.append(line).append("\n");
+				}
+			}
+			
+			if (normalText.length() > 0) {
+				addNormalText(container, context, normalText.toString());
+			}
+			if (!tableLines.isEmpty()) {
+				renderTable(container, context, tableLines);
+			}
+		}
+		
+		private void addNormalText(LinearLayout container, Context context, String text) {
+			TextView textView = new TextView(context);
+			textView.setTextColor(context.getResources().getColor(R.color.agentMessageText, null));
+			textView.setTextSize(16);
+			textView.setMovementMethod(LinkMovementMethod.getInstance());
+			if (markwon != null) {
+				markwon.setMarkdown(textView, text);
+			} else {
+				textView.setText(text);
+			}
+			container.addView(textView);
+		}
+		
+		private void renderTable(LinearLayout container, Context context, java.util.ArrayList<String> tableLines) {
+			if (tableLines.size() < 2) return;
+			
+			android.widget.HorizontalScrollView scrollView = new android.widget.HorizontalScrollView(context);
+			LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+				LinearLayout.LayoutParams.MATCH_PARENT,
+				LinearLayout.LayoutParams.WRAP_CONTENT
+			);
+			scrollParams.setMargins(0, 10, 0, 10);
+			scrollView.setLayoutParams(scrollParams);
+			
+			android.widget.TableLayout table = new android.widget.TableLayout(context);
+			int tableBgColor = context.getResources().getColor(R.color.codeBlockBackground, null);
+			table.setBackgroundColor(tableBgColor);
+			table.setPadding(10, 10, 10, 10);
+			
+			for (int i = 0; i < tableLines.size(); i++) {
+				if (i == 1 && tableLines.get(i).contains("---")) continue;
+				
+				String[] cells = tableLines.get(i).split("\\|");
+				android.widget.TableRow row = new android.widget.TableRow(context);
+				
+				for (int j = 1; j < cells.length - 1; j++) {
+					TextView cell = new TextView(context);
+					cell.setText(cells[j].trim());
+					cell.setTextColor(0xFFE0E0E0);
+					cell.setTextSize(14);
+					cell.setPadding(15, 10, 15, 10);
+					cell.setMinWidth(150);
+					
+					if (i == 0) {
+						cell.setTypeface(null, android.graphics.Typeface.BOLD);
+						cell.setTextColor(0xFFFFFFFF);
+					}
+					
+					row.addView(cell);
+				}
+				
+				table.addView(row);
+			}
+			
+			scrollView.addView(table);
+			container.addView(scrollView);
 		}
 
         @Override
@@ -1239,7 +1203,7 @@ public class AgentFragment extends Fragment {
 			final com.emwaver.emwaverandroidapp.databinding.ItemAgentMessageBinding binding;
 			final LinearLayout messageRow;
 			final ImageView messageIcon;
-			final TextView messageContent;
+			final LinearLayout messageContent;
 
 			MessageViewHolder(com.emwaver.emwaverandroidapp.databinding.ItemAgentMessageBinding binding) {
 				super(binding.getRoot());

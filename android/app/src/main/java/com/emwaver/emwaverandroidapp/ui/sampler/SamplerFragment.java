@@ -1,6 +1,5 @@
 package com.emwaver.emwaverandroidapp.ui.sampler;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -9,17 +8,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.preference.PreferenceManager;
-import android.provider.OpenableColumns;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -32,7 +29,7 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
-import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
@@ -44,19 +41,11 @@ import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentSamplerBinding;
-import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
-import com.emwaver.emwaverandroidapp.files.FileRepository;
-import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
-import com.emwaver.emwaverandroidapp.files.UserFileData;
-import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
-import com.emwaver.emwaverandroidapp.infrared.InfraredRepository;
 import com.github.mikephil.charting.charts.LineChart;
 import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.components.YAxis;
@@ -65,24 +54,19 @@ import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
 import com.github.mikephil.charting.listener.ChartTouchListener;
 import com.github.mikephil.charting.listener.OnChartGestureListener;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
 
 import java.util.ArrayList;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class SamplerFragment extends Fragment {
 
@@ -124,41 +108,44 @@ public class SamplerFragment extends Fragment {
 
     // Add PINS array to match UsbFragment
     private static final String[] PINS = {
-            "GPIO0 (IO0)",
-            "CC1101 GDO0 (IO1)",
-            "CC1101 GDO2 (IO2)",
-            
-            "IR TX (IO4)",
-            "IR RX (IO5)",
-            "GPIO6 (IO6)",      // Schematic shows GPIO6 with overbar
+            "RFM69 DIO0 (IO1)",
+            "RFM69 DIO1 (IO2)",
+            "RFM69 DIO2 (IO42)",
+            "RFM69 DIO3 (IO41)",
+            "RFM69 DIO4 (IO40)",
+            "RFM69 DIO5 (IO39)",
+            "IR RX (IO38)",
+            "IR TX (IO37)",
+            "GPIO4 (IO4)",
+            "GPIO5 (IO5)",
+            "GPIO6 (IO6)",
             "GPIO7 (IO7)",
-
-            "GPIO9 (IO9)",
-            "CC1101 NSS (IO10)", // SPI Chip Select
-            "CC1101 MOSI (IO11)",// SPI MOSI
-            "CC1101 SCK (IO12)", // SPI SCK
-            "CC1101 MISO (IO13)",// SPI MISO
-            "GPIO14 (IO14)",
             "GPIO15 (IO15)",
-            "GPIO16 (IO16)"
+            "GPIO16 (IO16)",
+            "GPIO17 (IO17)",
+            "GPIO18 (IO18)",
+            "GPIO8 (IO8)",
+            "GPIO3 (IO3)",
+            "GPIO46 (IO46)",
+            "GPIO9 (IO9)",
+            "GPIO10 (IO10)",
+            "GPIO11 (IO11)",
+            "GPIO12 (IO12)",
+            "GPIO13 (IO13)",
+            "GPIO14 (IO14)"
     };
 
     private static final String PREF_SELECTED_PIN_INDEX = "selectedSamplerPinIndex";
+    private static final String PREF_LAST_SELECTED_SIGNAL = "sampler_last_selected_signal";
+    private static final String SIGNALS_DIR = "signals";
 
-    private FileRepository fileRepository;
-    private InfraredRepository infraredRepository;
-    private AuthenticationManager authenticationManager;
+    private File signalsDir;
+    private final List<String> savedSignalNames = new ArrayList<>();
+    private ArrayAdapter<String> signalPickerAdapter;
     private ActivityResultLauncher<String[]> openRawFileLauncher;
-    private ActivityResultLauncher<String> createRawFileLauncher;
-    private UserFileMetadata currentSignalMetadata;
     private String currentSignalName;
     private boolean hasUnsavedChanges;
-    private boolean isLoadingSignalList;
-    private boolean isSavingSignal;
-    private byte[] pendingExportBuffer;
-    private String pendingExportDisplayName;
-    private final List<UserFileMetadata> signalFiles = new ArrayList<>();
-    private SignalsAdapter signalAdapter;
+    private AdapterView.OnItemSelectedListener signalPickerListener;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -169,6 +156,10 @@ public class SamplerFragment extends Fragment {
             Log.i("service binding", "onServiceConnected");
             initChart();
             refreshChart(); // Refresh the chart with the new buffer
+            // Try to load last selected signal if not already loaded
+            if (TextUtils.isEmpty(currentSignalName) && !savedSignalNames.isEmpty()) {
+                loadLastSelectedSignal();
+            }
         }
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
@@ -180,21 +171,19 @@ public class SamplerFragment extends Fragment {
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Initialize signals directory
+        File appFilesDir = requireContext().getFilesDir();
+        signalsDir = new File(appFilesDir, SIGNALS_DIR);
+        if (!signalsDir.exists()) {
+            signalsDir.mkdirs();
+        }
+        
+        // Setup file picker launcher for importing signals
         openRawFileLauncher = registerForActivityResult(
             new ActivityResultContracts.OpenDocument(),
             uri -> {
                 if (uri != null) {
-                    importSignalFromUri(uri);
-                }
-            }
-        );
-        createRawFileLauncher = registerForActivityResult(
-            new ActivityResultContracts.CreateDocument("application/octet-stream"),
-            uri -> {
-                if (uri != null) {
-                    exportPendingBufferToUri(uri);
-                } else {
-                    clearPendingExport();
+                    importSignalFromExternalStorage(uri);
                 }
             }
         );
@@ -208,29 +197,33 @@ public class SamplerFragment extends Fragment {
         binding = FragmentSamplerBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
-        fileRepository = FileRepository.getInstance(requireContext());
-        infraredRepository = InfraredRepository.getInstance(requireContext());
-        authenticationManager = AuthenticationManager.getInstance(requireContext());
         chart = binding.chart;
 
-        signalAdapter = new SignalsAdapter(metadata -> loadSignalFromCloud(metadata));
-        binding.signalList.setLayoutManager(new LinearLayoutManager(requireContext()));
-        binding.signalList.setAdapter(signalAdapter);
-        binding.signalListRefreshButton.setOnClickListener(v -> refreshSignalList());
-        binding.signalSaveButton.setOnClickListener(v -> saveSignalToCloud());
+        // Setup signal picker
+        List<String> pickerItems = new ArrayList<>();
+        pickerItems.add("New signal...");
+        pickerItems.addAll(savedSignalNames);
+        signalPickerAdapter = new ArrayAdapter<>(requireContext(), 
+            android.R.layout.simple_spinner_item, pickerItems);
+        signalPickerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        binding.signalPicker.setAdapter(signalPickerAdapter);
+        signalPickerListener = new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position > 0) { // Position 0 is "New signal..."
+                    String selectedSignal = savedSignalNames.get(position - 1);
+                    loadSignalFromStorage(selectedSignal);
+                } else {
+                    // Position 0 - "New signal..."
+                    createNewSignal();
+                }
+            }
 
-        if (binding.irpProtocolEditText != null && TextUtils.isEmpty(getInputText(binding.irpProtocolEditText))) {
-            binding.irpProtocolEditText.setText("NEC1");
-        }
-        if (binding.irpDeviceEditText != null && TextUtils.isEmpty(getInputText(binding.irpDeviceEditText))) {
-            binding.irpDeviceEditText.setText("0");
-        }
-        if (binding.irpSubdeviceEditText != null && TextUtils.isEmpty(getInputText(binding.irpSubdeviceEditText))) {
-            binding.irpSubdeviceEditText.setText("0");
-        }
-        if (binding.irpFunctionEditText != null && TextUtils.isEmpty(getInputText(binding.irpFunctionEditText))) {
-            binding.irpFunctionEditText.setText("170");
-        }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        };
+        binding.signalPicker.setOnItemSelectedListener(signalPickerListener);
 
         // Replace the resource-based spinner adapter with the PINS array
         ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
@@ -240,7 +233,7 @@ public class SamplerFragment extends Fragment {
 
         // Load saved pin selection or set default
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        int defaultPinIndex = 6; // GPIO6 (IO6)
+        int defaultPinIndex = 10; // GPIO6 (IO6)
         int selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, defaultPinIndex);
         if (selectedPinIndex >= 0 && selectedPinIndex < adapter.getCount()) {
             binding.gpioSpinner.setSelection(selectedPinIndex);
@@ -272,12 +265,14 @@ public class SamplerFragment extends Fragment {
         binding.stopButton.setOnClickListener(v -> stopRecording());
         binding.retransmitButton.setOnClickListener(v -> retransmitSignal());
         binding.getTimingsButton.setOnClickListener(v -> getTimings());
-        binding.invertSignalButton.setOnClickListener(v -> convertToIR());
-        binding.decodeIrpButton.setOnClickListener(v -> decodeIrp());
-        binding.renderIrpButton.setOnClickListener(v -> renderIrp());
         
         // Initially disable the stop button as we're not recording yet
         binding.stopButton.setEnabled(false);
+        
+        // Initialize current signal name and unsaved changes
+        currentSignalName = null;
+        hasUnsavedChanges = false;
+        updateStatusBar();
         
         rawModeViewModel = new ViewModelProvider(this).get(SamplerViewModel.class);
 
@@ -368,11 +363,11 @@ public class SamplerFragment extends Fragment {
         initScheduler();
 
         setupMenu();
-        currentSignalMetadata = null;
-        currentSignalName = defaultSignalName();
-        hasUnsavedChanges = false;
-        isLoadingSignalList = false;
-        updateCurrentSignalUi();
+        refreshSignalList(() -> {
+            // After refreshing the list, try to load the last selected signal
+            loadLastSelectedSignal();
+        });
+        updateStatusBar();
 
         return root;
     }
@@ -393,6 +388,9 @@ public class SamplerFragment extends Fragment {
                 } else if (id == R.id.action_new_signal) {
                     createNewSignal();
                     return true;
+                } else if (id == R.id.action_save_signal) {
+                    saveSignal();
+                    return true;
                 } else if (id == R.id.action_rename_signal) {
                     renameSignal();
                     return true;
@@ -401,9 +399,6 @@ public class SamplerFragment extends Fragment {
                     return true;
                 } else if (id == R.id.action_load_from_storage) {
                     selectSignalFromExternalStorage();
-                    return true;
-                } else if (id == R.id.action_save_to_storage) {
-                    saveCurrentBufferToExternal();
                     return true;
                 }
                 return false;
@@ -418,7 +413,7 @@ public class SamplerFragment extends Fragment {
             BLEService.clearBuffer();
             lastBufferSize = -1; // Force refresh
             refreshChart(); // Refresh the chart to reflect the cleared buffer
-            markBufferDirty(false, null);
+            markBufferDirty();
         } else {
             Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
         }
@@ -431,154 +426,7 @@ public class SamplerFragment extends Fragment {
         openRawFileLauncher.launch(new String[]{"application/octet-stream", "*/*"});
     }
 
-    private void saveCurrentBufferToExternal() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        byte[] buffer = BLEService.getBuffer();
-        if (buffer == null || buffer.length == 0) {
-            Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        pendingExportBuffer = buffer.clone();
-        String exportName = !TextUtils.isEmpty(currentSignalName) ? currentSignalName : defaultSignalName();
-        pendingExportDisplayName = normalizeSignalName(exportName);
-        if (createRawFileLauncher != null) {
-            createRawFileLauncher.launch(pendingExportDisplayName);
-        }
-    }
-
-    private void saveSignalToCloud() {
-        if (!isAdded()) {
-            return;
-        }
-        if (!hasUnsavedChanges || isSavingSignal) {
-            return;
-        }
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        byte[] buffer = BLEService.getBuffer();
-        if (buffer == null || buffer.length == 0) {
-            Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        boolean isAuthenticated = authenticationManager != null && !TextUtils.isEmpty(authenticationManager.getAccessToken());
-        if (!isAuthenticated) {
-            Toast.makeText(requireContext(), "Sign in to save signals", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        final byte[] payload = buffer.clone();
-        if (currentSignalMetadata == null) {
-            promptForSignalName(payload);
-        } else {
-            if (TextUtils.isEmpty(currentSignalMetadata.getEtag())) {
-                Toast.makeText(requireContext(), "Reload signal before saving changes", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            updateSignalInCloud(currentSignalMetadata, payload);
-        }
-    }
-
-    private void promptForSignalName(byte[] data) {
-        if (!isAdded()) {
-            return;
-        }
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Save Signal");
-        builder.setMessage("Enter a name for the signal:");
-        final EditText input = new EditText(requireContext());
-        String defaultName = !TextUtils.isEmpty(currentSignalName) ? currentSignalName : defaultSignalName();
-        input.setText(defaultName);
-        input.setSelection(defaultName.length());
-        builder.setView(input);
-        builder.setPositiveButton("Save", (dialog, which) -> {
-            String entered = input.getText() != null ? input.getText().toString().trim() : "";
-            if (TextUtils.isEmpty(entered)) {
-                entered = defaultSignalName();
-            }
-            String normalized = normalizeSignalName(entered);
-            currentSignalName = normalized;
-            updateCurrentSignalUi();
-            createSignalInCloud(normalized, data);
-        });
-        builder.setNegativeButton("Cancel", (dialog, which) -> {
-            isSavingSignal = false;
-            updateCurrentSignalUi();
-        });
-        builder.setOnCancelListener(dialog -> {
-            isSavingSignal = false;
-            updateCurrentSignalUi();
-        });
-        builder.show();
-    }
-
-    private void createSignalInCloud(String name, byte[] data) {
-        if (!isAdded()) {
-            return;
-        }
-        if (fileRepository == null) {
-            showToastOnUiThread("Storage not available");
-            return;
-        }
-        isSavingSignal = true;
-        updateCurrentSignalUi();
-        final String normalizedName = normalizeSignalName(name);
-        fileRepository.createBinaryFile(normalizedName, data, new RepositoryCallback<UserFileMetadata>() {
-            @Override
-            public void onSuccess(UserFileMetadata value) {
-                isSavingSignal = false;
-                markBufferClean(value);
-                showToastOnUiThread("Signal saved to cloud");
-                refreshSignalList();
-            }
-
-            @Override
-            public void onError(String message) {
-                isSavingSignal = false;
-                updateCurrentSignalUi();
-                showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to save signal" : message);
-            }
-        });
-    }
-
-    private void updateSignalInCloud(UserFileMetadata metadata, byte[] data) {
-        if (!isAdded()) {
-            return;
-        }
-        if (fileRepository == null) {
-            showToastOnUiThread("Storage not available");
-            return;
-        }
-        String etag = metadata.getEtag();
-        if (TextUtils.isEmpty(etag)) {
-            showToastOnUiThread("Reload signal before saving changes");
-            return;
-        }
-        isSavingSignal = true;
-        updateCurrentSignalUi();
-        fileRepository.updateBinaryFile(metadata.getId(), etag, data, new RepositoryCallback<UserFileMetadata>() {
-            @Override
-            public void onSuccess(UserFileMetadata value) {
-                isSavingSignal = false;
-                markBufferClean(value);
-                showToastOnUiThread("Signal updated");
-                refreshSignalList();
-            }
-
-            @Override
-            public void onError(String message) {
-                isSavingSignal = false;
-                updateCurrentSignalUi();
-                showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to save changes" : message);
-            }
-        });
-    }
-
-    private void importSignalFromUri(Uri uri) {
+    private void importSignalFromExternalStorage(Uri uri) {
         if (!isAdded()) {
             return;
         }
@@ -586,63 +434,55 @@ public class SamplerFragment extends Fragment {
             try {
                 byte[] data = readBytesFromUri(uri);
                 if (data == null || data.length == 0) {
-                    showToastOnUiThread("Selected file is empty");
+                    requireActivity().runOnUiThread(() -> {
+                        Toast.makeText(requireContext(), "Selected file is empty", Toast.LENGTH_SHORT).show();
+                    });
                     return;
                 }
                 String displayName = getDisplayNameFromUri(uri);
                 String normalizedName = normalizeSignalName(displayName);
+                
+                // Save to internal storage
+                File signalFile = new File(signalsDir, normalizedName);
+                try (FileOutputStream fos = new FileOutputStream(signalFile)) {
+                    fos.write(data);
+                    fos.flush();
+                }
+                
+                // Load into buffer and refresh chart
                 requireActivity().runOnUiThread(() -> {
                     if (!isAdded()) {
                         return;
                     }
                     if (BLEService == null) {
                         Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                        refreshSignalList();
                         return;
                     }
                     BLEService.loadBuffer(data);
                     lastBufferSize = -1;
+                    resetChartZoom();
                     refreshChart();
-                    markBufferDirty(true, normalizedName);
-                    Toast.makeText(requireContext(), "Signal loaded from storage", Toast.LENGTH_SHORT).show();
+                    currentSignalName = normalizedName;
+                    hasUnsavedChanges = false;
+                    saveLastSelectedSignal(normalizedName);
+                    updateStatusBar();
+                    Toast.makeText(requireContext(), "Signal imported: " + normalizedName, Toast.LENGTH_SHORT).show();
+                    // Refresh list and update picker selection
+                    refreshSignalList(() -> {
+                        int signalIndex = savedSignalNames.indexOf(normalizedName);
+                        if (signalIndex >= 0) {
+                            binding.signalPicker.setSelection(signalIndex + 1); // +1 because position 0 is "New signal..."
+                        }
+                    });
                 });
             } catch (IOException e) {
                 Log.e("SamplerFragment", "Failed to import signal", e);
-                showToastOnUiThread("Failed to read signal file");
+                requireActivity().runOnUiThread(() -> {
+                    Toast.makeText(requireContext(), "Failed to import signal", Toast.LENGTH_SHORT).show();
+                });
             }
         }).start();
-    }
-
-    private void exportPendingBufferToUri(Uri uri) {
-        if (pendingExportBuffer == null || pendingExportBuffer.length == 0 || !isAdded()) {
-            showToastOnUiThread("Nothing to save");
-            clearPendingExport();
-            return;
-        }
-        byte[] data = pendingExportBuffer;
-        new Thread(() -> {
-            try (OutputStream outputStream = requireContext().getContentResolver().openOutputStream(uri)) {
-                if (outputStream == null) {
-                    throw new IOException("Unable to open destination");
-                }
-                outputStream.write(data);
-                outputStream.flush();
-                String displayName = getDisplayNameFromUri(uri);
-                if (TextUtils.isEmpty(displayName)) {
-                    displayName = pendingExportDisplayName;
-                }
-                showToastOnUiThread("Signal saved to storage");
-            } catch (IOException e) {
-                Log.e("SamplerFragment", "Failed to export signal", e);
-                showToastOnUiThread("Failed to save signal");
-            } finally {
-                clearPendingExport();
-            }
-        }).start();
-    }
-
-    private void clearPendingExport() {
-        pendingExportBuffer = null;
-        pendingExportDisplayName = null;
     }
 
     private byte[] readBytesFromUri(Uri uri) throws IOException {
@@ -681,232 +521,190 @@ public class SamplerFragment extends Fragment {
         if (TextUtils.isEmpty(result)) {
             result = uri.getLastPathSegment();
         }
-        return result != null ? result : defaultSignalName();
+        if (TextUtils.isEmpty(result)) {
+            result = generateNewSignalName();
+        }
+        return result;
     }
 
-    private void markBufferDirty(boolean resetMetadata, @Nullable String suggestedName) {
-        if (resetMetadata) {
-            currentSignalMetadata = null;
-        }
-        if (!TextUtils.isEmpty(suggestedName)) {
-            currentSignalName = normalizeSignalName(suggestedName);
-        } else if (resetMetadata && TextUtils.isEmpty(currentSignalName)) {
-            currentSignalName = defaultSignalName();
-        }
-        hasUnsavedChanges = true;
-        updateCurrentSignalUi();
-    }
-
-    private void markBufferClean(@Nullable UserFileMetadata metadata) {
-        if (metadata != null) {
-            currentSignalMetadata = metadata;
-            currentSignalName = metadata.getName();
-        }
-        hasUnsavedChanges = false;
-        updateCurrentSignalUi();
-    }
-
-    private void createNewSignal() {
-        if (!isAdded()) {
-            return;
-        }
+    private void saveSignalToStorage() {
         if (BLEService == null) {
-            Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
             return;
         }
-        BLEService.clearBuffer();
-        lastBufferSize = -1;
-        refreshChart();
-        String defaultName = generateNewSignalName();
-        markBufferDirty(true, defaultName);
-        Toast.makeText(requireContext(), "New signal ready", Toast.LENGTH_SHORT).show();
-    }
+        byte[] buffer = BLEService.getBuffer();
+        if (buffer == null || buffer.length == 0) {
+            Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
-    private void renameSignal() {
-        if (!isAdded()) {
-            return;
-        }
-        if (isSavingSignal) {
-            Toast.makeText(requireContext(), "Operation in progress", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (currentSignalMetadata == null) {
-            Toast.makeText(requireContext(), "Save the signal before renaming", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (hasUnsavedChanges) {
-            Toast.makeText(requireContext(), "Save changes before renaming", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        final String existingName = currentSignalMetadata.getName() != null
-            ? currentSignalMetadata.getName()
-            : currentSignalName;
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Rename Signal");
-        builder.setMessage("Enter a new name:");
+        builder.setTitle("Save Signal");
+        builder.setMessage("Enter a name for the signal:");
         final EditText input = new EditText(requireContext());
-        String prefill = !TextUtils.isEmpty(existingName) ? existingName : defaultSignalName();
-        input.setText(prefill);
-        input.setSelection(prefill.length());
+        String defaultName = generateNewSignalName();
+        input.setText(defaultName);
+        input.setSelection(defaultName.length());
         builder.setView(input);
-        builder.setPositiveButton("Rename", (dialog, which) -> {
+        builder.setPositiveButton("Save", (dialog, which) -> {
             String entered = input.getText() != null ? input.getText().toString().trim() : "";
             if (TextUtils.isEmpty(entered)) {
-                Toast.makeText(requireContext(), "Name cannot be empty", Toast.LENGTH_SHORT).show();
-                return;
+                entered = defaultName;
             }
             String normalized = normalizeSignalName(entered);
-            String currentName = currentSignalMetadata.getName();
-            if (currentName != null && currentName.equalsIgnoreCase(normalized)) {
-                Toast.makeText(requireContext(), "Name unchanged", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            if (fileRepository == null) {
-                Toast.makeText(requireContext(), "Storage not available", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            isSavingSignal = true;
-            updateCurrentSignalUi();
-            fileRepository.renameFile(currentSignalMetadata.getId(), normalized, new RepositoryCallback<UserFileMetadata>() {
-                @Override
-                public void onSuccess(UserFileMetadata value) {
-                    isSavingSignal = false;
-                    markBufferClean(value);
-                    showToastOnUiThread("Signal renamed");
-                    refreshSignalList();
-                }
-
-                @Override
-                public void onError(String message) {
-                    isSavingSignal = false;
-                    updateCurrentSignalUi();
-                    showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to rename signal" : message);
-                }
-            });
+            saveSignalFile(normalized, buffer.clone());
         });
         builder.setNegativeButton("Cancel", null);
         builder.show();
     }
 
-    private void deleteSignal() {
-        if (!isAdded()) {
-            return;
-        }
-        if (isSavingSignal) {
-            Toast.makeText(requireContext(), "Operation in progress", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (currentSignalMetadata == null) {
-            Toast.makeText(requireContext(), "Nothing to delete", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (hasUnsavedChanges) {
-            Toast.makeText(requireContext(), "Save or discard changes before deleting", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String etag = currentSignalMetadata.getEtag();
-        if (TextUtils.isEmpty(etag)) {
-            Toast.makeText(requireContext(), "Reload signal before deleting", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (fileRepository == null) {
-            Toast.makeText(requireContext(), "Storage not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        String signalName = currentSignalMetadata.getName() != null ? currentSignalMetadata.getName() : "this signal";
-        new AlertDialog.Builder(requireContext())
-            .setTitle("Delete Signal")
-            .setMessage("Delete " + signalName + " from cloud?")
-            .setPositiveButton("Delete", (dialog, which) -> performDeleteSignal(currentSignalMetadata.getId(), etag))
-            .setNegativeButton("Cancel", null)
-            .show();
+    private void saveSignalFile(String fileName, byte[] data) {
+        new Thread(() -> {
+            try {
+                File signalFile = new File(signalsDir, fileName);
+                try (FileOutputStream fos = new FileOutputStream(signalFile)) {
+                    fos.write(data);
+                    fos.flush();
+                }
+                requireActivity().runOnUiThread(() -> {
+                    currentSignalName = fileName;
+                    hasUnsavedChanges = false;
+                    saveLastSelectedSignal(fileName);
+                    updateStatusBar();
+                    refreshSignalList(() -> {
+                        // Update picker selection to show the saved signal
+                        int signalIndex = savedSignalNames.indexOf(fileName);
+                        if (signalIndex >= 0) {
+                            binding.signalPicker.setSelection(signalIndex + 1); // +1 because position 0 is "New signal..."
+                        }
+                    });
+                    Toast.makeText(requireContext(), "Signal saved: " + fileName, Toast.LENGTH_SHORT).show();
+                });
+            } catch (IOException e) {
+                Log.e("SamplerFragment", "Failed to save signal", e);
+                requireActivity().runOnUiThread(() -> {
+                    Toast.makeText(requireContext(), "Failed to save signal", Toast.LENGTH_SHORT).show();
+                });
+            }
+        }).start();
     }
 
-    private void performDeleteSignal(String fileId, String etag) {
-        isSavingSignal = true;
-        updateCurrentSignalUi();
-        fileRepository.deleteFile(fileId, etag, new RepositoryCallback<Void>() {
-            @Override
-            public void onSuccess(Void value) {
-                isSavingSignal = false;
-                showToastOnUiThread("Signal deleted");
-                refreshSignalList();
-                markBufferDirty(true, defaultSignalName());
+    private void loadSignalFromStorage(String fileName) {
+        // Prevent loading the same signal if it's already loaded
+        if (fileName.equals(currentSignalName) && !hasUnsavedChanges) {
+            return;
+        }
+        
+        new Thread(() -> {
+            try {
+                File signalFile = new File(signalsDir, fileName);
+                if (!signalFile.exists()) {
+                    requireActivity().runOnUiThread(() -> {
+                        Toast.makeText(requireContext(), "Signal file not found", Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+                byte[] data = readSignalFile(signalFile);
+                if (data == null || data.length == 0) {
+                    requireActivity().runOnUiThread(() -> {
+                        Toast.makeText(requireContext(), "Signal file is empty", Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+                requireActivity().runOnUiThread(() -> {
+                    if (BLEService == null) {
+                        Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    BLEService.loadBuffer(data);
+                    lastBufferSize = -1;
+                    resetChartZoom();
+                    refreshChart();
+                    currentSignalName = fileName;
+                    hasUnsavedChanges = false;
+                    saveLastSelectedSignal(fileName);
+                    updateStatusBar();
+                    // Update picker selection (only if binding is available and listener is set)
+                    if (binding != null && signalPickerListener != null) {
+                        int signalIndex = savedSignalNames.indexOf(fileName);
+                        if (signalIndex >= 0) {
+                            // Temporarily disable listener to prevent recursive calls
+                            binding.signalPicker.setOnItemSelectedListener(null);
+                            binding.signalPicker.setSelection(signalIndex + 1); // +1 because position 0 is "New signal..."
+                            // Re-enable listener after a short delay to ensure selection is set
+                            binding.signalPicker.post(() -> {
+                                if (binding != null && signalPickerListener != null) {
+                                    binding.signalPicker.setOnItemSelectedListener(signalPickerListener);
+                                }
+                            });
+                        }
+                    }
+                    Toast.makeText(requireContext(), "Signal loaded", Toast.LENGTH_SHORT).show();
+                });
+            } catch (Exception e) {
+                Log.e("SamplerFragment", "Failed to load signal", e);
+                requireActivity().runOnUiThread(() -> {
+                    Toast.makeText(requireContext(), "Failed to load signal", Toast.LENGTH_SHORT).show();
+                });
             }
+        }).start();
+    }
 
-            @Override
-            public void onError(String message) {
-                isSavingSignal = false;
-                updateCurrentSignalUi();
-                showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to delete signal" : message);
+    private byte[] readSignalFile(File file) throws IOException {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] buffer = new byte[(int) file.length()];
+            fis.read(buffer);
+            return buffer;
+        }
+    }
+
+    private void refreshSignalList() {
+        refreshSignalList(null);
+    }
+
+    private void refreshSignalList(@Nullable Runnable onComplete) {
+        if (!isAdded() || binding == null) {
+            return;
+        }
+        new Thread(() -> {
+            List<String> signalNames = new ArrayList<>();
+            File[] files = signalsDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile() && file.getName().toLowerCase(Locale.US).endsWith(".raw")) {
+                        signalNames.add(file.getName());
+                    }
+                }
             }
-        });
+            Collections.sort(signalNames);
+            requireActivity().runOnUiThread(() -> {
+                if (!isAdded() || binding == null) {
+                    return;
+                }
+                savedSignalNames.clear();
+                savedSignalNames.addAll(signalNames);
+                List<String> pickerItems = new ArrayList<>();
+                pickerItems.add("New signal...");
+                pickerItems.addAll(savedSignalNames);
+                signalPickerAdapter.clear();
+                signalPickerAdapter.addAll(pickerItems);
+                signalPickerAdapter.notifyDataSetChanged();
+                if (onComplete != null) {
+                    onComplete.run();
+                }
+            });
+        }).start();
     }
 
     private String generateNewSignalName() {
         String base = "signal";
         int counter = 1;
         String candidate = base + counter + ".raw";
-        while (signalFiles != null && containsSignalName(candidate)) {
+        while (savedSignalNames.contains(candidate)) {
             counter++;
             candidate = base + counter + ".raw";
         }
         return candidate;
-    }
-
-    private boolean containsSignalName(String name) {
-        if (TextUtils.isEmpty(name)) {
-            return false;
-        }
-        for (UserFileMetadata metadata : signalFiles) {
-            if (metadata != null && name.equalsIgnoreCase(metadata.getName())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void updateCurrentSignalUi() {
-        if (!isAdded() || binding == null) {
-            return;
-        }
-        boolean isAuthenticated = authenticationManager != null && !TextUtils.isEmpty(authenticationManager.getAccessToken());
-        String name = !TextUtils.isEmpty(currentSignalName) ? currentSignalName : defaultSignalName();
-        StringBuilder summary = new StringBuilder("Current signal: ").append(name);
-        if (hasUnsavedChanges) {
-            summary.append(" *");
-        } else if (currentSignalMetadata != null) {
-            summary.append(" • synced");
-        }
-        binding.currentSignalSummary.setText(summary.toString());
-
-        String buttonText;
-        boolean enableButton = false;
-        if (isSavingSignal) {
-            buttonText = "Saving...";
-        } else if (!isAuthenticated) {
-            buttonText = "Sign in to save";
-        } else if (currentSignalMetadata == null) {
-            buttonText = hasUnsavedChanges ? "Save to Cloud" : "Save to Cloud";
-            enableButton = hasUnsavedChanges;
-        } else {
-            if (hasUnsavedChanges) {
-                buttonText = "Save Changes";
-                enableButton = true;
-            } else {
-                buttonText = "Synced";
-            }
-        }
-        binding.signalSaveButton.setText(buttonText);
-        binding.signalSaveButton.setEnabled(enableButton && !isSavingSignal && isAuthenticated);
-        binding.signalSaveButton.setAlpha(binding.signalSaveButton.isEnabled() ? 1f : 0.6f);
-
-        if (signalAdapter != null) {
-            String activeId = currentSignalMetadata != null ? currentSignalMetadata.getId() : null;
-            boolean dirty = hasUnsavedChanges && currentSignalMetadata != null;
-            signalAdapter.setActiveSignal(activeId, dirty);
-        }
     }
 
     private void initScheduler() {
@@ -1027,7 +825,7 @@ public class SamplerFragment extends Fragment {
             binding.stopButton.setEnabled(false);
             
             Toast.makeText(getContext(), "Recording stopped", Toast.LENGTH_SHORT).show();
-            markBufferDirty(true, defaultSignalName());
+            markBufferDirty();
         }
     }
 
@@ -1207,7 +1005,13 @@ public class SamplerFragment extends Fragment {
         // Force a refresh to make sure we're showing current data
         forceRefresh();
 
-        refreshSignalList();
+        refreshSignalList(() -> {
+            // After refreshing the list, try to load the last selected signal if not already loaded
+            if (TextUtils.isEmpty(currentSignalName)) {
+                loadLastSelectedSignal();
+            }
+        });
+        updateStatusBar();
         
         // Update UI based on recording state
         binding.recordButton.setEnabled(!isRecording);
@@ -1217,6 +1021,7 @@ public class SamplerFragment extends Fragment {
     public void onPause() {
         super.onPause();
         stopScheduler();
+        Utils.updateActionBarStatus(this, "");
     }
 
     @Override
@@ -1225,120 +1030,7 @@ public class SamplerFragment extends Fragment {
         stopScheduler();
     }
 
-    private String defaultSignalName() {
-        return "capture.raw";
-    }
 
-    private void loadSignalFromCloud(UserFileMetadata metadata) {
-        if (fileRepository == null) {
-            showToastOnUiThread("Not authenticated");
-            return;
-        }
-        if (binding != null) {
-            binding.signalListProgress.setVisibility(View.VISIBLE);
-        }
-        fileRepository.getFile(metadata.getId(), new RepositoryCallback<UserFileData>() {
-            @Override
-            public void onSuccess(UserFileData value) {
-                if (!isAdded()) {
-                    return;
-                }
-                if (binding != null) {
-                    binding.signalListProgress.setVisibility(View.GONE);
-                }
-                byte[] data = value.hasBinaryContent() ? value.getBinaryContent() : null;
-                if (data == null || data.length == 0) {
-                    showToastOnUiThread("Signal file is empty");
-                    return;
-                }
-                if (BLEService == null) {
-                    showToastOnUiThread("BLE Service not available");
-                    return;
-                }
-                BLEService.loadBuffer(data);
-                lastBufferSize = -1;
-                refreshChart();
-                markBufferClean(value.getMetadata());
-                showToastOnUiThread("Signal loaded");
-            }
-
-            @Override
-            public void onError(String message) {
-                if (!isAdded()) {
-                    return;
-                }
-                if (binding != null) {
-                    binding.signalListProgress.setVisibility(View.GONE);
-                }
-                showToastOnUiThread(message != null ? message : "Failed to download signal");
-            }
-        });
-    }
-
-    private void refreshSignalList() {
-        if (!isAdded() || binding == null) {
-            return;
-        }
-        if (isLoadingSignalList) {
-            return;
-        }
-
-        boolean isAuthenticated = authenticationManager != null && !TextUtils.isEmpty(authenticationManager.getAccessToken());
-        if (!isAuthenticated) {
-            binding.signalListProgress.setVisibility(View.GONE);
-            binding.signalList.setVisibility(View.GONE);
-            binding.signalListEmpty.setText("Sign in to access saved signals");
-            binding.signalListEmpty.setVisibility(View.VISIBLE);
-            updateCurrentSignalUi();
-            return;
-        }
-
-        isLoadingSignalList = true;
-        binding.signalListProgress.setVisibility(View.VISIBLE);
-        binding.signalListEmpty.setVisibility(View.GONE);
-        binding.signalList.setVisibility(View.GONE);
-
-        fileRepository.listFiles(".raw", new RepositoryCallback<List<UserFileMetadata>>() {
-            @Override
-            public void onSuccess(List<UserFileMetadata> value) {
-                if (!isAdded() || binding == null) {
-                    isLoadingSignalList = false;
-                    return;
-                }
-                binding.signalListProgress.setVisibility(View.GONE);
-                signalFiles.clear();
-                if (value != null) {
-                    signalFiles.addAll(value);
-                }
-                Collections.sort(signalFiles, (left, right) -> left.getName().compareToIgnoreCase(right.getName()));
-                if (signalFiles.isEmpty()) {
-                    binding.signalListEmpty.setText("No signals saved yet");
-                    binding.signalListEmpty.setVisibility(View.VISIBLE);
-                    binding.signalList.setVisibility(View.GONE);
-                } else {
-                    signalAdapter.setSignals(signalFiles);
-                    binding.signalListEmpty.setVisibility(View.GONE);
-                    binding.signalList.setVisibility(View.VISIBLE);
-                }
-                isLoadingSignalList = false;
-                updateCurrentSignalUi();
-            }
-
-            @Override
-            public void onError(String message) {
-                if (!isAdded() || binding == null) {
-                    isLoadingSignalList = false;
-                    return;
-                }
-                binding.signalListProgress.setVisibility(View.GONE);
-                binding.signalList.setVisibility(View.GONE);
-                binding.signalListEmpty.setText(TextUtils.isEmpty(message) ? "Failed to load signals" : message);
-                binding.signalListEmpty.setVisibility(View.VISIBLE);
-                showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to load signals" : message);
-                isLoadingSignalList = false;
-            }
-        });
-    }
 
     private String normalizeSignalName(String rawName) {
         String name = rawName != null ? rawName.trim() : "";
@@ -1349,13 +1041,6 @@ public class SamplerFragment extends Fragment {
             name = name + ".raw";
         }
         return name;
-    }
-
-    private void showToastOnUiThread(String message) {
-        if (!isAdded()) {
-            return;
-        }
-        requireActivity().runOnUiThread(() -> Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show());
     }
 
     private String buildSignedRawTimings(byte[] bufferData) {
@@ -1416,314 +1101,9 @@ public class SamplerFragment extends Fragment {
             return;
         }
 
-        if (binding != null) {
-            binding.timingsEditText.setText(timings);
-        }
         showTimingsDialog(timings);
     }
 
-    private void decodeIrp() {
-        if (infraredRepository == null) {
-            Toast.makeText(getContext(), "Infrared service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        byte[] buffer = BLEService.getBuffer();
-        if (buffer == null || buffer.length == 0) {
-            Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        String timings = buildSignedRawTimings(buffer);
-        if (TextUtils.isEmpty(timings)) {
-            Toast.makeText(getContext(), "Unable to compute timings", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (binding != null) {
-            binding.decodeIrpButton.setEnabled(false);
-            binding.timingsEditText.setText("Decoding IRP...");
-        }
-
-        final String payload = timings;
-        infraredRepository.decodeSignedRaw(payload, false, new InfraredRepository.Callback<List<InfraredRepository.DecodeResult>>() {
-            @Override
-            public void onSuccess(List<InfraredRepository.DecodeResult> value) {
-                if (!isAdded() || binding == null) {
-                    return;
-                }
-                binding.decodeIrpButton.setEnabled(true);
-                if (value == null || value.isEmpty()) {
-                    binding.timingsEditText.setText("");
-                    showToastOnUiThread("No decode results");
-                    return;
-                }
-                String formatted = formatDecodeResults(value);
-                Log.d("SamplerFragment", "IRP decode results: " + truncateForLog(formatted));
-                binding.timingsEditText.setText(formatted);
-            }
-
-            @Override
-            public void onError(String message) {
-                if (!isAdded() || binding == null) {
-                    return;
-                }
-                binding.decodeIrpButton.setEnabled(true);
-                showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to decode signal" : message);
-            }
-        });
-    }
-
-    private String formatDecodeResults(List<InfraredRepository.DecodeResult> results) {
-        if (results == null || results.isEmpty()) {
-            return "";
-        }
-        StringBuilder builder = new StringBuilder();
-        for (InfraredRepository.DecodeResult result : results) {
-            if (result == null) {
-                continue;
-            }
-            String protocol = result.getProtocol();
-            if (!TextUtils.isEmpty(protocol)) {
-                builder.append(protocol);
-            } else {
-                builder.append("Unknown Protocol");
-            }
-            Map<String, Object> parameters = result.getParameters();
-            if (parameters != null && !parameters.isEmpty()) {
-                builder.append(' ').append(formatParameters(parameters));
-            }
-            String raw = result.getRaw();
-            if (!TextUtils.isEmpty(raw)) {
-                builder.append('\n').append(raw.trim());
-            }
-            builder.append('\n');
-        }
-        return builder.toString().trim();
-    }
-
-    private String formatParameters(Map<String, Object> parameters) {
-        List<Map.Entry<String, Object>> entries = new ArrayList<>(parameters.entrySet());
-        Collections.sort(entries, (left, right) -> left.getKey().compareToIgnoreCase(right.getKey()));
-        StringBuilder builder = new StringBuilder("{");
-        for (int i = 0; i < entries.size(); i++) {
-            Map.Entry<String, Object> entry = entries.get(i);
-            builder.append(entry.getKey()).append('=');
-            Object value = entry.getValue();
-            if (value != null) {
-                builder.append(value.toString());
-            } else {
-                builder.append("null");
-            }
-            if (i < entries.size() - 1) {
-                builder.append(", ");
-            }
-        }
-        builder.append('}');
-        return builder.toString();
-    }
-
-    private void renderIrp() {
-        if (infraredRepository == null) {
-            Toast.makeText(getContext(), "Infrared service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (binding == null) {
-            return;
-        }
-
-        binding.irpProtocolInputLayout.setError(null);
-        binding.irpDeviceInputLayout.setError(null);
-        binding.irpSubdeviceInputLayout.setError(null);
-        binding.irpFunctionInputLayout.setError(null);
-
-        String protocol = getInputText(binding.irpProtocolEditText);
-        if (TextUtils.isEmpty(protocol)) {
-            binding.irpProtocolInputLayout.setError("Required");
-            return;
-        }
-
-        Map<String, Object> parameters = new HashMap<>();
-        if (!applyNumericParameter(parameters, binding.irpDeviceInputLayout, "D", binding.irpDeviceEditText)) {
-            return;
-        }
-        if (!applyNumericParameter(parameters, binding.irpSubdeviceInputLayout, "S", binding.irpSubdeviceEditText)) {
-            return;
-        }
-        if (!applyNumericParameter(parameters, binding.irpFunctionInputLayout, "F", binding.irpFunctionEditText)) {
-            return;
-        }
-
-        binding.renderIrpButton.setEnabled(false);
-        binding.timingsEditText.setText("Rendering IRP...");
-
-        final String normalizedProtocol = protocol.trim();
-        infraredRepository.renderSignedRaw(normalizedProtocol, parameters, new InfraredRepository.Callback<InfraredRepository.RenderResult>() {
-            @Override
-            public void onSuccess(InfraredRepository.RenderResult value) {
-                if (!isAdded() || binding == null) {
-                    return;
-                }
-                binding.renderIrpButton.setEnabled(true);
-                if (value == null || TextUtils.isEmpty(value.getData())) {
-                    showToastOnUiThread("Render returned empty data");
-                    return;
-                }
-                String data = value.getData().trim();
-                Log.d("SamplerFragment", "IRP render data length=" + data.length() + " sample=" + truncateForLog(data));
-                binding.timingsEditText.setText(data);
-                try {
-                    float[] timings = parseSignedRawTimings(data);
-                    if (timings.length == 0) {
-                        showToastOnUiThread("Rendered timings are empty");
-                        return;
-                    }
-                    byte[] binary = Utils.convertTimingsToBinary(timings);
-                    Log.d("SamplerFragment", "Converted rendered timings to " + binary.length + " bytes");
-                    BLEService.loadBuffer(binary);
-                    lastBufferSize = -1;
-                    refreshChart();
-                    markBufferDirty(false, null);
-                    showToastOnUiThread("Signal rendered");
-                } catch (NumberFormatException e) {
-                    showToastOnUiThread("Invalid timings returned by backend");
-                }
-            }
-
-            @Override
-            public void onError(String message) {
-                if (!isAdded() || binding == null) {
-                    return;
-                }
-                binding.renderIrpButton.setEnabled(true);
-                showToastOnUiThread(TextUtils.isEmpty(message) ? "Failed to render signal" : message);
-            }
-        });
-    }
-
-    private boolean applyNumericParameter(Map<String, Object> target,
-                                          TextInputLayout layout,
-                                          String key,
-                                          TextInputEditText input) {
-        if (layout == null || input == null) {
-            return true;
-        }
-        String raw = getInputText(input);
-        layout.setError(null);
-        if (TextUtils.isEmpty(raw)) {
-            return true;
-        }
-        try {
-            int value = parseNumericValue(raw);
-            target.put(key, value);
-            return true;
-        } catch (NumberFormatException e) {
-            layout.setError("Invalid value");
-            return false;
-        }
-    }
-
-    private String getInputText(TextInputEditText editText) {
-        if (editText == null || editText.getText() == null) {
-            return "";
-        }
-        return editText.getText().toString().trim();
-    }
-
-    private int parseNumericValue(String raw) {
-        return Integer.decode(raw);
-    }
-
-    private float[] parseSignedRawTimings(String data) {
-        if (TextUtils.isEmpty(data)) {
-            return new float[0];
-        }
-        String trimmed = data.trim();
-        List<Float> values = new ArrayList<>();
-
-        if (trimmed.contains("[")) {
-            Matcher matcher = Pattern.compile("\\[([^\\]]*)\\]").matcher(trimmed);
-            while (matcher.find()) {
-                String segment = matcher.group(1);
-                if (TextUtils.isEmpty(segment)) {
-                    continue;
-                }
-                String[] parts = segment.split(",");
-                for (String part : parts) {
-                    String cleaned = part.trim();
-                    if (cleaned.isEmpty()) {
-                        continue;
-                    }
-                    try {
-                        float value = Float.parseFloat(cleaned);
-                        if (value != 0f) {
-                            values.add(Math.abs(value));
-                        }
-                    } catch (NumberFormatException ignore) {
-                        Log.w("SamplerFragment", "Skipping invalid timing value: " + cleaned);
-                    }
-                }
-            }
-        } else {
-            String[] parts = trimmed.split("\\s+");
-            for (String part : parts) {
-                if (TextUtils.isEmpty(part)) {
-                    continue;
-                }
-                try {
-                    float value = Float.parseFloat(part);
-                    if (value != 0f) {
-                        values.add(Math.abs(value));
-                    }
-                } catch (NumberFormatException ignore) {
-                    Log.w("SamplerFragment", "Skipping invalid timing token: " + part);
-                }
-            }
-        }
-
-        float[] timings = new float[values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            timings[i] = values.get(i);
-        }
-        return timings;
-    }
-
-    private String truncateForLog(String value) {
-        if (TextUtils.isEmpty(value)) {
-            return "";
-        }
-        int limit = 120;
-        return value.length() <= limit ? value : value.substring(0, limit) + "...";
-    }
-
-    private void convertToIR() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (BLEService.getBufferLength() == 0) {
-            Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        byte[] buffer = BLEService.getBuffer();
-        if (buffer == null || buffer.length == 0) {
-            Toast.makeText(getContext(), "Cannot access buffer", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        byte[] irBuffer = com.emwaver.emwaverandroidapp.Utils.convertToIRBuffer(buffer);
-        BLEService.loadBuffer(irBuffer);
-        refreshChart();
-        markBufferDirty(false, null);
-        Toast.makeText(getContext(), "Signal converted to precise 38kHz IR carrier", Toast.LENGTH_SHORT).show();
-    }
 
     private void showTimingsDialog(String timingsText) {
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
@@ -1752,97 +1132,18 @@ public class SamplerFragment extends Fragment {
         refreshChart();
     }
 
-    private static class SignalsAdapter extends RecyclerView.Adapter<SignalsAdapter.SignalViewHolder> {
-
-        interface OnSignalClickListener {
-            void onSignalClick(UserFileMetadata metadata);
+    private void resetChartZoom() {
+        if (chart == null) {
+            return;
         }
-
-        private final List<UserFileMetadata> items = new ArrayList<>();
-        private final OnSignalClickListener listener;
-        private String activeSignalId;
-        private boolean activeDirty;
-
-        SignalsAdapter(OnSignalClickListener listener) {
-            this.listener = listener;
-        }
-
-        void setSignals(List<UserFileMetadata> signals) {
-            items.clear();
-            if (signals != null) {
-                items.addAll(signals);
-            }
-            notifyDataSetChanged();
-        }
-
-        void setActiveSignal(@Nullable String signalId, boolean dirty) {
-            if (!TextUtils.equals(activeSignalId, signalId) || activeDirty != dirty) {
-                activeSignalId = signalId;
-                activeDirty = dirty;
-                notifyDataSetChanged();
-            }
-        }
-
-        @NonNull
-        @Override
-        public SignalViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            LayoutInflater inflater = LayoutInflater.from(parent.getContext());
-            View view = inflater.inflate(R.layout.item_signal, parent, false);
-            return new SignalViewHolder(view);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull SignalViewHolder holder, int position) {
-            UserFileMetadata metadata = items.get(position);
-            boolean isActive = activeSignalId != null && metadata.getId() != null && metadata.getId().equals(activeSignalId);
-            boolean dirty = isActive && activeDirty;
-            holder.bind(metadata, listener, isActive, dirty);
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.size();
-        }
-
-        static class SignalViewHolder extends RecyclerView.ViewHolder {
-            private final TextView nameView;
-            private final TextView metaView;
-
-            SignalViewHolder(@NonNull View itemView) {
-                super(itemView);
-                nameView = itemView.findViewById(R.id.signalName);
-                metaView = itemView.findViewById(R.id.signalMeta);
-            }
-
-            void bind(UserFileMetadata metadata, OnSignalClickListener listener, boolean isActive, boolean isDirty) {
-                nameView.setText(metadata.getName());
-                nameView.setTypeface(null, isActive ? Typeface.BOLD : Typeface.NORMAL);
-                metaView.setText(formatMeta(metadata.getSizeBytes(), isActive, isDirty));
-                itemView.setAlpha(isActive ? 1f : 0.9f);
-                itemView.setOnClickListener(v -> listener.onSignalClick(metadata));
-            }
-
-            private String formatMeta(long bytes, boolean isActive, boolean isDirty) {
-                String base;
-                if (bytes <= 0) {
-                    base = "Size unknown";
-                } else if (bytes < 1024) {
-                    base = bytes + " bytes";
-                } else if (bytes < 1024 * 1024) {
-                    base = String.format(Locale.US, "%.1f KB", bytes / 1024.0);
-                } else {
-                    base = String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0));
-                }
-                if (isActive) {
-                    if (isDirty) {
-                        base += " • Unsaved changes";
-                    } else {
-                        base += " • Active";
-                    }
-                }
-                return base;
-            }
-        }
+        // Reset zoom to show full signal
+        chart.fitScreen();
+        // Also reset the scale to 1.0
+        chart.setScaleX(1.0f);
+        chart.setScaleY(1.0f);
+        // Reset translation
+        chart.setTranslationX(0f);
+        chart.setTranslationY(0f);
     }
 
     private byte getPinNumberFromSelection(String selectedPinString) {
@@ -1860,5 +1161,198 @@ public class SamplerFragment extends Fragment {
         Log.e("SamplerFragment", "Could not extract IO number from: " + selectedPinString + ". Check PINS array format and regex.");
         Toast.makeText(getContext(), "Error: Could not parse pin number from '" + selectedPinString + "'", Toast.LENGTH_LONG).show();
         return -1; // Indicates an error
+    }
+
+    private void updateStatusBar() {
+        if (TextUtils.isEmpty(currentSignalName)) {
+            Utils.updateActionBarStatus(this, "No signal");
+        } else {
+            String displayName = currentSignalName;
+            if (hasUnsavedChanges) {
+                displayName = displayName + "*";
+            }
+            Utils.updateActionBarStatus(this, displayName);
+        }
+    }
+
+    private void markBufferDirty() {
+        hasUnsavedChanges = true;
+        updateStatusBar();
+    }
+
+    private void createNewSignal() {
+        if (BLEService == null) {
+            Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        BLEService.clearBuffer();
+        lastBufferSize = -1;
+        refreshChart();
+        currentSignalName = null;
+        hasUnsavedChanges = false;
+        saveLastSelectedSignal(null);
+        updateStatusBar();
+        Toast.makeText(requireContext(), "New signal ready", Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveSignal() {
+        if (BLEService == null) {
+            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        byte[] buffer = BLEService.getBuffer();
+        if (buffer == null || buffer.length == 0) {
+            Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String fileName = generateNewSignalFileName();
+        saveSignalFile(fileName, buffer.clone());
+    }
+
+    private String generateNewSignalFileName() {
+        String baseName = "NewSignal.raw";
+        if (!savedSignalNames.contains(baseName)) {
+            return baseName;
+        }
+        
+        int counter = 1;
+        String candidate = "NewSignal(" + counter + ").raw";
+        while (savedSignalNames.contains(candidate)) {
+            counter++;
+            candidate = "NewSignal(" + counter + ").raw";
+        }
+        return candidate;
+    }
+
+    private void renameSignal() {
+        if (TextUtils.isEmpty(currentSignalName)) {
+            Toast.makeText(requireContext(), "No signal loaded", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        File currentFile = new File(signalsDir, currentSignalName);
+        if (!currentFile.exists()) {
+            Toast.makeText(requireContext(), "Current signal file not found", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("Rename Signal");
+        builder.setMessage("Enter a new name:");
+        final EditText input = new EditText(requireContext());
+        String currentNameWithoutExt = currentSignalName.replace(".raw", "");
+        input.setText(currentNameWithoutExt);
+        input.setSelection(currentNameWithoutExt.length());
+        builder.setView(input);
+        builder.setPositiveButton("Rename", (dialog, which) -> {
+            String entered = input.getText() != null ? input.getText().toString().trim() : "";
+            if (TextUtils.isEmpty(entered)) {
+                Toast.makeText(requireContext(), "Name cannot be empty", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String normalized = normalizeSignalName(entered);
+            if (normalized.equals(currentSignalName)) {
+                Toast.makeText(requireContext(), "Name unchanged", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            File newFile = new File(signalsDir, normalized);
+            if (newFile.exists()) {
+                Toast.makeText(requireContext(), "A signal with this name already exists", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            if (currentFile.renameTo(newFile)) {
+                currentSignalName = normalized;
+                hasUnsavedChanges = false;
+                saveLastSelectedSignal(normalized);
+                updateStatusBar();
+                refreshSignalList();
+                Toast.makeText(requireContext(), "Signal renamed", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(requireContext(), "Failed to rename signal", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+
+    private void saveLastSelectedSignal(@Nullable String signalName) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        if (TextUtils.isEmpty(signalName)) {
+            prefs.edit().remove(PREF_LAST_SELECTED_SIGNAL).apply();
+        } else {
+            prefs.edit().putString(PREF_LAST_SELECTED_SIGNAL, signalName).apply();
+        }
+    }
+
+    private void loadLastSelectedSignal() {
+        if (BLEService == null || binding == null) {
+            return;
+        }
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        String lastSignalName = prefs.getString(PREF_LAST_SELECTED_SIGNAL, null);
+        if (!TextUtils.isEmpty(lastSignalName) && savedSignalNames.contains(lastSignalName)) {
+            // Signal exists, load it directly (the check in loadSignalFromStorage prevents duplicates)
+            // We'll update the picker selection inside loadSignalFromStorage
+            loadSignalFromStorage(lastSignalName);
+        }
+    }
+
+    private void deleteSignal() {
+        if (TextUtils.isEmpty(currentSignalName)) {
+            Toast.makeText(requireContext(), "No signal loaded", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        File signalFile = new File(signalsDir, currentSignalName);
+        if (!signalFile.exists()) {
+            Toast.makeText(requireContext(), "Signal file not found", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String signalName = currentSignalName;
+        int currentIndex = savedSignalNames.indexOf(currentSignalName);
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Delete Signal")
+            .setMessage("Delete " + signalName + "?")
+            .setPositiveButton("Delete", (dialog, which) -> {
+                if (signalFile.delete()) {
+                    // Determine which signal name to load next before refreshing
+                    String nextSignalName = null;
+                    if (currentIndex >= 0 && savedSignalNames.size() > 1) {
+                        if (currentIndex < savedSignalNames.size() - 1) {
+                            // Load the next signal (at currentIndex + 1)
+                            nextSignalName = savedSignalNames.get(currentIndex + 1);
+                        } else {
+                            // Was last, wrap to first
+                            nextSignalName = savedSignalNames.get(0);
+                        }
+                    }
+                    
+                    final String finalNextSignalName = nextSignalName;
+                    
+                    // Refresh the list and then load the next signal
+                    refreshSignalList(() -> {
+                        if (finalNextSignalName != null && savedSignalNames.contains(finalNextSignalName)) {
+                            // Load the next signal (setting selection will trigger the listener)
+                            int nextIndex = savedSignalNames.indexOf(finalNextSignalName);
+                            binding.signalPicker.setSelection(nextIndex + 1); // +1 because position 0 is "New signal..."
+                        } else {
+                            // No signals left, select "New signal..." (setting selection will trigger the listener)
+                            binding.signalPicker.setSelection(0);
+                            saveLastSelectedSignal(null);
+                        }
+                    });
+                    
+                    Toast.makeText(requireContext(), "Signal deleted", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(requireContext(), "Failed to delete signal", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 }

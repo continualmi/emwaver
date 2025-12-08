@@ -9,7 +9,11 @@
     <item
         android:id="@+id/action_new_signal"
         android:title="New Signal"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_save_signal"
+        android:title="Save Signal"
+        app:showAsAction="never" />
     <item
         android:id="@+id/action_rename_signal"
         android:title="Rename Signal"
@@ -21,9 +25,5 @@
     <item
         android:id="@+id/action_load_from_storage"
         android:title="Load from Storage"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/action_save_to_storage"
-        android:title="Save to Storage"
         app:showAsAction="never" />
 </menu>
