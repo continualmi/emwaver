@@ -35,9 +35,12 @@ tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${CLI_DIR}'" C-m
 
 tmux new-window -t "${SESSION_NAME}" -n "build" -c "${CLI_DIR}"
 tmux send-keys -t "${SESSION_NAME}:build.0" "cd '${CLI_DIR}'" C-m
+tmux send-keys -t "${SESSION_NAME}:build.0" "cargo build" C-m
 
 tmux split-window -v -t "${SESSION_NAME}:build" -c "${CLI_DIR}"
 tmux send-keys -t "${SESSION_NAME}:build.1" "cd '${CLI_DIR}'" C-m
+tmux send-keys -t "${SESSION_NAME}:build.1" "cargo run" 
+
 
 tmux select-window -t "${SESSION_NAME}:work"
 tmux select-pane -t "${SESSION_NAME}:work.0"
