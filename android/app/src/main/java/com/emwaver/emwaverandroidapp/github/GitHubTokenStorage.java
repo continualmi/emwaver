@@ -9,6 +9,8 @@ public class GitHubTokenStorage {
     private static final String PREF_GITHUB_TOKEN = "github_access_token";
     private static final String PREF_GITHUB_PAT = "github_pat";
     private static final String PREF_GITHUB_USERNAME = "github_username";
+    private static final String PREF_SELECTED_REPO_OWNER = "github_selected_repo_owner";
+    private static final String PREF_SELECTED_REPO_NAME = "github_selected_repo_name";
     
     private final SharedPreferences prefs;
     
@@ -63,11 +65,40 @@ public class GitHubTokenStorage {
         prefs.edit().remove(PREF_GITHUB_PAT).apply();
     }
     
+    // Selected repository
+    public void saveSelectedRepo(String owner, String repoName) {
+        prefs.edit()
+            .putString(PREF_SELECTED_REPO_OWNER, owner)
+            .putString(PREF_SELECTED_REPO_NAME, repoName)
+            .apply();
+    }
+    
+    public String getSelectedRepoOwner() {
+        return prefs.getString(PREF_SELECTED_REPO_OWNER, null);
+    }
+    
+    public String getSelectedRepoName() {
+        return prefs.getString(PREF_SELECTED_REPO_NAME, null);
+    }
+    
+    public boolean hasSelectedRepo() {
+        return !TextUtils.isEmpty(getSelectedRepoOwner()) && !TextUtils.isEmpty(getSelectedRepoName());
+    }
+    
+    public void clearSelectedRepo() {
+        prefs.edit()
+            .remove(PREF_SELECTED_REPO_OWNER)
+            .remove(PREF_SELECTED_REPO_NAME)
+            .apply();
+    }
+    
     public void clear() {
         prefs.edit()
             .remove(PREF_GITHUB_TOKEN)
             .remove(PREF_GITHUB_PAT)
             .remove(PREF_GITHUB_USERNAME)
+            .remove(PREF_SELECTED_REPO_OWNER)
+            .remove(PREF_SELECTED_REPO_NAME)
             .apply();
     }
 }
