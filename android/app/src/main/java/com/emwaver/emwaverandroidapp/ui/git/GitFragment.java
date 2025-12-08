@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -33,6 +34,7 @@ import com.emwaver.emwaverandroidapp.databinding.FragmentGitBinding;
 import com.emwaver.emwaverandroidapp.github.GitHubApiClient;
 import com.emwaver.emwaverandroidapp.github.GitHubCacheManager;
 import com.emwaver.emwaverandroidapp.github.GitHubConfig;
+import com.emwaver.emwaverandroidapp.github.GitHubDiffUtil;
 import com.emwaver.emwaverandroidapp.github.GitHubOAuth;
 import com.emwaver.emwaverandroidapp.github.GitHubTokenStorage;
 import com.emwaver.emwaverandroidapp.files.FileRepositoryLocal;
@@ -60,7 +62,6 @@ public class GitFragment extends Fragment {
     private GitHubApiClient.GitHubContent currentFile;
     private String currentFileSha;
     private String currentFileContent;
-    private boolean isEditing = false;
     
     private OnBackPressedCallback backPressedCallback;
     
@@ -74,9 +75,7 @@ public class GitFragment extends Fragment {
         backPressedCallback = new OnBackPressedCallback(false) {
             @Override
             public void handleOnBackPressed() {
-                if (isEditing) {
-                    cancelEdit();
-                } else if (!currentPath.isEmpty()) {
+                if (!currentPath.isEmpty()) {
                     navigateUp();
                 }
             }
@@ -199,10 +198,48 @@ public class GitFragment extends Fragment {
                         displayName = "📄 " + displayName;
                         editButton.setVisibility(View.VISIBLE);
                         editButton.setOnClickListener(v -> {
-                            editFile(item.content);
+                            // Add click animation
+                            v.animate()
+                                .scaleX(0.8f)
+                                .scaleY(0.8f)
+                                .setDuration(100)
+                                .withEndAction(() -> {
+                                    v.animate()
+                                        .scaleX(1.0f)
+                                        .scaleY(1.0f)
+                                        .setDuration(100)
+                                        .start();
+                                    editFile(item.content);
+                                })
+                                .start();
                         });
                     }
                     fileNameView.setText(displayName);
+                    
+                    // Make file name clickable to show options dialog
+                    if (!"dir".equals(item.content.type)) {
+                        fileNameView.setOnClickListener(v -> {
+                            // Add click animation
+                            v.animate()
+                                .scaleX(0.95f)
+                                .scaleY(0.95f)
+                                .setDuration(100)
+                                .withEndAction(() -> {
+                                    v.animate()
+                                        .scaleX(1.0f)
+                                        .scaleY(1.0f)
+                                        .setDuration(100)
+                                        .start();
+                                })
+                                .start();
+                            
+                            showFileOptionsDialog(item.content);
+                        });
+                        fileNameView.setClickable(true);
+                    }
+                    
+                    // Store content in view tag for click handler
+                    view.setTag(item.content);
                 }
                 
                 return view;
@@ -215,27 +252,12 @@ public class GitFragment extends Fragment {
                 if ("dir".equals(item.content.type)) {
                     navigateToPath(item.content.path);
                 }
-                // Files are opened via edit button, not by clicking the row
+                // For files, clicking is handled by the TextView onClickListener
+                // This handler only processes directory clicks
             }
         });
         
-        // Editor
-        binding.fileEditorContent.addTextChangedListener(new android.text.TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                currentFileContent = s != null ? s.toString() : "";
-            }
-            
-            @Override
-            public void afterTextChanged(android.text.Editable s) {}
-        });
-        
-        // Commit button
-        binding.commitButton.setOnClickListener(v -> commitChanges());
-        binding.cancelEditButton.setOnClickListener(v -> cancelEdit());
+        // Editor removed - using dialogs now
     }
     
     private void checkAuthState() {
@@ -403,7 +425,7 @@ public class GitFragment extends Fragment {
                             fileTree.addAll(result);
                         }
                         updateFileTree();
-                        backPressedCallback.setEnabled(!path.isEmpty() || isEditing);
+                        backPressedCallback.setEnabled(!path.isEmpty());
                     });
                 }
                 
@@ -440,6 +462,423 @@ public class GitFragment extends Fragment {
         navigateToPath(parentPath);
     }
     
+    private void showFileOptionsDialog(GitHubApiClient.GitHubContent content) {
+        String fileName = content.name;
+        boolean localFileExists = checkLocalFileExists(fileName);
+        
+        // Create options with icons
+        class DialogOption {
+            String text;
+            int iconRes;
+            int iconColor;
+            
+            DialogOption(String text, int iconRes, int iconColor) {
+                this.text = text;
+                this.iconRes = iconRes;
+                this.iconColor = iconColor;
+            }
+        }
+        
+        List<DialogOption> options = new ArrayList<>();
+        options.add(new DialogOption("Edit File", R.drawable.ic_edit, 0xFF2196F3)); // Blue
+        options.add(new DialogOption("GitHub → Local", R.drawable.ic_arrow_down_black, 0xFF4CAF50)); // Green for download
+        if (localFileExists) {
+            options.add(new DialogOption("Local → GitHub", R.drawable.ic_arrow_up_black, 0xFFFF9800)); // Orange for upload
+        }
+        
+        // Create custom adapter
+        ArrayAdapter<DialogOption> adapter = new ArrayAdapter<DialogOption>(requireContext(), R.layout.item_file_option, options) {
+            @NonNull
+            @Override
+            public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+                if (convertView == null) {
+                    convertView = LayoutInflater.from(getContext()).inflate(R.layout.item_file_option, parent, false);
+                }
+                
+                DialogOption option = getItem(position);
+                if (option != null) {
+                    ImageView iconView = convertView.findViewById(R.id.option_icon);
+                    TextView textView = convertView.findViewById(R.id.option_text);
+                    
+                    iconView.setImageResource(option.iconRes);
+                    iconView.setColorFilter(option.iconColor, android.graphics.PorterDuff.Mode.SRC_ATOP);
+                    textView.setText(option.text);
+                }
+                
+                return convertView;
+            }
+        };
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle(fileName)
+            .setAdapter(adapter, (dialog, which) -> {
+                if (which == 0) {
+                    editFile(content);
+                } else if (which == 1) {
+                    syncGitHubToLocal(content);
+                } else if (which == 2 && localFileExists) {
+                    syncLocalToGitHub(content);
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private boolean checkLocalFileExists(String fileName) {
+        // Check if file exists in local wavelets storage
+        FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
+        java.io.File storageDir = new java.io.File(requireContext().getFilesDir(), "wavelets");
+        java.io.File file = new java.io.File(storageDir, fileName);
+        return file.exists();
+    }
+    
+    private void syncGitHubToLocal(GitHubApiClient.GitHubContent content) {
+        if (apiClient == null || selectedRepo == null) return;
+        
+        showToast("Loading from GitHub...");
+        
+        // Get file from cache or API
+        GitHubCacheManager cacheManager = GitHubCacheManager.getInstance(requireContext());
+        String owner = selectedRepo.owner;
+        String repoName = selectedRepo.name;
+        
+        GitHubCacheManager.CacheCallback<String> onContentLoaded = new GitHubCacheManager.CacheCallback<String>() {
+            @Override
+            public void onSuccess(String githubContent) {
+                requireActivity().runOnUiThread(() -> {
+                    // Get local content for diff
+                    String localContent = "";
+                    FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
+                    java.io.File storageDir = new java.io.File(requireContext().getFilesDir(), "wavelets");
+                    java.io.File localFile = new java.io.File(storageDir, content.name);
+                    if (localFile.exists()) {
+                        try {
+                            java.io.FileInputStream fis = new java.io.FileInputStream(localFile);
+                            byte[] buffer = new byte[(int) localFile.length()];
+                            fis.read(buffer);
+                            fis.close();
+                            localContent = new String(buffer, java.nio.charset.StandardCharsets.UTF_8);
+                        } catch (Exception e) {
+                            Log.w(TAG, "Failed to read local file for diff", e);
+                        }
+                    }
+                    
+                    // Show diff preview dialog
+                    showSyncPreviewDialog(
+                        "GitHub →",
+                        "Local",
+                        githubContent,
+                        localContent,
+                        true, // GitHub to Local
+                        () -> performSyncGitHubToLocal(content, githubContent),
+                        content.name
+                    );
+                });
+            }
+            
+            @Override
+            public void onError(String message) {
+                requireActivity().runOnUiThread(() -> {
+                    showToast("Failed to load file: " + message);
+                });
+            }
+        };
+        
+        if (cacheManager.fileExists(owner, repoName, content.path)) {
+            cacheManager.getFile(owner, repoName, content.path, onContentLoaded);
+        } else {
+            loadFileFromApiForSync(content, onContentLoaded);
+        }
+    }
+    
+    private void performSyncGitHubToLocal(GitHubApiClient.GitHubContent content, String githubContent) {
+        FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
+        localRepo.createTextFile(content.name, githubContent, new RepositoryCallback<com.emwaver.emwaverandroidapp.files.UserFileMetadata>() {
+            @Override
+            public void onSuccess(com.emwaver.emwaverandroidapp.files.UserFileMetadata metadata) {
+                requireActivity().runOnUiThread(() -> {
+                    showToast("File copied to local wavelets");
+                });
+            }
+            
+            @Override
+            public void onError(String message) {
+                requireActivity().runOnUiThread(() -> {
+                    showToast("Failed to copy to local: " + message);
+                });
+            }
+        });
+    }
+    
+    private void syncLocalToGitHub(GitHubApiClient.GitHubContent content) {
+        if (apiClient == null || selectedRepo == null) return;
+        
+        showToast("Loading from local...");
+        
+        // Get file from local wavelets
+        FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
+        localRepo.getFile(content.name, new RepositoryCallback<com.emwaver.emwaverandroidapp.files.UserFileData>() {
+            @Override
+            public void onSuccess(com.emwaver.emwaverandroidapp.files.UserFileData fileData) {
+                requireActivity().runOnUiThread(() -> {
+                    String localContentTemp = fileData.hasTextContent() ? fileData.getTextContent() : "";
+                    if (localContentTemp.isEmpty() && fileData.hasBinaryContent()) {
+                        // For binary files, encode to base64
+                        localContentTemp = android.util.Base64.encodeToString(
+                            fileData.getBinaryContent(), 
+                            android.util.Base64.NO_WRAP
+                        );
+                    }
+                    final String localContent = localContentTemp; // Make final for lambda
+                    
+                    // Get GitHub content for diff
+                    GitHubCacheManager cacheManager = GitHubCacheManager.getInstance(requireContext());
+                    String owner = selectedRepo.owner;
+                    String repoName = selectedRepo.name;
+                    
+                    if (cacheManager.fileExists(owner, repoName, content.path)) {
+                        cacheManager.getFile(owner, repoName, content.path, new GitHubCacheManager.CacheCallback<String>() {
+                            @Override
+                            public void onSuccess(String githubContentStr) {
+                                requireActivity().runOnUiThread(() -> {
+                                    showSyncPreviewDialog(
+                                        "Local →",
+                                        "GitHub",
+                                        localContent,
+                                        githubContentStr,
+                                        false, // Local to GitHub
+                                        () -> showCommitDialogForSync(content, localContent),
+                                        content.name
+                                    );
+                                });
+                            }
+                            
+                            @Override
+                            public void onError(String message) {
+                                // If can't load GitHub content, still show dialog with empty diff
+                                requireActivity().runOnUiThread(() -> {
+                                    showSyncPreviewDialog(
+                                        "Local →",
+                                        "GitHub",
+                                        localContent,
+                                        "",
+                                        false,
+                                        () -> showCommitDialogForSync(content, localContent),
+                                        content.name
+                                    );
+                                });
+                            }
+                        });
+                    } else {
+                        // No GitHub content, show dialog with empty diff
+                        showSyncPreviewDialog(
+                            "Local →",
+                            "GitHub",
+                            localContent,
+                            "",
+                            false,
+                            () -> showCommitDialogForSync(content, localContent),
+                            content.name
+                        );
+                    }
+                });
+            }
+            
+            @Override
+            public void onError(String message) {
+                requireActivity().runOnUiThread(() -> {
+                    showToast("Failed to load local file: " + message);
+                });
+            }
+        });
+    }
+    
+    private void showSyncPreviewDialog(String sourceLabel, String destLabel, String sourceContent, 
+                                       String destContent, boolean isGitHubToLocal, Runnable onConfirm, String fileName) {
+        GitHubDiffUtil.DiffResult diff = GitHubDiffUtil.calculateDiff(destContent, sourceContent);
+        boolean isNewFile = (destContent == null || destContent.isEmpty()) && (sourceContent != null && !sourceContent.isEmpty());
+        
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_file_sync_preview, null);
+        TextView sourceLabelView = dialogView.findViewById(R.id.source_label);
+        TextView destLabelView = dialogView.findViewById(R.id.destination_label);
+        TextView sourceFilenameView = dialogView.findViewById(R.id.source_filename);
+        TextView destFilenameView = dialogView.findViewById(R.id.destination_filename);
+        TextView arrowIcon = dialogView.findViewById(R.id.arrow_icon);
+        TextView diffSummary = dialogView.findViewById(R.id.diff_summary);
+        TextView diffPreview = dialogView.findViewById(R.id.diff_preview);
+        
+        sourceLabelView.setText(sourceLabel);
+        destLabelView.setText(destLabel);
+        sourceFilenameView.setText(fileName);
+        destFilenameView.setText(fileName);
+        
+        // Hide the separate arrow icon since arrow is now in the source label
+        arrowIcon.setVisibility(android.view.View.GONE);
+        
+        // Set diff summary
+        String summary;
+        if (isNewFile) {
+            summary = "Adding new file (" + diff.linesAdded + " lines)";
+        } else {
+            summary = GitHubDiffUtil.getDiffSummary(diff);
+        }
+        diffSummary.setText(summary);
+        
+        // Set diff preview
+        if (diff.previewLines.isEmpty() && !isNewFile) {
+            diffPreview.setText("(No changes - files are identical)");
+        } else {
+            StringBuilder preview = new StringBuilder();
+            if (isNewFile) {
+                preview.append("New file will be created:\n\n");
+            }
+            for (String line : diff.previewLines) {
+                preview.append(line).append("\n");
+            }
+            String previewText = preview.toString();
+            
+            // Color code the diff preview with line numbers
+            android.text.SpannableString spannable = new android.text.SpannableString(previewText);
+            String[] lines = previewText.split("\n", -1);
+            int offset = 0;
+            for (String line : lines) {
+                if (line.trim().isEmpty()) {
+                    offset += line.length() + 1;
+                    continue;
+                }
+                
+                // Format: "   4 + content" or "   5 - content" or "   6   content"
+                // Check for line number prefix (4 digits + space + prefix)
+                if (line.length() > 5) {
+                    char prefixChar = line.charAt(5); // Character after "   4 " (position 5)
+                    int lineStart = offset;
+                    int lineEnd = offset + line.length();
+                    
+                    if (prefixChar == '+') {
+                        // Added line - green
+                        spannable.setSpan(new android.text.style.ForegroundColorSpan(0xFF4CAF50), 
+                            lineStart, lineEnd, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if (prefixChar == '-') {
+                        // Removed line - red
+                        spannable.setSpan(new android.text.style.ForegroundColorSpan(0xFFF44336), 
+                            lineStart, lineEnd, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    } else if (prefixChar == ' ') {
+                        // Context line - white
+                        spannable.setSpan(new android.text.style.ForegroundColorSpan(0xFFFFFFFF), 
+                            lineStart, lineEnd, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                }
+                offset += line.length() + 1; // +1 for newline
+            }
+            diffPreview.setText(spannable);
+        }
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Sync Preview")
+            .setView(dialogView)
+            .setPositiveButton("Confirm", (dialog, which) -> {
+                onConfirm.run();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private void showCommitDialogForSync(GitHubApiClient.GitHubContent content, String localContent) {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_commit_message, null);
+        EditText messageInput = dialogView.findViewById(R.id.commit_message_input);
+        messageInput.setText("Update " + content.name + " from local wavelets");
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Commit Changes")
+            .setView(dialogView)
+            .setPositiveButton("Commit", (dialog, which) -> {
+                String message = messageInput.getText().toString().trim();
+                if (message.isEmpty()) {
+                    showToast("Commit message cannot be empty");
+                    return;
+                }
+                commitLocalToGitHub(content, localContent, message);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private void commitLocalToGitHub(GitHubApiClient.GitHubContent content, String localContent, String commitMessage) {
+        // Encode content to base64
+        String encodedContent = android.util.Base64.encodeToString(
+            localContent.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+            android.util.Base64.NO_WRAP
+        );
+        
+        showToast("Committing to GitHub...");
+        apiClient.updateFile(selectedRepo.owner, selectedRepo.name, content.path,
+            commitMessage, encodedContent, content.sha,
+            new GitHubApiClient.ApiCallback<GitHubApiClient.GitHubCommit>() {
+                @Override
+                public void onSuccess(GitHubApiClient.GitHubCommit result) {
+                    requireActivity().runOnUiThread(() -> {
+                        // Update cache
+                        GitHubCacheManager cacheManager = GitHubCacheManager.getInstance(requireContext());
+                        cacheManager.saveFile(selectedRepo.owner, selectedRepo.name, content.path,
+                            localContent, new GitHubCacheManager.CacheCallback<Void>() {
+                                @Override
+                                public void onSuccess(Void v) {
+                                    requireActivity().runOnUiThread(() -> {
+                                        showToast("File updated on GitHub");
+                                        navigateToPath(currentPath);
+                                    });
+                                }
+                                
+                                @Override
+                                public void onError(String message) {
+                                    Log.w(TAG, "Failed to update cache: " + message);
+                                    requireActivity().runOnUiThread(() -> {
+                                        showToast("File updated on GitHub (cache update failed)");
+                                        navigateToPath(currentPath);
+                                    });
+                                }
+                            });
+                    });
+                }
+                
+                @Override
+                public void onError(String error) {
+                    requireActivity().runOnUiThread(() -> {
+                        showToast("Failed to commit: " + error);
+                    });
+                }
+            });
+    }
+    
+    private void loadFileFromApiForSync(GitHubApiClient.GitHubContent content, GitHubCacheManager.CacheCallback<String> callback) {
+        apiClient.getFileContent(selectedRepo.owner, selectedRepo.name, content.path,
+            new GitHubApiClient.ApiCallback<String>() {
+                @Override
+                public void onSuccess(String result) {
+                    // Cache the file
+                    GitHubCacheManager cacheManager = GitHubCacheManager.getInstance(requireContext());
+                    cacheManager.saveFile(selectedRepo.owner, selectedRepo.name, content.path, 
+                        result, new GitHubCacheManager.CacheCallback<Void>() {
+                            @Override
+                            public void onSuccess(Void v) {
+                                callback.onSuccess(result);
+                            }
+                            
+                            @Override
+                            public void onError(String message) {
+                                Log.w(TAG, "Failed to cache file: " + message);
+                                callback.onSuccess(result);
+                            }
+                        });
+                }
+                
+                @Override
+                public void onError(String message) {
+                    callback.onError(message);
+                }
+            });
+    }
+    
     private void editFile(GitHubApiClient.GitHubContent content) {
         if (apiClient == null || selectedRepo == null) return;
         
@@ -451,27 +890,108 @@ public class GitFragment extends Fragment {
         String owner = selectedRepo.owner;
         String repoName = selectedRepo.name;
         
+        GitHubCacheManager.CacheCallback<String> onContentLoaded = new GitHubCacheManager.CacheCallback<String>() {
+            @Override
+            public void onSuccess(String result) {
+                requireActivity().runOnUiThread(() -> {
+                    currentFileContent = result != null ? result : "";
+                    currentFileSha = content.sha;
+                    showEditDialog();
+                });
+            }
+            
+            @Override
+            public void onError(String message) {
+                // Fallback to API
+                loadFileFromApiForEdit(content);
+            }
+        };
+        
         if (cacheManager.fileExists(owner, repoName, content.path)) {
-            cacheManager.getFile(owner, repoName, content.path, new GitHubCacheManager.CacheCallback<String>() {
+            cacheManager.getFile(owner, repoName, content.path, onContentLoaded);
+        } else {
+            // Load from API and cache it
+            loadFileFromApiForEdit(content);
+        }
+    }
+    
+    private void loadFileFromApiForEdit(GitHubApiClient.GitHubContent content) {
+        apiClient.getFileContent(selectedRepo.owner, selectedRepo.name, content.path,
+            new GitHubApiClient.ApiCallback<String>() {
                 @Override
                 public void onSuccess(String result) {
                     requireActivity().runOnUiThread(() -> {
                         currentFileContent = result != null ? result : "";
                         currentFileSha = content.sha;
-                        showEditor();
+                        
+                        // Cache the file
+                        GitHubCacheManager cacheManager = GitHubCacheManager.getInstance(requireContext());
+                        cacheManager.saveFile(selectedRepo.owner, selectedRepo.name, content.path, 
+                            currentFileContent, new GitHubCacheManager.CacheCallback<Void>() {
+                                @Override
+                                public void onSuccess(Void v) {}
+                                @Override
+                                public void onError(String message) {
+                                    Log.w(TAG, "Failed to cache file: " + message);
+                                }
+                            });
+                        
+                        showEditDialog();
                     });
                 }
                 
                 @Override
                 public void onError(String message) {
-                    // Fallback to API
-                    loadFileFromApi(content);
+                    requireActivity().runOnUiThread(() -> {
+                        showToast("Failed to load file: " + message);
+                    });
                 }
             });
-        } else {
-            // Load from API and cache it
-            loadFileFromApi(content);
+    }
+    
+    private void showEditDialog() {
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_file, null);
+        EditText contentInput = dialogView.findViewById(R.id.file_content_input);
+        contentInput.setText(currentFileContent);
+        
+        // Select all text for easy editing
+        contentInput.selectAll();
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Edit: " + currentFile.name)
+            .setView(dialogView)
+            .setPositiveButton("Save", (dialog, which) -> {
+                String newContent = contentInput.getText().toString();
+                currentFileContent = newContent;
+                commitChanges("Update " + currentFile.name);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private void commitChanges(String defaultMessage) {
+        if (apiClient == null || selectedRepo == null || currentFile == null) {
+            return;
         }
+        
+        // Show commit message dialog
+        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_commit_message, null);
+        EditText messageInput = dialogView.findViewById(R.id.commit_message_input);
+        messageInput.setText(defaultMessage);
+        
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Commit Changes")
+            .setView(dialogView)
+            .setPositiveButton("Commit", (dialog, which) -> {
+                String message = messageInput.getText().toString().trim();
+                if (message.isEmpty()) {
+                    showToast("Commit message cannot be empty");
+                    return;
+                }
+                performCommit(message);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
     
     private void loadFileFromApi(GitHubApiClient.GitHubContent content) {
@@ -495,7 +1015,7 @@ public class GitFragment extends Fragment {
                                 }
                             });
                         
-                        showEditor();
+                        showEditDialog();
                     });
                 }
                 
@@ -513,48 +1033,6 @@ public class GitFragment extends Fragment {
         editFile(content);
     }
     
-    private void showEditor() {
-        isEditing = true;
-        binding.fileEditorContainer.setVisibility(View.VISIBLE);
-        binding.commitButtonContainer.setVisibility(View.VISIBLE);
-        binding.fileEditorContent.setText(currentFileContent);
-        backPressedCallback.setEnabled(true);
-    }
-    
-    private void cancelEdit() {
-        isEditing = false;
-        binding.fileEditorContainer.setVisibility(View.GONE);
-        binding.commitButtonContainer.setVisibility(View.GONE);
-        currentFile = null;
-        currentFileContent = null;
-        currentFileSha = null;
-        backPressedCallback.setEnabled(!currentPath.isEmpty());
-    }
-    
-    private void commitChanges() {
-        if (apiClient == null || selectedRepo == null || currentFile == null) {
-            return;
-        }
-        
-        // Show commit message dialog
-        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_commit_message, null);
-        EditText messageInput = dialogView.findViewById(R.id.commit_message_input);
-        messageInput.setText("Update " + currentFile.name);
-        
-        new AlertDialog.Builder(requireContext())
-            .setTitle("Commit Changes")
-            .setView(dialogView)
-            .setPositiveButton("Commit", (dialog, which) -> {
-                String message = messageInput.getText().toString().trim();
-                if (message.isEmpty()) {
-                    showToast("Commit message cannot be empty");
-                    return;
-                }
-                performCommit(message);
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
     
     private void performCommit(String message) {
         if (apiClient == null || selectedRepo == null || currentFile == null) {
@@ -582,7 +1060,6 @@ public class GitFragment extends Fragment {
                                 public void onSuccess(Void v) {
                                     requireActivity().runOnUiThread(() -> {
                                         showToast("Changes committed successfully");
-                                        cancelEdit();
                                         // Refresh file tree to get updated SHA
                                         navigateToPath(currentPath);
                                     });
@@ -593,7 +1070,6 @@ public class GitFragment extends Fragment {
                                     Log.w(TAG, "Failed to update cache: " + message);
                                     requireActivity().runOnUiThread(() -> {
                                         showToast("Changes committed (cache update failed)");
-                                        cancelEdit();
                                         navigateToPath(currentPath);
                                     });
                                 }
@@ -722,11 +1198,18 @@ public class GitFragment extends Fragment {
     
     private void updateStatusBar() {
         String username = tokenStorage.getUsername();
+        String statusText = "";
+        
         if (!TextUtils.isEmpty(username)) {
-            Utils.updateActionBarStatus(this, username);
-        } else {
-            Utils.updateActionBarStatus(this, "");
+            if (tokenStorage.hasSelectedRepo()) {
+                String repoName = tokenStorage.getSelectedRepoName();
+                statusText = username + "/" + repoName;
+            } else {
+                statusText = username;
+            }
         }
+        
+        Utils.updateActionBarStatus(this, statusText);
     }
     
     private void showPatDialog() {
@@ -994,6 +1477,7 @@ public class GitFragment extends Fragment {
         selectedRepo = repo;
         tokenStorage.saveSelectedRepo(repo.owner, repo.name);
         currentPath = "";
+        updateStatusBar(); // Update status bar to show username/repo_name
         // Sync repository on selection
         syncRepository();
     }
