@@ -53,13 +53,13 @@ struct ContentView: View {
                 .tag("Wavelets")
 
                 NavigationView {
-                    AgentsView()
+                    GitView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Agents", systemImage: "bubble.left.and.sparkles")
+                    Label("Git", systemImage: "arrow.triangle.branch")
                 }
-                .tag("Agents")
+                .tag("Git")
             }
             .onAppear {
                 let appearance = UINavigationBarAppearance()
