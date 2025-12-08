@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "EMWaver IDE",
+  "productName": "EMWaver",
   "version": "0.1.0",
-  "identifier": "com.luispl.emwaver.ide",
+  "identifier": "com.luispl.emwaver",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "EMWaver IDE",
+        "title": "EMWaver",
         "width": 800,
         "height": 600,
         "maximized": true
