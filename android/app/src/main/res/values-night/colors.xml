@@ -23,6 +23,7 @@
     <color name="monitorBackground">#000000</color>
     <color name="monitorText">#6CFF7F</color>
     <color name="codeText">#8AB4F8</color>
+    <color name="codeBlockBackground">#1A1A2E</color>
     
     <color name="agentMessageText">#F2F2F2</color>
 </resources>
