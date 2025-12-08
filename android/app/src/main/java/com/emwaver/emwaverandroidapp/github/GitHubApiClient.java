@@ -210,6 +210,132 @@ public class GitHubApiClient {
         });
     }
     
+    // Create a new repository
+    public void createRepository(String name, String description, boolean isPrivate, ApiCallback<GitHubRepository> callback) {
+        JsonObject bodyJson = new JsonObject();
+        bodyJson.addProperty("name", name);
+        if (description != null && !description.isEmpty()) {
+            bodyJson.addProperty("description", description);
+        }
+        bodyJson.addProperty("private", isPrivate);
+        bodyJson.addProperty("auto_init", false); // We'll commit files ourselves
+        
+        RequestBody body = RequestBody.create(bodyJson.toString(), JSON);
+        Request request = new Request.Builder()
+            .url(GitHubConfig.GITHUB_API_BASE + "/user/repos")
+            .post(body)
+            .addHeader("Authorization", "Bearer " + accessToken)
+            .addHeader("Accept", "application/vnd.github.v3+json")
+            .addHeader("Content-Type", "application/json")
+            .build();
+        
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                callback.onError("Failed to create repository: " + e.getMessage());
+            }
+            
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    ResponseBody errorBody = response.body();
+                    String errorMsg = "Failed to create repository: " + response.code();
+                    if (errorBody != null) {
+                        try {
+                            JsonObject errorJson = gson.fromJson(errorBody.string(), JsonObject.class);
+                            if (errorJson.has("message")) {
+                                errorMsg = errorJson.get("message").getAsString();
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    callback.onError(errorMsg);
+                    return;
+                }
+                
+                ResponseBody body = response.body();
+                if (body == null) {
+                    callback.onError("Empty response");
+                    return;
+                }
+                
+                try {
+                    JsonObject json = gson.fromJson(body.string(), JsonObject.class);
+                    GitHubRepository repo = new GitHubRepository();
+                    repo.id = json.has("id") ? json.get("id").getAsLong() : 0;
+                    repo.name = json.has("name") ? json.get("name").getAsString() : null;
+                    repo.fullName = json.has("full_name") ? json.get("full_name").getAsString() : null;
+                    repo.owner = json.has("owner") ? json.getAsJsonObject("owner").get("login").getAsString() : null;
+                    repo.description = json.has("description") && !json.get("description").isJsonNull() 
+                        ? json.get("description").getAsString() : null;
+                    repo.isPrivate = json.has("private") ? json.get("private").getAsBoolean() : false;
+                    callback.onSuccess(repo);
+                } catch (Exception e) {
+                    callback.onError("Failed to parse response: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    // Create a new file in repository
+    public void createFile(String owner, String repo, String path, String message, String content, ApiCallback<GitHubCommit> callback) {
+        JsonObject bodyJson = new JsonObject();
+        bodyJson.addProperty("message", message);
+        bodyJson.addProperty("content", content);
+        
+        RequestBody body = RequestBody.create(bodyJson.toString(), JSON);
+        Request request = new Request.Builder()
+            .url(GitHubConfig.GITHUB_API_BASE + "/repos/" + owner + "/" + repo + "/contents/" + path)
+            .put(body)
+            .addHeader("Authorization", "Bearer " + accessToken)
+            .addHeader("Accept", "application/vnd.github.v3+json")
+            .addHeader("Content-Type", "application/json")
+            .build();
+        
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                callback.onError("Failed to create file: " + e.getMessage());
+            }
+            
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    ResponseBody errorBody = response.body();
+                    String errorMsg = "Failed to create file: " + response.code();
+                    if (errorBody != null) {
+                        try {
+                            JsonObject errorJson = gson.fromJson(errorBody.string(), JsonObject.class);
+                            if (errorJson.has("message")) {
+                                errorMsg = errorJson.get("message").getAsString();
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    callback.onError(errorMsg);
+                    return;
+                }
+                
+                ResponseBody body = response.body();
+                if (body == null) {
+                    callback.onError("Empty response");
+                    return;
+                }
+                
+                try {
+                    JsonObject json = gson.fromJson(body.string(), JsonObject.class);
+                    GitHubCommit commit = new GitHubCommit();
+                    if (json.has("commit")) {
+                        JsonObject commitJson = json.getAsJsonObject("commit");
+                        commit.sha = commitJson.has("sha") ? commitJson.get("sha").getAsString() : null;
+                        commit.message = commitJson.has("message") ? commitJson.get("message").getAsString() : null;
+                    }
+                    callback.onSuccess(commit);
+                } catch (Exception e) {
+                    callback.onError("Failed to parse response: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
     // Update file content
     public void updateFile(String owner, String repo, String path, String message, String content, String sha, ApiCallback<GitHubCommit> callback) {
         JsonObject bodyJson = new JsonObject();

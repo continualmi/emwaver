@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Select a repository to work with:"
+        android:textSize="14sp"
+        android:layout_marginBottom="8dp" />
+
+    <ListView
+        android:id="@+id/repo_list_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxHeight="400dp"
+        android:minHeight="200dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/create_repo_button"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Create New Repository"
+        android:layout_marginTop="16dp" />
+
+</LinearLayout>
