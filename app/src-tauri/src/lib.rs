@@ -1,11 +1,14 @@
+mod ble;
+
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io, io::Write, path::{Path, PathBuf}, process::Command};
+use std::{env, fs, io, io::Write, path::{Path, PathBuf}, process::Command, sync::Arc};
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
-    Emitter,
+    Emitter, State,
 };
 use tempfile::Builder;
+use ble::{BLEState, BLEStatus, BLENotification};
 
 #[derive(Deserialize)]
 struct CreateProjectPayload {
@@ -357,6 +360,42 @@ fn resolve_token() -> Option<String> {
     None
 }
 
+// BLE Commands
+#[tauri::command]
+async fn ble_initialize(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.initialize().await
+}
+
+#[tauri::command]
+async fn ble_start_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.start_scan().await
+}
+
+#[tauri::command]
+async fn ble_stop_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.stop_scan().await
+}
+
+#[tauri::command]
+async fn ble_disconnect(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.disconnect().await
+}
+
+#[tauri::command]
+async fn ble_send_packet(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
+    state.send_packet(data).await
+}
+
+#[tauri::command]
+async fn ble_get_status(state: State<'_, Arc<BLEState>>) -> Result<BLEStatus, String> {
+    Ok(state.get_status().await)
+}
+
+#[tauri::command]
+async fn ble_get_notification(state: State<'_, Arc<BLEState>>) -> Result<Option<BLENotification>, String> {
+    Ok(state.get_notification().await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -562,11 +601,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .manage(Arc::new(BLEState::new()))
         .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
             read_file,
-            write_file
+            write_file,
+            ble_initialize,
+            ble_start_scan,
+            ble_stop_scan,
+            ble_disconnect,
+            ble_send_packet,
+            ble_get_status,
+            ble_get_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
