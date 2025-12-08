@@ -5,11 +5,12 @@ struct AgentsView: View {
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             conversationHeader
-
-            Divider()
-
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+            
             messagesList
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .center) {
@@ -20,41 +21,20 @@ struct AgentsView: View {
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }
-
+            
             messageComposer
+                .padding(.horizontal)
+                .padding(.bottom, 16)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { viewModel.loadIfNeeded() }
         .navigationTitle("Agents")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
         .alert("Agent Error", isPresented: $viewModel.isShowingErrorAlert, presenting: viewModel.errorMessage) { message in
             Button("OK", role: .cancel) {}
         } message: { message in
             Text(message)
-        }
-        .sheet(isPresented: $viewModel.isPresentingNewConversationSheet) {
-            NavigationView {
-                Form {
-                    Section(header: Text("Conversation")) {
-                        TextField("Topic (optional)", text: $viewModel.newConversationTitle)
-                    }
-                }
-                .navigationTitle("New Conversation")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { viewModel.isPresentingNewConversationSheet = false }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Create") {
-                            viewModel.createConversation(with: viewModel.newConversationTitle)
-                            viewModel.newConversationTitle = ""
-                            viewModel.isPresentingNewConversationSheet = false
-                        }
-                        .disabled(viewModel.isStreaming)
-                    }
-                }
-            }
         }
         .sheet(isPresented: $viewModel.isPresentingRenameSheet) {
             NavigationView {
@@ -103,15 +83,14 @@ struct AgentsView: View {
                 }
             }
             Button("New Chat") {
-                viewModel.newConversationTitle = ""
-                viewModel.isPresentingNewConversationSheet = true
+                viewModel.createConversation(with: "New Chat")
             }
             Button("Cancel", role: .cancel) {}
         }
     }
 
     private var conversationHeader: some View {
-        HStack {
+        HStack(spacing: 8) {
             Menu {
                 if viewModel.conversations.isEmpty {
                     Text("No conversations")
@@ -131,33 +110,28 @@ struct AgentsView: View {
                     }
                 }
             } label: {
-                HStack {
+                HStack(spacing: 4) {
                     Text(viewModel.conversations.first(where: { $0.id == viewModel.selectedConversationId })?.title ?? "Select conversation")
+                        .font(.subheadline)
                         .foregroundColor(.primary)
                         .lineLimit(1)
-                    Spacer(minLength: 4)
                     Image(systemName: "chevron.down")
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
 
             Button {
-                viewModel.newConversationTitle = ""
-                viewModel.isPresentingNewConversationSheet = true
+                viewModel.createConversation(with: "New Chat")
             } label: {
-                Label("New", systemImage: "plus")
-                    .labelStyle(.iconOnly)
-                    .frame(width: 44, height: 44)
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 32, height: 32)
                     .background(Color.accentColor.opacity(0.15))
                     .foregroundColor(.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .disabled(viewModel.isStreaming)
         }
@@ -172,10 +146,16 @@ struct AgentsView: View {
                             .id(message.id)
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 8)
             }
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.systemGray6)))
             .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(
+                TapGesture().onEnded { _ in
+                    isComposerFocused = false
+                }
+            )
             .onChange(of: viewModel.messages) { _ in
                 if let last = viewModel.messages.last {
                     withAnimation {
@@ -187,54 +167,47 @@ struct AgentsView: View {
     }
 
     private var messageComposer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Message")
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-            HStack(alignment: .bottom, spacing: 12) {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $viewModel.messageInput)
-                        .frame(minHeight: 44, maxHeight: 120)
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemBackground)))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.25), lineWidth: 1)
-                        )
-                        .disabled(viewModel.isStreaming)
-                        .focused($isComposerFocused)
-
-                    if viewModel.messageInput.isEmpty {
-                        Text("Ask the agent...")
-                            .foregroundColor(.gray)
-                            .padding(.top, 16)
-                            .padding(.leading, 14)
-                            .allowsHitTesting(false)
+        HStack(alignment: .center, spacing: 8) {
+            TextField("Message", text: $viewModel.messageInput)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(24)
+                .disabled(viewModel.isStreaming)
+                .focused($isComposerFocused)
+                .submitLabel(.send)
+                .onSubmit {
+                    if viewModel.canSend {
+                        viewModel.sendMessage()
+                        isComposerFocused = false
                     }
                 }
 
-                Button {
-                    viewModel.sendMessage()
-                } label: {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                        .background(viewModel.canSend ? Color.accentColor : Color.gray.opacity(0.4))
-                        .clipShape(Circle())
-                }
-                .disabled(!viewModel.canSend)
+            Button {
+                viewModel.sendMessage()
+                isComposerFocused = false
+            } label: {
+                Text("Send")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(viewModel.canSend ? .accentColor : .gray)
+                    .padding(.horizontal, 8)
             }
+            .disabled(!viewModel.canSend)
         }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: -2)
+        )
     }
 
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
             Menu {
                 Button {
-                    viewModel.newConversationTitle = ""
-                    viewModel.isPresentingNewConversationSheet = true
+                    viewModel.createConversation(with: "New Chat")
                 } label: {
                     Label("New Chat", systemImage: "plus")
                 }
@@ -291,47 +264,34 @@ private struct MessageRow: View {
     let message: AgentMessage
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if message.role == .assistant {
+        if message.role == .assistant {
+            VStack(alignment: .leading, spacing: 4) {
                 LLMIconSymbol()
-                    .frame(width: 28, height: 28)
+                    .frame(width: 26, height: 26)
                     .foregroundColor(Color.accentColor)
+                    .padding(.bottom, 4)
+                
+                MarkdownContent(markdown: message.content)
             }
-
-            VStack(alignment: message.role == .assistant ? .leading : .trailing, spacing: 4) {
-                Text(attributedContent)
-                    .foregroundColor(message.role == .assistant ? .primary : .white)
-                    .padding(12)
-                    .background(bubbleBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack {
+                Spacer()
+                Text(message.content)
+                    .foregroundColor(.white)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.accentColor, Color.accentColor.opacity(0.85)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(16)
             }
-            .frame(maxWidth: .infinity, alignment: message.role == .assistant ? .leading : .trailing)
-
-            if message.role == .user {
-                Spacer().frame(width: 28)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: message.role == .assistant ? .leading : .trailing)
-    }
-
-    private var attributedContent: AttributedString {
-        if let attributed = try? AttributedString(markdown: message.content) {
-            return attributed
-        }
-        return AttributedString(message.content)
-    }
-
-    private var bubbleBackground: some View {
-        Group {
-            if message.role == .assistant {
-                Color(.systemBackground)
-            } else {
-                LinearGradient(
-                    colors: [Color.accentColor, Color.accentColor.opacity(0.85)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 }
