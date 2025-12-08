@@ -87,13 +87,6 @@ struct SettingsView: View {
                 .foregroundColor(.primary)
             }
 
-            Section("Account") {
-                Button(role: .destructive) {
-                    authManager.logout()
-                } label: {
-                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)

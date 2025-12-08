@@ -7,7 +7,6 @@ struct WaveletsView: View {
     @StateObject private var previewManager = WaveletPreviewManager()
     @State private var editorSession: EditorSession?
     @State private var showingPreview = false
-    @State private var showingIRDBSheet = false
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
@@ -40,23 +39,6 @@ struct WaveletsView: View {
                     showingPreview = false
                 }
             }
-            .sheet(isPresented: $showingIRDBSheet) {
-                if let token = authManager.accessToken, !token.isEmpty {
-                    IRDBImportView(
-                        accessToken: token,
-                        service: IRDBService.shared,
-                        onDismiss: { showingIRDBSheet = false },
-                        onWaveletImported: { wavelet in
-                            Task {
-                                await viewModel.importWavelet(wavelet: wavelet, accessToken: token)
-                            }
-                        }
-                    )
-                } else {
-                    Text("Authentication required")
-                        .padding()
-                }
-            }
             .sheet(item: $namePrompt) { prompt in
                 NamePromptSheet(prompt: prompt)
             }
@@ -67,13 +49,9 @@ struct WaveletsView: View {
             ) {
                 Button("Delete", role: .destructive) {
                     guard let target = deleteTarget else { return }
-                    guard let token = authManager.accessToken, !token.isEmpty else {
-                        viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
-                        return
-                    }
                     editorSession = nil
                     Task {
-                        await viewModel.deleteScript(id: target.id, accessToken: token)
+                        await viewModel.deleteScript(id: target.id, accessToken: authManager.accessToken ?? "local-only-token")
                     }
                     deleteTarget = nil
                 }
@@ -142,7 +120,7 @@ struct WaveletsView: View {
                 .foregroundColor(.secondary)
             Text("No scripts available")
                 .font(.headline)
-            Text("Create a new script or import one from the IRDB catalogue.")
+            Text("Create a new script to get started.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -156,20 +134,15 @@ struct WaveletsView: View {
     }
 
     private func loadScripts() {
-        guard let token = authManager.accessToken, !token.isEmpty else { return }
         Task {
-            await viewModel.loadScripts(accessToken: token)
+            await viewModel.loadScripts(accessToken: authManager.accessToken ?? "local-only-token")
         }
     }
 
     private func openPreview(for id: String) {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
-            return
-        }
         viewModel.selectScript(id: id)
         Task {
-            await viewModel.ensureContent(for: id, accessToken: token)
+            await viewModel.ensureContent(for: id, accessToken: authManager.accessToken ?? "local-only-token")
             await MainActor.run {
                 let script = viewModel.scriptDraft(for: id)
                 let name = viewModel.scriptName(for: id)
@@ -181,13 +154,9 @@ struct WaveletsView: View {
     }
 
     private func openEditor(for id: String) {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
-            return
-        }
         viewModel.selectScript(id: id)
         Task {
-            await viewModel.ensureContent(for: id, accessToken: token)
+            await viewModel.ensureContent(for: id, accessToken: authManager.accessToken ?? "local-only-token")
             await MainActor.run {
                 editorSession = EditorSession(id: id)
             }
@@ -200,34 +169,25 @@ struct WaveletsView: View {
     }
 
     private func syncScripts() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
-            return
-        }
         Task {
-            await viewModel.syncScripts(accessToken: token)
+            await viewModel.syncScripts(accessToken: authManager.accessToken ?? "local-only-token")
         }
     }
 
     private func editorSheet(for session: EditorSession) -> some View {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            return AnyView(Text("Authentication required").padding())
-        }
-        return AnyView(
-            ScriptEditorSheet(
-                scriptId: session.id,
-                viewModel: viewModel,
-                accessToken: token,
-                onDismiss: { editorSession = nil },
-                onRequestCreate: { presentNamePrompt(context: .create) },
-                onRequestRename: { presentNamePrompt(context: .rename(id: session.id)) },
-                onRequestCopy: { presentNamePrompt(context: .copy(id: session.id)) },
-                onRequestDelete: {
-                        deleteTarget = DeletionTarget(id: session.id, name: viewModel.scriptName(for: session.id))
-                        showingDeleteConfirmation = true
-                },
-                onRequestPreview: { openPreview(for: session.id) }
-            )
+        ScriptEditorSheet(
+            scriptId: session.id,
+            viewModel: viewModel,
+            accessToken: authManager.accessToken ?? "local-only-token",
+            onDismiss: { editorSession = nil },
+            onRequestCreate: { presentNamePrompt(context: .create) },
+            onRequestRename: { presentNamePrompt(context: .rename(id: session.id)) },
+            onRequestCopy: { presentNamePrompt(context: .copy(id: session.id)) },
+            onRequestDelete: {
+                    deleteTarget = DeletionTarget(id: session.id, name: viewModel.scriptName(for: session.id))
+                    showingDeleteConfirmation = true
+            },
+            onRequestPreview: { openPreview(for: session.id) }
         )
     }
 
@@ -252,12 +212,9 @@ struct WaveletsView: View {
     }
 
     private func handleName(context: NamePromptContext, name: String) {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = WaveletsViewModel.Notice(title: "Error", message: "Missing access token")
-            return
-        }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let token = authManager.accessToken ?? "local-only-token"
 
         Task {
             switch context {
@@ -295,11 +252,6 @@ struct WaveletsView: View {
                     Label("Sync Scripts", systemImage: "arrow.triangle.2.circlepath")
                 }
 
-                Button {
-                    showingIRDBSheet = true
-                } label: {
-                    Label("Import from IRDB", systemImage: "antenna.radiowaves.left.and.right")
-                }
 
                 if let selected = viewModel.selectedScriptId, viewModel.isExistingScript(selected) {
                     Divider()
@@ -570,237 +522,3 @@ private struct NamePromptSheet: View {
     }
 }
 
-private struct IRDBImportView: View {
-    @Environment(\.dismiss) private var dismiss
-    let accessToken: String
-    let service: IRDBService
-    let onDismiss: () -> Void
-    let onWaveletImported: (IRDBImportedWavelet) -> Void
-
-    var body: some View {
-        NavigationStack {
-            BrandListView(
-                accessToken: accessToken,
-                service: service,
-                onWaveletImported: { wavelet in
-                    onWaveletImported(wavelet)
-                    dismiss()
-                    onDismiss()
-                }
-            )
-            .navigationTitle("Select Brand")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                        onDismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct BrandListView: View {
-    let accessToken: String
-    let service: IRDBService
-    let onWaveletImported: (IRDBImportedWavelet) -> Void
-
-    @State private var brands: [String] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var searchText: String = ""
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView("Loading brands…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(filteredBrands, id: \.self) { brand in
-                    NavigationLink(brand) {
-                        RemoteListView(
-                            brand: brand,
-                            accessToken: accessToken,
-                            service: service,
-                            onWaveletImported: onWaveletImported
-                        )
-                        .navigationTitle(brand)
-                    }
-                }
-                .listStyle(.insetGrouped)
-            }
-        }
-        .searchable(text: $searchText, prompt: "Search brands")
-        .alert(isPresented: Binding<Bool>(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Alert(title: Text("Error"), message: Text(errorMessage ?? ""), dismissButton: .default(Text("OK")))
-        }
-        .task { await loadBrands() }
-    }
-
-    private var filteredBrands: [String] {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return brands }
-        return brands.filter { $0.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private func loadBrands() async {
-        isLoading = true
-        do {
-            brands = try await service.fetchBrands(accessToken: accessToken).sorted()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoading = false
-    }
-}
-
-private struct RemoteListView: View {
-    let brand: String
-    let accessToken: String
-    let service: IRDBService
-    let onWaveletImported: (IRDBImportedWavelet) -> Void
-
-    @State private var remotes: [IRDBRemoteSummary] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var searchText: String = ""
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView("Loading remotes…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(filteredRemotes) { remote in
-                    NavigationLink(remote.name) {
-                        VariantListView(
-                            brand: brand,
-                            remote: remote.name,
-                            accessToken: accessToken,
-                            service: service,
-                            onWaveletImported: onWaveletImported
-                        )
-                        .navigationTitle(remote.name)
-                    }
-                    .badge(remote.variantCount)
-                }
-                .listStyle(.insetGrouped)
-            }
-        }
-        .searchable(text: $searchText, prompt: "Search remotes")
-        .alert(isPresented: Binding<Bool>(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Alert(title: Text("Error"), message: Text(errorMessage ?? ""), dismissButton: .default(Text("OK")))
-        }
-        .task { await loadRemotes() }
-    }
-
-    private var filteredRemotes: [IRDBRemoteSummary] {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return remotes }
-        return remotes.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private func loadRemotes() async {
-        isLoading = true
-        do {
-            remotes = try await service.fetchRemotes(brand: brand, accessToken: accessToken).sorted(by: { $0.name < $1.name })
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoading = false
-    }
-}
-
-private struct VariantListView: View {
-    @Environment(\.dismiss) private var dismiss
-    let brand: String
-    let remote: String
-    let accessToken: String
-    let service: IRDBService
-    let onWaveletImported: (IRDBImportedWavelet) -> Void
-
-    @State private var variants: [String] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
-    @State private var searchText: String = ""
-    @State private var importProgress: IRDBImportProgress?
-
-    var body: some View {
-        Group {
-            if isLoading {
-                if let progress = importProgress {
-                    VStack(spacing: 12) {
-                        if progress.total > 0 {
-                            ProgressView(value: Double(progress.processed), total: Double(progress.total))
-                        } else {
-                            ProgressView()
-                        }
-                        Text(progress.formatted)
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ProgressView("Loading variants…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                List(filteredVariants, id: \.self) { variant in
-                    Button(action: { importVariant(named: variant) }) {
-                        HStack {
-                            Text(variant)
-                            Spacer()
-                            Image(systemName: "square.and.arrow.down")
-                                .foregroundColor(.accentColor)
-                        }
-                    }
-                }
-                .listStyle(.insetGrouped)
-            }
-        }
-        .searchable(text: $searchText, prompt: "Search variants")
-        .alert(isPresented: Binding<Bool>(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Alert(title: Text("Error"), message: Text(errorMessage ?? ""), dismissButton: .default(Text("OK")))
-        }
-        .task { await loadVariants() }
-    }
-
-    private var filteredVariants: [String] {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return variants }
-        return variants.filter { $0.localizedCaseInsensitiveContains(trimmed) }
-    }
-
-    private func loadVariants() async {
-        isLoading = true
-        do {
-            variants = try await service.fetchVariants(brand: brand, remote: remote, accessToken: accessToken).sorted()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        isLoading = false
-    }
-
-    private func importVariant(named fileName: String) {
-        isLoading = true
-        importProgress = IRDBImportProgress(processed: 0, total: 0)
-        Task {
-            do {
-                let wavelet = try await service.importRemote(
-                    brand: brand,
-                    remote: remote,
-                    fileName: fileName,
-                    accessToken: accessToken
-                ) { progress in
-                    importProgress = progress
-                }
-                onWaveletImported(wavelet)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-                isLoading = false
-            }
-        }
-    }
-}

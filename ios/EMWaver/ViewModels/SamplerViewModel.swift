@@ -45,8 +45,6 @@ final class SamplerViewModel: ObservableObject {
     @Published private(set) var currentSignalName: String = SamplerViewModel.defaultSignalName
     @Published private(set) var hasUnsavedChanges = false
     @Published var outputText: String = ""
-    @Published private(set) var isDecoding = false
-    @Published private(set) var isRendering = false
     @Published var notice: Notice?
 
     private var bleManager: BLEManager?
@@ -219,7 +217,7 @@ final class SamplerViewModel: ObservableObject {
             let metadata: UserFileMetadata
             if let current = currentSignalMetadata {
                 guard let etag = current.etag, !etag.isEmpty else {
-                    throw FileServiceError.server(message: "Reload signal before saving changes")
+                    throw FileServiceError.invalidResponse
                 }
                 metadata = try await FileService.shared.updateBinaryFile(
                     id: current.id,
@@ -349,72 +347,6 @@ final class SamplerViewModel: ObservableObject {
         return components.joined(separator: " ")
     }
 
-    func decode(buffer: Data, accessToken: String) async {
-        guard !buffer.isEmpty else {
-            notice = Notice(title: "Error", message: "Buffer is empty")
-            return
-        }
-
-        let timings = buildSignedRawTimings(from: buffer)
-        guard !timings.isEmpty else {
-            notice = Notice(title: "Error", message: "Unable to compute timings")
-            return
-        }
-
-        outputText = "Decoding IRP..."
-        isDecoding = true
-        defer { isDecoding = false }
-
-        do {
-            let results = try await InfraredService.shared.decodeSignedRaw(
-                timings: timings,
-                strict: false,
-                accessToken: accessToken
-            )
-            outputText = formatDecodeResults(results)
-            if outputText.isEmpty {
-                notice = Notice(title: "Info", message: "No decode results")
-            }
-        } catch {
-            notice = Notice(title: "Error", message: error.localizedDescription)
-        }
-    }
-
-    func renderSignal(
-        protocolName: String,
-        parameters: [String: Int],
-        accessToken: String
-    ) async -> Data? {
-        guard !protocolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            notice = Notice(title: "Error", message: "Protocol is required")
-            return nil
-        }
-
-        outputText = "Rendering IRP..."
-        isRendering = true
-        defer { isRendering = false }
-
-        do {
-            let renderResult = try await InfraredService.shared.renderSignedRaw(
-                protocolName: protocolName.trimmingCharacters(in: .whitespacesAndNewlines),
-                parameters: parameters.reduce(into: [String: Any]()) { dict, entry in
-                    dict[entry.key] = entry.value
-                },
-                accessToken: accessToken
-            )
-            outputText = renderResult.signedRaw
-            let timings = parseSignedRawTimings(renderResult.signedRaw)
-            guard !timings.isEmpty else {
-                notice = Notice(title: "Error", message: "Rendered timings are empty")
-                return nil
-            }
-            let utils = Utils()
-            return utils.convertTimingsToBinary(timings)
-        } catch {
-            notice = Notice(title: "Error", message: error.localizedDescription)
-            return nil
-        }
-    }
 
     func parseSignedRawTimings(_ text: String) -> [Double] {
         var normalized = text.replacingOccurrences(of: "[", with: " ")
@@ -458,27 +390,4 @@ final class SamplerViewModel: ObservableObject {
         components.append("\(prefix)\(microseconds)")
     }
 
-    private func formatDecodeResults(_ results: [InfraredDecodeResult]) -> String {
-        guard !results.isEmpty else { return "" }
-        return results.map { result in
-            var lines: [String] = []
-            if !result.protocolName.isEmpty {
-                var line = result.protocolName
-                if !result.parameters.isEmpty {
-                    let formatted = result.parameters
-                        .map { ($0.key, $0.value) }
-                        .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
-                        .map { "\($0.0)=\($0.1)" }
-                        .joined(separator: ", ")
-                    line.append(" {\(formatted)}")
-                }
-                lines.append(line)
-            }
-            if !result.raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                lines.append(result.raw.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-            return lines.joined(separator: "\n")
-        }
-        .joined(separator: "\n\n")
-    }
 }

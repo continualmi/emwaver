@@ -1,12 +1,14 @@
 import Foundation
 
 enum AppConfig {
+    // Local-only mode: use operouter/localhost URLs
     static var backendBaseURL: URL {
-        if let rawValue = Bundle.main.object(forInfoDictionaryKey: "BackendBaseURL") as? String,
+        if let rawValue = Bundle.main.object(forInfoDictionaryKey: "OperouterBaseURL") as? String,
            let url = URL(string: rawValue.trimmingCharacters(in: .whitespacesAndNewlines)),
            !rawValue.isEmpty {
             return url
         }
-        return URL(string: "http://10.0.2.2:8000")!
+        // Default to localhost for iOS simulator, operouter for device
+        return URL(string: "http://localhost:8000")!
     }
 }
