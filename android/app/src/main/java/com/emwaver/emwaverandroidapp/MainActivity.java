@@ -75,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
         // Set up the AppBarConfiguration with BLE replacing USB
         appBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.navigation_cc1101, R.id.navigation_emwaver,
-                R.id.navigation_sampler, R.id.navigation_wavelets, R.id.navigation_agent)
+                R.id.navigation_sampler, R.id.navigation_wavelets, R.id.navigation_git)
                 .build();
 
         NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
@@ -119,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
                 destinationId == R.id.navigation_cc1101 || 
                 destinationId == R.id.navigation_sampler || 
                 destinationId == R.id.navigation_wavelets || 
-                destinationId == R.id.navigation_agent) {
+                destinationId == R.id.navigation_git) {
                 bottomNavigationView.setVisibility(View.VISIBLE);
                 // Find the menu item that corresponds to this destination
                 if (bottomNavigationView.getMenu().findItem(destinationId) != null) {
