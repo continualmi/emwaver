@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -71,6 +72,9 @@ public class MainActivity extends AppCompatActivity {
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+        
+        // Handle OAuth callback intent
+        handleOAuthCallback(getIntent());
 
         // Set up the AppBarConfiguration with BLE replacing USB
         appBarConfiguration = new AppBarConfiguration.Builder(
@@ -293,8 +297,28 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         
+        // Handle OAuth callback intent (in case app was already running)
+        handleOAuthCallback(getIntent());
+        
         // Make sure Bluetooth is enabled
         checkBluetoothEnabled();
+    }
+    
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleOAuthCallback(intent);
+    }
+    
+    private void handleOAuthCallback(Intent intent) {
+        if (intent == null) return;
+        
+        Uri data = intent.getData();
+        if (data != null && "emwaver".equals(data.getScheme()) && "oauth".equals(data.getHost())) {
+            // OAuth callback - let GitFragment handle it
+            // The fragment will check the intent in onResume
+        }
     }
     
     private void checkBluetoothEnabled() {
