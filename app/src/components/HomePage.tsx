@@ -56,14 +56,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       borderClass: "hover:border-purple-500/60",
       iconClass: "text-purple-400",
     },
-    {
-      id: "git" as FragmentType,
-      name: "Git",
-      description: "GitHub repository sync for wavelets",
-      icon: <GitIcon />,
-      borderClass: "hover:border-indigo-500/60",
-      iconClass: "text-indigo-400",
-    },
   ];
 
   // Initialize BLE on mount and auto-connect
@@ -536,12 +528,3 @@ function SamplerIcon() {
   );
 }
 
-function GitIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-full w-full">
-      <circle cx="7" cy="7" r="2" />
-      <circle cx="13" cy="13" r="2" />
-      <path d="M9 7l2 6" strokeLinecap="round" />
-    </svg>
-  );
-}

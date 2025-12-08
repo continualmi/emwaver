@@ -31,7 +31,6 @@ const MENU_SHOW_WAVELETS_EVENT: &str = "menu-show-wavelets";
 const MENU_SHOW_ISM_EVENT: &str = "menu-show-ism";
 const MENU_SHOW_SAMPLER_EVENT: &str = "menu-show-sampler";
 const MENU_SHOW_EMWAVER_EVENT: &str = "menu-show-emwaver";
-const MENU_SHOW_GIT_EVENT: &str = "menu-show-git";
 const MENU_INCREASE_LAYOUT_EVENT: &str = "menu-increase-layout";
 const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
@@ -164,6 +163,52 @@ async fn write_file(payload: WriteFilePayload) -> Result<(), String> {
     .map_err(|error| format!("Failed to write file: {error}"))?;
 
     Ok(())
+}
+
+#[derive(Deserialize)]
+struct RevealInFinderPayload {
+    path: String,
+}
+
+#[tauri::command]
+async fn reveal_in_finder(payload: RevealInFinderPayload) -> Result<(), String> {
+    let path = expand_path(&payload.path);
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| "Path contains invalid characters".to_string())?
+        .to_string();
+    spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("open")
+                .arg("-R")
+                .arg(&path_str)
+                .output()
+                .map_err(|error| format!("Failed to reveal in Finder: {error}"))?;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("explorer")
+                .arg("/select,")
+                .arg(&path_str)
+                .output()
+                .map_err(|error| format!("Failed to reveal in Explorer: {error}"))?;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let parent_path = Path::new(&path_str)
+                .parent()
+                .and_then(|p| p.to_str())
+                .unwrap_or(&path_str);
+            Command::new("xdg-open")
+                .arg(parent_path)
+                .output()
+                .map_err(|error| format!("Failed to reveal in file manager: {error}"))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("Failed to reveal in Finder: {error}"))?
 }
 
 // ESP-IDF and shell commands removed - desktop app doesn't need ESP-IDF toolchain or shell sessions
@@ -465,13 +510,6 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let show_git_item = MenuItem::with_id(
-                app,
-                "menu-show-git",
-                "Show Git",
-                true,
-                None::<&str>,
-            )?;
             let increase_layout_item = MenuItem::with_id(
                 app,
                 "menu-increase-layout",
@@ -515,7 +553,6 @@ pub fn run() {
                                 submenu.append(&show_ism_item)?;
                                 submenu.append(&show_sampler_item)?;
                                 submenu.append(&show_emwaver_item)?;
-                                submenu.append(&show_git_item)?;
                                 view_menu_added = true;
                             }
                         }
@@ -540,7 +577,6 @@ pub fn run() {
                 view_menu.append(&show_ism_item)?;
                 view_menu.append(&show_sampler_item)?;
                 view_menu.append(&show_emwaver_item)?;
-                view_menu.append(&show_git_item)?;
                 menu.append(&view_menu)?;
             }
 
@@ -582,9 +618,6 @@ pub fn run() {
                 "menu-show-emwaver" => {
                     let _ = app.emit(MENU_SHOW_EMWAVER_EVENT, ());
                 }
-                "menu-show-git" => {
-                    let _ = app.emit(MENU_SHOW_GIT_EVENT, ());
-                }
                 "menu-increase-layout" => {
                     let _ = app.emit(MENU_INCREASE_LAYOUT_EVENT, ());
                 }
@@ -607,6 +640,7 @@ pub fn run() {
             read_directory,
             read_file,
             write_file,
+            reveal_in_finder,
             ble_initialize,
             ble_start_scan,
             ble_stop_scan,

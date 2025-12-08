@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { join } from "@tauri-apps/api/path";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 type DirectoryEntry = {
   name: string;
@@ -44,6 +45,7 @@ const DEFAULT_SIDEBAR_WIDTH = 288;
 const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_MAX_WIDTH = 520;
 const SIDEBAR_STORAGE_KEY = "emwaver.sidebarWidth";
+const LAST_PROJECT_PATH_STORAGE_KEY = "emwaver.lastProjectPath";
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   fontFamily: '"Fira Code", "Courier New", monospace',
@@ -184,7 +186,6 @@ export default function WaveletsFragment() {
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() =>
     readStoredNumber(SIDEBAR_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH),
   );
@@ -207,6 +208,7 @@ export default function WaveletsFragment() {
     }
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
+
 
   useEffect(() => {
     if (!monaco) {
@@ -295,11 +297,10 @@ export default function WaveletsFragment() {
 
   const ensureDefaultScripts = useCallback(async (projectPath: string) => {
     try {
-      const waveletsDir = await join(projectPath, "wavelets");
       let entries: DirectoryEntry[];
       try {
         entries = await invoke<DirectoryEntry[]>("read_directory", {
-          payload: { path: waveletsDir },
+          payload: { path: projectPath },
         });
       } catch {
         // Directory doesn't exist, will be created when writing files
@@ -309,13 +310,13 @@ export default function WaveletsFragment() {
       const jsFiles = entries.filter((e) => e.kind === "file" && e.name.endsWith(".js"));
       
       if (jsFiles.length === 0) {
-        // Load default scripts
+        // Load default scripts directly into project folder
         for (const scriptName of DEFAULT_SCRIPTS) {
           try {
             const response = await fetch(`/default-scripts/${scriptName}`);
             if (response.ok) {
               const content = await response.text();
-              const filePath = await join(waveletsDir, scriptName);
+              const filePath = await join(projectPath, scriptName);
               await invoke<void>("write_file", {
                 payload: { path: filePath, content },
               });
@@ -334,15 +335,14 @@ export default function WaveletsFragment() {
     const { initialName, isNewProject = false } = options;
 
     try {
-      // Load default scripts first if it's a new project or if wavelets directory is empty
+      // Load default scripts first if it's a new project or if project directory is empty
       if (isNewProject) {
         await ensureDefaultScripts(directory);
       } else {
-        // Check if wavelets directory exists and has files
-        const waveletsDir = await join(directory, "wavelets");
+        // Check if project directory has JS files
         try {
           const entries = await invoke<DirectoryEntry[]>("read_directory", {
-            payload: { path: waveletsDir },
+            payload: { path: directory },
           });
           const jsFiles = entries.filter((e) => e.kind === "file" && e.name.endsWith(".js"));
           if (jsFiles.length === 0) {
@@ -377,11 +377,75 @@ export default function WaveletsFragment() {
       if (!treeOpenStateRef.current.has(project.id)) {
         treeOpenStateRef.current.set(project.id, {});
       }
+
+      // Store the project path for restoration on next app launch
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(LAST_PROJECT_PATH_STORAGE_KEY, directory);
+      }
     } catch (error) {
       console.error(error);
       alert(String(error));
     }
   }, [ensureDefaultScripts]);
+
+  // Restore last opened project on mount (only once)
+  const hasRestoredRef = useRef(false);
+  const openProjectAtPathRef = useRef<typeof openProjectAtPath | null>(null);
+  
+  // Keep ref updated with latest function
+  useEffect(() => {
+    openProjectAtPathRef.current = openProjectAtPath;
+  }, [openProjectAtPath]);
+
+  useEffect(() => {
+    if (hasRestoredRef.current) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    // Wait for openProjectAtPath to be available
+    if (!openProjectAtPathRef.current) {
+      return;
+    }
+
+    const restoreLastProject = async () => {
+      // Mark as restored before attempting, so we don't try multiple times
+      hasRestoredRef.current = true;
+      
+      try {
+        const lastProjectPath = window.localStorage.getItem(LAST_PROJECT_PATH_STORAGE_KEY);
+        if (!lastProjectPath) {
+          return;
+        }
+
+        // Verify the directory still exists before trying to open it
+        try {
+          await invoke<DirectoryEntry[]>("read_directory", {
+            payload: { path: lastProjectPath },
+          });
+          // Directory exists, restore it using the ref to avoid dependency issues
+          const openFn = openProjectAtPathRef.current;
+          if (openFn) {
+            await openFn(lastProjectPath);
+          }
+        } catch {
+          // Directory doesn't exist anymore, clear the stored path
+          window.localStorage.removeItem(LAST_PROJECT_PATH_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.error("Failed to restore last project:", error);
+        // Clear invalid stored path
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(LAST_PROJECT_PATH_STORAGE_KEY);
+        }
+      }
+    };
+
+    void restoreLastProject();
+  }, [openProjectAtPath]); // Re-run when openProjectAtPath is available
 
   const handleOpenProject = useCallback(async () => {
     try {
@@ -396,49 +460,51 @@ export default function WaveletsFragment() {
     }
   }, [openProjectAtPath]);
 
-  const handleCreateProjectClick = useCallback(() => {
-    setIsCreateProjectModalOpen(true);
-  }, []);
-
-  const handleCreateProject = useCallback(
-    async ({ name, location }: { name: string; location: string }) => {
-      if (!name.trim() || !location.trim()) {
+  const handleCreateProjectClick = useCallback(async () => {
+    try {
+      // Use save dialog (Save As style) to get location and folder name in one dialog
+      const selectedPath = await saveDialog({
+        title: "Create New Project",
+        defaultPath: "My Wavelet Project",
+        filters: [],
+      });
+      
+      if (typeof selectedPath !== "string") {
         return;
       }
+
       setIsCreatingProject(true);
+      
+      // The selectedPath is the full path to the folder we want to create
+      const projectPath = selectedPath;
+      const folderName = projectPath.split(/[/\\]/).pop() || "My Wavelet Project";
+      
+      // Check if directory exists
       try {
-        const projectPath = await join(location.trim(), name.trim());
-        
-        // Check if directory exists
-        try {
-          const entries = await invoke<DirectoryEntry[]>("read_directory", {
-            payload: { path: projectPath },
-          });
-          if (entries.length > 0) {
-            alert("Project directory already exists and is not empty");
-            return;
-          }
-        } catch {
-          // Directory doesn't exist, create it by writing a file
-          // write_file creates parent directories automatically
-          const waveletsDir = await join(projectPath, "wavelets");
-          const initFile = await join(waveletsDir, ".gitkeep");
-          await invoke<void>("write_file", {
-            payload: { path: initFile, content: "" },
-          });
+        const entries = await invoke<DirectoryEntry[]>("read_directory", {
+          payload: { path: projectPath },
+        });
+        if (entries.length > 0) {
+          alert("Project directory already exists and is not empty");
+          return;
         }
-        
-        setIsCreateProjectModalOpen(false);
-        await openProjectAtPath(projectPath, { initialName: name.trim(), isNewProject: true });
-      } catch (error) {
-        console.error("Failed to create project:", error);
-        alert(String(error));
-      } finally {
-        setIsCreatingProject(false);
+      } catch {
+        // Directory doesn't exist, create it by writing a file
+        // write_file creates parent directories automatically
+        const initFile = await join(projectPath, ".gitkeep");
+        await invoke<void>("write_file", {
+          payload: { path: initFile, content: "" },
+        });
       }
-    },
-    [openProjectAtPath],
-  );
+      
+      await openProjectAtPath(projectPath, { initialName: folderName, isNewProject: true });
+    } catch (error) {
+      console.error("Failed to create project:", error);
+      alert(String(error));
+    } finally {
+      setIsCreatingProject(false);
+    }
+  }, [openProjectAtPath]);
 
   const writeContent = useCallback(
     async (fileId: string, path: string, content: string) => {
@@ -482,6 +548,40 @@ export default function WaveletsFragment() {
       }
     }
   }, [writeContent]);
+
+  const handleCloseProject = useCallback(async () => {
+    await commitPendingSave();
+    if (project) {
+      treeOpenStateRef.current.delete(project.id);
+    }
+    setProject(null);
+    setSelectedFileId(null);
+    setOpenFiles([]);
+    setActiveFileId(null);
+  }, [commitPendingSave, project]);
+
+  // Listen for menu-close-folder event
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+
+    const setupListener = async () => {
+      try {
+        unlisten = await listen("menu-close-folder", () => {
+          void handleCloseProject();
+        });
+      } catch (error) {
+        console.error("Failed to listen for menu-close-folder event:", error);
+      }
+    };
+
+    void setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [handleCloseProject]);
 
   const handleSelectFile = useCallback(
     async (node: TreeNode) => {
@@ -634,20 +734,14 @@ export default function WaveletsFragment() {
               </button>
               <button
                 onClick={handleCreateProjectClick}
-                className="rounded-md border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200"
+                disabled={isCreatingProject}
+                className="rounded-md border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create New Project
+                {isCreatingProject ? "Creating..." : "Create New Project"}
               </button>
             </div>
           </div>
         </div>
-        {isCreateProjectModalOpen && (
-          <NewProjectModal
-            onClose={() => setIsCreateProjectModalOpen(false)}
-            onCreate={handleCreateProject}
-            isSubmitting={isCreatingProject}
-          />
-        )}
       </section>
     );
   }
@@ -659,6 +753,15 @@ export default function WaveletsFragment() {
           <h2 className="text-lg font-semibold text-slate-100">Wavelets</h2>
           <p className="text-sm text-slate-400">{project.name}</p>
         </div>
+        <button
+          onClick={() => {
+            // Placeholder for Git connection
+            alert("Git connection coming soon");
+          }}
+          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:border-indigo-500/60 hover:bg-slate-800 hover:text-indigo-300"
+        >
+          Connect to Git
+        </button>
       </header>
       <div className="flex flex-1 min-h-0">
         <Sidebar
@@ -755,118 +858,7 @@ export default function WaveletsFragment() {
           </div>
         </div>
       </div>
-      {isCreateProjectModalOpen && (
-        <NewProjectModal
-          onClose={() => setIsCreateProjectModalOpen(false)}
-          onCreate={handleCreateProject}
-          isSubmitting={isCreatingProject}
-        />
-      )}
     </section>
-  );
-}
-
-type NewProjectPayload = {
-  name: string;
-  location: string;
-};
-
-function NewProjectModal({
-  onClose,
-  onCreate,
-  isSubmitting,
-}: {
-  onClose: () => void;
-  onCreate: (payload: NewProjectPayload) => Promise<void> | void;
-  isSubmitting: boolean;
-}) {
-  const [name, setName] = useState("My Wavelet Project");
-  const [location, setLocation] = useState("");
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!name.trim() || !location.trim()) {
-      return;
-    }
-    await onCreate({
-      name: name.trim(),
-      location: location.trim(),
-    });
-  };
-
-  const handleBrowse = async () => {
-    try {
-      const directory = await openDialog({ directory: true });
-      if (typeof directory === "string") {
-        setLocation(directory);
-      }
-    } catch (error) {
-      console.error(error);
-      alert(String(error));
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-100">Create New Project</h2>
-          <p className="text-sm text-slate-400">
-            Choose a location and name for your new wavelet project.
-          </p>
-        </div>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Project name
-            </label>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-              placeholder="My Wavelet Project"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Location
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={location}
-                onChange={(event) => setLocation(event.target.value)}
-                className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-                placeholder="/Users/me/Projects"
-              />
-              <button
-                type="button"
-                onClick={handleBrowse}
-                className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200"
-              >
-                Browse
-              </button>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-colors hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !name.trim() || !location.trim()}
-              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? "Creating..." : "Create"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 
@@ -885,6 +877,43 @@ function Sidebar({
   getInitialOpenState: (projectId: string) => Record<string, boolean>;
   onToggleNode: (projectId: string, nodeId: string, isOpen: boolean) => void;
 }) {
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const handleProjectContextMenu = async (event: ReactMouseEvent<HTMLHeadingElement>) => {
+    if (!project) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  const handleShowProjectInFinder = async () => {
+    if (!project) {
+      return;
+    }
+    setContextMenu(null);
+    try {
+      await invoke<void>("reveal_in_finder", {
+        payload: { path: project.path },
+      });
+    } catch (error) {
+      console.error("Failed to reveal in Finder:", error);
+      alert(String(error));
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+    };
+    if (contextMenu) {
+      document.addEventListener("click", handleClickOutside);
+      return () => {
+        document.removeEventListener("click", handleClickOutside);
+      };
+    }
+  }, [contextMenu]);
   const treeRef = useRef<TreeApi<TreeNode> | null>(null);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const [treeSize, setTreeSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -943,12 +972,27 @@ function Sidebar({
     >
       <div className="border-b border-slate-900 px-4 py-3">
         <h2
-          className="truncate text-sm font-semibold text-slate-200"
+          className="truncate text-sm font-semibold text-slate-200 cursor-pointer"
           title={project ? project.name : "Explorer"}
+          onContextMenu={handleProjectContextMenu}
         >
           {project ? project.name : "Explorer"}
         </h2>
       </div>
+      {contextMenu && project && (
+        <div
+          className="fixed z-50 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleShowProjectInFinder}
+            className="w-full px-4 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800 hover:text-sky-200"
+          >
+            Show in Finder
+          </button>
+        </div>
+      )}
       <nav className="flex-1 min-h-0 p-3 text-[13px]">
         {project ? (
           <div ref={treeContainerRef} className="flex h-full min-h-0">
@@ -978,7 +1022,7 @@ function Sidebar({
                 width={treeSize.width}
                 className="w-full"
               >
-                {(props) => <FileTreeNode {...props} />}
+                {(props) => <FileTreeNode {...props} projectPath={project.path} />}
               </Tree>
             ) : null}
           </div>
@@ -992,9 +1036,10 @@ function Sidebar({
   );
 }
 
-function FileTreeNode({ node, style }: NodeRendererProps<TreeNode>) {
+function FileTreeNode({ node, style, projectPath }: NodeRendererProps<TreeNode> & { projectPath: string }) {
   const isSelected = node.isSelected;
   const isFolder = node.data.kind === "directory";
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     node.handleClick(event);
@@ -1008,32 +1053,89 @@ function FileTreeNode({ node, style }: NodeRendererProps<TreeNode>) {
     node.toggle();
   };
 
+  const handleContextMenu = async (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!isFolder) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  const handleShowInFinder = async () => {
+    if (!isFolder) {
+      return;
+    }
+    setContextMenu(null);
+    try {
+      // If path is empty or just the folder name, it's the root project folder
+      const absolutePath = node.data.path === "" || node.data.path === node.data.name
+        ? projectPath
+        : await join(projectPath, node.data.path);
+      await invoke<void>("reveal_in_finder", {
+        payload: { path: absolutePath },
+      });
+    } catch (error) {
+      console.error("Failed to reveal in Finder:", error);
+      alert(String(error));
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+    };
+    if (contextMenu) {
+      document.addEventListener("click", handleClickOutside);
+      return () => {
+        document.removeEventListener("click", handleClickOutside);
+      };
+    }
+  }, [contextMenu]);
+
   return (
-    <div
-      style={style}
-      className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-tight transition-colors ${
-        isSelected ? "bg-slate-800 text-sky-100" : "text-slate-300 hover:bg-slate-800/60"
-      }`}
-      onClick={handleClick}
-    >
-      {isFolder ? (
-        <button
-          type="button"
-          onClick={handleToggle}
-          className="flex h-5 w-5 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-300"
-          aria-label={node.isOpen ? "Collapse folder" : "Expand folder"}
-        >
-          {node.isOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        </button>
-      ) : (
-        <span className="h-5 w-5" aria-hidden="true">
-          <FileIcon />
+    <>
+      <div
+        style={style}
+        className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-tight transition-colors ${
+          isSelected ? "bg-slate-800 text-sky-100" : "text-slate-300 hover:bg-slate-800/60"
+        }`}
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+      >
+        {isFolder ? (
+          <button
+            type="button"
+            onClick={handleToggle}
+            className="flex h-5 w-5 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-300"
+            aria-label={node.isOpen ? "Collapse folder" : "Expand folder"}
+          >
+            {node.isOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </button>
+        ) : (
+          <span className="h-5 w-5" aria-hidden="true">
+            <FileIcon />
+          </span>
+        )}
+        <span className={`truncate text-left ${isSelected ? "text-slate-100" : "text-slate-200"}`}>
+          {node.data.name}
         </span>
+      </div>
+      {contextMenu && isFolder && (
+        <div
+          className="fixed z-50 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleShowInFinder}
+            className="w-full px-4 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800 hover:text-sky-200"
+          >
+            Show in Finder
+          </button>
+        </div>
       )}
-      <span className={`truncate text-left ${isSelected ? "text-slate-100" : "text-slate-200"}`}>
-        {node.data.name}
-      </span>
-    </div>
+    </>
   );
 }
 

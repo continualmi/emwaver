@@ -12,7 +12,6 @@ import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
 import EMWaverFragment from "./components/EMWaverFragment";
-import GitFragment from "./components/GitFragment";
 import HomePage from "./components/HomePage";
 
 type DirectoryEntry = {
@@ -56,7 +55,7 @@ type OpenFile = {
   isDirty: boolean;
   isSaving: boolean;
 };
-export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver" | "git";
+export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver";
 
 type RecentProject = {
   path: string;
@@ -681,7 +680,8 @@ function App() {
     setSelectedFileId(null);
     setOpenFiles([]);
     setActiveFileId(null);
-    setActivePane("emwaver");
+    // Don't switch panes - stay on current fragment
+    // setActivePane("emwaver");
   }, [commitPendingSave, selectedProjectId]);
 
   const handleFragmentClick = useCallback((fragment: FragmentType) => {
@@ -774,11 +774,7 @@ function App() {
 
     const register = async () => {
       try {
-        disposers.push(
-          await listen("menu-close-folder", () => {
-            void handleCloseProject();
-          }),
-        );
+        // menu-close-folder is handled by WaveletsFragment now
 
         disposers.push(
           await listen("menu-new-project", () => {
@@ -816,11 +812,6 @@ function App() {
           }),
         );
 
-        disposers.push(
-          await listen("menu-show-git", () => {
-            handleFragmentClick("git");
-          }),
-        );
 
 
         disposers.push(
@@ -856,13 +847,12 @@ function App() {
         }
       });
     };
-  }, [decreaseLayoutSize, handleCloseProject, handleOpenProject, handleFragmentClick, increaseLayoutSize, resetLayoutSizes]);
+  }, [decreaseLayoutSize, handleOpenProject, handleFragmentClick, increaseLayoutSize, resetLayoutSizes]);
 
   const isWaveletsActive = activePane === "wavelets";
   const isISMActive = activePane === "ism";
   const isSamplerActive = activePane === "sampler";
   const isEMWaverActive = activePane === "emwaver";
-  const isGitActive = activePane === "git";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -877,7 +867,6 @@ function App() {
         <Pane active={isWaveletsActive}><WaveletsFragment /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
-        <Pane active={isGitActive}><GitFragment /></Pane>
       </div>
       {isModalOpen && (
         <NewProjectModal
@@ -1070,12 +1059,6 @@ function ActivityBar({ activePane, onFragmentClick }: ActivityBarProps) {
         onClick={() => onFragmentClick("sampler")}
         icon={<SamplerIcon />}
       />
-      <ActivityButton
-        label="Git"
-        isActive={activePane === "git"}
-        onClick={() => onFragmentClick("git")}
-        icon={<GitIcon />}
-      />
     </aside>
   );
 }
@@ -1184,15 +1167,6 @@ function EMWaverIcon() {
   );
 }
 
-function GitIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-full w-full">
-      <circle cx="7" cy="7" r="2" />
-      <circle cx="13" cy="13" r="2" />
-      <path d="M9 7l2 6" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 
 // TerminalPanel component removed - ESP-IDF functionality removed
