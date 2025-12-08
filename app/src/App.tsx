@@ -56,7 +56,7 @@ type OpenFile = {
   isDirty: boolean;
   isSaving: boolean;
 };
-export type FragmentType = "explorer" | "wavelets" | "ism" | "sampler" | "emwaver" | "git";
+export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver" | "git";
 
 type RecentProject = {
   path: string;
@@ -130,7 +130,6 @@ function App() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [activePane, setActivePane] = useState<FragmentType>("emwaver");
-  const [isExplorerVisible, setIsExplorerVisible] = useState(true);
   const sidebarResizeActive = useRef(false);
   const sidebarStartX = useRef(0);
   const sidebarStartWidth = useRef(0);
@@ -451,31 +450,6 @@ function App() {
   }, [activeFile]);
 
 
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      if (sidebarResizeActive.current && isExplorerVisible) {
-        const delta = event.clientX - sidebarStartX.current;
-        const max = Math.min(SIDEBAR_MAX_WIDTH, window.innerWidth * 0.6);
-        const width = clamp(sidebarStartWidth.current + delta, SIDEBAR_MIN_WIDTH, max);
-        setSidebarWidth(width);
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (sidebarResizeActive.current) {
-        sidebarResizeActive.current = false;
-      }
-      document.body.style.removeProperty("cursor");
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isExplorerVisible]);
 
   useEffect(
     () => () => {
@@ -707,57 +681,13 @@ function App() {
     setSelectedFileId(null);
     setOpenFiles([]);
     setActiveFileId(null);
-    setActivePane("explorer");
-    setIsExplorerVisible(true);
+    setActivePane("emwaver");
   }, [commitPendingSave, selectedProjectId]);
-
-  const handleExplorerButtonClick = useCallback(() => {
-    if (activePane === "explorer") {
-      setIsExplorerVisible((prev) => !prev);
-    } else {
-      setActivePane("explorer");
-      setIsExplorerVisible(true);
-    }
-  }, [activePane]);
 
   const handleFragmentClick = useCallback((fragment: FragmentType) => {
     setActivePane(fragment);
-    setIsExplorerVisible(fragment === "explorer");
   }, []);
 
-  const toggleExplorerVisibility = useCallback(() => {
-    setIsExplorerVisible((prev) => {
-      const next = !prev;
-      if (next) {
-        setActivePane("explorer");
-      }
-      return next;
-    });
-  }, []);
-
-  const showExplorer = useCallback(() => {
-    setActivePane("explorer");
-    setIsExplorerVisible(true);
-  }, []);
-
-  const showFragment = useCallback((fragment: FragmentType) => {
-    setActivePane(fragment);
-    setIsExplorerVisible(fragment === "explorer");
-  }, []);
-
-  const handleSidebarMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!isExplorerVisible) {
-        return;
-      }
-      event.preventDefault();
-      sidebarResizeActive.current = true;
-      sidebarStartX.current = event.clientX;
-      sidebarStartWidth.current = sidebarWidth;
-      document.body.style.cursor = "col-resize";
-    },
-    [isExplorerVisible, sidebarWidth],
-  );
 
   const adjustZoomLevel = useCallback((delta: number) => {
     setZoomLevel((prev) => {
@@ -852,57 +782,43 @@ function App() {
 
         disposers.push(
           await listen("menu-new-project", () => {
-            showExplorer();
             setIsModalOpen(true);
           }),
         );
 
         disposers.push(
           await listen("menu-open-project", () => {
-            showExplorer();
             void handleOpenProject();
           }),
         );
 
         disposers.push(
-          await listen("menu-toggle-explorer", () => {
-            toggleExplorerVisibility();
-          }),
-        );
-
-        disposers.push(
-          await listen("menu-show-explorer", () => {
-            showExplorer();
-          }),
-        );
-
-        disposers.push(
           await listen("menu-show-wavelets", () => {
-            showFragment("wavelets");
+            handleFragmentClick("wavelets");
           }),
         );
 
         disposers.push(
           await listen("menu-show-ism", () => {
-            showFragment("ism");
+            handleFragmentClick("ism");
           }),
         );
 
         disposers.push(
           await listen("menu-show-sampler", () => {
-            showFragment("sampler");
+            handleFragmentClick("sampler");
           }),
         );
 
         disposers.push(
           await listen("menu-show-emwaver", () => {
-            showFragment("emwaver");
+            handleFragmentClick("emwaver");
           }),
         );
 
         disposers.push(
           await listen("menu-show-git", () => {
-            showFragment("git");
+            handleFragmentClick("git");
           }),
         );
 
@@ -940,146 +856,27 @@ function App() {
         }
       });
     };
-  }, [activePane, decreaseLayoutSize, handleCloseProject, handleOpenProject, increaseLayoutSize, resetLayoutSizes, showExplorer, showFragment, toggleExplorerVisibility]);
+  }, [decreaseLayoutSize, handleCloseProject, handleOpenProject, handleFragmentClick, increaseLayoutSize, resetLayoutSizes]);
 
-  const isExplorerActive = activePane === "explorer";
   const isWaveletsActive = activePane === "wavelets";
   const isISMActive = activePane === "ism";
   const isSamplerActive = activePane === "sampler";
   const isEMWaverActive = activePane === "emwaver";
   const isGitActive = activePane === "git";
 
-  // Terminal session management removed
-
-  const explorerPane = selectedProject ? (
-    <div className="flex flex-1 min-h-0">
-      <Sidebar
-        width={sidebarWidth}
-        project={selectedProject}
-        selectedFileId={selectedFileId}
-        onSelectNode={handleTreeSelection}
-        isVisible={isExplorerVisible}
-        getInitialOpenState={getTreeOpenState}
-        onToggleNode={updateTreeOpenState}
-      />
-      {isExplorerVisible && (
-        <div
-          onMouseDown={handleSidebarMouseDown}
-          className="flex w-1 cursor-col-resize items-stretch bg-slate-900"
-        >
-          <span className="mx-auto h-full w-px bg-slate-800" />
-        </div>
-      )}
-      <div className="flex flex-1 flex-col min-h-0">
-        <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-            {openFiles.map((file) => {
-              const isActive = file.id === activeFileId;
-              const isSaving = file.isSaving;
-              const isDirty = !file.isSaving && file.isDirty;
-              return (
-                <div
-                  key={file.id}
-                  className={`group flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors ${
-                    isActive
-                      ? "bg-slate-800 text-slate-100"
-                      : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleSelectTab(file.id)}
-                    className="flex max-w-[200px] items-center gap-2 truncate text-left"
-                  >
-                    {(isSaving || isDirty) && (
-                      <span
-                        className={
-                          isSaving
-                            ? "inline-flex h-2.5 w-2.5 shrink-0 animate-spin rounded-full border-2 border-sky-400 border-t-transparent"
-                            : "inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400"
-                        }
-                        aria-label={isSaving ? "Saving" : "Unsaved changes"}
-                      />
-                    )}
-                    <span className="truncate">{file.name}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleCloseTab(file.id)}
-                    className="rounded px-1 text-slate-500 transition-colors hover:text-rose-400"
-                    aria-label={`Close ${file.name}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
-            {openFiles.length === 0 && (
-              <span className="shrink-0 px-3 py-2 text-xs text-slate-500">No files open</span>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 bg-slate-950">
-          {activeFile ? (
-            <div className="flex h-full w-full min-h-0">
-              <MonacoEditor
-                key={activeFile.id}
-                path={activeFile.relativePath}
-                value={activeFile.content}
-                language={activeFile.language}
-                onChange={handleEditorChange}
-                options={MONACO_EDITOR_OPTIONS}
-                theme="vs-dark"
-                height="100%"
-                loading={
-                  <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-                    Loading editor...
-                  </div>
-                }
-              />
-            </div>
-          ) : isLoadingFile ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-              Loading file...
-            </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-              Choose a file from the explorer to open it.
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  ) : (
-    <WelcomePage
-      onStartNewProject={() => {
-        showExplorer();
-        setIsModalOpen(true);
-      }}
-      onOpenProject={() => {
-        showExplorer();
-        void handleOpenProject();
-      }}
-      onOpenRecent={handleOpenRecentProject}
-      recentProjects={recentProjects}
-    />
-  );
-
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
       <ActivityBar
         activePane={activePane}
-        isExplorerVisible={isExplorerVisible}
         onFragmentClick={handleFragmentClick}
       />
       <div className="relative flex flex-1 min-h-0">
-        <Pane active={isExplorerActive}>{explorerPane}</Pane>
-        <Pane active={isWaveletsActive}><WaveletsFragment /></Pane>
-        <Pane active={isISMActive}><ISMFragment /></Pane>
-        <Pane active={isSamplerActive}><SamplerFragment /></Pane>
         <Pane active={isEMWaverActive}>
           <HomePage onNavigateToFragment={handleFragmentClick} />
         </Pane>
+        <Pane active={isWaveletsActive}><WaveletsFragment /></Pane>
+        <Pane active={isISMActive}><ISMFragment /></Pane>
+        <Pane active={isSamplerActive}><SamplerFragment /></Pane>
         <Pane active={isGitActive}><GitFragment /></Pane>
       </div>
       {isModalOpen && (
@@ -1243,19 +1040,17 @@ function Sidebar({
 
 type ActivityBarProps = {
   activePane: FragmentType;
-  isExplorerVisible: boolean;
   onFragmentClick: (fragment: FragmentType) => void;
 };
 
-function ActivityBar({ activePane, isExplorerVisible, onFragmentClick }: ActivityBarProps) {
-  const explorerActive = activePane === "explorer" && isExplorerVisible;
+function ActivityBar({ activePane, onFragmentClick }: ActivityBarProps) {
   return (
     <aside className="flex w-14 shrink-0 flex-col items-center gap-3 border-r border-slate-900 bg-slate-950 py-4 overflow-y-auto">
       <ActivityButton
-        label="Explorer"
-        isActive={explorerActive}
-        onClick={() => onFragmentClick("explorer")}
-        icon={<ExplorerIcon />}
+        label="EMWaver"
+        isActive={activePane === "emwaver"}
+        onClick={() => onFragmentClick("emwaver")}
+        icon={<EMWaverIcon />}
       />
       <ActivityButton
         label="Wavelets"
@@ -1274,12 +1069,6 @@ function ActivityBar({ activePane, isExplorerVisible, onFragmentClick }: Activit
         isActive={activePane === "sampler"}
         onClick={() => onFragmentClick("sampler")}
         icon={<SamplerIcon />}
-      />
-      <ActivityButton
-        label="EMWaver"
-        isActive={activePane === "emwaver"}
-        onClick={() => onFragmentClick("emwaver")}
-        icon={<EMWaverIcon />}
       />
       <ActivityButton
         label="Git"
@@ -1437,16 +1226,6 @@ function IconButton({ onClick, label, icon, disabled = false, isActive = false }
   );
 }
 
-function ExplorerIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-full w-full">
-      <rect x="3" y="4" width="14" height="12" rx="2" />
-      <line x1="7" y1="4" x2="7" y2="16" />
-      <line x1="9" y1="8" x2="16" y2="8" />
-      <line x1="9" y1="12" x2="16" y2="12" />
-    </svg>
-  );
-}
 
 function WaveletIcon() {
   return (
