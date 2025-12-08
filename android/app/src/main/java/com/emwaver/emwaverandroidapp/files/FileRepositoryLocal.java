@@ -293,4 +293,51 @@ public final class FileRepositoryLocal {
         fos.write(data);
         fos.close();
     }
+
+    // Synchronous methods for BLE file sync server
+    public List<UserFileMetadata> listFiles() {
+        List<UserFileMetadata> result = new ArrayList<>();
+        File[] files = storageDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile()) {
+                    String name = file.getName();
+                    String id = name;
+                    long size = file.length();
+                    long lastModified = file.lastModified();
+                    String etag = String.valueOf(lastModified);
+                    String ext = name.contains(".") ? name.substring(name.lastIndexOf(".")) : "";
+                    String kind = "file";
+                    String contentType = "text/plain";
+                    result.add(new UserFileMetadata(id, name, ext, kind, etag, size, contentType));
+                }
+            }
+        }
+        return result;
+    }
+
+    public byte[] readFile(String filename) throws IOException {
+        File file = new File(storageDir, filename);
+        if (!file.exists()) {
+            throw new IOException("File not found: " + filename);
+        }
+        return readFile(file);
+    }
+
+    public void saveFile(String filename, byte[] data) throws IOException {
+        File file = new File(storageDir, filename);
+        writeFile(file, data);
+        Log.d(TAG, "Saved file: " + filename + " (" + data.length + " bytes)");
+    }
+
+    public void deleteFile(String filename) throws IOException {
+        File file = new File(storageDir, filename);
+        if (!file.exists()) {
+            throw new IOException("File not found: " + filename);
+        }
+        if (!file.delete()) {
+            throw new IOException("Failed to delete file: " + filename);
+        }
+        Log.d(TAG, "Deleted file: " + filename);
+    }
 }
