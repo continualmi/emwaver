@@ -10,6 +10,8 @@ btleplug = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "io-util", "io-std"] }
 tokio-stream = "0.1"
 uuid = { version = "1", features = ["macro-diagnostics"] }
+serialport = "4"
+sha2 = "0.10"
 
 [dev-dependencies]
 assert_cmd = "2"

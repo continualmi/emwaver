@@ -22,34 +22,27 @@ Wavelets are the user-authored extension bundles (manifest + JavaScript) that pl
 - **In-wavelet logging**: scripts surface their output through Wavelet UI components (e.g., `UI.logViewer`) instead of the legacy console text pane. Avoid adding new out-of-band logging surfaces.
 
 ## Wavelet Development & File Sync
-The EMWaver ecosystem supports flexible wavelet development through a transparent file sync pipeline that requires only USB connectivity. Developers can write wavelet scripts on their computer and sync them to the mobile app via the EMWaver device acting as a bridge. See `skills/wavelet-sync.md` for the complete architecture, implementation details, and workflow examples.
+The EMWaver CLI provides Git-like file management for wavelets stored on the mobile app. The CLI connects **directly to the Android/iOS app via BLE** (no firmware involved in file sync).
 
 **Key Design Points**:
-- **Pipeline**: `CLI (Computer) ↔ UART/USB ↔ Firmware ↔ BLE ↔ Android/iOS`
-- **Minimal requirements**: Only USB connection needed (no WiFi, Bluetooth on computer, or internet)
-- **Git-like workflow**: Commands mirror `git` (`push`, `pull`, `status`, `list`)
-- **Chunked streaming**: Files transferred in 128–256KB chunks to respect firmware RAM limits
-- **Stateless firmware**: Device acts as transparent bridge without persisting files
+- **Pipeline**: `CLI (Computer) ↔ BLE ↔ Android/iOS App`
+- **Direct BLE**: Computer connects directly to smartphone via Bluetooth
+- **Git-like workflow**: Commands like `git` (`clone`, `push`, `pull`, `list`, `rm`)
+- **Android as peripheral**: Android app advertises BLE GATT server with file sync service
 - **App-side storage**: Mobile apps handle persistence via `FileRepositoryLocal`
+- **`.emwaver` folder**: Clone creates Git-like `.emwaver` directory for metadata
 
 **CLI Commands**:
 ```bash
-emwaver sync push mywavelet.js    # Upload wavelet to device
-emwaver sync pull mywavelet.js    # Download wavelet from device
-emwaver sync list                  # List remote files
-emwaver sync status                # Show sync state
+emwaver clone wavelets        # Clone all files (creates .emwaver folder)
+emwaver list                  # List files on device
+emwaver push mywavelet.js     # Upload wavelet to device
+emwaver pull mywavelet.js     # Download wavelet from device
+emwaver rm oldfile.js         # Remove file from device
+emwaver status                # Show sync state
 ```
 
-**Firmware Commands** (via UART):
-```bash
-sync --start --name <file> --size <bytes> --type wavelet
-sync --chunk --seq <n> --data <hex>
-sync --commit --hash <sha256>
-sync --list
-sync --get --name <file>
-```
-
-**BLE Protocol**: New file transfer characteristic (UUID `48c7158e-0c3b-4e90-a847-452a15b14191`) carries JSON-encoded packets (`start`, `chunk`, `commit`) between firmware and app.
+**BLE Protocol**: File sync service (UUID `FILE_SYNC_SERVICE_UUID`) with characteristic for JSON packets (`list`, `push`, `pull`, `remove`) between CLI and app.
 
 ## Cross-Cutting Practices
 - Keep commits scoped and imperative (e.g., `driver: fix cc1101 init`, `android: update wavelet renderer`); never bundle unrelated changes.
@@ -63,8 +56,8 @@ sync --get --name <file>
 - Firmware lives in `main/` (modules such as `ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`); regenerate ESP-IDF managed components with `idf.py reconfigure` instead of editing generated files.
 - **Environment**: `source setup.sh`, then `idf.py set-target esp32s3`, `idf.py build`, `idf.py -p <port> flash`, `idf.py monitor`; keep hardware ports configurable per developer.
 - **Coding style**: 4-space indent, K&R braces, `snake_case`, `static` internals, ESP-IDF headers before project headers; Python helpers follow Black defaults.
-- **Command protocol**: every control packet is ASCII using Unix-style verbs and flags (e.g., `spi --open --name cc1101 --port 2 --miso 13 --mosi 11 --sck 12 --cs 10 --clock 8000000`). Current firmware supports hardware-agnostic SPI operations (`--open`, `--read`, `--write`, `--close` with `--data` hex payloads), sampler routing (`sample --start --mode pwm --channel 3 --freq 25000 --duty 0.4`, `sample --stop`), and file sync operations (`sync --start`, `sync --chunk`, `sync --commit`). Responses echo the same structure (`ok ...`, `err ...`) so smartphone and CLI clients stay aligned.
-- **BLE services**: Custom service (UUID `45c7158e-...`) exposes command characteristic (write), notification characteristic (read), and file transfer characteristic (bidirectional). File sync packets are JSON-encoded for firmware-to-app communication. See `skills/wavelet-sync.md` for packet format.
+- **Command protocol**: every control packet is ASCII using Unix-style verbs and flags (e.g., `spi --open --name cc1101 --port 2 --miso 13 --mosi 11 --sck 12 --cs 10 --clock 8000000`). Current firmware supports hardware-agnostic SPI operations (`--open`, `--read`, `--write`, `--close` with `--data` hex payloads) and sampler routing (`sample --start --mode pwm --channel 3 --freq 25000 --duty 0.4`, `sample --stop`). Responses echo the same structure (`ok ...`, `err ...`) so smartphone and CLI clients stay aligned.
+- **BLE services**: Custom service (UUID `45c7158e-...`) exposes command characteristic (write) and notification characteristic (read) for device control commands.
 - **Testing**: flash to hardware for smoke verification, extend `pytest_hello_world.py` with `@pytest.mark.host_test` suites, and document timing-sensitive paths inline.
 - **Build commands**:
 ```bash

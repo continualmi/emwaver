@@ -2,8 +2,11 @@ use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Result};
-use btleplug::api::{Central, CentralEvent, CentralState, Characteristic, Manager as _, Peripheral as _, ScanFilter, WriteType};
+use anyhow::{Context, Result, anyhow, bail};
+use btleplug::api::{
+    Central, CentralEvent, CentralState, Characteristic, Manager as _, Peripheral as _, ScanFilter,
+    WriteType,
+};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::runtime::Runtime;
@@ -24,8 +27,13 @@ pub fn run_shell(verbose: bool) -> Result<()> {
 }
 
 async fn run_shell_async(verbose: bool) -> Result<()> {
-    let manager = Manager::new().await.context("failed to initialize BLE manager")?;
-    let adapters = manager.adapters().await.context("failed to list BLE adapters")?;
+    let manager = Manager::new()
+        .await
+        .context("failed to initialize BLE manager")?;
+    let adapters = manager
+        .adapters()
+        .await
+        .context("failed to list BLE adapters")?;
     let adapter = adapters
         .into_iter()
         .next()
@@ -41,7 +49,9 @@ async fn run_shell_async(verbose: bool) -> Result<()> {
             return Ok(());
         }
         CentralState::Unknown => {
-            println!("Bluetooth adapter state is unknown. Ensure Bluetooth is enabled if discovery fails.");
+            println!(
+                "Bluetooth adapter state is unknown. Ensure Bluetooth is enabled if discovery fails."
+            );
         }
         CentralState::PoweredOn => {}
     }
@@ -137,8 +147,15 @@ async fn handle_event(adapter: &Adapter, event: CentralEvent) -> Result<Option<P
         CentralEvent::DeviceDiscovered(id)
         | CentralEvent::DeviceUpdated(id)
         | CentralEvent::DeviceConnected(id) => {
-            let peripheral = adapter.peripheral(&id).await.context("failed to access peripheral")?;
-            if let Some(props) = peripheral.properties().await.context("failed to read peripheral properties")? {
+            let peripheral = adapter
+                .peripheral(&id)
+                .await
+                .context("failed to access peripheral")?;
+            if let Some(props) = peripheral
+                .properties()
+                .await
+                .context("failed to read peripheral properties")?
+            {
                 if let Some(name) = props.local_name {
                     if name == TARGET_DEVICE_NAME {
                         return Ok(Some(peripheral));
@@ -148,9 +165,19 @@ async fn handle_event(adapter: &Adapter, event: CentralEvent) -> Result<Option<P
             Ok(None)
         }
         CentralEvent::DeviceDisconnected(_) => Ok(None),
-        CentralEvent::ManufacturerDataAdvertisement { id, manufacturer_data: _ } => {
-            let peripheral = adapter.peripheral(&id).await.context("failed to access peripheral")?;
-            if let Some(props) = peripheral.properties().await.context("failed to read peripheral properties")? {
+        CentralEvent::ManufacturerDataAdvertisement {
+            id,
+            manufacturer_data: _,
+        } => {
+            let peripheral = adapter
+                .peripheral(&id)
+                .await
+                .context("failed to access peripheral")?;
+            if let Some(props) = peripheral
+                .properties()
+                .await
+                .context("failed to read peripheral properties")?
+            {
                 if let Some(name) = props.local_name {
                     if name == TARGET_DEVICE_NAME {
                         return Ok(Some(peripheral));
@@ -268,7 +295,10 @@ fn parse_bracket_value(content: &str) -> Result<u8> {
         bail!("empty value inside brackets");
     }
 
-    let value = if let Some(stripped) = content.strip_prefix("0x").or_else(|| content.strip_prefix("0X")) {
+    let value = if let Some(stripped) = content
+        .strip_prefix("0x")
+        .or_else(|| content.strip_prefix("0X"))
+    {
         u8::from_str_radix(stripped, 16).context("invalid hex value")?
     } else {
         u8::from_str_radix(content, 10).context("invalid decimal value")?
@@ -314,4 +344,43 @@ fn render_notification(data: &[u8], verbose: bool) {
 fn print_prompt() -> Result<()> {
     print!("<emwaver> ");
     io::stdout().flush().context("failed to flush stdout")
+}
+
+// Helper function to open serial port for sync operations
+pub fn open_serial_port() -> Result<Box<dyn serialport::SerialPort>> {
+    use serialport::*;
+
+    // Try to find EMWaver device on common serial ports
+    let ports = available_ports()?;
+
+    for port in &ports {
+        if let SerialPortType::UsbPort(info) = &port.port_type {
+            // ESP32-S3 typical USB identifiers
+            if info.vid == 0x303a || // Espressif VID
+               port.port_name.contains("usbserial") ||
+               port.port_name.contains("ttyACM")
+            {
+                println!("Found device on: {}", port.port_name);
+                return serialport::new(&port.port_name, 115_200)
+                    .timeout(Duration::from_secs(2))
+                    .open()
+                    .context(format!("Failed to open {}", port.port_name));
+            }
+        }
+    }
+
+    // Fallback: try common port names directly
+    for port_name in &["/dev/ttyACM0", "/dev/ttyUSB0", "/dev/cu.usbserial-0001"] {
+        if let Ok(port) = serialport::new(*port_name, 115_200)
+            .timeout(Duration::from_secs(2))
+            .open()
+        {
+            println!("Using serial port: {}", port_name);
+            return Ok(port);
+        }
+    }
+
+    Err(anyhow!(
+        "No EMWaver device found. Ensure device is connected via USB."
+    ))
 }

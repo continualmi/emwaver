@@ -37,6 +37,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
+import com.emwaver.emwaverandroidapp.files.FileSyncManager;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -64,6 +66,8 @@ public class BLEService extends Service {
         UUID.fromString("46c7158e-0c3b-4e90-a847-452a15b14191");
     private static final UUID NOTIF_CHAR_UUID = 
         UUID.fromString("47c7158e-0c3b-4e90-a847-452a15b14191");
+    private static final UUID FILE_CHAR_UUID = 
+        UUID.fromString("48c7158e-0c3b-4e90-a847-452a15b14191");
     
     // GATT Client configuration descriptor UUID
     private static final UUID CLIENT_CONFIG_DESCRIPTOR_UUID = 
@@ -76,6 +80,7 @@ public class BLEService extends Service {
     private BluetoothGatt bluetoothGatt;
     private BluetoothGattCharacteristic cmdCharacteristic;
     private BluetoothGattCharacteristic notifCharacteristic;
+    private BluetoothGattCharacteristic fileCharacteristic;
     
     // Connection state variables
     private boolean isConnected = false;
@@ -97,6 +102,9 @@ public class BLEService extends Service {
     
     // Store firmware version information
     private String firmwareVersion = "Unknown";
+    
+    // BLE File Sync Server (for CLI connection)
+    private BLEFileSyncServer fileSyncServer;
 
     // Native method declarations
     public native void storeBulkPkt(byte[] data);
@@ -118,6 +126,8 @@ public class BLEService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        Log.d(TAG, "=== BLE Service onCreate() called ===");
+        
         bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         if (bluetoothManager != null) {
             bluetoothAdapter = bluetoothManager.getAdapter();
@@ -129,7 +139,19 @@ public class BLEService extends Service {
         // Start as a foreground service with initial "Not connected" notification
         startForeground(NOTIFICATION_ID, createNotification("Not connected"));
         
-        Log.d(TAG, "BLE Service created");
+        Log.d(TAG, "=== About to start BLE file sync server ===");
+        
+        // Start BLE file sync server for CLI connections
+        try {
+            fileSyncServer = new BLEFileSyncServer(this);
+            Log.d(TAG, "=== BLEFileSyncServer created ===");
+            fileSyncServer.start();
+            Log.d(TAG, "=== BLEFileSyncServer.start() called ===");
+        } catch (Exception e) {
+            Log.e(TAG, "=== Failed to start BLEFileSyncServer ===", e);
+        }
+        
+        Log.d(TAG, "=== BLE Service created complete ===");
     }
 
     // Create the notification channel (required for Android O and above)
@@ -257,6 +279,13 @@ public class BLEService extends Service {
     @Override
     public void onDestroy() {
         disconnectGatt();
+        
+        // Stop BLE file sync server
+        if (fileSyncServer != null) {
+            fileSyncServer.stop();
+            fileSyncServer = null;
+        }
+        
         super.onDestroy();
         Log.d(TAG, "BLE Service destroyed");
     }
@@ -498,35 +527,52 @@ public class BLEService extends Service {
                     
                     cmdCharacteristic = service.getCharacteristic(CMD_CHAR_UUID);
                     notifCharacteristic = service.getCharacteristic(NOTIF_CHAR_UUID);
+                    fileCharacteristic = service.getCharacteristic(FILE_CHAR_UUID);
                     
                     Log.d(TAG, "Found EMWaver service and characteristics");
                     Log.d(TAG, "CMD Char: " + (cmdCharacteristic != null));
                     Log.d(TAG, "NOTIF Char: " + (notifCharacteristic != null));
+                    Log.d(TAG, "FILE Char: " + (fileCharacteristic != null));
                     
-                    // Enable notifications
-                    if (notifCharacteristic != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            if (ActivityCompat.checkSelfPermission(BLEService.this, Manifest.permission.BLUETOOTH_CONNECT) 
-                                    != PackageManager.PERMISSION_GRANTED) {
-                                showToast("Missing BLUETOOTH_CONNECT permission");
-                                return;
-                            }
+                    // Enable notifications for both characteristics
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        if (ActivityCompat.checkSelfPermission(BLEService.this, Manifest.permission.BLUETOOTH_CONNECT) 
+                                != PackageManager.PERMISSION_GRANTED) {
+                            showToast("Missing BLUETOOTH_CONNECT permission");
+                            return;
                         }
-                        
+                    }
+                    
+                    // Enable notifications for command responses
+                    if (notifCharacteristic != null) {
                         boolean success = gatt.setCharacteristicNotification(notifCharacteristic, true);
-                        Log.d(TAG, "Set characteristic notification: " + success);
+                        Log.d(TAG, "Set notification characteristic: " + success);
                         
-                        // Enable notifications on the client side
                         BluetoothGattDescriptor descriptor = notifCharacteristic.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID);
                         if (descriptor != null) {
                             descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                             gatt.writeDescriptor(descriptor);
                             Log.d(TAG, "Notification descriptor write initiated");
                         } else {
-                            Log.e(TAG, "Client config descriptor not found");
+                            Log.e(TAG, "Notification config descriptor not found");
                         }
                     } else {
                         Log.e(TAG, "Notification characteristic not found");
+                    }
+                    
+                    // Enable notifications for file transfer
+                    if (fileCharacteristic != null) {
+                        handler.postDelayed(() -> {
+                            boolean success = gatt.setCharacteristicNotification(fileCharacteristic, true);
+                            Log.d(TAG, "Set file characteristic notification: " + success);
+                            
+                            BluetoothGattDescriptor descriptor = fileCharacteristic.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID);
+                            if (descriptor != null) {
+                                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                                gatt.writeDescriptor(descriptor);
+                                Log.d(TAG, "File transfer descriptor write initiated");
+                            }
+                        }, 500);
                     }
                 } else {
                     Log.w(TAG, "EMWaver service not found!");
@@ -589,10 +635,12 @@ public class BLEService extends Service {
 
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            if (characteristic.getUuid().equals(NOTIF_CHAR_UUID)) {
-                byte[] data = characteristic.getValue();
-                if (data != null && data.length > 0) {
+            byte[] data = characteristic.getValue();
+            if (data != null && data.length > 0) {
+                if (characteristic.getUuid().equals(NOTIF_CHAR_UUID)) {
                     processReceivedData(data);
+                } else if (characteristic.getUuid().equals(FILE_CHAR_UUID)) {
+                    processFileTransferData(data);
                 }
             }
         }
@@ -645,6 +693,44 @@ public class BLEService extends Service {
             Log.i(TAG, String.format("Reception Speed: %.2f bps", speedBps));
             lastLogTimeMillis = currentTime;
         }
+    }
+    
+    // Process file transfer data from BLE device
+    private void processFileTransferData(byte[] data) {
+        Log.d(TAG, "File transfer packet received: " + data.length + " bytes");
+        FileSyncManager syncManager = FileSyncManager.getInstance(this);
+        
+        // Set callback so FileSyncManager can send responses back
+        syncManager.setBleCallback(new FileSyncManager.BleResponseCallback() {
+            @Override
+            public void sendFileResponse(String json) {
+                sendFileTransferResponse(json);
+            }
+        });
+        
+        syncManager.handleFilePacket(data);
+    }
+    
+    // Send response back via file transfer characteristic
+    private void sendFileTransferResponse(String json) {
+        if (fileCharacteristic == null || bluetoothGatt == null) {
+            Log.e(TAG, "Cannot send file response: characteristic or gatt is null");
+            return;
+        }
+        
+        byte[] data = json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED) {
+                Log.e(TAG, "Missing BLUETOOTH_CONNECT permission");
+                return;
+            }
+        }
+        
+        fileCharacteristic.setValue(data);
+        boolean success = bluetoothGatt.writeCharacteristic(fileCharacteristic);
+        Log.d(TAG, "File response written: " + success + " (" + data.length + " bytes)");
     }
 
     // Start scanning for BLE devices
@@ -1192,5 +1278,35 @@ public class BLEService extends Service {
     
     public void setFirmwareVersion(String version) {
         this.firmwareVersion = version;
+    }
+
+    // File sync server control methods
+    public void startFileSyncServer() {
+        if (fileSyncServer != null) {
+            Log.d(TAG, "File sync server already exists, restarting...");
+            fileSyncServer.stop();
+        }
+        try {
+            fileSyncServer = new BLEFileSyncServer(this);
+            fileSyncServer.start();
+            Log.i(TAG, "✓ File sync server started via UI");
+            showToast("File sync enabled - CLI can now connect");
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start file sync server", e);
+            showToast("Failed to start file sync: " + e.getMessage());
+        }
+    }
+
+    public void stopFileSyncServer() {
+        if (fileSyncServer != null) {
+            fileSyncServer.stop();
+            fileSyncServer = null;
+            Log.i(TAG, "File sync server stopped via UI");
+            showToast("File sync disabled");
+        }
+    }
+
+    public boolean isFileSyncServerRunning() {
+        return fileSyncServer != null;
     }
 } 
