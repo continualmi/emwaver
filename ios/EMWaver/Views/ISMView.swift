@@ -166,10 +166,7 @@ struct ISMView: View {
             }
         }
         .sheet(isPresented: $showingSettingsSheet) {
-            NavigationView {
-                ISMSettingsView()
-                    .environmentObject(SettingsManager.shared)
-            }
+            SettingsSheet()
         }
         .sheet(isPresented: $showLoadingAlert) {
             LoadingDialogView(
