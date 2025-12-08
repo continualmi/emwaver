@@ -108,26 +108,35 @@ public class SamplerFragment extends Fragment {
 
     // Add PINS array to match UsbFragment
     private static final String[] PINS = {
-            "GPIO0 (IO0)",
-            "CC1101 GDO0 (IO1)",
-            "CC1101 GDO2 (IO2)",
-            
-            "IR TX (IO4)",
-            "IR RX (IO5)",
-            "GPIO6 (IO6)",      // Schematic shows GPIO6 with overbar
+            "RFM69 DIO0 (IO1)",
+            "RFM69 DIO1 (IO2)",
+            "RFM69 DIO2 (IO42)",
+            "RFM69 DIO3 (IO41)",
+            "RFM69 DIO4 (IO40)",
+            "RFM69 DIO5 (IO39)",
+            "IR RX (IO38)",
+            "IR TX (IO37)",
+            "GPIO4 (IO4)",
+            "GPIO5 (IO5)",
+            "GPIO6 (IO6)",
             "GPIO7 (IO7)",
-
-            "GPIO9 (IO9)",
-            "CC1101 NSS (IO10)", // SPI Chip Select
-            "CC1101 MOSI (IO11)",// SPI MOSI
-            "CC1101 SCK (IO12)", // SPI SCK
-            "CC1101 MISO (IO13)",// SPI MISO
-            "GPIO14 (IO14)",
             "GPIO15 (IO15)",
-            "GPIO16 (IO16)"
+            "GPIO16 (IO16)",
+            "GPIO17 (IO17)",
+            "GPIO18 (IO18)",
+            "GPIO8 (IO8)",
+            "GPIO3 (IO3)",
+            "GPIO46 (IO46)",
+            "GPIO9 (IO9)",
+            "GPIO10 (IO10)",
+            "GPIO11 (IO11)",
+            "GPIO12 (IO12)",
+            "GPIO13 (IO13)",
+            "GPIO14 (IO14)"
     };
 
     private static final String PREF_SELECTED_PIN_INDEX = "selectedSamplerPinIndex";
+    private static final String PREF_LAST_SELECTED_SIGNAL = "sampler_last_selected_signal";
     private static final String SIGNALS_DIR = "signals";
 
     private File signalsDir;
@@ -136,6 +145,7 @@ public class SamplerFragment extends Fragment {
     private ActivityResultLauncher<String[]> openRawFileLauncher;
     private String currentSignalName;
     private boolean hasUnsavedChanges;
+    private AdapterView.OnItemSelectedListener signalPickerListener;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -146,6 +156,10 @@ public class SamplerFragment extends Fragment {
             Log.i("service binding", "onServiceConnected");
             initChart();
             refreshChart(); // Refresh the chart with the new buffer
+            // Try to load last selected signal if not already loaded
+            if (TextUtils.isEmpty(currentSignalName) && !savedSignalNames.isEmpty()) {
+                loadLastSelectedSignal();
+            }
         }
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
@@ -187,25 +201,29 @@ public class SamplerFragment extends Fragment {
 
         // Setup signal picker
         List<String> pickerItems = new ArrayList<>();
-        pickerItems.add("Select signal...");
+        pickerItems.add("New signal...");
         pickerItems.addAll(savedSignalNames);
         signalPickerAdapter = new ArrayAdapter<>(requireContext(), 
             android.R.layout.simple_spinner_item, pickerItems);
         signalPickerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         binding.signalPicker.setAdapter(signalPickerAdapter);
-        binding.signalPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        signalPickerListener = new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position > 0) { // Position 0 is "Select signal..."
+                if (position > 0) { // Position 0 is "New signal..."
                     String selectedSignal = savedSignalNames.get(position - 1);
                     loadSignalFromStorage(selectedSignal);
+                } else {
+                    // Position 0 - "New signal..."
+                    createNewSignal();
                 }
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
             }
-        });
+        };
+        binding.signalPicker.setOnItemSelectedListener(signalPickerListener);
 
         // Replace the resource-based spinner adapter with the PINS array
         ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
@@ -215,7 +233,7 @@ public class SamplerFragment extends Fragment {
 
         // Load saved pin selection or set default
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        int defaultPinIndex = 6; // GPIO6 (IO6)
+        int defaultPinIndex = 10; // GPIO6 (IO6)
         int selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, defaultPinIndex);
         if (selectedPinIndex >= 0 && selectedPinIndex < adapter.getCount()) {
             binding.gpioSpinner.setSelection(selectedPinIndex);
@@ -247,10 +265,6 @@ public class SamplerFragment extends Fragment {
         binding.stopButton.setOnClickListener(v -> stopRecording());
         binding.retransmitButton.setOnClickListener(v -> retransmitSignal());
         binding.getTimingsButton.setOnClickListener(v -> getTimings());
-        binding.newSignalButton.setOnClickListener(v -> createNewSignal());
-        binding.renameSignalButton.setOnClickListener(v -> renameSignal());
-        binding.deleteSignalButton.setOnClickListener(v -> deleteSignal());
-        binding.saveSignalButton.setOnClickListener(v -> saveSignal());
         
         // Initially disable the stop button as we're not recording yet
         binding.stopButton.setEnabled(false);
@@ -349,7 +363,10 @@ public class SamplerFragment extends Fragment {
         initScheduler();
 
         setupMenu();
-        refreshSignalList();
+        refreshSignalList(() -> {
+            // After refreshing the list, try to load the last selected signal
+            loadLastSelectedSignal();
+        });
         updateStatusBar();
 
         return root;
@@ -367,6 +384,18 @@ public class SamplerFragment extends Fragment {
                 int id = menuItem.getItemId();
                 if (id == R.id.action_clear_buffer) {
                     clearBuffer();
+                    return true;
+                } else if (id == R.id.action_new_signal) {
+                    createNewSignal();
+                    return true;
+                } else if (id == R.id.action_save_signal) {
+                    saveSignal();
+                    return true;
+                } else if (id == R.id.action_rename_signal) {
+                    renameSignal();
+                    return true;
+                } else if (id == R.id.action_delete_signal) {
+                    deleteSignal();
                     return true;
                 } else if (id == R.id.action_load_from_storage) {
                     selectSignalFromExternalStorage();
@@ -432,12 +461,20 @@ public class SamplerFragment extends Fragment {
                     }
                     BLEService.loadBuffer(data);
                     lastBufferSize = -1;
+                    resetChartZoom();
                     refreshChart();
                     currentSignalName = normalizedName;
                     hasUnsavedChanges = false;
+                    saveLastSelectedSignal(normalizedName);
                     updateStatusBar();
                     Toast.makeText(requireContext(), "Signal imported: " + normalizedName, Toast.LENGTH_SHORT).show();
-                    refreshSignalList();
+                    // Refresh list and update picker selection
+                    refreshSignalList(() -> {
+                        int signalIndex = savedSignalNames.indexOf(normalizedName);
+                        if (signalIndex >= 0) {
+                            binding.signalPicker.setSelection(signalIndex + 1); // +1 because position 0 is "New signal..."
+                        }
+                    });
                 });
             } catch (IOException e) {
                 Log.e("SamplerFragment", "Failed to import signal", e);
@@ -532,8 +569,15 @@ public class SamplerFragment extends Fragment {
                 requireActivity().runOnUiThread(() -> {
                     currentSignalName = fileName;
                     hasUnsavedChanges = false;
+                    saveLastSelectedSignal(fileName);
                     updateStatusBar();
-                    refreshSignalList();
+                    refreshSignalList(() -> {
+                        // Update picker selection to show the saved signal
+                        int signalIndex = savedSignalNames.indexOf(fileName);
+                        if (signalIndex >= 0) {
+                            binding.signalPicker.setSelection(signalIndex + 1); // +1 because position 0 is "New signal..."
+                        }
+                    });
                     Toast.makeText(requireContext(), "Signal saved: " + fileName, Toast.LENGTH_SHORT).show();
                 });
             } catch (IOException e) {
@@ -546,6 +590,11 @@ public class SamplerFragment extends Fragment {
     }
 
     private void loadSignalFromStorage(String fileName) {
+        // Prevent loading the same signal if it's already loaded
+        if (fileName.equals(currentSignalName) && !hasUnsavedChanges) {
+            return;
+        }
+        
         new Thread(() -> {
             try {
                 File signalFile = new File(signalsDir, fileName);
@@ -569,10 +618,27 @@ public class SamplerFragment extends Fragment {
                     }
                     BLEService.loadBuffer(data);
                     lastBufferSize = -1;
+                    resetChartZoom();
                     refreshChart();
                     currentSignalName = fileName;
                     hasUnsavedChanges = false;
+                    saveLastSelectedSignal(fileName);
                     updateStatusBar();
+                    // Update picker selection (only if binding is available and listener is set)
+                    if (binding != null && signalPickerListener != null) {
+                        int signalIndex = savedSignalNames.indexOf(fileName);
+                        if (signalIndex >= 0) {
+                            // Temporarily disable listener to prevent recursive calls
+                            binding.signalPicker.setOnItemSelectedListener(null);
+                            binding.signalPicker.setSelection(signalIndex + 1); // +1 because position 0 is "New signal..."
+                            // Re-enable listener after a short delay to ensure selection is set
+                            binding.signalPicker.post(() -> {
+                                if (binding != null && signalPickerListener != null) {
+                                    binding.signalPicker.setOnItemSelectedListener(signalPickerListener);
+                                }
+                            });
+                        }
+                    }
                     Toast.makeText(requireContext(), "Signal loaded", Toast.LENGTH_SHORT).show();
                 });
             } catch (Exception e) {
@@ -593,6 +659,10 @@ public class SamplerFragment extends Fragment {
     }
 
     private void refreshSignalList() {
+        refreshSignalList(null);
+    }
+
+    private void refreshSignalList(@Nullable Runnable onComplete) {
         if (!isAdded() || binding == null) {
             return;
         }
@@ -614,11 +684,14 @@ public class SamplerFragment extends Fragment {
                 savedSignalNames.clear();
                 savedSignalNames.addAll(signalNames);
                 List<String> pickerItems = new ArrayList<>();
-                pickerItems.add("Select signal...");
+                pickerItems.add("New signal...");
                 pickerItems.addAll(savedSignalNames);
                 signalPickerAdapter.clear();
                 signalPickerAdapter.addAll(pickerItems);
                 signalPickerAdapter.notifyDataSetChanged();
+                if (onComplete != null) {
+                    onComplete.run();
+                }
             });
         }).start();
     }
@@ -932,7 +1005,12 @@ public class SamplerFragment extends Fragment {
         // Force a refresh to make sure we're showing current data
         forceRefresh();
 
-        refreshSignalList();
+        refreshSignalList(() -> {
+            // After refreshing the list, try to load the last selected signal if not already loaded
+            if (TextUtils.isEmpty(currentSignalName)) {
+                loadLastSelectedSignal();
+            }
+        });
         updateStatusBar();
         
         // Update UI based on recording state
@@ -1023,9 +1101,6 @@ public class SamplerFragment extends Fragment {
             return;
         }
 
-        if (binding != null) {
-            binding.timingsEditText.setText(timings);
-        }
         showTimingsDialog(timings);
     }
 
@@ -1055,6 +1130,20 @@ public class SamplerFragment extends Fragment {
     private void forceRefresh() {
         forceRefresh = true;
         refreshChart();
+    }
+
+    private void resetChartZoom() {
+        if (chart == null) {
+            return;
+        }
+        // Reset zoom to show full signal
+        chart.fitScreen();
+        // Also reset the scale to 1.0
+        chart.setScaleX(1.0f);
+        chart.setScaleY(1.0f);
+        // Reset translation
+        chart.setTranslationX(0f);
+        chart.setTranslationY(0f);
     }
 
     private byte getPinNumberFromSelection(String selectedPinString) {
@@ -1101,6 +1190,7 @@ public class SamplerFragment extends Fragment {
         refreshChart();
         currentSignalName = null;
         hasUnsavedChanges = false;
+        saveLastSelectedSignal(null);
         updateStatusBar();
         Toast.makeText(requireContext(), "New signal ready", Toast.LENGTH_SHORT).show();
     }
@@ -1176,6 +1266,7 @@ public class SamplerFragment extends Fragment {
             if (currentFile.renameTo(newFile)) {
                 currentSignalName = normalized;
                 hasUnsavedChanges = false;
+                saveLastSelectedSignal(normalized);
                 updateStatusBar();
                 refreshSignalList();
                 Toast.makeText(requireContext(), "Signal renamed", Toast.LENGTH_SHORT).show();
@@ -1185,6 +1276,28 @@ public class SamplerFragment extends Fragment {
         });
         builder.setNegativeButton("Cancel", null);
         builder.show();
+    }
+
+    private void saveLastSelectedSignal(@Nullable String signalName) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        if (TextUtils.isEmpty(signalName)) {
+            prefs.edit().remove(PREF_LAST_SELECTED_SIGNAL).apply();
+        } else {
+            prefs.edit().putString(PREF_LAST_SELECTED_SIGNAL, signalName).apply();
+        }
+    }
+
+    private void loadLastSelectedSignal() {
+        if (BLEService == null || binding == null) {
+            return;
+        }
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        String lastSignalName = prefs.getString(PREF_LAST_SELECTED_SIGNAL, null);
+        if (!TextUtils.isEmpty(lastSignalName) && savedSignalNames.contains(lastSignalName)) {
+            // Signal exists, load it directly (the check in loadSignalFromStorage prevents duplicates)
+            // We'll update the picker selection inside loadSignalFromStorage
+            loadSignalFromStorage(lastSignalName);
+        }
     }
 
     private void deleteSignal() {
@@ -1200,14 +1313,40 @@ public class SamplerFragment extends Fragment {
         }
 
         String signalName = currentSignalName;
+        int currentIndex = savedSignalNames.indexOf(currentSignalName);
+        
         new AlertDialog.Builder(requireContext())
             .setTitle("Delete Signal")
             .setMessage("Delete " + signalName + "?")
             .setPositiveButton("Delete", (dialog, which) -> {
                 if (signalFile.delete()) {
-                    currentSignalName = null;
-                    updateStatusBar();
-                    refreshSignalList();
+                    // Determine which signal name to load next before refreshing
+                    String nextSignalName = null;
+                    if (currentIndex >= 0 && savedSignalNames.size() > 1) {
+                        if (currentIndex < savedSignalNames.size() - 1) {
+                            // Load the next signal (at currentIndex + 1)
+                            nextSignalName = savedSignalNames.get(currentIndex + 1);
+                        } else {
+                            // Was last, wrap to first
+                            nextSignalName = savedSignalNames.get(0);
+                        }
+                    }
+                    
+                    final String finalNextSignalName = nextSignalName;
+                    
+                    // Refresh the list and then load the next signal
+                    refreshSignalList(() -> {
+                        if (finalNextSignalName != null && savedSignalNames.contains(finalNextSignalName)) {
+                            // Load the next signal (setting selection will trigger the listener)
+                            int nextIndex = savedSignalNames.indexOf(finalNextSignalName);
+                            binding.signalPicker.setSelection(nextIndex + 1); // +1 because position 0 is "New signal..."
+                        } else {
+                            // No signals left, select "New signal..." (setting selection will trigger the listener)
+                            binding.signalPicker.setSelection(0);
+                            saveLastSelectedSignal(null);
+                        }
+                    });
+                    
                     Toast.makeText(requireContext(), "Signal deleted", Toast.LENGTH_SHORT).show();
                 } else {
                     Toast.makeText(requireContext(), "Failed to delete signal", Toast.LENGTH_SHORT).show();
