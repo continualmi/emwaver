@@ -1,17 +1,68 @@
 # Master **Hardware**, **Firmware**, **Software**.
 
-<div style="display: flex; align-items: center; gap: 2em; margin-bottom: 2em;">
-  <img src="pcb.png" alt="EMWaver Logo" style="width: 180px; max-width: 30vw; height: auto; border-radius: 12px;">
-  <div>
-    <h2>Welcome to EMWaver!</h2>
-    <p>Your all-in-one platform for wireless experimentation, device control, and embedded development.</p>
-    <p>
-      Explore the tabs above to learn more, review the firmware update process, or visit the store.
-    </p>
-  </div>
+<div style="margin-bottom: 2em;">
+  <h2>Welcome to EMWaver!</h2>
+  <p>Your all-in-one platform for wireless experimentation, device control, and embedded development.</p>
+  <p>
+    Explore the tabs above to learn more, review the firmware update process, or visit the store.
+  </p>
 </div>
 
 EMWaver combines an ESP32-S3 platform with mobile and cloud tooling for wireless experimentation, signal analysis, and remote control. The ecosystem centers on Wavelets—portable JavaScript bundles that present UI through the EMWaver DSL and orchestrate hardware features without custom firmware builds.
+
+## Download EMWaver
+
+Get started with EMWaver by downloading the app for your platform or installing the CLI tool.
+
+### Mobile Apps
+
+<div style="display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: 2em;">
+  <a href="https://apps.apple.com/app/emwaver" style="text-decoration: none;">
+    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #007AFF; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
+      <span>🍎</span>
+      <span>Download for iOS</span>
+    </button>
+  </a>
+  <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" style="text-decoration: none;">
+    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #34A853; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
+      <span>🤖</span>
+      <span>Download for Android</span>
+    </button>
+  </a>
+</div>
+
+### Desktop App
+
+<div style="display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: 2em;">
+  <a href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-macOS.dmg" style="text-decoration: none;">
+    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #333; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
+      <span>🍎</span>
+      <span>Download for macOS</span>
+    </button>
+  </a>
+  <a href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-Windows.exe" style="text-decoration: none;">
+    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #0078D4; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
+      <span>🪟</span>
+      <span>Download for Windows</span>
+    </button>
+  </a>
+  <a href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-Linux.AppImage" style="text-decoration: none;">
+    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #FCC624; color: #333; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
+      <span>🐧</span>
+      <span>Download for Linux</span>
+    </button>
+  </a>
+</div>
+
+### Command Line Interface
+
+Install the EMWaver CLI tool with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/emwaver/emwaver/main/cli/install.sh | sh
+```
+
+The installer automatically detects your platform (macOS, Linux, or Windows) and installs the appropriate binary.
 
 <div class="grid cards" markdown>
 
@@ -52,7 +103,7 @@ EMWaver combines an ESP32-S3 platform with mobile and cloud tooling for wireless
 ## What is EMWaver?
 
 EMWaver is designed for enthusiasts, makers, and researchers who want to:
-- Experiment with sub-GHz and infrared signals
+- Experiment with sub-GHz signals
 - Build and share custom workflows through Wavelets
 - Manage firmware safely without recompiling for every use case
 - Expand with GPIO accessories and automation scripts
@@ -63,15 +114,15 @@ The mobile application is structured around five primary fragments, each focused
 
 1. **Home** – Manage connections to the EMWaver device, view device health, and access quick actions for recent wavelets or captures.
 2. **ISM** – Inspect and configure sub-GHz radio settings, including modulation parameters, channel presets, and regulatory constraints.
-3. **Sampler** – Capture and analyze RF and IR signals, leverage IRP decoding, visualize waveforms, and prepare recordings for replay or wavelet integration.
-4. **Wavelets** – Edit, organize, and sync JavaScript bundles that render UI via the EMWaver DSL. Import IRDB remote profiles to generate control surfaces and trigger the correct IR payloads.
+3. **Sampler** – Capture and analyze RF signals, visualize waveforms, and prepare recordings for replay or wavelet integration.
+4. **Wavelets** – Edit, organize, and sync JavaScript bundles that render UI via the EMWaver DSL.
 5. **Agents** – Chat with the EMWaver LLM assistant for troubleshooting, documentation lookups, and live wavelet debugging. The agent can review console output, propose fixes, and help author new scripts.
 
 For guidance on authoring scripts, see the [Wavelets](wavelets.md) and [EMWaver DSL](emwaver-dsl.md) pages.
 
 ## Project Structure
 
-- **Hardware:** ESP32-S3 board with CC1101, IR transceiver, USB-C, and GPIO expansion
+- **Hardware:** ESP32-S3 board with CC1101, USB-C, and GPIO expansion
 - **Firmware:** ESP-IDF-based, exposes BLE APIs consumed by the mobile runtime
 - **Wavelets & DSL:** JavaScript runtime and declarative UI layer shared across platforms
 - **Documentation:** MkDocs site collecting guides for hardware, firmware, and runtime features
@@ -80,13 +131,13 @@ For guidance on authoring scripts, see the [Wavelets](wavelets.md) and [EMWaver 
 
 ## Hardware
 
-The EMWaver board combines the ESP32-S3 with sub-GHz (CC1101) and infrared peripherals, USB-C for power and flashing, and general-purpose I/O. Expansion headers support custom add-ons for experimentation and automation projects. See the [Hardware](hardware.md) page for a complete component breakdown.
+The EMWaver board combines the ESP32-S3 with sub-GHz (CC1101) radio, USB-C for power and flashing, and general-purpose I/O. Expansion headers support custom add-ons for experimentation and automation projects. See the [Hardware](hardware.md) page for a complete component breakdown.
 
 ---
 
 ## Firmware
 
-Firmware lives in `main/` and is built with ESP-IDF. Core modules include BLE communication (`ble_server.c`), sub-GHz drivers (`cc1101.c`), RFID support (`mfrc522.c`), IR transceivers, and optional BadUSB features. The firmware exposes consistent APIs so Wavelets can orchestrate hardware behavior through higher-level abstractions.
+Firmware lives in `main/` and is built with ESP-IDF. Core modules include BLE communication (`ble_server.c`), sub-GHz drivers (`cc1101.c`), RFID support (`mfrc522.c`), and optional BadUSB features. The firmware exposes consistent APIs so Wavelets can orchestrate hardware behavior through higher-level abstractions.
 
 ---
 
