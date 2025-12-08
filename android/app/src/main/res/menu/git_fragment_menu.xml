@@ -7,6 +7,11 @@
         android:icon="@android:drawable/ic_menu_rotate"
         app:showAsAction="ifRoom" />
     <item
+        android:id="@+id/action_manage_pat"
+        android:title="Manage PAT"
+        android:icon="@android:drawable/ic_menu_preferences"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_logout"
         android:title="Logout"
         app:showAsAction="never" />

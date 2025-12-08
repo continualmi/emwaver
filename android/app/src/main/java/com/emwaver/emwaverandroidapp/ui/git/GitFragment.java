@@ -123,6 +123,9 @@ public class GitFragment extends Fragment {
                 } else if (itemId == R.id.action_refresh) {
                     refreshRepositories();
                     return true;
+                } else if (itemId == R.id.action_manage_pat) {
+                    showPatDialog();
+                    return true;
                 }
                 return false;
             }
@@ -210,7 +213,8 @@ public class GitFragment extends Fragment {
     private void checkAuthState() {
         if (tokenStorage.isAuthenticated()) {
             showAuthenticatedState();
-            String token = tokenStorage.getToken();
+            // Use active token (PAT if available, otherwise OAuth token)
+            String token = tokenStorage.getActiveToken();
             apiClient = new GitHubApiClient(token);
             loadUserInfo();
             refreshRepositories();
@@ -273,7 +277,9 @@ public class GitFragment extends Fragment {
             public void onSuccess(String accessToken) {
                 requireActivity().runOnUiThread(() -> {
                     tokenStorage.saveToken(accessToken);
-                    apiClient = new GitHubApiClient(accessToken);
+                    // Use active token (PAT if available, otherwise the OAuth token we just saved)
+                    String activeToken = tokenStorage.getActiveToken();
+                    apiClient = new GitHubApiClient(activeToken);
                     checkAuthState();
                 });
             }
@@ -515,6 +521,65 @@ public class GitFragment extends Fragment {
             Utils.updateActionBarStatus(this, username);
         } else {
             Utils.updateActionBarStatus(this, "");
+        }
+    }
+    
+    private void showPatDialog() {
+        EditText patInput = new EditText(requireContext());
+        patInput.setHint("Enter Personal Access Token");
+        patInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        patInput.setPadding(50, 20, 50, 20);
+        
+        // Pre-fill if PAT exists (show masked)
+        String existingPat = tokenStorage.getPat();
+        boolean hasExistingPat = !TextUtils.isEmpty(existingPat);
+        if (hasExistingPat) {
+            patInput.setHint("PAT is set (enter new one to replace)");
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
+            .setTitle("Personal Access Token")
+            .setMessage("For private repository access, enter a GitHub Personal Access Token.\n\n" +
+                       "OAuth grants access to public repos only. PATs can be scoped to specific repos.\n\n" +
+                       "Create one at: https://github.com/settings/tokens")
+            .setView(patInput)
+            .setPositiveButton("Save", (dialog, which) -> {
+                String pat = patInput.getText().toString().trim();
+                if (!pat.isEmpty()) {
+                    savePat(pat);
+                }
+            });
+        
+        if (hasExistingPat) {
+            builder.setNeutralButton("Clear", (dialog, which) -> {
+                clearPat();
+            });
+        }
+        
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+    
+    private void savePat(String pat) {
+        tokenStorage.savePat(pat);
+        // Reinitialize API client with new token
+        String activeToken = tokenStorage.getActiveToken();
+        apiClient = new GitHubApiClient(activeToken);
+        showToast("PAT saved. Using PAT for API calls.");
+        // Refresh to verify token works
+        refreshRepositories();
+    }
+    
+    private void clearPat() {
+        tokenStorage.clearPat();
+        // Reinitialize API client with OAuth token
+        String activeToken = tokenStorage.getActiveToken();
+        if (!TextUtils.isEmpty(activeToken)) {
+            apiClient = new GitHubApiClient(activeToken);
+            showToast("PAT cleared. Using OAuth token.");
+            refreshRepositories();
+        } else {
+            showToast("PAT cleared.");
         }
     }
     
