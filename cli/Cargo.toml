@@ -3,6 +3,10 @@ name = "emwaver-cli"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "emw"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }
@@ -12,6 +16,7 @@ tokio-stream = "0.1"
 uuid = { version = "1", features = ["macro-diagnostics"] }
 serialport = "4"
 sha2 = "0.10"
+dirs = "5"
 
 [dev-dependencies]
 assert_cmd = "2"
