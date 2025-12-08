@@ -16,9 +16,9 @@ pub fn run() -> Result<()> {
     match cli.command {
         cli::Commands::Shell { verbose } => shell::run_shell(verbose),
 
-        cli::Commands::Clone { directory, force } => runtime.block_on(async {
+        cli::Commands::Clone { force } => runtime.block_on(async {
             let app = app_ble::AppConnection::connect().await?;
-            app.clone_repository(&directory, force).await
+            app.clone_repository(force).await
         }),
 
         cli::Commands::List { long } => runtime.block_on(async {
@@ -27,24 +27,23 @@ pub fn run() -> Result<()> {
             Ok(())
         }),
 
-        cli::Commands::Push { file, force } => runtime.block_on(async {
+        cli::Commands::Push { yes } => runtime.block_on(async {
             let app = app_ble::AppConnection::connect().await?;
-            app.push_file(&file, force).await
+            app.push(yes).await
         }),
 
-        cli::Commands::Pull { name, output } => runtime.block_on(async {
+        cli::Commands::Pull { yes } => runtime.block_on(async {
             let app = app_ble::AppConnection::connect().await?;
-            app.pull_file(&name, output.as_deref()).await
+            app.pull(yes).await
+        }),
+
+        cli::Commands::Status { verbose } => runtime.block_on(async {
+            app_ble::show_status(verbose).await
         }),
 
         cli::Commands::Remove { name, force } => runtime.block_on(async {
             let app = app_ble::AppConnection::connect().await?;
             app.remove_file(&name, force).await
-        }),
-
-        cli::Commands::Status { verbose } => runtime.block_on(async {
-            let app = app_ble::AppConnection::connect().await?;
-            app.show_status(verbose).await
         }),
     }
 }

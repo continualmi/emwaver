@@ -33,13 +33,6 @@ impl AppConnection {
     }
 
     pub async fn connect() -> Result<Self> {
-        // Try cached connection first
-        if let Ok(connection) = Self::try_cached_connection().await {
-            return Ok(connection);
-        }
-
-        println!("🔍 Scanning for EMWaver phone...");
-
         let manager = Manager::new().await?;
         let adapters = manager.adapters().await?;
         let adapter = adapters
@@ -49,28 +42,20 @@ impl AppConnection {
 
         adapter.start_scan(ScanFilter::default()).await?;
 
-        // Poll every 500ms for up to 10 seconds, stop as soon as we find EMWaver service
-        for attempt in 1..=20 {
-            tokio::time::sleep(Duration::from_millis(500)).await;
+        // Poll every 300ms for up to 8 seconds
+        for _attempt in 1..=26 {
+            tokio::time::sleep(Duration::from_millis(300)).await;
             
             let peripherals = adapter.peripherals().await?;
             
             for peripheral in peripherals {
-                if let Some((name, reason)) = Self::identify_candidate(&peripheral).await {
-                    println!("📱 Found {} ({}) after {}s", name, reason, attempt as f32 * 0.5);
-                    
+                if let Some((name, _reason)) = Self::identify_candidate(&peripheral).await {
                     match Self::attach_to_candidate(peripheral.clone(), &name).await {
                         Ok(connection) => {
                             let _ = adapter.stop_scan().await;
-                            // Cache the device address
-                            if let Ok(Some(props)) = peripheral.properties().await {
-                                let _ = Self::cache_device(&props.address.to_string());
-                            }
                             return Ok(connection);
                         }
-                        Err(err) => {
-                            eprintln!("⚠️  Unable to connect to {}: {}", name, err);
-                        }
+                        Err(_) => continue,
                     }
                 }
             }
@@ -82,8 +67,7 @@ impl AppConnection {
             "EMWaver phone not found. Make sure:\n  \
              1. Android/iOS app is running\n  \
              2. Bluetooth is enabled on phone\n  \
-             3. App is advertising file sync service\n  \
-             4. Check logcat: adb logcat | grep BLEFileSyncServer"
+             3. App is advertising file sync service"
         ))
     }
 
@@ -153,25 +137,19 @@ impl AppConnection {
         Ok(())
     }
 
-    pub async fn clone_repository(&self, directory: &Path, force: bool) -> Result<()> {
-        println!(
-            "📦 Cloning EMWaver repository to {}...",
-            directory.display()
-        );
+    pub async fn clone_repository(&self, force: bool) -> Result<()> {
+        let directory = PathBuf::from("emwaver_files");
 
-        // Check if directory exists
         if directory.exists() && !force {
             return Err(anyhow::anyhow!(
-                "Directory already exists. Use --force to overwrite."
+                "emwaver_files/ already exists. Use --force to overwrite."
             ));
         }
 
         // Create directory structure
-        fs::create_dir_all(directory)?;
+        fs::create_dir_all(&directory)?;
         let emwaver_dir = directory.join(".emwaver");
         fs::create_dir_all(&emwaver_dir)?;
-
-        println!("✓ Created .emwaver directory");
 
         // Get file list
         let response = self.send_and_receive(r#"{"op":"list"}"#).await?;
@@ -182,74 +160,126 @@ impl AppConnection {
             return Ok(());
         }
 
-        println!("\n📥 Pulling {} files...", files.len());
+        println!("Cloning {} files into emwaver_files/", files.len());
 
         // Pull each file
-        for (i, file_info) in files.iter().enumerate() {
-            println!("[{}/{}] Pulling {}...", i + 1, files.len(), file_info.name);
-
+        for file_info in files.iter() {
             let pull_request = format!(r#"{{"op":"pull","name":"{}"}}"#, file_info.name);
             let pull_response = self.send_and_receive(&pull_request).await?;
-
-            // Parse response and save file
-            self.save_pulled_file(&pull_response, directory)?;
+            self.save_pulled_file(&pull_response, &directory)?;
         }
 
-        println!("\n✓ Clone complete!");
-        println!("\nNext steps:");
-        println!("  cd {}", directory.display());
-        println!("  emwaver list    # View files");
-        println!("  emwaver push <file>  # Push changes");
+        println!("✓ Cloned {} files", files.len());
 
         Ok(())
     }
 
-    pub async fn push_file(&self, path: &Path, _force: bool) -> Result<()> {
-        let filename = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| anyhow::anyhow!("Invalid filename"))?;
-
-        println!("📤 Pushing {} to phone...", filename);
-
-        // Read file
-        let content = fs::read(path)?;
-        let size = content.len();
-
-        // Encode as base64
-        let encoded = base64_encode(&content);
-
-        // Send push request
-        let request = format!(
-            r#"{{"op":"push","name":"{}","size":{},"data":"{}"}}"#,
-            filename, size, encoded
-        );
-
-        // Wait for response
-        let response = self.send_and_receive(&request).await?;
-
-        // Check if successful
-        if response.contains("\"status\":\"ok\"") {
-            println!("✓ Upload complete: {} ({} bytes)", filename, size);
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Push failed: {}", response))
+    pub async fn push(&self, yes: bool) -> Result<()> {
+        let directory = PathBuf::from("emwaver_files");
+        
+        if !directory.exists() {
+            return Err(anyhow::anyhow!(
+                "Not in an emwaver repository. Run 'emw clone' first."
+            ));
         }
+
+        // Get all local files
+        let mut local_files = Vec::new();
+        for entry in fs::read_dir(&directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if !name.starts_with('.') {
+                        local_files.push(name.to_string());
+                    }
+                }
+            }
+        }
+
+        if local_files.is_empty() {
+            println!("No local files to push");
+            return Ok(());
+        }
+
+        println!("Will upload {} files to device (overwrites remote)\n", local_files.len());
+        for file in &local_files {
+            println!("  + {}", file);
+        }
+
+        if !yes {
+            use std::io::{self, Write};
+            print!("\nPush these files? [Y/n] ");
+            io::stdout().flush()?;
+
+            let mut response = String::new();
+            io::stdin().read_line(&mut response)?;
+
+            if !response.trim().is_empty() && !response.trim().eq_ignore_ascii_case("y") {
+                println!("Cancelled");
+                return Ok(());
+            }
+        }
+
+        for file in local_files {
+            let path = directory.join(&file);
+            let content = fs::read(&path)?;
+            let encoded = base64_encode(&content);
+            let request = format!(
+                r#"{{"op":"push","name":"{}","size":{},"data":"{}"}}"#,
+                file, content.len(), encoded
+            );
+            self.send_and_receive(&request).await?;
+        }
+
+        println!("✓ Pushed all files");
+        Ok(())
     }
 
-    pub async fn pull_file(&self, name: &str, output: Option<&Path>) -> Result<()> {
-        println!("📥 Pulling {} from phone...", name);
+    pub async fn pull(&self, yes: bool) -> Result<()> {
+        let directory = PathBuf::from("emwaver_files");
+        
+        if !directory.exists() {
+            return Err(anyhow::anyhow!(
+                "Not in an emwaver repository. Run 'emw clone' first."
+            ));
+        }
 
-        // Send pull request
-        let request = format!(r#"{{"op":"pull","name":"{}"}}"#, name);
-        let response = self.send_and_receive(&request).await?;
+        // Get remote files
+        let response = self.send_and_receive(r#"{"op":"list"}"#).await?;
+        let remote_files = self.parse_file_list(&response)?;
 
-        // Save file
-        let output_path = output.unwrap_or_else(|| Path::new("."));
-        self.save_pulled_file(&response, output_path)?;
+        if remote_files.is_empty() {
+            println!("No remote files to pull");
+            return Ok(());
+        }
 
-        println!("✓ Pull complete");
+        println!("Will download {} files from device (overwrites local)\n", remote_files.len());
+        for file in &remote_files {
+            println!("  - {}", file.name);
+        }
 
+        if !yes {
+            use std::io::{self, Write};
+            print!("\nPull these files? [Y/n] ");
+            io::stdout().flush()?;
+
+            let mut response = String::new();
+            io::stdin().read_line(&mut response)?;
+
+            if !response.trim().is_empty() && !response.trim().eq_ignore_ascii_case("y") {
+                println!("Cancelled");
+                return Ok(());
+            }
+        }
+
+        for file_info in remote_files {
+            let request = format!(r#"{{"op":"pull","name":"{}"}}"#, file_info.name);
+            let response = self.send_and_receive(&request).await?;
+            self.save_pulled_file(&response, &directory)?;
+        }
+
+        println!("✓ Pulled all files");
         Ok(())
     }
 
@@ -282,24 +312,7 @@ impl AppConnection {
         }
     }
 
-    pub async fn show_status(&self, _verbose: bool) -> Result<()> {
-        println!("╔══════════════════════════════════════════════════════════╗");
-        println!("║              EMWaver Status                              ║");
-        println!("╚══════════════════════════════════════════════════════════╝");
-        println!();
-        println!("📡 Connection:");
-        println!("   Device:  EMWaver Phone");
-        println!("   Status:  ✓ Connected via BLE");
-        println!();
-        println!("💾 Available Commands:");
-        println!("   emwaver clone <dir>    - Clone all files to directory");
-        println!("   emwaver list           - List files on phone");
-        println!("   emwaver push <file>    - Upload file to phone");
-        println!("   emwaver pull <name>    - Download file from phone");
-        println!("   emwaver rm <name>      - Remove file from phone");
-        println!();
-        Ok(())
-    }
+
 
     async fn identify_candidate(peripheral: &Peripheral) -> Option<(String, String)> {
         match peripheral.properties().await {
@@ -385,15 +398,44 @@ impl AppConnection {
             )
             .await?;
 
-        // Wait for response
-        timeout(Duration::from_secs(10), async {
-            while let Some(notification) = stream.next().await {
-                if notification.uuid == FILE_SYNC_CHAR_UUID {
-                    return String::from_utf8(notification.value)
-                        .context("Invalid UTF-8 in response");
+        // Receive response (may be chunked)
+        timeout(Duration::from_secs(60), async {
+            let mut buffer = Vec::new();
+            
+            loop {
+                match tokio::time::timeout(Duration::from_millis(100), stream.next()).await {
+                    Ok(Some(notification)) if notification.uuid == FILE_SYNC_CHAR_UUID => {
+                        buffer.extend_from_slice(&notification.value);
+                        
+                        // Try to parse as complete JSON
+                        if let Ok(s) = String::from_utf8(buffer.clone()) {
+                            if s.trim_end().ends_with('}') {
+                                let open_braces = s.chars().filter(|&c| c == '{').count();
+                                let close_braces = s.chars().filter(|&c| c == '}').count();
+                                if open_braces == close_braces && open_braces > 0 {
+                                    // Additional validation: if it contains "data", it must have a closing quote
+                                    if let Some(idx) = s.find("\"data\":\"") {
+                                        let rest = &s[idx + 8..];
+                                        if !rest.contains('"') {
+                                            return Err(anyhow::anyhow!("Corrupted response: missing data termination"));
+                                        }
+                                    }
+                                    return Ok(s);
+                                }
+                            }
+                        }
+                    }
+                    Ok(Some(_)) => continue,
+                    Ok(None) => return Err(anyhow::anyhow!("Stream ended")),
+                    Err(_) => {
+                        // No notification for 100ms, assume complete
+                        if !buffer.is_empty() {
+                            return String::from_utf8(buffer).context("Invalid UTF-8 in response");
+                        }
+                        return Err(anyhow::anyhow!("No response received"));
+                    }
                 }
             }
-            Err(anyhow::anyhow!("No response received"))
         })
         .await
         .context("Timeout waiting for response")?
@@ -577,4 +619,131 @@ fn format_bytes(bytes: usize) -> String {
     } else {
         format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
     }
+}
+
+#[derive(Debug)]
+enum Change {
+    Upload(String),
+    Download(String),
+    Delete(String),
+}
+
+impl Change {
+    fn is_empty(changes: &[Change]) -> bool {
+        changes.is_empty()
+    }
+}
+
+async fn compute_changes(directory: &Path, conn: &AppConnection) -> Result<Vec<Change>> {
+    use std::collections::{HashMap, HashSet};
+
+    // Get local files
+    let mut local_files = HashMap::new();
+    if directory.exists() {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if !name.starts_with('.') {
+                        let metadata = fs::metadata(&path)?;
+                        local_files.insert(name.to_string(), metadata.len() as usize);
+                    }
+                }
+            }
+        }
+    }
+
+    // Get remote files
+    let response = conn.send_and_receive(r#"{"op":"list"}"#).await?;
+    let remote_files = conn.parse_file_list(&response)?;
+    let remote_map: HashMap<String, usize> = remote_files
+        .into_iter()
+        .map(|f| (f.name, f.size))
+        .collect();
+
+    let mut changes = Vec::new();
+    let local_names: HashSet<_> = local_files.keys().cloned().collect();
+    let remote_names: HashSet<_> = remote_map.keys().cloned().collect();
+
+    // Files to upload (new or modified)
+    for name in &local_names {
+        if let Some(&local_size) = local_files.get(name) {
+            if let Some(&remote_size) = remote_map.get(name) {
+                if local_size != remote_size {
+                    changes.push(Change::Upload(name.clone()));
+                }
+            } else {
+                changes.push(Change::Upload(name.clone()));
+            }
+        }
+    }
+
+    // Files to download (new on remote)
+    for name in remote_names.difference(&local_names) {
+        changes.push(Change::Download(name.clone()));
+    }
+
+    Ok(changes)
+}
+
+fn print_changes(changes: &[Change]) {
+    println!("Changes to be synced:\n");
+    
+    let mut uploads = Vec::new();
+    let mut downloads = Vec::new();
+    let mut deletes = Vec::new();
+
+    for change in changes {
+        match change {
+            Change::Upload(f) => uploads.push(f),
+            Change::Download(f) => downloads.push(f),
+            Change::Delete(f) => deletes.push(f),
+        }
+    }
+
+    if !uploads.is_empty() {
+        println!("  Upload to device:");
+        for file in uploads {
+            println!("    + {}", file);
+        }
+        println!();
+    }
+
+    if !downloads.is_empty() {
+        println!("  Download from device:");
+        for file in downloads {
+            println!("    - {}", file);
+        }
+        println!();
+    }
+
+    if !deletes.is_empty() {
+        println!("  Delete from device:");
+        for file in deletes {
+            println!("    × {}", file);
+        }
+        println!();
+    }
+}
+
+pub async fn show_status(_verbose: bool) -> Result<()> {
+    let directory = PathBuf::from("emwaver_files");
+    
+    if !directory.exists() {
+        println!("Not in an emwaver repository. Run 'emw clone' first.");
+        return Ok(());
+    }
+
+    let conn = AppConnection::connect().await?;
+    let changes = compute_changes(&directory, &conn).await?;
+
+    if changes.is_empty() {
+        println!("Already up to date");
+    } else {
+        print_changes(&changes);
+        println!("Run 'emw sync' to apply these changes");
+    }
+
+    Ok(())
 }

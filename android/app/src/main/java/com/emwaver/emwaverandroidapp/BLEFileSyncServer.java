@@ -384,8 +384,34 @@ public class BLEFileSyncServer {
         }
         
         byte[] data = json.getBytes(StandardCharsets.UTF_8);
-        fileSyncChar.setValue(data);
-        gattServer.notifyCharacteristicChanged(device, fileSyncChar, false);
+        
+        // BLE notifications have max size ~512 bytes, chunk if needed
+        int mtu = 512;
+        int chunkSize = mtu - 3; // Leave room for ATT overhead
+        
+        if (data.length <= chunkSize) {
+            // Small response, send in one go
+            fileSyncChar.setValue(data);
+            gattServer.notifyCharacteristicChanged(device, fileSyncChar, false);
+        } else {
+            // Large response, chunk it
+            for (int offset = 0; offset < data.length; offset += chunkSize) {
+                int length = Math.min(chunkSize, data.length - offset);
+                byte[] chunk = new byte[length];
+                System.arraycopy(data, offset, chunk, 0, length);
+                
+                fileSyncChar.setValue(chunk);
+                gattServer.notifyCharacteristicChanged(device, fileSyncChar, false);
+                
+                // Small delay between chunks to prevent flooding the BLE stack
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
     }
     
     private void sendError(BluetoothDevice device, String message) {
