@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "emwaver",
+    name = "emw",
     version,
     about = "EMWaver - Manage wavelets and device files"
 )]
@@ -32,7 +32,7 @@ pub enum Commands {
     },
 
     /// List files on the device
-    #[command(visible_alias = "ls")]
+    #[command(name = "ls", visible_alias = "list")]
     List {
         /// Show detailed information
         #[arg(short, long)]

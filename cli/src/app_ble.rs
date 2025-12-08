@@ -4,7 +4,7 @@ use btleplug::api::{
 };
 use btleplug::platform::{Manager, Peripheral};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
@@ -25,7 +25,19 @@ pub struct AppConnection {
 }
 
 impl AppConnection {
+    fn cache_path() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".emwaver")
+            .join("connection.cache")
+    }
+
     pub async fn connect() -> Result<Self> {
+        // Try cached connection first
+        if let Ok(connection) = Self::try_cached_connection().await {
+            return Ok(connection);
+        }
+
         println!("🔍 Scanning for EMWaver phone...");
 
         let manager = Manager::new().await?;
@@ -47,9 +59,13 @@ impl AppConnection {
                 if let Some((name, reason)) = Self::identify_candidate(&peripheral).await {
                     println!("📱 Found {} ({}) after {}s", name, reason, attempt as f32 * 0.5);
                     
-                    match Self::attach_to_candidate(peripheral, &name).await {
+                    match Self::attach_to_candidate(peripheral.clone(), &name).await {
                         Ok(connection) => {
                             let _ = adapter.stop_scan().await;
+                            // Cache the device address
+                            if let Ok(Some(props)) = peripheral.properties().await {
+                                let _ = Self::cache_device(&props.address.to_string());
+                            }
                             return Ok(connection);
                         }
                         Err(err) => {
@@ -71,9 +87,66 @@ impl AppConnection {
         ))
     }
 
-    pub async fn list_files(&self, long: bool) -> Result<()> {
-        println!("📋 Listing files on phone...");
+    async fn try_cached_connection() -> Result<Self> {
+        let cache_path = Self::cache_path();
+        if !cache_path.exists() {
+            return Err(anyhow::anyhow!("No cache"));
+        }
 
+        let cached_addr = fs::read_to_string(&cache_path)?;
+        
+        let manager = Manager::new().await?;
+        let adapters = manager.adapters().await?;
+        let adapter = adapters
+            .into_iter()
+            .next()
+            .context("No Bluetooth adapter found")?;
+
+        adapter.start_scan(ScanFilter::default()).await?;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+
+        let peripherals = adapter.peripherals().await?;
+        let _ = adapter.stop_scan().await;
+
+        for peripheral in peripherals {
+            if let Ok(Some(props)) = peripheral.properties().await {
+                if props.address.to_string() == cached_addr.trim() {
+                    if peripheral.is_connected().await? {
+                        // Already connected, reuse it
+                        let file_char = peripheral
+                            .characteristics()
+                            .iter()
+                            .find(|c| c.uuid == FILE_SYNC_CHAR_UUID)
+                            .ok_or_else(|| anyhow::anyhow!("Characteristic not found"))?
+                            .clone();
+                        
+                        return Ok(Self {
+                            peripheral,
+                            file_char,
+                        });
+                    }
+
+                    // Try to reconnect
+                    if let Ok(connection) = Self::attach_to_candidate(peripheral, "cached device").await {
+                        return Ok(connection);
+                    }
+                }
+            }
+        }
+
+        Err(anyhow::anyhow!("Cached device not available"))
+    }
+
+    fn cache_device(address: &str) -> Result<()> {
+        let cache_path = Self::cache_path();
+        if let Some(parent) = cache_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(cache_path, address)?;
+        Ok(())
+    }
+
+    pub async fn list_files(&self, long: bool) -> Result<()> {
         let response = self.send_and_receive(r#"{"op":"list"}"#).await?;
         self.display_file_list(&response, long)?;
 
@@ -256,7 +329,9 @@ impl AppConnection {
     }
 
     async fn attach_to_candidate(peripheral: Peripheral, name: &str) -> Result<Self> {
-        println!("🔗 Connecting to {}...", name);
+        if name != "cached device" {
+            println!("🔗 Connecting to {}...", name);
+        }
 
         peripheral.connect().await?;
         peripheral.discover_services().await?;
@@ -281,7 +356,9 @@ impl AppConnection {
             .cloned()
             .context("File sync characteristic not found")?;
 
-        println!("✓ Connected to {} via BLE", name);
+        if name != "cached device" {
+            println!("✓ Connected to {} via BLE", name);
+        }
 
         Ok(Self {
             peripheral,
