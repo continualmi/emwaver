@@ -14,79 +14,71 @@ struct ContentView: View {
     @State private var showWelcome: Bool = false
     
     var body: some View {
-        Group {
-            if authManager.isAuthenticated {
-                ZStack {
-                    TabView(selection: $selection) {
-                        NavigationView {
-                            EMWaverView()
-                        }
-                        .navigationViewStyle(StackNavigationViewStyle())
-                        .tabItem {
-                            Label("EMWaver", systemImage: "house")
-                        }
-                        .tag("EMWaver")
-
-                        NavigationView {
-                            ISMView()
-                        }
-                        .navigationViewStyle(StackNavigationViewStyle())
-                        .tabItem {
-                            Label("ISM", systemImage: "memorychip")
-                        }
-                        .tag("ISM")
-
-                        NavigationView {
-                            SamplerView()
-                        }
-                        .navigationViewStyle(StackNavigationViewStyle())
-                        .tabItem {
-                            Label("Sampler", systemImage: "waveform")
-                        }
-                        .tag("Sampler")
-
-                        NavigationView {
-                            WaveletsView()
-                        }
-                        .navigationViewStyle(StackNavigationViewStyle())
-                        .tabItem {
-                            Label("Wavelets", systemImage: "text.and.command.macwindow")
-                        }
-                        .tag("Wavelets")
-
-                        NavigationView {
-                            AgentsView(authManager: authManager)
-                        }
-                        .navigationViewStyle(StackNavigationViewStyle())
-                        .tabItem {
-                            Label("Agents", systemImage: "bubble.left.and.sparkles")
-                        }
-                        .tag("Agents")
-                    }
-                    .onAppear {
-                        let appearance = UINavigationBarAppearance()
-                        appearance.configureWithOpaqueBackground()
-                        UINavigationBar.appearance().standardAppearance = appearance
-                        UINavigationBar.appearance().compactAppearance = appearance
-                        UINavigationBar.appearance().scrollEdgeAppearance = appearance
-                        checkFirstLaunch()
-                    }
-
-                    if showWelcome {
-                        WelcomeView(onDismiss: {
-                            withAnimation(.easeInOut(duration: 0.5)) {
-                                showWelcome = false
-                            }
-                            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
-                        })
-                        .transition(.opacity)
-                        .zIndex(1)
-                    }
+        ZStack {
+            TabView(selection: $selection) {
+                NavigationView {
+                    EMWaverView()
                 }
-            } else {
-                NavigationStack {
-                    LoginView()
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("EMWaver", systemImage: "house")
                 }
+                .tag("EMWaver")
+
+                NavigationView {
+                    ISMView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("ISM", systemImage: "memorychip")
+                }
+                .tag("ISM")
+
+                NavigationView {
+                    SamplerView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("Sampler", systemImage: "waveform")
+                }
+                .tag("Sampler")
+
+                NavigationView {
+                    WaveletsView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("Wavelets", systemImage: "text.and.command.macwindow")
+                }
+                .tag("Wavelets")
+
+                NavigationView {
+                    AgentsView(authManager: authManager)
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("Agents", systemImage: "bubble.left.and.sparkles")
+                }
+                .tag("Agents")
+            }
+            .onAppear {
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                checkFirstLaunch()
+            }
+
+            if showWelcome {
+                WelcomeView(onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showWelcome = false
+                    }
+                    UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+                })
+                .transition(.opacity)
+                .zIndex(1)
             }
         }
     }

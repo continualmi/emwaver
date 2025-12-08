@@ -34,7 +34,6 @@ final class WaveletsViewModel: ObservableObject {
     private var records: [String: ScriptRecord] = [:]
 
     private let fileService: FileService
-    private let waveletCloudService: WaveletCloudService
     private let defaults: UserDefaults
 
     private let scriptExtension = ".js"
@@ -43,11 +42,9 @@ final class WaveletsViewModel: ObservableObject {
 
     init(
         fileService: FileService = .shared,
-        waveletCloudService: WaveletCloudService = .shared,
         defaults: UserDefaults = .standard
     ) {
         self.fileService = fileService
-        self.waveletCloudService = waveletCloudService
         self.defaults = defaults
         selectedScriptId = defaults.string(forKey: lastScriptDefaultsKey)
         createUnsavedRecordIfNeeded()
@@ -314,51 +311,6 @@ final class WaveletsViewModel: ObservableObject {
         }
     }
 
-    func importWavelet(
-        wavelet: IRDBImportedWavelet,
-        accessToken: String
-    ) async {
-        let normalized = resolveUniqueScriptName(normalizeScriptName(wavelet.name))
-
-        isPerformingAction = true
-        defer { isPerformingAction = false }
-
-        do {
-            let metadata = try await fileService.createTextFile(name: normalized, content: wavelet.content, accessToken: accessToken)
-            let id = metadata.id
-            let record = ScriptRecord(
-                id: id,
-                metadata: metadata,
-                name: metadata.name,
-                draftContent: wavelet.content,
-                remoteContent: wavelet.content,
-                remoteEtag: metadata.etag,
-                isDirty: false
-            )
-            records[id] = record
-            rebuildScriptItems()
-            selectedScriptId = id
-            defaults.set(id, forKey: lastScriptDefaultsKey)
-            showInfo(title: "Wavelet Imported", message: metadata.name)
-
-            Task {
-                do {
-                    try await waveletCloudService.uploadWavelet(
-                        name: metadata.name,
-                        content: wavelet.content,
-                        metadataJSON: wavelet.metadataJSON,
-                        accessToken: accessToken
-                    )
-                } catch {
-                    await MainActor.run {
-                        self.showError(message: "Wavelet imported but failed to sync to cloud")
-                    }
-                }
-            }
-        } catch {
-            showError(message: error.localizedDescription)
-        }
-    }
 
     // MARK: - Selection
 

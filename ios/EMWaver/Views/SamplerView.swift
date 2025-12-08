@@ -165,10 +165,6 @@ struct SamplerView: View {
     @State private var namePrompt: NamePrompt?
     @State private var showingDeleteConfirmation = false
 
-    @State private var irpProtocol = "NEC1"
-    @State private var irpDevice = "0"
-    @State private var irpSubdevice = "0"
-    @State private var irpFunction = "170"
 
     private let pins = [
         "GPIO0 (IO0)",
@@ -198,7 +194,6 @@ struct SamplerView: View {
 
                     chartSection
                     signalsSection
-                    infraredSection
                 }
                 .padding(.vertical, 16)
             }
@@ -207,7 +202,7 @@ struct SamplerView: View {
             .toolbar { toolbarContent }
             .onAppear { handleAppear() }
             .onChange(of: bleManager.isConnected) { handleConnectionChange($0) }
-            .onChange(of: authManager.accessToken) { _ in loadSignals() }
+            .onAppear { loadSignals() }
             .onDisappear { stopScheduler() }
             .alert(item: $viewModel.notice) { notice in
                 Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
@@ -363,14 +358,13 @@ struct SamplerView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .labelStyle(.iconOnly)
-                .disabled(!(authManager.accessToken?.isEmpty == false))
             }
 
             Text(viewModel.currentSignalSummary())
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            let state = viewModel.saveButtonState(isAuthenticated: authManager.accessToken?.isEmpty == false)
+            let state = viewModel.saveButtonState(isAuthenticated: true)
             Button(state.title) {
                 handleSaveTapped()
             }
@@ -384,10 +378,6 @@ struct SamplerView: View {
             if viewModel.isLoadingSignals {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, alignment: .center)
-            } else if authManager.accessToken?.isEmpty != false {
-                Text("Sign in to access saved signals.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
             } else if viewModel.signals.isEmpty {
                 Text("No signals saved yet.")
                     .font(.subheadline)
@@ -414,63 +404,6 @@ struct SamplerView: View {
         .padding(.horizontal)
     }
 
-    private var infraredSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Infrared Tools")
-                .font(.headline)
-
-            HStack(spacing: 12) {
-                Button("Get Timings") {
-                    getTimings()
-                }
-                .buttonStyle(.bordered)
-
-                Button("Decode IRP") {
-                    decodeIrp()
-                }
-                .buttonStyle(.bordered)
-                .disabled(bleManager.getBuffer().isEmpty || authManager.accessToken?.isEmpty != false)
-
-                Button("Convert to IR") {
-                    convertToIR()
-                }
-                .buttonStyle(.bordered)
-                .disabled(bleManager.getBuffer().isEmpty)
-            }
-
-            VStack(spacing: 8) {
-                TextField("Protocol", text: $irpProtocol)
-                    .textInputAutocapitalization(.characters)
-                    .disableAutocorrection(true)
-
-                HStack {
-                    TextField("Device (D)", text: $irpDevice)
-                        .keyboardType(.numbersAndPunctuation)
-                    TextField("Subdevice (S)", text: $irpSubdevice)
-                        .keyboardType(.numbersAndPunctuation)
-                    TextField("Function (F)", text: $irpFunction)
-                        .keyboardType(.numbersAndPunctuation)
-                }
-            }
-
-            Button("Render IRP") {
-                renderIrp()
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(authManager.accessToken?.isEmpty != false)
-
-            TextEditor(text: $viewModel.outputText)
-                .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 160)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(.separator), lineWidth: 1)
-                )
-        }
-        .padding()
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-    }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
@@ -518,12 +451,8 @@ struct SamplerView: View {
     }
 
     private func loadSignals() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.clearSignals()
-            return
-        }
         Task {
-            await viewModel.refreshSignals(accessToken: token)
+            await viewModel.refreshSignals(accessToken: authManager.accessToken ?? "local-only-token")
         }
     }
 
@@ -535,12 +464,9 @@ struct SamplerView: View {
     }
 
     private func handleSaveTapped() {
-        let state = viewModel.saveButtonState(isAuthenticated: authManager.accessToken?.isEmpty == false)
+        let state = viewModel.saveButtonState(isAuthenticated: true)
         guard state.isEnabled else { return }
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
+        let token = authManager.accessToken ?? "local-only-token"
         let buffer = bleManager.getBuffer()
         if buffer.isEmpty {
             viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Buffer is empty")
@@ -568,21 +494,14 @@ struct SamplerView: View {
             namePrompt = nil
             return
         }
+        let token = authManager.accessToken ?? "local-only-token"
         switch prompt.mode {
         case .create(let buffer):
-            guard let token = authManager.accessToken, !token.isEmpty else {
-                viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-                break
-            }
             viewModel.markBufferDirty(resetMetadata: true, suggestedName: trimmed)
             Task {
                 await viewModel.saveSignal(buffer: buffer, accessToken: token)
             }
         case .rename:
-            guard let token = authManager.accessToken, !token.isEmpty else {
-                viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-                break
-            }
             Task {
                 await viewModel.renameCurrentSignal(to: trimmed, accessToken: token)
             }
@@ -592,12 +511,8 @@ struct SamplerView: View {
 
     private func performDelete() {
         showingDeleteConfirmation = false
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
         Task {
-            await viewModel.deleteCurrentSignal(accessToken: token)
+            await viewModel.deleteCurrentSignal(accessToken: authManager.accessToken ?? "local-only-token")
         }
     }
 
@@ -634,36 +549,6 @@ struct SamplerView: View {
         viewModel.outputText = viewModel.buildSignedRawTimings(from: buffer)
     }
 
-    private func decodeIrp() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
-        let buffer = bleManager.getBuffer()
-        Task {
-            await viewModel.decode(buffer: buffer, accessToken: token)
-        }
-    }
-
-    private func renderIrp() {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
-        let protocolName = irpProtocol.trimmingCharacters(in: .whitespacesAndNewlines)
-        var parameters: [String: Int] = [:]
-        if let value = parseNumericValue(irpDevice) { parameters["D"] = value }
-        if let value = parseNumericValue(irpSubdevice) { parameters["S"] = value }
-        if let value = parseNumericValue(irpFunction) { parameters["F"] = value }
-
-        Task {
-            if let data = await viewModel.renderSignal(protocolName: protocolName, parameters: parameters, accessToken: token) {
-                bleManager.loadBuffer(data: data)
-                viewModel.markBufferDirty(resetMetadata: false, suggestedName: nil)
-                refreshChart(force: true)
-            }
-        }
-    }
 
     private func convertToIR() {
         let buffer = bleManager.getBuffer()
@@ -700,12 +585,8 @@ struct SamplerView: View {
     }
 
     private func loadSignal(from metadata: UserFileMetadata) {
-        guard let token = authManager.accessToken, !token.isEmpty else {
-            viewModel.notice = SamplerViewModel.Notice(title: "Error", message: "Sign in required")
-            return
-        }
         Task {
-            if let data = await viewModel.loadSignal(id: metadata.id, accessToken: token) {
+            if let data = await viewModel.loadSignal(id: metadata.id, accessToken: authManager.accessToken ?? "local-only-token") {
                 bleManager.loadBuffer(data: data)
                 refreshChart(force: true)
             }
