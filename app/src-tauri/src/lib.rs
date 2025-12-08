@@ -1,11 +1,14 @@
+mod ble;
+
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io, io::Write, path::{Path, PathBuf}, process::Command};
+use std::{env, fs, io, io::Write, path::{Path, PathBuf}, process::Command, sync::Arc};
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
-    Emitter,
+    Emitter, State,
 };
 use tempfile::Builder;
+use ble::{BLEState, BLEStatus, BLENotification};
 
 #[derive(Deserialize)]
 struct CreateProjectPayload {
@@ -28,7 +31,6 @@ const MENU_SHOW_WAVELETS_EVENT: &str = "menu-show-wavelets";
 const MENU_SHOW_ISM_EVENT: &str = "menu-show-ism";
 const MENU_SHOW_SAMPLER_EVENT: &str = "menu-show-sampler";
 const MENU_SHOW_EMWAVER_EVENT: &str = "menu-show-emwaver";
-const MENU_SHOW_GIT_EVENT: &str = "menu-show-git";
 const MENU_INCREASE_LAYOUT_EVENT: &str = "menu-increase-layout";
 const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
@@ -161,6 +163,52 @@ async fn write_file(payload: WriteFilePayload) -> Result<(), String> {
     .map_err(|error| format!("Failed to write file: {error}"))?;
 
     Ok(())
+}
+
+#[derive(Deserialize)]
+struct RevealInFinderPayload {
+    path: String,
+}
+
+#[tauri::command]
+async fn reveal_in_finder(payload: RevealInFinderPayload) -> Result<(), String> {
+    let path = expand_path(&payload.path);
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| "Path contains invalid characters".to_string())?
+        .to_string();
+    spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("open")
+                .arg("-R")
+                .arg(&path_str)
+                .output()
+                .map_err(|error| format!("Failed to reveal in Finder: {error}"))?;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("explorer")
+                .arg("/select,")
+                .arg(&path_str)
+                .output()
+                .map_err(|error| format!("Failed to reveal in Explorer: {error}"))?;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let parent_path = Path::new(&path_str)
+                .parent()
+                .and_then(|p| p.to_str())
+                .unwrap_or(&path_str);
+            Command::new("xdg-open")
+                .arg(parent_path)
+                .output()
+                .map_err(|error| format!("Failed to reveal in file manager: {error}"))?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("Failed to reveal in Finder: {error}"))?
 }
 
 // ESP-IDF and shell commands removed - desktop app doesn't need ESP-IDF toolchain or shell sessions
@@ -357,6 +405,42 @@ fn resolve_token() -> Option<String> {
     None
 }
 
+// BLE Commands
+#[tauri::command]
+async fn ble_initialize(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.initialize().await
+}
+
+#[tauri::command]
+async fn ble_start_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.start_scan().await
+}
+
+#[tauri::command]
+async fn ble_stop_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.stop_scan().await
+}
+
+#[tauri::command]
+async fn ble_disconnect(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.disconnect().await
+}
+
+#[tauri::command]
+async fn ble_send_packet(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
+    state.send_packet(data).await
+}
+
+#[tauri::command]
+async fn ble_get_status(state: State<'_, Arc<BLEState>>) -> Result<BLEStatus, String> {
+    Ok(state.get_status().await)
+}
+
+#[tauri::command]
+async fn ble_get_notification(state: State<'_, Arc<BLEState>>) -> Result<Option<BLENotification>, String> {
+    Ok(state.get_notification().await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -426,13 +510,6 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let show_git_item = MenuItem::with_id(
-                app,
-                "menu-show-git",
-                "Show Git",
-                true,
-                None::<&str>,
-            )?;
             let increase_layout_item = MenuItem::with_id(
                 app,
                 "menu-increase-layout",
@@ -476,7 +553,6 @@ pub fn run() {
                                 submenu.append(&show_ism_item)?;
                                 submenu.append(&show_sampler_item)?;
                                 submenu.append(&show_emwaver_item)?;
-                                submenu.append(&show_git_item)?;
                                 view_menu_added = true;
                             }
                         }
@@ -501,7 +577,6 @@ pub fn run() {
                 view_menu.append(&show_ism_item)?;
                 view_menu.append(&show_sampler_item)?;
                 view_menu.append(&show_emwaver_item)?;
-                view_menu.append(&show_git_item)?;
                 menu.append(&view_menu)?;
             }
 
@@ -543,9 +618,6 @@ pub fn run() {
                 "menu-show-emwaver" => {
                     let _ = app.emit(MENU_SHOW_EMWAVER_EVENT, ());
                 }
-                "menu-show-git" => {
-                    let _ = app.emit(MENU_SHOW_GIT_EVENT, ());
-                }
                 "menu-increase-layout" => {
                     let _ = app.emit(MENU_INCREASE_LAYOUT_EVENT, ());
                 }
@@ -562,11 +634,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .manage(Arc::new(BLEState::new()))
         .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
             read_file,
-            write_file
+            write_file,
+            reveal_in_finder,
+            ble_initialize,
+            ble_start_scan,
+            ble_stop_scan,
+            ble_disconnect,
+            ble_send_packet,
+            ble_get_status,
+            ble_get_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
