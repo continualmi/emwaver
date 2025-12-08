@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ISMView: View {
     @EnvironmentObject var bleManager: BLEManager
-    @State private var cc1101: CC1101?
+    @State private var rfm69: RFM69?
     
     // RF parameter states - no defaults
     @State private var frequency: String = ""
@@ -25,38 +25,39 @@ struct ISMView: View {
     @State private var isLoadingRegisters: Bool = false
     @State private var registerLoadingProgress: Double = 0.0
     @State private var loadingRegistersCancelled: Bool = false
-    @State private var loadingAlertMessage: String = "Loading CC1101 parameters..."
+    @State private var loadingAlertMessage: String = "Loading RFM69 parameters..."
+    @State private var currentCommand: String = "Preparing..."
+    @State private var totalLoadSteps: Int = 0
+    @State private var completedLoadSteps: Int = 0
     @State private var showingSettingsSheet = false
     
     // Define modulation types
-    private let modulationFormats = ["2-FSK", "GFSK", "ASK/OOK", "4-FSK", "MSK"]
-    private let modulationValues: [UInt8] = [0, 1, 3, 4, 7] // CC1101.MOD_* values
+    private let modulationFormats = ["FSK", "OOK"]
+    private let modulationValues: [Int] = [0, 1] // RFM69.MOD_FSK, RFM69.MOD_OOK
     
     // Define power levels
-    private let powerLevels = ["-30 dBm", "-20 dBm", "-15 dBm", "-10 dBm", "0 dBm", "5 dBm", "7 dBm", "10 dBm"]
-    private let powerValues = [-30, -20, -15, -10, 0, 5, 7, 10] // CC1101.POWER_* values
+    private let powerLevels = ["-30 dBm", "-20 dBm", "-15 dBm", "-10 dBm", "0 dBm", "5 dBm", "7 dBm", "10 dBm", "13 dBm", "17 dBm", "20 dBm"]
+    private let powerValues = [-30, -20, -15, -10, 0, 5, 7, 10, 13, 17, 20]
     
-    // Configuration registers
-    private let configRegisters: [(key: String, name: String)] = [
-        ("00", "IOCFG2"), ("01", "IOCFG1"), ("02", "IOCFG0"), ("03", "FIFOTHR"),
-        ("04", "SYNC1"), ("05", "SYNC0"), ("06", "PKTLEN"), ("07", "PKTCTRL1"),
-        ("08", "PKTCTRL0"), ("09", "ADDR"), ("0A", "CHANNR"), ("0B", "FSCTRL1"),
-        ("0C", "FSCTRL0"), ("0D", "FREQ2"), ("0E", "FREQ1"), ("0F", "FREQ0"),
-        ("10", "MDMCFG4"), ("11", "MDMCFG3"), ("12", "MDMCFG2"), ("13", "MDMCFG1"),
-        ("14", "MDMCFG0"), ("15", "DEVIATN"), ("16", "MCSM2"), ("17", "MCSM1"),
-        ("18", "MCSM0"), ("19", "FOCCFG"), ("1A", "BSCFG"), ("1B", "AGCCTRL2"),
-        ("1C", "AGCCTRL1"), ("1D", "AGCCTRL0"), ("1E", "WOREVT1"), ("1F", "WOREVT0"),
-        ("20", "WORCTRL"), ("21", "FREND1"), ("22", "FREND0"), ("23", "FSCAL3"),
-        ("24", "FSCAL2"), ("25", "FSCAL1"), ("26", "FSCAL0"), ("27", "RCCTRL1"),
-        ("28", "RCCTRL0"), ("29", "FSTEST"), ("2A", "PTEST"), ("2B", "AGCTEST"),
-        ("2C", "TEST2"), ("2D", "TEST1"), ("2E", "TEST0")
+    // Configuration registers (matching Android CONFIG_REGISTERS list)
+    private let configRegisters: [(key: String, name: String, address: UInt8)] = [
+        ("01", "OPMODE", 0x01), ("02", "DATAMODUL", 0x02), ("03", "BITRATEMSB", 0x03), ("04", "BITRATELSB", 0x04),
+        ("05", "FDEVMSB", 0x05), ("06", "FDEVLSB", 0x06), ("07", "FRFMSB", 0x07), ("08", "FRFMID", 0x08),
+        ("09", "FRFLSB", 0x09), ("0A", "OSC1", 0x0A), ("0B", "AFCCTRL", 0x0B), ("0C", "LOWBAT", 0x0C),
+        ("0D", "LISTEN1", 0x0D), ("0E", "LISTEN2", 0x0E), ("0F", "LISTEN3", 0x0F), ("11", "PALEVEL", 0x11),
+        ("12", "PARAMP", 0x12), ("13", "OCP", 0x13), ("18", "LNA", 0x18), ("19", "RXBW", 0x19),
+        ("1A", "AFCBW", 0x1A), ("1B", "OOKPEAK", 0x1B), ("1C", "OOKAVG", 0x1C), ("1D", "OOKFIX", 0x1D),
+        ("1E", "AFCFEI", 0x1E), ("1F", "AFCMSB", 0x1F), ("20", "AFCLSB", 0x20), ("21", "FEIMSB", 0x21),
+        ("22", "FEILSB", 0x22), ("23", "RSSICONFIG", 0x23), ("25", "DIOMAPPING1", 0x25), ("26", "DIOMAPPING2", 0x26),
+        ("27", "IRQFLAGS1", 0x27), ("28", "IRQFLAGS2", 0x28), ("29", "RSSITHRESH", 0x29), ("2A", "RXTIMEOUT1", 0x2A),
+        ("2B", "RXTIMEOUT2", 0x2B), ("2C", "PREAMBLEMSB", 0x2C), ("2D", "PREAMBLELSB", 0x2D), ("2E", "SYNCCONFIG", 0x2E),
+        ("37", "PACKETCONFIG1", 0x37), ("38", "PAYLOADLENGTH", 0x38), ("39", "NODEADRS", 0x39), ("3A", "BROADCASTADRS", 0x3A),
+        ("3B", "AUTOMODES", 0x3B), ("3C", "FIFOTHRESH", 0x3C), ("3D", "PACKETCONFIG2", 0x3D)
     ]
     
     // Status registers
-    private let statusRegisters: [(key: String, name: String)] = [
-        ("30", "PARTNUM"), ("31", "VERSION"), ("32", "FREQEST"), ("33", "LQI"),
-        ("34", "RSSI"), ("35", "MARCSTATE"), ("36", "WORTIME1"), ("37", "WORTIME0"),
-        ("38", "PKTSTATUS"), ("39", "VCO_VC_DAC"), ("3A", "TXBYTES"), ("3B", "RXBYTES")
+    private let statusRegisters: [(key: String, name: String, address: UInt8)] = [
+        ("10", "VERSION", 0x10), ("24", "RSSIVALUE", 0x24), ("4E", "TEMP1", 0x4E), ("4F", "TEMP2", 0x4F)
     ]
     
     // Focus state for keyboard dismissal
@@ -113,7 +114,7 @@ struct ISMView: View {
             print("ISM View appeared")
             isViewActive = true
             if bleManager.isConnected {
-                setupCC1101()
+                setupRFM69()
             }
         }
         .onDisappear {
@@ -121,10 +122,20 @@ struct ISMView: View {
             isViewActive = false
             // Cancel any ongoing register loading
             loadingRegistersCancelled = true
+            // Clear command observer and close SPI device when view disappears
+            if let rfm69 = rfm69 {
+                rfm69.clearCommandObserver()
+                _ = rfm69.closeDevice()
+            }
         }
         .onChange(of: bleManager.isConnected) { connected in
             if connected && isViewActive {
-                setupCC1101()
+                setupRFM69()
+            } else if !connected {
+                // Close SPI device when disconnected
+                if let rfm69 = rfm69 {
+                    _ = rfm69.closeDevice()
+                }
             }
         }
         .onChange(of: showLoadingAlert) { show in
@@ -155,7 +166,24 @@ struct ISMView: View {
             }
         }
         .sheet(isPresented: $showingSettingsSheet) {
-            SettingsSheet()
+            NavigationView {
+                ISMSettingsView()
+                    .environmentObject(SettingsManager.shared)
+            }
+        }
+        .sheet(isPresented: $showLoadingAlert) {
+            LoadingDialogView(
+                progress: registerLoadingProgress,
+                completedSteps: completedLoadSteps,
+                totalSteps: totalLoadSteps,
+                currentCommand: currentCommand,
+                onCancel: {
+                    loadingRegistersCancelled = true
+                    isLoadingRegisters = false
+                    showLoadingAlert = false
+                }
+            )
+            .interactiveDismissDisabled()
         }
     }
     
@@ -185,7 +213,7 @@ struct ISMView: View {
                 .foregroundColor(.blue)
                 .padding()
             
-            Text("Connect to an EMWaver device to control the CC1101 radio.")
+            Text("Connect to an EMWaver device to control the RFM69 radio.")
                 .multilineTextAlignment(.center)
                 .padding()
             
@@ -338,7 +366,7 @@ struct ISMView: View {
     private var registersViewSection: some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack {
-                Text("CC1101 Registers")
+                Text("RFM69 Registers")
                     .font(.headline)
                     .padding(.bottom, 5)
                 
@@ -386,23 +414,6 @@ struct ISMView: View {
                             value: registerValues[register.key] ?? "??"
                         )
                     }
-                    
-                    Divider()
-                        .padding(.vertical, 4)
-                    
-                    // PA Table
-                    Text("PA Table")
-                        .font(.subheadline)
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    ForEach(0..<8, id: \.self) { index in
-                        registerRow(
-                            name: "PA[\(index)]",
-                            address: "PA\(index)",
-                            value: registerValues["PA\(index)"] ?? "??"
-                        )
-                    }
                 }
                 .padding(.horizontal, 4)
             }
@@ -434,16 +445,24 @@ struct ISMView: View {
     
     // MARK: - Helper Methods
     
-    private func setupCC1101() {
-        print("Setting up CC1101 in ISM View")
-        // Initialize CC1101 if needed
-        if cc1101 == nil {
-            cc1101 = CC1101(bleManager: bleManager)
+    private func setupRFM69() {
+        print("Setting up RFM69 in ISM View")
+        // Initialize RFM69 if needed
+        if rfm69 == nil {
+            rfm69 = RFM69(bleManager: bleManager)
         }
         
         // Check BLE connection before proceeding
         if !bleManager.isConnected {
             statusMessage = "Not connected to BLE device"
+            isLoading = false
+            return
+        }
+        
+        // Ensure SPI device is open before any operations
+        if !rfm69!.openDevice() {
+            print("RFM69: Failed to open SPI device")
+            statusMessage = "Failed to initialize RFM69"
             isLoading = false
             return
         }
@@ -456,7 +475,7 @@ struct ISMView: View {
     }
     
     private func loadAllSettings() {
-        guard let cc1101 = cc1101 else {
+        guard let rfm69 = rfm69 else {
             showLoadingAlert = false
             return
         }
@@ -467,10 +486,21 @@ struct ISMView: View {
         // Clear register values
         registerValues.removeAll()
         
+        // Set up command observer to update the current command display
+        rfm69.setCommandObserver { command in
+            Task { @MainActor in
+                self.currentCommand = command
+            }
+        }
+        
         // Use Task to perform loading asynchronously
         Task {
-            // Set total steps (RF parameters + 47 config registers + 12 status registers + 8 PA table entries)
-            let totalSteps = 5 + 47 + 12 + 8 // 5 RF parameters + registers
+            // Set total steps (RF parameters + config registers + status registers)
+            let totalSteps = 5 + configRegisters.count + statusRegisters.count
+            await MainActor.run {
+                totalLoadSteps = totalSteps
+                completedLoadSteps = 0
+            }
             var currentStep = 0
             
             // Step 1: Load RF parameters
@@ -486,10 +516,11 @@ struct ISMView: View {
             await MainActor.run {
                 loadingAlertMessage = "Loading parameters... (1/5)"
             }
-            let freqValue = cc1101.getFrequency()
+            let freqValue = rfm69.getFrequency()
             await MainActor.run {
                 frequency = String(format: "%.6f", freqValue)
                 currentStep += 1
+                completedLoadSteps = currentStep
                 registerLoadingProgress = Double(currentStep) / Double(totalSteps)
             }
             
@@ -497,10 +528,11 @@ struct ISMView: View {
             await MainActor.run {
                 loadingAlertMessage = "Loading parameters... (2/5)"
             }
-            let rateValue = cc1101.getDataRate()
+            let rateValue = rfm69.getDataRate()
             await MainActor.run {
                 dataRate = String(rateValue)
                 currentStep += 1
+                completedLoadSteps = currentStep
                 registerLoadingProgress = Double(currentStep) / Double(totalSteps)
             }
             
@@ -508,10 +540,11 @@ struct ISMView: View {
             await MainActor.run {
                 loadingAlertMessage = "Loading parameters... (3/5)"
             }
-            let bwValue = cc1101.getBandwidth()
+            let bwValue = rfm69.getBandwidth()
             await MainActor.run {
                 bandwidth = String(format: "%.1f", bwValue)
                 currentStep += 1
+                completedLoadSteps = currentStep
                 registerLoadingProgress = Double(currentStep) / Double(totalSteps)
             }
             
@@ -519,10 +552,11 @@ struct ISMView: View {
             await MainActor.run {
                 loadingAlertMessage = "Loading parameters... (4/5)"
             }
-            let devValue = cc1101.getDeviation()
+            let devValue = rfm69.getDeviation()
             await MainActor.run {
                 deviation = String(devValue)
                 currentStep += 1
+                completedLoadSteps = currentStep
                 registerLoadingProgress = Double(currentStep) / Double(totalSteps)
             }
             
@@ -530,20 +564,21 @@ struct ISMView: View {
             await MainActor.run {
                 loadingAlertMessage = "Loading parameters... (5/5)"
             }
-            let modValue = cc1101.getModulation()
-            let powValue = cc1101.getPowerLevel()
+            let modValue = rfm69.getModulation()
+            let powValue = rfm69.getPowerLevel()
             await MainActor.run {
-                selectedModulation = modulationValues.firstIndex(of: UInt8(modValue)) ?? 0
+                selectedModulation = modulationValues.firstIndex(of: modValue) ?? 0
                 selectedPower = powerValues.firstIndex(of: powValue) ?? 4
                 currentStep += 1
+                completedLoadSteps = currentStep
                 registerLoadingProgress = Double(currentStep) / Double(totalSteps)
             }
             
             // Step 2: Configuration registers
             await MainActor.run {
-                loadingAlertMessage = "Loading registers... (1/3)"
+                loadingAlertMessage = "Loading registers... (1/2)"
             }
-            for i in 0..<47 {
+            for (index, register) in configRegisters.enumerated() {
                 if loadingRegistersCancelled {
                     await MainActor.run {
                         showLoadingAlert = false
@@ -552,17 +587,17 @@ struct ISMView: View {
                     return
                 }
                 
-                let addr = UInt8(i)
-                let value = cc1101.readReg(addr: addr)
+                let value = rfm69.readReg(addr: register.address)
                 
                 await MainActor.run {
-                    registerValues[String(format: "%02X", addr)] = String(format: "%02X", value)
+                    registerValues[register.key] = String(format: "%02X", value)
                     currentStep += 1
+                    completedLoadSteps = currentStep
                     registerLoadingProgress = Double(currentStep) / Double(totalSteps)
                     
                     // Update loading message occasionally
-                    if i % 10 == 0 {
-                        loadingAlertMessage = "Loading config registers... (\(i)/47)"
+                    if index % 10 == 0 {
+                        loadingAlertMessage = "Loading config registers... (\(index)/\(configRegisters.count))"
                     }
                 }
                 
@@ -572,9 +607,9 @@ struct ISMView: View {
             
             // Step 3: Status registers
             await MainActor.run {
-                loadingAlertMessage = "Loading status registers... (2/3)"
+                loadingAlertMessage = "Loading status registers... (2/2)"
             }
-            for i in 0..<12 {
+            for register in statusRegisters {
                 if loadingRegistersCancelled {
                     await MainActor.run {
                         showLoadingAlert = false
@@ -583,51 +618,29 @@ struct ISMView: View {
                     return
                 }
                 
-                let baseAddr = UInt8(CC1101.PARTNUM) + UInt8(i)
-                let addr = baseAddr | CC1101.READ_BURST
-                let value = cc1101.readReg(addr: addr)
+                let value = rfm69.readReg(addr: register.address)
                 
                 await MainActor.run {
-                    registerValues[String(format: "%02X", baseAddr)] = String(format: "%02X", value)
+                    registerValues[register.key] = String(format: "%02X", value)
                     currentStep += 1
+                    completedLoadSteps = currentStep
                     registerLoadingProgress = Double(currentStep) / Double(totalSteps)
                 }
                 
                 try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
             }
             
-            // Step 4: PA Table
-            await MainActor.run {
-                loadingAlertMessage = "Loading PA table... (3/3)"
-            }
-            let paTable = cc1101.readBurstReg(addr: CC1101.PATABLE, len: 8)
-            for i in 0..<min(8, paTable.count) {
-                if loadingRegistersCancelled {
-                    await MainActor.run {
-                        showLoadingAlert = false
-                        isLoadingRegisters = false
-                    }
-                    return
-                }
-                
-                await MainActor.run {
-                    registerValues["PA\(i)"] = String(format: "%02X", paTable[i])
-                    currentStep += 1
-                    registerLoadingProgress = Double(currentStep) / Double(totalSteps)
-                }
-                
-                if i < 7 { // Don't delay after the last item
-                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms delay
-                }
-            }
-            
             // Complete loading
             await MainActor.run {
                 registerLoadingProgress = 1.0
+                completedLoadSteps = totalSteps
                 isLoadingRegisters = false
                 showLoadingAlert = false
                 statusMessage = "Settings loaded successfully"
-                loadingAlertMessage = "Loading CC1101 parameters..." // Reset for next time
+                loadingAlertMessage = "Loading RFM69 parameters..." // Reset for next time
+                currentCommand = "Preparing..."
+                // Clear command observer
+                rfm69.clearCommandObserver()
             }
         }
     }
@@ -635,39 +648,33 @@ struct ISMView: View {
     // MARK: - Control Methods
     
     private func setFrequency(_ freq: Double) {
-        guard let cc1101 = cc1101 else { return }
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        if cc1101.setFrequencyMHz(frequencyMHz: freq) {
-            let actualFreq = cc1101.getFrequency()
-            frequency = String(format: "%.6f", actualFreq)
-            statusMessage = "Frequency set to \(actualFreq) MHz"
-        } else {
-            statusMessage = "Failed to set frequency"
-        }
+        rfm69.setFrequencyMHz(Float(freq))
+        let actualFreq = rfm69.getFrequency()
+        frequency = String(format: "%.6f", actualFreq)
+        statusMessage = "Frequency set to \(actualFreq) MHz"
         isLoading = false
     }
     
     private func setDataRate(_ rate: Int) {
-        guard let cc1101 = cc1101 else { return }
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        if cc1101.setDataRate(bitRate: rate) {
-            let actualRate = cc1101.getDataRate()
-            dataRate = String(actualRate)
-            statusMessage = "Data rate set to \(actualRate) bps"
-        } else {
-            statusMessage = "Failed to set data rate"
-        }
+        rfm69.setDataRate(rate)
+        let actualRate = rfm69.getDataRate()
+        dataRate = String(actualRate)
+        statusMessage = "Data rate set to \(actualRate) bps"
         isLoading = false
     }
     
     private func setBandwidth(_ bw: Double) {
-        guard let cc1101 = cc1101 else { return }
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        if cc1101.setBandwidth(bandwidth: bw) {
-            let actualBw = cc1101.getBandwidth()
+        if rfm69.setBandwidth(bw) {
+            let actualBw = rfm69.getBandwidth()
             bandwidth = String(format: "%.1f", actualBw)
             statusMessage = "Bandwidth set to \(actualBw) kHz"
         } else {
@@ -677,59 +684,49 @@ struct ISMView: View {
     }
     
     private func setDeviation(_ dev: Int) {
-        guard let cc1101 = cc1101 else { return }
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        if cc1101.setDeviation(deviation: dev) {
-            let actualDev = cc1101.getDeviation()
-            deviation = String(actualDev)
-            statusMessage = "Deviation set to \(actualDev) Hz"
-        } else {
-            statusMessage = "Failed to set deviation"
-        }
+        rfm69.setDeviation(dev)
+        let actualDev = rfm69.getDeviation()
+        deviation = String(actualDev)
+        statusMessage = "Deviation set to \(actualDev) Hz"
         isLoading = false
     }
     
-    private func setModulation(_ mod: UInt8) {
-        guard let cc1101 = cc1101 else { return }
+    private func setModulation(_ mod: Int) {
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        if cc1101.setModulation(modulation: mod) {
-            statusMessage = "Modulation set to \(modulationFormats[selectedModulation])"
-        } else {
-            statusMessage = "Failed to set modulation"
-            // Revert selection
-            let currentMod = cc1101.getModulation()
-            selectedModulation = modulationValues.firstIndex(of: UInt8(currentMod)) ?? 0
-        }
+        rfm69.setModulation(mod)
+        statusMessage = "Modulation set to \(modulationFormats[selectedModulation])"
         isLoading = false
     }
     
     private func setPowerLevel(_ power: Int) {
-        guard let cc1101 = cc1101 else { return }
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        if cc1101.setPowerLevel(powerLevel: power) {
+        if rfm69.setPowerLevel(power) {
             statusMessage = "Power level set to \(power) dBm"
         } else {
             statusMessage = "Failed to set power level"
             // Revert selection
-            let currentPower = cc1101.getPowerLevel()
+            let currentPower = rfm69.getPowerLevel()
             selectedPower = powerValues.firstIndex(of: currentPower) ?? 4
         }
         isLoading = false
     }
     
     private func resetRadio() {
-        guard let cc1101 = cc1101 else { return }
+        guard let rfm69 = rfm69 else { return }
         
         isLoading = true
-        cc1101.spiStrobe(commandStrobe: CC1101.SRES)
-        Thread.sleep(forTimeInterval: 0.1) // Wait for reset
-        
-        // Use the CC1101 init method correctly
-        cc1101.spiStrobe(commandStrobe: CC1101.SRES) // Reset chip
-        Thread.sleep(forTimeInterval: 0.1) // Wait for reset
+        // RFM69 reset: set to sleep mode then standby
+        rfm69.setMode(RFM69.MODE_SLEEP)
+        Thread.sleep(forTimeInterval: 0.1)
+        rfm69.setMode(RFM69.MODE_STANDBY)
+        Thread.sleep(forTimeInterval: 0.1)
         
         // Show loading dialog for reloading settings after reset
         showLoadingAlert = true
