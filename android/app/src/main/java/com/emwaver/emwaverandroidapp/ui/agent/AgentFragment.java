@@ -106,7 +106,7 @@ public class AgentFragment extends Fragment {
         setupSendActions();
         setupEmptyState();
         loadStoredConversations();
-        updateStatusBar();
+        // Status bar will be updated by loadStoredConversations() -> selectConversation()
         updateEmptyStateVisibility();
         return binding.getRoot();
     }
@@ -574,7 +574,7 @@ public class AgentFragment extends Fragment {
         messages.clear();
         messages.addAll(loaded);
         messageAdapter.notifyDataSetChanged();
-        updateStatusBar();
+        // Status bar will be updated by selectConversation() after this method returns
     }
 
     private int appendLocalMessage(MessageItem item) {
@@ -647,6 +647,10 @@ public class AgentFragment extends Fragment {
     private void loadStoredConversations() {
         File indexFile = new File(getConversationsDir(), CONVERSATIONS_INDEX);
         if (!indexFile.exists()) {
+            // No conversations exist yet, ensure status bar shows correct state
+            selectedConversationId = null;
+            updateStatusBar();
+            updateConversationActionButtons();
             return;
         }
         
@@ -681,10 +685,16 @@ public class AgentFragment extends Fragment {
                 // If last selected doesn't exist, select the most recent
                 selectConversation(conversations.get(0).id);
             } else {
+                // No conversations found, ensure status bar is updated
+                selectedConversationId = null;
                 updateStatusBar();
                 updateConversationActionButtons();
             }
-        } catch (IOException | JSONException ignored) {
+        } catch (IOException | JSONException e) {
+            // On error, ensure status bar reflects current state
+            selectedConversationId = null;
+            updateStatusBar();
+            updateConversationActionButtons();
         }
     }
 
@@ -1048,7 +1058,8 @@ public class AgentFragment extends Fragment {
 					
 					LinearLayout codeBlock = new LinearLayout(context);
 					codeBlock.setOrientation(LinearLayout.VERTICAL);
-					codeBlock.setBackgroundColor(0xFF2B2B2B);
+					int codeBlockBgColor = context.getResources().getColor(R.color.codeBlockBackground, null);
+					codeBlock.setBackgroundColor(codeBlockBgColor);
 					codeBlock.setPadding(20, 20, 20, 20);
 					LinearLayout.LayoutParams codeParams = new LinearLayout.LayoutParams(
 						LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1150,7 +1161,8 @@ public class AgentFragment extends Fragment {
 			scrollView.setLayoutParams(scrollParams);
 			
 			android.widget.TableLayout table = new android.widget.TableLayout(context);
-			table.setBackgroundColor(0xFF1E1E1E);
+			int tableBgColor = context.getResources().getColor(R.color.codeBlockBackground, null);
+			table.setBackgroundColor(tableBgColor);
 			table.setPadding(10, 10, 10, 10);
 			
 			for (int i = 0; i < tableLines.size(); i++) {
