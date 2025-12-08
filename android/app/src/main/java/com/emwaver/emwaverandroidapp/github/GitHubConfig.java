@@ -29,7 +29,9 @@ public class GitHubConfig {
     public static final String GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
     public static final String GITHUB_API_BASE = "https://api.github.com";
     
-    public static final String[] SCOPES = {"repo", "read:user"};
+    // Use public_repo scope for OAuth - only grants access to public repositories
+    // Users who need private repo access can use a Personal Access Token (PAT) instead
+    public static final String[] SCOPES = {"public_repo", "read:user"};
     
     public static String getAuthorizationUrl() {
         try {
