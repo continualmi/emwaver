@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxHeight="500dp"
+        android:minHeight="300dp">
+
+        <EditText
+            android:id="@+id/file_content_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="top|start"
+            android:fontFamily="monospace"
+            android:padding="12dp"
+            android:inputType="textMultiLine|textNoSuggestions"
+            android:scrollbars="vertical"
+            android:textColor="@color/codeText"
+            android:textColorHint="@color/textSecondary"
+            android:textSize="12sp"
+            android:minLines="10" />
+
+    </ScrollView>
+
+</LinearLayout>

@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Git branch icon - simplified version -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M7,2C5.9,2 5,2.9 5,4C5,5.1 5.9,6 7,6C8.1,6 9,5.1 9,4C9,2.9 8.1,2 7,2M7,8C5.9,8 5,8.9 5,10C5,11.1 5.9,12 7,12C8.1,12 9,11.1 9,10C9,8.9 8.1,8 7,8M17,8C15.9,8 15,8.9 15,10C15,11.1 15.9,12 17,12C18.1,12 19,11.1 19,10C19,8.9 18.1,8 17,8M7,6L7,8M17,12L17,20M7,12L7,20" 
+        android:strokeWidth="2"
+        android:strokeColor="#FF000000" />
+</vector>
