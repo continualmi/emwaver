@@ -893,19 +893,15 @@ export default function WaveletsFragment() {
   return (
     <section className="flex flex-1 flex-col bg-slate-950">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
-        <div>
+        <div className="flex flex-col min-w-0 flex-1">
           <h2 className="text-lg font-semibold text-slate-100">Wavelets</h2>
-          <p className="text-sm text-slate-400">{project.name}</p>
+          <p className="text-sm text-slate-400 truncate" title={project.path}>
+            {project.name}
+          </p>
+          <p className="text-xs text-slate-500 truncate mt-0.5" title={project.path}>
+            {project.path}
+          </p>
         </div>
-        <button
-          onClick={() => {
-            // Placeholder for Git connection
-            alert("Git connection coming soon");
-          }}
-          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-300 transition-colors hover:border-indigo-500/60 hover:bg-slate-800 hover:text-indigo-300"
-        >
-          Connect to Git
-        </button>
       </header>
       <div className="flex flex-1 min-h-0">
         <Sidebar
@@ -1094,43 +1090,6 @@ function Sidebar({
   getInitialOpenState: (projectId: string) => Record<string, boolean>;
   onToggleNode: (projectId: string, nodeId: string, isOpen: boolean) => void;
 }) {
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-
-  const handleProjectContextMenu = async (event: ReactMouseEvent<HTMLHeadingElement>) => {
-    if (!project) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    setContextMenu({ x: event.clientX, y: event.clientY });
-  };
-
-  const handleShowProjectInFinder = async () => {
-    if (!project) {
-      return;
-    }
-    setContextMenu(null);
-    try {
-      await safeInvoke<void>("reveal_in_finder", {
-        payload: { path: project.path },
-      });
-    } catch (error) {
-      console.error("Failed to reveal in Finder:", error);
-      alert(String(error));
-    }
-  };
-
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setContextMenu(null);
-    };
-    if (contextMenu) {
-      document.addEventListener("click", handleClickOutside);
-      return () => {
-        document.removeEventListener("click", handleClickOutside);
-      };
-    }
-  }, [contextMenu]);
   const treeRef = useRef<TreeApi<TreeNode> | null>(null);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
   const [treeSize, setTreeSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -1187,29 +1146,6 @@ function Sidebar({
       style={{ width }}
       className="flex h-full shrink-0 flex-col border-r border-slate-900 bg-slate-950"
     >
-      <div className="border-b border-slate-900 px-4 py-3">
-        <h2
-          className="truncate text-sm font-semibold text-slate-200 cursor-pointer"
-          title={project ? project.name : "Explorer"}
-          onContextMenu={handleProjectContextMenu}
-        >
-          {project ? project.name : "Explorer"}
-        </h2>
-      </div>
-      {contextMenu && project && (
-        <div
-          className="fixed z-50 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={handleShowProjectInFinder}
-            className="w-full px-4 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800 hover:text-sky-200"
-          >
-            Show in Finder
-          </button>
-        </div>
-      )}
       <nav className="flex-1 min-h-0 p-3 text-[13px]">
         {project ? (
           <div ref={treeContainerRef} className="flex h-full min-h-0">
