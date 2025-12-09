@@ -81,13 +81,22 @@ function SamplerFragment() {
     dataValues: [],
   });
   const [chartError] = useState<string | null>(null);
+  
+  // Settings state
+  const [showSettings, setShowSettings] = useState(false);
+  const [chartResolution, setChartResolution] = useState(1000);
+  const [maxSamples, setMaxSamples] = useState(393216);
+  const [refreshRate, setRefreshRate] = useState(50);
 
   const bufferRef = useRef(new SamplerBuffer());
   const chartRef = useRef<any>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const lastBufferSizeRef = useRef(0);
-  const visiblePoints = 300;
-  const refreshDelay = 50; // ms
+  
+  // Update buffer max size when setting changes
+  useEffect(() => {
+    bufferRef.current.setMaxSize(maxSamples);
+  }, [maxSamples]);
 
   // Define refreshChart callback first (before useEffects that depend on it)
   const refreshChart = useCallback((chartInstance?: any) => {
@@ -116,11 +125,11 @@ function SamplerFragment() {
     const compressed = bufferRef.current.compressDataBits(
       visibleRangeStart,
       visibleRangeEnd,
-      visiblePoints
+      chartResolution
     );
 
     setChartData(compressed);
-  }, []);
+  }, [chartResolution]);
 
   // Check BLE connection status
   useEffect(() => {
@@ -171,7 +180,7 @@ function SamplerFragment() {
       const currentBufferSize = bufferRef.current.getBufferLength();
       
       // Check buffer size limit
-      if (isRecording && currentBufferSize >= 393216) {
+      if (isRecording && currentBufferSize >= maxSamples) {
         stopRecording();
         alert('Recording stopped: Buffer size limit reached.');
         return;
@@ -210,7 +219,7 @@ function SamplerFragment() {
       const compressed = bufferRef.current.compressDataBits(
         visibleRangeStart,
         visibleRangeEnd,
-        visiblePoints
+        chartResolution
       );
 
       // Update chart data
@@ -231,14 +240,14 @@ function SamplerFragment() {
 
     refreshIntervalRef.current = window.setInterval(() => {
       refreshChartLoop();
-    }, refreshDelay);
+    }, refreshRate);
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
     };
-  }, [isConnected, isRecording]);
+  }, [isConnected, isRecording, chartResolution, maxSamples, refreshRate]);
 
   const startRecording = async () => {
     if (!isConnected) {
@@ -453,7 +462,7 @@ function SamplerFragment() {
   const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
-    animation: false,
+    animation: false as const,
     interaction: {
       mode: 'index' as const,
       intersect: false,
@@ -556,6 +565,7 @@ function SamplerFragment() {
         pointRadius: 0,
         fill: false,
         tension: 0,
+        normalized: true,
       },
     ],
   };
@@ -593,6 +603,12 @@ function SamplerFragment() {
             className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
           >
             Clear
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+          >
+            Settings
           </button>
         </div>
       </header>
@@ -683,6 +699,69 @@ function SamplerFragment() {
           </select>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-96 rounded-lg bg-slate-900 p-6 shadow-xl border border-slate-700">
+            <h3 className="mb-4 text-lg font-semibold text-slate-100">Settings</h3>
+            
+            <div className="mb-4 space-y-2">
+              <label className="block text-sm font-medium text-slate-300">
+                Chart Resolution (visible points)
+              </label>
+              <input
+                type="number"
+                value={chartResolution}
+                onChange={(e) => setChartResolution(Number(e.target.value))}
+                className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none"
+              />
+              <p className="text-xs text-slate-500">
+                Higher values show more detail but may reduce performance.
+              </p>
+            </div>
+
+            <div className="mb-4 space-y-2">
+              <label className="block text-sm font-medium text-slate-300">
+                Refresh Rate (ms)
+              </label>
+              <input
+                type="number"
+                value={refreshRate}
+                onChange={(e) => setRefreshRate(Number(e.target.value))}
+                className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none"
+              />
+              <p className="text-xs text-slate-500">
+                Interval between chart updates. Lower values are smoother but use more CPU.
+              </p>
+            </div>
+
+            <div className="mb-6 space-y-2">
+              <label className="block text-sm font-medium text-slate-300">
+                Max Buffer Size (KB)
+              </label>
+              <input
+                type="number"
+                value={maxSamples / 1024}
+                onChange={(e) => setMaxSamples(Number(e.target.value) * 1024)}
+                className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none"
+              />
+              <p className="text-xs text-slate-500">
+                Limit for signal recording storage. Default: 384KB (~30s)
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowSettings(false)}
+                className="rounded bg-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
