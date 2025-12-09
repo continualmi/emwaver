@@ -1,0 +1,7 @@
+adb logcat --pid=$(adb shell pidof -s com.emwaver.emwaverandroidapp) -T 0
+
+This command filters logcat to only show logs from the EMWaver Android app:
+- --pid=$(adb shell pidof -s <package>) filters by the app's process ID
+- -T 0 clears the buffer and shows logs from the current time forward
+
+Replace com.emwaver.emwaverandroidapp with your app's package name if different.
