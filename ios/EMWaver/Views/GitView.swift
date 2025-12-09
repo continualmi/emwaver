@@ -284,11 +284,200 @@ struct ManagePATView: View {
     }
 }
 
+// MARK: - File Editing
+
+struct FileEditView: View {
+    let file: GitHubContent
+    let initialContent: String
+    @Binding var isPresented: Bool
+    
+    @State private var content: String = ""
+    @StateObject private var service = GitService.shared
+    @State private var commitMessage = ""
+    @State private var showingCommit = false
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                if content.isEmpty && !initialContent.isEmpty { 
+                     // Fallback or loading if needed, though onAppear is fast
+                     Text("Loading content...")
+                }
+                TextEditor(text: $content)
+                    .font(.system(.body, design: .monospaced))
+                    .padding()
+                    .background(Color(.systemBackground))
+                    .foregroundColor(.primary)
+            }
+            .navigationTitle(file.name)
+            .navigationBarItems(
+                leading: Button("Cancel") { isPresented = false },
+                trailing: Button("Save") { showingCommit = true }
+            )
+            .alert("Commit Changes", isPresented: $showingCommit) {
+                TextField("Commit Message", text: $commitMessage)
+                Button("Commit") {
+                    Task {
+                        await service.updateFileOnGitHub(path: file.path, content: content, sha: file.sha, message: commitMessage)
+                        isPresented = false
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .onAppear {
+                self.content = initialContent
+                self.commitMessage = "Update " + file.name
+            }
+        }
+    }
+}
+
+// MARK: - Diff Preview
+
+struct DiffPreviewView: View {
+    let file: GitHubContent
+    let localContent: String
+    let githubContent: String
+    let direction: FileBrowserView.SyncDirection
+    @Binding var isPresented: Bool
+    @StateObject private var service = GitService.shared
+    
+    @State private var diff: DiffResult?
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header Diagram
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(direction == .githubToLocal ? "GitHub (Remote)" : "Local (Source)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(file.name)
+                            .bold()
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "arrow.right")
+                        .foregroundColor(.blue)
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing) {
+                        Text(direction == .githubToLocal ? "Local (Dest)" : "GitHub (Dest)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(file.name)
+                            .bold()
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                
+                Divider()
+                
+                if let diff = diff {
+                    ScrollView {
+                        if diff.previewLines.isEmpty {
+                            VStack(spacing: 20) {
+                                Spacer()
+                                Image(systemName: "checkmark.circle")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.green)
+                                Text("No changes detected.")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                Text("The files are identical.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 50)
+                        } else {
+                            HStack {
+                                Text("\(diff.linesAdded) additions")
+                                    .font(.caption)
+                                    .foregroundColor(.green)
+                                Text("•")
+                                Text("\(diff.linesRemoved) deletions")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                Spacer()
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 8)
+                            
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(diff.previewLines.enumerated()), id: \.offset) {
+                                    index, line in
+                                    Text(line)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundColor(getColor(line))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(getBgColor(line))
+                                }
+                            }
+                            .padding()
+                        }
+                    }
+                } else {
+                    ProgressView("Calculating Diff...")
+                }
+            }
+            .navigationTitle("Sync Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(
+                leading: Button("Cancel") { isPresented = false },
+                trailing: Button("Confirm") {
+                    Task {
+                        if direction == .githubToLocal {
+                            await service.syncGitHubToLocal(content: file)
+                        } else {
+                            // Local to GitHub requires commit
+                            await service.updateFileOnGitHub(path: file.path, content: localContent, sha: file.sha, message: "Update \(file.name) from local")
+                        }
+                        isPresented = false
+                    }
+                }
+            )
+            .onAppear {
+                // Calculate diff on appear
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = GitHubDiffUtil.calculateDiff(
+                        original: direction == .githubToLocal ? localContent : githubContent,
+                        new: direction == .githubToLocal ? githubContent : localContent
+                    )
+                    DispatchQueue.main.async {
+                        self.diff = result
+                    }
+                }
+            }
+        }
+    }
+    
+    func getColor(_ line: String) -> Color {
+        if line.starts(with: "+") { return .green }
+        if line.starts(with: "-") { return .red }
+        return .primary
+    }
+    
+    func getBgColor(_ line: String) -> Color {
+        if line.starts(with: "+") { return Color.green.opacity(0.1) }
+        if line.starts(with: "-") { return Color.red.opacity(0.1) }
+        return Color.clear
+    }
+}
+
 // MARK: - File Browser
 
 struct FileBrowserView: View {
     @StateObject private var service = GitService.shared
     @State private var selectedFile: GitHubContent?
+    @State private var showFileOptions = false
     @State private var showingEdit = false
     @State private var showingSyncPreview = false
     @State private var syncDirection: SyncDirection = .githubToLocal
@@ -321,15 +510,28 @@ struct FileBrowserView: View {
                         }
                     }
                 } else {
-                    Button(action: { handleFileSelection(item) }) {
-                        HStack {
-                            Image(systemName: "doc.text")
-                                .foregroundColor(.gray)
-                            Text(item.name)
-                            Spacer()
+                    HStack {
+                        Image(systemName: "doc.text")
+                            .foregroundColor(.gray)
+                        Text(item.name)
+                        Spacer()
+                        
+                        Button(action: {
+                            selectedFile = item
+                            showFileOptions = true
+                        }) {
                             Image(systemName: "ellipsis.circle")
+                                .font(.title3)
                                 .foregroundColor(.blue)
+                                .padding(10)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedFile = item
+                        loadAndEdit(item)
                     }
                 }
             }
@@ -337,28 +539,23 @@ struct FileBrowserView: View {
         .listStyle(PlainListStyle())
         .confirmationDialog(
             selectedFile?.name ?? "Options",
-            isPresented: Binding(
-                get: { selectedFile != nil },
-                set: { if !$0 { selectedFile = nil } }
-            ),
+            isPresented: $showFileOptions,
             titleVisibility: .visible
         ) {
-            Button("Edit File") {
+            Button("Edit File") { 
                 if let file = selectedFile { loadAndEdit(file) }
             }
-            Button("GitHub → Local") {
+            Button("GitHub → Local") { 
                 if let file = selectedFile { prepareSync(file, direction: .githubToLocal) }
             }
-            Button("Local → GitHub") {
+            Button("Local → GitHub") { 
                 if let file = selectedFile { prepareSync(file, direction: .localToGitHub) }
             }
-            Button("Cancel", role: .cancel) {
-                selectedFile = nil
-            }
+            Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showingEdit) {
             if let file = selectedFile {
-                FileEditView(file: file, content: githubContentForDiff, isPresented: $showingEdit)
+                FileEditView(file: file, initialContent: githubContentForDiff, isPresented: $showingEdit)
             }
         }
         .sheet(isPresented: $showingSyncPreview) {
@@ -374,12 +571,11 @@ struct FileBrowserView: View {
         }
     }
     
-    func handleFileSelection(_ item: GitHubContent) {
-        selectedFile = item
-    }
-    
     func loadAndEdit(_ file: GitHubContent) {
         Task {
+            await MainActor.run { service.isLoading = true }
+            defer { Task { await MainActor.run { service.isLoading = false } } }
+            
             do {
                 let content = try await service.getFileContent(path: file.path)
                 if let encoded = content.content, let data = Data(base64Encoded: encoded.replacingOccurrences(of: "\n", with: "")) {
@@ -397,6 +593,9 @@ struct FileBrowserView: View {
     func prepareSync(_ file: GitHubContent, direction: SyncDirection) {
         syncDirection = direction
         Task {
+            await MainActor.run { service.isLoading = true }
+            defer { Task { await MainActor.run { service.isLoading = false } } }
+            
             // Get local content
             let local = await service.getLocalFileContent(name: file.name) ?? ""
             
@@ -417,127 +616,5 @@ struct FileBrowserView: View {
                 showingSyncPreview = true
             }
         }
-    }
-}
-
-// MARK: - File Editing
-
-struct FileEditView: View {
-    let file: GitHubContent
-    @State var content: String
-    @Binding var isPresented: Bool
-    @StateObject private var service = GitService.shared
-    @State private var commitMessage = ""
-    @State private var showingCommit = false
-    
-    init(file: GitHubContent, content: String, isPresented: Binding<Bool>) {
-        self.file = file
-        self._content = State(initialValue: content)
-        self._isPresented = isPresented
-        self._commitMessage = State(initialValue: "Update " + file.name)
-    }
-    
-    var body: some View {
-        NavigationView {
-            VStack {
-                TextEditor(text: $content)
-                    .font(.system(.body, design: .monospaced))
-                    .padding()
-            }
-            .navigationTitle(file.name)
-            .navigationBarItems(
-                leading: Button("Cancel") { isPresented = false },
-                trailing: Button("Save") { showingCommit = true }
-            )
-            .alert("Commit Changes", isPresented: $showingCommit) {
-                TextField("Commit Message", text: $commitMessage)
-                Button("Commit") {
-                    Task {
-                        await service.updateFileOnGitHub(path: file.path, content: content, sha: file.sha, message: commitMessage)
-                        isPresented = false
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-        }
-    }
-}
-
-// MARK: - Diff Preview
-
-struct DiffPreviewView: View {
-    let file: GitHubContent
-    let localContent: String
-    let githubContent: String
-    let direction: FileBrowserView.SyncDirection
-    @Binding var isPresented: Bool
-    @StateObject private var service = GitService.shared
-    
-    @State private var commitMessage = ""
-    
-    var body: some View {
-        NavigationView {
-            VStack {
-                HStack {
-                    Text(direction == .githubToLocal ? "GitHub (Remote)" : "Local (Source)")
-                        .bold()
-                    Image(systemName: "arrow.right")
-                    Text(direction == .githubToLocal ? "Local (Dest)" : "GitHub (Dest)")
-                        .bold()
-                }
-                .padding()
-                
-                ScrollView {
-                    // Use GitHubDiffUtil
-                    let diff = GitHubDiffUtil.calculateDiff(
-                        original: direction == .githubToLocal ? localContent : githubContent,
-                        new: direction == .githubToLocal ? githubContent : localContent
-                    )
-                    
-                    Text("Lines Added: \(diff.linesAdded)  Removed: \(diff.linesRemoved)")
-                        .font(.caption)
-                        .padding(.bottom)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(diff.previewLines, id: \.self) {
-                            line in
-                            Text(line)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(getColor(line))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(getBgColor(line))
-                        }
-                    }
-                    .padding()
-                }
-            }
-            .navigationTitle("Sync Preview")
-            .navigationBarItems(
-                leading: Button("Cancel") { isPresented = false },
-                trailing: Button("Confirm") {
-                    Task {
-                        if direction == .githubToLocal {
-                            await service.syncGitHubToLocal(content: file)
-                        } else {
-                            // Local to GitHub requires commit
-                            await service.updateFileOnGitHub(path: file.path, content: localContent, sha: file.sha, message: "Update \(file.name) from local")
-                        }
-                        isPresented = false
-                    }
-                }
-            )
-        }
-    }
-    
-    func getColor(_ line: String) -> Color {
-        if line.starts(with: "+") { return .green }
-        if line.starts(with: "-") { return .red }
-        return .primary
-    }
-    
-    func getBgColor(_ line: String) -> Color {
-        if line.starts(with: "+") { return Color.green.opacity(0.1) }
-        if line.starts(with: "-") { return Color.red.opacity(0.1) }
-        return Color.clear
     }
 }
