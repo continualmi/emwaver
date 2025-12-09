@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,7 +12,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
-import { safeInvoke, isTauriAvailable } from '../utils/tauri';
+import { safeInvoke } from '../utils/tauri';
 import { SamplerBuffer } from '../utils/SamplerBuffer';
 
 // Register Chart.js components - do this once at module load
@@ -80,7 +80,7 @@ function SamplerFragment() {
     timeValues: [],
     dataValues: [],
   });
-  const [chartError, setChartError] = useState<string | null>(null);
+  const [chartError] = useState<string | null>(null);
 
   const bufferRef = useRef(new SamplerBuffer());
   const chartRef = useRef<any>(null);
@@ -90,8 +90,8 @@ function SamplerFragment() {
   const refreshDelay = 50; // ms
 
   // Define refreshChart callback first (before useEffects that depend on it)
-  const refreshChart = useCallback(() => {
-    const chart = chartRef.current;
+  const refreshChart = useCallback((chartInstance?: any) => {
+    const chart = chartInstance || chartRef.current;
     if (!chart) return;
 
     const currentBufferSize = bufferRef.current.getBufferLength();
@@ -167,7 +167,7 @@ function SamplerFragment() {
       return;
     }
 
-    const refreshChart = () => {
+    const refreshChartLoop = () => {
       const currentBufferSize = bufferRef.current.getBufferLength();
       
       // Check buffer size limit
@@ -230,7 +230,7 @@ function SamplerFragment() {
     };
 
     refreshIntervalRef.current = window.setInterval(() => {
-      refreshChart();
+      refreshChartLoop();
     }, refreshDelay);
     return () => {
       if (refreshIntervalRef.current) {
@@ -238,7 +238,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-  }, [isConnected, isRecording, refreshChart]);
+  }, [isConnected, isRecording]);
 
   const startRecording = async () => {
     if (!isConnected) {
@@ -450,9 +450,10 @@ function SamplerFragment() {
     return candidate;
   };
 
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    animation: false,
     interaction: {
       mode: 'index' as const,
       intersect: false,
@@ -477,10 +478,16 @@ function SamplerFragment() {
             enabled: true,
           },
           mode: 'x' as const,
+          onZoomComplete: ({ chart }: { chart: any }) => {
+            refreshChart(chart);
+          },
         },
         pan: {
           enabled: true,
           mode: 'x' as const,
+          onPanComplete: ({ chart }: { chart: any }) => {
+            refreshChart(chart);
+          },
         },
         limits: {
           x: {
@@ -524,7 +531,7 @@ function SamplerFragment() {
         max: 384,
       },
     },
-  };
+  }), [refreshChart]);
 
   // Update chart when data changes (matches Android: chart.setData() + chart.invalidate())
   useEffect(() => {
@@ -534,37 +541,6 @@ function SamplerFragment() {
     // Update chart data and force redraw
     chart.update('none');
   }, [chartData]);
-
-  // Handle chart zoom/pan events - refresh chart data when zoom/pan changes
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    // Get the Chart.js instance from react-chartjs-2
-    const getChartInstance = () => {
-      if (!chart) return null;
-      // react-chartjs-2 v5+ stores chart instance here
-      return (chart as any).chartInstance || (chart as any).chart || null;
-    };
-
-    const chartInstance = getChartInstance();
-    if (!chartInstance) return;
-
-    // Refresh chart data after zoom/pan
-    const handleZoomPan = () => {
-      setTimeout(() => refreshChart(), 50);
-    };
-
-    // Listen for zoom/pan events
-    chartInstance.canvas.addEventListener('wheel', handleZoomPan, { passive: true });
-    
-    return () => {
-      const instance = getChartInstance();
-      if (instance) {
-        instance.canvas.removeEventListener('wheel', handleZoomPan);
-      }
-    };
-  }, [refreshChart]);
 
   const data = {
     datasets: [
