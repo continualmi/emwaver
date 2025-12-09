@@ -983,9 +983,7 @@ function Sidebar({
   return (
     <aside
       style={{ width: isVisible ? width : 0 }}
-      className={`flex h-full shrink-0 flex-col border-r border-slate-900 bg-slate-950 transition-[width] duration-150 ${
-        isVisible ? "opacity-100" : "pointer-events-none opacity-0"
-      }`}
+      className={`flex h-full shrink-0 flex-col border-r border-slate-900 bg-slate-950 transition-[width] duration-150 ${isVisible ? "opacity-100" : "pointer-events-none opacity-0"}`}
       aria-hidden={isVisible ? undefined : true}
     >
       <div className="border-b border-slate-900 px-4 py-3">
@@ -1089,11 +1087,7 @@ function ActivityButton({ label, isActive, onClick, icon }: ActivityButtonProps)
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-transform transition-colors duration-150 hover:-translate-y-0.5 ${
-        isActive
-          ? "bg-slate-900 text-sky-200 shadow-lg shadow-sky-500/10"
-          : "text-slate-400 hover:bg-slate-900 hover:text-sky-200"
-      }`}
+      className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-transform transition-colors duration-150 hover:-translate-y-0.5 ${isActive ? "bg-slate-900 text-sky-200 shadow-lg shadow-sky-500/10" : "text-slate-400 hover:bg-slate-900 hover:text-sky-200"}`}
     >
       <span className="h-5 w-5" aria-hidden="true">
         {icon}
@@ -1123,9 +1117,7 @@ function FileTreeNode({ node, style }: NodeRendererProps<TreeNode>) {
   return (
     <div
       style={style}
-      className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-tight transition-colors ${
-        isSelected ? "bg-slate-800 text-sky-100" : "text-slate-300 hover:bg-slate-800/60"
-      }`}
+      className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-tight transition-colors ${isSelected ? "bg-slate-800 text-sky-100" : "text-slate-300 hover:bg-slate-800/60"}`}
       onClick={handleClick}
     >
       {isFolder ? (
@@ -1199,11 +1191,7 @@ function IconButton({ onClick, label, icon, disabled = false, isActive = false }
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:shadow-lg ${
-        isActive
-          ? "border-sky-500 bg-slate-800 text-sky-300 shadow-sky-500/20"
-          : "border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-500/70 hover:bg-slate-800 hover:text-sky-200"
-      } disabled:translate-y-0 disabled:shadow-none disabled:cursor-not-allowed disabled:opacity-50`}
+      className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:shadow-lg ${isActive ? "border-sky-500 bg-slate-800 text-sky-300 shadow-sky-500/20" : "border-slate-700 bg-slate-900 text-slate-300 hover:border-sky-500/70 hover:bg-slate-800 hover:text-sky-200"} disabled:translate-y-0 disabled:shadow-none disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="h-4 w-4" aria-hidden="true">
         {icon}
