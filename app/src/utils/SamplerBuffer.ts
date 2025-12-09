@@ -108,22 +108,45 @@ export class SamplerBuffer {
         const binEnd = Math.min(Math.floor(binStart + binWidth), rangeEnd);
 
         let foundData = false;
-        let minVal = 255.0;
-        let maxVal = 0.0;
+        let hasLow = false;
+        let hasHigh = false;
 
         // Match C++: for (int i = binStart; i < binEnd; ++i)
-        for (let i = binStart; i < binEnd; i++) {
-          // Match C++: int byteIndex = i / 8; int bitIndex = i % 8;
-          const byteIndex = Math.floor(i / 8);
-          const bitIndex = i % 8;
-          if (byteIndex < this.buffer.length) {
-            // Match C++: uint8_t bit = (ble_buffer[byteIndex] >> bitIndex) & 1;
+        for (let i = binStart; i < binEnd; ) {
+          const byteIndex = i >> 3;
+          if (byteIndex >= this.buffer.length) break;
+
+          // Optimization: If byte-aligned and we have a full byte to check
+          if ((i & 7) === 0 && (i + 8) <= binEnd) {
+            const byteVal = this.buffer[byteIndex];
+            
+            if (byteVal === 0) {
+              hasLow = true;
+            } else if (byteVal === 255) {
+              hasHigh = true;
+            } else {
+              // Mixed bits means we have both 0 and 1
+              hasLow = true;
+              hasHigh = true;
+            }
+            i += 8;
+          } else {
+            // Process single bit
+            const bitIndex = i & 7;
             const bit = (this.buffer[byteIndex] >> bitIndex) & 1;
-            // Match C++: float value = bit ? 255.0f : 0.0f;
-            const value = bit ? 255.0 : 0.0;
-            minVal = Math.min(minVal, value);
-            maxVal = Math.max(maxVal, value);
-            foundData = true;
+            
+            if (bit) {
+              hasHigh = true;
+            } else {
+              hasLow = true;
+            }
+            i++;
+          }
+
+          // Optimization: If we found both 0 and 1, we know the min is 0 and max is 255.
+          // We don't need to scan the rest of this bin.
+          if (hasLow && hasHigh) {
+            break;
           }
         }
 
@@ -131,11 +154,11 @@ export class SamplerBuffer {
           // Match C++: timeValues.push_back(static_cast<float>(binStart * timePerSample));
           timeValues.push(binStart * timePerSample);
           // Match C++: dataValues.push_back(minVal);
-          dataValues.push(minVal);
+          dataValues.push(hasLow ? 0.0 : 255.0);
           // Match C++: timeValues.push_back(static_cast<float>((binEnd - 1) * timePerSample));
           timeValues.push((binEnd - 1) * timePerSample);
           // Match C++: dataValues.push_back(maxVal);
-          dataValues.push(maxVal);
+          dataValues.push(hasHigh ? 255.0 : 0.0);
         }
       }
     }
