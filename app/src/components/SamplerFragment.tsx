@@ -253,11 +253,9 @@ function SamplerFragment() {
       return;
     }
 
-    // Send "sample <pin>" command (matching Android/iOS)
-    const command = new Uint8Array(8);
-    const sampleBytes = new TextEncoder().encode('sample ');
-    command.set(sampleBytes);
-    command[7] = pinNumber;
+    // Send "sample start --pin=<pin>" command (matching Android/iOS)
+    const commandStr = `sample start --pin=${pinNumber}`;
+    const command = new TextEncoder().encode(commandStr);
     await safeInvoke('ble_send_packet', { data: Array.from(command) });
 
     setIsRecording(true);
@@ -267,8 +265,8 @@ function SamplerFragment() {
   const stopRecording = async () => {
     if (!isConnected) return;
 
-    // Send "stop" command (matching Android/iOS)
-    const command = new TextEncoder().encode('stop');
+    // Send "sample stop" command (matching Android/iOS)
+    const command = new TextEncoder().encode('sample stop');
     await safeInvoke('ble_send_packet', { data: Array.from(command) });
 
     setIsRecording(false);
@@ -293,11 +291,9 @@ function SamplerFragment() {
       return;
     }
 
-    // Send "transmit <pin>" command (matching Android/iOS)
-    const command = new Uint8Array(10);
-    const transmitBytes = new TextEncoder().encode('transmit ');
-    command.set(transmitBytes);
-    command[9] = pinNumber;
+    // Send "transmit start --pin=<pin>" command (matching Android/iOS)
+    const commandStr = `transmit start --pin=${pinNumber}`;
+    const command = new TextEncoder().encode(commandStr);
     await safeInvoke('ble_send_packet', { data: Array.from(command) });
 
     // Use transmitBuffer method (matching Android/iOS)
@@ -472,6 +468,10 @@ function SamplerFragment() {
         zoom: {
           wheel: {
             enabled: true,
+            speed: 0.05,
+          },
+          drag: {
+            enabled: false,
           },
           pinch: {
             enabled: true,
@@ -489,12 +489,6 @@ function SamplerFragment() {
           },
         },
       },
-    },
-    onHover: (event: any, elements: any) => {
-      // Update chart on zoom/pan
-      if (event.type === 'mousemove' || event.type === 'wheel') {
-        setTimeout(() => refreshChart(), 10);
-      }
     },
     scales: {
       x: {
@@ -541,23 +535,34 @@ function SamplerFragment() {
     chart.update('none');
   }, [chartData]);
 
-  // Handle chart zoom/pan events
+  // Handle chart zoom/pan events - refresh chart data when zoom/pan changes
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
 
-    const handleZoom = () => {
-      setTimeout(() => refreshChart(), 10);
+    // Get the Chart.js instance from react-chartjs-2
+    const getChartInstance = () => {
+      if (!chart) return null;
+      // react-chartjs-2 v5+ stores chart instance here
+      return (chart as any).chartInstance || (chart as any).chart || null;
     };
 
-    const handlePan = () => {
-      setTimeout(() => refreshChart(), 10);
+    const chartInstance = getChartInstance();
+    if (!chartInstance) return;
+
+    // Refresh chart data after zoom/pan
+    const handleZoomPan = () => {
+      setTimeout(() => refreshChart(), 50);
     };
 
-    // Chart.js doesn't expose zoom/pan events directly, so we'll update on data changes
-    // The refresh interval will handle updates during zoom/pan
+    // Listen for zoom/pan events
+    chartInstance.canvas.addEventListener('wheel', handleZoomPan, { passive: true });
+    
     return () => {
-      // Cleanup if needed
+      const instance = getChartInstance();
+      if (instance) {
+        instance.canvas.removeEventListener('wheel', handleZoomPan);
+      }
     };
   }, [refreshChart]);
 

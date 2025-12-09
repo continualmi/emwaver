@@ -81,32 +81,45 @@ export class SamplerBuffer {
     const dataValues: number[] = [];
 
     // If zoomed in (fewer points than bins * 2), show raw data
+    // Match C++: if (totalPointsInRange <= numberBins * 2)
     if (totalPointsInRange <= numberBins * 2) {
-      for (let i = Math.floor(rangeStart); i < Math.floor(rangeEnd); i++) {
+      // Match C++: for (int i = rangeStart; i < rangeEnd; ++i)
+      for (let i = rangeStart; i < rangeEnd; i++) {
+        // Match C++: int byteIndex = i / 8; int bitIndex = i % 8;
         const byteIndex = Math.floor(i / 8);
         const bitIndex = i % 8;
         if (byteIndex < this.buffer.length) {
+          // Match C++: uint8_t bit = (ble_buffer[byteIndex] >> bitIndex) & 1;
           const bit = (this.buffer[byteIndex] >> bitIndex) & 1;
+          // Match C++: timeValues.push_back(static_cast<float>(i * timePerSample));
           timeValues.push(i * timePerSample);
+          // Match C++: dataValues.push_back(bit ? 255.0f : 0.0f);
           dataValues.push(bit ? 255.0 : 0.0);
         }
       }
     } else {
       // Zoomed out: bin and return min/max pairs (2 points per bin)
+      // Match C++ implementation exactly: binWidth = totalPointsInRange / numberBins
       const binWidth = totalPointsInRange / numberBins;
       for (let bin = 0; bin < numberBins; bin++) {
+        // Match C++: binStart = static_cast<int>(rangeStart + bin * binWidth)
         const binStart = Math.floor(rangeStart + bin * binWidth);
-        const binEnd = Math.min(Math.floor(binStart + binWidth), Math.floor(rangeEnd));
+        // Match C++: binEnd = std::min(static_cast<int>(binStart + binWidth), rangeEnd)
+        const binEnd = Math.min(Math.floor(binStart + binWidth), rangeEnd);
 
         let foundData = false;
         let minVal = 255.0;
         let maxVal = 0.0;
 
+        // Match C++: for (int i = binStart; i < binEnd; ++i)
         for (let i = binStart; i < binEnd; i++) {
+          // Match C++: int byteIndex = i / 8; int bitIndex = i % 8;
           const byteIndex = Math.floor(i / 8);
           const bitIndex = i % 8;
           if (byteIndex < this.buffer.length) {
+            // Match C++: uint8_t bit = (ble_buffer[byteIndex] >> bitIndex) & 1;
             const bit = (this.buffer[byteIndex] >> bitIndex) & 1;
+            // Match C++: float value = bit ? 255.0f : 0.0f;
             const value = bit ? 255.0 : 0.0;
             minVal = Math.min(minVal, value);
             maxVal = Math.max(maxVal, value);
@@ -115,9 +128,13 @@ export class SamplerBuffer {
         }
 
         if (foundData) {
+          // Match C++: timeValues.push_back(static_cast<float>(binStart * timePerSample));
           timeValues.push(binStart * timePerSample);
+          // Match C++: dataValues.push_back(minVal);
           dataValues.push(minVal);
+          // Match C++: timeValues.push_back(static_cast<float>((binEnd - 1) * timePerSample));
           timeValues.push((binEnd - 1) * timePerSample);
+          // Match C++: dataValues.push_back(maxVal);
           dataValues.push(maxVal);
         }
       }
