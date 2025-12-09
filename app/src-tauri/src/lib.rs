@@ -497,7 +497,7 @@ pub fn run() {
             let show_ism_item = MenuItem::with_id(
                 app,
                 "menu-show-ism",
-                "Show ISM (CC1101)",
+                "Show ISM (RFM69)",
                 true,
                 None::<&str>,
             )?;

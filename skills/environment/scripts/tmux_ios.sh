@@ -32,12 +32,13 @@ tmux send-keys -t "${SESSION_NAME}:work.0" "cd '${REPO_ROOT}'" C-m
 
 tmux split-window -h -t "${SESSION_NAME}:work" -c "${REPO_ROOT}"
 tmux send-keys -t "${SESSION_NAME}:work.1" "cd '${REPO_ROOT}'" C-m
+tmux send-keys -t "${SESSION_NAME}:work.1" "git status" C-m
 
-tmux new-window -t "${SESSION_NAME}" -n "build" -c "${IOS_DIR}"
-tmux send-keys -t "${SESSION_NAME}:build.0" "cd '${IOS_DIR}'" C-m
+tmux new-window -t "${SESSION_NAME}" -n "ios" -c "${IOS_DIR}"
+tmux send-keys -t "${SESSION_NAME}:ios.0" "cd '${IOS_DIR}'" C-m
 
-tmux split-window -v -t "${SESSION_NAME}:build" -c "${IOS_DIR}"
-tmux send-keys -t "${SESSION_NAME}:build.1" "cd '${IOS_DIR}'" C-m
+tmux split-window -h -t "${SESSION_NAME}:ios" -c "${IOS_DIR}"
+tmux send-keys -t "${SESSION_NAME}:ios.1" "cd '${IOS_DIR}'" C-m
 
 tmux select-window -t "${SESSION_NAME}:work"
 tmux select-pane -t "${SESSION_NAME}:work.0"
