@@ -216,6 +216,13 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
           <h2 className="text-lg font-semibold text-slate-100">EMWaver</h2>
           <p className="text-sm text-slate-400">Main hardware control and device management</p>
         </div>
+        <div className="flex items-center">
+          <img 
+            src="/emwaver-logo.png" 
+            alt="EMWaver Logo" 
+            className="h-12 w-12 object-contain"
+          />
+        </div>
       </header>
 
       <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-hidden px-6 py-4">
