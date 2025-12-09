@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { safeInvoke } from '../utils/tauri';
+import { useBLE } from '../utils/BLEContext';
 import {
   CONFIG_REGISTERS,
   STATUS_REGISTERS,
@@ -48,7 +48,9 @@ interface RfParameters {
 }
 
 export default function ISMFragment() {
-  const [isConnected, setIsConnected] = useState(false);
+  const { status, sendAndAwaitResponse } = useBLE();
+  
+  // Local state for UI only
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [totalLoadSteps, setTotalLoadSteps] = useState(0);
@@ -72,75 +74,13 @@ export default function ISMFragment() {
 
   // Refs for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Check connection status periodically
+  
+  // Sync deviceOpen with global status
   useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const status = await safeInvoke<{ connected: boolean }>('ble_get_status');
-        const connected = status?.connected ?? false;
-        setIsConnected(connected);
-        if (!connected) {
-           setDeviceOpen(false);
-        }
-      } catch (error) {
-        console.error('Failed to check BLE status:', error);
-        setIsConnected(false);
-      }
-    };
-
-    checkConnection();
-    const interval = setInterval(checkConnection, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Helper to flush notifications
-  const flushNotifications = async () => {
-    while (true) {
-      const notif = await safeInvoke('ble_get_notification');
-      if (!notif) break;
+    if (!status.connected) {
+        setDeviceOpen(false);
     }
-  };
-
-  // Helper to send command and wait for response
-  const sendSpiCommand = async (command: string, timeoutMs: number = 1000): Promise<Uint8Array | null> => {
-    if (!isConnected) return null;
-
-    try {
-      setCurrentCommand(command);
-      
-      // Flush old notifications
-      await flushNotifications();
-
-      // Send command
-      const encoded = new TextEncoder().encode(command + "\n");
-      await safeInvoke('ble_send_packet', { data: Array.from(encoded) });
-
-      // Poll for response
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeoutMs) {
-        if (abortControllerRef.current?.signal.aborted) throw new Error("Aborted");
-
-        const notif = await safeInvoke<{ data: number[] }>('ble_get_notification');
-        if (notif && notif.data) {
-          const responseStr = new TextDecoder().decode(new Uint8Array(notif.data)).trim();
-          if (responseStr.startsWith("ok")) {
-             return new Uint8Array(notif.data);
-          } else if (responseStr.startsWith("err")) {
-             console.error("Command error:", responseStr);
-             return null;
-          }
-        }
-        await new Promise(r => setTimeout(r, 10)); // Small delay
-      }
-      console.warn("Command timeout:", command);
-      return null;
-
-    } catch (e) {
-      console.error("SPI Command failed:", e);
-      return null;
-    }
-  };
+  }, [status.connected]);
 
   const parseOkResponse = (response: Uint8Array | null): Uint8Array => {
     if (!response || response.length === 0) return new Uint8Array(0);
@@ -158,7 +98,8 @@ export default function ISMFragment() {
   };
 
   const executeOpenCommand = async (command: string): Promise<string | null> => {
-    const response = await sendSpiCommand(command, 1000);
+    setCurrentCommand(command);
+    const response = await sendAndAwaitResponse(command, 1000);
     if (!response) return null;
     return new TextDecoder().decode(response).trim();
   };
@@ -180,7 +121,7 @@ export default function ISMFragment() {
 
     if (responseStr && responseStr.includes("spi open: exists")) {
        // Close and retry
-       await sendSpiCommand(`spi close --name=${DEVICE_NAME}`);
+       await sendAndAwaitResponse(`spi close --name=${DEVICE_NAME}`);
        responseStr = await executeOpenCommand(command);
        if (responseStr && responseStr.startsWith("ok")) {
          setDeviceOpen(true);
@@ -192,17 +133,11 @@ export default function ISMFragment() {
   };
 
   const readReg = async (addr: number): Promise<number> => {
-    // addr & 0x7F to ensure read bit is 0 (though SPI usually sets MSB for read/write differently, 
-    // RFM69 spec: MSB 0=read, 1=write. 
-    // Wait, RFM69 datasheet: "To read a value... bit 7 is set to 0". 
-    // "To write a value... bit 7 is set to 1".
-    // RFM69.java: readReg sends 0x(addr & 0x7F), writeReg sends 0x(addr | 0x80).
-    
-    // Command: spi xfer --name=rfm69 --tx=0xADDR,0x00 --rx=2
     const txData = `0x${(addr & 0x7F).toString(16).padStart(2, '0')},0x00`;
     const command = `spi xfer --name=${DEVICE_NAME} --tx=${txData} --rx=2`;
+    setCurrentCommand(command);
     
-    const response = await sendSpiCommand(command);
+    const response = await sendAndAwaitResponse(command);
     const parsed = parseOkResponse(response);
     if (parsed.length > 0) {
       // Return last byte (MISO response during second byte)
@@ -212,12 +147,12 @@ export default function ISMFragment() {
   };
 
   const writeReg = async (addr: number, value: number) => {
-    // Command: spi xfer --name=rfm69 --tx=0x(ADDR|0x80),0xVALUE
     const txAddr = (addr | 0x80).toString(16).padStart(2, '0');
     const txVal = value.toString(16).padStart(2, '0');
     const txData = `0x${txAddr},0x${txVal}`;
     const command = `spi xfer --name=${DEVICE_NAME} --tx=${txData}`;
-    await sendSpiCommand(command);
+    setCurrentCommand(command);
+    await sendAndAwaitResponse(command);
   };
 
   // --- High Level API (matching RFM69.java) ---
@@ -254,20 +189,6 @@ export default function ISMFragment() {
 
   const getBandwidth = async (): Promise<number> => {
     const reg = await readReg(REG_RXBW);
-    // TODO: Implement actual BW calculation from mantissa/exponent if needed for display
-    // For now, returning raw register value as placeholder or implementation from datasheet
-    // Android code: return (byte)(readReg(REG_RXBW) & 0x1F); -> This returns the index/value, not KHz
-    // But UI shows KHz. 
-    // Android UI logic: binding.bandwidthTextView.setText(String.format(Locale.US, "%.1f", bandwidth));
-    // RFM69.java getBandwidth() returns double, but implementation says: return (byte)(readReg(REG_RXBW) & 0x1F); 
-    // Wait, Android code in `getBandwidth()` returns `byte`.
-    // But `IsmFragment` formats it as `%.1f`. This implies the byte is being cast to float?
-    // 0x1F is 31. So it displays "31.0"? That seems wrong.
-    // Let's check `RFM69.java` again.
-    // "public double getBandwidth() { return (byte)(readReg(REG_RXBW) & 0x1F); }" -> This returns a byte cast to double.
-    // So if reg is 0x1A, it returns 26.0. 
-    // This looks like the Android app might just be displaying the register index value, not actual KHz.
-    // I will stick to returning the value for now.
     return reg & 0x1F; 
   };
   
@@ -321,36 +242,18 @@ export default function ISMFragment() {
   };
 
   const setTxPower = async (dbm: number) => {
-    // Simplified logic matching Android's switch case roughly
-    // Android's PowerAdapter has: -30, -20, -15, -10, 0, 5, 7, 10
-    // We should probably implement the exact logic from setTransmitPower in RFM69.java
-    // But for now, let's assume PA0 is used for low power, PA1 for high.
-    // Actually, let's just implement `setTransmitPower` logic fully.
-    
     let paMode = PA_MODE_PA0;
     let ocp = true;
     
-    // Logic inferred from values:
     if (dbm <= 13) paMode = PA_MODE_PA0;
     else if (dbm <= 17) paMode = PA_MODE_PA1_PA2;
     else paMode = PA_MODE_PA1_PA2_20DBM; // >17
 
-    // Recalculate based on specific values passed in Android UI (usually -30 to 10)
-    // Android PowerAdapter values: -30, -20, -15, -10, 0, 5, 7, 10
-    // For these values, PA0 is sufficient (-18 to +13).
-    // Let's stick to PA0 for simplicity unless higher is needed.
-    
-    // Re-implementing Android's setTransmitPower logic:
-    // ...
-    // Since we only support specific list in UI, let's just use PA0 for now as most are < 13dBm.
-    // Only 20dBm module supports higher.
-    
     let paLevelVal = 0;
     if (paMode === PA_MODE_PA0) {
         paLevelVal = RF_PALEVEL_PA0_ON | RF_PALEVEL_PA1_OFF | RF_PALEVEL_PA2_OFF;
         paLevelVal |= (dbm > 13 ? 31 : (dbm + 18));
     }
-    // ... others
     
     await writeReg(REG_PALEVEL, paLevelVal);
     await writeReg(REG_OCP, ocp ? RF_OCP_ON : RF_OCP_OFF);
@@ -360,7 +263,7 @@ export default function ISMFragment() {
   // --- Main Refresh Logic ---
 
   const refreshData = async () => {
-    if (!isConnected) return;
+    if (!status.connected) return;
     
     // Reset state
     setIsLoading(true);
@@ -416,7 +319,7 @@ export default function ISMFragment() {
 
     } catch (e) {
       console.error("Refresh failed", e);
-      // Optional: show toast
+      alert("Refresh failed: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setIsLoading(false);
       setCurrentCommand("");
@@ -468,8 +371,8 @@ export default function ISMFragment() {
   };
 
   return (
-    <section className="flex flex-1 flex-col bg-slate-950">
-      <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
+    <section className="flex flex-1 flex-col bg-slate-950 overflow-hidden">
+      <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4 flex-shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">ISM (RFM69)</h2>
           <p className="text-sm text-slate-400">Sub-GHz radio control</p>
@@ -477,7 +380,7 @@ export default function ISMFragment() {
         <div>
            <button 
              onClick={refreshData}
-             disabled={!isConnected || isLoading}
+             disabled={!status.connected || isLoading}
              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
            >
              Refresh
@@ -485,46 +388,46 @@ export default function ISMFragment() {
         </div>
       </header>
       
-      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
-        {/* RF Parameters */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-            <div className="bg-slate-900 p-4 rounded-lg">
+      <div className="flex flex-col flex-1 min-h-0 gap-4 px-4 py-4">
+        {/* RF Parameters - Fixed */}
+        <div className="flex-shrink-0 grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div className="bg-slate-900 p-3 rounded-lg">
                 <label className="text-xs text-slate-500 uppercase">Frequency (MHz)</label>
                 <div 
-                  className="text-xl font-mono text-slate-200 cursor-pointer hover:text-blue-400"
+                  className="text-lg font-mono text-slate-200 cursor-pointer hover:text-blue-400"
                   onClick={() => handleEditRfParam('frequency', 'Frequency (MHz)')}
                 >
                     {rfParams ? rfParams.frequency.toFixed(6) : '--'}
                 </div>
             </div>
-            <div className="bg-slate-900 p-4 rounded-lg">
+            <div className="bg-slate-900 p-3 rounded-lg">
                 <label className="text-xs text-slate-500 uppercase">Data Rate (bps)</label>
                 <div 
-                   className="text-xl font-mono text-slate-200 cursor-pointer hover:text-blue-400"
+                   className="text-lg font-mono text-slate-200 cursor-pointer hover:text-blue-400"
                    onClick={() => handleEditRfParam('dataRate', 'Data Rate (bps)')}
                 >
                     {rfParams ? rfParams.dataRate : '--'}
                 </div>
             </div>
-            <div className="bg-slate-900 p-4 rounded-lg">
+            <div className="bg-slate-900 p-3 rounded-lg">
                 <label className="text-xs text-slate-500 uppercase">Bandwidth</label>
                 <div 
-                   className="text-xl font-mono text-slate-200 cursor-pointer hover:text-blue-400"
+                   className="text-lg font-mono text-slate-200 cursor-pointer hover:text-blue-400"
                    onClick={() => handleEditRfParam('bandwidth', 'Bandwidth')}
                 >
                     {rfParams ? rfParams.bandwidth.toFixed(1) : '--'}
                 </div>
             </div>
-            <div className="bg-slate-900 p-4 rounded-lg">
+            <div className="bg-slate-900 p-3 rounded-lg">
                 <label className="text-xs text-slate-500 uppercase">Deviation (Hz)</label>
                 <div 
-                   className="text-xl font-mono text-slate-200 cursor-pointer hover:text-blue-400"
+                   className="text-lg font-mono text-slate-200 cursor-pointer hover:text-blue-400"
                    onClick={() => handleEditRfParam('deviation', 'Deviation (Hz)')}
                 >
                     {rfParams ? rfParams.deviation : '--'}
                 </div>
             </div>
-             <div className="bg-slate-900 p-4 rounded-lg">
+             <div className="bg-slate-900 p-3 rounded-lg">
                 <label className="text-xs text-slate-500 uppercase">Modulation</label>
                 <select 
                     className="w-full bg-slate-800 text-slate-200 rounded mt-1 border border-slate-700 text-sm p-1"
@@ -534,13 +437,13 @@ export default function ISMFragment() {
                         await setModulation(val);
                         setRfParams(prev => prev ? ({...prev, modulation: val}) : null);
                     }}
-                    disabled={!isConnected}
+                    disabled={!status.connected}
                 >
                     <option value={MOD_FSK}>FSK</option>
                     <option value={MOD_OOK}>OOK</option>
                 </select>
             </div>
-             <div className="bg-slate-900 p-4 rounded-lg">
+             <div className="bg-slate-900 p-3 rounded-lg">
                 <label className="text-xs text-slate-500 uppercase">TX Power (dBm)</label>
                 <select 
                     className="w-full bg-slate-800 text-slate-200 rounded mt-1 border border-slate-700 text-sm p-1"
@@ -550,7 +453,7 @@ export default function ISMFragment() {
                          await setTxPower(val);
                          setRfParams(prev => prev ? ({...prev, txPower: val}) : null);
                     }}
-                    disabled={!isConnected}
+                    disabled={!status.connected}
                 >
                     {[-30, -20, -15, -10, 0, 5, 7, 10].map(v => (
                         <option key={v} value={v}>{v}</option>
@@ -559,35 +462,37 @@ export default function ISMFragment() {
             </div>
         </div>
 
-        {/* Registers */}
-        <div>
-            <h3 className="text-slate-400 text-sm font-semibold mb-3 uppercase tracking-wider">Configuration Registers</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {CONFIG_REGISTERS.map(name => (
-                    <div key={name} className="flex flex-col bg-slate-900 p-2 rounded border border-slate-800">
-                        <span className="text-[10px] text-slate-500">{name}</span>
-                        <span 
-                            className="font-mono text-slate-200 cursor-pointer hover:text-blue-400"
-                            onClick={() => handleEditRegister(name, registers[name] || '')}
-                        >
-                            {registers[name] || '--'}
-                        </span>
-                    </div>
-                ))}
+        {/* Registers - Scrollable */}
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4">
+            <div>
+                <h3 className="text-slate-400 text-sm font-semibold mb-2 uppercase tracking-wider">Configuration Registers</h3>
+                <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2">
+                    {CONFIG_REGISTERS.map(name => (
+                        <div key={name} className="flex flex-col bg-slate-900 p-1.5 rounded border border-slate-800">
+                            <span className="text-[9px] text-slate-500 truncate">{name}</span>
+                            <span 
+                                className="font-mono text-sm text-slate-200 cursor-pointer hover:text-blue-400"
+                                onClick={() => handleEditRegister(name, registers[name] || '')}
+                            >
+                                {registers[name] || '--'}
+                            </span>
+                        </div>
+                    ))}
+                </div>
             </div>
-        </div>
-        
-         <div>
-            <h3 className="text-slate-400 text-sm font-semibold mb-3 uppercase tracking-wider">Status Registers</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {STATUS_REGISTERS.map(name => (
-                    <div key={name} className="flex flex-col bg-slate-900 p-2 rounded border border-slate-800">
-                        <span className="text-[10px] text-slate-500">{name}</span>
-                        <span className="font-mono text-slate-200">
-                            {registers[name] || '--'}
-                        </span>
-                    </div>
-                ))}
+            
+             <div>
+                <h3 className="text-slate-400 text-sm font-semibold mb-2 uppercase tracking-wider">Status Registers</h3>
+                <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2">
+                    {STATUS_REGISTERS.map(name => (
+                        <div key={name} className="flex flex-col bg-slate-900 p-1.5 rounded border border-slate-800">
+                            <span className="text-[9px] text-slate-500 truncate">{name}</span>
+                            <span className="font-mono text-sm text-slate-200">
+                                {registers[name] || '--'}
+                            </span>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
       </div>

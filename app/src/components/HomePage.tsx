@@ -1,35 +1,31 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { safeInvoke } from "../utils/tauri";
 import type { FragmentType } from "../App";
+import { useBLE } from "../utils/BLEContext";
 
 type HomePageProps = {
   onNavigateToFragment: (fragment: FragmentType) => void;
+  // isActive is no longer needed since polling is handled by context
 };
 
-interface BLEStatus {
-  connected: boolean;
-  scanning: boolean;
-  device_name: string | null;
-  device_address: string | null;
-}
-
 export default function HomePage({ onNavigateToFragment }: HomePageProps) {
-  const [status, setStatus] = useState<BLEStatus>({
-    connected: false,
-    scanning: false,
-    device_name: null,
-    device_address: null,
-  });
+  // Use BLE Context instead of local state for connection
+  const { 
+    status, 
+    connect, 
+    disconnect, 
+    sendCommand, 
+    addNotificationListener, 
+    removeNotificationListener 
+  } = useBLE();
+
   const [commandInput, setCommandInput] = useState("");
   const [serialMonitor, setSerialMonitor] = useState<string[]>([]);
   const [showHex, setShowHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
-  const [isInitialized, setIsInitialized] = useState(false);
-  const monitorEndRef = useRef<HTMLDivElement>(null);
-  const statusIntervalRef = useRef<number | null>(null);
-  const notificationIntervalRef = useRef<number | null>(null);
-  const wasConnectedRef = useRef<boolean>(false);
-  const manualDisconnectRef = useRef<boolean>(false);
+  
+  const monitorContainerRef = useRef<HTMLDivElement>(null);
+  
   const scanTimeoutRef = useRef<number | null>(null);
 
   const fragments = [
@@ -59,113 +55,22 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     },
   ];
 
-  // Initialize BLE on mount
-  useEffect(() => {
-    const initBLE = async () => {
-      try {
-        const result = await safeInvoke("ble_initialize");
-        if (result === null) {
-          // Tauri not available, skip initialization
-          setIsInitialized(true); // Still enable button so user can see the issue
-          return;
-        }
-        setIsInitialized(true);
-        
-        // Reset any stuck scanning state
-        const currentStatus = await safeInvoke<BLEStatus>("ble_get_status");
-        if (currentStatus?.scanning) {
-          await safeInvoke("ble_stop_scan");
-        }
-      } catch (error) {
-        console.error("Failed to initialize BLE:", error);
-        setIsInitialized(true); // Enable button even if init fails, user can retry
-      }
-    };
-    initBLE();
-  }, []);
-
-  // Poll for status updates
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    const updateStatus = async () => {
-      try {
-        const currentStatus = await safeInvoke<BLEStatus>("ble_get_status");
-        if (currentStatus === null) {
-          // Tauri not available, skip status update
-          return;
-        }
-        wasConnectedRef.current = currentStatus.connected;
-        setStatus(currentStatus);
-        
-        // Reset manual disconnect flag if we're connected again
-        if (currentStatus.connected) {
-          manualDisconnectRef.current = false;
-          // Clear scan timeout since we're connected
-          if (scanTimeoutRef.current !== null) {
-            clearTimeout(scanTimeoutRef.current);
-            scanTimeoutRef.current = null;
-          }
-        }
-      } catch (error) {
-        console.error("Failed to get BLE status:", error);
-      }
-    };
-
-    updateStatus();
-    statusIntervalRef.current = window.setInterval(updateStatus, 1000);
-
-    return () => {
-      if (statusIntervalRef.current !== null) {
-        clearInterval(statusIntervalRef.current);
-      }
-      if (scanTimeoutRef.current !== null) {
-        clearTimeout(scanTimeoutRef.current);
-      }
-    };
-  }, [isInitialized]);
-
-  // Poll for notifications
-  useEffect(() => {
-    if (!status.connected) return;
-
-    const checkNotifications = async () => {
-      try {
-        const notification = await safeInvoke<{ data: number[]; timestamp: number } | null>(
-          "ble_get_notification"
-        );
-        if (notification) {
-          const timestamp = new Date(notification.timestamp).toLocaleTimeString("en-US", {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            fractionalSecondDigits: 3,
-          });
-          const data = new Uint8Array(notification.data);
-          appendToMonitor(data, timestamp, false);
-        }
-      } catch (error) {
-        // Ignore errors for now
-      }
-    };
-
-    checkNotifications();
-    notificationIntervalRef.current = window.setInterval(checkNotifications, 100);
-
-    return () => {
-      if (notificationIntervalRef.current !== null) {
-        clearInterval(notificationIntervalRef.current);
-      }
-    };
-  }, [status.connected]);
-
   // Auto-scroll monitor
   useEffect(() => {
-    monitorEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (monitorContainerRef.current) {
+      monitorContainerRef.current.scrollTop = monitorContainerRef.current.scrollHeight;
+    }
   }, [serialMonitor]);
 
-  const appendToMonitor = (data: Uint8Array, timestamp: string, isTx: boolean) => {
+  const appendToMonitor = useCallback((data: Uint8Array, timestamp: number, isTx: boolean) => {
+    const timeStr = new Date(timestamp).toLocaleTimeString("en-US", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3,
+    });
+    
     const hexStr = Array.from(data)
       .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
       .join(" ");
@@ -175,10 +80,22 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     const content = showHex ? hexStr : asciiStr;
     const color = isTx ? "#FFD700" : "#00AA00";
-    const line = `[${timestamp}] <span style="color: ${color}">${content}</span>`;
+    const line = `[${timeStr}] <span style="color: ${color}">${content}</span>`;
 
     setSerialMonitor((prev) => [...prev, line]);
-  };
+  }, [showHex]);
+
+  // Register Notification Listener
+  useEffect(() => {
+    const listener = (data: Uint8Array, timestamp: number) => {
+        appendToMonitor(data, timestamp, false);
+    };
+    addNotificationListener(listener);
+    return () => {
+        removeNotificationListener(listener);
+    };
+  }, [addNotificationListener, removeNotificationListener, appendToMonitor]);
+
 
   const parseCommand = (input: string): Uint8Array | null => {
     const bytes: number[] = [];
@@ -222,63 +139,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     }
   };
 
-  const handleConnect = async () => {
-    try {
-      // Clear any existing timeout
-      if (scanTimeoutRef.current !== null) {
-        clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-
-      // Try to initialize if not already done
-      const initResult = await safeInvoke("ble_initialize");
-      if (initResult === null) {
-        // Tauri not available or init failed, but continue anyway
-        console.warn("BLE initialization returned null, continuing anyway");
-      } else {
-        setIsInitialized(true);
-      }
-      
-      manualDisconnectRef.current = false;
-      setStatus((prev) => ({ ...prev, scanning: true }));
-      await safeInvoke("ble_start_scan");
-
-      // Set timeout to stop scanning after 15 seconds if not connected
-      scanTimeoutRef.current = window.setTimeout(async () => {
-        const currentStatus = await safeInvoke<BLEStatus>("ble_get_status");
-        if (currentStatus?.scanning && !currentStatus?.connected) {
-          // Stop scanning and reset state
-          await safeInvoke("ble_stop_scan");
-          setStatus((prev) => ({ ...prev, scanning: false }));
-        }
-        scanTimeoutRef.current = null;
-      }, 15000);
-    } catch (error) {
-      console.error("Failed to start scan:", error);
-      setStatus((prev) => ({ ...prev, scanning: false }));
-      if (scanTimeoutRef.current !== null) {
-        clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-      alert(`Failed to start scan: ${error}`);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    try {
-      manualDisconnectRef.current = true;
-      // Clear scan timeout if it exists
-      if (scanTimeoutRef.current !== null) {
-        clearTimeout(scanTimeoutRef.current);
-        scanTimeoutRef.current = null;
-      }
-      await safeInvoke("ble_disconnect");
-      setFirmwareVersion("Unknown");
-    } catch (error) {
-      console.error("Failed to disconnect:", error);
-    }
-  };
-
   const handleSendCommand = async () => {
     if (!commandInput.trim()) {
       return;
@@ -296,18 +156,11 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     }
 
     try {
-      // Log TX data
-      const timestamp = new Date().toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-      });
-      appendToMonitor(commandBytes, timestamp, true);
+      // Log TX data locally
+      appendToMonitor(commandBytes, Date.now(), true);
 
-      // Send packet
-      await safeInvoke("ble_send_packet", { data: Array.from(commandBytes) });
+      // Send packet via Context
+      await sendCommand(commandBytes);
 
       // Clear input
       setCommandInput("");
@@ -325,15 +178,8 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     try {
       const versionBytes = new TextEncoder().encode("version");
-      const timestamp = new Date().toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-      });
-      appendToMonitor(versionBytes, timestamp, true);
-      await safeInvoke("ble_send_packet", { data: Array.from(versionBytes) });
+      appendToMonitor(versionBytes, Date.now(), true);
+      await sendCommand(versionBytes);
     } catch (error) {
       console.error("Failed to check version:", error);
     }
@@ -364,7 +210,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   }, [serialMonitor, status.connected]);
 
   return (
-    <section className="flex flex-1 flex-col bg-slate-950">
+    <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">EMWaver</h2>
@@ -372,7 +218,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
+      <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-hidden px-6 py-4">
         {/* Quick Access to Fragments */}
         <div className="flex-shrink-0">
           <h3 className="text-sm font-semibold text-slate-100 mb-2">Quick Access</h3>
@@ -417,14 +263,14 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
               </div>
               {status.connected ? (
                 <button
-                  onClick={handleDisconnect}
+                  onClick={disconnect}
                   className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                 >
                   Disconnect
                 </button>
               ) : (
                 <button
-                  onClick={handleConnect}
+                  onClick={connect}
                   className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
                   {status.scanning ? "Scanning..." : "Connect"}
@@ -505,7 +351,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         </div>
 
         {/* Serial Monitor */}
-        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-shrink-0" style={{ height: '200px' }}>
+        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-0">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <div className="text-sm font-semibold text-slate-400">Serial Monitor</div>
             <button
@@ -515,7 +361,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
               Clear
             </button>
           </div>
-          <div className="overflow-y-auto font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
+          <div ref={monitorContainerRef} className="overflow-y-auto font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
             {serialMonitor.length === 0 ? (
               <div className="text-slate-500">No data received yet...</div>
             ) : (
@@ -527,7 +373,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
                     className="mb-1"
                   />
                 ))}
-                <div ref={monitorEndRef} />
               </>
             )}
           </div>
@@ -573,4 +418,3 @@ function SamplerIcon() {
     </svg>
   );
 }
-

@@ -107,7 +107,6 @@ export class SamplerBuffer {
         // Match C++: binEnd = std::min(static_cast<int>(binStart + binWidth), rangeEnd)
         const binEnd = Math.min(Math.floor(binStart + binWidth), rangeEnd);
 
-        let foundData = false;
         let hasLow = false;
         let hasHigh = false;
 
@@ -150,7 +149,8 @@ export class SamplerBuffer {
           }
         }
 
-        if (foundData) {
+        // Always add points if we have data in this bin
+        if (hasLow || hasHigh) {
           // Match C++: timeValues.push_back(static_cast<float>(binStart * timePerSample));
           timeValues.push(binStart * timePerSample);
           // Match C++: dataValues.push_back(minVal);

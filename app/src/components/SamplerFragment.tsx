@@ -14,6 +14,7 @@ import { Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { safeInvoke } from '../utils/tauri';
 import { SamplerBuffer } from '../utils/SamplerBuffer';
+import { useBLE } from '../utils/BLEContext';
 
 // Register Chart.js components - do this once at module load
 try {
@@ -69,7 +70,10 @@ function getPinNumber(pinString: string): number {
 }
 
 function SamplerFragment() {
-  const [isConnected, setIsConnected] = useState(false);
+  // Use BLE context instead of polling directly
+  const { status, addNotificationListener, removeNotificationListener, sendCommand } = useBLE();
+  const isConnected = status.connected;
+  
   const [isRecording, setIsRecording] = useState(false);
   const [selectedPinIndex, setSelectedPinIndex] = useState(10); // GPIO6 default
   const [signalNames, setSignalNames] = useState<string[]>([]);
@@ -131,40 +135,25 @@ function SamplerFragment() {
     setChartData(compressed);
   }, [chartResolution]);
 
-  // Check BLE connection status
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const status = await safeInvoke<{ connected: boolean }>('ble_get_status');
-        setIsConnected(status?.connected ?? false);
-      } catch (error) {
-        console.error('Failed to check BLE status:', error);
-        setIsConnected(false);
-      }
-    };
-
-    checkConnection();
-    const interval = setInterval(checkConnection, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Listen for BLE notifications and accumulate buffer
+  // Listen for BLE notifications via context and accumulate buffer
   useEffect(() => {
     if (!isConnected) return;
 
-    const pollNotifications = async () => {
-      const notification = await safeInvoke<{ data: number[] }>('ble_get_notification');
-      if (notification?.data) {
-        bufferRef.current.append(new Uint8Array(notification.data));
+    const notificationListener = (data: Uint8Array, timestamp: number) => {
+      // Append all notification data to buffer
+      if (data.length > 0) {
+        bufferRef.current.append(data);
         if (isRecording) {
           setHasUnsavedChanges(true);
         }
       }
     };
 
-    const interval = setInterval(pollNotifications, 10);
-    return () => clearInterval(interval);
-  }, [isConnected, isRecording]);
+    addNotificationListener(notificationListener);
+    return () => {
+      removeNotificationListener(notificationListener);
+    };
+  }, [isConnected, isRecording, addNotificationListener, removeNotificationListener]);
 
   // Refresh chart periodically
   useEffect(() => {
@@ -222,7 +211,7 @@ function SamplerFragment() {
         chartResolution
       );
 
-      // Update chart data
+      // Update chart data - always set even if empty to trigger re-render
       setChartData(compressed);
       
       // Update chart X-axis max to expand as buffer grows (matches Android)
@@ -233,9 +222,6 @@ function SamplerFragment() {
           chart.options.plugins.zoom.limits.x.max = chartMaxX;
         }
       }
-      
-      // Force chart update (matches Android: chart.invalidate())
-      chart.update('none');
     };
 
     refreshIntervalRef.current = window.setInterval(() => {
@@ -263,9 +249,9 @@ function SamplerFragment() {
     }
 
     // Send "sample start --pin=<pin>" command (matching Android/iOS)
-    const commandStr = `sample start --pin=${pinNumber}`;
+    const commandStr = `sample start --pin=${pinNumber}\n`;
     const command = new TextEncoder().encode(commandStr);
-    await safeInvoke('ble_send_packet', { data: Array.from(command) });
+    await sendCommand(command);
 
     setIsRecording(true);
     setHasUnsavedChanges(true);
@@ -275,8 +261,8 @@ function SamplerFragment() {
     if (!isConnected) return;
 
     // Send "sample stop" command (matching Android/iOS)
-    const command = new TextEncoder().encode('sample stop');
-    await safeInvoke('ble_send_packet', { data: Array.from(command) });
+    const command = new TextEncoder().encode('sample stop\n');
+    await sendCommand(command);
 
     setIsRecording(false);
   };
@@ -300,15 +286,20 @@ function SamplerFragment() {
       return;
     }
 
-    // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-    const commandStr = `transmit start --pin=${pinNumber}`;
-    const command = new TextEncoder().encode(commandStr);
-    await safeInvoke('ble_send_packet', { data: Array.from(command) });
+    try {
+      // Send "transmit start --pin=<pin>" command (matching Android/iOS)
+      const commandStr = `transmit start --pin=${pinNumber}\n`;
+      const command = new TextEncoder().encode(commandStr);
+      await sendCommand(command);
 
-    // Use transmitBuffer method (matching Android/iOS)
-    await safeInvoke('ble_transmit_buffer', { data: Array.from(buffer) });
+      // Use transmitBuffer method (matching Android/iOS)
+      await safeInvoke('ble_transmit_buffer', { data: Array.from(buffer) });
 
-    alert(`Retransmitting ${buffer.length} samples on ${selectedPin}`);
+      alert(`Retransmitting ${buffer.length} samples on ${selectedPin}`);
+    } catch (error) {
+      console.error('Failed to retransmit signal:', error);
+      alert('Failed to retransmit signal');
+    }
   };
 
   const getTimings = () => {
@@ -547,18 +538,20 @@ function SamplerFragment() {
     const chart = chartRef.current;
     if (!chart) return;
     
-    // Update chart data and force redraw
+    // Force chart update when data changes
     chart.update('none');
   }, [chartData]);
 
-  const data = {
+  const data = useMemo(() => ({
     datasets: [
       {
         label: 'Signal',
-        data: chartData.timeValues.map((time, index) => ({
-          x: time,
-          y: chartData.dataValues[index],
-        })),
+        data: chartData.timeValues.length > 0 
+          ? chartData.timeValues.map((time, index) => ({
+              x: time,
+              y: chartData.dataValues[index] ?? 0,
+            }))
+          : [],
         borderColor: '#01579B',
         backgroundColor: 'rgba(1, 87, 155, 0.1)',
         borderWidth: 2,
@@ -568,7 +561,7 @@ function SamplerFragment() {
         normalized: true,
       },
     ],
-  };
+  }), [chartData]);
 
   return (
     <section className="flex flex-1 flex-col bg-slate-950">
@@ -616,7 +609,7 @@ function SamplerFragment() {
       <div className="flex flex-1 flex-col gap-5 overflow-hidden px-6 py-6">
         {/* Chart */}
         <div className="flex-1 min-h-0 bg-slate-900 rounded-lg p-4">
-          <div className="h-full w-full">
+          <div className="h-full w-full" style={{ minHeight: '400px' }}>
             {chartError ? (
               <div className="flex h-full items-center justify-center text-slate-400">
                 <p>Chart error: {chartError}</p>
@@ -626,6 +619,7 @@ function SamplerFragment() {
                 ref={chartRef} 
                 data={data} 
                 options={chartOptions}
+                redraw={false}
               />
             )}
           </div>
