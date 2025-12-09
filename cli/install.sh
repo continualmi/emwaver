@@ -5,7 +5,19 @@ set -euo pipefail
 # Detects platform and installs the appropriate binary
 
 VERSION="${EMWAVER_CLI_VERSION:-latest}"
-BASE_URL="${EMWAVER_CLI_BASE_URL:-https://github.com/emwaver/emwaver/releases/latest/download}"
+if [ "$VERSION" = "latest" ]; then
+    BASE_URL="${EMWAVER_CLI_BASE_URL:-https://github.com/luispl77/emwaver/releases/latest/download}"
+else
+    # Handle version tags like "v0.1.0" or "cli-v0.1.0"
+    if [ "${VERSION#cli-}" != "$VERSION" ]; then
+        VERSION_TAG="$VERSION"
+    elif [ "${VERSION#v}" != "$VERSION" ]; then
+        VERSION_TAG="cli-$VERSION"
+    else
+        VERSION_TAG="cli-v$VERSION"
+    fi
+    BASE_URL="${EMWAVER_CLI_BASE_URL:-https://github.com/luispl77/emwaver/releases/download/$VERSION_TAG}"
+fi
 INSTALL_ROOT="${EMWAVER_CLI_PREFIX:-$HOME/.local/bin}"
 
 detect_platform() {
@@ -52,10 +64,6 @@ download_binary() {
     else
         artifact="emwaver-cli-${platform}"
         target="$tmp_dir/emwaver"
-    fi
-    
-    if [ "$VERSION" != "latest" ]; then
-        artifact="$artifact-$VERSION"
     fi
     
     url="$BASE_URL/$artifact"
