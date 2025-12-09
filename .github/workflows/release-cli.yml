@@ -44,20 +44,42 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-22.04' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libbluetooth-dev pkg-config
+          sudo apt-get install -y libbluetooth-dev libdbus-1-dev pkg-config
+
+      - name: Install Linux cross-compilation dependencies
+        if: matrix.os == 'ubuntu-22.04' && matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            libc6-dev-arm64-cross \
+            pkg-config
 
       - name: Build release binary
+        env:
+          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
+          CC_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
         run: |
           cd cli
+          # For ARM64 cross-compilation, we need to disable pkg-config for dbus
+          # and let the build script use vendored sources
+          if [ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]; then
+            export DBUS_1_NO_PKG_CONFIG=1
+          fi
           cargo build --release --target ${{ matrix.target }}
 
       - name: Strip binary (Unix)
         if: matrix.os != 'windows-2022'
         run: |
-          strip cli/target/${{ matrix.target }}/release/emwaver
+          if [ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]; then
+            aarch64-linux-gnu-strip cli/target/${{ matrix.target }}/release/emwaver
+          else
+            strip cli/target/${{ matrix.target }}/release/emwaver
+          fi
 
       - name: Prepare artifact (Unix)
         if: matrix.os != 'windows-2022'
