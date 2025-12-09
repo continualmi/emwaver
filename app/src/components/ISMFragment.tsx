@@ -38,6 +38,9 @@ import {
 
 const DEVICE_NAME = "rfm69";
 
+const CS_PIN_STORAGE_KEY = "rfm69_cs_pin";
+const CS_ACTIVE_HIGH_STORAGE_KEY = "rfm69_cs_active_high";
+
 interface RfParameters {
   frequency: number;
   dataRate: number;
@@ -59,6 +62,19 @@ export default function ISMFragment() {
   const [rfParams, setRfParams] = useState<RfParameters | null>(null);
   const [deviceOpen, setDeviceOpen] = useState(false);
   
+  // CS pin and active high settings (with localStorage persistence)
+  const [csPin, setCsPin] = useState<string>(() => {
+    const stored = localStorage.getItem(CS_PIN_STORAGE_KEY);
+    return stored || "36";
+  });
+  const [csActiveHigh, setCsActiveHigh] = useState<boolean>(() => {
+    const stored = localStorage.getItem(CS_ACTIVE_HIGH_STORAGE_KEY);
+    return stored ? stored === "true" : true;
+  });
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [tempCsPin, setTempCsPin] = useState(csPin);
+  const [tempCsActiveHigh, setTempCsActiveHigh] = useState(csActiveHigh);
+  
   // Modals
   const [editDialog, setEditDialog] = useState<{
     isOpen: boolean;
@@ -72,8 +88,9 @@ export default function ISMFragment() {
     onSave: async () => {}
   });
 
-  // Refs for cancellation
+  // Refs for cancellation and progress tracking
   const abortControllerRef = useRef<AbortController | null>(null);
+  const progressRef = useRef(0);
   
   // Sync deviceOpen with global status
   useEffect(() => {
@@ -107,10 +124,6 @@ export default function ISMFragment() {
   const openDevice = async (): Promise<boolean> => {
     if (deviceOpen) return true;
 
-    // Use default pins for now (matching Android default)
-    const csPin = "10";
-    const csActiveHigh = false;
-
     const command = `spi open --name=${DEVICE_NAME} --miso=13 --mosi=11 --sck=12 --cs=${csPin} --mode=0 --clock=8000000 --cs_active_high=${csActiveHigh ? "1" : "0"}`;
     
     let responseStr = await executeOpenCommand(command);
@@ -130,6 +143,28 @@ export default function ISMFragment() {
     }
 
     return false;
+  };
+  
+  const handleSaveSettings = async () => {
+    const pinNum = parseInt(tempCsPin);
+    if (isNaN(pinNum) || pinNum <= 0) {
+      alert("Invalid CS pin value");
+      return;
+    }
+    
+    // Close device if open
+    if (deviceOpen) {
+      await sendAndAwaitResponse(`spi close --name=${DEVICE_NAME}`);
+      setDeviceOpen(false);
+    }
+    
+    // Update state and save to localStorage
+    setCsPin(tempCsPin);
+    setCsActiveHigh(tempCsActiveHigh);
+    localStorage.setItem(CS_PIN_STORAGE_KEY, tempCsPin);
+    localStorage.setItem(CS_ACTIVE_HIGH_STORAGE_KEY, String(tempCsActiveHigh));
+    
+    setShowSettingsDialog(false);
   };
 
   const readReg = async (addr: number): Promise<number> => {
@@ -268,62 +303,112 @@ export default function ISMFragment() {
     // Reset state
     setIsLoading(true);
     setLoadingProgress(0);
-    setTotalLoadSteps(CONFIG_REGISTERS.length + STATUS_REGISTERS.length + 6); // +6 for RF params
+    const totalSteps = CONFIG_REGISTERS.length + STATUS_REGISTERS.length + 6;
+    setTotalLoadSteps(totalSteps);
     abortControllerRef.current = new AbortController();
 
-    try {
-      if (!await openDevice()) {
-        throw new Error("Failed to open device");
+    // Use microtask scheduling to prevent blocking
+    setTimeout(async () => {
+      try {
+        if (!await openDevice()) {
+          throw new Error("Failed to open device");
+        }
+
+        let currentStep = 0;
+        const newRegisters: { [key: string]: string } = {};
+        
+        // Load Config Registers - only update progress, not register state
+        for (let i = 0; i < CONFIG_REGISTERS.length; i++) {
+          if (abortControllerRef.current.signal.aborted) break;
+          
+          const name = CONFIG_REGISTERS[i];
+          const addr = REGISTER_MAP[name];
+          
+          const val = await readReg(addr);
+          newRegisters[name] = val.toString(16).toUpperCase().padStart(2, '0');
+          
+          currentStep++;
+          
+          // Only update progress and command text, not registers
+          if (i % 3 === 0) {
+            setCurrentCommand(`Reading ${name}...`);
+            setLoadingProgress(currentStep);
+          }
+        }
+
+        // Load Status Registers
+        for (let i = 0; i < STATUS_REGISTERS.length; i++) {
+          if (abortControllerRef.current.signal.aborted) break;
+          
+          const name = STATUS_REGISTERS[i];
+          const addr = REGISTER_MAP[name];
+          
+          const val = await readReg(addr);
+          newRegisters[name] = val.toString(16).toUpperCase().padStart(2, '0');
+          currentStep++;
+          
+          setCurrentCommand(`Reading ${name}...`);
+          setLoadingProgress(currentStep);
+        }
+
+        // Load RF Params
+        let rfParamsData: RfParameters | null = null;
+        
+        if (!abortControllerRef.current.signal.aborted) {
+          setCurrentCommand("Reading frequency...");
+          const freq = await getFrequency();
+          currentStep++;
+          setLoadingProgress(currentStep);
+          
+          setCurrentCommand("Reading data rate...");
+          const dr = await getDataRate();
+          currentStep++;
+          setLoadingProgress(currentStep);
+          
+          setCurrentCommand("Reading bandwidth...");
+          const bw = await getBandwidth();
+          currentStep++;
+          setLoadingProgress(currentStep);
+          
+          setCurrentCommand("Reading deviation...");
+          const dev = await getDeviation();
+          currentStep++;
+          setLoadingProgress(currentStep);
+          
+          setCurrentCommand("Reading modulation...");
+          const mod = await getModulation();
+          currentStep++;
+          setLoadingProgress(currentStep);
+          
+          setCurrentCommand("Reading TX power...");
+          const pwr = await getTxPower();
+          currentStep++;
+          setLoadingProgress(currentStep);
+
+          rfParamsData = {
+            frequency: freq,
+            dataRate: dr,
+            bandwidth: bw,
+            deviation: dev,
+            modulation: mod,
+            txPower: pwr
+          };
+        }
+
+        // Single batch update at the end
+        setRegisters(newRegisters);
+        if (rfParamsData) {
+          setRfParams(rfParamsData);
+        }
+
+      } catch (e) {
+        console.error("Refresh failed", e);
+        alert("Refresh failed: " + (e instanceof Error ? e.message : String(e)));
+      } finally {
+        setIsLoading(false);
+        setCurrentCommand("");
       }
-
-      // Load Config Registers
-      const newRegisters: { [key: string]: string } = {};
-      
-      for (const name of CONFIG_REGISTERS) {
-        if (abortControllerRef.current.signal.aborted) break;
-        const addr = REGISTER_MAP[name];
-        const val = await readReg(addr);
-        newRegisters[name] = val.toString(16).toUpperCase().padStart(2, '0');
-        setRegisters(prev => ({ ...prev, [name]: newRegisters[name] })); // Incremental update
-        setLoadingProgress(p => p + 1);
-      }
-
-      // Load Status Registers
-      for (const name of STATUS_REGISTERS) {
-        if (abortControllerRef.current.signal.aborted) break;
-        const addr = REGISTER_MAP[name];
-        const val = await readReg(addr);
-        newRegisters[name] = val.toString(16).toUpperCase().padStart(2, '0');
-        setRegisters(prev => ({ ...prev, [name]: newRegisters[name] }));
-        setLoadingProgress(p => p + 1);
-      }
-
-      // Load RF Params
-      if (!abortControllerRef.current.signal.aborted) {
-        const freq = await getFrequency(); setLoadingProgress(p => p + 1);
-        const dr = await getDataRate(); setLoadingProgress(p => p + 1);
-        const bw = await getBandwidth(); setLoadingProgress(p => p + 1);
-        const dev = await getDeviation(); setLoadingProgress(p => p + 1);
-        const mod = await getModulation(); setLoadingProgress(p => p + 1);
-        const pwr = await getTxPower(); setLoadingProgress(p => p + 1);
-
-        setRfParams({
-          frequency: freq,
-          dataRate: dr,
-          bandwidth: bw,
-          deviation: dev,
-          modulation: mod,
-          txPower: pwr
-        });
-      }
-
-    } catch (e) {
-      console.error("Refresh failed", e);
-      alert("Refresh failed: " + (e instanceof Error ? e.message : String(e)));
-    } finally {
-      setIsLoading(false);
-      setCurrentCommand("");
-    }
+    }, 0);
   };
 
   const handleEditRegister = (name: string, currentVal: string) => {
@@ -377,14 +462,24 @@ export default function ISMFragment() {
           <h2 className="text-lg font-semibold text-slate-100">ISM (RFM69)</h2>
           <p className="text-sm text-slate-400">Sub-GHz radio control</p>
         </div>
-        <div>
-           <button 
-             onClick={refreshData}
-             disabled={!status.connected || isLoading}
-             className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-           >
-             Refresh
-           </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              setTempCsPin(csPin);
+              setTempCsActiveHigh(csActiveHigh);
+              setShowSettingsDialog(true);
+            }}
+            className="px-3 py-1.5 text-sm bg-slate-700 text-white rounded hover:bg-slate-600"
+          >
+            Settings
+          </button>
+          <button 
+            onClick={refreshData}
+            disabled={!status.connected || isLoading}
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            Refresh
+          </button>
         </div>
       </header>
       
@@ -502,19 +597,25 @@ export default function ISMFragment() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
             <div className="bg-slate-900 p-6 rounded-lg w-96 border border-slate-700 shadow-xl">
                 <h3 className="text-lg font-medium text-slate-100 mb-4">Initializing RFM69</h3>
-                <div className="w-full bg-slate-800 rounded-full h-2.5 mb-2">
+                <div className="w-full bg-slate-800 rounded-full h-3 mb-3 overflow-hidden">
                     <div 
-                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-200"
-                        style={{ width: `${(loadingProgress / totalLoadSteps) * 100}%` }}
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-100 ease-linear"
+                        style={{ 
+                            width: totalLoadSteps > 0 
+                                ? `${Math.round((loadingProgress / totalLoadSteps) * 100)}%` 
+                                : '0%'
+                        }}
                     ></div>
                 </div>
-                <div className="flex justify-between text-xs text-slate-400 mb-4">
+                <div className="text-xs text-slate-400 mb-2">
                     <span>{loadingProgress} / {totalLoadSteps}</span>
-                    <span className="truncate ml-4 max-w-[150px] font-mono">{currentCommand}</span>
+                </div>
+                <div className="text-xs text-slate-500 mb-4 font-mono break-all min-h-[1rem]">
+                    {currentCommand || "Preparing..."}
                 </div>
                  <button 
                    onClick={() => abortControllerRef.current?.abort()}
-                   className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded"
+                   className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors"
                  >
                    Cancel
                  </button>
@@ -550,6 +651,54 @@ export default function ISMFragment() {
                      </button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* Settings Dialog */}
+      {showSettingsDialog && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-900 p-6 rounded-lg w-96 border border-slate-700 shadow-xl">
+            <h3 className="text-lg font-medium text-slate-100 mb-4">ISM Settings</h3>
+            
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-300">CS Pin:</label>
+                <input
+                  type="number"
+                  value={tempCsPin}
+                  onChange={(e) => setTempCsPin(e.target.value)}
+                  className="w-24 bg-slate-950 border border-slate-700 text-slate-100 rounded px-3 py-2 text-sm"
+                  min="1"
+                  max="48"
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-slate-300">CS Active High:</label>
+                <input
+                  type="checkbox"
+                  checked={tempCsActiveHigh}
+                  onChange={(e) => setTempCsActiveHigh(e.target.checked)}
+                  className="w-4 h-4"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => setShowSettingsDialog(false)}
+                className="px-4 py-2 text-slate-300 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveSettings}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>
