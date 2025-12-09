@@ -4,6 +4,15 @@
 <dict>
 	<key>BackendBaseURL</key>
 	<string>http://192.168.1.135:8000</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>emwaver</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
