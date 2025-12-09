@@ -14,8 +14,10 @@ jobs:
   build:
     name: Build CLI for ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 5
       matrix:
         include:
           - os: ubuntu-22.04
@@ -25,10 +27,10 @@ jobs:
           # - os: ubuntu-22.04
           #   target: aarch64-unknown-linux-gnu
           #   artifact_name: emwaver-cli-linux-aarch64
-          - os: macos-13
+          - os: macos-14
             target: x86_64-apple-darwin
             artifact_name: emwaver-cli-macos-x86_64
-          - os: macos-13
+          - os: macos-14
             target: aarch64-apple-darwin
             artifact_name: emwaver-cli-macos-aarch64
           - os: windows-2022
@@ -82,6 +84,7 @@ jobs:
   release:
     name: Create Release
     needs: build
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,17 +110,25 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          continue-on-error: true
 
       - name: Create checksums
         run: |
           cd artifacts
-          for file in *; do
-            if [[ "$file" != *.exe ]]; then
-              sha256sum "$file" > "${file}.sha256"
-            else
-              certutil -hashfile "$file" SHA256 | findstr /v "CertUtil" | findstr /v "SHA256" > "${file}.sha256" || true
-            fi
-          done
+          # Only process files that exist (skip if no artifacts downloaded)
+          if [ -n "$(ls -A 2>/dev/null)" ]; then
+            for file in *; do
+              if [ -f "$file" ] && [[ "$file" != *.sha256 ]]; then
+                if [[ "$file" != *.exe ]]; then
+                  sha256sum "$file" > "${file}.sha256"
+                else
+                  certutil -hashfile "$file" SHA256 | findstr /v "CertUtil" | findstr /v "SHA256" > "${file}.sha256" || true
+                fi
+              fi
+            done
+          else
+            echo "No artifacts found - some builds may have failed"
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -129,7 +140,7 @@ jobs:
 
             ### Installation
 
-            **Linux/macOS:**
+            **Linux:**
             ```bash
             curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
             ```
@@ -137,12 +148,16 @@ jobs:
             **Windows:**
             Download `emwaver-cli-windows-x86_64.exe` and add it to your PATH.
 
+            **macOS:**
+            macOS builds may be temporarily unavailable. Please build from source or check back later.
+
             ### Checksums
             See the `.sha256` files for verification.
 
             ### Changes
             See the [full changelog](https://github.com/luispl77/emwaver/releases).
           files: artifacts/*
+          fail_on_unmatched_files: false
           draft: false
           prerelease: false
         env:
