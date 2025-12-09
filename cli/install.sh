@@ -34,7 +34,10 @@ detect_platform() {
             ;;
         Linux)
             case "$arch" in
-                aarch64|arm64) echo "linux-aarch64" ;;
+                aarch64|arm64) 
+                    echo "ARM64 Linux builds are not yet available. Please build from source or use x86_64." >&2
+                    exit 1
+                    ;;
                 x86_64|amd64) echo "linux-x86_64" ;;
                 *) echo "Unsupported Linux architecture: $arch" >&2; exit 1 ;;
             esac
