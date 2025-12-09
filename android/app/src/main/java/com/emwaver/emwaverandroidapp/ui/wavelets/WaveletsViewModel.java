@@ -120,6 +120,13 @@ public final class WaveletsViewModel extends ViewModel {
     void removeRecord(@NonNull String id) {
         records.remove(id);
     }
+    
+    void clearAll() {
+        records.clear();
+        lastScriptContent = null;
+        lastScriptName = null;
+        lastScriptId = null;
+    }
 
     Map<String, String> getModuleSources() {
         Map<String, String> modules = new HashMap<>();

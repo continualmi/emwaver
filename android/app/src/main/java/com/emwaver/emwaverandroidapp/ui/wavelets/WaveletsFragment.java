@@ -341,6 +341,9 @@ public class WaveletsFragment extends Fragment {
                     menuItem.setChecked(lineWrapEnabled);
                     updateLineWrap();
                     return true;
+                } else if (itemId == R.id.reset_defaults) {
+                    showResetDefaultsConfirmationDialog();
+                    return true;
                 } else if (itemId == R.id.action_clear_console) {
                     WaveletConsoleState.getInstance().clear();
                     return true;
@@ -577,6 +580,9 @@ public class WaveletsFragment extends Fragment {
                     scriptFiles.addAll(value);
                 }
                 
+                // Migrate CC1101 scripts to RFM69
+                migrateCC1101ToRFM69();
+                
                 if (scriptFiles.isEmpty()) {
                     loadDefaultWaveletsFromAssets();
                 } else {
@@ -597,15 +603,53 @@ public class WaveletsFragment extends Fragment {
         });
     }
     
+    private void migrateCC1101ToRFM69() {
+        if (fileRepository == null || scriptFiles.isEmpty()) {
+            return;
+        }
+        
+        List<UserFileMetadata> toDelete = new ArrayList<>();
+        for (UserFileMetadata script : scriptFiles) {
+            String name = script.getName().toLowerCase();
+            if (name.equals("cc1101") || name.equals("cc1101_radio_console") || name.equals("cc1101_radio_module")) {
+                toDelete.add(script);
+            }
+        }
+        
+        if (toDelete.isEmpty()) {
+            return;
+        }
+        
+        // Remove CC1101 scripts from the list synchronously
+        for (UserFileMetadata script : toDelete) {
+            scriptFiles.remove(script);
+            if (viewModel != null) {
+                viewModel.removeRecord(script.getId());
+            }
+            // Delete asynchronously in background
+            fileRepository.deleteFile(script.getId(), script.getEtag(), new RepositoryCallback<Void>() {
+                @Override
+                public void onSuccess(Void value) {
+                    Log.d(TAG, "Migrated CC1101 script: " + script.getName());
+                }
+                
+                @Override
+                public void onError(String message) {
+                    Log.w(TAG, "Failed to delete CC1101 script during migration: " + script.getName());
+                }
+            });
+        }
+    }
+    
     private void loadDefaultWaveletsFromAssets() {
         if (!isAdded()) {
             return;
         }
         
         String[] defaultWavelets = {
-            "cc1101.js",
-            "cc1101_radio_console.js",
-            "cc1101_radio_module.js",
+            "rfm69.js",
+            "rfm69_radio_console.js",
+            "rfm69_radio_module.js",
             "hello_world_usb.js",
             "wavelet_console_demo.js",
             "wavelet_demo.js",
@@ -1177,6 +1221,81 @@ public class WaveletsFragment extends Fragment {
             .setPositiveButton("Delete", (dialog, which) -> deleteScript(metadata))
             .setNegativeButton("Cancel", null)
             .show();
+    }
+    
+    private void showResetDefaultsConfirmationDialog() {
+        if (!isAdded()) {
+            return;
+        }
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Reset to Default Scripts")
+            .setMessage("This will delete ALL scripts from internal storage and restore default scripts. This action cannot be undone.\n\nAre you sure you want to continue?")
+            .setPositiveButton("Reset", (dialog, which) -> resetToDefaults())
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private void resetToDefaults() {
+        if (fileRepository == null) {
+            showToast("File repository unavailable");
+            return;
+        }
+        
+        if (scriptFiles.isEmpty()) {
+            // No scripts to delete, just load defaults
+            loadDefaultWaveletsFromAssets();
+            return;
+        }
+        
+        showLoadingDialog("Resetting to defaults...");
+        
+        // Delete all scripts
+        AtomicInteger remaining = new AtomicInteger(scriptFiles.size());
+        AtomicInteger successCount = new AtomicInteger(0);
+        
+        for (UserFileMetadata script : new ArrayList<>(scriptFiles)) {
+            fileRepository.deleteFile(script.getId(), script.getEtag(), new RepositoryCallback<Void>() {
+                @Override
+                public void onSuccess(Void value) {
+                    scriptFiles.remove(script);
+                    if (viewModel != null) {
+                        viewModel.removeRecord(script.getId());
+                    }
+                    successCount.incrementAndGet();
+                    if (remaining.decrementAndGet() == 0) {
+                        // All scripts deleted, now load defaults
+                        hideLoadingDialog();
+                        scriptFiles.clear();
+                        if (viewModel != null) {
+                            viewModel.clearAll();
+                        }
+                        currentScriptMetadata = null;
+                        currentScriptName = null;
+                        currentScriptEtag = null;
+                        setEditorText("");
+                        loadDefaultWaveletsFromAssets();
+                    }
+                }
+                
+                @Override
+                public void onError(String message) {
+                    Log.w(TAG, "Failed to delete script during reset: " + script.getName());
+                    if (remaining.decrementAndGet() == 0) {
+                        hideLoadingDialog();
+                        // Still load defaults even if some deletions failed
+                        scriptFiles.clear();
+                        if (viewModel != null) {
+                            viewModel.clearAll();
+                        }
+                        currentScriptMetadata = null;
+                        currentScriptName = null;
+                        currentScriptEtag = null;
+                        setEditorText("");
+                        loadDefaultWaveletsFromAssets();
+                    }
+                }
+            });
+        }
     }
 
     private void deleteScript(UserFileMetadata metadata) {

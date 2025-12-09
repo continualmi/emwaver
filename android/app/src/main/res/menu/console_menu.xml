@@ -43,4 +43,8 @@
         android:icon="@drawable/ai_discard"
         android:title="Clear Console"
         app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/reset_defaults"
+        android:title="Reset Defaults"
+        app:showAsAction="never" />
 </menu>
