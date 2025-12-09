@@ -4,23 +4,34 @@ Command-line interface for interacting with EMWaver devices.
 
 ## Installation
 
-### Quick Install (Linux/macOS)
+### Manual Installation (Recommended)
 
+1. Go to [Releases](https://github.com/luispl77/emwaver/releases) and download the binary for your platform:
+   - **Linux**: `emwaver-cli-linux-x86_64`
+   - **macOS Intel**: `emwaver-cli-macos-x86_64`
+   - **macOS Apple Silicon**: `emwaver-cli-macos-aarch64`
+   - **Windows**: `emwaver-cli-windows-x86_64.exe`
+
+2. **Linux/macOS**: Make it executable and install:
+   ```bash
+   chmod +x emwaver-cli-linux-x86_64  # or macos version
+   mkdir -p ~/.local/bin
+   mv emwaver-cli-linux-x86_64 ~/.local/bin/emwaver
+   # Add to PATH (add to ~/.bashrc or ~/.zshrc):
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+3. **Windows**: Add the `.exe` file to your PATH or run it directly.
+
+### Quick Install Script (If Available)
+
+If you have access to the install script:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
 ```
 
-This will:
-- Detect your platform (Linux/macOS)
-- Download the appropriate binary
-- Install it to `~/.local/bin/emwaver`
-- Add it to your PATH
-
-### Manual Installation
-
-1. Download the binary for your platform from [Releases](https://github.com/luispl77/emwaver/releases)
-2. Make it executable: `chmod +x emwaver`
-3. Move it to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
+**Note**: This requires the repository to be public or access to the install script.
 
 ### Building from Source
 
