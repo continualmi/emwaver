@@ -4,8 +4,8 @@ Recorded steps for cloning and building the VS Code fork before we pivoted away 
 
 ## Repository Preparation
 
-- `git clone --depth 1 https://github.com/microsoft/vscode.git emwaver-ide`
-- `rm -rf emwaver-ide/.git`
+- `git clone --depth 1 https://github.com/microsoft/vscode.git EMWaver`
+- `rm -rf EMWaver/.git`
 
 ## Tooling Installation & Environment
 

@@ -109,7 +109,12 @@ impl BLEState {
         });
         
         tokio::spawn(async move {
-            let mut stream = adapter_clone.events().await.unwrap();
+            let Ok(mut stream) = adapter_clone.events().await else {
+                eprintln!("Failed to get BLE event stream");
+                let mut status = status_clone.lock().await;
+                status.scanning = false;
+                return;
+            };
             while let Some(event) = stream.next().await {
                 match event {
                     CentralEvent::DeviceDiscovered(id) => {
@@ -122,10 +127,10 @@ impl BLEState {
                                             let mut status = status_clone.lock().await;
                                             status.device_name = Some(name.clone());
                                             status.device_address = Some(id.to_string());
-                                            status.scanning = false;
+                                            // Keep scanning=true to indicate "working on it" (connecting)
                                         }
                                         
-                                        // Stop scanning
+                                        // Stop scanning (hardware)
                                         let _ = adapter_clone.stop_scan().await;
                                         
                                         // Connect to device
@@ -177,10 +182,11 @@ impl BLEState {
                                                     }
                                                 }
                                                 
-                                                // Update status
+                                                // Update status: Connected and finished scanning/connecting
                                                 {
                                                     let mut status = status_clone.lock().await;
                                                     status.connected = true;
+                                                    status.scanning = false; 
                                                 }
                                                 
                                                 // Store peripheral
@@ -188,7 +194,15 @@ impl BLEState {
                                                     let mut peripheral_guard = peripheral_clone.lock().await;
                                                     *peripheral_guard = Some(peripheral_for_storage);
                                                 }
+                                            } else {
+                                                // Service discovery failed
+                                                 let mut status = status_clone.lock().await;
+                                                 status.scanning = false;
                                             }
+                                        } else {
+                                            // Connection failed
+                                            let mut status = status_clone.lock().await;
+                                            status.scanning = false;
                                         }
                                     }
                                 }
@@ -196,8 +210,7 @@ impl BLEState {
                         }
                     }
                     CentralEvent::DeviceConnected(_) => {
-                        let mut status = status_clone.lock().await;
-                        status.connected = true;
+                        // Don't set connected=true here, wait for service discovery
                     }
                     CentralEvent::DeviceDisconnected(_) => {
                         let mut status = status_clone.lock().await;
