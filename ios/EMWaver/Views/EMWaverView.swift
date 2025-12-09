@@ -419,9 +419,6 @@ struct EMWaverView: View {
             }
         })
         
-        // Set up CC1101 if needed later
-        let cc1101 = CC1101(bleManager: bleManager)
-        jsEngine?.setupCC1101(cc1101)
         
         // Set up IR encoder
         jsEngine?.setupIR()

@@ -42,7 +42,7 @@ import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
-import com.emwaver.emwaverandroidapp.ui.ism.CC1101;
+import com.emwaver.emwaverandroidapp.ui.ism.RFM69;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 
@@ -91,7 +91,6 @@ public class ButtonsFragment extends Fragment {
     private ActivityResultLauncher<Intent> openFileLauncher;
     private WaveletEngine waveletEngine;
     private BLEService bleService;
-    private CC1101 cc1101;
     private boolean isServiceBound = false;
     private IrEncoderWrapper irEncoderWrapper;
 
@@ -106,7 +105,6 @@ public class ButtonsFragment extends Fragment {
         public void onServiceConnected(ComponentName className, IBinder service) {
             BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
             bleService = binder.getService();
-            cc1101 = new CC1101(bleService);
             isServiceBound = true;
             Log.i("ButtonsFragment", "BLE Service connected");
             initializeWaveletEngine();
@@ -985,12 +983,10 @@ public class ButtonsFragment extends Fragment {
 
     private void initializeWaveletEngine() {
         if (isServiceBound && bleService != null) {
-            CC1101 cc1101 = new CC1101(bleService);
             Utils utils = new Utils();
             utils.setContext(requireContext());
             irEncoderWrapper = new IrEncoderWrapper();
             Map<String, Object> bindings = new HashMap<>();
-            bindings.put("CC1101", cc1101);
             bindings.put("Utils", utils);
             bindings.put("BLEService", bleService);
             bindings.put("IrEncoder", irEncoderWrapper);
