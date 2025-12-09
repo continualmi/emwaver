@@ -94,6 +94,19 @@ impl BLEState {
         let status_clone = Arc::clone(&self.status);
         let peripheral_clone = Arc::clone(&self.peripheral);
         let notification_tx_clone = Arc::clone(&self.notification_tx);
+        let adapter_for_timeout = adapter_clone.clone();
+        let status_for_timeout = Arc::clone(&self.status);
+        
+        // Spawn timeout task to stop scan after 10 seconds if no device found
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            let mut status = status_for_timeout.lock().await;
+            if status.scanning && !status.connected {
+                status.scanning = false;
+                drop(status);
+                let _ = adapter_for_timeout.stop_scan().await;
+            }
+        });
         
         tokio::spawn(async move {
             let mut stream = adapter_clone.events().await.unwrap();
@@ -264,5 +277,79 @@ impl BLEState {
         } else {
             None
         }
+    }
+
+    pub async fn transmit_buffer(&self, data: Vec<u8>) -> Result<(), String> {
+        let peripheral_guard = self.peripheral.lock().await;
+        let peripheral = peripheral_guard.as_ref().ok_or("Not connected to device")?;
+        
+        let services = peripheral.services();
+        let service_uuid = Uuid::parse_str(SERVICE_UUID).unwrap();
+        let cmd_char_uuid = Uuid::parse_str(CMD_CHAR_UUID).unwrap();
+        
+        let characteristic = services
+            .iter()
+            .find(|s| s.uuid == service_uuid)
+            .and_then(|s| s.characteristics.iter().find(|c| c.uuid == cmd_char_uuid))
+            .ok_or("Command characteristic not found")?;
+        
+        drop(peripheral_guard);
+
+        if data.is_empty() {
+            return Err("Buffer is empty".to_string());
+        }
+
+        // Flow control parameters (matching Android/iOS)
+        let max_packet_size = 200;
+        let min_packet_size = 128;
+        let initial_packet_size = 188;
+        let mut current_packet_size = max_packet_size;
+        let fixed_delay_ms = 15u64;
+        
+        let target_buffer_level = 2048;
+        let buffer_high_threshold = 3000;
+        let buffer_low_threshold = 1000;
+        let initial_fill_bytes = 2048;
+
+        let total_bytes = data.len();
+        let mut bytes_sent = 0;
+
+        while bytes_sent < total_bytes {
+            // Calculate packet size
+            let remaining = total_bytes - bytes_sent;
+            let packet_size = std::cmp::min(current_packet_size, remaining);
+            let end = bytes_sent + packet_size;
+            let packet = &data[bytes_sent..end];
+
+            // Send packet
+            let peripheral_guard = self.peripheral.lock().await;
+            let peripheral = peripheral_guard.as_ref().ok_or("Not connected")?;
+            peripheral
+                .write(&characteristic, packet, btleplug::api::WriteType::WithoutResponse)
+                .await
+                .map_err(|e| format!("Failed to write packet: {}", e))?;
+            drop(peripheral_guard);
+
+            // Flow control logic (matching Android/iOS)
+            if bytes_sent >= initial_fill_bytes {
+                // In a real implementation, we'd check buffer status here
+                // For now, use simple adaptive sizing
+                // TODO: Add buffer status checking if firmware provides it
+                if current_packet_size > initial_packet_size {
+                    current_packet_size = std::cmp::max(min_packet_size, current_packet_size - 32);
+                } else if current_packet_size < initial_packet_size {
+                    current_packet_size = std::cmp::min(max_packet_size, current_packet_size + 32);
+                }
+            } else {
+                current_packet_size = max_packet_size;
+            }
+
+            // Fixed delay between packets
+            tokio::time::sleep(tokio::time::Duration::from_millis(fixed_delay_ms)).await;
+
+            bytes_sent += packet_size;
+        }
+
+        Ok(())
     }
 }

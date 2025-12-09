@@ -441,6 +441,11 @@ async fn ble_get_notification(state: State<'_, Arc<BLEState>>) -> Result<Option<
     Ok(state.get_notification().await)
 }
 
+#[tauri::command]
+async fn ble_transmit_buffer(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
+    state.transmit_buffer(data).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -647,7 +652,8 @@ pub fn run() {
             ble_disconnect,
             ble_send_packet,
             ble_get_status,
-            ble_get_notification
+            ble_get_notification,
+            ble_transmit_buffer
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

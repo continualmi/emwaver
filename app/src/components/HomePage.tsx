@@ -30,6 +30,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   const notificationIntervalRef = useRef<number | null>(null);
   const wasConnectedRef = useRef<boolean>(false);
   const manualDisconnectRef = useRef<boolean>(false);
+  const scanTimeoutRef = useRef<number | null>(null);
 
   const fragments = [
     {
@@ -58,27 +59,32 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     },
   ];
 
-  // Initialize BLE on mount and auto-connect
+  // Initialize BLE on mount
   useEffect(() => {
     const initBLE = async () => {
       try {
         const result = await safeInvoke("ble_initialize");
         if (result === null) {
           // Tauri not available, skip initialization
+          setIsInitialized(true); // Still enable button so user can see the issue
           return;
         }
         setIsInitialized(true);
-        // Automatically start scanning for devices
-        await safeInvoke("ble_start_scan");
-        setStatus((prev) => ({ ...prev, scanning: true }));
+        
+        // Reset any stuck scanning state
+        const currentStatus = await safeInvoke<BLEStatus>("ble_get_status");
+        if (currentStatus?.scanning) {
+          await safeInvoke("ble_stop_scan");
+        }
       } catch (error) {
         console.error("Failed to initialize BLE:", error);
+        setIsInitialized(true); // Enable button even if init fails, user can retry
       }
     };
     initBLE();
   }, []);
 
-  // Poll for status updates and auto-reconnect if disconnected
+  // Poll for status updates
   useEffect(() => {
     if (!isInitialized) return;
 
@@ -89,23 +95,17 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
           // Tauri not available, skip status update
           return;
         }
-        const wasConnected = wasConnectedRef.current;
         wasConnectedRef.current = currentStatus.connected;
         setStatus(currentStatus);
-        
-        // Auto-reconnect if we were connected but now disconnected (and not manually disconnected)
-        if (wasConnected && !currentStatus.connected && !currentStatus.scanning && !manualDisconnectRef.current) {
-          try {
-            await safeInvoke("ble_start_scan");
-            setStatus((prev) => ({ ...prev, scanning: true }));
-          } catch (error) {
-            console.error("Failed to auto-reconnect:", error);
-          }
-        }
         
         // Reset manual disconnect flag if we're connected again
         if (currentStatus.connected) {
           manualDisconnectRef.current = false;
+          // Clear scan timeout since we're connected
+          if (scanTimeoutRef.current !== null) {
+            clearTimeout(scanTimeoutRef.current);
+            scanTimeoutRef.current = null;
+          }
         }
       } catch (error) {
         console.error("Failed to get BLE status:", error);
@@ -118,6 +118,9 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     return () => {
       if (statusIntervalRef.current !== null) {
         clearInterval(statusIntervalRef.current);
+      }
+      if (scanTimeoutRef.current !== null) {
+        clearTimeout(scanTimeoutRef.current);
       }
     };
   }, [isInitialized]);
@@ -221,18 +224,54 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
   const handleConnect = async () => {
     try {
+      // Clear any existing timeout
+      if (scanTimeoutRef.current !== null) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
+      }
+
+      // Try to initialize if not already done
+      const initResult = await safeInvoke("ble_initialize");
+      if (initResult === null) {
+        // Tauri not available or init failed, but continue anyway
+        console.warn("BLE initialization returned null, continuing anyway");
+      } else {
+        setIsInitialized(true);
+      }
+      
       manualDisconnectRef.current = false;
       setStatus((prev) => ({ ...prev, scanning: true }));
       await safeInvoke("ble_start_scan");
+
+      // Set timeout to stop scanning after 15 seconds if not connected
+      scanTimeoutRef.current = window.setTimeout(async () => {
+        const currentStatus = await safeInvoke<BLEStatus>("ble_get_status");
+        if (currentStatus?.scanning && !currentStatus?.connected) {
+          // Stop scanning and reset state
+          await safeInvoke("ble_stop_scan");
+          setStatus((prev) => ({ ...prev, scanning: false }));
+        }
+        scanTimeoutRef.current = null;
+      }, 15000);
     } catch (error) {
       console.error("Failed to start scan:", error);
       setStatus((prev) => ({ ...prev, scanning: false }));
+      if (scanTimeoutRef.current !== null) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
+      }
+      alert(`Failed to start scan: ${error}`);
     }
   };
 
   const handleDisconnect = async () => {
     try {
       manualDisconnectRef.current = true;
+      // Clear scan timeout if it exists
+      if (scanTimeoutRef.current !== null) {
+        clearTimeout(scanTimeoutRef.current);
+        scanTimeoutRef.current = null;
+      }
       await safeInvoke("ble_disconnect");
       setFirmwareVersion("Unknown");
     } catch (error) {
@@ -386,8 +425,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
               ) : (
                 <button
                   onClick={handleConnect}
-                  disabled={status.scanning || !isInitialized}
-                  className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                 >
                   {status.scanning ? "Scanning..." : "Connect"}
                 </button>
