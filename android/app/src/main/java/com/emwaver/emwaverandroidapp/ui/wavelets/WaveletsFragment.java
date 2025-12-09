@@ -159,7 +159,6 @@ public class WaveletsFragment extends Fragment {
             bleService = binder.getService();
             isServiceBound = true;
             ensureWaveletEngineBindings();
-            updateBleSyncStatus();
         }
 
         @Override
@@ -208,7 +207,6 @@ public class WaveletsFragment extends Fragment {
         setupFileLaunchers();
         setupScriptList();
         setupConsoleSection();
-        setupBleSyncToggle();
         setupCollapsibleSections();
         showingPreview = false;
         // Ensure console is hidden by default
@@ -453,54 +451,6 @@ public class WaveletsFragment extends Fragment {
 
         updateConsoleText(WaveletConsoleState.getInstance().snapshot());
         WaveletConsoleState.getInstance().observe().observe(getViewLifecycleOwner(), this::updateConsoleText);
-    }
-
-    private void setupBleSyncToggle() {
-        TextView statusText = binding.bleSyncStatusText;
-        MaterialButton toggleButton = binding.bleSyncToggleButton;
-
-        toggleButton.setOnClickListener(v -> {
-            if (bleService == null) {
-                Toast.makeText(requireContext(), "BLE service not available", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            if (bleService.isFileSyncServerRunning()) {
-                Log.d(TAG, "User clicked: Stopping file sync server");
-                bleService.stopFileSyncServer();
-                statusText.setText("📡 CLI File Sync: Inactive");
-                statusText.setTextColor(getResources().getColor(R.color.textSecondary));
-                toggleButton.setText("Enable");
-            } else {
-                Log.d(TAG, "User clicked: Starting file sync server");
-                bleService.startFileSyncServer();
-                statusText.setText("📡 CLI File Sync: Active");
-                statusText.setTextColor(getResources().getColor(android.R.color.holo_green_dark));
-                toggleButton.setText("Disable");
-            }
-        });
-
-        // Initial state
-        updateBleSyncStatus();
-    }
-
-    private void updateBleSyncStatus() {
-        if (binding == null || bleService == null) {
-            return;
-        }
-
-        TextView statusText = binding.bleSyncStatusText;
-        MaterialButton toggleButton = binding.bleSyncToggleButton;
-
-        if (bleService.isFileSyncServerRunning()) {
-            statusText.setText("📡 CLI File Sync: Active");
-            statusText.setTextColor(getResources().getColor(android.R.color.holo_green_dark));
-            toggleButton.setText("Disable");
-        } else {
-            statusText.setText("📡 CLI File Sync: Inactive");
-            statusText.setTextColor(getResources().getColor(R.color.textSecondary));
-            toggleButton.setText("Enable");
-        }
     }
 
     private void updateConsoleText(List<String> lines) {

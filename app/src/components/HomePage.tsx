@@ -39,7 +39,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     },
     {
       id: "ism" as FragmentType,
-      name: "ISM (CC1101)",
+      name: "ISM (RFM69)",
       description: "Sub-GHz radio control and signal capture",
       icon: <ISMIcon />,
       borderClass: "hover:border-emerald-500/60",
