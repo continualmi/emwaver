@@ -77,6 +77,7 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 - **Git fragment**: UI section for GitHub repo operations (clone, pull, push) using GitHub REST API with token-based auth.
 - Wavelet console/sampler loads `.js` and `.raw` assets from local storage (synced via Git fragment).
 - Mirror iOS feature parity for wavelets, IR tooling, and hardware interaction.
+- **Logcat filtering**: To view logs only from the EMWaver Android app, use: `adb logcat --pid=$(adb shell pidof -s com.emwaver.emwaverandroidapp) -T 0`. The `--pid` flag filters by process ID, and `-T 0` clears the buffer and shows logs from the current time forward.
 
 ### iOS (`/ios`)
 - SwiftUI app opened via `EMWaver.xcodeproj`; mirror Android feature parity.
