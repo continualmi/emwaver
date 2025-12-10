@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMWaver Hardware Evolution</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            500: '#6366f1', // Indigo
+                            600: '#4f46e5',
+                        },
+                        dark: {
+                            900: '#0f172a', // Slate 900
+                            800: '#1e293b', // Slate 800
+                            700: '#334155', // Slate 700
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .timeline-line::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            background: #334155;
+            transform: translateX(-50%);
+            z-index: 0;
+        }
+        /* Custom dot for timeline */
+        .timeline-dot-left::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: calc(50% - 14px); /* Adjust to be exactly on the line */
+            width: 16px;
+            height: 16px;
+            background-color: #6366f1; /* brand-500 */
+            border: 3px solid #0f172a; /* Same as body background */
+            border-radius: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+        .timeline-dot-right::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: calc(50% - 14px); /* Adjust to be exactly on the line */
+            width: 16px;
+            height: 16px;
+            background-color: #6366f1; /* brand-500 */
+            border: 3px solid #0f172a; /* Same as body background */
+            border-radius: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+        @media (max-width: 767px) {
+            .timeline-line::before {
+                left: 20px;
+                transform: translateX(0);
+            }
+            .timeline-dot-left::before, .timeline-dot-right::before {
+                left: 12px;
+                transform: translateY(-50%);
+            }
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Navigation (Simple) -->
+    <nav class="fixed top-0 w-full z-50 bg-dark-900/80 backdrop-blur-md border-b border-dark-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <a href="index.html" class="text-xl font-bold tracking-tight text-white hover:text-brand-500 transition">
+                        EMWaver
+                    </a>
+                    <span class="text-dark-700">/</span>
+                    <span class="text-sm font-medium text-gray-400">Hardware Archive</span>
+                </div>
+                <div>
+                    <a href="index.html" class="text-sm font-medium text-gray-400 hover:text-white transition">Back to Docs &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="pt-32 pb-20 px-4 sm:px-6 lg:px-8 text-center max-w-5xl mx-auto">
+        <h1 class="text-5xl md:text-6xl font-bold tracking-tight text-white mb-6">
+            The Evolution of <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-purple-500">EMWaver Hardware</span>
+        </h1>
+        <p class="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
+            A chronological archive of the iterations of the EMWaver board. 
+            From breadboard prototypes to the polished v10, explore the design decisions, trade-offs, and lessons learned along the way.
+        </p>
+    </header>
+
+    <!-- Timeline Container -->
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-32 relative timeline-line">
+        
+        <!-- Board Version: V1.0 -->
+        <section class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 mb-24 items-center group">
+            <!-- Content Side (Left for odd) -->
+            <div class="md:text-right order-2 md:order-1 relative timeline-dot-left">
+                <div class="inline-block px-3 py-1 mb-4 text-xs font-semibold tracking-wider text-brand-500 uppercase bg-brand-500/10 rounded-full">
+                    Sep 2023
+                </div>
+                <h2 class="text-3xl font-bold text-white mb-4 group-hover:text-brand-500 transition">Emwaver v1.0: The Breadboard Proto</h2>
+                <p class="text-gray-400 mb-6 leading-relaxed">
+                    The very first proof-of-concept. This version proved that the ESP32-S3 could directly drive the CC1101 without a dedicated coprocessor. 
+                    However, the antenna placement was suboptimal, causing significant interference with the USB data lines. The USB-Micro connector was also a common pain point.
+                </p>
+                
+                <div class="flex flex-wrap gap-2 justify-end mb-6">
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">ESP32-S3</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">CC1101</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">USB-Micro</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Through-hole Components</span>
+                </div>
+
+                <div class="flex items-center justify-end gap-4">
+                    <a href="https://easyeda.com/example/v1_project" target="_blank" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-brand-500/20">
+                        Open in EasyEDA
+                    </a>
+                    <a href="#" class="text-sm font-medium text-gray-400 hover:text-white flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Schematic
+                    </a>
+                </div>
+            </div>
+
+            <!-- Image Side (Right for odd) -->
+            <div class="relative order-1 md:order-2">
+                <div class="relative rounded-2xl overflow-hidden border border-dark-700 shadow-2xl bg-dark-800 aspect-video group-hover:border-brand-500/50 transition duration-500">
+                    <img src="https://via.placeholder.com/800x450/1e293b/4f46e5?text=Emwaver+v1.0+Prototype" alt="Emwaver v1.0" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 group-hover:scale-105 transition duration-700">
+                </div>
+            </div>
+        </section>
+
+        <!-- Board Version: V2.0 -->
+        <section class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 mb-24 items-center group">
+            <!-- Image Side (Left for even) -->
+            <div class="relative order-1">
+                <div class="relative rounded-2xl overflow-hidden border border-dark-700 shadow-2xl bg-dark-800 aspect-video group-hover:border-brand-500/50 transition duration-500">
+                    <img src="https://via.placeholder.com/800x450/1e293b/4f46e5?text=Emwaver+v2.0+SMD" alt="Emwaver v2.0" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 group-hover:scale-105 transition duration-700">
+                </div>
+            </div>
+
+            <!-- Content Side (Right for even) -->
+            <div class="md:text-left order-2 relative timeline-dot-right">
+                <div class="inline-block px-3 py-1 mb-4 text-xs font-semibold tracking-wider text-brand-500 uppercase bg-brand-500/10 rounded-full">
+                    Oct 2023
+                </div>
+                <h2 class="text-3xl font-bold text-white mb-4 group-hover:text-brand-500 transition">Emwaver v2.0: First SMD Attempt</h2>
+                <p class="text-gray-400 mb-6 leading-relaxed">
+                    This was our first attempt at a surface-mount design. We moved to a more compact form factor, but still struggled with RF noise, especially near the USB lines. The USB-Micro connector remained.
+                </p>
+                
+                <div class="flex flex-wrap gap-2 mb-6">
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">SMD</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Compact</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">USB-Micro</span>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <a href="https://easyeda.com/example/v2_project" target="_blank" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-brand-500/20">
+                        Open in EasyEDA
+                    </a>
+                    <a href="#" class="text-sm font-medium text-gray-400 hover:text-white flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Schematic
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Board Version: V5.0 -->
+        <section class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 mb-24 items-center group">
+            <!-- Content Side (Left for odd) -->
+            <div class="md:text-right order-2 md:order-1 relative timeline-dot-left">
+                <div class="inline-block px-3 py-1 mb-4 text-xs font-semibold tracking-wider text-brand-500 uppercase bg-brand-500/10 rounded-full">
+                    Jan 2024
+                </div>
+                <h2 class="text-3xl font-bold text-white mb-4 group-hover:text-brand-500 transition">Emwaver v5.0: The USB-C Leap</h2>
+                <p class="text-gray-400 mb-6 leading-relaxed">
+                    A major redesign saw the introduction of USB-C, solving the physical durability issues. We moved to a 4-layer PCB stackup to better isolate the RF signals, which significantly improved performance and reduced interference. This was also the first version to support the expansion header standard we use today.
+                </p>
+                
+                <div class="flex flex-wrap gap-2 justify-end mb-6">
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">4-Layer PCB</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">USB-C</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Standard Expansion Header</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Improved RF Isolation</span>
+                </div>
+
+                <div class="flex items-center justify-end gap-4">
+                    <a href="https://easyeda.com/example/v5_project" target="_blank" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-brand-500/20">
+                        Open in EasyEDA
+                    </a>
+                    <a href="#" class="text-sm font-medium text-gray-400 hover:text-white flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Schematic
+                    </a>
+                </div>
+            </div>
+
+            <!-- Image Side (Right for odd) -->
+            <div class="relative order-1 md:order-2">
+                <div class="relative rounded-2xl overflow-hidden border border-dark-700 shadow-2xl bg-dark-800 aspect-video group-hover:border-brand-500/50 transition duration-500">
+                    <img src="https://via.placeholder.com/800x450/1e293b/4f46e5?text=Emwaver+v5.0+USB-C" alt="Emwaver v5.0" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 group-hover:scale-105 transition duration-700">
+                </div>
+            </div>
+        </section>
+
+        <!-- Board Version: V10.0 -->
+        <section class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 mb-24 items-center group">
+            <!-- Image Side (Left for even) -->
+            <div class="relative order-1">
+                <div class="relative rounded-2xl overflow-hidden border border-dark-700 shadow-2xl bg-dark-800 aspect-video group-hover:border-brand-500/50 transition duration-500">
+                    <img src="https://via.placeholder.com/800x450/1e293b/4f46e5?text=Emwaver+v10.0+Final" alt="Emwaver v10.0" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 group-hover:scale-105 transition duration-700">
+                </div>
+            </div>
+
+            <!-- Content Side (Right for even) -->
+            <div class="md:text-left order-2 relative timeline-dot-right">
+                <div class="inline-block px-3 py-1 mb-4 text-xs font-semibold tracking-wider text-brand-500 uppercase bg-brand-500/10 rounded-full">
+                    Oct 2024
+                </div>
+                <h2 class="text-3xl font-bold text-white mb-4 group-hover:text-brand-500 transition">Emwaver v10.0: Production Ready</h2>
+                <p class="text-gray-400 mb-6 leading-relaxed">
+                    The culmination of all previous iterations. This version features a highly optimized 4-layer PCB, refined antenna matching, and dedicated shielding to virtually eliminate RF interference. It includes all standard expansion headers and is fully production-ready, supporting all advanced Wavelet features.
+                </p>
+                
+                <div class="flex flex-wrap gap-2 mb-6">
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Production Ready</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Optimized RF</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">Shielded</span>
+                    <span class="px-2 py-1 bg-dark-800 border border-dark-700 rounded text-xs text-gray-300">All Wavelet Features</span>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <a href="https://easyeda.com/example/v10_project" target="_blank" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition shadow-lg shadow-brand-500/20">
+                        Open in EasyEDA
+                    </a>
+                    <a href="#" class="text-sm font-medium text-gray-400 hover:text-white flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Schematic
+                    </a>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-dark-700 py-12 text-center">
+        <p class="text-gray-500">© 2025 EMWaver Project. Open Hardware.</p>
+    </footer>
+
+</body>
+</html>
