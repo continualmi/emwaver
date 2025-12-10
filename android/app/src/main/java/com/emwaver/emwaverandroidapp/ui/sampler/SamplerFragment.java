@@ -43,6 +43,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.emwaver.emwaverandroidapp.BLEService;
+import com.emwaver.emwaverandroidapp.USBService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentSamplerBinding;
@@ -73,10 +74,12 @@ public class SamplerFragment extends Fragment {
     private SamplerViewModel rawModeViewModel;
     private FragmentSamplerBinding binding;
     private static com.emwaver.emwaverandroidapp.BLEService BLEService;
+    private static com.emwaver.emwaverandroidapp.USBService USBService;
     LineChart chart = null;
     private int chartMinX = 0;
     private int chartMaxX = 10000;
     private boolean isServiceBound = false;
+    private boolean isUsbServiceBound = false;
     private float currentZoomLevel = 1.0f;
     private int prevRangeStart = 0;
     private int prevRangeEnd = 0;
@@ -184,6 +187,21 @@ public class SamplerFragment extends Fragment {
         public void onServiceDisconnected(ComponentName arg0) {
             isServiceBound = false;
             Log.i("service binding", "onServiceDisconnected");
+        }
+    };
+
+    private final ServiceConnection usbServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder service) {
+            USBService.LocalBinder binder = (USBService.LocalBinder) service;
+            USBService = binder.getService();
+            isUsbServiceBound = true;
+            Log.i("usb service binding", "onServiceConnected");
+        }
+        @Override
+        public void onServiceDisconnected(ComponentName arg0) {
+            isUsbServiceBound = false;
+            Log.i("usb service binding", "onServiceDisconnected");
         }
     };
 
@@ -451,8 +469,13 @@ public class SamplerFragment extends Fragment {
             lastBufferSize = -1; // Force refresh
             refreshChart(); // Refresh the chart to reflect the cleared buffer
             markBufferDirty();
+        } else if (USBService != null) {
+            USBService.clearBuffer();
+            lastBufferSize = -1; // Force refresh
+            refreshChart(); // Refresh the chart to reflect the cleared buffer
+            markBufferDirty();
         } else {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "Service not available", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -491,12 +514,22 @@ public class SamplerFragment extends Fragment {
                     if (!isAdded()) {
                         return;
                     }
-                    if (BLEService == null) {
-                        Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                    if (BLEService == null && USBService == null) {
+                        Toast.makeText(requireContext(), "Service not available", Toast.LENGTH_SHORT).show();
                         refreshSignalList();
                         return;
                     }
-                    BLEService.loadBuffer(data);
+                    
+                    if (currentDeviceType == DEVICE_STM32 && USBService != null) {
+                         USBService.loadBuffer(data);
+                    } else if (currentDeviceType != DEVICE_STM32 && BLEService != null) { // Assume BLE for other cases
+                         BLEService.loadBuffer(data);
+                    } else {
+                        Toast.makeText(requireContext(), "Service not available", Toast.LENGTH_SHORT).show();
+                        refreshSignalList(); // Refresh the signal list, as data loading failed
+                        return;
+                    }
+
                     lastBufferSize = -1;
                     resetChartZoom();
                     refreshChart();
@@ -565,11 +598,21 @@ public class SamplerFragment extends Fragment {
     }
 
     private void saveSignalToStorage() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+        if (BLEService == null && USBService == null) {
+            Toast.makeText(getContext(), "Service not available", Toast.LENGTH_SHORT).show();
             return;
         }
-        byte[] buffer = BLEService.getBuffer();
+        
+        final byte[] buffer;
+        if (currentDeviceType == DEVICE_STM32 && USBService != null) {
+             buffer = USBService.getBuffer();
+        } else if (BLEService != null) {
+             buffer = BLEService.getBuffer();
+        } else {
+            Toast.makeText(getContext(), "Service not available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         if (buffer == null || buffer.length == 0) {
             Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
             return;
@@ -649,11 +692,21 @@ public class SamplerFragment extends Fragment {
                     return;
                 }
                 requireActivity().runOnUiThread(() -> {
-                    if (BLEService == null) {
-                        Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                    if (BLEService == null && USBService == null) {
+                        Toast.makeText(requireContext(), "Service not available", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    BLEService.loadBuffer(data);
+                    
+                    if (currentDeviceType == DEVICE_STM32 && USBService != null) {
+                         USBService.loadBuffer(data);
+                    } else if (currentDeviceType != DEVICE_STM32 && BLEService != null) { // Assume BLE for other cases
+                         BLEService.loadBuffer(data);
+                    } else {
+                        Toast.makeText(requireContext(), "Service not available", Toast.LENGTH_SHORT).show();
+                        refreshSignalList(); // Refresh the signal list, as data loading failed
+                        return;
+                    }
+                    
                     lastBufferSize = -1;
                     resetChartZoom();
                     refreshChart();
@@ -780,13 +833,21 @@ public class SamplerFragment extends Fragment {
     }
 
     private void refreshChart() {
-        if (BLEService == null) {
+        int currentBufferSize = 0;
+        if (currentDeviceType == DEVICE_STM32) {
+             if (USBService != null) currentBufferSize = USBService.getBufferLength();
+        } else {
+             if (BLEService != null) currentBufferSize = BLEService.getBufferLength();
+        }
+        
+        if (currentDeviceType == DEVICE_STM32 && USBService == null) {
+            // If USBService is not available for STM32, prevent chart refresh
+            return;
+        } else if (currentDeviceType != DEVICE_STM32 && BLEService == null) {
+            // If BLEService is not available for ESP32, prevent chart refresh
             return;
         }
 
-        // Get current buffer size
-        int currentBufferSize = BLEService.getBufferLength();
-        
         // Check if buffer size limit has been reached while recording
         if (isRecording && bufferSizeLimit > 0 && currentBufferSize >= bufferSizeLimit) {
             Log.i("SamplerFragment", "Buffer size limit reached: " + currentBufferSize + " bytes. Stopping recording.");
@@ -820,28 +881,66 @@ public class SamplerFragment extends Fragment {
     }
 
     private void startRecording() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         if (currentDeviceType == DEVICE_STM32) {
-            Toast.makeText(getContext(), "STM32 sampler support is not implemented yet.", Toast.LENGTH_SHORT).show();
-            return;
-        }
+            if (USBService == null) {
+                Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            // Note: STM32 Pins are simpler, we might need to adjust extraction if format changes
+            // For now, assume format is "Name (PA0)" etc.
+            // But getPinNumberFromSelection extracts "IOx".
+            // STM32 strings are "IR RX (PA1)", "PA0 (TIM2 CH1)" etc.
+            // My getPinNumberFromSelection regex is "\\(IO(\\d+)\\)"
+            // It won't work for STM32 strings.
+            // I need to update pin extraction or parsing for STM32.
+            
+            // For now, let's just send the index or a mapped value?
+            // The previous STM32 code used pin number in bulk_packet.
+            // I should stick to the "sample start --pin=X" string format.
+            // I need to map the selection to a pin number the firmware understands.
+            // Firmware: PA0=0, PA1=1, PA2=2, PA3=3.
+            
+            // Let's look at STM32_PINS:
+            // "IR RX (PA1)" -> 1
+            // "PA0 (TIM2 CH1)" -> 0
+            // "PA2 (TIM2 CH3)" -> 2
+            // "PA3 (TIM2 CH4)" -> 3
+            
+            int pinNumber = -1;
+            String selected = binding.gpioSpinner.getSelectedItem().toString();
+            if (selected.contains("PA0")) pinNumber = 0;
+            else if (selected.contains("PA1")) pinNumber = 1;
+            else if (selected.contains("PA2")) pinNumber = 2;
+            else if (selected.contains("PA3")) pinNumber = 3;
+            
+            if (pinNumber == -1) {
+                 Toast.makeText(getContext(), "Invalid STM32 pin selected", Toast.LENGTH_SHORT).show();
+                 return;
+            }
 
-        String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
-        byte pinNumber = getPinNumberFromSelection(selectedPinString);
+            String commandStr = "sample start --pin=" + pinNumber;
+            byte[] command = commandStr.getBytes();
+            USBService.write(command);
+            
+        } else {
+            if (BLEService == null) {
+                Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
+            byte pinNumber = getPinNumberFromSelection(selectedPinString);
 
-        if (pinNumber == -1) { // Check if pin parsing failed
-            Toast.makeText(getContext(), "Recording failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
-            return; // Don't proceed
+            if (pinNumber == -1) { // Check if pin parsing failed
+                Toast.makeText(getContext(), "Recording failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
+                return; // Don't proceed
+            }
+            
+            // Format command for ESP32: "sample start --pin=<pin>"
+            String commandStr = "sample start --pin=" + pinNumber;
+            byte[] command = commandStr.getBytes();
+            BLEService.write(command);
         }
-        
-        // Format command for ESP32: "sample start --pin=<pin>"
-        String commandStr = "sample start --pin=" + pinNumber;
-        byte[] command = commandStr.getBytes();
-        BLEService.write(command);
         
         // Set recording flag
         isRecording = true;
@@ -851,65 +950,99 @@ public class SamplerFragment extends Fragment {
         // Enable stop button
         binding.stopButton.setEnabled(true);
         
-        Toast.makeText(getContext(), "Recording started on " + selectedPinString, Toast.LENGTH_SHORT).show();
+        Toast.makeText(getContext(), "Recording started", Toast.LENGTH_SHORT).show();
     }
 
     private void stopRecording() {
-        if (BLEService != null) {
-            // Use firmware command format: "sample stop"
-            byte[] command = "sample stop".getBytes();
-            BLEService.write(command);
-            
-            // Clear recording flag
-            isRecording = false;
-            
-            // Re-enable record button
-            binding.recordButton.setEnabled(true);
-            // Disable stop button
-            binding.stopButton.setEnabled(false);
-            
-            Toast.makeText(getContext(), "Recording stopped", Toast.LENGTH_SHORT).show();
-            markBufferDirty();
+        if (currentDeviceType == DEVICE_STM32) {
+             if (USBService != null) {
+                 byte[] command = "sample stop".getBytes();
+                 USBService.write(command);
+             }
+        } else {
+            if (BLEService != null) {
+                // Use firmware command format: "sample stop"
+                byte[] command = "sample stop".getBytes();
+                BLEService.write(command);
+            }
         }
+            
+        // Clear recording flag
+        isRecording = false;
+        
+        // Re-enable record button
+        binding.recordButton.setEnabled(true);
+        // Disable stop button
+        binding.stopButton.setEnabled(false);
+        
+        Toast.makeText(getContext(), "Recording stopped", Toast.LENGTH_SHORT).show();
+        markBufferDirty();
     }
 
     private void retransmitSignal() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         if (currentDeviceType == DEVICE_STM32) {
-            Toast.makeText(getContext(), "STM32 retransmit support is not implemented yet.", Toast.LENGTH_SHORT).show();
-            return;
+            if (USBService == null) {
+                Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            
+            int bufferLength = USBService.getBufferLength();
+            
+            int pinNumber = -1;
+            String selected = binding.gpioSpinner.getSelectedItem().toString();
+            if (selected.contains("PA0")) pinNumber = 0;
+            else if (selected.contains("PA1")) pinNumber = 1;
+            else if (selected.contains("PA2")) pinNumber = 2;
+            else if (selected.contains("PA3")) pinNumber = 3;
+            
+            if (pinNumber == -1) {
+                 Toast.makeText(getContext(), "Invalid STM32 pin selected", Toast.LENGTH_SHORT).show();
+                 return;
+            }
+            
+            // Format command: "transmit start --pin=<pin>"
+            String commandStr = "transmit start --pin=" + pinNumber;
+            byte[] commandBytes = commandStr.getBytes();
+            USBService.write(commandBytes);
+
+            // Now call the transmitBuffer method
+            USBService.transmitBuffer();
+            
+            Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples", Toast.LENGTH_SHORT).show();
+
+        } else {
+            if (BLEService == null) {
+                Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            int bufferLength = BLEService.getBufferLength();
+            Log.d("SamplerFragment", "BEFORE_RETRANSMIT: Buffer contains " + bufferLength + 
+                  " bytes = " + (bufferLength * 8) + " bits");
+              
+            String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
+            byte pinNumber = getPinNumberFromSelection(selectedPinString);
+
+            if (pinNumber == -1) { // Check if pin parsing failed
+                Toast.makeText(getContext(), "Retransmit failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
+                return; // Don't proceed
+            }
+            
+            // Format command for ESP32: "transmit start --pin=<pin>"
+            String commandStr = "transmit start --pin=" + pinNumber;
+            byte[] commandBytes = commandStr.getBytes();
+            BLEService.write(commandBytes);
+
+            // Now call the transmitBuffer method
+            BLEService.transmitBuffer();
+            
+            // Log buffer state after transmission
+            int postTransmitLength = BLEService.getBufferLength();
+            Log.d("SamplerFragment", "AFTER_RETRANSMIT: Buffer contains " + postTransmitLength + 
+                  " bytes = " + (postTransmitLength * 8) + " bits");
+
+            Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples on " + selectedPinString, Toast.LENGTH_SHORT).show();
         }
-
-        int bufferLength = BLEService.getBufferLength();
-        Log.d("SamplerFragment", "BEFORE_RETRANSMIT: Buffer contains " + bufferLength + 
-              " bytes = " + (bufferLength * 8) + " bits");
-          
-        String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
-        byte pinNumber = getPinNumberFromSelection(selectedPinString);
-
-        if (pinNumber == -1) { // Check if pin parsing failed
-            Toast.makeText(getContext(), "Retransmit failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
-            return; // Don't proceed
-        }
-        
-        // Format command for ESP32: "transmit start --pin=<pin>"
-        String commandStr = "transmit start --pin=" + pinNumber;
-        byte[] commandBytes = commandStr.getBytes();
-        BLEService.write(commandBytes);
-
-        // Now call the transmitBuffer method
-        BLEService.transmitBuffer();
-        
-        // Log buffer state after transmission
-        int postTransmitLength = BLEService.getBufferLength();
-        Log.d("SamplerFragment", "AFTER_RETRANSMIT: Buffer contains " + postTransmitLength + 
-              " bytes = " + (postTransmitLength * 8) + " bits");
-
-        Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples on " + selectedPinString, Toast.LENGTH_SHORT).show();
     }
 
     public void initChart() {
@@ -955,7 +1088,14 @@ public class SamplerFragment extends Fragment {
 
     private LineDataSet compressDataAndGetDataSet(int rangeStart, int rangeEnd, int numberBins) {
         // Call the native method to get compressed data
-        Object[] result = (Object[]) BLEService.compressDataBits(rangeStart, rangeEnd, numberBins);
+        Object[] result = null;
+        if (currentDeviceType == DEVICE_STM32 && USBService != null) {
+            result = (Object[]) USBService.compressDataBits(rangeStart, rangeEnd, numberBins);
+        } else if (BLEService != null) {
+            result = (Object[]) BLEService.compressDataBits(rangeStart, rangeEnd, numberBins);
+        }
+        
+        if (result == null) return new LineDataSet(new ArrayList<>(), "No Data");
 
         float[] timeValues = (float[]) result[0];
         float[] dataValues = (float[]) result[1];
@@ -1040,6 +1180,10 @@ public class SamplerFragment extends Fragment {
         if (!isServiceBound && getActivity() != null) {
             Intent intent = new Intent(getActivity(), BLEService.class);
             getActivity().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+        }
+        if (!isUsbServiceBound && getActivity() != null) {
+            Intent intent = new Intent(getActivity(), USBService.class);
+            getActivity().bindService(intent, usbServiceConnection, Context.BIND_AUTO_CREATE);
         }
     }
 
@@ -1137,12 +1281,23 @@ public class SamplerFragment extends Fragment {
     }
 
     private void getTimings() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
+        final byte[] bufferData; // Declare as final and initialize once
+        if (currentDeviceType == DEVICE_STM32) {
+             if (USBService != null) {
+                 bufferData = USBService.getBuffer();
+             } else {
+                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
+                 return;
+             }
+        } else {
+             if (BLEService != null) {
+                 bufferData = BLEService.getBuffer();
+             } else {
+                 Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+                 return;
+             }
         }
 
-        byte[] bufferData = BLEService.getBuffer();
         if (bufferData == null || bufferData.length == 0) {
             Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
             return;
@@ -1274,11 +1429,15 @@ public class SamplerFragment extends Fragment {
     }
 
     private void createNewSignal() {
-        if (BLEService == null) {
-            Toast.makeText(requireContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
-            return;
+        if (currentDeviceType == DEVICE_STM32 && USBService != null) {
+             USBService.clearBuffer();
+        } else if (BLEService != null) { // Assume BLE for other cases
+             BLEService.clearBuffer();
+        } else {
+             Toast.makeText(requireContext(), "Service not available", Toast.LENGTH_SHORT).show();
+             return;
         }
-        BLEService.clearBuffer();
+
         lastBufferSize = -1;
         refreshChart();
         currentSignalName = null;
@@ -1289,11 +1448,18 @@ public class SamplerFragment extends Fragment {
     }
 
     private void saveSignal() {
-        if (BLEService == null) {
-            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+        if (BLEService == null && USBService == null) {
+            Toast.makeText(getContext(), "Service not available", Toast.LENGTH_SHORT).show();
             return;
         }
-        byte[] buffer = BLEService.getBuffer();
+        
+        byte[] buffer = null;
+        if (currentDeviceType == DEVICE_STM32 && USBService != null) {
+             buffer = USBService.getBuffer();
+        } else if (BLEService != null) {
+             buffer = BLEService.getBuffer();
+        }
+
         if (buffer == null || buffer.length == 0) {
             Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
             return;
@@ -1381,7 +1547,7 @@ public class SamplerFragment extends Fragment {
     }
 
     private void loadLastSelectedSignal() {
-        if (BLEService == null || binding == null) {
+        if (binding == null) {
             return;
         }
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
