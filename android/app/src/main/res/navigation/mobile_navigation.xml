@@ -12,11 +12,7 @@
         android:label="ISM"
         tools:layout="@layout/fragment_ism" />
 
-    <fragment
-        android:id="@+id/navigation_buttons"
-        android:name="com.emwaver.emwaverandroidapp.ui.buttons.ButtonsFragment"
-        android:label="Buttons"
-        tools:layout="@layout/fragment_buttons" />
+
 
 
 
