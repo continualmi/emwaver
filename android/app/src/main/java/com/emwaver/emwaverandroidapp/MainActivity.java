@@ -53,6 +53,7 @@ import androidx.lifecycle.Lifecycle;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.navigation.NavigationView;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -79,19 +80,37 @@ public class MainActivity extends AppCompatActivity {
         // Handle OAuth callback intent
         handleOAuthCallback(getIntent());
 
-        // Set up the AppBarConfiguration with BLE replacing USB
-        appBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.navigation_cc1101, R.id.navigation_emwaver,
-                R.id.navigation_sampler, R.id.navigation_wavelets, R.id.navigation_git)
-                .build();
-
         NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.nav_host_fragment_activity_main);
         if (navHostFragment == null) {
             throw new IllegalStateException("NavHostFragment not found");
         }
         navController = navHostFragment.getNavController();
+        
+        // Set up the AppBarConfiguration with drawer layout
+        androidx.drawerlayout.widget.DrawerLayout drawer = binding.drawerLayout;
+        appBarConfiguration = new AppBarConfiguration.Builder(
+                R.id.navigation_cc1101, R.id.navigation_emwaver,
+                R.id.navigation_sampler, R.id.navigation_wavelets, 
+                R.id.navigation_git, R.id.navigation_flash)
+                .setOpenableLayout(drawer)
+                .build();
+        
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
+        
+        // Set up BottomNavigationView
+        BottomNavigationView bottomNavView = binding.navViewBottom;
+        NavigationUI.setupWithNavController(bottomNavView, navController);
+        
+        // Set up NavigationView (drawer)
+        NavigationView navigationView = binding.navView;
+        NavigationUI.setupWithNavController(navigationView, navController);
+        
+        // Handle Settings menu item click (it's not a fragment, it's an activity)
+        navigationView.getMenu().findItem(R.id.navigation_settings).setOnMenuItemClickListener(item -> {
+            startActivity(new Intent(this, SettingsActivity.class));
+            return true;
+        });
 
         addMenuProvider(new MenuProvider() {
             @Override
@@ -108,35 +127,6 @@ public class MainActivity extends AppCompatActivity {
                 return false;
             }
         }, this, Lifecycle.State.RESUMED);
-        
-        // Set up Bottom Navigation
-        BottomNavigationView bottomNavigationView = binding.bottomNavView;
-        NavigationUI.setupWithNavController(bottomNavigationView, navController);
-        
-        // Only show bottom navigation items that are in the bottom navigation menu
-        bottomNavigationView.setOnItemSelectedListener(item -> {
-            navController.navigate(item.getItemId());
-            return true;
-        });
-        
-        // Update bottom navigation when destination changes
-        navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
-            int destinationId = destination.getId();
-            if (destinationId == R.id.navigation_emwaver || 
-                destinationId == R.id.navigation_cc1101 || 
-                destinationId == R.id.navigation_sampler || 
-                destinationId == R.id.navigation_wavelets || 
-                destinationId == R.id.navigation_git) {
-                bottomNavigationView.setVisibility(View.VISIBLE);
-                // Find the menu item that corresponds to this destination
-                if (bottomNavigationView.getMenu().findItem(destinationId) != null) {
-                    bottomNavigationView.getMenu().findItem(destinationId).setChecked(true);
-                }
-            } else {
-                // Hide bottom navigation for other destinations not in the bottom nav menu
-                bottomNavigationView.setVisibility(View.GONE);
-            }
-        });
 
         // Initialize DeviceConnectionManager
         connectionManager = DeviceConnectionManager.getInstance(this);
