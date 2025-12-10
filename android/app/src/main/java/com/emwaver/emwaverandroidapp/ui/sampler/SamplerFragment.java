@@ -106,8 +106,12 @@ public class SamplerFragment extends Fragment {
         }
     };
 
-    // Add PINS array to match UsbFragment
-    private static final String[] PINS = {
+    // Device types
+    private static final int DEVICE_ESP32 = 0;
+    private static final int DEVICE_STM32 = 1;
+
+    // ESP32 pins (BLE sampler)
+    private static final String[] ESP32_PINS = {
             "RFM69 DIO0 (IO1)",
             "RFM69 DIO1 (IO2)",
             "RFM69 DIO2 (IO42)",
@@ -135,13 +139,28 @@ public class SamplerFragment extends Fragment {
             "GPIO14 (IO14)"
     };
 
+    // STM32 pins (USB sampler)
+    // Note: PA1 is IR_RX, PA0/PA2/PA3 are TIM2 CH1/CH3/CH4 outputs
+    private static final String[] STM32_PINS = {
+            "IR RX (PA1)",
+            "PA0 (TIM2 CH1)",
+            "PA2 (TIM2 CH3)",
+            "PA3 (TIM2 CH4)"
+    };
+
+    // Legacy single-device preference key kept for backwards compatibility
     private static final String PREF_SELECTED_PIN_INDEX = "selectedSamplerPinIndex";
+    private static final String PREF_SELECTED_PIN_INDEX_ESP32 = "selectedSamplerPinIndexEsp32";
+    private static final String PREF_SELECTED_PIN_INDEX_STM32 = "selectedSamplerPinIndexStm32";
+    private static final String PREF_SELECTED_DEVICE_TYPE = "sampler_selected_device_type";
     private static final String PREF_LAST_SELECTED_SIGNAL = "sampler_last_selected_signal";
     private static final String SIGNALS_DIR = "signals";
 
     private File signalsDir;
     private final List<String> savedSignalNames = new ArrayList<>();
     private ArrayAdapter<String> signalPickerAdapter;
+    private ArrayAdapter<String> gpioAdapter;
+    private int currentDeviceType = DEVICE_ESP32;
     private ActivityResultLauncher<String[]> openRawFileLauncher;
     private String currentSignalName;
     private boolean hasUnsavedChanges;
@@ -225,33 +244,51 @@ public class SamplerFragment extends Fragment {
         };
         binding.signalPicker.setOnItemSelectedListener(signalPickerListener);
 
-        // Replace the resource-based spinner adapter with the PINS array
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(),
-                android.R.layout.simple_spinner_item, PINS);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        binding.gpioSpinner.setAdapter(adapter);
-
-        // Load saved pin selection or set default
+        // Restore device selection from preferences
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        int defaultPinIndex = 10; // GPIO6 (IO6)
-        int selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, defaultPinIndex);
-        if (selectedPinIndex >= 0 && selectedPinIndex < adapter.getCount()) {
-            binding.gpioSpinner.setSelection(selectedPinIndex);
+        currentDeviceType = prefs.getInt(PREF_SELECTED_DEVICE_TYPE, DEVICE_ESP32);
+
+        if (currentDeviceType == DEVICE_STM32) {
+            binding.deviceRadioGroup.check(R.id.radioStm32);
         } else {
-            binding.gpioSpinner.setSelection(defaultPinIndex); // Fallback to default
+            currentDeviceType = DEVICE_ESP32;
+            binding.deviceRadioGroup.check(R.id.radioEsp32);
         }
+
+        // Initial GPIO spinner setup based on current device type
+        updateGpioSpinnerForCurrentDevice();
+
+        // React to device type changes
+        binding.deviceRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            if (!isAdded()) {
+                return;
+            }
+            if (checkedId == R.id.radioStm32) {
+                currentDeviceType = DEVICE_STM32;
+            } else {
+                currentDeviceType = DEVICE_ESP32;
+            }
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            sp.edit().putInt(PREF_SELECTED_DEVICE_TYPE, currentDeviceType).apply();
+            updateGpioSpinnerForCurrentDevice();
+        });
 
         binding.gpioSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                String selectedPin = parent.getItemAtPosition(position).toString();
                 // Show retransmit button for all pins
                 binding.retransmitButton.setVisibility(View.VISIBLE);
 
-                // Save the selected pin index
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-                SharedPreferences.Editor editor = prefs.edit();
-                editor.putInt(PREF_SELECTED_PIN_INDEX, position);
+                // Save the selected pin index for the current device type
+                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                SharedPreferences.Editor editor = sp.edit();
+                if (currentDeviceType == DEVICE_STM32) {
+                    editor.putInt(PREF_SELECTED_PIN_INDEX_STM32, position);
+                } else {
+                    editor.putInt(PREF_SELECTED_PIN_INDEX_ESP32, position);
+                    // Also update legacy key for backwards compatibility
+                    editor.putInt(PREF_SELECTED_PIN_INDEX, position);
+                }
                 editor.apply();
             }
 
@@ -783,30 +820,38 @@ public class SamplerFragment extends Fragment {
     }
 
     private void startRecording() {
-        if (BLEService != null) {
-            String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
-            byte pinNumber = getPinNumberFromSelection(selectedPinString);
-
-            if (pinNumber == -1) { // Check if pin parsing failed
-                Toast.makeText(getContext(), "Recording failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
-                return; // Don't proceed
-            }
-            
-            // Format command for ESP32: "sample start --pin=<pin>"
-            String commandStr = "sample start --pin=" + pinNumber;
-            byte[] command = commandStr.getBytes();
-            BLEService.write(command);
-            
-            // Set recording flag
-            isRecording = true;
-            
-            // Disable record button while recording
-            binding.recordButton.setEnabled(false);
-            // Enable stop button
-            binding.stopButton.setEnabled(true);
-            
-            Toast.makeText(getContext(), "Recording started on " + selectedPinString, Toast.LENGTH_SHORT).show();
+        if (BLEService == null) {
+            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+            return;
         }
+
+        if (currentDeviceType == DEVICE_STM32) {
+            Toast.makeText(getContext(), "STM32 sampler support is not implemented yet.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
+        byte pinNumber = getPinNumberFromSelection(selectedPinString);
+
+        if (pinNumber == -1) { // Check if pin parsing failed
+            Toast.makeText(getContext(), "Recording failed: Invalid pin selected.", Toast.LENGTH_SHORT).show();
+            return; // Don't proceed
+        }
+        
+        // Format command for ESP32: "sample start --pin=<pin>"
+        String commandStr = "sample start --pin=" + pinNumber;
+        byte[] command = commandStr.getBytes();
+        BLEService.write(command);
+        
+        // Set recording flag
+        isRecording = true;
+        
+        // Disable record button while recording
+        binding.recordButton.setEnabled(false);
+        // Enable stop button
+        binding.stopButton.setEnabled(true);
+        
+        Toast.makeText(getContext(), "Recording started on " + selectedPinString, Toast.LENGTH_SHORT).show();
     }
 
     private void stopRecording() {
@@ -829,6 +874,16 @@ public class SamplerFragment extends Fragment {
     }
 
     private void retransmitSignal() {
+        if (BLEService == null) {
+            Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (currentDeviceType == DEVICE_STM32) {
+            Toast.makeText(getContext(), "STM32 retransmit support is not implemented yet.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         int bufferLength = BLEService.getBufferLength();
         Log.d("SamplerFragment", "BEFORE_RETRANSMIT: Buffer contains " + bufferLength + 
               " bytes = " + (bufferLength * 8) + " bits");
@@ -1128,6 +1183,46 @@ public class SamplerFragment extends Fragment {
     private void forceRefresh() {
         forceRefresh = true;
         refreshChart();
+    }
+
+    private void updateGpioSpinnerForCurrentDevice() {
+        if (!isAdded() || binding == null) {
+            return;
+        }
+
+        String[] pins = (currentDeviceType == DEVICE_STM32) ? STM32_PINS : ESP32_PINS;
+
+        if (gpioAdapter == null) {
+            gpioAdapter = new ArrayAdapter<>(requireContext(),
+                    android.R.layout.simple_spinner_item, new ArrayList<>(java.util.Arrays.asList(pins)));
+            gpioAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            binding.gpioSpinner.setAdapter(gpioAdapter);
+        } else {
+            gpioAdapter.clear();
+            gpioAdapter.addAll(pins);
+            gpioAdapter.notifyDataSetChanged();
+        }
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        int defaultEsp32PinIndex = 10; // GPIO6 (IO6)
+        int selectedPinIndex;
+
+        if (currentDeviceType == DEVICE_STM32) {
+            selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_STM32, 0);
+        } else {
+            if (prefs.contains(PREF_SELECTED_PIN_INDEX_ESP32)) {
+                selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_ESP32, defaultEsp32PinIndex);
+            } else {
+                // Fall back to legacy key if present
+                selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, defaultEsp32PinIndex);
+            }
+        }
+
+        if (selectedPinIndex >= 0 && selectedPinIndex < gpioAdapter.getCount()) {
+            binding.gpioSpinner.setSelection(selectedPinIndex);
+        } else if (gpioAdapter.getCount() > 0) {
+            binding.gpioSpinner.setSelection(0);
+        }
     }
 
     private void resetChartZoom() {
