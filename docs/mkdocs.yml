@@ -24,9 +24,8 @@ extra:
   toc:
     sidebar: false
 nav:
-  - Home: index.md
+  - Home: /
   - Hardware: hardware.md
-  - Board Evolution: board-evolution.html
   - Wavelets: wavelets.md
   - EMWaver DSL: emwaver-dsl.md
   - App Overview: documentation.md
