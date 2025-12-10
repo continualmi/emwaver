@@ -63,7 +63,7 @@ async fn run_shell_async(verbose: bool) -> Result<()> {
         .context("failed to query Bluetooth power state")?
     {
         CentralState::PoweredOff => {
-            println!("Bluetooth appears to be off. Enable Bluetooth and rerun `emwaver shell`.");
+            println!("Bluetooth appears to be off. Enable Bluetooth and rerun `emw`.");
             return Ok(());
         }
         CentralState::Unknown => {
@@ -255,6 +255,11 @@ async fn run_repl(peripheral: Peripheral, cmd_char: &Characteristic) -> Result<(
                     println!("Exiting shell.");
                     break;
                 }
+                if trimmed.eq_ignore_ascii_case("clear") {
+                    clear_screen();
+                    PROMPT_PENDING.store(true, Ordering::SeqCst);
+                    continue;
+                }
                 if trimmed.is_empty() {
                     PROMPT_PENDING.store(true, Ordering::SeqCst);
                     continue;
@@ -338,28 +343,34 @@ fn render_notification(data: &[u8], verbose: bool) {
         })
         .collect::<String>();
 
+    // Clear current line and print notification
+    print!("\r\x1b[K");
     if verbose {
         let hex = data
             .iter()
             .map(|b| format!("{:02X}", b))
             .collect::<Vec<_>>()
             .join(" ");
-        print!("\r\x1b[K");
-        io::stdout().flush().ok();
-        println!("<- hex:   {hex}");
-        println!("<- ascii: {ascii}");
+        println!("hex:   {hex}");
+        println!("ascii: {ascii}");
     } else {
-        print!("\r\x1b[K");
-        io::stdout().flush().ok();
-        println!("<- {ascii}");
+        println!("{ascii}");
     }
+    io::stdout().flush().ok();
+    
+    // Print prompt on a fresh line
     if let Err(err) = print_prompt() {
         eprintln!("Failed to print prompt: {err}");
     }
     PROMPT_PENDING.store(false, Ordering::SeqCst);
 }
 
+fn clear_screen() {
+    print!("\x1b[2J\x1b[H");
+    io::stdout().flush().ok();
+}
+
 fn print_prompt() -> Result<()> {
-    print!("<emwaver> ");
+    print!("<emw> ");
     io::stdout().flush().context("failed to flush stdout")
 }

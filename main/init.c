@@ -34,6 +34,7 @@
 #include "sampler.h"
 #include "spi.h"
 #include "usb.h"
+#include <string.h>
 
 #define FIRMWARE_VERSION "1.0.0"
 #define CMD_QUEUE_LEN 10
@@ -153,7 +154,8 @@ static void register_core_commands(void)
 
 static void version_command(void)
 {
-    command_send_ok((const uint8_t *)FIRMWARE_VERSION, strlen(FIRMWARE_VERSION));
+    // Send version as plain ASCII string
+    ble_server_notify((const uint8_t *)FIRMWARE_VERSION, strlen(FIRMWARE_VERSION));
 }
 
 static void ble_status_command(void)

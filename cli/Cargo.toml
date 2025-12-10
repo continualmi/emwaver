@@ -1,5 +1,5 @@
 [package]
-name = "emwaver-cli"
+name = "emw"
 version = "0.1.0"
 edition = "2024"
 
