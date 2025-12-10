@@ -1,4 +1,5 @@
 mod ble;
+mod usb;
 
 use serde::{Deserialize, Serialize};
 use std::{env, fs, io, io::Write, path::{Path, PathBuf}, process::Command, sync::Arc};
@@ -9,6 +10,7 @@ use tauri::{
 };
 use tempfile::Builder;
 use ble::{BLEState, BLEStatus, BLENotification};
+use usb::{USBState, USBStatus, USBNotification};
 
 #[derive(Deserialize)]
 struct CreateProjectPayload {
@@ -446,6 +448,37 @@ async fn ble_transmit_buffer(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> 
     state.transmit_buffer(data).await
 }
 
+// USB Commands
+#[tauri::command]
+async fn usb_list_ports() -> Result<Vec<String>, String> {
+    USBState::list_ports().await
+}
+
+#[tauri::command]
+async fn usb_connect(state: State<'_, Arc<USBState>>, port_name: String) -> Result<(), String> {
+    state.connect(port_name).await
+}
+
+#[tauri::command]
+async fn usb_disconnect(state: State<'_, Arc<USBState>>) -> Result<(), String> {
+    state.disconnect().await
+}
+
+#[tauri::command]
+async fn usb_send_packet(state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Result<(), String> {
+    state.send_packet(data).await
+}
+
+#[tauri::command]
+async fn usb_get_status(state: State<'_, Arc<USBState>>) -> Result<USBStatus, String> {
+    Ok(state.get_status().await)
+}
+
+#[tauri::command]
+async fn usb_get_notification(state: State<'_, Arc<USBState>>) -> Result<Option<USBNotification>, String> {
+    Ok(state.get_notification().await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -640,6 +673,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Arc::new(BLEState::new()))
+        .manage(Arc::new(USBState::new()))
         .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
@@ -653,7 +687,13 @@ pub fn run() {
             ble_send_packet,
             ble_get_status,
             ble_get_notification,
-            ble_transmit_buffer
+            ble_transmit_buffer,
+            usb_list_ports,
+            usb_connect,
+            usb_disconnect,
+            usb_send_packet,
+            usb_get_status,
+            usb_get_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

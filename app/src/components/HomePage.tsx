@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { safeInvoke } from "../utils/tauri";
 import type { FragmentType } from "../App";
-import { useBLE } from "../utils/BLEContext";
+import { useDevice, TransportType } from "../utils/DeviceContext";
 
 type HomePageProps = {
   onNavigateToFragment: (fragment: FragmentType) => void;
@@ -9,25 +8,30 @@ type HomePageProps = {
 };
 
 export default function HomePage({ onNavigateToFragment }: HomePageProps) {
-  // Use BLE Context instead of local state for connection
   const { 
     status, 
-    connect, 
+    connectUSB, 
+    connectBLE, 
     disconnect, 
+    listUSBPorts, 
     sendCommand, 
     addNotificationListener, 
     removeNotificationListener 
-  } = useBLE();
+  } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
   const [serialMonitor, setSerialMonitor] = useState<string[]>([]);
   const [showHex, setShowHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
   
+  // Transport selection state
+  const [selectedTransport, setSelectedTransport] = useState<TransportType>('USB');
+  const [usbPorts, setUsbPorts] = useState<string[]>([]);
+  const [selectedPort, setSelectedPort] = useState<string>("");
+  const [isRefreshingPorts, setIsRefreshingPorts] = useState(false);
+
   const monitorContainerRef = useRef<HTMLDivElement>(null);
   
-  const scanTimeoutRef = useRef<number | null>(null);
-
   const fragments = [
     {
       id: "wavelets" as FragmentType,
@@ -54,6 +58,26 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       iconClass: "text-purple-400",
     },
   ];
+
+  // Refresh ports on mount
+  useEffect(() => {
+    refreshPorts();
+  }, [listUSBPorts]);
+
+  const refreshPorts = async () => {
+    setIsRefreshingPorts(true);
+    try {
+        const ports = await listUSBPorts();
+        setUsbPorts(ports);
+        if (ports.length > 0 && !selectedPort) {
+            setSelectedPort(ports[0]);
+        }
+    } catch (e) {
+        console.error("Failed to list ports", e);
+    } finally {
+        setIsRefreshingPorts(false);
+    }
+  };
 
   // Auto-scroll monitor
   useEffect(() => {
@@ -137,6 +161,18 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       console.error("Error parsing command:", error);
       return null;
     }
+  };
+
+  const handleConnect = async () => {
+      if (selectedTransport === 'BLE') {
+          await connectBLE();
+      } else {
+          if (!selectedPort) {
+              alert("Please select a USB port");
+              return;
+          }
+          await connectUSB(selectedPort);
+      }
   };
 
   const handleSendCommand = async () => {
@@ -257,40 +293,92 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         <div className="grid grid-cols-2 gap-3 flex-shrink-0">
           {/* Connection Status */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-slate-400">Status:</span>
-                <span
-                  className={`text-sm font-medium ${
-                    status.connected ? "text-green-500" : status.scanning ? "text-yellow-500" : "text-red-500"
-                  }`}
-                >
-                  {status.connected ? "Connected" : status.scanning ? "Connecting..." : "Not connected"}
-                </span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-400">Connection</span>
+                <div className="flex gap-2">
+                    {!status.connected && (
+                        <>
+                            <button
+                                onClick={() => setSelectedTransport('USB')}
+                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'USB' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                            >
+                                USB
+                            </button>
+                            <button
+                                onClick={() => setSelectedTransport('BLE')}
+                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'BLE' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                            >
+                                BLE
+                            </button>
+                        </>
+                    )}
+                </div>
               </div>
-              {status.connected ? (
-                <button
-                  onClick={disconnect}
-                  className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                >
-                  Disconnect
-                </button>
-              ) : (
-                <button
-                  onClick={connect}
-                  className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  {status.scanning ? "Scanning..." : "Connect"}
-                </button>
-              )}
+              
+              <div className="flex items-center justify-between gap-2">
+                {!status.connected ? (
+                   selectedTransport === 'USB' ? (
+                       <div className="flex flex-1 gap-2 min-w-0">
+                           <select 
+                               value={selectedPort} 
+                               onChange={(e) => setSelectedPort(e.target.value)}
+                               className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                           >
+                               <option value="" disabled>Select Port</option>
+                               {usbPorts.map(port => <option key={port} value={port}>{port}</option>)}
+                           </select>
+                           <button 
+                                onClick={refreshPorts}
+                                disabled={isRefreshingPorts}
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
+                                title="Refresh Ports"
+                           >
+                               ↻
+                           </button>
+                           <button
+                              onClick={handleConnect}
+                              disabled={!selectedPort}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded transition-colors whitespace-nowrap"
+                           >
+                              Connect
+                           </button>
+                       </div>
+                   ) : (
+                       <div className="flex flex-1 items-center justify-between">
+                           <span className="text-xs text-slate-500">Scan for EMWaver devices</span>
+                           <button
+                              onClick={handleConnect}
+                              disabled={status.scanning}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-xs rounded transition-colors"
+                           >
+                              {status.scanning ? "Scanning..." : "Scan & Connect"}
+                           </button>
+                       </div>
+                   )
+                ) : (
+                   <div className="flex flex-1 items-center justify-between">
+                       <div className="flex flex-col">
+                           <span className="text-xs font-medium text-green-400">Connected ({status.transport})</span>
+                           <span className="text-[10px] text-slate-500 truncate max-w-[120px]" title={status.device_address || ""}>{status.device_address}</span>
+                       </div>
+                       <button
+                          onClick={disconnect}
+                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                       >
+                          Disconnect
+                       </button>
+                   </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Firmware Version */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-slate-400">Firmware:</span>
+            <div className="flex items-center justify-between h-full">
+              <div className="flex flex-col justify-center">
+                <span className="text-sm font-semibold text-slate-400">Firmware</span>
                 <span
                   className={`text-sm ${
                     firmwareVersion !== "Unknown" ? "text-blue-400" : "text-slate-500"
@@ -302,7 +390,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
               <button
                 onClick={handleCheckVersion}
                 disabled={!status.connected}
-                className="p-1.5 text-slate-400 hover:text-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                className="p-2 text-slate-400 hover:text-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed border border-slate-800 rounded hover:border-slate-700 transition-colors"
                 title="Check firmware version"
               >
                 <svg

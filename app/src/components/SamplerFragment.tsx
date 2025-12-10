@@ -14,7 +14,7 @@ import { Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import { safeInvoke } from '../utils/tauri';
 import { SamplerBuffer } from '../utils/SamplerBuffer';
-import { useBLE } from '../utils/BLEContext';
+import { useDevice } from '../utils/DeviceContext';
 
 // Register Chart.js components - do this once at module load
 try {
@@ -70,8 +70,8 @@ function getPinNumber(pinString: string): number {
 }
 
 function SamplerFragment() {
-  // Use BLE context instead of polling directly
-  const { status, addNotificationListener, removeNotificationListener, sendCommand } = useBLE();
+  // Use Device context instead of polling directly
+  const { status, addNotificationListener, removeNotificationListener, sendCommand, transmitBuffer } = useDevice();
   const isConnected = status.connected;
   
   const [isRecording, setIsRecording] = useState(false);
@@ -293,7 +293,7 @@ function SamplerFragment() {
       await sendCommand(command);
 
       // Use transmitBuffer method (matching Android/iOS)
-      await safeInvoke('ble_transmit_buffer', { data: Array.from(buffer) });
+      await transmitBuffer(buffer);
 
       alert(`Retransmitting ${buffer.length} samples on ${selectedPin}`);
     } catch (error) {

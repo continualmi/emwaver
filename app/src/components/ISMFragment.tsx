@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useBLE } from '../utils/BLEContext';
+import { useDevice } from '../utils/DeviceContext';
 import {
   CONFIG_REGISTERS,
   STATUS_REGISTERS,
@@ -51,7 +51,7 @@ interface RfParameters {
 }
 
 export default function ISMFragment() {
-  const { status, sendAndAwaitResponse } = useBLE();
+  const { status, sendAndAwaitResponse } = useDevice();
   
   // Local state for UI only
   const [isLoading, setIsLoading] = useState(false);
