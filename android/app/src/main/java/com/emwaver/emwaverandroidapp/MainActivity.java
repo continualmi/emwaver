@@ -21,11 +21,13 @@ package com.emwaver.emwaverandroidapp;
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
-import android.content.ComponentName;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -64,25 +66,8 @@ public class MainActivity extends AppCompatActivity {
     
     private AppBarConfiguration appBarConfiguration;
     private ActivityMainBinding binding;
-    private BLEService bleService;
-    private boolean isBleServiceBound = false;
+    private DeviceConnectionManager connectionManager;
     private NavController navController;
-
-    private final ServiceConnection bleServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
-            bleService = binder.getService();
-            isBleServiceBound = true;
-            Log.d(TAG, "BLE Service Connected");
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName arg0) {
-            isBleServiceBound = false;
-            Log.d(TAG, "BLE Service Disconnected");
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -153,11 +138,13 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Initialize DeviceConnectionManager
+        connectionManager = DeviceConnectionManager.getInstance(this);
+        
         // Request ALL necessary permissions at startup
         requestAllRequiredPermissions();
         
-        // Start BLE service only after permissions are requested
-        // The service will be started in onRequestPermissionsResult if permissions are granted
+        // Services will be initialized after permissions are granted
     }
 
     private void requestAllRequiredPermissions() {
@@ -197,15 +184,14 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, "Requesting permissions: " + permissions);
             ActivityCompat.requestPermissions(this, permissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
         } else {
-            // All permissions already granted, start BLE service
-            startBleService();
+            // All permissions already granted, initialize connection manager
+            initializeConnectionManager();
         }
     }
     
-    private void startBleService() {
-        Log.d(TAG, "Starting BLE Service");
-        Intent bleServiceIntent = new Intent(this, BLEService.class);
-        startService(bleServiceIntent);
+    private void initializeConnectionManager() {
+        Log.d(TAG, "Initializing DeviceConnectionManager");
+        connectionManager.initialize();
     }
 
     @Override
@@ -242,11 +228,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         
-        // Only bind to the service if we have the necessary permissions
-        if (hasRequiredPermissions()) {
-            // Bind to the BLE service
-            Intent bleIntent = new Intent(this, BLEService.class);
-            bindService(bleIntent, bleServiceConnection, Context.BIND_AUTO_CREATE);
+        // Initialize connection manager if permissions are granted
+        if (hasRequiredPermissions() && connectionManager != null) {
+            connectionManager.initialize();
         }
     }
     
@@ -269,10 +253,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        // Unbind from the BLE service
-        if (isBleServiceBound) {
-            unbindService(bleServiceConnection);
-            isBleServiceBound = false;
+        // Note: We don't cleanup connectionManager here as it should persist
+        // across activity lifecycle. Cleanup happens in onDestroy if needed.
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Cleanup connection manager when activity is destroyed
+        if (connectionManager != null) {
+            connectionManager.cleanup();
         }
     }
 
@@ -300,12 +290,8 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(TAG, "App directory created: " + dirCreated);
                 }
                 
-                // Start BLE service now that we have permissions
-                startBleService();
-                
-                // Bind to service as well
-                Intent bleIntent = new Intent(this, BLEService.class);
-                bindService(bleIntent, bleServiceConnection, Context.BIND_AUTO_CREATE);
+                // Initialize connection manager now that we have permissions
+                initializeConnectionManager();
             } else {
                 // Notify the user that the app needs these permissions
                 Toast.makeText(this, "This app requires the requested permissions to function properly", Toast.LENGTH_LONG).show();
@@ -313,6 +299,24 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+    
+    // USB device attachment receiver
+    private final BroadcastReceiver usbDeviceReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+                UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                if (device != null) {
+                    Log.d(TAG, "USB device attached: " + device.getDeviceName());
+                    // Check for USB devices when one is attached
+                    if (connectionManager != null) {
+                        connectionManager.checkForUsbDevices();
+                    }
+                }
+            }
+        }
+    };
     
     // Check if Bluetooth is enabled when resumed
     @Override
@@ -324,6 +328,22 @@ public class MainActivity extends AppCompatActivity {
         
         // Make sure Bluetooth is enabled
         checkBluetoothEnabled();
+        
+        // Register USB device attachment receiver
+        IntentFilter usbFilter = new IntentFilter();
+        usbFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        registerReceiver(usbDeviceReceiver, usbFilter);
+    }
+    
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Unregister USB receiver
+        try {
+            unregisterReceiver(usbDeviceReceiver);
+        } catch (IllegalArgumentException e) {
+            // Receiver was not registered, ignore
+        }
     }
     
     @Override
@@ -372,11 +392,9 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQUEST_ENABLE_BT) {
             if (resultCode == RESULT_OK) {
                 Log.d(TAG, "Bluetooth enabled by user");
-                // Bluetooth is now enabled, start/bind service if needed
-                if (!isBleServiceBound) {
-                    startBleService();
-                    Intent bleIntent = new Intent(this, BLEService.class);
-                    bindService(bleIntent, bleServiceConnection, Context.BIND_AUTO_CREATE);
+                // Bluetooth is now enabled, initialize connection manager if needed
+                if (connectionManager != null) {
+                    connectionManager.initialize();
                 }
             } else {
                 Log.d(TAG, "User declined to enable Bluetooth");
