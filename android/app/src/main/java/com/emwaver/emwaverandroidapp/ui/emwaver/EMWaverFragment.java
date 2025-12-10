@@ -1,9 +1,7 @@
 package com.emwaver.emwaverandroidapp.ui.emwaver;
 
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -37,6 +35,8 @@ import androidx.core.view.MenuProvider;
 import androidx.core.content.ContextCompat;
 
 import com.emwaver.emwaverandroidapp.BLEService;
+import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
+import com.emwaver.emwaverandroidapp.DeviceConnectionService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.BLEReceiver;
@@ -57,8 +57,8 @@ public class EMWaverFragment extends Fragment {
     private TextView firmwareVersionText;
     private ImageButton checkVersionButton;
     
-    private BLEService bleService;
-    private boolean isServiceBound = false;
+    private DeviceConnectionManager connectionManager;
+    private DeviceConnectionService activeService;
 
 
 
@@ -146,20 +146,15 @@ public class EMWaverFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        Intent intent = new Intent(getActivity(), BLEService.class);
-        getActivity().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-        
-        // Also start the service to ensure it's running even when not bound
-        getActivity().startService(intent);
+        // Get connection manager instance
+        connectionManager = DeviceConnectionManager.getInstance(requireContext());
+        // Update active service reference
+        activeService = connectionManager.getActiveService();
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        if (isServiceBound) {
-            getActivity().unbindService(serviceConnection);
-            isServiceBound = false;
-        }
         if (monitorHandler != null) {
             monitorHandler.removeCallbacks(monitorRunnable);
         }
@@ -171,6 +166,10 @@ public class EMWaverFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        // Update active service reference
+        if (connectionManager != null) {
+            activeService = connectionManager.getActiveService();
+        }
         updateConnectionStatus();
         
         // Register receiver for EMWaver connection status updates
@@ -178,14 +177,16 @@ public class EMWaverFragment extends Fragment {
         IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
         requireActivity().registerReceiver(bleReceiver, filter);
         
-        // Update firmware version display from stored version if connected
-        if (isServiceBound && bleService != null && bleService.checkConnection()) {
-            String storedVersion = bleService.getFirmwareVersion();
-            if (!"Unknown".equals(storedVersion)) {
-                // Use the stored version instead of requesting it again
-                firmwareVersionText.setText(storedVersion);
-                firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
-                        android.R.color.holo_blue_dark));
+        // Update firmware version display from stored version if connected via BLE
+        if (connectionManager != null) {
+            BLEService bleService = connectionManager.getBleService();
+            if (bleService != null && bleService.checkConnection()) {
+                String storedVersion = bleService.getFirmwareVersion();
+                if (!"Unknown".equals(storedVersion)) {
+                    firmwareVersionText.setText(storedVersion);
+                    firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                            android.R.color.holo_blue_dark));
+                }
             }
         }
     }
@@ -201,32 +202,21 @@ public class EMWaverFragment extends Fragment {
         }
     }
 
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
-            bleService = binder.getService();
-            isServiceBound = true;
-            Log.d(TAG, "EMWaver Service Connected");
-            updateConnectionStatus();
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName arg0) {
-            isServiceBound = false;
-            Log.d(TAG, "EMWaver Service Disconnected");
-        }
-    };
-
     private void updateConnectionStatus() {
-        if (isServiceBound && bleService != null) {
-            boolean connected = bleService.checkConnection();
+        if (connectionManager != null) {
+            activeService = connectionManager.getActiveService();
+            boolean connected = connectionManager.isConnected();
+            DeviceConnectionService.ConnectionType connectionType = connectionManager.getActiveConnectionType();
             
             if (emwaverStatusText != null) {
-                emwaverStatusText.setText(connected ? "Connected" : "Not connected");
-                emwaverStatusText.setTextColor(connected ? 
-                        ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark) : 
-                        ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+                if (connected) {
+                    String statusText = "Connected (" + connectionType.name() + ")";
+                    emwaverStatusText.setText(statusText);
+                    emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_green_dark));
+                } else {
+                    emwaverStatusText.setText("Not connected");
+                    emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
+                }
             }
             if (disconnectButton != null && connectButton != null) {
                 disconnectButton.setVisibility(connected ? View.VISIBLE : View.GONE);
@@ -234,7 +224,7 @@ public class EMWaverFragment extends Fragment {
             }
         } else {
             if (emwaverStatusText != null) {
-                emwaverStatusText.setText("Service not bound");
+                emwaverStatusText.setText("Service not initialized");
                 emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_red_dark));
             }
             if (disconnectButton != null) {
@@ -244,9 +234,6 @@ public class EMWaverFragment extends Fragment {
                 connectButton.setVisibility(View.VISIBLE);
             }
         }
-        
-        // Removing actionbar status updates
-        // Utils.updateActionBarStatus(this, statusMessage);
     }
 
 
@@ -271,18 +258,26 @@ public class EMWaverFragment extends Fragment {
             logTxData(commandBytes);
 
             Log.d(TAG, "Sending packet: " + bytesToHex(commandBytes));
-            if (isServiceBound && bleService != null) {
-                bleService.sendPacket(commandBytes);
+            if (connectionManager != null) {
+                // Always get fresh reference to active service
+                activeService = connectionManager.getActiveService();
+                if (activeService != null && activeService.checkConnection()) {
+                    Log.d(TAG, "Sending via: " + activeService.getConnectionType());
+                    activeService.sendPacket(commandBytes);
+                } else {
+                    Log.w(TAG, "Cannot send: service=" + (activeService != null) + ", connected=" + (activeService != null ? activeService.checkConnection() : false));
+                    Toast.makeText(getContext(), "Device not connected", Toast.LENGTH_SHORT).show();
+                }
             } else {
-                Toast.makeText(getContext(), "EMWaver Service not connected", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Connection manager not initialized", Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private void setupDisconnectButton() {
         disconnectButton.setOnClickListener(v -> {
-            if (isServiceBound && bleService != null && bleService.checkConnection()) {
-                bleService.disconnect();
+            if (connectionManager != null && connectionManager.isConnected()) {
+                connectionManager.disconnect();
                 Toast.makeText(getContext(), "Disconnected from device.", Toast.LENGTH_SHORT).show();
                 updateConnectionStatus();
             } else {
@@ -293,20 +288,25 @@ public class EMWaverFragment extends Fragment {
 
     private void setupConnectButton() {
         connectButton.setOnClickListener(v -> {
-            if (isServiceBound && bleService != null) {
+            if (connectionManager != null) {
                 emwaverStatusText.setText("Connecting...");
                 emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_orange_dark));
                 connectButton.setVisibility(View.GONE); // Hide connect while attempting, updateConnectionUI will fix later
-                bleService.startScan(); 
+                
+                // Check for USB first, then try BLE
+                connectionManager.checkForUsbDevices();
+                
+                // Also start BLE scan as fallback
+                connectionManager.startBleScan();
             } else {
-                Toast.makeText(getContext(), "EMWaver Service not bound. Cannot connect.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Connection manager not initialized. Cannot connect.", Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private void setupVersionButton() {
         checkVersionButton.setOnClickListener(v -> {
-            if (isServiceBound && bleService != null && bleService.checkConnection()) {
+            if (connectionManager != null && connectionManager.isConnected()) {
                 requestFirmwareVersion();
             } else {
                 Toast.makeText(getContext(), "Device not connected", Toast.LENGTH_SHORT).show();
@@ -461,12 +461,15 @@ public class EMWaverFragment extends Fragment {
         monitorRunnable = new Runnable() {
             @Override
             public void run() {
-                if (isServiceBound && bleService != null) {
-                    byte[] data = bleService.getCommand();
-                    if (data != null && data.length > 0) {
-                        String hexData = bytesToHex(data);
-                        String asciiData = bytesToAscii(data);
-                        updateResponse(hexData, asciiData);
+                if (connectionManager != null) {
+                    activeService = connectionManager.getActiveService();
+                    if (activeService != null && activeService.checkConnection()) {
+                        byte[] data = activeService.getCommand();
+                        if (data != null && data.length > 0) {
+                            String hexData = bytesToHex(data);
+                            String asciiData = bytesToAscii(data);
+                            updateResponse(hexData, asciiData);
+                        }
                     }
                 }
                 monitorHandler.postDelayed(this, MONITOR_UPDATE_INTERVAL);
@@ -529,36 +532,46 @@ public class EMWaverFragment extends Fragment {
 
     // Extract version checking logic into a separate method
     private void requestFirmwareVersion() {
-        if (isServiceBound && bleService != null && bleService.checkConnection()) {
-            // Create the "version" command (changed from "ver")
-            byte[] command = new byte[]{'v', 'e', 'r', 's', 'i', 'o', 'n'};
-            
-            // Log the command to serial monitor as transmitted
-            logTxData(command);
-            
-            // Send the command to the device using existing command mechanism
-            byte[] response = bleService.sendCommand(command, 2000);
-            
-            // Process the response
-            if (response != null && response.length > 0) {
-                // Display the response in the serial monitor
-                String hexData = bytesToHex(response);
-                String asciiData = bytesToAscii(response);
-                updateResponse(hexData, asciiData);
+        if (connectionManager != null) {
+            activeService = connectionManager.getActiveService();
+            if (activeService != null && activeService.checkConnection()) {
+                // Create the "version" command (changed from "ver")
+                byte[] command = new byte[]{'v', 'e', 'r', 's', 'i', 'o', 'n'};
                 
-                // Parse the version from the welcome message
-                String fullMessage = bytesToAscii(response);
-                String version = extractVersion(fullMessage);
+                // Log the command to serial monitor as transmitted
+                logTxData(command);
                 
-                // Store the version in the service for persistence across fragment changes
-                bleService.setFirmwareVersion(version);
+                // Send the command to the device using existing command mechanism
+                byte[] response = activeService.sendCommand(command, 2000);
                 
-                // Update the version text field with just the version number
-                firmwareVersionText.setText(version);
-                firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
-                        android.R.color.holo_blue_dark));
+                // Process the response
+                if (response != null && response.length > 0) {
+                    // Display the response in the serial monitor
+                    String hexData = bytesToHex(response);
+                    String asciiData = bytesToAscii(response);
+                    updateResponse(hexData, asciiData);
+                    
+                    // Parse the version from the welcome message
+                    String fullMessage = bytesToAscii(response);
+                    String version = extractVersion(fullMessage);
+                    
+                    // Store the version in BLE service if connected via BLE (for persistence)
+                    BLEService bleService = connectionManager.getBleService();
+                    if (bleService != null && connectionManager.getActiveConnectionType() == DeviceConnectionService.ConnectionType.BLE) {
+                        bleService.setFirmwareVersion(version);
+                    }
+                    
+                    // Update the version text field with just the version number
+                    firmwareVersionText.setText(version);
+                    firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                            android.R.color.holo_blue_dark));
+                } else {
+                    Toast.makeText(getContext(), "Failed to get firmware version", Toast.LENGTH_SHORT).show();
+                    firmwareVersionText.setText("Unknown");
+                    firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                            android.R.color.darker_gray));
+                }
             } else {
-                Toast.makeText(getContext(), "Failed to get firmware version", Toast.LENGTH_SHORT).show();
                 firmwareVersionText.setText("Unknown");
                 firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
                         android.R.color.darker_gray));

@@ -44,7 +44,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
-public class BLEService extends Service {
+public class BLEService extends Service implements DeviceConnectionService {
 
     static {
         System.loadLibrary("native-lib");
@@ -1308,5 +1308,23 @@ public class BLEService extends Service {
 
     public boolean isFileSyncServerRunning() {
         return fileSyncServer != null;
+    }
+
+    // DeviceConnectionService interface methods
+    
+    @Override
+    public ConnectionType getConnectionType() {
+        return isConnected ? ConnectionType.BLE : ConnectionType.NONE;
+    }
+    
+    @Override
+    public String getConnectionStatus() {
+        if (isConnected) {
+            return "Connected (BLE)";
+        } else if (isScanningInProgress) {
+            return "Scanning...";
+        } else {
+            return "Not connected";
+        }
     }
 } 

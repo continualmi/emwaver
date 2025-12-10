@@ -813,6 +813,11 @@ int main(void)
 			    uint8_t successMsg[] = "Success";
 			    CDC_SendResponsePkt_FS(successMsg, sizeof(successMsg) - 1, CDC_TIMEOUT);
 			    free_bulk_packet();
+			} else if (strncmp((char*)bulk_packet, "version", 7) == 0) { // Version command
+			    // Send version string matching ESP32 format: "1.0.0 - Welcome to EMWaver!"
+			    uint8_t versionMsg[] = "1.0.0 - Welcome to EMWaver!";
+			    CDC_SendResponsePkt_FS(versionMsg, sizeof(versionMsg) - 1, CDC_TIMEOUT);
+			    free_bulk_packet();
 			}
     /* USER CODE END WHILE */
 

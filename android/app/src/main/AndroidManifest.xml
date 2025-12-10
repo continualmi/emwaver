@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    
+    <!-- USB permissions -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
@@ -32,7 +35,6 @@
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
@@ -41,6 +43,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="emwaver" android:host="oauth" android:path="/callback" />
             </intent-filter>
+            <!-- USB device attachment intent filter -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
         </activity>
         <activity android:name=".ui.infrared.BrandsActivity"
             android:label="Select Brand"
@@ -49,6 +57,9 @@
         <service 
             android:name=".BLEService"
             android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
+        <service 
+            android:name=".USBService"
             android:exported="false" />
         <activity
             android:name=".SettingsActivity"
