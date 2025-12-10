@@ -20,15 +20,15 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { BLEProvider } from "./utils/BLEContext";
+import { DeviceProvider } from "./utils/DeviceContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <BLEProvider>
+      <DeviceProvider>
         <App />
-      </BLEProvider>
+      </DeviceProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -1,0 +1,202 @@
+use serialport::{SerialPort, SerialPortInfo, SerialPortType};
+use std::sync::Arc;
+use std::time::Duration;
+use std::io::{Read, Write};
+use tokio::sync::{mpsc, Mutex as AsyncMutex};
+use serde::{Deserialize, Serialize};
+use tauri::async_runtime::spawn_blocking;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct USBStatus {
+    pub connected: bool,
+    pub device_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct USBNotification {
+    pub data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+pub struct USBState {
+    pub port: Arc<AsyncMutex<Option<Box<dyn SerialPort + Send>>>>,
+    pub status: Arc<AsyncMutex<USBStatus>>,
+    pub notification_tx: Arc<AsyncMutex<Option<mpsc::Sender<USBNotification>>>>,
+    pub notification_rx: Arc<AsyncMutex<Option<mpsc::Receiver<USBNotification>>>>,
+    pub running: Arc<AsyncMutex<bool>>,
+}
+
+unsafe impl Send for USBState {}
+unsafe impl Sync for USBState {}
+
+impl USBState {
+    pub fn new() -> Self {
+        Self {
+            port: Arc::new(AsyncMutex::new(None)),
+            status: Arc::new(AsyncMutex::new(USBStatus {
+                connected: false,
+                device_path: None,
+            })),
+            notification_tx: Arc::new(AsyncMutex::new(None)),
+            notification_rx: Arc::new(AsyncMutex::new(None)),
+            running: Arc::new(AsyncMutex::new(false)),
+        }
+    }
+
+    pub async fn list_ports() -> Result<Vec<String>, String> {
+        spawn_blocking(move || {
+            let ports = serialport::available_ports().map_err(|e| format!("Failed to list ports: {}", e))?;
+            let port_names: Vec<String> = ports.into_iter().map(|p| p.port_name).collect();
+            Ok(port_names)
+        })
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+    }
+
+    pub async fn connect(&self, port_name: String) -> Result<(), String> {
+        let port_name_clone = port_name.clone();
+        
+        // Open port in blocking task
+        let port = spawn_blocking(move || {
+            serialport::new(port_name_clone, 115200)
+                .timeout(Duration::from_millis(100))
+                .open()
+                .map_err(|e| format!("Failed to open port: {}", e))
+        })
+        .await
+        .map_err(|e| format!("Task failed: {}", e))??;
+
+        {
+            let mut port_guard = self.port.lock().await;
+            *port_guard = Some(port);
+            
+            let mut status = self.status.lock().await;
+            status.connected = true;
+            status.device_path = Some(port_name.clone());
+            
+            let mut running = self.running.lock().await;
+            *running = true;
+        }
+
+        // Setup notification channel
+        {
+            let mut tx_guard = self.notification_tx.lock().await;
+            let mut rx_guard = self.notification_rx.lock().await;
+            if tx_guard.is_none() {
+                let (tx, rx) = mpsc::channel(100);
+                *tx_guard = Some(tx);
+                *rx_guard = Some(rx);
+            }
+        }
+
+        // Start reading thread
+        let port_clone = Arc::clone(&self.port);
+        let notification_tx_clone = Arc::clone(&self.notification_tx);
+        let running_clone = Arc::clone(&self.running);
+
+        // We need a way to read from the port without locking it forever.
+        // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
+        // We'll use spawn_blocking for the reading loop? No, that would block one thread forever.
+        // Better to use a standard thread or a blocking task that loops.
+        // Since we need to share the port, and SerialPort is not thread-safe for sharing between read/write easily without Mutex.
+        // But if we lock the mutex to read, we can't write.
+        // Solution: Split the serial port? serialport crate allows try_clone().
+        
+        let mut read_port = {
+            let mut port_guard = self.port.lock().await;
+            if let Some(p) = port_guard.as_mut() {
+                 p.try_clone().map_err(|e| format!("Failed to clone port: {}", e))?
+            } else {
+                return Err("Port not initialized".to_string());
+            }
+        };
+
+        std::thread::spawn(move || {
+            let mut buffer = [0u8; 1024];
+            loop {
+                // Check if we should stop
+                {
+                    let running = match running_clone.blocking_lock() {
+                        mut guard => *guard,
+                    };
+                    if !running {
+                        break;
+                    }
+                }
+
+                match read_port.read(&mut buffer) {
+                    Ok(bytes_read) => {
+                        if bytes_read > 0 {
+                            let data = buffer[0..bytes_read].to_vec();
+                            let notification = USBNotification {
+                                data,
+                                timestamp: std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_millis() as u64,
+                            };
+                            
+                            // Send to channel
+                            let tx_guard = notification_tx_clone.blocking_lock();
+                            if let Some(tx) = tx_guard.as_ref() {
+                                let _ = tx.blocking_send(notification);
+                            }
+                        }
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                        // Timeout is fine, just continue
+                    }
+                    Err(_) => {
+                        // Error (e.g. disconnected), stop loop
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    pub async fn disconnect(&self) -> Result<(), String> {
+        {
+            let mut running = self.running.lock().await;
+            *running = false;
+        }
+        
+        // Give the read thread time to exit
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let mut port_guard = self.port.lock().await;
+        *port_guard = None;
+
+        let mut status = self.status.lock().await;
+        status.connected = false;
+        status.device_path = None;
+
+        Ok(())
+    }
+
+    pub async fn send_packet(&self, data: Vec<u8>) -> Result<(), String> {
+        let mut port_guard = self.port.lock().await;
+        if let Some(port) = port_guard.as_mut() {
+            port.write_all(&data).map_err(|e| format!("Failed to write: {}", e))?;
+            port.flush().map_err(|e| format!("Failed to flush: {}", e))?;
+            Ok(())
+        } else {
+            Err("Not connected".to_string())
+        }
+    }
+
+    pub async fn get_status(&self) -> USBStatus {
+        self.status.lock().await.clone()
+    }
+
+    pub async fn get_notification(&self) -> Option<USBNotification> {
+        let mut rx_guard = self.notification_rx.lock().await;
+        if let Some(rx) = rx_guard.as_mut() {
+            rx.try_recv().ok()
+        } else {
+            None
+        }
+    }
+}
