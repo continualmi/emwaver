@@ -24,13 +24,14 @@ extra:
   toc:
     sidebar: false
 nav:
-  - Home: index.html
-  - News: news/index.html
+  - Home: index.md
   - Hardware: hardware.md
+  - Board Evolution: board-evolution.html
   - Wavelets: wavelets.md
   - EMWaver DSL: emwaver-dsl.md
   - App Overview: documentation.md
   - Firmware Update: firmware.md
+  - Store: https://emwavers.com/store
 
 extra_css:
   - styles/hide-toc.css
