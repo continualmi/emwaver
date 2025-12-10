@@ -24,9 +24,7 @@ use clap::Parser;
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
-    match cli.command {
-        cli::Commands::Shell { verbose } => shell::run_shell(verbose),
-    }
+    shell::run_shell(cli.verbose)
 }
 
 #[cfg(test)]

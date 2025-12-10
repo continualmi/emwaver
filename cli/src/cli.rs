@@ -16,21 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 #[derive(Debug, Parser)]
-#[command(name = "emwaver", version, about = "EMWaver device CLI")]
+#[command(name = "emw", version, about = "EMWaver device shell")]
 pub struct Cli {
-    #[command(subcommand)]
-    pub command: Commands,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum Commands {
-    /// Connect to a nearby EMWaver device and open an interactive shell.
-    Shell {
-        /// Show raw hex payloads alongside ASCII output.
-        #[arg(long)]
-        verbose: bool,
-    },
+    /// Show raw hex payloads alongside ASCII output.
+    #[arg(long)]
+    pub verbose: bool,
 }
