@@ -59,7 +59,6 @@ import java.util.function.Consumer;
 public class IsmFragment extends Fragment {
 
     private FragmentIsmBinding binding;
-    private RFM69 rfm69;
     private BLEService bleService;
     private boolean isServiceBound = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -92,18 +91,30 @@ public class IsmFragment extends Fragment {
 
     private static final int RF_PARAMETER_STEPS = 6;
 
+    // RFM69 registers needed by this fragment
+    private static final byte REG_VERSION = 0x10;
+    private static final byte REG_RSSIVALUE = 0x24;
+    private static final byte REG_TEMP1 = 0x4E;
+    private static final byte REG_TEMP2 = 0x4F;
+
+    // Modulation values (must match firmware expectations)
+    private static final int MOD_FSK = 0;
+    private static final int MOD_OOK = 1;
+
+    // Command observer for loading dialog
+    private volatile Consumer<String> commandObserver;
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
             BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
             bleService = binder.getService();
             isServiceBound = true;
-            rfm69 = new RFM69(bleService);
             Log.i("service binding", "onServiceConnected");
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isServiceBound && bleService != null && bleService.checkConnection()) {
                     // Open SPI device before any operations
-                    if (rfm69.openDevice()) {
+                    if (ensureRfm69Open()) {
                         Log.i("IsmFragment", "RFM69 SPI device opened successfully");
                         startInitialLoad();
                     } else {
@@ -121,9 +132,7 @@ public class IsmFragment extends Fragment {
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
             isServiceBound = false;
-            if (rfm69 != null) {
-                rfm69.setCommandObserver(null);
-            }
+            commandObserver = null;
             cancelLoadingThread();
             dismissLoadingDialog();
             loadingCancelled = false;
@@ -169,8 +178,8 @@ public class IsmFragment extends Fragment {
 
     private class ModulationAdapter extends ArrayAdapter<String> {
         private final int[] MOD_VALUES = {
-            RFM69.MOD_FSK,  // FSK
-            RFM69.MOD_OOK   // ASK/OOK
+            MOD_FSK,  // FSK
+            MOD_OOK   // ASK/OOK
         };
 
         public ModulationAdapter(Context context, int resource) {
@@ -286,12 +295,8 @@ public class IsmFragment extends Fragment {
     public void onStop() {
         super.onStop();
         cancelLoadingThread();
-        // Close RFM69 SPI device
-        if (rfm69 != null) {
-            rfm69.setCommandObserver(null);
-            rfm69.closeDevice();
-            Log.i("IsmFragment", "RFM69 SPI device closed");
-        }
+        // No explicit close command in firmware yet; we just stop sending.
+        commandObserver = null;
         dismissLoadingDialog();
         loadingCancelled = false;
         if (isServiceBound && getActivity() != null) {
@@ -417,7 +422,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void startInitialLoad() {
-        if (!isAdded() || rfm69 == null) {
+        if (!isAdded()) {
             return;
         }
         if (viewModel != null && Boolean.TRUE.equals(viewModel.hasLoaded().getValue())) {
@@ -567,13 +572,13 @@ public class IsmFragment extends Fragment {
             return;
         }
 
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             handler.post(this::showDisconnectedState);
             return;
         }
 
         // Ensure SPI device is open before any operations
-        if (!rfm69.openDevice()) {
+        if (!ensureRfm69Open()) {
             Log.e("IsmFragment", "Failed to open RFM69 SPI device");
             handler.post(this::showDisconnectedState);
             showToast("Failed to initialize RFM69");
@@ -595,7 +600,7 @@ public class IsmFragment extends Fragment {
 
         buildRegisterViews();
         final Consumer<String> commandObserver = this::updateLoadingCommand;
-        rfm69.setCommandObserver(commandObserver);
+        this.commandObserver = commandObserver;
 
         loadingThread = new Thread(() -> {
             boolean registersLoaded = populateRegisterValues();
@@ -604,7 +609,7 @@ public class IsmFragment extends Fragment {
                 rfLoaded = loadRfParametersData();
             }
             final boolean success = !loadingCancelled && registersLoaded && rfLoaded;
-            rfm69.clearCommandObserver(commandObserver);
+            this.commandObserver = null;
             if (viewModel != null) {
                 viewModel.setLoaded(success);
             }
@@ -660,13 +665,13 @@ public class IsmFragment extends Fragment {
                 registerValueTextView.setBackground(configBackground);
             }
             registerValueTextView.setOnClickListener(v -> showEditDialog(registerName, registerValueTextView.getText().toString(), newValue -> {
-                if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+                if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
                     showToast("Not connected. Cannot write register.");
                     return;
                 }
                 try {
                     byte value = (byte) Integer.parseInt(newValue, 16);
-                    rfm69.writeReg((byte) registerAddress, value);
+                    writeReg((byte) registerAddress, value);
                     String formatted = String.format(Locale.US, "%02X", value & 0xFF);
                     registerValueTextView.setText(formatted);
                     if (viewModel != null) {
@@ -734,7 +739,7 @@ public class IsmFragment extends Fragment {
     }
 
     private boolean populateRegisterValues() {
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             return false;
         }
 
@@ -744,7 +749,7 @@ public class IsmFragment extends Fragment {
                     return false;
                 }
                 final String registerName = CONFIG_REGISTERS.get(i);
-                byte value = rfm69.readReg((byte) (i + 1));
+                byte value = readReg((byte) (i + 1));
                 final String hexValue = String.format(Locale.US, "%02X", value & 0xFF);
                 TextView textView = registerTextViews.get(registerName);
                 if (textView != null) {
@@ -760,7 +765,7 @@ public class IsmFragment extends Fragment {
                 incrementProgress();
             }
 
-            byte version = rfm69.readReg(RFM69.REG_VERSION);
+            byte version = readReg(REG_VERSION);
             handler.post(() -> {
                 if (binding != null) {
                     TextView textView = registerTextViews.get("VERSION");
@@ -774,7 +779,7 @@ public class IsmFragment extends Fragment {
             }
             incrementProgress();
 
-            byte rssiValue = rfm69.readReg(RFM69.REG_RSSIVALUE);
+            byte rssiValue = readReg(REG_RSSIVALUE);
             handler.post(() -> {
                 if (binding != null) {
                     TextView textView = registerTextViews.get("RSSIVALUE");
@@ -788,7 +793,7 @@ public class IsmFragment extends Fragment {
             }
             incrementProgress();
 
-            byte temp1 = rfm69.readReg(RFM69.REG_TEMP1);
+            byte temp1 = readReg(REG_TEMP1);
             handler.post(() -> {
                 if (binding != null) {
                     TextView textView = registerTextViews.get("TEMP1");
@@ -802,7 +807,7 @@ public class IsmFragment extends Fragment {
             }
             incrementProgress();
 
-            byte temp2 = rfm69.readReg(RFM69.REG_TEMP2);
+            byte temp2 = readReg(REG_TEMP2);
             handler.post(() -> {
                 if (binding != null) {
                     TextView textView = registerTextViews.get("TEMP2");
@@ -824,12 +829,12 @@ public class IsmFragment extends Fragment {
     }
 
     private boolean loadRfParametersData() {
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             return false;
         }
 
         try {
-            double frequency = rfm69.getFrequency();
+            double frequency = getFrequency();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -840,7 +845,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int dataRate = rfm69.getDataRate();
+            int dataRate = getDataRate();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -851,7 +856,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            double bandwidth = rfm69.getBandwidth();
+            double bandwidth = getBandwidth();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -862,7 +867,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int deviation = rfm69.getDeviation();
+            int deviation = getDeviation();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -873,7 +878,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int modulation = rfm69.getModulation();
+            int modulation = getModulation();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -885,7 +890,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int txPower = rfm69.getPowerLevel();
+            int txPower = getPowerLevel();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -957,13 +962,13 @@ public class IsmFragment extends Fragment {
 
     private void updateFrequency(String newValue) {
         Log.d("updateFrequency", "update freq");
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
             float frequency = Float.parseFloat(newValue);
-            rfm69.setFrequencyMHz(frequency);
+            setFrequencyMHz(frequency);
             reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid frequency value");
@@ -971,13 +976,13 @@ public class IsmFragment extends Fragment {
     }
 
     private void updateDataRate(String newValue) {
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
             int dataRate = Integer.parseInt(newValue);
-            rfm69.setDataRate(dataRate);
+            setDataRate(dataRate);
             reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid data rate value");
@@ -985,13 +990,13 @@ public class IsmFragment extends Fragment {
     }
 
     private void updateBandwidth(String newValue) {
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
             byte bandwidth = (byte) Integer.parseInt(newValue, 16);
-            rfm69.setBandwidth(bandwidth);
+            setBandwidth(bandwidth);
             reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid bandwidth value");
@@ -999,16 +1004,184 @@ public class IsmFragment extends Fragment {
     }
 
     private void updateDeviation(String newValue) {
-        if (!isServiceBound || rfm69 == null || bleService == null || !bleService.checkConnection()) {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             showToast("Not connected");
             return;
         }
         try {
             int deviation = Integer.parseInt(newValue);
-            rfm69.setDeviation(deviation);
+            setDeviation(deviation);
             reloadCardViews();
         } catch (NumberFormatException e) {
             showToast("Invalid deviation value");
+        }
+    }
+
+    // ===== Firmware command helpers (no RFM69.java wrapper) =====
+
+    private void notifyCommandObserver(String command) {
+        Consumer<String> obs = this.commandObserver;
+        if (obs != null) {
+            obs.accept(command);
+        }
+    }
+
+    private byte[] sendCommand(String command, int timeoutMs) {
+        if (bleService == null) {
+            return new byte[0];
+        }
+        notifyCommandObserver(command);
+        byte[] resp = bleService.sendCommand((command + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8), timeoutMs);
+        return resp != null ? resp : new byte[0];
+    }
+
+    private boolean isOkAck(byte[] response) {
+        return response != null && response.length == 1 && (response[0] & 0xFF) == 0x00;
+    }
+
+    private boolean isErr(byte[] response) {
+        return response != null && response.length == 1 && (response[0] & 0xFF) == 0xFF;
+    }
+
+    private byte[] parseRawPayload(byte[] response) {
+        if (response == null || response.length == 0) return new byte[0];
+        if (isOkAck(response) || isErr(response)) return new byte[0];
+        return response;
+    }
+
+    private String parseRawString(byte[] response) {
+        if (isErr(response) || isOkAck(response)) return "";
+        if (response == null || response.length == 0) return "";
+        return new String(response, java.nio.charset.StandardCharsets.UTF_8).trim();
+    }
+
+    private boolean ensureRfm69Open() {
+        if (bleService == null) return false;
+
+        android.content.SharedPreferences preferences =
+                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
+        String csPin = preferences.getString("rfm69_cs_pin", "10");
+        boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", false);
+
+        String cmd = "rfm69 init --cs=" + csPin + " --cs_active_high=" + (csActiveHigh ? "1" : "0");
+        byte[] resp = sendCommand(cmd, 1000);
+
+        if (resp == null || resp.length == 0) {
+            Log.e("IsmFragment", "rfm69 init failed: empty response (timeout?)");
+            showToast("RFM69 init failed: no response");
+            return false;
+        }
+
+        // Accept ACK even if extra bytes are present (we'll warn).
+        if ((resp[0] & 0xFF) == 0x00) {
+            if (resp.length != 1) {
+                Log.w("IsmFragment", "rfm69 init: ACK with extra bytes (" + resp.length + "): " + bytesToHex(resp));
+            }
+            return true;
+        }
+
+        if (isErr(resp)) {
+            Log.e("IsmFragment", "rfm69 init failed: device returned ERR (0xFF)");
+            showToast("RFM69 init failed: device returned error (0xFF)");
+            return false;
+        }
+
+        // Helpful hint if we're still on legacy ASCII protocol.
+        if (resp.length >= 2 && (resp[0] == 'o' || resp[0] == 'O') && (resp[1] == 'k' || resp[1] == 'K')) {
+            Log.e("IsmFragment", "rfm69 init failed: device returned legacy ASCII ok/err format: " + bytesToHex(resp));
+            showToast("RFM69 init failed: firmware still on ASCII protocol");
+            return false;
+        }
+
+        Log.e("IsmFragment", "rfm69 init failed: unexpected response (" + resp.length + "): " + bytesToHex(resp));
+        showToast("RFM69 init failed: unexpected response");
+        return false;
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        if (bytes == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format(Locale.US, "%02X ", b & 0xFF));
+        }
+        return sb.toString().trim();
+    }
+
+    private byte readReg(byte addr) {
+        byte[] resp = sendCommand(String.format(Locale.US, "rfm69 read --reg=%d", addr & 0xFF), 1000);
+        if (isErr(resp)) {
+            return 0;
+        }
+        return (resp != null && resp.length > 0) ? resp[0] : 0;
+    }
+
+    private void writeReg(byte addr, byte value) {
+        sendCommand(String.format(Locale.US, "rfm69 write --reg=%d --val=%d", addr & 0xFF, value & 0xFF), 1000);
+    }
+
+    private double getFrequency() {
+        String s = parseRawString(sendCommand("rfm69 get_freq", 1000));
+        try {
+            return Double.parseDouble(s);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
+    }
+
+    private void setFrequencyMHz(float freqMHz) {
+        sendCommand(String.format(Locale.US, "rfm69 set_freq --mhz=%.6f", freqMHz), 1000);
+    }
+
+    private int getDataRate() {
+        String s = parseRawString(sendCommand("rfm69 get_bitrate", 1000));
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private void setDataRate(int bps) {
+        sendCommand("rfm69 set_bitrate --bps=" + bps, 1000);
+    }
+
+    private double getBandwidth() {
+        String s = parseRawString(sendCommand("rfm69 get_bw", 1000));
+        try {
+            return Double.parseDouble(s);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
+    }
+
+    private void setBandwidth(byte bw) {
+        sendCommand("rfm69 set_bw --val=" + (bw & 0xFF), 1000);
+    }
+
+    private int getDeviation() {
+        String s = parseRawString(sendCommand("rfm69 get_dev", 1000));
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private void setDeviation(int hz) {
+        sendCommand("rfm69 set_dev --hz=" + hz, 1000);
+    }
+
+    private int getModulation() {
+        String s = parseRawString(sendCommand("rfm69 get_mod", 1000));
+        return "ook".equalsIgnoreCase(s) ? MOD_OOK : MOD_FSK;
+    }
+
+    private int getPowerLevel() {
+        String s = parseRawString(sendCommand("rfm69 get_power", 1000));
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return 0;
         }
     }
 

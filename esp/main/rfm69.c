@@ -143,10 +143,10 @@ void rfm69_register_commands(void)
 static void rfm69_write_reg(uint8_t addr, uint8_t value)
 {
     if (!rfm69_handle) return;
-    
-    if (rfm69_cs_active_high) {
-        gpio_set_level(rfm69_cs, 1);
-    }
+
+    // Manual CS for both active-low and active-high.
+    // Select: active level; Deselect: inactive level.
+    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 1 : 0);
 
     uint8_t tx[2] = { addr | 0x80, value };
     spi_transaction_t t = {
@@ -157,18 +157,14 @@ static void rfm69_write_reg(uint8_t addr, uint8_t value)
     };
     spi_device_transmit(rfm69_handle, &t);
 
-    if (rfm69_cs_active_high) {
-        gpio_set_level(rfm69_cs, 0);
-    }
+    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 0 : 1);
 }
 
 static uint8_t rfm69_read_reg(uint8_t addr)
 {
     if (!rfm69_handle) return 0;
 
-    if (rfm69_cs_active_high) {
-        gpio_set_level(rfm69_cs, 1);
-    }
+    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 1 : 0);
 
     uint8_t tx[2] = { addr & 0x7F, 0x00 };
     uint8_t rx[2] = { 0 };
@@ -180,9 +176,7 @@ static uint8_t rfm69_read_reg(uint8_t addr)
     };
     spi_device_transmit(rfm69_handle, &t);
 
-    if (rfm69_cs_active_high) {
-        gpio_set_level(rfm69_cs, 0);
-    }
+    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 0 : 1);
 
     return rx[1];
 }
@@ -211,8 +205,8 @@ static esp_err_t rfm69_init_device(void)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = RFM69_CLOCK,
         .mode = 0,
-        // If active high, we manage CS manually, so tell driver CS is unused (-1)
-        .spics_io_num = rfm69_cs_active_high ? -1 : rfm69_cs,
+        // Always manage CS manually for determinism (active-low or active-high).
+        .spics_io_num = -1,
         .queue_size = 7,
     };
 
@@ -222,11 +216,10 @@ static esp_err_t rfm69_init_device(void)
         return ret;
     }
 
-    if (rfm69_cs_active_high) {
-        gpio_reset_pin(rfm69_cs);
-        gpio_set_direction(rfm69_cs, GPIO_MODE_OUTPUT);
-        gpio_set_level(rfm69_cs, 0); // Default low (deselected)
-    }
+    // Configure CS pin for manual control and default to "deselected".
+    gpio_reset_pin(rfm69_cs);
+    gpio_set_direction(rfm69_cs, GPIO_MODE_OUTPUT);
+    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 0 : 1);
 
     rfm69_initialized = true;
     ESP_LOGI(TAG, "RFM69 initialized on host %d (CS=%d, ActiveHigh=%d)", 
@@ -276,9 +269,8 @@ static void rfm69_cmd_read_reg(int reg)
         return;
     }
     uint8_t val = rfm69_read_reg((uint8_t)reg);
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%02X", val);
-    command_send_ok((uint8_t*)buf, strlen(buf));
+    // Raw byte response (no ASCII hex encoding)
+    command_send_ok(&val, 1);
 }
 
 static void rfm69_cmd_set_mode(const char *mode_str)
