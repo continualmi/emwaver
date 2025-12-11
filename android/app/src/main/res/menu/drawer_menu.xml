@@ -18,7 +18,7 @@
 
         <item
             android:id="@+id/navigation_git"
-            android:icon="@drawable/ic_git_black_24dp"
+            android:icon="@drawable/ic_github_icon"
             android:title="Git" />
 
         <item
@@ -30,6 +30,11 @@
             android:id="@+id/navigation_flash"
             android:icon="@drawable/ic_flash_black_24dp"
             android:title="Flash" />
+
+        <item
+            android:id="@+id/navigation_packet_mode"
+            android:icon="@drawable/ic_packetmode_black_24dp"
+            android:title="Packet Mode" />
 
 
     </group>

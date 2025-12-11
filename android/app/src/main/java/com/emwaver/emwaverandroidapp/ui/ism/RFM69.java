@@ -2,9 +2,8 @@ package com.emwaver.emwaverandroidapp.ui.ism;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Log;
-
 import androidx.preference.PreferenceManager;
+import android.util.Log;
 
 import com.emwaver.emwaverandroidapp.BLEService;
 
@@ -18,7 +17,7 @@ public class RFM69 {
     private final BLEService bleService;
     private final Context context;
 
-    // Register definitions
+    // Register definitions - Keep these for IsmFragment's register dump loop
     public static final byte REG_FIFO = 0x00;
     public static final byte REG_OPMODE = 0x01;
     public static final byte REG_DATAMODUL = 0x02;
@@ -77,62 +76,6 @@ public class RFM69 {
     public static final byte REG_TESTPA2 = 0x5C;
     public static final byte REG_TESTDAGC = 0x6F;
 
-    // OpMode bits
-    public static final byte RF_OPMODE_SEQUENCER_OFF = (byte)0x80;
-    public static final byte RF_OPMODE_SEQUENCER_ON = 0x00;
-    public static final byte RF_OPMODE_LISTEN_ON = 0x40;
-    public static final byte RF_OPMODE_LISTEN_OFF = 0x00;
-    public static final byte RF_OPMODE_LISTENABORT = 0x20;
-    public static final byte RF_OPMODE_SLEEP = 0x00;
-    public static final byte RF_OPMODE_STANDBY = 0x04;
-    public static final byte RF_OPMODE_SYNTHESIZER = 0x08;
-    public static final byte RF_OPMODE_TRANSMITTER = 0x0C;
-    public static final byte RF_OPMODE_RECEIVER = 0x10;
-
-    // DataModul bits
-    public static final byte RF_DATAMODUL_DATAMODE_PACKET = 0x00;
-    public static final byte RF_DATAMODUL_DATAMODE_CONTINUOUSNOBSYNC = 0x40;
-    public static final byte RF_DATAMODUL_DATAMODE_CONTINUOUS = 0x60;
-    public static final byte RF_DATAMODUL_MODULATIONTYPE_FSK = 0x00;
-    public static final byte RF_DATAMODUL_MODULATIONTYPE_OOK = 0x08;
-    public static final byte RF_DATAMODUL_MODULATIONSHAPING_00 = 0x00;
-
-    // PaLevel bits
-    public static final byte RF_PALEVEL_PA0_ON = (byte)0x80;
-    public static final byte RF_PALEVEL_PA0_OFF = 0x00;
-    public static final byte RF_PALEVEL_PA1_ON = 0x40;
-    public static final byte RF_PALEVEL_PA1_OFF = 0x00;
-    public static final byte RF_PALEVEL_PA2_ON = 0x20;
-    public static final byte RF_PALEVEL_PA2_OFF = 0x00;
-
-    // OCP bits
-    public static final byte RF_OCP_ON = 0x1A;
-    public static final byte RF_OCP_OFF = 0x0F;
-
-    // LNA bits
-    public static final byte RF_LNA_ZIN_50 = 0x00;
-    public static final byte RF_LNA_ZIN_200 = (byte)0x80;
-    public static final byte RF_LNA_GAINSELECT_AUTO = 0x00;
-    public static final byte RF_LNA_GAINSELECT_MAX = 0x08;
-    public static final byte RF_LNA_GAINSELECT_MAXMINUS6 = 0x10;
-    public static final byte RF_LNA_GAINSELECT_MAXMINUS12 = 0x18;
-    public static final byte RF_LNA_GAINSELECT_MAXMINUS24 = 0x20;
-    public static final byte RF_LNA_GAINSELECT_MAXMINUS36 = 0x28;
-    public static final byte RF_LNA_GAINSELECT_MAXMINUS48 = 0x30;
-
-    // OokPeak bits
-    public static final byte RF_OOKPEAK_THRESHTYPE_FIXED = 0x00;
-    public static final byte RF_OOKPEAK_THRESHTYPE_PEAK = 0x40;
-    public static final byte RF_OOKPEAK_PEAKTHRESHSTEP_000 = 0x00;
-    public static final byte RF_OOKPEAK_PEAKTHRESHDEC_000 = 0x00;
-
-    // RSSI Config bits
-    public static final byte RF_RSSI_START = 0x01;
-    public static final byte RF_RSSI_DONE = 0x02;
-
-    // IrqFlags1 bits
-    public static final byte RF_IRQFLAGS1_MODEREADY = (byte)0x80;
-
     // Modes
     public static final int MODE_SLEEP = 0;
     public static final int MODE_STANDBY = 1;
@@ -144,16 +87,6 @@ public class RFM69 {
     public static final int MOD_FSK = 0;
     public static final int MOD_OOK = 1;
 
-    // PA modes
-    public static final int PA_MODE_PA0 = 1;
-    public static final int PA_MODE_PA1 = 2;
-    public static final int PA_MODE_PA1_PA2 = 3;
-    public static final int PA_MODE_PA1_PA2_20DBM = 4;
-
-    // Frequency step (FXOSC / 2^19)
-    private static final double FSTEP = 61.03515625;
-
-    private static final String DEVICE_NAME = "rfm69";
     private boolean deviceOpen = false;
     private Consumer<String> commandObserver;
 
@@ -173,248 +106,151 @@ public class RFM69 {
     }
 
     public boolean openDevice() {
-        if (deviceOpen) {
-            Log.i(TAG, "RFM69 device already open");
-            return true;
-        }
+        if (deviceOpen) return true;
 
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         String csPin = preferences.getString("rfm69_cs_pin", "10");
         boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", false);
 
-        String command = "spi open --name=" + DEVICE_NAME +
-                " --host=2 --miso=13 --mosi=11 --sck=12 --cs=" + csPin +
-                " --mode=0 --clock=8000000 --cs_active_high=" + (csActiveHigh ? "1" : "0");
-
-        String responseStr = executeOpenCommand(command);
-        if (responseStr != null && responseStr.startsWith("ok")) {
+        String command = "rfm69 init --cs=" + csPin + " --cs_active_high=" + (csActiveHigh ? "1" : "0");
+        byte[] response = sendCommand(command, 1000);
+        
+        if (isOk(response)) {
             deviceOpen = true;
-            Log.i(TAG, "RFM69 SPI device opened successfully with CS pin " + csPin +
-                    " (active " + (csActiveHigh ? "high" : "low") + ")");
+            Log.i(TAG, "RFM69 initialized successfully with CS=" + csPin + " ActiveHigh=" + csActiveHigh);
             return true;
         }
 
-        if (responseStr != null && responseStr.contains("spi open: exists")) {
-            Log.w(TAG, "SPI device already open on firmware; attempting to close and retry");
-            sendCloseCommandToFirmware();
-            responseStr = executeOpenCommand(command);
-            if (responseStr != null && responseStr.startsWith("ok")) {
-                deviceOpen = true;
-                Log.i(TAG, "RFM69 SPI device opened successfully after retry with CS pin " + csPin +
-                        " (active " + (csActiveHigh ? "high" : "low") + ")");
-                return true;
-            }
-        }
-
-        Log.e(TAG, "Failed to open RFM69 SPI device" +
-                (responseStr != null ? (": " + responseStr) : " (no response)"));
+        Log.e(TAG, "Failed to initialize RFM69");
         return false;
     }
 
     public boolean closeDevice() {
-        boolean success = sendCloseCommandToFirmware();
-        if (success) {
-            deviceOpen = false;
-            Log.i(TAG, "RFM69 SPI device closed successfully");
-            return true;
-        }
-
-        if (!deviceOpen) {
-            return true;
-        }
-
-        Log.e(TAG, "Failed to close RFM69 SPI device");
-        return false;
+        // No explicit close command in new firmware logic yet, 
+        // as the device handle is managed statically in C.
+        // We just reset our local flag.
+        deviceOpen = false;
+        return true;
     }
 
     public byte readReg(byte addr) {
-        String txData = formatHexBytes(new byte[]{(byte)(addr & 0x7F), 0x00});
-        String command = "spi xfer --name=" + DEVICE_NAME + " --tx=" + txData + " --rx=2";
-        if (!deviceOpen) {
-            Log.w(TAG, "Attempting to read register while device is closed; opening now");
-            if (!openDevice()) {
-                Log.e(TAG, "Failed to open device before register read");
-                return 0;
-            }
-        }
-
-        byte[] response = sendSpiCommand(command, 1000);
+        String command = String.format(Locale.US, "rfm69 read --reg=%d", addr & 0xFF);
+        byte[] response = sendCommand(command, 1000);
         byte[] parsed = parseOkResponse(response);
         if (parsed.length > 0) {
-            return parsed[parsed.length - 1];
+            return parsed[0];
         }
-
-        Log.e(TAG, "Empty parsed response for register 0x" + String.format(Locale.US, "%02X", addr));
         return 0;
     }
 
     public void writeReg(byte addr, byte value) {
-        if (!deviceOpen) {
-            Log.w(TAG, "Attempting to write register while device is closed; opening now");
-            if (!openDevice()) {
-                Log.e(TAG, "Failed to open device before register write");
-                return;
-            }
-        }
-
-        String txData = formatHexBytes(new byte[]{(byte)(addr | 0x80), value});
-        String command = "spi xfer --name=" + DEVICE_NAME + " --tx=" + txData;
-        sendSpiCommand(command, 1000);
+        String command = String.format(Locale.US, "rfm69 write --reg=%d --val=%d", addr & 0xFF, value & 0xFF);
+        sendCommand(command, 1000);
     }
 
     public void setMode(int mode) {
-        byte currentOpMode = readReg(REG_OPMODE);
-        byte newOpMode;
-
+        String modeStr;
         switch (mode) {
-            case MODE_TX:
-                newOpMode = (byte)((currentOpMode & 0xE3) | RF_OPMODE_TRANSMITTER);
-                break;
-            case MODE_RX:
-                newOpMode = (byte)((currentOpMode & 0xE3) | RF_OPMODE_RECEIVER);
-                writeReg(REG_TESTPA1, (byte)0x55);
-                writeReg(REG_TESTPA2, (byte)0x70);
-                writeReg(REG_OCP, RF_OCP_ON);
-                break;
-            case MODE_SYNTH:
-                newOpMode = (byte)((currentOpMode & 0xE3) | RF_OPMODE_SYNTHESIZER);
-                break;
-            case MODE_STANDBY:
-                newOpMode = (byte)((currentOpMode & 0xE3) | RF_OPMODE_STANDBY);
-                break;
-            case MODE_SLEEP:
-                newOpMode = (byte)((currentOpMode & 0xE3) | RF_OPMODE_SLEEP);
-                break;
-            default:
-                return;
+            case MODE_TX: modeStr = "tx"; break;
+            case MODE_RX: modeStr = "rx"; break;
+            case MODE_SYNTH: modeStr = "synth"; break;
+            case MODE_STANDBY: modeStr = "standby"; break;
+            case MODE_SLEEP: modeStr = "sleep"; break;
+            default: return;
         }
-
-        writeReg(REG_OPMODE, newOpMode);
+        sendCommand("rfm69 set_mode --mode=" + modeStr, 1000);
     }
 
     public void setFrequencyMHz(float freqMHz) {
-        long freqHz = (long)(freqMHz / FSTEP * 1000000.0);
-        writeReg(REG_FRFMSB, (byte)(freqHz >> 16));
-        writeReg(REG_FRFMID, (byte)(freqHz >> 8));
-        writeReg(REG_FRFLSB, (byte)freqHz);
+        sendCommand(String.format(Locale.US, "rfm69 set_freq --mhz=%.6f", freqMHz), 1000);
     }
 
     public double getFrequency() {
-        long frfMsb = readReg(REG_FRFMSB) & 0xFF;
-        long frfMid = readReg(REG_FRFMID) & 0xFF;
-        long frfLsb = readReg(REG_FRFLSB) & 0xFF;
-        long freqHz = (frfMsb << 16) + (frfMid << 8) + frfLsb;
-        return (FSTEP * freqHz) / 1000000.0;
+        byte[] response = sendCommand("rfm69 get_freq", 1000);
+        String str = parseStringResponse(response);
+        try {
+            return Double.parseDouble(str);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
     }
 
     public void setDataRate(int bps) {
-        if (bps <= 0) return;
-        long bitrate = 32000000L / bps;
-        writeReg(REG_BITRATEMSB, (byte)(bitrate >> 8));
-        writeReg(REG_BITRATELSB, (byte)bitrate);
+        sendCommand("rfm69 set_bitrate --bps=" + bps, 1000);
     }
 
     public int getDataRate() {
-        int msb = readReg(REG_BITRATEMSB) & 0xFF;
-        int lsb = readReg(REG_BITRATELSB) & 0xFF;
-        int bitrate = (msb << 8) | lsb;
-        if (bitrate == 0) return 0;
-        return (int)(32000000L / bitrate);
+        byte[] response = sendCommand("rfm69 get_bitrate", 1000);
+        String str = parseStringResponse(response);
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     public void setDeviation(int deviationHz) {
-        long deviation = deviationHz / 61;
-        writeReg(REG_FDEVMSB, (byte)(deviation >> 8));
-        writeReg(REG_FDEVLSB, (byte)deviation);
+        sendCommand("rfm69 set_dev --hz=" + deviationHz, 1000);
     }
 
     public int getDeviation() {
-        int msb = readReg(REG_FDEVMSB) & 0xFF;
-        int lsb = readReg(REG_FDEVLSB) & 0xFF;
-        return ((msb << 8) | lsb) * 61;
+        byte[] response = sendCommand("rfm69 get_dev", 1000);
+        String str = parseStringResponse(response);
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     public void setBandwidth(byte bw) {
-        byte currentRxBw = readReg(REG_RXBW);
-        writeReg(REG_RXBW, (byte)((currentRxBw & 0xE0) | bw));
+        // Here we just send the register value directly as 'val' if we used a raw setter,
+        // but our C command 'set_bw' expects the register value directly for now.
+        sendCommand("rfm69 set_bw --val=" + (bw & 0xFF), 1000);
     }
 
     public byte getBandwidth() {
-        return (byte)(readReg(REG_RXBW) & 0x1F);
+        byte[] response = sendCommand("rfm69 get_bw", 1000);
+        String str = parseStringResponse(response);
+        try {
+            return (byte) Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     public void setModulation(int modulation) {
-        if (modulation == MOD_OOK) {
-            writeReg(REG_DATAMODUL, (byte)(RF_DATAMODUL_DATAMODE_CONTINUOUSNOBSYNC |
-                    RF_DATAMODUL_MODULATIONTYPE_OOK | RF_DATAMODUL_MODULATIONSHAPING_00));
-        } else {
-            writeReg(REG_DATAMODUL, (byte)(RF_DATAMODUL_DATAMODE_CONTINUOUSNOBSYNC |
-                    RF_DATAMODUL_MODULATIONTYPE_FSK | RF_DATAMODUL_MODULATIONSHAPING_00));
-        }
+        String modStr = (modulation == MOD_OOK) ? "ook" : "fsk";
+        sendCommand("rfm69 set_mod --mod=" + modStr, 1000);
     }
 
     public int getModulation() {
-        byte dataModul = readReg(REG_DATAMODUL);
-        return ((dataModul & RF_DATAMODUL_MODULATIONTYPE_OOK) != 0) ? MOD_OOK : MOD_FSK;
+        byte[] response = sendCommand("rfm69 get_mod", 1000);
+        String str = parseStringResponse(response);
+        return "ook".equals(str) ? MOD_OOK : MOD_FSK;
     }
 
     public void setTransmitPower(int dbm, int paMode, boolean ocp) {
-        byte paLevel;
-        switch (paMode) {
-            case PA_MODE_PA0:
-                paLevel = (byte)(RF_PALEVEL_PA0_ON | RF_PALEVEL_PA1_OFF | RF_PALEVEL_PA2_OFF |
-                        (dbm > 13 ? 31 : (dbm + 18)));
-                break;
-            case PA_MODE_PA1:
-                paLevel = (byte)(RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_OFF |
-                        (dbm > 13 ? 31 : (dbm + 18)));
-                break;
-            case PA_MODE_PA1_PA2:
-                paLevel = (byte)(RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_ON |
-                        (dbm > 17 ? 31 : (dbm + 14)));
-                break;
-            case PA_MODE_PA1_PA2_20DBM:
-                writeReg(REG_TESTPA1, (byte)0x5D);
-                writeReg(REG_TESTPA2, (byte)0x7C);
-                paLevel = (byte)(RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_ON |
-                        (dbm > 20 ? 31 : (dbm + 11)));
-                break;
-            default:
-                paLevel = (byte)(RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_ON | 31);
-                break;
-        }
-        writeReg(REG_PALEVEL, paLevel);
-        writeReg(REG_OCP, ocp ? RF_OCP_ON : RF_OCP_OFF);
+        // We simplified the C side to just take dbm.
+        // If we want to support paMode/ocp we need to enhance the C side.
+        // For now, just send dbm.
+        sendCommand("rfm69 set_power --dbm=" + dbm, 1000);
     }
 
     public int getPowerLevel() {
-        byte paLevel = readReg(REG_PALEVEL);
-        int outputPower = paLevel & 0x1F;
-
-        boolean pa0 = (paLevel & RF_PALEVEL_PA0_ON) != 0;
-        boolean pa1 = (paLevel & RF_PALEVEL_PA1_ON) != 0;
-        boolean pa2 = (paLevel & RF_PALEVEL_PA2_ON) != 0;
-
-        byte testPa1 = readReg(REG_TESTPA1);
-        byte testPa2 = readReg(REG_TESTPA2);
-        boolean is20dBm = (testPa1 == (byte)0x5D) && (testPa2 == (byte)0x7C);
-
-        if (pa0 && !pa1 && !pa2) {
-            return outputPower - 18;
-        } else if (!pa0 && pa1 && !pa2) {
-            return outputPower - 18;
-        } else if (!pa0 && pa1 && pa2) {
-            if (is20dBm) {
-                return outputPower - 11;
-            } else {
-                return outputPower - 14;
-            }
+        byte[] response = sendCommand("rfm69 get_power", 1000);
+        String str = parseStringResponse(response);
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return 0;
         }
-        return 0;
     }
 
+    // These legacy setters might not map directly if not implemented in C,
+    // or if they just write registers directly.
     public void setLNAGain(byte lnaGain) {
-        writeReg(REG_LNA, (byte)(RF_LNA_ZIN_50 | lnaGain));
+        writeReg(REG_LNA, (byte)(0x00 | lnaGain)); // simplified
     }
 
     public void setFixedThreshold(byte threshold) {
@@ -426,88 +262,14 @@ public class RFM69 {
     }
 
     public void setSensitivityBoost(boolean boost) {
-        if (boost) {
+         if (boost) {
             writeReg(REG_TESTLNA, (byte)0x2D);
         } else {
             writeReg(REG_TESTLNA, (byte)0x1B);
         }
     }
-
-    public void setThreshTypeFixed(boolean fixed) {
-        if (fixed) {
-            writeReg(REG_OOKPEAK, (byte)(RF_OOKPEAK_THRESHTYPE_FIXED |
-                    RF_OOKPEAK_PEAKTHRESHSTEP_000 | RF_OOKPEAK_PEAKTHRESHDEC_000));
-        } else {
-            writeReg(REG_OOKPEAK, (byte)(RF_OOKPEAK_THRESHTYPE_PEAK |
-                    RF_OOKPEAK_PEAKTHRESHSTEP_000 | RF_OOKPEAK_PEAKTHRESHDEC_000));
-        }
-    }
-
-    public int readRSSI(boolean forceTrigger) {
-        if (forceTrigger) {
-            writeReg(REG_RSSICONFIG, RF_RSSI_START);
-            int timeout = 0;
-            while ((readReg(REG_RSSICONFIG) & RF_RSSI_DONE) == 0x00) {
-                try {
-                    Thread.sleep(1);
-                } catch (InterruptedException e) {
-                    break;
-                }
-                if (++timeout > 100) break;
-            }
-        }
-        return -((readReg(REG_RSSIVALUE) & 0xFF) >> 1);
-    }
-
-    private String formatHexBytes(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < bytes.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(String.format("0x%02X", bytes[i] & 0xFF));
-        }
-        return sb.toString();
-    }
-
-    private byte[] parseOkResponse(byte[] response) {
-        if (response == null || response.length == 0) {
-            return new byte[0];
-        }
-
-        String responseStr = new String(response, StandardCharsets.UTF_8).trim();
-        if (!responseStr.startsWith("ok")) {
-            Log.e(TAG, "Command failed: " + responseStr);
-            return new byte[0];
-        }
-
-        String payload = responseStr.length() > 2 ? responseStr.substring(2).trim() : "";
-        if (payload.isEmpty()) {
-            return new byte[0];
-        }
-
-        String[] tokens = payload.split("[\\s,]+");
-        byte[] result = new byte[tokens.length];
-        int count = 0;
-
-        for (String token : tokens) {
-            if (token.isEmpty()) {
-                continue;
-            }
-            try {
-                String hexStr = token.replace("0x", "").replace("0X", "");
-                result[count++] = (byte) Integer.parseInt(hexStr, 16);
-            } catch (NumberFormatException e) {
-                Log.e(TAG, "Failed to parse hex value: " + token);
-            }
-        }
-
-        if (count == result.length) {
-            return result;
-        }
-
-        byte[] trimmed = new byte[count];
-        System.arraycopy(result, 0, trimmed, 0, count);
-        return trimmed;
-    }
+    
+    // ... other legacy methods can use writeReg directly.
 
     private void notifyCommandObserver(String command) {
         if (commandObserver != null) {
@@ -515,7 +277,7 @@ public class RFM69 {
         }
     }
 
-    private byte[] sendSpiCommand(String command, int timeoutMs) {
+    private byte[] sendCommand(String command, int timeoutMs) {
         notifyCommandObserver(command);
         byte[] rawResponse = bleService.sendCommand((command + "\n").getBytes(StandardCharsets.UTF_8), timeoutMs);
         if (rawResponse == null || rawResponse.length == 0) {
@@ -525,26 +287,37 @@ public class RFM69 {
         return rawResponse;
     }
 
-    private String executeOpenCommand(String command) {
-        byte[] response = sendSpiCommand(command, 1000);
-        if (response == null || response.length == 0) {
-            Log.e(TAG, "spi open returned empty response");
-            return null;
-        }
-        String responseStr = new String(response, StandardCharsets.UTF_8).trim();
-        Log.d(TAG, "spi open response: " + responseStr);
-        return responseStr;
+    private boolean isOk(byte[] response) {
+        if (response == null || response.length == 0) return false;
+        String str = new String(response, StandardCharsets.UTF_8).trim();
+        return str.startsWith("ok");
     }
 
-    private boolean sendCloseCommandToFirmware() {
-        String command = "spi close --name=" + DEVICE_NAME;
-        byte[] response = sendSpiCommand(command, 1000);
-        if (response == null || response.length == 0) {
-            Log.w(TAG, "spi close returned empty response");
-            return false;
+    private byte[] parseOkResponse(byte[] response) {
+        if (response == null || response.length == 0) return new byte[0];
+        String str = new String(response, StandardCharsets.UTF_8).trim();
+        if (!str.startsWith("ok")) return new byte[0];
+        
+        String payload = str.length() > 2 ? str.substring(2).trim() : "";
+        if (payload.isEmpty()) return new byte[0];
+
+        // Parse hex tokens
+        String[] tokens = payload.split("[\\s,]+");
+        byte[] result = new byte[tokens.length];
+        for (int i=0; i<tokens.length; i++) {
+            try {
+                result[i] = (byte) Integer.parseInt(tokens[i], 16);
+            } catch (NumberFormatException e) {
+                // ignore
+            }
         }
-        String responseStr = new String(response, StandardCharsets.UTF_8).trim();
-        Log.d(TAG, "spi close response: " + responseStr);
-        return responseStr.startsWith("ok");
+        return result;
+    }
+
+    private String parseStringResponse(byte[] response) {
+        if (response == null || response.length == 0) return "";
+        String str = new String(response, StandardCharsets.UTF_8).trim();
+        if (!str.startsWith("ok")) return "";
+        return str.length() > 2 ? str.substring(2).trim() : "";
     }
 }

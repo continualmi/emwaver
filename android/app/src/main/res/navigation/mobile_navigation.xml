@@ -48,4 +48,10 @@
         android:label="Flash"
         tools:layout="@layout/fragment_flash" />
 
+    <fragment
+        android:id="@+id/navigation_packet_mode"
+        android:name="com.emwaver.emwaverandroidapp.ui.packetmode.PacketModeFragment"
+        android:label="Packet Mode"
+        tools:layout="@layout/fragment_packet_mode" />
+
 </navigation>
