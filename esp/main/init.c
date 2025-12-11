@@ -34,6 +34,7 @@
 #include "sampler.h"
 #include "spi.h"
 #include "usb.h"
+#include "rfm69.h"
 #include <string.h>
 
 #define FIRMWARE_VERSION "1.0.0"
@@ -84,6 +85,7 @@ void emwaver_init(void)
     sampler_module_init();
 
     spi_register_commands();
+    rfm69_register_commands();
     sampler_register_commands();
     usb_register_commands();
     register_core_commands();

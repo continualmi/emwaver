@@ -511,6 +511,12 @@ static void invoke_handler(const command_entry_t *entry,
         return;
     }
 
+    if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT}, 5)) {
+        CALL_HANDLER(entry, void (*)(int, int, int, int, int),
+                     values[0].int_val, values[1].int_val, values[2].int_val, values[3].int_val, values[4].int_val);
+        return;
+    }
+
     if (types_match(entry,
                     (cmd_arg_type_t[]){CMD_ARG_STRING, CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT,
                                        CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT},

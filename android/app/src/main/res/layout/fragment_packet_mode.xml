@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".ui.packetmode.PacketModeFragment">
+
+
+    <Button
+        android:id="@+id/sendTesla"
+        android:layout_width="110dp"
+        android:layout_height="55dp"
+        android:text="send tesla"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.1" />
+
+    <Button
+        android:id="@+id/transferPayloadTxButton"
+        android:layout_width="120dp"
+        android:layout_height="55dp"
+        android:text="transfer"
+        android:layout_marginLeft="10dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/transmitPayloadDataTextInput" />
+
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/manchesterSwitch"
+        android:layout_width="120dp"
+        android:layout_height="48dp"
+        android:text="Manchester encoding"
+        android:layout_marginLeft="10dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/initReceiveButton" />
+
+
+    <AutoCompleteTextView
+        android:id="@+id/syncModeSelector"
+        android:layout_width="100dp"
+        android:layout_height="48dp"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        android:hint="Sync mode"
+        app:layout_constraintEnd_toStartOf="@+id/receivePayloadButton"
+        app:layout_constraintStart_toEndOf="@+id/sendPayloadButton"
+        app:layout_constraintTop_toBottomOf="@+id/receivePayloadDataTextInput" />
+
+
+    <AutoCompleteTextView
+        android:id="@+id/modulationSelector"
+        android:layout_width="120dp"
+        android:layout_height="48dp"
+        android:hint="Modulation"
+        app:layout_constraintEnd_toStartOf="@+id/preambleSelector"
+        app:layout_constraintStart_toEndOf="@+id/manchesterSwitch"
+        app:layout_constraintTop_toBottomOf="@+id/sendTesla" />
+
+
+    <AutoCompleteTextView
+        android:id="@+id/preambleSelector"
+        android:layout_width="120dp"
+        android:layout_height="48dp"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        android:hint="Preamble"
+        android:layout_marginRight="10dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/initTransmitButton" />
+
+
+    <EditText
+        android:id="@+id/datarateTextInput"
+        android:layout_width="120dp"
+        android:layout_height="48dp"
+        android:hint="datarate..."
+        android:layout_marginLeft="10dp"
+        android:imeOptions="actionDone"
+        android:inputType="number"
+        android:padding="8dp"
+        android:textColor="#000"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/manchesterSwitch" />
+
+    <EditText
+        android:id="@+id/deviationTextInput"
+        android:layout_width="120dp"
+        android:layout_height="48dp"
+        android:hint="deviation..."
+        android:layout_marginRight="10dp"
+        android:imeOptions="actionDone"
+        android:inputType="number"
+        android:padding="8dp"
+        android:textColor="#000"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/preambleSelector" />
+
+    <EditText
+        android:id="@+id/syncwordTextInput"
+        android:layout_width="120dp"
+        android:layout_height="48dp"
+        android:hint="sync word..."
+        android:imeOptions="actionDone"
+        android:inputType="text"
+        android:padding="8dp"
+        android:textColor="#000"
+        app:layout_constraintEnd_toStartOf="@+id/deviationTextInput"
+        app:layout_constraintStart_toEndOf="@+id/datarateTextInput"
+        app:layout_constraintTop_toBottomOf="@+id/modulationSelector" />
+
+    <Button
+        android:id="@+id/sendPayloadButton"
+        android:layout_width="110dp"
+        android:layout_height="55dp"
+        android:layout_marginLeft="10dp"
+        android:text="SEND PAYLOAD"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/receivePayloadDataTextInput" />
+
+    <Button
+        android:id="@+id/receivePayloadButton"
+        android:layout_width="110dp"
+        android:layout_height="55dp"
+        android:layout_marginRight="10dp"
+        android:text="receive payload"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/receivePayloadDataTextInput" />
+
+    <Button
+        android:id="@+id/initTransmitButton"
+        android:layout_width="110dp"
+        android:layout_height="55dp"
+        android:text="init transmit"
+        android:layout_marginRight="10dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/initReceiveButton"
+        android:layout_width="110dp"
+        android:layout_height="55dp"
+        android:text="init receive"
+        android:layout_marginLeft="10dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+
+    <EditText
+        android:id="@+id/receivePayloadDataTextInput"
+        android:layout_width="411dp"
+        android:layout_height="100dp"
+        android:background="#EEE"
+        android:gravity="top|start"
+        android:hint="Hex data received..."
+        android:inputType="textMultiLine"
+        android:padding="8dp"
+        android:scrollbars="vertical"
+        android:textColor="#000"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/datarateTextInput" />
+
+    <EditText
+        android:id="@+id/transmitPayloadDataTextInput"
+        android:layout_width="411dp"
+        android:layout_height="100dp"
+        android:background="#EEE"
+        android:gravity="top|start"
+        android:hint="Hex data to transmit..."
+        android:inputType="textMultiLine"
+        android:padding="8dp"
+        android:scrollbars="vertical"
+        android:textColor="#000"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/sendPayloadButton" />
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>
