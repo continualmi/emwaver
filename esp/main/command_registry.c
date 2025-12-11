@@ -309,37 +309,24 @@ void command_registry_handle(const command_t *cmd)
 
 void command_send_ok(const uint8_t *data, size_t len)
 {
-    char response[CLI_RESPONSE_MAX];
-    size_t offset = 0;
-
-    int written = snprintf(response, sizeof(response), "ok");
-    if (written < 0) {
+    // Raw response protocol:
+    // - Success with payload: send payload bytes as-is.
+    // - Success with no payload: send a single 0x00 byte as ACK.
+    if (data && len > 0) {
+        ble_server_notify(data, (uint16_t)len);
         return;
     }
-    offset = (size_t)written;
-
-    for (size_t i = 0; data && i < len && offset < sizeof(response); ++i) {
-        written = snprintf(response + offset, sizeof(response) - offset, " 0x%02X", data[i]);
-        if (written < 0) {
-            break;
-        }
-        offset += (size_t)written;
-    }
-
-    ble_server_notify((const uint8_t *)response, offset);
+    const uint8_t ok = 0x00;
+    ble_server_notify(&ok, 1);
 }
 
 void command_send_err(const char *msg)
 {
-    char response[CLI_RESPONSE_MAX];
-    if (!msg) {
-        msg = "unknown";
-    }
-    int written = snprintf(response, sizeof(response), "err %s", msg);
-    if (written < 0) {
-        return;
-    }
-    ble_server_notify((const uint8_t *)response, (size_t)written);
+    (void)msg;
+    // Raw response protocol:
+    // - Error: send a single 0xFF byte.
+    const uint8_t err = 0xFF;
+    ble_server_notify(&err, 1);
 }
 
 #define CALL_HANDLER(entry, signature, ...)     (((signature)((entry)->handler))(__VA_ARGS__))

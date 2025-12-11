@@ -638,7 +638,6 @@ public class WaveletsFragment extends Fragment {
     private List<String> getAssetScriptNames() {
         List<String> names = new ArrayList<>();
         String[] defaultWavelets = {
-            "rfm69.js",
             "rfm69_radio_console.js",
             "rfm69_radio_module.js",
             "hello_world_usb.js",
@@ -661,7 +660,6 @@ public class WaveletsFragment extends Fragment {
         assetScripts.clear(); // Clear existing asset scripts
         
         String[] assetScriptFiles = {
-            "rfm69.js",
             "rfm69_radio_console.js",
             "rfm69_radio_module.js",
             "hello_world_usb.js",
