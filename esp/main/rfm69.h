@@ -137,4 +137,4 @@
 
 // Functions
 void rfm69_register_commands(void);
-esp_err_t rfm69_init_device(void); // Internal init if needed, or exposed
+// NOTE: `rfm69_init_device()` is intentionally internal to `rfm69.c`.
