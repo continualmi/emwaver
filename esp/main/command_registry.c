@@ -26,7 +26,9 @@
 #include "ble_server.h"
 #include "esp_log.h"
 
-#define COMMAND_REGISTRY_MAX 16
+// NOTE: Keep this comfortably above the total number of registered commands
+// across modules (spi/rfm69/sampler/usb/core/etc.). We currently exceed 16.
+#define COMMAND_REGISTRY_MAX 64
 #define COMMAND_MAX_ARGS CLI_MAX_ARGS
 
 typedef struct {
