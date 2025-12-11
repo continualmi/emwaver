@@ -8,20 +8,79 @@
     android:background="@color/surfaceBackground"
     tools:context=".ui.wavelets.WaveletsFragment">
 
-    <androidx.cardview.widget.CardView
-        android:id="@+id/script_list_card"
+    <!-- Asset Scripts Section -->
+    <TextView
+        android:id="@+id/asset_scripts_title"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:maxHeight="150dp"
+        android:text="Asset Scripts (Read-Only)"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:padding="8dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:drawableEnd="@drawable/ic_arrow_down_black"
+        android:drawablePadding="8dp"
+        android:textColor="@color/textPrimary"
+        android:drawableTint="?attr/colorOnSurface"
+        android:background="?attr/selectableItemBackground"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/asset_scripts_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxHeight="200dp"
         app:cardElevation="2dp"
         app:cardCornerRadius="4dp"
         app:cardBackgroundColor="@color/surfaceCard"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/asset_scripts_title"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <ListView
-            android:id="@+id/script_list_view"
+            android:id="@+id/asset_scripts_list_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/surfaceCard" />
+    </androidx.cardview.widget.CardView>
+
+    <!-- Custom Scripts Section -->
+    <TextView
+        android:id="@+id/custom_scripts_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Custom Scripts"
+        android:textStyle="bold"
+        android:textSize="15sp"
+        android:padding="8dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp"
+        android:drawableEnd="@drawable/ic_arrow_down_black"
+        android:drawablePadding="8dp"
+        android:textColor="@color/textPrimary"
+        android:drawableTint="?attr/colorOnSurface"
+        android:background="?attr/selectableItemBackground"
+        app:layout_constraintTop_toBottomOf="@id/asset_scripts_card"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/custom_scripts_card"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:maxHeight="200dp"
+        app:cardElevation="2dp"
+        app:cardCornerRadius="4dp"
+        app:cardBackgroundColor="@color/surfaceCard"
+        app:layout_constraintTop_toBottomOf="@id/custom_scripts_title"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ListView
+            android:id="@+id/custom_scripts_list_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@color/surfaceCard" />
@@ -36,7 +95,7 @@
         android:layout_marginBottom="8dp"
         android:visibility="gone"
         android:background="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/script_list_card"
+        app:layout_constraintTop_toBottomOf="@id/custom_scripts_card"
         app:layout_constraintBottom_toTopOf="@id/console_title"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">

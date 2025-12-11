@@ -55,6 +55,7 @@ import com.emwaver.emwaverandroidapp.files.FileRepositoryLocal;
 import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
+import com.emwaver.emwaverandroidapp.ui.wavelets.ScriptMetadata;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
@@ -82,9 +83,11 @@ public class WaveletsFragment extends Fragment {
     private static final String SCRIPT_EXTENSION = ".js";
 
     private FragmentWaveletsBinding binding;
-    private final List<UserFileMetadata> scriptFiles = new ArrayList<>();
-    private ScriptListAdapter scriptAdapter;
-    private UserFileMetadata currentScriptMetadata;
+    private final List<ScriptMetadata> assetScripts = new ArrayList<>();
+    private final List<ScriptMetadata> customScripts = new ArrayList<>();
+    private ScriptListAdapter assetScriptAdapter;
+    private ScriptListAdapter customScriptAdapter;
+    private ScriptMetadata currentScriptMetadata;
     private String currentScriptName;
     private String currentScriptEtag;
     private String currentDraftContent;
@@ -117,8 +120,10 @@ public class WaveletsFragment extends Fragment {
 
     private ActivityResultLauncher<String[]> openFileLauncher;
 
-    private TextView scriptsListTitle;
-    private CardView scriptListCard;
+    private TextView assetScriptsTitle;
+    private CardView assetScriptsCard;
+    private TextView customScriptsTitle;
+    private CardView customScriptsCard;
     private TextView consoleTitle;
     private CardView consoleCard;
     private ScrollView consoleScrollView;
@@ -277,11 +282,12 @@ public class WaveletsFragment extends Fragment {
                 MenuItem clearConsoleItem = menu.findItem(R.id.action_clear_console);
                 
                 boolean showEditorItems = showingEditor;
+                boolean isAssetScript = currentScriptMetadata != null && currentScriptMetadata.isAssetScript();
                 if (copyItem != null) copyItem.setVisible(showEditorItems);
-                if (pasteItem != null) pasteItem.setVisible(showEditorItems);
+                if (pasteItem != null) pasteItem.setVisible(showEditorItems && !isAssetScript);
                 if (previewItem != null) previewItem.setVisible(showEditorItems);
-                if (renameItem != null) renameItem.setVisible(showEditorItems && currentScriptMetadata != null);
-                if (deleteItem != null) deleteItem.setVisible(showEditorItems && currentScriptMetadata != null);
+                if (renameItem != null) renameItem.setVisible(showEditorItems && currentScriptMetadata != null && !isAssetScript);
+                if (deleteItem != null) deleteItem.setVisible(showEditorItems && currentScriptMetadata != null && !isAssetScript);
                 if (lineWrapItem != null) {
                     lineWrapItem.setVisible(showEditorItems);
                     lineWrapItem.setChecked(lineWrapEnabled);
@@ -320,18 +326,22 @@ public class WaveletsFragment extends Fragment {
                     previewEditorContent();
                     return true;
                 } else if (itemId == R.id.editor_rename) {
-                    if (currentScriptMetadata != null) {
+                    if (currentScriptMetadata != null && currentScriptMetadata.isCustomScript()) {
                         showNameInputDialog(
                             "Rename Script",
                             "Enter a new name for the script:",
                             currentScriptMetadata.getName(),
                             newName -> renameScript(currentScriptMetadata, newName)
                         );
+                    } else {
+                        showToast("Asset scripts cannot be renamed");
                     }
                     return true;
                 } else if (itemId == R.id.editor_delete) {
-                    if (currentScriptMetadata != null) {
+                    if (currentScriptMetadata != null && currentScriptMetadata.isCustomScript()) {
                         showDeleteConfirmationDialog(currentScriptMetadata);
+                    } else {
+                        showToast("Asset scripts cannot be deleted");
                     }
                     return true;
                 } else if (itemId == R.id.editor_line_wrap) {
@@ -360,23 +370,57 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void setupScriptList() {
-        scriptListCard = binding.scriptListCard;
-        scriptAdapter = new ScriptListAdapter();
-        binding.scriptListView.setAdapter(scriptAdapter);
+        // Setup asset scripts list
+        assetScriptsCard = binding.assetScriptsCard;
+        assetScriptAdapter = new ScriptListAdapter(assetScripts);
+        binding.assetScriptsListView.setAdapter(assetScriptAdapter);
 
-        binding.scriptListView.setOnItemClickListener((parent, view, position, id) -> {
-            Log.d(TAG, "ListView clicked at position " + position + ", scriptFiles.size=" + scriptFiles.size());
-            if (position >= 0 && position < scriptFiles.size()) {
-                previewScript(scriptFiles.get(position));
+        binding.assetScriptsListView.setOnItemClickListener((parent, view, position, id) -> {
+            if (position >= 0 && position < assetScripts.size()) {
+                previewScript(assetScripts.get(position));
             }
         });
 
-        binding.scriptListView.setOnItemLongClickListener((parent, view, position, id) -> {
-            if (position >= 0 && position < scriptFiles.size()) {
-                showScriptOptionsDialog(scriptFiles.get(position));
+        binding.assetScriptsListView.setOnItemLongClickListener((parent, view, position, id) -> {
+            showToast("Asset scripts are read-only. Create a copy to edit.");
+            return true;
+        });
+
+        // Setup custom scripts list
+        customScriptsCard = binding.customScriptsCard;
+        customScriptAdapter = new ScriptListAdapter(customScripts);
+        binding.customScriptsListView.setAdapter(customScriptAdapter);
+
+        binding.customScriptsListView.setOnItemClickListener((parent, view, position, id) -> {
+            if (position >= 0 && position < customScripts.size()) {
+                previewScript(customScripts.get(position));
+            }
+        });
+
+        binding.customScriptsListView.setOnItemLongClickListener((parent, view, position, id) -> {
+            if (position >= 0 && position < customScripts.size()) {
+                showScriptOptionsDialog(customScripts.get(position));
             }
             return true;
         });
+
+        // Setup collapsible sections
+        assetScriptsTitle = binding.assetScriptsTitle;
+        customScriptsTitle = binding.customScriptsTitle;
+        
+        assetScriptsTitle.setOnClickListener(v -> {
+            toggleVisibility(assetScriptsCard);
+            updateArrow(assetScriptsTitle, assetScriptsCard.getVisibility() == View.VISIBLE);
+        });
+        
+        customScriptsTitle.setOnClickListener(v -> {
+            toggleVisibility(customScriptsCard);
+            updateArrow(customScriptsTitle, customScriptsCard.getVisibility() == View.VISIBLE);
+        });
+        
+        // Initialize arrows
+        updateArrow(assetScriptsTitle, assetScriptsCard.getVisibility() == View.VISIBLE);
+        updateArrow(customScriptsTitle, customScriptsCard.getVisibility() == View.VISIBLE);
     }
 
     private void setupConsoleSection() {
@@ -470,25 +514,32 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void refreshScriptList() {
-        if (scriptAdapter != null) {
-            Log.d(TAG, "refreshScriptList: notifying adapter with " + scriptFiles.size() + " items");
-            scriptAdapter.notifyDataSetChanged();
+        if (assetScriptAdapter != null) {
+            Log.d(TAG, "refreshScriptList: notifying asset adapter with " + assetScripts.size() + " items");
+            assetScriptAdapter.notifyDataSetChanged();
+        }
+        if (customScriptAdapter != null) {
+            Log.d(TAG, "refreshScriptList: notifying custom adapter with " + customScripts.size() + " items");
+            customScriptAdapter.notifyDataSetChanged();
         }
     }
 
-    private void previewScript(UserFileMetadata metadata) {
-        if (!isAdded() || metadata == null || TextUtils.isEmpty(metadata.getId())) {
+    private void previewScript(ScriptMetadata scriptMetadata) {
+        if (!isAdded() || scriptMetadata == null || TextUtils.isEmpty(scriptMetadata.getId())) {
             Log.w(TAG, "previewScript: invalid state or metadata");
             return;
         }
-        Log.d(TAG, "previewScript: " + metadata.getName() + " (id=" + metadata.getId() + ")");
-        pendingPreviewScriptId = metadata.getId();
-        loadScript(metadata);
+        Log.d(TAG, "previewScript: " + scriptMetadata.getName() + " (id=" + scriptMetadata.getId() + ")");
+        pendingPreviewScriptId = scriptMetadata.getId();
+        loadScript(scriptMetadata);
     }
 
-    private class ScriptListAdapter extends ArrayAdapter<UserFileMetadata> {
-        ScriptListAdapter() {
-            super(requireContext(), 0, scriptFiles);
+    private class ScriptListAdapter extends ArrayAdapter<ScriptMetadata> {
+        private final List<ScriptMetadata> scripts;
+        
+        ScriptListAdapter(List<ScriptMetadata> scripts) {
+            super(requireContext(), 0, scripts);
+            this.scripts = scripts;
         }
 
         @NonNull
@@ -500,16 +551,24 @@ public class WaveletsFragment extends Fragment {
             }
             TextView nameView = view.findViewById(R.id.script_name);
             ImageButton editButton = view.findViewById(R.id.script_edit_button);
-            UserFileMetadata metadata = getItem(position);
-            if (metadata != null) {
-                nameView.setText(metadata.getName());
-                editButton.setOnClickListener(v -> {
-                    v.setPressed(false);
-                    showScriptEditorDialog(metadata);
-                });
+            ScriptMetadata scriptMetadata = getItem(position);
+            if (scriptMetadata != null) {
+                nameView.setText(scriptMetadata.getName());
+                // Asset scripts are read-only, so hide edit button
+                if (scriptMetadata.isAssetScript()) {
+                    editButton.setVisibility(View.GONE);
+                } else {
+                    editButton.setVisibility(View.VISIBLE);
+                    editButton.setEnabled(true);
+                    editButton.setAlpha(1.0f);
+                    editButton.setOnClickListener(v -> {
+                        v.setPressed(false);
+                        showScriptEditorDialog(scriptMetadata);
+                    });
+                }
             } else {
                 nameView.setText("-");
-                editButton.setOnClickListener(null);
+                editButton.setVisibility(View.GONE);
             }
             return view;
         }
@@ -519,27 +578,50 @@ public class WaveletsFragment extends Fragment {
         if (fileRepository == null) {
             return;
         }
+        // Always load asset scripts first
+        loadAssetScripts();
+        
+        // Then load custom scripts from storage
         fileRepository.listFiles(SCRIPT_EXTENSION, new RepositoryCallback<List<UserFileMetadata>>() {
             @Override
             public void onSuccess(List<UserFileMetadata> value) {
                 if (!isAdded()) {
                     return;
                 }
-                scriptFiles.clear();
+                
+                // Clear and populate custom scripts list
+                customScripts.clear();
+                
+                // Add custom scripts (exclude any that match asset script names)
+                List<String> assetNames = getAssetScriptNames();
                 if (value != null) {
-                    scriptFiles.addAll(value);
+                    for (UserFileMetadata metadata : value) {
+                        String name = metadata.getName().toLowerCase();
+                        // Skip if this is an asset script name (shouldn't be in storage, but check anyway)
+                        boolean isAssetName = false;
+                        for (String assetName : assetNames) {
+                            if (name.equals(assetName.toLowerCase())) {
+                                isAssetName = true;
+                                break;
+                            }
+                        }
+                        if (!isAssetName) {
+                            customScripts.add(new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM));
+                        }
+                    }
                 }
                 
                 // Migrate CC1101 scripts to RFM69
                 migrateCC1101ToRFM69();
                 
-                if (scriptFiles.isEmpty()) {
-                    loadDefaultWaveletsFromAssets();
-                } else {
-                    Collections.sort(scriptFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
-                    refreshScriptList();
-                    primeScriptCache(new ArrayList<>(scriptFiles), WaveletsFragment.this::handlePostListLoad);
-                }
+                // Sort custom scripts alphabetically
+                Collections.sort(customScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+                
+                refreshScriptList();
+                List<ScriptMetadata> allScripts = new ArrayList<>();
+                allScripts.addAll(assetScripts);
+                allScripts.addAll(customScripts);
+                primeScriptCache(allScripts, WaveletsFragment.this::handlePostListLoad);
             }
 
             @Override
@@ -553,13 +635,75 @@ public class WaveletsFragment extends Fragment {
         });
     }
     
-    private void migrateCC1101ToRFM69() {
-        if (fileRepository == null || scriptFiles.isEmpty()) {
+    private List<String> getAssetScriptNames() {
+        List<String> names = new ArrayList<>();
+        String[] defaultWavelets = {
+            "rfm69.js",
+            "rfm69_radio_console.js",
+            "rfm69_radio_module.js",
+            "hello_world_usb.js",
+            "wavelet_console_demo.js",
+            "wavelet_demo.js",
+            "wavelet_gpio.js",
+            "wavelet_rfid.js"
+        };
+        for (String filename : defaultWavelets) {
+            names.add(filename);
+        }
+        return names;
+    }
+    
+    private void loadAssetScripts() {
+        if (!isAdded()) {
             return;
         }
         
-        List<UserFileMetadata> toDelete = new ArrayList<>();
-        for (UserFileMetadata script : scriptFiles) {
+        assetScripts.clear(); // Clear existing asset scripts
+        
+        String[] assetScriptFiles = {
+            "rfm69.js",
+            "rfm69_radio_console.js",
+            "rfm69_radio_module.js",
+            "hello_world_usb.js",
+            "wavelet_console_demo.js",
+            "wavelet_demo.js",
+            "wavelet_gpio.js",
+            "wavelet_rfid.js"
+        };
+        
+        for (String filename : assetScriptFiles) {
+            try {
+                InputStream is = requireContext().getAssets().open(filename);
+                is.close(); // Just check if it exists
+                
+                String name = filename.replace(".js", "");
+                String id = "__asset__" + filename; // Special ID prefix for asset scripts
+                UserFileMetadata metadata = new UserFileMetadata(
+                    id,
+                    name,
+                    ".js",
+                    "file",
+                    "asset", // Special etag for assets
+                    0,
+                    "text/javascript"
+                );
+                assetScripts.add(new ScriptMetadata(metadata, ScriptMetadata.SourceType.ASSET));
+            } catch (IOException e) {
+                Log.w(TAG, "Asset script not found: " + filename, e);
+            }
+        }
+        
+        // Sort asset scripts alphabetically
+        Collections.sort(assetScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+    }
+    
+    private void migrateCC1101ToRFM69() {
+        if (fileRepository == null || customScripts.isEmpty()) {
+            return;
+        }
+        
+        List<ScriptMetadata> toDelete = new ArrayList<>();
+        for (ScriptMetadata script : customScripts) {
             String name = script.getName().toLowerCase();
             if (name.equals("cc1101") || name.equals("cc1101_radio_console") || name.equals("cc1101_radio_module")) {
                 toDelete.add(script);
@@ -571,8 +715,8 @@ public class WaveletsFragment extends Fragment {
         }
         
         // Remove CC1101 scripts from the list synchronously
-        for (UserFileMetadata script : toDelete) {
-            scriptFiles.remove(script);
+        for (ScriptMetadata script : toDelete) {
+            customScripts.remove(script);
             if (viewModel != null) {
                 viewModel.removeRecord(script.getId());
             }
@@ -591,94 +735,17 @@ public class WaveletsFragment extends Fragment {
         }
     }
     
-    private void loadDefaultWaveletsFromAssets() {
-        if (!isAdded()) {
-            return;
-        }
-        
-        String[] defaultWavelets = {
-            "rfm69.js",
-            "rfm69_radio_console.js",
-            "rfm69_radio_module.js",
-            "hello_world_usb.js",
-            "wavelet_console_demo.js",
-            "wavelet_demo.js",
-            "wavelet_gpio.js",
-            "wavelet_rfid.js"
-        };
-        
-        AtomicInteger remaining = new AtomicInteger(defaultWavelets.length);
-        AtomicInteger successCount = new AtomicInteger(0);
-        
-        for (String filename : defaultWavelets) {
-            try {
-                InputStream is = requireContext().getAssets().open(filename);
-                String content = readTextFromInputStream(is);
-                is.close();
-                
-                String name = filename.replace(".js", "");
-                createScriptInBackground(name, content, () -> {
-                    successCount.incrementAndGet();
-                    if (remaining.decrementAndGet() == 0) {
-                        onDefaultWaveletsLoaded(successCount.get());
-                    }
-                }, () -> {
-                    if (remaining.decrementAndGet() == 0) {
-                        onDefaultWaveletsLoaded(successCount.get());
-                    }
-                });
-            } catch (IOException e) {
-                Log.w(TAG, "Could not load default wavelet: " + filename, e);
-                if (remaining.decrementAndGet() == 0) {
-                    onDefaultWaveletsLoaded(successCount.get());
-                }
-            }
-        }
-    }
-    
-    private void onDefaultWaveletsLoaded(int count) {
-        if (!isAdded()) {
-            return;
-        }
-        requireActivity().runOnUiThread(() -> {
-            if (count > 0) {
-                showToast("Loaded " + count + " default wavelets");
-            }
-            loadScriptsFromCloud();
-        });
-    }
-    
-    private void createScriptInBackground(String name, String content, Runnable onSuccess, Runnable onError) {
-        if (fileRepository == null) {
-            if (onError != null) {
-                onError.run();
-            }
-            return;
-        }
-        fileRepository.createTextFile(normalizeScriptName(name), content, new RepositoryCallback<UserFileMetadata>() {
-            @Override
-            public void onSuccess(UserFileMetadata metadata) {
-                Log.d(TAG, "Created default wavelet: " + name);
-                if (onSuccess != null) {
-                    onSuccess.run();
-                }
-            }
 
-            @Override
-            public void onError(String message) {
-                Log.w(TAG, "Failed to create default wavelet " + name + ": " + message);
-                if (onError != null) {
-                    onError.run();
-                }
-            }
-        });
+    private void renameScript(ScriptMetadata scriptMetadata, String newName) {
+        renameScript(scriptMetadata, newName, null);
     }
 
-    private void renameScript(UserFileMetadata metadata, String newName) {
-        renameScript(metadata, newName, null);
-    }
-
-    private void renameScript(UserFileMetadata metadata, String newName, @Nullable Consumer<UserFileMetadata> onSuccess) {
+    private void renameScript(ScriptMetadata scriptMetadata, String newName, @Nullable Consumer<ScriptMetadata> onSuccess) {
+        if (scriptMetadata.isAssetScript()) {
+            showToast("Asset scripts cannot be renamed");
+            return;
+        }
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
         if (fileRepository == null) {
             return;
         }
@@ -689,9 +756,10 @@ public class WaveletsFragment extends Fragment {
                 if (!isAdded()) {
                     return;
                 }
-                addOrReplaceMetadata(updated);
+                ScriptMetadata updatedScriptMetadata = new ScriptMetadata(updated, ScriptMetadata.SourceType.CUSTOM);
+                addOrReplaceMetadata(updatedScriptMetadata);
                 if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(updated.getId())) {
-                    currentScriptMetadata = updated;
+                    currentScriptMetadata = updatedScriptMetadata;
                     currentScriptName = updated.getName();
                     currentScriptEtag = updated.getEtag();
                 }
@@ -709,7 +777,7 @@ public class WaveletsFragment extends Fragment {
                     }
                 }
                 if (onSuccess != null) {
-                    onSuccess.accept(updated);
+                    onSuccess.accept(updatedScriptMetadata);
                 }
                 showToast("Script renamed to: " + updated.getName());
             }
@@ -729,7 +797,11 @@ public class WaveletsFragment extends Fragment {
             return;
         }
 
-        if (scriptFiles.isEmpty()) {
+        List<ScriptMetadata> allScripts = new ArrayList<>();
+        allScripts.addAll(assetScripts);
+        allScripts.addAll(customScripts);
+
+        if (allScripts.isEmpty()) {
             if (binding != null) {
                 String content = null;
                 boolean dirty = false;
@@ -749,7 +821,7 @@ public class WaveletsFragment extends Fragment {
             return;
         }
 
-        UserFileMetadata target = null;
+        ScriptMetadata target = null;
         if (currentScriptMetadata != null) {
             target = findScriptById(currentScriptMetadata.getId());
         }
@@ -759,51 +831,70 @@ public class WaveletsFragment extends Fragment {
                 target = findScriptById(lastId);
             }
         }
-        if (target == null) {
-            target = scriptFiles.get(0);
+        if (target == null && !allScripts.isEmpty()) {
+            target = allScripts.get(0);
         }
         if (target != null) {
             loadScript(target);
         }
     }
 
-    private UserFileMetadata findScriptById(String id) {
+    private ScriptMetadata findScriptById(String id) {
         if (id == null) {
             return null;
         }
-        for (UserFileMetadata metadata : scriptFiles) {
-            if (metadata != null && TextUtils.equals(id, metadata.getId())) {
-                return metadata;
+        // Check asset scripts first
+        for (ScriptMetadata scriptMetadata : assetScripts) {
+            if (scriptMetadata != null && TextUtils.equals(id, scriptMetadata.getId())) {
+                return scriptMetadata;
+            }
+        }
+        // Then check custom scripts
+        for (ScriptMetadata scriptMetadata : customScripts) {
+            if (scriptMetadata != null && TextUtils.equals(id, scriptMetadata.getId())) {
+                return scriptMetadata;
             }
         }
         return null;
     }
 
-    private void addOrReplaceMetadata(UserFileMetadata metadata) {
-        if (metadata == null) {
+    private void addOrReplaceMetadata(ScriptMetadata scriptMetadata) {
+        if (scriptMetadata == null) {
             return;
         }
+        List<ScriptMetadata> targetList = scriptMetadata.isAssetScript() ? assetScripts : customScripts;
         boolean replaced = false;
-        for (int i = 0; i < scriptFiles.size(); i++) {
-            UserFileMetadata existing = scriptFiles.get(i);
-            if (existing != null && TextUtils.equals(existing.getId(), metadata.getId())) {
-                scriptFiles.set(i, metadata);
+        for (int i = 0; i < targetList.size(); i++) {
+            ScriptMetadata existing = targetList.get(i);
+            if (existing != null && TextUtils.equals(existing.getId(), scriptMetadata.getId())) {
+                targetList.set(i, scriptMetadata);
                 replaced = true;
                 break;
             }
         }
         if (!replaced) {
-            scriptFiles.add(metadata);
+            targetList.add(scriptMetadata);
+            // Sort the target list
+            Collections.sort(targetList, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
         }
-        Collections.sort(scriptFiles, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
         refreshScriptList();
     }
 
     private void removeMetadataById(String id) {
-        for (int i = 0; i < scriptFiles.size(); i++) {
-            if (scriptFiles.get(i).getId().equals(id)) {
-                scriptFiles.remove(i);
-                break;
+        // Try to remove from custom scripts first (asset scripts shouldn't be removed)
+        for (int i = 0; i < customScripts.size(); i++) {
+            if (customScripts.get(i).getId().equals(id)) {
+                customScripts.remove(i);
+                refreshScriptList();
+                return;
+            }
+        }
+        // Also check asset scripts (shouldn't happen, but be safe)
+        for (int i = 0; i < assetScripts.size(); i++) {
+            if (assetScripts.get(i).getId().equals(id)) {
+                assetScripts.remove(i);
+                refreshScriptList();
+                return;
             }
         }
     }
@@ -812,8 +903,9 @@ public class WaveletsFragment extends Fragment {
         if (binding == null) {
             return;
         }
-        addOrReplaceMetadata(metadata);
-        currentScriptMetadata = metadata;
+        ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
+        addOrReplaceMetadata(scriptMetadata);
+        currentScriptMetadata = scriptMetadata;
         currentScriptName = metadata.getName();
         currentScriptEtag = metadata.getEtag();
         setEditorText(content);
@@ -825,19 +917,28 @@ public class WaveletsFragment extends Fragment {
             viewModel.setLastScriptName(metadata.getName());
             viewModel.setLastScriptContent(content);
         }
-        showScriptEditorDialog(metadata);
+        showScriptEditorDialog(scriptMetadata);
     }
 
-    private void loadScript(UserFileMetadata metadata) {
-        if (!isAdded() || metadata == null) {
+    private void loadScript(ScriptMetadata scriptMetadata) {
+        if (!isAdded() || scriptMetadata == null) {
             return;
         }
 
-        currentScriptMetadata = metadata;
+        currentScriptMetadata = scriptMetadata;
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
         currentScriptName = metadata.getName();
         currentScriptEtag = metadata.getEtag();
 
         final String scriptId = metadata.getId();
+        
+        // Handle asset scripts differently - load directly from assets
+        if (scriptMetadata.isAssetScript()) {
+            loadAssetScriptContent(scriptMetadata);
+            return;
+        }
+
+        // Custom scripts load from storage
         final boolean hasRepository = fileRepository != null;
 
         boolean needsFetch = true;
@@ -928,6 +1029,39 @@ public class WaveletsFragment extends Fragment {
             }
         });
     }
+    
+    private void loadAssetScriptContent(ScriptMetadata scriptMetadata) {
+        if (!isAdded() || scriptMetadata == null || !scriptMetadata.isAssetScript()) {
+            return;
+        }
+        
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
+        String scriptId = metadata.getId();
+        String filename = metadata.getName() + ".js";
+        
+        try {
+            InputStream is = requireContext().getAssets().open(filename);
+            String content = readTextFromInputStream(is);
+            is.close();
+            
+            // Asset scripts are always clean (not dirty)
+            if (viewModel != null) {
+                viewModel.updateDraft(scriptId, metadata.getName(), content, false);
+                viewModel.setLastScriptId(scriptId);
+                viewModel.setLastScriptName(metadata.getName());
+                viewModel.setLastScriptContent(content);
+            }
+            setEditorText(content);
+            updateDraftState(content, false);
+            completePendingPreview(scriptId);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to load asset script: " + filename, e);
+            if (TextUtils.equals(pendingPreviewScriptId, scriptId)) {
+                pendingPreviewScriptId = null;
+            }
+            showToast("Failed to load asset script: " + filename);
+        }
+    }
 
     private void createNewScript(String name) {
         createScriptWithContent(name, buildNewScriptTemplate(), "Script created: ");
@@ -965,6 +1099,27 @@ public class WaveletsFragment extends Fragment {
             showToast("No script to copy");
             return;
         }
+        
+        // For asset scripts, copy content to a new custom script
+        if (currentScriptMetadata.isAssetScript()) {
+            String content = getEditorText();
+            if (content == null || content.trim().isEmpty()) {
+                // Load asset content
+                try {
+                    String filename = currentScriptMetadata.getName() + ".js";
+                    InputStream is = requireContext().getAssets().open(filename);
+                    content = readTextFromInputStream(is);
+                    is.close();
+                } catch (IOException e) {
+                    showToast("Failed to read asset script content");
+                    return;
+                }
+            }
+            createScriptWithContent(name, content, "Script copied: ");
+            return;
+        }
+        
+        // For custom scripts, use file repository copy
         final String normalizedName = normalizeScriptName(name);
         fileRepository.copyFile(currentScriptMetadata.getId(), normalizedName, new RepositoryCallback<UserFileMetadata>() {
             @Override
@@ -972,8 +1127,9 @@ public class WaveletsFragment extends Fragment {
                 if (!isAdded()) {
                     return;
                 }
-                addOrReplaceMetadata(metadata);
-                showScriptEditorDialog(metadata);
+                ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
+                addOrReplaceMetadata(scriptMetadata);
+                showScriptEditorDialog(scriptMetadata);
                 showToast("Script copied: " + metadata.getName());
             }
 
@@ -1000,6 +1156,13 @@ public class WaveletsFragment extends Fragment {
             );
             return;
         }
+        
+        // Asset scripts cannot be saved (they're read-only)
+        if (currentScriptMetadata.isAssetScript()) {
+            showToast("Asset scripts cannot be modified. Create a copy to edit.");
+            return;
+        }
+        
         if (!isCurrentScriptDirty()) {
             showToast("No changes to save");
             return;
@@ -1016,8 +1179,9 @@ public class WaveletsFragment extends Fragment {
                 if (!isAdded()) {
                     return;
                 }
-                addOrReplaceMetadata(metadata);
-                currentScriptMetadata = metadata;
+                ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
+                addOrReplaceMetadata(scriptMetadata);
+                currentScriptMetadata = scriptMetadata;
                 currentScriptName = metadata.getName();
                 currentScriptEtag = metadata.getEtag();
                 updateDraftState(content, false);
@@ -1040,7 +1204,13 @@ public class WaveletsFragment extends Fragment {
         });
     }
 
-    private void showScriptOptionsDialog(UserFileMetadata metadata) {
+    private void showScriptOptionsDialog(ScriptMetadata scriptMetadata) {
+        if (scriptMetadata.isAssetScript()) {
+            showToast("Asset scripts cannot be modified");
+            return;
+        }
+        
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
         builder.setTitle("Rename Script");
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_rename_script, null);
@@ -1061,12 +1231,12 @@ public class WaveletsFragment extends Fragment {
                 input.setError("Script name cannot be empty");
                 return;
             }
-            renameScript(metadata, newName);
+            renameScript(scriptMetadata, newName);
             dialog.dismiss();
         });
 
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-            showDeleteConfirmationDialog(metadata);
+            showDeleteConfirmationDialog(scriptMetadata);
             dialog.dismiss();
         });
     }
@@ -1079,18 +1249,20 @@ public class WaveletsFragment extends Fragment {
         updateViewMode();
     }
 
-    private void showScriptEditorDialog(@Nullable UserFileMetadata metadata) {
+    private void showScriptEditorDialog(@Nullable ScriptMetadata scriptMetadata) {
         if (!isAdded()) {
             return;
         }
         
         showingEditor = true;
         pendingPreviewScriptId = null;
+        
+        UserFileMetadata metadata = scriptMetadata != null ? scriptMetadata.getMetadata() : null;
         final String scriptId = metadata != null ? metadata.getId() : WaveletsViewModel.UNSAVED_KEY;
         final String scriptName = metadata != null ? metadata.getName() : (currentScriptName != null ? currentScriptName : "Unsaved Script");
 
-        if (metadata != null) {
-            currentScriptMetadata = metadata;
+        if (scriptMetadata != null) {
+            currentScriptMetadata = scriptMetadata;
             currentScriptName = metadata.getName();
             currentScriptEtag = metadata.getEtag();
         } else {
@@ -1101,7 +1273,20 @@ public class WaveletsFragment extends Fragment {
 
         String content = null;
         boolean dirty = false;
-        if (viewModel != null) {
+        
+        // For asset scripts, load directly from assets
+        if (scriptMetadata != null && scriptMetadata.isAssetScript()) {
+            String filename = metadata.getName() + ".js";
+            try {
+                InputStream is = requireContext().getAssets().open(filename);
+                content = readTextFromInputStream(is);
+                is.close();
+                dirty = false; // Asset scripts are never dirty
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to load asset script for editor: " + filename, e);
+                content = "";
+            }
+        } else if (viewModel != null) {
             content = viewModel.getDraftContent(scriptId);
             dirty = viewModel.isDirty(scriptId);
             if (content == null) {
@@ -1112,7 +1297,8 @@ public class WaveletsFragment extends Fragment {
             content = metadata != null ? "" : buildNewScriptTemplate();
         }
 
-        if (metadata != null && viewModel != null && TextUtils.isEmpty(viewModel.getRemoteEtag(scriptId)) && fileRepository != null) {
+        // For custom scripts, load from storage if needed
+        if (scriptMetadata != null && scriptMetadata.isCustomScript() && viewModel != null && TextUtils.isEmpty(viewModel.getRemoteEtag(scriptId)) && fileRepository != null) {
             showLoadingDialog("Loading script...");
             fileRepository.getFile(scriptId, new RepositoryCallback<UserFileData>() {
                 @Override
@@ -1127,7 +1313,7 @@ public class WaveletsFragment extends Fragment {
                         viewModel.updateDraft(scriptId, scriptName, remoteContent, false);
                     }
                     setEditorText(remoteContent);
-                    showScriptEditorDialog(metadata);
+                    showScriptEditorDialog(scriptMetadata);
                 }
 
                 @Override
@@ -1161,14 +1347,19 @@ public class WaveletsFragment extends Fragment {
         updateViewMode();
     }
 
-    private void showDeleteConfirmationDialog(UserFileMetadata metadata) {
-        if (!isAdded() || metadata == null) {
+    private void showDeleteConfirmationDialog(ScriptMetadata scriptMetadata) {
+        if (!isAdded() || scriptMetadata == null) {
             return;
         }
+        if (scriptMetadata.isAssetScript()) {
+            showToast("Asset scripts cannot be deleted");
+            return;
+        }
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
         new AlertDialog.Builder(requireContext())
             .setTitle("Delete Script")
             .setMessage("Are you sure you want to delete " + metadata.getName() + "?")
-            .setPositiveButton("Delete", (dialog, which) -> deleteScript(metadata))
+            .setPositiveButton("Delete", (dialog, which) -> deleteScript(scriptMetadata))
             .setNegativeButton("Cancel", null)
             .show();
     }
@@ -1178,9 +1369,9 @@ public class WaveletsFragment extends Fragment {
             return;
         }
         new AlertDialog.Builder(requireContext())
-            .setTitle("Reset to Default Scripts")
-            .setMessage("This will delete ALL scripts from internal storage and restore default scripts. This action cannot be undone.\n\nAre you sure you want to continue?")
-            .setPositiveButton("Reset", (dialog, which) -> resetToDefaults())
+            .setTitle("Delete Custom Scripts")
+            .setMessage("This will delete ALL custom scripts from internal storage. Asset scripts (hard-coded defaults) will remain unchanged. This action cannot be undone.\n\nAre you sure you want to continue?")
+            .setPositiveButton("Delete", (dialog, which) -> resetToDefaults())
             .setNegativeButton("Cancel", null)
             .show();
     }
@@ -1191,31 +1382,32 @@ public class WaveletsFragment extends Fragment {
             return;
         }
         
-        if (scriptFiles.isEmpty()) {
-            // No scripts to delete, just load defaults
-            loadDefaultWaveletsFromAssets();
+        if (customScripts.isEmpty()) {
+            // No custom scripts to delete
+            showToast("No custom scripts to delete");
             return;
         }
         
-        showLoadingDialog("Resetting to defaults...");
+        showLoadingDialog("Deleting custom scripts...");
         
-        // Delete all scripts
-        AtomicInteger remaining = new AtomicInteger(scriptFiles.size());
+        // Delete all custom scripts
+        List<ScriptMetadata> scriptsToDelete = new ArrayList<>(customScripts);
+        AtomicInteger remaining = new AtomicInteger(scriptsToDelete.size());
         AtomicInteger successCount = new AtomicInteger(0);
         
-        for (UserFileMetadata script : new ArrayList<>(scriptFiles)) {
+        for (ScriptMetadata script : scriptsToDelete) {
             fileRepository.deleteFile(script.getId(), script.getEtag(), new RepositoryCallback<Void>() {
                 @Override
                 public void onSuccess(Void value) {
-                    scriptFiles.remove(script);
+                    customScripts.remove(script);
                     if (viewModel != null) {
                         viewModel.removeRecord(script.getId());
                     }
                     successCount.incrementAndGet();
                     if (remaining.decrementAndGet() == 0) {
-                        // All scripts deleted, now load defaults
+                        // All custom scripts deleted
                         hideLoadingDialog();
-                        scriptFiles.clear();
+                        refreshScriptList();
                         if (viewModel != null) {
                             viewModel.clearAll();
                         }
@@ -1223,7 +1415,7 @@ public class WaveletsFragment extends Fragment {
                         currentScriptName = null;
                         currentScriptEtag = null;
                         setEditorText("");
-                        loadDefaultWaveletsFromAssets();
+                        showToast("Deleted " + successCount.get() + " custom script(s)");
                     }
                 }
                 
@@ -1232,8 +1424,7 @@ public class WaveletsFragment extends Fragment {
                     Log.w(TAG, "Failed to delete script during reset: " + script.getName());
                     if (remaining.decrementAndGet() == 0) {
                         hideLoadingDialog();
-                        // Still load defaults even if some deletions failed
-                        scriptFiles.clear();
+                        refreshScriptList();
                         if (viewModel != null) {
                             viewModel.clearAll();
                         }
@@ -1241,17 +1432,22 @@ public class WaveletsFragment extends Fragment {
                         currentScriptName = null;
                         currentScriptEtag = null;
                         setEditorText("");
-                        loadDefaultWaveletsFromAssets();
+                        showToast("Deleted " + successCount.get() + " custom script(s)");
                     }
                 }
             });
         }
     }
 
-    private void deleteScript(UserFileMetadata metadata) {
-        if (fileRepository == null || metadata == null) {
+    private void deleteScript(ScriptMetadata scriptMetadata) {
+        if (fileRepository == null || scriptMetadata == null) {
             return;
         }
+        if (scriptMetadata.isAssetScript()) {
+            showToast("Asset scripts cannot be deleted");
+            return;
+        }
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
         showLoadingDialog("Deleting script...");
         fileRepository.deleteFile(metadata.getId(), metadata.getEtag(), new RepositoryCallback<Void>() {
             @Override
@@ -1293,18 +1489,37 @@ public class WaveletsFragment extends Fragment {
         });
     }
 
-    private void primeScriptCache(List<UserFileMetadata> metadataList, @Nullable Runnable completion) {
+    private void primeScriptCache(List<ScriptMetadata> metadataList, @Nullable Runnable completion) {
         if (!isAdded() || viewModel == null || fileRepository == null || metadataList == null || metadataList.isEmpty()) {
             if (completion != null) {
                 runOnUiThreadSafe(completion);
             }
             return;
         }
+        
+        // Load asset scripts into cache
+        for (ScriptMetadata scriptMetadata : metadataList) {
+            if (scriptMetadata != null && scriptMetadata.isAssetScript()) {
+                try {
+                    String filename = scriptMetadata.getName() + ".js";
+                    InputStream is = requireContext().getAssets().open(filename);
+                    String content = readTextFromInputStream(is);
+                    is.close();
+                    String scriptId = scriptMetadata.getId();
+                    viewModel.updateDraft(scriptId, scriptMetadata.getName(), content, false);
+                } catch (IOException e) {
+                    Log.w(TAG, "Failed to cache asset script: " + scriptMetadata.getName(), e);
+                }
+            }
+        }
+        
+        // Check if custom scripts need refresh
         boolean needsRefresh = false;
-        for (UserFileMetadata metadata : metadataList) {
-            if (metadata == null || TextUtils.isEmpty(metadata.getId())) {
+        for (ScriptMetadata scriptMetadata : metadataList) {
+            if (scriptMetadata == null || scriptMetadata.isAssetScript() || TextUtils.isEmpty(scriptMetadata.getId())) {
                 continue;
             }
+            UserFileMetadata metadata = scriptMetadata.getMetadata();
             String cachedEtag = viewModel.getRemoteEtag(metadata.getId());
             String cachedContent = viewModel.getRemoteContent(metadata.getId());
             if (TextUtils.isEmpty(cachedEtag) || cachedContent == null || !TextUtils.equals(cachedEtag, metadata.getEtag())) {
@@ -1367,10 +1582,8 @@ public class WaveletsFragment extends Fragment {
     }
 
     private void setupCollapsibleSections() {
-        if (scriptListCard != null) {
-            scriptListCard.setVisibility(View.VISIBLE);
-        }
-
+        // Asset and custom scripts sections are set up in setupScriptList()
+        
         if (consoleTitle != null && consoleCard != null) {
             // Only allow collapsing/expanding when previewing
             consoleTitle.setOnClickListener(v -> {
@@ -1524,9 +1737,17 @@ public class WaveletsFragment extends Fragment {
             backPressedCallback.setEnabled(hideMainView);
         }
         
-        if (scriptListCard != null) {
-            scriptListCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
-            Log.d(TAG, "updateViewMode: scriptListCard visibility = " + (hideMainView ? "GONE" : "VISIBLE"));
+        if (assetScriptsTitle != null) {
+            assetScriptsTitle.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
+        }
+        if (assetScriptsCard != null) {
+            assetScriptsCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
+        }
+        if (customScriptsTitle != null) {
+            customScriptsTitle.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
+        }
+        if (customScriptsCard != null) {
+            customScriptsCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
         }
         binding.waveletContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         scriptEditorContainer.setVisibility(showingEditor ? View.VISIBLE : View.GONE);
@@ -2114,12 +2335,13 @@ public class WaveletsFragment extends Fragment {
                 if (!isAdded()) {
                     return;
                 }
-                addOrReplaceMetadata(metadata);
+                ScriptMetadata updatedScriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
+                addOrReplaceMetadata(updatedScriptMetadata);
                 viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), change.after);
                 viewModel.markClean(metadata.getId(), change.after, metadata.getEtag());
                 viewModel.updateDraft(metadata.getId(), metadata.getName(), change.after, false);
                 if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(metadata.getId())) {
-                    currentScriptMetadata = metadata;
+                    currentScriptMetadata = updatedScriptMetadata;
                     currentScriptName = metadata.getName();
                     currentScriptEtag = metadata.getEtag();
                     setEditorText(change.after);
@@ -2149,7 +2371,8 @@ public class WaveletsFragment extends Fragment {
             }
             UserFileData data = dataMap.get(metadata.getId());
             String content = data != null && data.hasTextContent() ? data.getTextContent() : "";
-            addOrReplaceMetadata(metadata);
+            ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
+            addOrReplaceMetadata(scriptMetadata);
             viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), content);
             viewModel.markClean(metadata.getId(), content, metadata.getEtag());
         }
@@ -2166,11 +2389,12 @@ public class WaveletsFragment extends Fragment {
             }
             UserFileData data = dataMap.get(metadata.getId());
             String content = data != null && data.hasTextContent() ? data.getTextContent() : safe(change.after);
-            addOrReplaceMetadata(metadata);
+            ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
+            addOrReplaceMetadata(scriptMetadata);
             viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), content);
             viewModel.markClean(metadata.getId(), content, metadata.getEtag());
             if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(metadata.getId())) {
-                currentScriptMetadata = metadata;
+                currentScriptMetadata = scriptMetadata;
                 currentScriptName = metadata.getName();
                 currentScriptEtag = metadata.getEtag();
                 setEditorText(content);
@@ -2193,8 +2417,12 @@ public class WaveletsFragment extends Fragment {
                 currentScriptEtag = null;
                 setEditorText("");
                 updateDraftState("", false);
-                if (!scriptFiles.isEmpty()) {
-                    loadScript(scriptFiles.get(0));
+                // Try to load another script if available
+                List<ScriptMetadata> allScripts = new ArrayList<>();
+                allScripts.addAll(assetScripts);
+                allScripts.addAll(customScripts);
+                if (!allScripts.isEmpty()) {
+                    loadScript(allScripts.get(0));
                 }
             }
         }
