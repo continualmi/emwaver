@@ -1064,7 +1064,15 @@ public class IsmFragment extends Fragment {
         boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", false);
 
         String cmd = "rfm69 init --cs=" + csPin + " --cs_active_high=" + (csActiveHigh ? "1" : "0");
-        byte[] resp = sendCommand(cmd, 1000);
+        // First init right after connect can be slow; use a longer timeout and retry once.
+        byte[] resp = sendCommand(cmd, 2000);
+        if (resp == null || resp.length == 0) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ignored) {
+            }
+            resp = sendCommand(cmd, 2000);
+        }
 
         if (resp == null || resp.length == 0) {
             Log.e("IsmFragment", "rfm69 init failed: empty response (timeout?)");
