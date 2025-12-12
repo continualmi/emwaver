@@ -1,10 +1,10 @@
 {
   "title": "ISM_WAVER_V2",
   "displayTitle": "ISM Waver v2",
-  "status": "module",
-  "featured": true,
+  "group": "stm32",
   "description": "ISM band expansion board (description coming soon).",
-  "tags": ["ISM", "module"],
+  "tags": ["ISM"],
+  "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",
   "githubUrl": "",
   "schematicUrl": ""

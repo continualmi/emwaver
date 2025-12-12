@@ -1,10 +1,12 @@
 {
   "title": "RFID_WAVER",
   "displayTitle": "RFID Waver",
+  "group": "module",
+  "parent": "GPIO_WAVER_V3",
   "status": "module",
-  "featured": true,
   "description": "RFID expansion board (description coming soon).",
   "tags": ["RFID", "module"],
+  "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",
   "githubUrl": "",
   "schematicUrl": ""

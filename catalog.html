@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EMWaver Hardware Catalog</title>
+    <meta name="description" content="Complete EMWaver hardware list, grouped by platform." />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: { sans: ["Inter", "sans-serif"] },
+            colors: {
+              brand: { 400: "#38bdf8", 500: "#0ea5e9", 600: "#0284c7" },
+              dark: { 950: "#070b16", 900: "#0b1224", 850: "#101a33", 800: "#131f3c", 700: "#1e2b50" },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.22), transparent 60%),
+          radial-gradient(900px 700px at 90% 15%, rgba(56, 189, 248, 0.14), transparent 55%),
+          linear-gradient(180deg, #070b16 0%, #0b1224 50%, #070b16 100%);
+        color: #e2e8f0;
+      }
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.05;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+      }
+    </style>
+  </head>
+
+  <body class="antialiased selection:bg-brand-500 selection:text-white">
+    <div class="noise"></div>
+
+    <nav class="fixed top-0 w-full z-50 bg-dark-900/75 backdrop-blur-md border-b border-dark-700">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center gap-3">
+            <a
+              href="hardware.html"
+              class="text-xl font-bold tracking-tight text-white hover:text-brand-500 transition"
+            >
+              EMWaver
+            </a>
+            <span class="text-dark-700 hidden sm:inline">/</span>
+            <span class="text-sm font-medium text-gray-400 hidden sm:inline">Catalog</span>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <a href="hardware.html" class="text-sm font-medium text-gray-400 hover:text-white transition">Back</a>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <header class="pt-28 pb-8">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 class="text-4xl font-bold text-white">Full Hardware Catalog</h1>
+        <p class="mt-3 text-lg text-gray-400 max-w-3xl">
+          Complete list of devices, grouped by platform. Click an entry to open its page.
+        </p>
+      </div>
+    </header>
+
+    <main class="pb-20">
+      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-3">
+            <div class="rounded-2xl border border-dark-700 bg-dark-850/40 p-4 sticky top-24">
+              <div class="text-sm font-semibold text-white">Sections</div>
+              <div class="mt-3 space-y-2 text-sm">
+                <a class="block px-3 py-2 rounded-xl hover:bg-dark-800/60 border border-transparent hover:border-dark-700 transition" href="#esp32"
+                  >ESP32-based</a
+                >
+                <a class="block px-3 py-2 rounded-xl hover:bg-dark-800/60 border border-transparent hover:border-dark-700 transition" href="#stm32"
+                  >STM32-based</a
+                >
+                <a class="block px-3 py-2 rounded-xl hover:bg-dark-800/60 border border-transparent hover:border-dark-700 transition" href="#modules"
+                  >Modules</a
+                >
+              </div>
+              <div class="mt-4 text-xs text-gray-500" id="count-pill">…</div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-9 space-y-10">
+            <section id="esp32">
+              <h2 class="text-2xl font-bold text-white">ESP32-based</h2>
+              <p class="text-sm text-gray-500 mt-1">Android, iOS, and desktop support.</p>
+              <div class="mt-5 space-y-4" id="list-esp32"></div>
+            </section>
+
+            <section id="stm32">
+              <h2 class="text-2xl font-bold text-white">STM32-based</h2>
+              <p class="text-sm text-gray-500 mt-1">Typically USB comms: Android + desktop.</p>
+              <div class="mt-5 space-y-4" id="list-stm32"></div>
+            </section>
+
+            <section id="modules">
+              <h2 class="text-2xl font-bold text-white">Modules</h2>
+              <p class="text-sm text-gray-500 mt-1">Add-ons; may require a parent board.</p>
+              <div class="mt-5 space-y-4" id="list-modules"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const MANIFEST_URL = "hardware/devices.json";
+
+      const el = {
+        countPill: document.getElementById("count-pill"),
+        listEsp32: document.getElementById("list-esp32"),
+        listStm32: document.getElementById("list-stm32"),
+        listModules: document.getElementById("list-modules"),
+      };
+
+      function prettyTitle(folderOrTitle) {
+        return String(folderOrTitle || "")
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function pill(text, className) {
+        return `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${className}">${text}</span>`;
+      }
+
+      function statusLabel(status) {
+        if (status !== "module") return null;
+        return { text: "Module", className: "text-cyan-300 bg-cyan-500/10 border-cyan-500/20" };
+      }
+
+      function supportPills(group, support) {
+        const normalized = Array.isArray(support) ? support : null;
+        const derived =
+          normalized ||
+          (group === "esp32"
+            ? ["android", "ios", "desktop"]
+            : group === "stm32" || group === "module"
+              ? ["android", "desktop"]
+              : []);
+
+        const map = {
+          android: pill("Android", "text-green-300 bg-green-500/10 border-green-500/20"),
+          ios: pill("iOS", "text-gray-200 bg-white/5 border-dark-700"),
+          desktop: pill("Desktop", "text-indigo-200 bg-indigo-500/10 border-indigo-500/20"),
+        };
+        return derived.filter((x) => map[x]).map((x) => map[x]).join("");
+      }
+
+      function rowHtml(device, lookup) {
+        const title = prettyTitle(device.displayTitle || device.title || device.folder);
+        const description = device.description || "Description coming soon.";
+        const badge = statusLabel(device.status);
+        const group = device.group || "";
+        const tags = Array.isArray(device.tags) ? device.tags.slice(0, 5) : [];
+        const parent = device.parent ? String(device.parent).trim() : "";
+        const parentTitle = parent && lookup[parent] ? prettyTitle(lookup[parent].displayTitle || lookup[parent].title || parent) : prettyTitle(parent);
+
+        return `
+          <div class="rounded-2xl border border-dark-700 bg-dark-850/40 hover:bg-dark-850/60 transition overflow-hidden">
+            <a href="device.html?id=${encodeURIComponent(device.folder)}" class="block group">
+              <div class="p-5">
+                <div class="flex flex-wrap items-center gap-2">
+                  ${
+                    badge
+                      ? `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${badge.className}">${badge.text}</span>`
+                      : ""
+                  }
+                  ${supportPills(group, device.appSupport)}
+                  ${
+                    parent
+                      ? `<span class="text-gray-500 text-xs">Requires</span>
+                         <span class="text-gray-300 text-xs font-semibold">${parentTitle}</span>`
+                      : ""
+                  }
+                </div>
+
+                <h3 class="mt-3 text-lg font-bold text-white group-hover:text-brand-500 transition">${title}</h3>
+                <p class="mt-2 text-sm text-gray-400 leading-relaxed">${description}</p>
+
+                ${
+                  tags.length
+                    ? `<div class="mt-4 flex flex-wrap gap-2">${tags
+                        .map(
+                          (t) =>
+                            `<span class="text-xs px-2.5 py-1 rounded-full border border-dark-700 bg-dark-800/40 text-gray-300">${t}</span>`
+                        )
+                        .join("")}</div>`
+                    : ""
+                }
+              </div>
+            </a>
+          </div>
+        `;
+      }
+
+      async function load() {
+        const res = await fetch(MANIFEST_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Failed manifest: ${res.status}`);
+        const folders = await res.json();
+        if (!Array.isArray(folders)) throw new Error("Manifest must be an array.");
+
+        const reads = folders.map(async (folder) => {
+          try {
+            const r = await fetch(`hardware/${folder}/device.json`, { cache: "no-store" });
+            const data = r.ok ? await r.json() : {};
+            return { folder, ...data };
+          } catch {
+            return { folder, title: folder };
+          }
+        });
+
+        const devices = await Promise.all(reads);
+        const lookup = Object.fromEntries(devices.map((d) => [d.folder, d]));
+        devices.sort((a, b) => prettyTitle(a.title || a.folder).localeCompare(prettyTitle(b.title || b.folder)));
+
+        el.countPill.textContent = `${devices.length} entries`;
+
+        const esp32 = devices.filter((d) => d.group === "esp32");
+        const stm32 = devices.filter((d) => d.group === "stm32");
+        const modules = devices.filter((d) => d.group === "module");
+
+        el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d, lookup)).join("");
+        el.listStm32.innerHTML = stm32.map((d) => rowHtml(d, lookup)).join("");
+        el.listModules.innerHTML = modules.map((d) => rowHtml(d, lookup)).join("");
+      }
+
+      load().catch((err) => {
+        const isFileProtocol = window.location && window.location.protocol === "file:";
+        const html = `
+          <div class="rounded-2xl border border-dark-700 bg-dark-850/40 p-6">
+            <div class="text-white font-semibold">Couldn’t load catalog</div>
+            <div class="text-gray-500 text-sm mt-2">
+              Ensure <code>hardware/devices.json</code> exists and is valid JSON.
+            </div>
+            ${
+              isFileProtocol
+                ? `<div class="text-gray-500 text-sm mt-2">
+                     You’re opening this page via <code>file://</code>, which blocks <code>fetch()</code>.
+                     Run a local server: <code>python3 -m http.server 8000</code> then open
+                     <code>http://localhost:8000/catalog.html</code>.
+                   </div>`
+                : ""
+            }
+            <div class="text-gray-600 text-xs mt-2">${String(err)}</div>
+          </div>
+        `;
+        el.listEsp32.innerHTML = html;
+        el.listStm32.innerHTML = "";
+        el.listModules.innerHTML = "";
+      });
+    </script>
+  </body>
+</html>

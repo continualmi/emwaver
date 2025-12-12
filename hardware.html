@@ -118,86 +118,32 @@
             >
               Hardware catalog
               <span class="w-1 h-1 rounded-full bg-brand-500/70"></span>
-              boards • modules • archives
+              boards • platforms • docs
             </div>
             <h1 class="text-4xl sm:text-5xl font-bold text-white leading-tight">
               EMWaver Hardware
             </h1>
             <p class="mt-5 text-lg text-gray-400 leading-relaxed max-w-2xl">
-              A living catalog of EMWaver boards. Each entry links to its OSHW Lab project and the
-              related files on GitHub.
+              The main EMWaver boards, grouped by platform. For the complete list (including
+              add-on modules), use the full catalog.
             </p>
 
-            <div class="mt-8 flex flex-col sm:flex-row gap-3">
-              <div class="flex-1">
-                <label for="search" class="sr-only">Search hardware</label>
-                <div class="relative">
-                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg
-                      class="w-5 h-5 text-gray-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.15 6.15z"
-                      />
-                    </svg>
-                  </div>
-                  <input
-                    id="search"
-                    type="text"
-                    autocomplete="off"
-                    placeholder="Search boards, modules, versions…"
-                    class="w-full pl-10 pr-4 py-3 rounded-xl bg-dark-850/60 border border-dark-700 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/40 shadow-sm"
-                  />
-                </div>
-              </div>
-
-              <div class="flex gap-3">
-                <button
-                  id="filter-featured"
-                  class="px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shadow-lg shadow-brand-500/20"
-                >
-                  Featured
-                </button>
-                <button
-                  id="filter-all"
-                  class="px-4 py-3 rounded-xl bg-dark-850/60 hover:bg-dark-800 border border-dark-700 text-gray-200 font-medium transition"
-                >
-                  All
-                </button>
-              </div>
-            </div>
-
-            <div class="mt-4 flex flex-wrap gap-2 text-xs">
-              <button
-                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
-                data-status="production"
+            <div class="mt-8 flex flex-wrap gap-3 text-sm">
+              <a
+                href="#esp32"
+                class="px-4 py-2.5 rounded-xl bg-dark-850/60 hover:bg-dark-800 border border-dark-700 text-gray-200 font-medium transition"
+                >ESP32-based</a
               >
-                Production
-              </button>
-              <button
-                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
-                data-status="module"
+              <a
+                href="#stm32"
+                class="px-4 py-2.5 rounded-xl bg-dark-850/60 hover:bg-dark-800 border border-dark-700 text-gray-200 font-medium transition"
+                >STM32-based</a
               >
-                Module
-              </button>
-              <button
-                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
-                data-status="prototype"
+              <a
+                href="catalog.html"
+                class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shadow-lg shadow-brand-500/20"
+                >Full catalog →</a
               >
-                Prototype
-              </button>
-              <button
-                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
-                data-status="archive"
-              >
-                Archive
-              </button>
             </div>
           </div>
 
@@ -220,18 +166,25 @@
                 </div>
                 <div class="p-6 space-y-3 text-sm">
                   <a
-                    href="#featured"
+                    href="#esp32"
                     class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
                   >
-                    <span class="text-gray-200">Featured hardware</span>
+                    <span class="text-gray-200">ESP32-based</span>
                     <span class="text-gray-500">↓</span>
                   </a>
                   <a
-                    href="#catalog"
+                    href="#stm32"
+                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
+                  >
+                    <span class="text-gray-200">STM32-based</span>
+                    <span class="text-gray-500">↓</span>
+                  </a>
+                  <a
+                    href="catalog.html"
                     class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
                   >
                     <span class="text-gray-200">Full catalog</span>
-                    <span class="text-gray-500">↓</span>
+                    <span class="text-gray-500">→</span>
                   </a>
                   <a
                     href="hardware/README.md"
@@ -249,36 +202,24 @@
     </header>
 
     <main class="pb-20">
-      <section id="featured" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-        <div class="flex items-end justify-between gap-4 mb-6">
-          <div>
-            <h2 class="text-2xl font-bold text-white">Featured</h2>
-            <p class="text-sm text-gray-500 mt-1">
-              The boards you’d typically point people at.
-            </p>
-          </div>
+      <section id="esp32" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div class="mb-5">
+          <h2 class="text-2xl font-bold text-white">ESP32-based</h2>
+          <p class="text-sm text-gray-500 mt-1">
+            Full app support: Android, iOS, and desktop.
+          </p>
         </div>
-        <div id="featured-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+        <div id="list-esp32" class="space-y-4"></div>
       </section>
 
-      <section id="catalog" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">
-        <div class="flex items-end justify-between gap-4 mb-6">
-          <div>
-            <h2 class="text-2xl font-bold text-white">Catalog</h2>
-            <p class="text-sm text-gray-500 mt-1">
-              Search and filter the full list. Fill in descriptions/links in each
-              <code class="text-gray-400">device.json</code>.
-            </p>
-          </div>
+      <section id="stm32" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">
+        <div class="mb-5">
+          <h2 class="text-2xl font-bold text-white">STM32-based</h2>
+          <p class="text-sm text-gray-500 mt-1">
+            Cost-effective boards; typically USB comms (Android + desktop support).
+          </p>
         </div>
-        <div id="catalog-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
-
-        <div id="empty-state" class="hidden mt-10">
-          <div class="rounded-2xl border border-dark-700 bg-dark-850/40 p-8 text-center">
-            <div class="text-white font-semibold">No matches</div>
-            <div class="text-gray-500 text-sm mt-2">Try a different search or filter.</div>
-          </div>
-        </div>
+        <div id="list-stm32" class="space-y-4"></div>
       </section>
     </main>
 
@@ -301,28 +242,13 @@
 
       const state = {
         devices: [],
-        query: "",
-        status: null,
-        showFeaturedOnly: true,
       };
 
       const el = {
         countPill: document.getElementById("count-pill"),
-        featuredGrid: document.getElementById("featured-grid"),
-        catalogGrid: document.getElementById("catalog-grid"),
-        emptyState: document.getElementById("empty-state"),
-        search: document.getElementById("search"),
-        filterFeatured: document.getElementById("filter-featured"),
-        filterAll: document.getElementById("filter-all"),
-        chips: Array.from(document.querySelectorAll(".chip")),
+        listEsp32: document.getElementById("list-esp32"),
+        listStm32: document.getElementById("list-stm32"),
       };
-
-      function normalize(text) {
-        return String(text || "")
-          .toLowerCase()
-          .replace(/[_-]+/g, " ")
-          .trim();
-      }
 
       function prettyTitle(folderOrTitle) {
         return String(folderOrTitle || "")
@@ -331,19 +257,13 @@
           .trim();
       }
 
-      function statusLabel(status) {
-        switch (status) {
-          case "production":
-            return { text: "Production", className: "text-green-300 bg-green-500/10 border-green-500/20" };
-          case "module":
-            return { text: "Module", className: "text-cyan-300 bg-cyan-500/10 border-cyan-500/20" };
-          case "prototype":
-            return { text: "Prototype", className: "text-amber-300 bg-amber-500/10 border-amber-500/20" };
-          case "archive":
-            return { text: "Archive", className: "text-gray-300 bg-white/5 border-dark-700" };
-          default:
-            return { text: "Unclassified", className: "text-gray-300 bg-white/5 border-dark-700" };
-        }
+      function pill(text, className) {
+        return `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${className}">${text}</span>`;
+      }
+
+      function modulePill(status) {
+        if (status !== "module") return "";
+        return `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border text-cyan-300 bg-cyan-500/10 border-cyan-500/20">Module</span>`;
       }
 
       function safeUrl(url) {
@@ -353,7 +273,25 @@
         return s;
       }
 
-      function cardHtml(device) {
+      function supportPills(group, support) {
+        const normalized = Array.isArray(support) ? support : null;
+        const derived =
+          normalized ||
+          (group === "esp32"
+            ? ["android", "ios", "desktop"]
+            : group === "stm32" || group === "module"
+              ? ["android", "desktop"]
+              : []);
+
+        const map = {
+          android: pill("Android", "text-green-300 bg-green-500/10 border-green-500/20"),
+          ios: pill("iOS", "text-gray-200 bg-white/5 border-dark-700"),
+          desktop: pill("Desktop", "text-indigo-200 bg-indigo-500/10 border-indigo-500/20"),
+        };
+        return derived.filter((x) => map[x]).map((x) => map[x]).join("");
+      }
+
+      function rowHtml(device) {
         const title = prettyTitle(device.displayTitle || device.title || device.folder);
         const description =
           device.description ||
@@ -364,119 +302,62 @@
             ? String(device.image)
             : `${device.folder}/${device.image}`
           : `${device.folder}/${device.folder}.png`;
-        const badge = statusLabel(device.status);
-
-        const oshwLabUrl = safeUrl(device.oshwLabUrl);
-        const githubUrl = safeUrl(device.githubUrl);
-        const schematicUrl = safeUrl(device.schematicUrl);
-
+        const group = device.group || "";
         const tags = Array.isArray(device.tags) ? device.tags.slice(0, 5) : [];
 
         return `
-          <article class="group rounded-2xl border border-dark-700 bg-dark-850/40 overflow-hidden hover:bg-dark-850/60 transition shadow-sm">
-            <div class="relative">
-              <div class="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/30 to-transparent pointer-events-none"></div>
-              <img
-                src="hardware/${img}"
-                alt="${title}"
-                class="w-full h-44 object-cover"
-                loading="lazy"
-                onerror="this.onerror=null; this.style.display='none'; this.parentElement.classList.add('bg-dark-800'); this.parentElement.style.height='11rem';"
-              />
-              <div class="absolute top-3 left-3">
-                <span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${badge.className}">
-                  ${badge.text}
-                </span>
+          <div class="rounded-2xl border border-dark-700 bg-dark-850/40 hover:bg-dark-850/60 transition overflow-hidden">
+            <a href="device.html?id=${encodeURIComponent(device.folder)}" class="block group">
+              <div class="p-5 flex flex-col sm:flex-row gap-5">
+                  <div class="sm:w-44 sm:shrink-0">
+                    <div class="rounded-xl overflow-hidden border border-dark-700 bg-dark-800/40 aspect-[16/10]">
+                      <img
+                        src="hardware/${img}"
+                        alt="${title}"
+                        class="w-full h-full object-cover"
+                        loading="lazy"
+                        onerror="this.onerror=null; this.style.display='none';"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      ${modulePill(device.status)}
+                      <span class="text-gray-500 text-xs">→</span>
+                      <span class="text-gray-400 text-xs">Open device page</span>
+                    </div>
+
+                    <h3 class="mt-3 text-lg font-bold text-white group-hover:text-brand-500 transition truncate">${title}</h3>
+                    <p class="mt-2 text-sm text-gray-400 leading-relaxed">${description}</p>
+
+                    <div class="mt-4 flex flex-wrap gap-2">
+                      ${supportPills(group, device.appSupport)}
+                    </div>
+
+                    ${
+                      tags.length
+                        ? `<div class="mt-4 flex flex-wrap gap-2">${tags
+                            .map(
+                              (t) =>
+                                `<span class="text-xs px-2.5 py-1 rounded-full border border-dark-700 bg-dark-800/40 text-gray-300">${t}</span>`
+                            )
+                            .join("")}</div>`
+                        : ""
+                    }
+                  </div>
               </div>
-            </div>
-
-            <div class="p-5">
-              <h3 class="text-lg font-bold text-white group-hover:text-brand-500 transition">${title}</h3>
-              <p class="mt-2 text-sm text-gray-400 leading-relaxed">${description}</p>
-
-              ${
-                tags.length
-                  ? `<div class="mt-4 flex flex-wrap gap-2">${tags
-                      .map(
-                        (t) =>
-                          `<span class="text-xs px-2.5 py-1 rounded-full border border-dark-700 bg-dark-800/40 text-gray-300">${t}</span>`
-                      )
-                      .join("")}</div>`
-                  : ""
-              }
-
-              <div class="mt-5 flex flex-wrap gap-2">
-                ${
-                  oshwLabUrl
-                    ? `<a href="${oshwLabUrl}" target="_blank" rel="noreferrer" class="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-500/10">Open in OSHW Lab</a>`
-                    : `<button disabled class="px-3.5 py-2 rounded-xl bg-dark-800/60 border border-dark-700 text-gray-500 text-sm font-medium cursor-not-allowed">OSHW Lab</button>`
-                }
-                ${
-                  githubUrl
-                    ? `<a href="${githubUrl}" target="_blank" rel="noreferrer" class="px-3.5 py-2 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 text-gray-200 text-sm font-medium transition">GitHub files</a>`
-                    : `<button disabled class="px-3.5 py-2 rounded-xl bg-dark-800/60 border border-dark-700 text-gray-500 text-sm font-medium cursor-not-allowed">GitHub files</button>`
-                }
-                ${
-                  schematicUrl
-                    ? `<a href="${schematicUrl}" target="_blank" rel="noreferrer" class="px-3.5 py-2 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 text-gray-200 text-sm font-medium transition">Schematic</a>`
-                    : `<button disabled class="px-3.5 py-2 rounded-xl bg-dark-800/60 border border-dark-700 text-gray-500 text-sm font-medium cursor-not-allowed">Schematic</button>`
-                }
-              </div>
-            </div>
-          </article>
+            </a>
+          </div>
         `;
       }
 
-      function matches(device) {
-        const q = normalize(state.query);
-        const hay = normalize(
-          [
-            device.folder,
-            device.title,
-            device.displayTitle,
-            device.description,
-            (device.tags || []).join(" "),
-            device.status,
-          ].join(" ")
-        );
-        const queryOk = !q || hay.includes(q);
-        const statusOk = !state.status || device.status === state.status;
-        const featuredOk = !state.showFeaturedOnly || Boolean(device.featured);
-        return queryOk && statusOk && featuredOk;
-      }
-
       function render() {
-        const featured = state.devices.filter((d) => d.featured);
-        el.featuredGrid.innerHTML = featured.map(cardHtml).join("");
-
-        const filtered = state.devices.filter(matches);
-        el.catalogGrid.innerHTML = filtered.map(cardHtml).join("");
-
-        el.emptyState.classList.toggle("hidden", filtered.length > 0);
         el.countPill.textContent = `${state.devices.length} entries`;
-      }
-
-      function setFeaturedOnly(on) {
-        state.showFeaturedOnly = on;
-        el.filterFeatured.classList.toggle("bg-brand-600", on);
-        el.filterFeatured.classList.toggle("bg-dark-850/60", !on);
-        el.filterFeatured.classList.toggle("border", !on);
-        el.filterFeatured.classList.toggle("border-dark-700", !on);
-
-        el.filterAll.classList.toggle("bg-brand-600", !on);
-        el.filterAll.classList.toggle("bg-dark-850/60", on);
-        render();
-      }
-
-      function setStatus(status) {
-        state.status = status;
-        el.chips.forEach((chip) => {
-          const active = chip.dataset.status === status;
-          chip.classList.toggle("bg-brand-500/15", active);
-          chip.classList.toggle("border-brand-500/30", active);
-          chip.classList.toggle("text-white", active);
-        });
-        render();
+        const esp32 = state.devices.filter((d) => d.group === "esp32");
+        const stm32 = state.devices.filter((d) => d.group === "stm32");
+        el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d)).join("");
+        el.listStm32.innerHTML = stm32.map((d) => rowHtml(d)).join("");
       }
 
       async function loadDevices() {
@@ -501,25 +382,9 @@
         render();
       }
 
-      el.search.addEventListener("input", (e) => {
-        state.query = e.target.value;
-        render();
-      });
-
-      el.filterFeatured.addEventListener("click", () => setFeaturedOnly(true));
-      el.filterAll.addEventListener("click", () => setFeaturedOnly(false));
-
-      el.chips.forEach((chip) => {
-        chip.addEventListener("click", () => {
-          const status = chip.dataset.status;
-          setStatus(state.status === status ? null : status);
-        });
-      });
-
-      setFeaturedOnly(true);
       loadDevices().catch((err) => {
         const isFileProtocol = window.location && window.location.protocol === "file:";
-        el.catalogGrid.innerHTML = `
+        el.listEsp32.innerHTML = `
           <div class="md:col-span-2 xl:col-span-3 rounded-2xl border border-dark-700 bg-dark-850/40 p-6">
             <div class="text-white font-semibold">Couldn’t load hardware list</div>
             <div class="text-gray-500 text-sm mt-2">
@@ -537,6 +402,7 @@
             <div class="text-gray-600 text-xs mt-2">${String(err)}</div>
           </div>
         `;
+        el.listStm32.innerHTML = "";
       });
     </script>
   </body>
