@@ -88,10 +88,28 @@
             <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">Hardware Catalog</h1>
             <p class="text-sm text-slate-600 mt-1">ESP32 • STM32 • Modules</p>
           </div>
-          <div class="text-xs text-slate-500" id="count-pill">…</div>
+          <div class="flex items-center gap-3">
+            <div class="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm">
+              <button
+                id="tab-current"
+                class="px-3 py-1.5 text-sm font-semibold rounded-lg bg-brand-600 text-white transition"
+                type="button"
+              >
+                Current
+              </button>
+              <button
+                id="tab-experimental"
+                class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
+                type="button"
+              >
+                Experimental
+              </button>
+            </div>
+            <div class="text-xs text-slate-500" id="count-pill">…</div>
+          </div>
         </div>
 
-        <div class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div id="view-current" class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4">
           <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
               <div class="flex items-center justify-between gap-3">
@@ -147,6 +165,19 @@
             <div id="list-modules" class="p-2 overflow-auto space-y-2"></div>
           </section>
         </div>
+
+        <div id="view-experimental" class="hidden">
+          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[360px] shadow-sm">
+            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold text-slate-900">Experimental / Archived</h2>
+                <div class="text-xs text-slate-500" id="count-experimental">…</div>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">Older revisions, prototypes, or WIP</div>
+            </div>
+            <div id="list-experimental" class="p-2 overflow-auto space-y-2"></div>
+          </section>
+        </div>
       </section>
     </main>
 
@@ -165,10 +196,35 @@
         countEsp32: document.getElementById("count-esp32"),
         countStm32: document.getElementById("count-stm32"),
         countModules: document.getElementById("count-modules"),
+        countExperimental: document.getElementById("count-experimental"),
         listEsp32: document.getElementById("list-esp32"),
         listStm32: document.getElementById("list-stm32"),
         listModules: document.getElementById("list-modules"),
+        listExperimental: document.getElementById("list-experimental"),
+        tabCurrent: document.getElementById("tab-current"),
+        tabExperimental: document.getElementById("tab-experimental"),
+        viewCurrent: document.getElementById("view-current"),
+        viewExperimental: document.getElementById("view-experimental"),
       };
+
+      function setView(view) {
+        const isExperimental = view === "experimental";
+        el.viewCurrent.classList.toggle("hidden", isExperimental);
+        el.viewExperimental.classList.toggle("hidden", !isExperimental);
+
+        el.tabCurrent.classList.toggle("bg-brand-600", !isExperimental);
+        el.tabCurrent.classList.toggle("text-white", !isExperimental);
+        el.tabCurrent.classList.toggle("text-slate-700", isExperimental);
+        el.tabCurrent.classList.toggle("hover:bg-slate-50", isExperimental);
+
+        el.tabExperimental.classList.toggle("bg-brand-600", isExperimental);
+        el.tabExperimental.classList.toggle("text-white", isExperimental);
+        el.tabExperimental.classList.toggle("text-slate-700", !isExperimental);
+        el.tabExperimental.classList.toggle("hover:bg-slate-50", !isExperimental);
+
+        if (isExperimental) window.location.hash = "experimental";
+        else window.location.hash = "";
+      }
 
       function prettyTitle(folderOrTitle) {
         return String(folderOrTitle || "")
@@ -263,19 +319,47 @@
 
         el.countPill.textContent = `${devices.length} entries`;
 
-        const esp32 = devices.filter((d) => d.group === "esp32");
-        const stm32 = devices.filter((d) => d.group === "stm32");
-        const modules = devices.filter((d) => d.group === "module");
+        const experimental = devices.filter((d) => {
+          const lifecycle = d.lifecycle ? String(d.lifecycle).trim().toLowerCase() : "";
+          const status = d.status ? String(d.status).trim().toLowerCase() : "";
+          const tags = Array.isArray(d.tags) ? d.tags.map((t) => String(t).trim().toLowerCase()) : [];
+          const group = d.group ? String(d.group).trim().toLowerCase() : "";
+
+          const explicit =
+            d.experimental === true ||
+            lifecycle === "experimental" ||
+            lifecycle === "archived" ||
+            status === "experimental" ||
+            status === "archived" ||
+            tags.includes("experimental") ||
+            tags.includes("archived") ||
+            tags.includes("prototype") ||
+            tags.includes("wip");
+
+          const unknownGroup = group !== "esp32" && group !== "stm32" && group !== "module";
+          return explicit || unknownGroup;
+        });
+
+        const experimentalSet = new Set(experimental.map((d) => d.folder));
+        const esp32 = devices.filter((d) => d.group === "esp32" && !experimentalSet.has(d.folder));
+        const stm32 = devices.filter((d) => d.group === "stm32" && !experimentalSet.has(d.folder));
+        const modules = devices.filter((d) => d.group === "module" && !experimentalSet.has(d.folder));
 
         el.countEsp32.textContent = `${esp32.length}`;
         el.countStm32.textContent = `${stm32.length}`;
         el.countModules.textContent = `${modules.length}`;
+        el.countExperimental.textContent = `${experimental.length}`;
 
         el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d, lookup)).join("");
         el.listStm32.innerHTML = stm32.map((d) => rowHtml(d, lookup)).join("");
         el.listModules.innerHTML = modules.map((d) => rowHtml(d, lookup)).join("");
+        el.listExperimental.innerHTML = experimental.map((d) => rowHtml(d, lookup)).join("");
       }
 
+      el.tabCurrent.addEventListener("click", () => setView("current"));
+      el.tabExperimental.addEventListener("click", () => setView("experimental"));
+
+      setView(window.location.hash === "#experimental" ? "experimental" : "current");
       load().catch((err) => {
         const isFileProtocol = window.location && window.location.protocol === "file:";
         const html = `
@@ -299,6 +383,7 @@
         el.listEsp32.innerHTML = html;
         el.listStm32.innerHTML = "";
         el.listModules.innerHTML = "";
+        el.listExperimental.innerHTML = "";
       });
     </script>
   </body>
