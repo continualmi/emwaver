@@ -1,3 +1,12 @@
 {
-  "title": "EMWAVER_V1.0.1"
+  "title": "EMWAVER_V1.0.1",
+  "displayTitle": "EMWaver v1.0.1",
+  "group": "stm32",
+  "experimental": true,
+  "description": "Early STM32-based revision (description coming soon).",
+  "tags": ["STM32"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

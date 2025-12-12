@@ -1,3 +1,12 @@
 {
-  "title": "STM32_CC1101_USBMALE_PCBANTENNA"
+  "title": "STM32_CC1101_USBMALE_PCBANTENNA",
+  "displayTitle": "STM32 CC1101 (USB male, PCB antenna)",
+  "group": "stm32",
+  "experimental": true,
+  "description": "STM32 + CC1101 USB-male variant (description coming soon).",
+  "tags": ["STM32", "CC1101", "USB"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

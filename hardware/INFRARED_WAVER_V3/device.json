@@ -2,6 +2,7 @@
   "title": "INFRARED_WAVER_V3",
   "displayTitle": "Infrared Waver v3",
   "group": "stm32",
+  "image": "INFRARED_WAVER_V3.png",
   "description": "Infrared (IR) expansion board (description coming soon).",
   "tags": ["IR"],
   "appSupport": ["android", "desktop"],

@@ -1,3 +1,13 @@
 {
-  "title": "BLE_WAVER_DONGLE"
+  "title": "BLE_WAVER_DONGLE",
+  "displayTitle": "BLE Waver Dongle",
+  "group": "module",
+  "status": "module",
+  "experimental": true,
+  "description": "BLE add-on (description coming soon).",
+  "tags": ["BLE", "module"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

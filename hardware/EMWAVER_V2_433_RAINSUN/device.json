@@ -1,3 +1,12 @@
 {
-  "title": "EMWAVER_V2_433_RAINSUN"
+  "title": "EMWAVER_V2_433_RAINSUN",
+  "displayTitle": "EMWaver v2 (433 MHz, Rainsun)",
+  "group": "stm32",
+  "experimental": true,
+  "description": "433 MHz revision (Rainsun) (description coming soon).",
+  "tags": ["STM32", "433MHz", "Rainsun"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

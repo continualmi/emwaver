@@ -1,3 +1,12 @@
 {
-  "title": "GPIO_WAVER"
+  "title": "GPIO_WAVER",
+  "displayTitle": "GPIO Waver",
+  "group": "stm32",
+  "experimental": true,
+  "description": "Early GPIO-focused board (description coming soon).",
+  "tags": ["GPIO", "STM32"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }
