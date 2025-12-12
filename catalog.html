@@ -27,6 +27,8 @@
     <style>
       :root {
         color-scheme: dark;
+        --nav-height: 64px;
+        --page-pad: 20px;
       }
       body {
         background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.22), transparent 60%),
@@ -41,6 +43,11 @@
         opacity: 0.05;
         mix-blend-mode: overlay;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+      }
+      @media (min-width: 1024px) {
+        .catalog-grid {
+          height: calc(100vh - var(--nav-height) - (2 * var(--page-pad)));
+        }
       }
     </style>
   </head>
@@ -69,55 +76,49 @@
       </div>
     </nav>
 
-    <header class="pt-28 pb-8">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 class="text-4xl font-bold text-white">Full Hardware Catalog</h1>
-        <p class="mt-3 text-lg text-gray-400 max-w-3xl">
-          Complete list of devices, grouped by platform. Click an entry to open its page.
-        </p>
-      </div>
-    </header>
+    <main class="pt-20 pb-5" style="padding-left: var(--page-pad); padding-right: var(--page-pad)">
+      <section class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between gap-4 mb-4">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">Hardware Catalog</h1>
+            <p class="text-sm text-gray-500 mt-1">ESP32 • STM32 • Modules</p>
+          </div>
+          <div class="text-xs text-gray-500" id="count-pill">…</div>
+        </div>
 
-    <main class="pb-20">
-      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div class="lg:col-span-3">
-            <div class="rounded-2xl border border-dark-700 bg-dark-850/40 p-4 sticky top-24">
-              <div class="text-sm font-semibold text-white">Sections</div>
-              <div class="mt-3 space-y-2 text-sm">
-                <a class="block px-3 py-2 rounded-xl hover:bg-dark-800/60 border border-transparent hover:border-dark-700 transition" href="#esp32"
-                  >ESP32-based</a
-                >
-                <a class="block px-3 py-2 rounded-xl hover:bg-dark-800/60 border border-transparent hover:border-dark-700 transition" href="#stm32"
-                  >STM32-based</a
-                >
-                <a class="block px-3 py-2 rounded-xl hover:bg-dark-800/60 border border-transparent hover:border-dark-700 transition" href="#modules"
-                  >Modules</a
-                >
+        <div class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <section class="rounded-2xl border border-dark-700 bg-dark-850/35 overflow-hidden flex flex-col min-h-[320px]">
+            <div class="px-4 py-3 border-b border-dark-700 bg-dark-850/30">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold text-white">ESP32-based</h2>
+                <div class="text-xs text-gray-500" id="count-esp32">…</div>
               </div>
-              <div class="mt-4 text-xs text-gray-500" id="count-pill">…</div>
+              <div class="text-xs text-gray-500 mt-1">Android • iOS • desktop</div>
             </div>
-          </div>
+            <div id="list-esp32" class="p-2 overflow-auto space-y-2"></div>
+          </section>
 
-          <div class="lg:col-span-9 space-y-10">
-            <section id="esp32">
-              <h2 class="text-2xl font-bold text-white">ESP32-based</h2>
-              <p class="text-sm text-gray-500 mt-1">Android, iOS, and desktop support.</p>
-              <div class="mt-5 space-y-4" id="list-esp32"></div>
-            </section>
+          <section class="rounded-2xl border border-dark-700 bg-dark-850/35 overflow-hidden flex flex-col min-h-[320px]">
+            <div class="px-4 py-3 border-b border-dark-700 bg-dark-850/30">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold text-white">STM32-based</h2>
+                <div class="text-xs text-gray-500" id="count-stm32">…</div>
+              </div>
+              <div class="text-xs text-gray-500 mt-1">Typically USB: Android • desktop</div>
+            </div>
+            <div id="list-stm32" class="p-2 overflow-auto space-y-2"></div>
+          </section>
 
-            <section id="stm32">
-              <h2 class="text-2xl font-bold text-white">STM32-based</h2>
-              <p class="text-sm text-gray-500 mt-1">Typically USB comms: Android + desktop.</p>
-              <div class="mt-5 space-y-4" id="list-stm32"></div>
-            </section>
-
-            <section id="modules">
-              <h2 class="text-2xl font-bold text-white">Modules</h2>
-              <p class="text-sm text-gray-500 mt-1">Add-ons; may require a parent board.</p>
-              <div class="mt-5 space-y-4" id="list-modules"></div>
-            </section>
-          </div>
+          <section class="rounded-2xl border border-dark-700 bg-dark-850/35 overflow-hidden flex flex-col min-h-[320px]">
+            <div class="px-4 py-3 border-b border-dark-700 bg-dark-850/30">
+              <div class="flex items-center justify-between gap-3">
+                <h2 class="text-sm font-semibold text-white">Modules</h2>
+                <div class="text-xs text-gray-500" id="count-modules">…</div>
+              </div>
+              <div class="text-xs text-gray-500 mt-1">Add-ons (not standalone)</div>
+            </div>
+            <div id="list-modules" class="p-2 overflow-auto space-y-2"></div>
+          </section>
         </div>
       </section>
     </main>
@@ -127,6 +128,9 @@
 
       const el = {
         countPill: document.getElementById("count-pill"),
+        countEsp32: document.getElementById("count-esp32"),
+        countStm32: document.getElementById("count-stm32"),
+        countModules: document.getElementById("count-modules"),
         listEsp32: document.getElementById("list-esp32"),
         listStm32: document.getElementById("list-stm32"),
         listModules: document.getElementById("list-modules"),
@@ -139,16 +143,12 @@
           .trim();
       }
 
-      function pill(text, className) {
-        return `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${className}">${text}</span>`;
+      function modulePill(status) {
+        if (status !== "module") return "";
+        return `<span class="inline-flex items-center gap-2 px-2.5 py-1 text-[11px] font-semibold rounded-full border text-cyan-300 bg-cyan-500/10 border-cyan-500/20">Module</span>`;
       }
 
-      function statusLabel(status) {
-        if (status !== "module") return null;
-        return { text: "Module", className: "text-cyan-300 bg-cyan-500/10 border-cyan-500/20" };
-      }
-
-      function supportPills(group, support) {
+      function supportSummary(group, support) {
         const normalized = Array.isArray(support) ? support : null;
         const derived =
           normalized ||
@@ -158,55 +158,40 @@
               ? ["android", "desktop"]
               : []);
 
-        const map = {
-          android: pill("Android", "text-green-300 bg-green-500/10 border-green-500/20"),
-          ios: pill("iOS", "text-gray-200 bg-white/5 border-dark-700"),
-          desktop: pill("Desktop", "text-indigo-200 bg-indigo-500/10 border-indigo-500/20"),
+        const labels = {
+          android: "Android",
+          ios: "iOS",
+          desktop: "Desktop",
         };
-        return derived.filter((x) => map[x]).map((x) => map[x]).join("");
+        return derived.map((x) => labels[x]).filter(Boolean).join(" • ");
       }
 
       function rowHtml(device, lookup) {
         const title = prettyTitle(device.displayTitle || device.title || device.folder);
-        const description = device.description || "Description coming soon.";
-        const badge = statusLabel(device.status);
         const group = device.group || "";
-        const tags = Array.isArray(device.tags) ? device.tags.slice(0, 5) : [];
         const parent = device.parent ? String(device.parent).trim() : "";
         const parentTitle = parent && lookup[parent] ? prettyTitle(lookup[parent].displayTitle || lookup[parent].title || parent) : prettyTitle(parent);
+        const support = supportSummary(group, device.appSupport);
 
         return `
-          <div class="rounded-2xl border border-dark-700 bg-dark-850/40 hover:bg-dark-850/60 transition overflow-hidden">
+          <div class="rounded-xl border border-dark-700 bg-dark-850/30 hover:bg-dark-850/50 transition overflow-hidden">
             <a href="device.html?id=${encodeURIComponent(device.folder)}" class="block group">
-              <div class="p-5">
-                <div class="flex flex-wrap items-center gap-2">
-                  ${
-                    badge
-                      ? `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${badge.className}">${badge.text}</span>`
-                      : ""
-                  }
-                  ${supportPills(group, device.appSupport)}
-                  ${
-                    parent
-                      ? `<span class="text-gray-500 text-xs">Requires</span>
-                         <span class="text-gray-300 text-xs font-semibold">${parentTitle}</span>`
-                      : ""
-                  }
+              <div class="px-3 py-2.5">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-white group-hover:text-brand-500 transition truncate">${title}</div>
+                    <div class="text-xs text-gray-500 mt-1 truncate">${support}</div>
+                    ${
+                      parent
+                        ? `<div class="text-[11px] text-gray-500 mt-1 truncate">Requires <span class="text-gray-300 font-semibold">${parentTitle}</span></div>`
+                        : ""
+                    }
+                  </div>
+                  <div class="shrink-0 flex items-center gap-2">
+                    ${modulePill(device.status)}
+                    <span class="text-gray-500 text-xs">→</span>
+                  </div>
                 </div>
-
-                <h3 class="mt-3 text-lg font-bold text-white group-hover:text-brand-500 transition">${title}</h3>
-                <p class="mt-2 text-sm text-gray-400 leading-relaxed">${description}</p>
-
-                ${
-                  tags.length
-                    ? `<div class="mt-4 flex flex-wrap gap-2">${tags
-                        .map(
-                          (t) =>
-                            `<span class="text-xs px-2.5 py-1 rounded-full border border-dark-700 bg-dark-800/40 text-gray-300">${t}</span>`
-                        )
-                        .join("")}</div>`
-                    : ""
-                }
               </div>
             </a>
           </div>
@@ -238,6 +223,10 @@
         const esp32 = devices.filter((d) => d.group === "esp32");
         const stm32 = devices.filter((d) => d.group === "stm32");
         const modules = devices.filter((d) => d.group === "module");
+
+        el.countEsp32.textContent = `${esp32.length}`;
+        el.countStm32.textContent = `${stm32.length}`;
+        el.countModules.textContent = `${modules.length}`;
 
         el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d, lookup)).join("");
         el.listStm32.innerHTML = stm32.map((d) => rowHtml(d, lookup)).join("");
