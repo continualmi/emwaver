@@ -1,3 +1,11 @@
 {
-  "title": "ISM_WAVER_V2"
+  "title": "ISM_WAVER_V2",
+  "displayTitle": "ISM Waver v2",
+  "status": "module",
+  "featured": true,
+  "description": "ISM band expansion board (description coming soon).",
+  "tags": ["ISM", "module"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

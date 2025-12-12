@@ -1,3 +1,11 @@
 {
-  "title": "RFID_WAVER_MIRRORED"
+  "title": "RFID_WAVER",
+  "displayTitle": "RFID Waver",
+  "status": "module",
+  "featured": true,
+  "description": "RFID expansion board (description coming soon).",
+  "tags": ["RFID", "module"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

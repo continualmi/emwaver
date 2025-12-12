@@ -1,3 +1,11 @@
 {
-  "title": "GPIO_WAVER_V3"
+  "title": "GPIO_WAVER_V3",
+  "displayTitle": "GPIO Waver v3",
+  "status": "module",
+  "featured": true,
+  "description": "GPIO-focused expansion board (description coming soon).",
+  "tags": ["GPIO", "module"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }
