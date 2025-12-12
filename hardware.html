@@ -111,115 +111,44 @@
 
     <header class="pt-28 pb-10">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-          <div class="lg:col-span-7 fade-in">
+        <div class="fade-in">
             <div
               class="inline-flex items-center gap-2 px-3 py-1 mb-6 text-xs font-semibold tracking-wider text-brand-500 uppercase bg-brand-500/10 rounded-full border border-brand-500/20"
             >
-              Hardware catalog
+              Hardware
               <span class="w-1 h-1 rounded-full bg-brand-500/70"></span>
-              boards • platforms • docs
+              boards • docs
             </div>
             <h1 class="text-4xl sm:text-5xl font-bold text-white leading-tight">
               EMWaver Hardware
             </h1>
             <p class="mt-5 text-lg text-gray-400 leading-relaxed max-w-2xl">
-              The main EMWaver boards, grouped by platform. For the complete list (including
-              add-on modules), use the full catalog.
+              A short list of the main boards. Each device has its own page with photos and links.
             </p>
-
-            <div class="mt-8 flex flex-wrap gap-3 text-sm">
-              <a
-                href="#esp32"
-                class="px-4 py-2.5 rounded-xl bg-dark-850/60 hover:bg-dark-800 border border-dark-700 text-gray-200 font-medium transition"
-                >ESP32-based</a
-              >
-              <a
-                href="#stm32"
-                class="px-4 py-2.5 rounded-xl bg-dark-850/60 hover:bg-dark-800 border border-dark-700 text-gray-200 font-medium transition"
-                >STM32-based</a
-              >
-              <a
-                href="catalog.html"
-                class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shadow-lg shadow-brand-500/20"
-                >Full catalog →</a
-              >
-            </div>
-          </div>
-
-          <div class="lg:col-span-5 fade-in">
-            <div class="relative group">
-              <div
-                class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-700"
-              ></div>
-              <div
-                class="relative rounded-2xl overflow-hidden border border-dark-700 bg-dark-850/50 shadow-glow"
-              >
-                <div class="p-6 border-b border-dark-700">
-                  <div class="flex items-center justify-between gap-4">
-                    <div>
-                      <div class="text-sm font-semibold text-white">Quick links</div>
-                      <div class="text-xs text-gray-500 mt-1">Jump into the latest hardware.</div>
-                    </div>
-                    <div class="text-xs text-gray-500" id="count-pill">…</div>
-                  </div>
-                </div>
-                <div class="p-6 space-y-3 text-sm">
-                  <a
-                    href="#esp32"
-                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
-                  >
-                    <span class="text-gray-200">ESP32-based</span>
-                    <span class="text-gray-500">↓</span>
-                  </a>
-                  <a
-                    href="#stm32"
-                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
-                  >
-                    <span class="text-gray-200">STM32-based</span>
-                    <span class="text-gray-500">↓</span>
-                  </a>
-                  <a
-                    href="catalog.html"
-                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
-                  >
-                    <span class="text-gray-200">Full catalog</span>
-                    <span class="text-gray-500">→</span>
-                  </a>
-                  <a
-                    href="hardware/README.md"
-                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
-                  >
-                    <span class="text-gray-200">Hardware license</span>
-                    <span class="text-gray-500">→</span>
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </header>
 
     <main class="pb-20">
-      <section id="esp32" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-        <div class="mb-5">
-          <h2 class="text-2xl font-bold text-white">ESP32-based</h2>
-          <p class="text-sm text-gray-500 mt-1">
-            Full app support: Android, iOS, and desktop.
-          </p>
+      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+        <div class="flex items-end justify-between gap-6 mb-5">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Featured</h2>
+            <p class="text-sm text-gray-500 mt-1">
+              ESP32 boards support Android+iOS+desktop; STM32 boards are typically USB (Android+desktop).
+            </p>
+          </div>
         </div>
-        <div id="list-esp32" class="space-y-4"></div>
-      </section>
 
-      <section id="stm32" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">
-        <div class="mb-5">
-          <h2 class="text-2xl font-bold text-white">STM32-based</h2>
-          <p class="text-sm text-gray-500 mt-1">
-            Cost-effective boards; typically USB comms (Android + desktop support).
-          </p>
+        <div id="list-featured" class="space-y-4"></div>
+
+        <div class="mt-10 flex justify-center">
+          <a
+            href="catalog.html"
+            class="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shadow-lg shadow-brand-500/20"
+            >Full catalog →</a
+          >
         </div>
-        <div id="list-stm32" class="space-y-4"></div>
       </section>
     </main>
 
@@ -239,15 +168,20 @@
 
     <script>
       const MANIFEST_URL = "hardware/devices.json";
+      const FEATURED_IDS = [
+        "EMWAVER_UNO_V4",
+        "GPIO_WAVER_V3",
+        "USB_WAVER",
+        "INFRARED_WAVER_V3",
+        "ISM_WAVER_V2",
+      ];
 
       const state = {
         devices: [],
       };
 
       const el = {
-        countPill: document.getElementById("count-pill"),
-        listEsp32: document.getElementById("list-esp32"),
-        listStm32: document.getElementById("list-stm32"),
+        listFeatured: document.getElementById("list-featured"),
       };
 
       function prettyTitle(folderOrTitle) {
@@ -353,11 +287,9 @@
       }
 
       function render() {
-        el.countPill.textContent = `${state.devices.length} entries`;
-        const esp32 = state.devices.filter((d) => d.group === "esp32");
-        const stm32 = state.devices.filter((d) => d.group === "stm32");
-        el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d)).join("");
-        el.listStm32.innerHTML = stm32.map((d) => rowHtml(d)).join("");
+        const byId = new Map(state.devices.map((d) => [d.folder, d]));
+        const featured = FEATURED_IDS.map((id) => byId.get(id)).filter(Boolean);
+        el.listFeatured.innerHTML = featured.map((d) => rowHtml(d)).join("");
       }
 
       async function loadDevices() {
@@ -377,14 +309,13 @@
         });
 
         const devices = await Promise.all(reads);
-        devices.sort((a, b) => prettyTitle(a.title || a.folder).localeCompare(prettyTitle(b.title || b.folder)));
-        state.devices = devices;
+        state.devices = devices.filter((d) => d.group !== "module");
         render();
       }
 
       loadDevices().catch((err) => {
         const isFileProtocol = window.location && window.location.protocol === "file:";
-        el.listEsp32.innerHTML = `
+        el.listFeatured.innerHTML = `
           <div class="md:col-span-2 xl:col-span-3 rounded-2xl border border-dark-700 bg-dark-850/40 p-6">
             <div class="text-white font-semibold">Couldn’t load hardware list</div>
             <div class="text-gray-500 text-sm mt-2">
@@ -402,7 +333,6 @@
             <div class="text-gray-600 text-xs mt-2">${String(err)}</div>
           </div>
         `;
-        el.listStm32.innerHTML = "";
       });
     </script>
   </body>
