@@ -1,10 +1,10 @@
 {
   "title": "GPIO_WAVER_V3",
   "displayTitle": "GPIO Waver v3",
-  "status": "module",
-  "featured": true,
+  "group": "stm32",
   "description": "GPIO-focused expansion board (description coming soon).",
-  "tags": ["GPIO", "module"],
+  "tags": ["GPIO"],
+  "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",
   "githubUrl": "",
   "schematicUrl": ""

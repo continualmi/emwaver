@@ -1,10 +1,11 @@
 {
   "title": "EMWAVER_UNO_V4",
   "displayTitle": "EMWaver UNO v4",
+  "group": "esp32",
   "status": "production",
-  "featured": true,
   "description": "Mainline EMWaver UNO hardware (description coming soon).",
   "tags": ["UNO", "ESP32", "CC1101"],
+  "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "",
   "githubUrl": "",
   "schematicUrl": ""
