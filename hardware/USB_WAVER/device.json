@@ -1,3 +1,11 @@
 {
-  "title": "USB_WAVER"
+  "title": "USB_WAVER",
+  "displayTitle": "USB Waver",
+  "status": "module",
+  "featured": true,
+  "description": "USB form-factor board (description coming soon).",
+  "tags": ["USB", "module"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

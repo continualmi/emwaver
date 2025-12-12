@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EMWaver Hardware</title>
+    <meta
+      name="description"
+      content="EMWaver hardware catalog: production boards, modules, and archived designs."
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+            colors: {
+              brand: {
+                400: "#38bdf8", // sky-400
+                500: "#0ea5e9", // sky-500
+                600: "#0284c7", // sky-600
+              },
+              dark: {
+                950: "#070b16",
+                900: "#0b1224",
+                850: "#101a33",
+                800: "#131f3c",
+                700: "#1e2b50",
+              },
+            },
+            boxShadow: {
+              glow: "0 0 0 1px rgba(99, 102, 241, 0.18), 0 20px 80px rgba(99, 102, 241, 0.18)",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.22), transparent 60%),
+          radial-gradient(900px 700px at 90% 15%, rgba(56, 189, 248, 0.14), transparent 55%),
+          linear-gradient(180deg, #070b16 0%, #0b1224 50%, #070b16 100%);
+        color: #e2e8f0;
+      }
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.05;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+      }
+      .fade-in {
+        animation: fade 280ms ease-out both;
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+
+  <body class="antialiased selection:bg-brand-500 selection:text-white">
+    <div class="noise"></div>
+
+    <nav class="fixed top-0 w-full z-50 bg-dark-900/75 backdrop-blur-md border-b border-dark-700">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center gap-3">
+            <a
+              href="hardware.html"
+              class="text-xl font-bold tracking-tight text-white hover:text-brand-500 transition"
+            >
+              EMWaver
+            </a>
+            <span class="text-dark-700 hidden sm:inline">/</span>
+            <span class="text-sm font-medium text-gray-400 hidden sm:inline">Hardware</span>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <a
+              href="index.html"
+              class="text-sm font-medium text-gray-400 hover:text-white transition hidden sm:inline"
+              >Home</a
+            >
+            <a
+              href="documentation/"
+              class="text-sm font-medium text-gray-400 hover:text-white transition hidden sm:inline"
+              >Documentation</a
+            >
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <header class="pt-28 pb-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+          <div class="lg:col-span-7 fade-in">
+            <div
+              class="inline-flex items-center gap-2 px-3 py-1 mb-6 text-xs font-semibold tracking-wider text-brand-500 uppercase bg-brand-500/10 rounded-full border border-brand-500/20"
+            >
+              Hardware catalog
+              <span class="w-1 h-1 rounded-full bg-brand-500/70"></span>
+              boards • modules • archives
+            </div>
+            <h1 class="text-4xl sm:text-5xl font-bold text-white leading-tight">
+              EMWaver Hardware
+            </h1>
+            <p class="mt-5 text-lg text-gray-400 leading-relaxed max-w-2xl">
+              A living catalog of EMWaver boards. Each entry links to its OSHW Lab project and the
+              related files on GitHub.
+            </p>
+
+            <div class="mt-8 flex flex-col sm:flex-row gap-3">
+              <div class="flex-1">
+                <label for="search" class="sr-only">Search hardware</label>
+                <div class="relative">
+                  <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg
+                      class="w-5 h-5 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 103.5 10.5a7.5 7.5 0 0013.15 6.15z"
+                      />
+                    </svg>
+                  </div>
+                  <input
+                    id="search"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Search boards, modules, versions…"
+                    class="w-full pl-10 pr-4 py-3 rounded-xl bg-dark-850/60 border border-dark-700 text-gray-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500/60 focus:border-brand-500/40 shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div class="flex gap-3">
+                <button
+                  id="filter-featured"
+                  class="px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shadow-lg shadow-brand-500/20"
+                >
+                  Featured
+                </button>
+                <button
+                  id="filter-all"
+                  class="px-4 py-3 rounded-xl bg-dark-850/60 hover:bg-dark-800 border border-dark-700 text-gray-200 font-medium transition"
+                >
+                  All
+                </button>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-2 text-xs">
+              <button
+                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
+                data-status="production"
+              >
+                Production
+              </button>
+              <button
+                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
+                data-status="module"
+              >
+                Module
+              </button>
+              <button
+                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
+                data-status="prototype"
+              >
+                Prototype
+              </button>
+              <button
+                class="chip px-3 py-1.5 rounded-full border border-dark-700 bg-dark-850/50 hover:bg-dark-800 text-gray-300 transition"
+                data-status="archive"
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+
+          <div class="lg:col-span-5 fade-in">
+            <div class="relative group">
+              <div
+                class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-700"
+              ></div>
+              <div
+                class="relative rounded-2xl overflow-hidden border border-dark-700 bg-dark-850/50 shadow-glow"
+              >
+                <div class="p-6 border-b border-dark-700">
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <div class="text-sm font-semibold text-white">Quick links</div>
+                      <div class="text-xs text-gray-500 mt-1">Jump into the latest hardware.</div>
+                    </div>
+                    <div class="text-xs text-gray-500" id="count-pill">…</div>
+                  </div>
+                </div>
+                <div class="p-6 space-y-3 text-sm">
+                  <a
+                    href="#featured"
+                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
+                  >
+                    <span class="text-gray-200">Featured hardware</span>
+                    <span class="text-gray-500">↓</span>
+                  </a>
+                  <a
+                    href="#catalog"
+                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
+                  >
+                    <span class="text-gray-200">Full catalog</span>
+                    <span class="text-gray-500">↓</span>
+                  </a>
+                  <a
+                    href="hardware/README.md"
+                    class="flex items-center justify-between px-4 py-3 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 transition"
+                  >
+                    <span class="text-gray-200">Hardware license</span>
+                    <span class="text-gray-500">→</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="pb-20">
+      <section id="featured" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div class="flex items-end justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Featured</h2>
+            <p class="text-sm text-gray-500 mt-1">
+              The boards you’d typically point people at.
+            </p>
+          </div>
+        </div>
+        <div id="featured-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+      </section>
+
+      <section id="catalog" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">
+        <div class="flex items-end justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white">Catalog</h2>
+            <p class="text-sm text-gray-500 mt-1">
+              Search and filter the full list. Fill in descriptions/links in each
+              <code class="text-gray-400">device.json</code>.
+            </p>
+          </div>
+        </div>
+        <div id="catalog-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+
+        <div id="empty-state" class="hidden mt-10">
+          <div class="rounded-2xl border border-dark-700 bg-dark-850/40 p-8 text-center">
+            <div class="text-white font-semibold">No matches</div>
+            <div class="text-gray-500 text-sm mt-2">Try a different search or filter.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-dark-700 bg-dark-900/40">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div class="text-sm text-gray-500">
+            EMWaver hardware docs — static and GitHub Pages friendly.
+          </div>
+          <div class="text-sm text-gray-500">
+            Want a new entry? Add <code>hardware/DEVICE/device.json</code> + update
+            <code>hardware/devices.json</code>.
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const MANIFEST_URL = "hardware/devices.json";
+
+      const state = {
+        devices: [],
+        query: "",
+        status: null,
+        showFeaturedOnly: true,
+      };
+
+      const el = {
+        countPill: document.getElementById("count-pill"),
+        featuredGrid: document.getElementById("featured-grid"),
+        catalogGrid: document.getElementById("catalog-grid"),
+        emptyState: document.getElementById("empty-state"),
+        search: document.getElementById("search"),
+        filterFeatured: document.getElementById("filter-featured"),
+        filterAll: document.getElementById("filter-all"),
+        chips: Array.from(document.querySelectorAll(".chip")),
+      };
+
+      function normalize(text) {
+        return String(text || "")
+          .toLowerCase()
+          .replace(/[_-]+/g, " ")
+          .trim();
+      }
+
+      function prettyTitle(folderOrTitle) {
+        return String(folderOrTitle || "")
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function statusLabel(status) {
+        switch (status) {
+          case "production":
+            return { text: "Production", className: "text-green-300 bg-green-500/10 border-green-500/20" };
+          case "module":
+            return { text: "Module", className: "text-cyan-300 bg-cyan-500/10 border-cyan-500/20" };
+          case "prototype":
+            return { text: "Prototype", className: "text-amber-300 bg-amber-500/10 border-amber-500/20" };
+          case "archive":
+            return { text: "Archive", className: "text-gray-300 bg-white/5 border-dark-700" };
+          default:
+            return { text: "Unclassified", className: "text-gray-300 bg-white/5 border-dark-700" };
+        }
+      }
+
+      function safeUrl(url) {
+        if (!url) return null;
+        const s = String(url).trim();
+        if (!s) return null;
+        return s;
+      }
+
+      function cardHtml(device) {
+        const title = prettyTitle(device.displayTitle || device.title || device.folder);
+        const description =
+          device.description ||
+          "Description coming soon. Add it in this device’s device.json.";
+
+        const img = device.image
+          ? String(device.image).includes("/")
+            ? String(device.image)
+            : `${device.folder}/${device.image}`
+          : `${device.folder}/${device.folder}.png`;
+        const badge = statusLabel(device.status);
+
+        const oshwLabUrl = safeUrl(device.oshwLabUrl);
+        const githubUrl = safeUrl(device.githubUrl);
+        const schematicUrl = safeUrl(device.schematicUrl);
+
+        const tags = Array.isArray(device.tags) ? device.tags.slice(0, 5) : [];
+
+        return `
+          <article class="group rounded-2xl border border-dark-700 bg-dark-850/40 overflow-hidden hover:bg-dark-850/60 transition shadow-sm">
+            <div class="relative">
+              <div class="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/30 to-transparent pointer-events-none"></div>
+              <img
+                src="hardware/${img}"
+                alt="${title}"
+                class="w-full h-44 object-cover"
+                loading="lazy"
+                onerror="this.onerror=null; this.style.display='none'; this.parentElement.classList.add('bg-dark-800'); this.parentElement.style.height='11rem';"
+              />
+              <div class="absolute top-3 left-3">
+                <span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${badge.className}">
+                  ${badge.text}
+                </span>
+              </div>
+            </div>
+
+            <div class="p-5">
+              <h3 class="text-lg font-bold text-white group-hover:text-brand-500 transition">${title}</h3>
+              <p class="mt-2 text-sm text-gray-400 leading-relaxed">${description}</p>
+
+              ${
+                tags.length
+                  ? `<div class="mt-4 flex flex-wrap gap-2">${tags
+                      .map(
+                        (t) =>
+                          `<span class="text-xs px-2.5 py-1 rounded-full border border-dark-700 bg-dark-800/40 text-gray-300">${t}</span>`
+                      )
+                      .join("")}</div>`
+                  : ""
+              }
+
+              <div class="mt-5 flex flex-wrap gap-2">
+                ${
+                  oshwLabUrl
+                    ? `<a href="${oshwLabUrl}" target="_blank" rel="noreferrer" class="px-3.5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-500/10">Open in OSHW Lab</a>`
+                    : `<button disabled class="px-3.5 py-2 rounded-xl bg-dark-800/60 border border-dark-700 text-gray-500 text-sm font-medium cursor-not-allowed">OSHW Lab</button>`
+                }
+                ${
+                  githubUrl
+                    ? `<a href="${githubUrl}" target="_blank" rel="noreferrer" class="px-3.5 py-2 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 text-gray-200 text-sm font-medium transition">GitHub files</a>`
+                    : `<button disabled class="px-3.5 py-2 rounded-xl bg-dark-800/60 border border-dark-700 text-gray-500 text-sm font-medium cursor-not-allowed">GitHub files</button>`
+                }
+                ${
+                  schematicUrl
+                    ? `<a href="${schematicUrl}" target="_blank" rel="noreferrer" class="px-3.5 py-2 rounded-xl bg-dark-800/60 hover:bg-dark-800 border border-dark-700 text-gray-200 text-sm font-medium transition">Schematic</a>`
+                    : `<button disabled class="px-3.5 py-2 rounded-xl bg-dark-800/60 border border-dark-700 text-gray-500 text-sm font-medium cursor-not-allowed">Schematic</button>`
+                }
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      function matches(device) {
+        const q = normalize(state.query);
+        const hay = normalize(
+          [
+            device.folder,
+            device.title,
+            device.displayTitle,
+            device.description,
+            (device.tags || []).join(" "),
+            device.status,
+          ].join(" ")
+        );
+        const queryOk = !q || hay.includes(q);
+        const statusOk = !state.status || device.status === state.status;
+        const featuredOk = !state.showFeaturedOnly || Boolean(device.featured);
+        return queryOk && statusOk && featuredOk;
+      }
+
+      function render() {
+        const featured = state.devices.filter((d) => d.featured);
+        el.featuredGrid.innerHTML = featured.map(cardHtml).join("");
+
+        const filtered = state.devices.filter(matches);
+        el.catalogGrid.innerHTML = filtered.map(cardHtml).join("");
+
+        el.emptyState.classList.toggle("hidden", filtered.length > 0);
+        el.countPill.textContent = `${state.devices.length} entries`;
+      }
+
+      function setFeaturedOnly(on) {
+        state.showFeaturedOnly = on;
+        el.filterFeatured.classList.toggle("bg-brand-600", on);
+        el.filterFeatured.classList.toggle("bg-dark-850/60", !on);
+        el.filterFeatured.classList.toggle("border", !on);
+        el.filterFeatured.classList.toggle("border-dark-700", !on);
+
+        el.filterAll.classList.toggle("bg-brand-600", !on);
+        el.filterAll.classList.toggle("bg-dark-850/60", on);
+        render();
+      }
+
+      function setStatus(status) {
+        state.status = status;
+        el.chips.forEach((chip) => {
+          const active = chip.dataset.status === status;
+          chip.classList.toggle("bg-brand-500/15", active);
+          chip.classList.toggle("border-brand-500/30", active);
+          chip.classList.toggle("text-white", active);
+        });
+        render();
+      }
+
+      async function loadDevices() {
+        const res = await fetch(MANIFEST_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Failed manifest: ${res.status}`);
+        const folders = await res.json();
+        if (!Array.isArray(folders)) throw new Error("Manifest must be an array.");
+
+        const reads = folders.map(async (folder) => {
+          try {
+            const r = await fetch(`hardware/${folder}/device.json`, { cache: "no-store" });
+            const data = r.ok ? await r.json() : {};
+            return { folder, ...data };
+          } catch {
+            return { folder, title: folder };
+          }
+        });
+
+        const devices = await Promise.all(reads);
+        devices.sort((a, b) => prettyTitle(a.title || a.folder).localeCompare(prettyTitle(b.title || b.folder)));
+        state.devices = devices;
+        render();
+      }
+
+      el.search.addEventListener("input", (e) => {
+        state.query = e.target.value;
+        render();
+      });
+
+      el.filterFeatured.addEventListener("click", () => setFeaturedOnly(true));
+      el.filterAll.addEventListener("click", () => setFeaturedOnly(false));
+
+      el.chips.forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const status = chip.dataset.status;
+          setStatus(state.status === status ? null : status);
+        });
+      });
+
+      setFeaturedOnly(true);
+      loadDevices().catch((err) => {
+        const isFileProtocol = window.location && window.location.protocol === "file:";
+        el.catalogGrid.innerHTML = `
+          <div class="md:col-span-2 xl:col-span-3 rounded-2xl border border-dark-700 bg-dark-850/40 p-6">
+            <div class="text-white font-semibold">Couldn’t load hardware list</div>
+            <div class="text-gray-500 text-sm mt-2">
+              Ensure <code>hardware/devices.json</code> exists and is valid JSON.
+            </div>
+            ${
+              isFileProtocol
+                ? `<div class="text-gray-500 text-sm mt-2">
+                     You’re opening this page via <code>file://</code>, which blocks <code>fetch()</code>.
+                     Run a local server instead: <code>python3 -m http.server 8000</code> then open
+                     <code>http://localhost:8000/hardware.html</code>.
+                   </div>`
+                : ""
+            }
+            <div class="text-gray-600 text-xs mt-2">${String(err)}</div>
+          </div>
+        `;
+      });
+    </script>
+  </body>
+</html>
