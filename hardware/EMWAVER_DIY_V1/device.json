@@ -1,3 +1,12 @@
 {
-  "title": "EMWAVER_DIY_V1"
+  "title": "EMWAVER_DIY_V1",
+  "displayTitle": "EMWaver DIY v1",
+  "group": "esp32",
+  "experimental": true,
+  "description": "DIY ESP32-based board (description coming soon).",
+  "tags": ["DIY", "ESP32"],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

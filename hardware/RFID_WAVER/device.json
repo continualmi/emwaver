@@ -4,6 +4,7 @@
   "group": "module",
   "parent": "GPIO_WAVER_V3",
   "status": "module",
+  "image": "RFID_WAVER.png",
   "description": "RFID expansion board (description coming soon).",
   "tags": ["RFID", "module"],
   "appSupport": ["android", "desktop"],

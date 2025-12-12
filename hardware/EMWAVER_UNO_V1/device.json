@@ -1,3 +1,12 @@
 {
-  "title": "EMWAVER_UNO_V1"
+  "title": "EMWAVER_UNO_V1",
+  "displayTitle": "EMWaver UNO v1",
+  "group": "stm32",
+  "experimental": true,
+  "description": "Early UNO revision (description coming soon).",
+  "tags": ["UNO", "STM32"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

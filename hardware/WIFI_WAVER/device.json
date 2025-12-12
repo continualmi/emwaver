@@ -1,3 +1,13 @@
 {
-  "title": "WIFI_WAVER"
+  "title": "WIFI_WAVER",
+  "displayTitle": "WiFi Waver",
+  "group": "module",
+  "status": "module",
+  "experimental": true,
+  "description": "ESP8266-based WiFi add-on (description coming soon).",
+  "tags": ["WiFi", "ESP8266", "module"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

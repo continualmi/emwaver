@@ -1,3 +1,12 @@
 {
-  "title": "INFRARED_WAVER_V0"
+  "title": "INFRARED_WAVER_V0",
+  "displayTitle": "Infrared Waver v0",
+  "group": "stm32",
+  "experimental": true,
+  "description": "Early IR board revision (description coming soon).",
+  "tags": ["IR", "STM32"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }

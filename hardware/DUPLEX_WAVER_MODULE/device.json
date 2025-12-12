@@ -1,3 +1,13 @@
 {
-  "title": "DUPLEX_WAVER_MODULE"
+  "title": "DUPLEX_WAVER_MODULE",
+  "displayTitle": "Duplex Waver Module",
+  "group": "module",
+  "status": "module",
+  "experimental": true,
+  "description": "Duplex add-on module (description coming soon).",
+  "tags": ["Duplex", "module"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
 }
