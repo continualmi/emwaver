@@ -286,7 +286,8 @@
         const crumbCatalog = document.getElementById("crumb-catalog");
         const crumbCatalogSep = document.getElementById("crumb-catalog-sep");
         const cameFromCatalog = from === "catalog";
-        const backToCatalog = back === "experimental" ? "catalog.html#experimental" : "catalog.html";
+        const backToCatalog =
+          back === "experimental" ? "catalog.html#experimental" : back === "old" ? "catalog.html#old" : "catalog.html";
         if (cameFromCatalog) {
           navBack.href = backToCatalog;
           navBack.textContent = "Back to catalog";
