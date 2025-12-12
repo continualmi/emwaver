@@ -1,18 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMWaver Hardware Catalog</title>
-    <meta name="description" content="Complete EMWaver hardware list, grouped by platform." />
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <script>
-      tailwind.config = {
+tailwind.config = {
         theme: {
           extend: {
             fontFamily: { sans: ["Inter", "sans-serif"] },
@@ -22,135 +8,15 @@
           },
         },
       };
-    </script>
-    <style>
-      :root {
-        color-scheme: light;
-        --nav-height: 64px;
-        --page-pad: 20px;
-      }
-      body {
-        background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.16), transparent 60%),
-          radial-gradient(900px 700px at 90% 15%, rgba(56, 189, 248, 0.12), transparent 55%),
-          linear-gradient(180deg, #f8fafc 0%, #ffffff 55%, #f8fafc 100%);
-        color: #0f172a;
-      }
-      .noise {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.03;
-        mix-blend-mode: multiply;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
-      }
-      @media (min-width: 1024px) {
-        .catalog-grid {
-          height: calc(100vh - var(--nav-height) - (2 * var(--page-pad)));
-        }
-      }
-    </style>
-  </head>
+    
 
-  <body class="antialiased selection:bg-brand-500 selection:text-white bg-white text-slate-900">
-    <div class="noise"></div>
 
-    <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-          <div class="flex items-center gap-3">
-            <a
-              href="hardware.html"
-              class="text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
-            >
-              EMWaver
-            </a>
-            <span class="text-slate-300 hidden sm:inline">/</span>
-            <span class="text-sm font-medium text-slate-600 hidden sm:inline">Catalog</span>
-          </div>
-
-          <div class="flex items-center gap-4">
-            <a href="hardware.html" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition">Back</a>
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <main class="pt-20 pb-5" style="padding-left: var(--page-pad); padding-right: var(--page-pad)">
-      <section class="max-w-7xl mx-auto">
-        <div class="flex items-center justify-between gap-4 mb-4">
-          <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">Hardware Catalog</h1>
-            <p class="text-sm text-slate-600 mt-1">ESP32 • STM32 • Modules</p>
-          </div>
-          <div class="text-xs text-slate-500" id="count-pill">…</div>
-        </div>
-
-        <div class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
-            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                  <img
-                    src="https://www.mouser.com/Images/espressifsystems/lrg/ESP32-S3FH4R2_SPL.jpg"
-                    alt="ESP32"
-                    title="ESP32"
-                    loading="lazy"
-                    referrerpolicy="no-referrer"
-                    class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-                    onerror="this.onerror=null; this.style.display='none';"
-                  />
-                  <span class="text-slate-900">ESP32-based</span>
-                </h2>
-                <div class="text-xs text-slate-500" id="count-esp32">…</div>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">Android • iOS • desktop</div>
-            </div>
-            <div id="list-esp32" class="p-2 overflow-auto space-y-2"></div>
-          </section>
-
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
-            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                  <img
-                    src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s"
-                    alt="STM32"
-                    title="STM32"
-                    loading="lazy"
-                    referrerpolicy="no-referrer"
-                    class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-                    onerror="this.onerror=null; this.style.display='none';"
-                  />
-                  <span class="text-slate-900">STM32-based</span>
-                </h2>
-                <div class="text-xs text-slate-500" id="count-stm32">…</div>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">Typically USB: Android • desktop</div>
-            </div>
-            <div id="list-stm32" class="p-2 overflow-auto space-y-2"></div>
-          </section>
-
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
-            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
-                <div class="text-xs text-slate-500" id="count-modules">…</div>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">Add-ons (not standalone)</div>
-            </div>
-            <div id="list-modules" class="p-2 overflow-auto space-y-2"></div>
-          </section>
-        </div>
-      </section>
-    </main>
-
-    <script>
       const MANIFEST_URL = "hardware/devices.json";
       const ICONS = {
         android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
-        ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
+        ios: "https://icons.veryicon.com/png/o/application/skills-section/ios-1.png",
         desktop: "https://cdn-icons-png.flaticon.com/512/3381/3381949.png",
-        esp32: "https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg",
+        esp32: "https://www.mouser.com/Images/espressifsystems/lrg/ESP32-S3FH4R2_SPL.jpg",
         stm32: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s",
       };
 
@@ -294,6 +160,3 @@
         el.listStm32.innerHTML = "";
         el.listModules.innerHTML = "";
       });
-    </script>
-  </body>
-</html>

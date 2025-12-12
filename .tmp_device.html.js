@@ -1,18 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMWaver Hardware</title>
-    <meta name="description" content="EMWaver hardware device page." />
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <script>
-      tailwind.config = {
+tailwind.config = {
         theme: {
           extend: {
             fontFamily: { sans: ["Inter", "sans-serif"] },
@@ -22,133 +8,9 @@
           },
         },
       };
-    </script>
-    <style>
-      :root {
-        color-scheme: light;
-      }
-      body {
-        background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.16), transparent 60%),
-          radial-gradient(900px 700px at 90% 15%, rgba(56, 189, 248, 0.12), transparent 55%),
-          linear-gradient(180deg, #f8fafc 0%, #ffffff 55%, #f8fafc 100%);
-        color: #0f172a;
-      }
-      .noise {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.03;
-        mix-blend-mode: multiply;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
-      }
-      .fade-in {
-        animation: fade 280ms ease-out both;
-      }
-      @keyframes fade {
-        from {
-          opacity: 0;
-          transform: translateY(6px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-    </style>
-  </head>
+    
 
-  <body class="antialiased selection:bg-brand-500 selection:text-white bg-white text-slate-900">
-    <div class="noise"></div>
 
-    <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-          <div class="flex items-center gap-3">
-            <a
-              href="hardware.html"
-              class="text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
-            >
-              EMWaver
-            </a>
-            <span class="text-slate-300 hidden sm:inline">/</span>
-            <a
-              href="hardware.html"
-              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
-              >Hardware</a
-            >
-            <span class="text-slate-300 hidden sm:inline">/</span>
-            <span id="crumb-title" class="text-sm font-medium text-slate-600 hidden sm:inline">…</span>
-          </div>
-
-          <div class="flex items-center gap-4">
-            <a href="hardware.html" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition">Back</a>
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <main class="pt-28 pb-20">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div id="error" class="hidden rounded-2xl border border-slate-200 bg-white/80 p-6"></div>
-
-        <div id="content" class="hidden fade-in">
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-            <div class="lg:col-span-5">
-              <div class="relative group">
-                <div
-                  class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-700"
-                ></div>
-                <div
-                  class="relative rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm"
-                >
-                  <div class="relative">
-                    <div class="absolute inset-0 bg-gradient-to-t from-white/95 via-white/30 to-transparent"></div>
-                    <img
-                      id="device-image"
-                      src=""
-                      alt=""
-                      class="w-full h-64 object-cover"
-                      loading="lazy"
-                      onerror="this.onerror=null; this.style.display='none';"
-                    />
-                    <div class="absolute top-4 left-4" id="status-pill"></div>
-                  </div>
-                  <div class="p-6 border-t border-slate-200">
-                    <div class="text-xs text-slate-500">Folder</div>
-                    <div id="device-folder" class="text-sm text-slate-700 mt-1 font-mono"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="lg:col-span-7">
-              <div class="flex flex-wrap items-center gap-2">
-                <div id="group-badge" class="flex items-center gap-2 text-sm text-slate-700"></div>
-                <div class="w-px h-4 bg-slate-200"></div>
-                <div id="support-icons" class="flex items-center gap-2"></div>
-              </div>
-
-              <div id="relations" class="mt-4 hidden"></div>
-
-              <h1 id="device-title" class="mt-4 text-4xl font-bold text-slate-900 leading-tight">…</h1>
-              <p id="device-description" class="mt-4 text-lg text-slate-600 leading-relaxed">…</p>
-
-              <div class="mt-6 flex flex-wrap gap-3" id="action-buttons"></div>
-
-              <div class="mt-10 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-                <div class="text-slate-900 font-semibold">Notes</div>
-                <div class="mt-2 text-sm text-slate-600 leading-relaxed">
-                  Fill in links, description, and metadata inside this device’s <code>device.json</code>.
-                </div>
-                <div id="tags" class="mt-4 flex flex-wrap gap-2"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <script>
       const params = new URLSearchParams(window.location.search);
       const deviceId = params.get("id");
 
@@ -177,9 +39,9 @@
 
       const ICONS = {
         android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
-        ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
+        ios: "https://icons.veryicon.com/png/o/application/skills-section/ios-1.png",
         desktop: "https://cdn-icons-png.flaticon.com/512/3381/3381949.png",
-        esp32: "https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg",
+        esp32: "https://www.mouser.com/Images/espressifsystems/lrg/ESP32-S3FH4R2_SPL.jpg",
         stm32: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s",
       };
 
@@ -321,6 +183,3 @@
       }
 
       load().catch((err) => showError("Couldn’t load device", String(err)));
-    </script>
-  </body>
-</html>
