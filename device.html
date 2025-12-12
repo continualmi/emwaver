@@ -66,8 +66,14 @@
           <div class="flex items-center gap-3">
             <a
               href="hardware.html"
-              class="text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
+              class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
             >
+              <img
+                src="assets/emwaver-logo.png"
+                alt="EMWaver"
+                class="w-7 h-7 rounded-lg object-contain bg-white border border-slate-200"
+                loading="lazy"
+              />
               EMWaver
             </a>
             <span class="text-slate-300 hidden sm:inline">/</span>
@@ -102,20 +108,14 @@
                   class="relative rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm"
                 >
                   <div class="relative">
-                    <div class="absolute inset-0 bg-gradient-to-t from-white/95 via-white/30 to-transparent"></div>
                     <img
                       id="device-image"
                       src=""
                       alt=""
                       class="w-full h-64 object-cover"
                       loading="lazy"
-                      onerror="this.onerror=null; this.style.display='none';"
                     />
                     <div class="absolute top-4 left-4" id="status-pill"></div>
-                  </div>
-                  <div class="p-6 border-t border-slate-200">
-                    <div class="text-xs text-slate-500">Folder</div>
-                    <div id="device-folder" class="text-sm text-slate-700 mt-1 font-mono"></div>
                   </div>
                 </div>
               </div>
@@ -273,15 +273,30 @@
         document.getElementById("support-icons").innerHTML = supportIcons(group, device.appSupport);
 
         document.getElementById("status-pill").innerHTML = statusPill(device.status);
-        document.getElementById("device-folder").textContent = `hardware/${deviceId}/`;
 
-        const img = device.image
-          ? String(device.image).includes("/")
-            ? String(device.image)
-            : `${deviceId}/${device.image}`
-          : `${deviceId}/${deviceId}.png`;
         const imgEl = document.getElementById("device-image");
-        imgEl.src = `hardware/${img}`;
+        const rawImage = device.image ? String(device.image).trim() : "";
+        const isHttp = (s) => /^https?:\/\//i.test(s);
+        const defaultImg = `hardware/${deviceId}/${deviceId}.png`;
+        const resolvedImg = !rawImage
+          ? defaultImg
+          : isHttp(rawImage)
+            ? rawImage
+            : rawImage.startsWith("hardware/")
+              ? rawImage
+              : `hardware/${rawImage.includes("/") ? rawImage : `${deviceId}/${rawImage}`}`;
+
+        imgEl.onerror = () => {
+          if (imgEl.dataset.fallbackDone === "1") {
+            imgEl.onerror = null;
+            imgEl.style.display = "none";
+            return;
+          }
+          imgEl.dataset.fallbackDone = "1";
+          imgEl.src = defaultImg;
+        };
+
+        imgEl.src = resolvedImg;
         imgEl.alt = title;
 
         const oshwLabUrl = safeUrl(device.oshwLabUrl);
