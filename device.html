@@ -82,12 +82,24 @@
               class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
               >Hardware</a
             >
+            <span id="crumb-catalog-sep" class="text-slate-300 hidden sm:inline">/</span>
+            <a
+              id="crumb-catalog"
+              href="catalog.html"
+              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline hidden"
+              >Catalog</a
+            >
             <span class="text-slate-300 hidden sm:inline">/</span>
             <span id="crumb-title" class="text-sm font-medium text-slate-600 hidden sm:inline">…</span>
           </div>
 
           <div class="flex items-center gap-4">
-            <a href="hardware.html" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition">Back</a>
+            <a
+              id="nav-back"
+              href="hardware.html"
+              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition"
+              >Back</a
+            >
           </div>
         </div>
       </div>
@@ -151,6 +163,8 @@
     <script>
       const params = new URLSearchParams(window.location.search);
       const deviceId = params.get("id");
+      const from = (params.get("from") || "").trim().toLowerCase();
+      const back = (params.get("back") || "").trim().toLowerCase();
 
       function prettyTitle(text) {
         return String(text || "")
@@ -267,6 +281,24 @@
         document.getElementById("device-title").textContent = title;
         document.getElementById("device-description").textContent =
           device.description || "Description coming soon.";
+
+        const navBack = document.getElementById("nav-back");
+        const crumbCatalog = document.getElementById("crumb-catalog");
+        const crumbCatalogSep = document.getElementById("crumb-catalog-sep");
+        const cameFromCatalog = from === "catalog";
+        const backToCatalog = back === "experimental" ? "catalog.html#experimental" : "catalog.html";
+        if (cameFromCatalog) {
+          navBack.href = backToCatalog;
+          navBack.textContent = "Back to catalog";
+          crumbCatalog.classList.remove("hidden");
+          crumbCatalogSep.classList.remove("hidden");
+          crumbCatalog.href = backToCatalog;
+        } else {
+          navBack.href = "hardware.html";
+          navBack.textContent = "Back";
+          crumbCatalog.classList.add("hidden");
+          crumbCatalogSep.classList.add("hidden");
+        }
 
         const group = device.group || null;
         document.getElementById("group-badge").innerHTML = groupBadge(group);

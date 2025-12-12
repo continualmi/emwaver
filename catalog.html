@@ -71,6 +71,12 @@
               EMWaver
             </a>
             <span class="text-slate-300 hidden sm:inline">/</span>
+            <a
+              href="hardware.html"
+              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
+              >Hardware</a
+            >
+            <span class="text-slate-300 hidden sm:inline">/</span>
             <span class="text-sm font-medium text-slate-600 hidden sm:inline">Catalog</span>
           </div>
 
@@ -207,8 +213,13 @@
         viewExperimental: document.getElementById("view-experimental"),
       };
 
+      const state = {
+        view: "current",
+      };
+
       function setView(view) {
         const isExperimental = view === "experimental";
+        state.view = isExperimental ? "experimental" : "current";
         el.viewCurrent.classList.toggle("hidden", isExperimental);
         el.viewExperimental.classList.toggle("hidden", !isExperimental);
 
@@ -269,10 +280,12 @@
         const group = device.group || "";
         const parent = device.parent ? String(device.parent).trim() : "";
         const parentTitle = parent && lookup[parent] ? prettyTitle(lookup[parent].displayTitle || lookup[parent].title || parent) : prettyTitle(parent);
+        const from = "catalog";
+        const back = state.view;
 
         return `
           <div class="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition overflow-hidden">
-            <a href="device.html?id=${encodeURIComponent(device.folder)}" class="block group">
+            <a href="device.html?id=${encodeURIComponent(device.folder)}&from=${from}&back=${encodeURIComponent(back)}" class="block group">
               <div class="px-3 py-2.5">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0">
