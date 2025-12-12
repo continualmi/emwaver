@@ -94,23 +94,30 @@
             <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">Hardware Catalog</h1>
             <p class="text-sm text-slate-600 mt-1">ESP32 • STM32 • Modules</p>
           </div>
-          <div class="flex items-center gap-3">
-            <div class="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm">
-              <button
-                id="tab-current"
-                class="px-3 py-1.5 text-sm font-semibold rounded-lg bg-brand-600 text-white transition"
-                type="button"
-              >
-                Current
-              </button>
-              <button
-                id="tab-experimental"
-                class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
-                type="button"
-              >
-                Experimental
-              </button>
-            </div>
+            <div class="flex items-center gap-3">
+              <div class="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm">
+                <button
+                  id="tab-current"
+                  class="px-3 py-1.5 text-sm font-semibold rounded-lg bg-brand-600 text-white transition"
+                  type="button"
+                >
+                  Current
+                </button>
+                <button
+                  id="tab-experimental"
+                  class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
+                  type="button"
+                >
+                  Experimental
+                </button>
+                <button
+                  id="tab-old"
+                  class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
+                  type="button"
+                >
+                  Old
+                </button>
+              </div>
             <div class="text-xs text-slate-500" id="count-pill">…</div>
           </div>
         </div>
@@ -230,6 +237,65 @@
 	            </section>
 	          </div>
 	        </div>
+
+	        <div id="view-old" class="hidden">
+	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+	                <div class="flex items-center justify-between gap-3">
+	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+	                    <img
+	                      src="https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg"
+	                      alt="ESP32"
+	                      title="ESP32"
+	                      loading="lazy"
+	                      referrerpolicy="no-referrer"
+	                      class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
+	                      onerror="this.onerror=null; this.style.display='none';"
+	                    />
+	                    <span class="text-slate-900">ESP32-based</span>
+	                  </h2>
+	                  <div class="text-xs text-slate-500" id="count-esp32-old">…</div>
+	                </div>
+	                <div class="text-xs text-slate-500 mt-1">Old devices</div>
+	              </div>
+	              <div id="list-esp32-old" class="p-2 overflow-auto space-y-2"></div>
+	            </section>
+	
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+	                <div class="flex items-center justify-between gap-3">
+	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
+	                    <img
+	                      src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s"
+	                      alt="STM32"
+	                      title="STM32"
+	                      loading="lazy"
+	                      referrerpolicy="no-referrer"
+	                      class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
+	                      onerror="this.onerror=null; this.style.display='none';"
+	                    />
+	                    <span class="text-slate-900">STM32-based</span>
+	                  </h2>
+	                  <div class="text-xs text-slate-500" id="count-stm32-old">…</div>
+	                </div>
+	                <div class="text-xs text-slate-500 mt-1">Old devices</div>
+	              </div>
+	              <div id="list-stm32-old" class="p-2 overflow-auto space-y-2"></div>
+	            </section>
+	
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
+	                <div class="flex items-center justify-between gap-3">
+	                  <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
+	                  <div class="text-xs text-slate-500" id="count-modules-old">…</div>
+	                </div>
+	                <div class="text-xs text-slate-500 mt-1">Old add-ons</div>
+	              </div>
+	              <div id="list-modules-old" class="p-2 overflow-auto space-y-2"></div>
+	            </section>
+	          </div>
+	        </div>
 	      </section>
 	    </main>
 
@@ -251,16 +317,24 @@
 	        countEsp32Exp: document.getElementById("count-esp32-exp"),
 	        countStm32Exp: document.getElementById("count-stm32-exp"),
 	        countModulesExp: document.getElementById("count-modules-exp"),
+	        countEsp32Old: document.getElementById("count-esp32-old"),
+	        countStm32Old: document.getElementById("count-stm32-old"),
+	        countModulesOld: document.getElementById("count-modules-old"),
 	        listEsp32: document.getElementById("list-esp32"),
 	        listStm32: document.getElementById("list-stm32"),
 	        listModules: document.getElementById("list-modules"),
 	        listEsp32Exp: document.getElementById("list-esp32-exp"),
 	        listStm32Exp: document.getElementById("list-stm32-exp"),
 	        listModulesExp: document.getElementById("list-modules-exp"),
+	        listEsp32Old: document.getElementById("list-esp32-old"),
+	        listStm32Old: document.getElementById("list-stm32-old"),
+	        listModulesOld: document.getElementById("list-modules-old"),
 	        tabCurrent: document.getElementById("tab-current"),
 	        tabExperimental: document.getElementById("tab-experimental"),
+	        tabOld: document.getElementById("tab-old"),
 	        viewCurrent: document.getElementById("view-current"),
 	        viewExperimental: document.getElementById("view-experimental"),
+	        viewOld: document.getElementById("view-old"),
       };
 
       const state = {
@@ -268,23 +342,25 @@
       };
 
       function setView(view) {
-        const isExperimental = view === "experimental";
-        state.view = isExperimental ? "experimental" : "current";
-        el.viewCurrent.classList.toggle("hidden", isExperimental);
-        el.viewExperimental.classList.toggle("hidden", !isExperimental);
+        const next = view === "experimental" || view === "old" ? view : "current";
+        state.view = next;
 
-        el.tabCurrent.classList.toggle("bg-brand-600", !isExperimental);
-        el.tabCurrent.classList.toggle("text-white", !isExperimental);
-        el.tabCurrent.classList.toggle("text-slate-700", isExperimental);
-        el.tabCurrent.classList.toggle("hover:bg-slate-50", isExperimental);
+        el.viewCurrent.classList.toggle("hidden", next !== "current");
+        el.viewExperimental.classList.toggle("hidden", next !== "experimental");
+        el.viewOld.classList.toggle("hidden", next !== "old");
 
-        el.tabExperimental.classList.toggle("bg-brand-600", isExperimental);
-        el.tabExperimental.classList.toggle("text-white", isExperimental);
-        el.tabExperimental.classList.toggle("text-slate-700", !isExperimental);
-        el.tabExperimental.classList.toggle("hover:bg-slate-50", !isExperimental);
+        const active = (btn, on) => {
+          btn.classList.toggle("bg-brand-600", on);
+          btn.classList.toggle("text-white", on);
+          btn.classList.toggle("text-slate-700", !on);
+          btn.classList.toggle("hover:bg-slate-50", !on);
+        };
 
-        if (isExperimental) window.location.hash = "experimental";
-        else window.location.hash = "";
+        active(el.tabCurrent, next === "current");
+        active(el.tabExperimental, next === "experimental");
+        active(el.tabOld, next === "old");
+
+        window.location.hash = next === "current" ? "" : next;
       }
 
       function prettyTitle(folderOrTitle) {
@@ -404,6 +480,20 @@
 
         el.countPill.textContent = `${devices.length} entries`;
 
+        const old = devices.filter((d) => {
+          const lifecycle = d.lifecycle ? String(d.lifecycle).trim().toLowerCase() : "";
+          const status = d.status ? String(d.status).trim().toLowerCase() : "";
+          const tags = Array.isArray(d.tags) ? d.tags.map((t) => String(t).trim().toLowerCase()) : [];
+          return (
+            lifecycle === "old" ||
+            lifecycle === "legacy" ||
+            status === "old" ||
+            status === "legacy" ||
+            tags.includes("old") ||
+            tags.includes("legacy")
+          );
+        });
+
         const experimental = devices.filter((d) => {
           const lifecycle = d.lifecycle ? String(d.lifecycle).trim().toLowerCase() : "";
           const status = d.status ? String(d.status).trim().toLowerCase() : "";
@@ -425,14 +515,21 @@
           return explicit || unknownGroup;
         });
 
-	        const experimentalSet = new Set(experimental.map((d) => d.folder));
-	        const esp32 = devices.filter((d) => d.group === "esp32" && !experimentalSet.has(d.folder));
-	        const stm32 = devices.filter((d) => d.group === "stm32" && !experimentalSet.has(d.folder));
-	        const modules = devices.filter((d) => d.group === "module" && !experimentalSet.has(d.folder));
+	        const oldSet = new Set(old.map((d) => d.folder));
+	        const experimentalSet = new Set(experimental.filter((d) => !oldSet.has(d.folder)).map((d) => d.folder));
+
+	        const esp32 = devices.filter((d) => d.group === "esp32" && !experimentalSet.has(d.folder) && !oldSet.has(d.folder));
+	        const stm32 = devices.filter((d) => d.group === "stm32" && !experimentalSet.has(d.folder) && !oldSet.has(d.folder));
+	        const modules = devices.filter((d) => d.group === "module" && !experimentalSet.has(d.folder) && !oldSet.has(d.folder));
 	
-	        const expEsp32 = experimental.filter((d) => d.group === "esp32");
-	        const expModules = experimental.filter((d) => d.group === "module");
-	        const expStm32 = experimental.filter((d) => d.group !== "esp32" && d.group !== "module");
+	        const effectiveExperimental = experimental.filter((d) => !oldSet.has(d.folder));
+	        const expEsp32 = effectiveExperimental.filter((d) => d.group === "esp32");
+	        const expModules = effectiveExperimental.filter((d) => d.group === "module");
+	        const expStm32 = effectiveExperimental.filter((d) => d.group !== "esp32" && d.group !== "module");
+
+	        const oldEsp32 = old.filter((d) => d.group === "esp32");
+	        const oldModules = old.filter((d) => d.group === "module");
+	        const oldStm32 = old.filter((d) => d.group !== "esp32" && d.group !== "module");
 
 	        el.countEsp32.textContent = `${esp32.length}`;
 	        el.countStm32.textContent = `${stm32.length}`;
@@ -440,6 +537,9 @@
 	        el.countEsp32Exp.textContent = `${expEsp32.length}`;
 	        el.countStm32Exp.textContent = `${expStm32.length}`;
 	        el.countModulesExp.textContent = `${expModules.length}`;
+	        el.countEsp32Old.textContent = `${oldEsp32.length}`;
+	        el.countStm32Old.textContent = `${oldStm32.length}`;
+	        el.countModulesOld.textContent = `${oldModules.length}`;
 
 	        el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d, lookup)).join("");
 	        el.listStm32.innerHTML = stm32.map((d) => rowHtml(d, lookup)).join("");
@@ -447,12 +547,16 @@
 	        el.listEsp32Exp.innerHTML = expEsp32.map((d) => rowHtml(d, lookup)).join("");
 	        el.listStm32Exp.innerHTML = expStm32.map((d) => rowHtml(d, lookup)).join("");
 	        el.listModulesExp.innerHTML = expModules.map((d) => rowHtml(d, lookup)).join("");
+	        el.listEsp32Old.innerHTML = oldEsp32.map((d) => rowHtml(d, lookup)).join("");
+	        el.listStm32Old.innerHTML = oldStm32.map((d) => rowHtml(d, lookup)).join("");
+	        el.listModulesOld.innerHTML = oldModules.map((d) => rowHtml(d, lookup)).join("");
 	      }
 
       el.tabCurrent.addEventListener("click", () => setView("current"));
       el.tabExperimental.addEventListener("click", () => setView("experimental"));
+      el.tabOld.addEventListener("click", () => setView("old"));
 
-      setView(window.location.hash === "#experimental" ? "experimental" : "current");
+      setView(window.location.hash === "#experimental" ? "experimental" : window.location.hash === "#old" ? "old" : "current");
       load().catch((err) => {
         const isFileProtocol = window.location && window.location.protocol === "file:";
         const html = `
@@ -479,6 +583,9 @@
 	        el.listEsp32Exp.innerHTML = "";
 	        el.listStm32Exp.innerHTML = "";
 	        el.listModulesExp.innerHTML = "";
+	        el.listEsp32Old.innerHTML = "";
+	        el.listStm32Old.innerHTML = "";
+	        el.listModulesOld.innerHTML = "";
 	      });
 	    </script>
 	  </body>

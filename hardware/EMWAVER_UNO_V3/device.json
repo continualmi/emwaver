@@ -2,7 +2,7 @@
   "title": "EMWAVER_UNO_V3",
   "displayTitle": "EMWaver UNO v3",
   "group": "esp32",
-  "experimental": true,
+  "lifecycle": "old",
   "description": "UNO revision with ESP32 (description coming soon).",
   "tags": ["UNO", "ESP32"],
   "appSupport": ["android", "ios", "desktop"],

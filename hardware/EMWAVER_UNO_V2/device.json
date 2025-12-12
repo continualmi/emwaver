@@ -2,7 +2,7 @@
   "title": "EMWAVER_UNO_V2",
   "displayTitle": "EMWaver UNO v2",
   "group": "stm32",
-  "experimental": true,
+  "lifecycle": "old",
   "description": "Early UNO revision (description coming soon).",
   "tags": ["UNO", "STM32"],
   "appSupport": ["android", "desktop"],
