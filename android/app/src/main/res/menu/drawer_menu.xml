@@ -12,6 +12,11 @@
             android:title="ISM" />
 
         <item
+            android:id="@+id/navigation_rfid"
+            android:icon="@drawable/beacon_svgrepo_com"
+            android:title="RFID" />
+
+        <item
             android:id="@+id/navigation_sampler"
             android:icon="@drawable/ic_rawmode_black_24dp"
             android:title="Sampler" />

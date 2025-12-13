@@ -12,6 +12,12 @@
         android:label="ISM"
         tools:layout="@layout/fragment_ism" />
 
+    <fragment
+        android:id="@+id/navigation_rfid"
+        android:name="com.emwaver.emwaverandroidapp.ui.rfid.RfidFragment"
+        android:label="RFID"
+        tools:layout="@layout/fragment_rfid" />
+
 
 
 
