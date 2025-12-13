@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp"
+    tools:context=".ui.rfid.RfidFragment">
+
+    <TextView
+        android:id="@+id/text_block_address"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Block Address (Hex):"
+        app:layout_constraintBottom_toBottomOf="@+id/edit_text_block_address"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <EditText
+        android:id="@+id/edit_text_block_address"
+        android:layout_width="80dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:background="@android:drawable/edit_text"
+        android:inputType="text"
+        android:maxLength="2"
+        android:padding="8dp"
+        app:layout_constraintStart_toEndOf="@id/text_block_address"
+        app:layout_constraintTop_toTopOf="@id/text_block_address" />
+
+    <TextView
+        android:id="@+id/text_key"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Key (6 bytes, Hex):"
+        app:layout_constraintBottom_toBottomOf="@+id/layout_key_inputs"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/edit_text_block_address" />
+
+    <LinearLayout
+        android:id="@+id/layout_key_inputs"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/text_key"
+        app:layout_constraintTop_toBottomOf="@id/edit_text_block_address">
+
+        <EditText
+            android:id="@+id/edit_text_key1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:background="@android:drawable/edit_text"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="8dp" />
+
+        <EditText
+            android:id="@+id/edit_text_key2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:background="@android:drawable/edit_text"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="8dp" />
+
+        <EditText
+            android:id="@+id/edit_text_key3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:background="@android:drawable/edit_text"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="8dp" />
+
+        <EditText
+            android:id="@+id/edit_text_key4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:background="@android:drawable/edit_text"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="8dp" />
+
+        <EditText
+            android:id="@+id/edit_text_key5"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:background="@android:drawable/edit_text"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="8dp" />
+
+        <EditText
+            android:id="@+id/edit_text_key6"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@android:drawable/edit_text"
+            android:inputType="text"
+            android:maxLength="2"
+            android:padding="8dp" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/text_auth_mode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Auth Mode:"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layout_key_inputs" />
+
+    <Spinner
+        android:id="@+id/spinner_auth_mode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        app:layout_constraintStart_toEndOf="@id/text_auth_mode"
+        app:layout_constraintTop_toTopOf="@id/text_auth_mode" />
+
+    <TextView
+        android:id="@+id/text_write_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Write Data (16 bytes, Hex):"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/text_auth_mode" />
+
+    <EditText
+        android:id="@+id/edit_text_combined_data"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:background="@android:drawable/edit_text"
+        android:inputType="text"
+        android:padding="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/text_write_data" />
+
+    <Button
+        android:id="@+id/button_read"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Read UID/Block"
+        app:icon="@drawable/ic_arrow_right"
+        app:iconGravity="start"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/edit_text_combined_data" />
+
+    <Button
+        android:id="@+id/button_write"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Write Block"
+        app:icon="@drawable/ic_arrow_right"
+        app:iconGravity="start"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/button_read" />
+
+    <TextView
+        android:id="@+id/text_result"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:textAlignment="center"
+        android:textSize="18sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/button_write" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+
