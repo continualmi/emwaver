@@ -1,0 +1,28 @@
+dependencies:
+  espressif/usb_host_cdc_acm:
+    component_hash: f76e1283e7ef0e7970e8a708c4ee443ff0aa112572e25319d30b7ec555cc0aee
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.0.6
+  idf:
+    source:
+      type: idf
+    version: 5.3.2
+  nimble_peripheral_utils:
+    dependencies: []
+    source:
+      path: /media/luispl/128gb_2/espidf/v5.3.2/esp-idf/examples/bluetooth/nimble/common/nimble_peripheral_utils
+      type: local
+    version: '*'
+direct_dependencies:
+- espressif/usb_host_cdc_acm
+- idf
+- nimble_peripheral_utils
+manifest_hash: dcc007d548438d3f9d1e3507363bb9cef4f36eeeb9b3ab773c9de0e3619234db
+target: esp32s3
+version: 2.0.0

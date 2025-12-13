@@ -2,7 +2,7 @@
   <img src="logo.png" alt="EMWaver Logo" width="250">
 </div>
 
-This repository hosts the EMWaver firmware. Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com). The sections below walk through ESP-IDF CLI workflows for the firmware.
+This repository hosts the EMWaver firmware. Visit the full docs at [docs.emwaver.com](https://docs.emwaver.com). The sections below walk through ESP-IDF CLI workflows for the firmware in the repo root; the BLE Waver Dongle USB↔BLE adapter firmware lives in `adapter/`.
 
 # EMWaver Firmware
 
