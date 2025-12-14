@@ -196,9 +196,11 @@ void command_registry_handle(const command_t *cmd)
         return;
     }
 
-    command_entry_t *entry = find_entry(parsed.verb);
-
-    if (!entry && parsed.positional_count > 0) {
+    // Prefer composite subcommands ("<verb> <positional0>") when available.
+    // This prevents a base verb (e.g. debug "rfm69") from shadowing a subcommand
+    // (e.g. "rfm69 init") which is required for Android/iOS/CLI clients.
+    command_entry_t *entry = NULL;
+    if (parsed.positional_count > 0) {
         char composite[CLI_VERB_MAX + CLI_VALUE_MAX + 2];
         int written = snprintf(composite, sizeof(composite), "%s %s", parsed.verb, parsed.positional[0]);
         if (written > 0 && (size_t)written < sizeof(composite)) {
@@ -213,6 +215,9 @@ void command_registry_handle(const command_t *cmd)
                 parsed.positional[parsed.positional_count][0] = '\0';
             }
         }
+    }
+    if (!entry) {
+        entry = find_entry(parsed.verb);
     }
     if (!entry) {
         command_send_err("unknown command");
