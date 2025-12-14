@@ -17,6 +17,7 @@ import android.provider.OpenableColumns;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.graphics.Typeface;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -554,13 +555,22 @@ public class WaveletsFragment extends Fragment {
             ScriptMetadata scriptMetadata = getItem(position);
             if (scriptMetadata != null) {
                 nameView.setText(scriptMetadata.getName());
-                // Asset scripts are read-only, so hide edit button
                 if (scriptMetadata.isAssetScript()) {
-                    editButton.setVisibility(View.GONE);
+                    editButton.setVisibility(View.VISIBLE);
+                    editButton.setEnabled(true);
+                    editButton.setAlpha(1.0f);
+                    editButton.setImageResource(R.drawable.ic_visibility);
+                    editButton.setContentDescription(getString(R.string.view));
+                    editButton.setOnClickListener(v -> {
+                        v.setPressed(false);
+                        showAssetScriptViewDialog(scriptMetadata);
+                    });
                 } else {
                     editButton.setVisibility(View.VISIBLE);
                     editButton.setEnabled(true);
                     editButton.setAlpha(1.0f);
+                    editButton.setImageResource(R.drawable.ic_edit);
+                    editButton.setContentDescription(getString(R.string.edit));
                     editButton.setOnClickListener(v -> {
                         v.setPressed(false);
                         showScriptEditorDialog(scriptMetadata);
@@ -571,6 +581,52 @@ public class WaveletsFragment extends Fragment {
                 editButton.setVisibility(View.GONE);
             }
             return view;
+        }
+    }
+
+    private void showAssetScriptViewDialog(@NonNull ScriptMetadata scriptMetadata) {
+        if (!isAdded() || scriptMetadata == null || !scriptMetadata.isAssetScript()) {
+            return;
+        }
+
+        UserFileMetadata metadata = scriptMetadata.getMetadata();
+        String filename = metadata.getName() + ".js";
+        final String content = readAssetText(filename);
+
+        TextView codeView = new TextView(requireContext());
+        codeView.setText(content);
+        codeView.setTextIsSelectable(true);
+        codeView.setTypeface(Typeface.MONOSPACE);
+        codeView.setHorizontallyScrolling(true);
+        int padding = (int) (16 * requireContext().getResources().getDisplayMetrics().density);
+        codeView.setPadding(padding, padding, padding, padding);
+
+        ScrollView verticalScroll = new ScrollView(requireContext());
+        verticalScroll.addView(codeView);
+
+        HorizontalScrollView bothAxisScroll = new HorizontalScrollView(requireContext());
+        bothAxisScroll.addView(verticalScroll);
+
+        new AlertDialog.Builder(requireContext())
+            .setTitle(metadata.getName() + ".js")
+            .setView(bothAxisScroll)
+            .setPositiveButton("Close", null)
+            .setNeutralButton("Copy", (dialog, which) -> {
+                ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(ClipData.newPlainText(metadata.getName() + ".js", content));
+                    showToast("Copied");
+                }
+            })
+            .show();
+    }
+
+    private String readAssetText(@NonNull String filename) {
+        try (InputStream is = requireContext().getAssets().open(filename)) {
+            return readTextFromInputStream(is);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to read asset: " + filename, e);
+            return "";
         }
     }
 

@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">EMWaver</string>
     <string name="edit">Edit</string>
+    <string name="view">View</string>
     <string name="rename">Rename</string>
     <string name="delete">Delete</string>
     <string name="nav_header_desc">Navigation header</string>
