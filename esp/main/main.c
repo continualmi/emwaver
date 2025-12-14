@@ -39,7 +39,7 @@ static void rfm69_quick_command(const char *ignored_action)
     const int miso = 13;
     const int mosi = 11;
     const int sck = 12;
-    const int cs = 10;
+    const int cs = 36;
     const int clock_hz = 8000000;
 
     static bool initialized = false;
@@ -79,7 +79,7 @@ static void rfm69_quick_command(const char *ignored_action)
 
         gpio_reset_pin(cs);
         gpio_set_direction(cs, GPIO_MODE_OUTPUT);
-        gpio_set_level(cs, 1); // deselected (active-low)
+        gpio_set_level(cs, 0); // deselected (active-low)
 
         initialized = true;
         ESP_LOGI(TAG, "rfm69: SPI ready (host=SPI2, miso=%d mosi=%d sck=%d cs=%d)", miso, mosi, sck, cs);
@@ -90,7 +90,7 @@ static void rfm69_quick_command(const char *ignored_action)
     uint8_t rx[2] = { 0 };
 
     // Select (active-low)
-    gpio_set_level(cs, 0);
+    gpio_set_level(cs, 1);
     spi_transaction_t t = {
         .flags = 0,
         .length = 16,
@@ -100,7 +100,7 @@ static void rfm69_quick_command(const char *ignored_action)
 
     esp_err_t ret = spi_device_transmit(dev, &t);
     // Deselect
-    gpio_set_level(cs, 1);
+    gpio_set_level(cs, 0);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "rfm69: spi_device_transmit failed: %s", esp_err_to_name(ret));
         command_send_err("rfm69: xfer");
