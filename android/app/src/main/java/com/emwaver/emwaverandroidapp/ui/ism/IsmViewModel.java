@@ -45,6 +45,10 @@ public class IsmViewModel extends ViewModel {
         registerValues.postValue(new HashMap<>());
     }
 
+    public void clearRfParameters() {
+        rfParameters.postValue(null);
+    }
+
     public void postRfParameters(double frequencyMHz,
                                  int dataRate,
                                  double bandwidthKHz,

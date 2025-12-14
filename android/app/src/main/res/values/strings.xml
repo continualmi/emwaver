@@ -35,6 +35,13 @@
         <item>FSK</item>
         <item>ASK/OOK</item>
     </string-array>
+    <string-array name="cc1101_modulation_formats">
+        <item>2-FSK</item>
+        <item>GFSK</item>
+        <item>ASK/OOK</item>
+        <item>4-FSK</item>
+        <item>MSK</item>
+    </string-array>
     <string-array name="tx_power_levels">
         <item>-30 dBm</item>
         <item>-20 dBm</item>

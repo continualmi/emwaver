@@ -73,7 +73,7 @@
                         android:id="@+id/cc1101HintTextView"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="CC1101 RF parameter controls are not implemented yet; use the Registers panel to inspect/write values."
+                        android:text="CC1101 notes: TX Power updates the PA table (PATABLE[0], and PATABLE[1] for ASK/OOK)."
                         android:textSize="12sp"
                         android:visibility="gone"
                         android:layout_marginBottom="12dp" />
