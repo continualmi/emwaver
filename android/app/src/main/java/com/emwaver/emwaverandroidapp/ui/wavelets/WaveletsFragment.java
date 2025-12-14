@@ -611,9 +611,6 @@ public class WaveletsFragment extends Fragment {
                     }
                 }
                 
-                // Migrate CC1101 scripts to RFM69
-                migrateCC1101ToRFM69();
-                
                 // Sort custom scripts alphabetically
                 Collections.sort(customScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
                 
@@ -638,13 +635,12 @@ public class WaveletsFragment extends Fragment {
     private List<String> getAssetScriptNames() {
         List<String> names = new ArrayList<>();
         String[] defaultWavelets = {
+            "cc1101_init.js",
             "rfm69_radio_console.js",
             "rfm69_radio_module.js",
             "hello_world_usb.js",
-            "wavelet_console_demo.js",
             "wavelet_demo.js",
-            "wavelet_gpio.js",
-            "wavelet_rfid.js"
+            "wavelet_gpio.js"
         };
         for (String filename : defaultWavelets) {
             names.add(filename);
@@ -660,13 +656,12 @@ public class WaveletsFragment extends Fragment {
         assetScripts.clear(); // Clear existing asset scripts
         
         String[] assetScriptFiles = {
+            "cc1101_init.js",
             "rfm69_radio_console.js",
             "rfm69_radio_module.js",
             "hello_world_usb.js",
-            "wavelet_console_demo.js",
             "wavelet_demo.js",
-            "wavelet_gpio.js",
-            "wavelet_rfid.js"
+            "wavelet_gpio.js"
         };
         
         for (String filename : assetScriptFiles) {
@@ -695,45 +690,6 @@ public class WaveletsFragment extends Fragment {
         Collections.sort(assetScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
     }
     
-    private void migrateCC1101ToRFM69() {
-        if (fileRepository == null || customScripts.isEmpty()) {
-            return;
-        }
-        
-        List<ScriptMetadata> toDelete = new ArrayList<>();
-        for (ScriptMetadata script : customScripts) {
-            String name = script.getName().toLowerCase();
-            if (name.equals("cc1101") || name.equals("cc1101_radio_console") || name.equals("cc1101_radio_module")) {
-                toDelete.add(script);
-            }
-        }
-        
-        if (toDelete.isEmpty()) {
-            return;
-        }
-        
-        // Remove CC1101 scripts from the list synchronously
-        for (ScriptMetadata script : toDelete) {
-            customScripts.remove(script);
-            if (viewModel != null) {
-                viewModel.removeRecord(script.getId());
-            }
-            // Delete asynchronously in background
-            fileRepository.deleteFile(script.getId(), script.getEtag(), new RepositoryCallback<Void>() {
-                @Override
-                public void onSuccess(Void value) {
-                    Log.d(TAG, "Migrated CC1101 script: " + script.getName());
-                }
-                
-                @Override
-                public void onError(String message) {
-                    Log.w(TAG, "Failed to delete CC1101 script during migration: " + script.getName());
-                }
-            });
-        }
-    }
-    
-
     private void renameScript(ScriptMetadata scriptMetadata, String newName) {
         renameScript(scriptMetadata, newName, null);
     }
