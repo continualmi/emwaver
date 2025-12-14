@@ -98,8 +98,6 @@ static void cc1101_cmd_get_mod(void);
 static void cc1101_cmd_set_mod_power(int modulation, int dbm);
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data);
 static void cc1101_cmd_set_pktctrl0(int value);
-static void cc1101_cmd_init_rx(void);
-static void cc1101_cmd_init_tx(void);
 
 static esp_err_t cc1101_init_device(void);
 static void cc1101_select(void);
@@ -203,14 +201,6 @@ void cc1101_register_commands(void)
     ok &= register_command("cc1101 set_pktctrl0", (void *)cc1101_cmd_set_pktctrl0,
                            (const cmd_arg_spec_t[]){
                                {"val", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-    ok &= register_command("cc1101 init_rx", (void *)cc1101_cmd_init_rx,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-    ok &= register_command("cc1101 init_tx", (void *)cc1101_cmd_init_tx,
-                           (const cmd_arg_spec_t[]){
                                {NULL, CMD_ARG_DONE, false}
                            });
     if (!ok) {
@@ -866,49 +856,5 @@ static void cc1101_cmd_set_pktctrl0(int value)
         return;
     }
     cc1101_write_reg(CC1101_REG_PKTCTRL0, (uint8_t)value);
-    command_send_ok(NULL, 0);
-}
-
-static void cc1101_cmd_init_rx(void)
-{
-    esp_err_t ret = cc1101_init_device();
-    if (ret != ESP_OK) {
-        command_send_err("cc1101 init failed");
-        return;
-    }
-
-    cc1101_strobe(CC1101_SRES);
-    vTaskDelay(pdMS_TO_TICKS(2));
-
-    cc1101_apply_defaults();
-    cc1101_write_reg(CC1101_REG_PKTCTRL0, 0x32);
-    cc1101_set_gdo(0x2E, 0x2E, 0x0D);
-    cc1101_set_frequency_mhz(433.92);
-    cc1101_set_datarate(100000);
-    cc1101_set_modulation_and_power(CC1101_MOD_ASK, 10);
-
-    cc1101_strobe(CC1101_SRX);
-    command_send_ok(NULL, 0);
-}
-
-static void cc1101_cmd_init_tx(void)
-{
-    esp_err_t ret = cc1101_init_device();
-    if (ret != ESP_OK) {
-        command_send_err("cc1101 init failed");
-        return;
-    }
-
-    cc1101_strobe(CC1101_SRES);
-    vTaskDelay(pdMS_TO_TICKS(2));
-
-    cc1101_apply_defaults();
-    cc1101_write_reg(CC1101_REG_PKTCTRL0, 0x32);
-    cc1101_set_gdo(0x2E, 0x2E, 0x0D);
-    cc1101_set_frequency_mhz(433.92);
-    cc1101_set_datarate(100000);
-    cc1101_set_modulation_and_power(CC1101_MOD_ASK, 10);
-
-    cc1101_strobe(CC1101_STX);
     command_send_ok(NULL, 0);
 }
