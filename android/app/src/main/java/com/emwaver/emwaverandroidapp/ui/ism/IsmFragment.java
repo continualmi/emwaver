@@ -43,6 +43,7 @@ import androidx.core.view.MenuProvider;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.databinding.FragmentIsmBinding;
 import com.emwaver.emwaverandroidapp.BLEService;
@@ -220,6 +221,8 @@ public class IsmFragment extends Fragment {
     );
 
     private static final int RF_PARAMETER_STEPS = 6;
+    private static final int CC1101_PA_TABLE_SIZE = 8;
+    private static final byte CC1101_PATABLE_ADDR = (byte) 0x3E;
 
     // Defaults aligned with `esp/main/main.c` quick-check wiring.
     private static final int DEFAULT_RFM69_MISO = 13;
@@ -291,6 +294,8 @@ public class IsmFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        applyBottomNavPadding(view);
+
         // Show UI immediately; loading happens only when the user triggers it.
         binding.registersProgressBar.setVisibility(View.GONE);
         binding.registersContainer.setVisibility(View.VISIBLE);
@@ -308,6 +313,29 @@ public class IsmFragment extends Fragment {
         restoreCachedStateIfAvailable();
         setupClickListeners();
         updateChipDependentVisibility();
+    }
+
+    private void applyBottomNavPadding(@NonNull View root) {
+        root.post(() -> {
+            if (!isAdded()) {
+                return;
+            }
+
+            BottomNavigationView bottomNav = requireActivity().findViewById(R.id.nav_view_bottom);
+            if (bottomNav == null) {
+                return;
+            }
+
+            int bottomNavHeight = bottomNav.getHeight();
+            if (bottomNavHeight <= 0) {
+                bottomNav.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+                bottomNavHeight = bottomNav.getMeasuredHeight();
+            }
+
+            if (bottomNavHeight > 0 && root.getPaddingBottom() != bottomNavHeight) {
+                root.setPadding(root.getPaddingLeft(), root.getPaddingTop(), root.getPaddingRight(), bottomNavHeight);
+            }
+        });
     }
 
     private class ModulationAdapter extends ArrayAdapter<String> {
@@ -631,7 +659,9 @@ public class IsmFragment extends Fragment {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        builder.setTitle("Initializing RFM69");
+        String chipName = selectedChip == RadioChip.RFM69 ? "RFM69"
+                : (selectedChip == RadioChip.CC1101 ? "CC1101" : "Radio");
+        builder.setTitle("Initializing " + chipName);
         builder.setView(container);
         builder.setNegativeButton("Cancel", null);
         builder.setCancelable(false);
@@ -668,6 +698,9 @@ public class IsmFragment extends Fragment {
 
     private int calculateTotalLoadSteps() {
         int steps = getConfigRegisters().size() + getStatusRegisters().size();
+        if (selectedChip == RadioChip.CC1101) {
+            steps += CC1101_PA_TABLE_SIZE;
+        }
         if (selectedChip == RadioChip.RFM69) {
             steps += RF_PARAMETER_STEPS;
         }
@@ -937,6 +970,92 @@ public class IsmFragment extends Fragment {
 
             previousTextView = registerAddressTextView;
         }
+
+        if (selectedChip == RadioChip.CC1101) {
+            for (int i = 0; i < CC1101_PA_TABLE_SIZE; i++) {
+                final int index = i;
+                final String registerName = "PA_TABLE" + index;
+
+                TextView registerAddressTextView = new TextView(requireContext());
+                registerAddressTextView.setId(View.generateViewId());
+                registerAddressTextView.setText(registerName);
+                ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
+                        ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                        ConstraintLayout.LayoutParams.WRAP_CONTENT
+                );
+                layoutParams.topMargin = marginInPixels;
+                registerAddressTextView.setLayoutParams(layoutParams);
+
+                TextView registerValueTextView = new TextView(requireContext());
+                registerValueTextView.setId(View.generateViewId());
+                registerValueTextView.setText("--");
+                registerValueTextView.setClickable(true);
+                Drawable paBackground = ContextCompat.getDrawable(requireContext(), android.R.drawable.list_selector_background);
+                if (paBackground != null) {
+                    registerValueTextView.setBackground(paBackground);
+                }
+                registerValueTextView.setOnClickListener(v -> showEditDialog(registerName, registerValueTextView.getText().toString(), newValue -> {
+                    if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+                        showToast("Not connected. Cannot write PA table.");
+                        return;
+                    }
+                    try {
+                        byte value = (byte) Integer.parseInt(newValue, 16);
+                        byte[] table = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+                        if (table.length < CC1101_PA_TABLE_SIZE) {
+                            showToast("Failed to read PA table");
+                            return;
+                        }
+                        table[index] = value;
+                        if (!cc1101WriteBurstReg(CC1101_PATABLE_ADDR, table)) {
+                            showToast("Failed to write PA table");
+                            return;
+                        }
+                        byte[] verify = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+                        if (verify.length >= CC1101_PA_TABLE_SIZE) {
+                            for (int j = 0; j < CC1101_PA_TABLE_SIZE; j++) {
+                                final String key = "PA_TABLE" + j;
+                                final String formatted = String.format(Locale.US, "%02X", verify[j] & 0xFF);
+                                TextView tv = registerTextViews.get(key);
+                                if (tv != null) {
+                                    tv.setText(formatted);
+                                }
+                                if (viewModel != null) {
+                                    viewModel.postRegisterValue(key, formatted);
+                                }
+                            }
+                        } else {
+                            String formatted = String.format(Locale.US, "%02X", value & 0xFF);
+                            registerValueTextView.setText(formatted);
+                            if (viewModel != null) {
+                                viewModel.postRegisterValue(registerName, formatted);
+                            }
+                        }
+                    } catch (NumberFormatException e) {
+                        showToast("Invalid hexadecimal value");
+                    } catch (Exception e) {
+                        Log.e("ismFragment", "Failed to update PA table", e);
+                        showToast("Failed to update PA table");
+                    }
+                }));
+
+                registerTextViews.put(registerName, registerValueTextView);
+
+                registersContainer.addView(registerAddressTextView);
+                registersContainer.addView(registerValueTextView);
+
+                ConstraintSet constraintSet = new ConstraintSet();
+                constraintSet.clone(registersContainer);
+                constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+                constraintSet.connect(registerAddressTextView.getId(), ConstraintSet.TOP, previousTextView.getId(), ConstraintSet.BOTTOM);
+                constraintSet.connect(registerValueTextView.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+                constraintSet.connect(registerValueTextView.getId(), ConstraintSet.TOP, registerAddressTextView.getId(), ConstraintSet.TOP);
+                constraintSet.connect(registerValueTextView.getId(), ConstraintSet.BOTTOM, registerAddressTextView.getId(), ConstraintSet.BOTTOM);
+                constraintSet.applyTo(registersContainer);
+
+                previousTextView = registerAddressTextView;
+            }
+        }
     }
 
     private boolean populateRegisterValues() {
@@ -987,6 +1106,29 @@ public class IsmFragment extends Fragment {
                     viewModel.postRegisterValue(registerName, hexValue);
                 }
                 incrementProgress();
+            }
+
+            if (selectedChip == RadioChip.CC1101) {
+                byte[] paTableValues = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+                for (int i = 0; i < paTableValues.length && i < CC1101_PA_TABLE_SIZE; i++) {
+                    if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                        return false;
+                    }
+                    final String registerName = "PA_TABLE" + i;
+                    final String hexValue = String.format(Locale.US, "%02X", paTableValues[i] & 0xFF);
+                    TextView textView = registerTextViews.get(registerName);
+                    if (textView != null) {
+                        handler.post(() -> {
+                            if (binding != null) {
+                                textView.setText(hexValue);
+                            }
+                        });
+                    }
+                    if (viewModel != null) {
+                        viewModel.postRegisterValue(registerName, hexValue);
+                    }
+                    incrementProgress();
+                }
             }
             return true;
         } catch (Exception e) {
@@ -1316,6 +1458,44 @@ public class IsmFragment extends Fragment {
     private void writeReg(byte addr, byte value) {
         String verb = selectedChip == RadioChip.RFM69 ? "rfm69" : "cc1101";
         sendCommand(String.format(Locale.US, "%s write --reg=%d --val=%d", verb, addr & 0xFF, value & 0xFF), 1000);
+    }
+
+    private byte[] cc1101ReadBurstReg(byte addr, int len) {
+        if (selectedChip != RadioChip.CC1101) {
+            return new byte[0];
+        }
+        byte[] resp = sendCommand(
+                String.format(Locale.US, "cc1101 read_burst --reg=%d --len=%d", addr & 0xFF, len),
+                1500
+        );
+        if (isErr(resp)) {
+            return new byte[0];
+        }
+        return parseRawPayload(resp);
+    }
+
+    private boolean cc1101WriteBurstReg(byte addr, byte[] data) {
+        if (selectedChip != RadioChip.CC1101) {
+            return false;
+        }
+        String cmd = String.format(
+                Locale.US,
+                "cc1101 write_burst --reg=%d --data=%s",
+                addr & 0xFF,
+                bytesToHexCsv(data)
+        );
+        byte[] resp = sendCommand(cmd, 1500);
+        return isOkAck(resp);
+    }
+
+    private static String bytesToHexCsv(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) return "0";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < bytes.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(String.format(Locale.US, "0x%02X", bytes[i] & 0xFF));
+        }
+        return sb.toString();
     }
 
     private double getFrequency() {

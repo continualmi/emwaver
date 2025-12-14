@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <string.h>
 
 static const char *TAG = "CC1101";
 
@@ -30,6 +31,8 @@ static void cc1101_cmd_init(int miso, int mosi, int sck, int cs, int cs_active_h
 static void cc1101_cmd_write_reg(int reg, int val);
 static void cc1101_cmd_read_reg(int reg);
 static void cc1101_cmd_strobe(int cmd);
+static void cc1101_cmd_read_burst(int reg, int len);
+static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data);
 
 static esp_err_t cc1101_init_device(void);
 static void cc1101_select(void);
@@ -37,6 +40,8 @@ static void cc1101_deselect(void);
 static uint8_t cc1101_read_reg(uint8_t addr);
 static void cc1101_write_reg(uint8_t addr, uint8_t value);
 static void cc1101_strobe(uint8_t cmd);
+static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len);
+static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len);
 
 void cc1101_register_commands(void)
 {
@@ -64,6 +69,18 @@ void cc1101_register_commands(void)
     ok &= register_command("cc1101 strobe", (void *)cc1101_cmd_strobe,
                            (const cmd_arg_spec_t[]){
                                {"cmd", CMD_ARG_INT, true},
+                               {NULL, CMD_ARG_DONE, false}
+                           });
+    ok &= register_command("cc1101 read_burst", (void *)cc1101_cmd_read_burst,
+                           (const cmd_arg_spec_t[]){
+                               {"reg", CMD_ARG_INT, true},
+                               {"len", CMD_ARG_INT, true},
+                               {NULL, CMD_ARG_DONE, false}
+                           });
+    ok &= register_command("cc1101 write_burst", (void *)cc1101_cmd_write_burst,
+                           (const cmd_arg_spec_t[]){
+                               {"reg", CMD_ARG_INT, true},
+                               {"data", CMD_ARG_HEX, true},
                                {NULL, CMD_ARG_DONE, false}
                            });
     if (!ok) {
@@ -155,9 +172,16 @@ static uint8_t cc1101_read_reg(uint8_t addr)
         return 0;
     }
 
-    // CC1101 single register read: set R/W bit (0x80), send dummy.
+    // CC1101 register read:
+    // - Config registers (0x00-0x2E): READ_SINGLE (0x80)
+    // - Status registers (0x30-0x3D): must use READ_BURST (0xC0) even for single-byte access.
+    uint8_t cmd = (uint8_t)(addr | 0x80);
+    if (addr >= 0x30 && addr <= 0x3D) {
+        cmd = (uint8_t)(addr | 0xC0);
+    }
+
     cc1101_select();
-    uint8_t tx[2] = { (uint8_t)(addr | 0x80), 0x00 };
+    uint8_t tx[2] = { cmd, 0x00 };
     uint8_t rx[2] = { 0 };
     spi_transaction_t t = {
         .flags = 0,
@@ -183,6 +207,58 @@ static void cc1101_write_reg(uint8_t addr, uint8_t value)
     spi_transaction_t t = {
         .flags = 0,
         .length = 16,
+        .tx_buffer = tx,
+        .rx_buffer = NULL,
+    };
+    spi_device_transmit(cc1101_handle, &t);
+    cc1101_deselect();
+}
+
+static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
+{
+    if (!cc1101_handle || !out || len == 0) {
+        return;
+    }
+
+    // Burst read uses 0xC0 on the address byte.
+    uint8_t tx[1 + CLI_VALUE_MAX] = {0};
+    uint8_t rx[1 + CLI_VALUE_MAX] = {0};
+    if (len > CLI_VALUE_MAX) {
+        len = CLI_VALUE_MAX;
+    }
+    tx[0] = (uint8_t)(addr | 0xC0);
+
+    cc1101_select();
+    spi_transaction_t t = {
+        .flags = 0,
+        .length = (uint32_t)((1 + len) * 8),
+        .tx_buffer = tx,
+        .rx_buffer = rx,
+    };
+    spi_device_transmit(cc1101_handle, &t);
+    cc1101_deselect();
+
+    memcpy(out, &rx[1], len);
+}
+
+static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
+{
+    if (!cc1101_handle || !data || len == 0) {
+        return;
+    }
+
+    // Burst write uses 0x40 on the address byte.
+    uint8_t tx[1 + CLI_VALUE_MAX] = {0};
+    if (len > CLI_VALUE_MAX) {
+        len = CLI_VALUE_MAX;
+    }
+    tx[0] = (uint8_t)(addr | 0x40);
+    memcpy(&tx[1], data, len);
+
+    cc1101_select();
+    spi_transaction_t t = {
+        .flags = 0,
+        .length = (uint32_t)((1 + len) * 8),
         .tx_buffer = tx,
         .rx_buffer = NULL,
     };
@@ -260,5 +336,48 @@ static void cc1101_cmd_strobe(int cmd)
         return;
     }
     cc1101_strobe((uint8_t)cmd);
+    command_send_ok(NULL, 0);
+}
+
+static void cc1101_cmd_read_burst(int reg, int len)
+{
+    if (!cc1101_initialized) {
+        command_send_err("cc1101 not initialized");
+        return;
+    }
+    if (reg < 0 || reg > 0x3F) {
+        command_send_err("cc1101 reg range");
+        return;
+    }
+    if (len <= 0 || len > CLI_VALUE_MAX) {
+        command_send_err("cc1101 len range");
+        return;
+    }
+
+    uint8_t out[CLI_VALUE_MAX] = {0};
+    cc1101_read_burst((uint8_t)reg, out, (size_t)len);
+    command_send_ok(out, (size_t)len);
+}
+
+static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
+{
+    if (!cc1101_initialized) {
+        command_send_err("cc1101 not initialized");
+        return;
+    }
+    if (reg < 0 || reg > 0x3F) {
+        command_send_err("cc1101 reg range");
+        return;
+    }
+    if (!data || data->length == 0) {
+        command_send_err("cc1101 data empty");
+        return;
+    }
+    if (data->length > CLI_VALUE_MAX) {
+        command_send_err("cc1101 data too long");
+        return;
+    }
+
+    cc1101_write_burst((uint8_t)reg, data->data, data->length);
     command_send_ok(NULL, 0);
 }
