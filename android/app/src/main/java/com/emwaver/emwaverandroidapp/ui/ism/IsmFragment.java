@@ -73,29 +73,85 @@ public class IsmFragment extends Fragment {
     private int totalLoadSteps = 0;
     private int completedSteps = 0;
 
-    private static final List<String> CONFIG_REGISTERS = Arrays.asList(
-            "OPMODE", "DATAMODUL", "BITRATEMSB", "BITRATELSB", "FDEVMSB", "FDEVLSB",
-            "FRFMSB", "FRFMID", "FRFLSB", "OSC1", "AFCCTRL", "LOWBAT",
-            "LISTEN1", "LISTEN2", "LISTEN3", "PALEVEL", "PARAMP", "OCP",
-            "LNA", "RXBW", "AFCBW", "OOKPEAK", "OOKAVG", "OOKFIX",
-            "AFCFEI", "AFCMSB", "AFCLSB", "FEIMSB", "FEILSB", "RSSICONFIG",
-            "DIOMAPPING1", "DIOMAPPING2", "IRQFLAGS1", "IRQFLAGS2", "RSSITHRESH",
-            "RXTIMEOUT1", "RXTIMEOUT2", "PREAMBLEMSB", "PREAMBLELSB", "SYNCCONFIG",
-            "PACKETCONFIG1", "PAYLOADLENGTH", "NODEADRS", "BROADCASTADRS",
-            "AUTOMODES", "FIFOTHRESH", "PACKETCONFIG2"
+    private static final class RegisterSpec {
+        final String name;
+        final byte addr;
+
+        RegisterSpec(String name, int addr) {
+            this.name = name;
+            this.addr = (byte) (addr & 0xFF);
+        }
+    }
+
+    private static RegisterSpec reg(String name, int addr) {
+        return new RegisterSpec(name, addr);
+    }
+
+    private static final List<RegisterSpec> CONFIG_REGISTERS = Arrays.asList(
+            reg("OPMODE", 0x01),
+            reg("DATAMODUL", 0x02),
+            reg("BITRATEMSB", 0x03),
+            reg("BITRATELSB", 0x04),
+            reg("FDEVMSB", 0x05),
+            reg("FDEVLSB", 0x06),
+            reg("FRFMSB", 0x07),
+            reg("FRFMID", 0x08),
+            reg("FRFLSB", 0x09),
+            reg("OSC1", 0x0A),
+            reg("AFCCTRL", 0x0B),
+            reg("LOWBAT", 0x0C),
+            reg("LISTEN1", 0x0D),
+            reg("LISTEN2", 0x0E),
+            reg("LISTEN3", 0x0F),
+            reg("PALEVEL", 0x11),
+            reg("PARAMP", 0x12),
+            reg("OCP", 0x13),
+            reg("LNA", 0x18),
+            reg("RXBW", 0x19),
+            reg("AFCBW", 0x1A),
+            reg("OOKPEAK", 0x1B),
+            reg("OOKAVG", 0x1C),
+            reg("OOKFIX", 0x1D),
+            reg("AFCFEI", 0x1E),
+            reg("AFCMSB", 0x1F),
+            reg("AFCLSB", 0x20),
+            reg("FEIMSB", 0x21),
+            reg("FEILSB", 0x22),
+            reg("RSSICONFIG", 0x23),
+            reg("DIOMAPPING1", 0x25),
+            reg("DIOMAPPING2", 0x26),
+            reg("IRQFLAGS1", 0x27),
+            reg("IRQFLAGS2", 0x28),
+            reg("RSSITHRESH", 0x29),
+            reg("RXTIMEOUT1", 0x2A),
+            reg("RXTIMEOUT2", 0x2B),
+            reg("PREAMBLEMSB", 0x2C),
+            reg("PREAMBLELSB", 0x2D),
+            reg("SYNCCONFIG", 0x2E),
+            reg("PACKETCONFIG1", 0x37),
+            reg("PAYLOADLENGTH", 0x38),
+            reg("NODEADRS", 0x39),
+            reg("BROADCASTADRS", 0x3A),
+            reg("AUTOMODES", 0x3B),
+            reg("FIFOTHRESH", 0x3C),
+            reg("PACKETCONFIG2", 0x3D)
     );
 
-    private static final List<String> STATUS_REGISTERS = Arrays.asList(
-            "VERSION", "RSSIVALUE", "TEMP1", "TEMP2"
+    private static final List<RegisterSpec> STATUS_REGISTERS = Arrays.asList(
+            reg("VERSION", 0x10),
+            reg("RSSIVALUE", 0x24),
+            reg("TEMP1", 0x4E),
+            reg("TEMP2", 0x4F)
     );
 
     private static final int RF_PARAMETER_STEPS = 6;
 
-    // RFM69 registers needed by this fragment
-    private static final byte REG_VERSION = 0x10;
-    private static final byte REG_RSSIVALUE = 0x24;
-    private static final byte REG_TEMP1 = 0x4E;
-    private static final byte REG_TEMP2 = 0x4F;
+    // Defaults aligned with `esp/main/main.c` quick-check wiring.
+    private static final int DEFAULT_RFM69_MISO = 13;
+    private static final int DEFAULT_RFM69_MOSI = 11;
+    private static final int DEFAULT_RFM69_SCK = 12;
+    private static final int DEFAULT_RFM69_CS = 36;
+    private static final boolean DEFAULT_RFM69_CS_ACTIVE_HIGH = true;
 
     // Modulation values (must match firmware expectations)
     private static final int MOD_FSK = 0;
@@ -643,8 +699,9 @@ public class IsmFragment extends Fragment {
         int marginInPixels = (int) (8 * getResources().getDisplayMetrics().density);
 
         for (int i = 0; i < CONFIG_REGISTERS.size(); i++) {
-            final String registerName = CONFIG_REGISTERS.get(i);
-            final int registerAddress = i;
+            final RegisterSpec spec = CONFIG_REGISTERS.get(i);
+            final String registerName = spec.name;
+            final byte registerAddress = spec.addr;
 
             TextView registerAddressTextView = new TextView(requireContext());
             registerAddressTextView.setId(View.generateViewId());
@@ -671,7 +728,7 @@ public class IsmFragment extends Fragment {
                 }
                 try {
                     byte value = (byte) Integer.parseInt(newValue, 16);
-                    writeReg((byte) registerAddress, value);
+                    writeReg(registerAddress, value);
                     String formatted = String.format(Locale.US, "%02X", value & 0xFF);
                     registerValueTextView.setText(formatted);
                     if (viewModel != null) {
@@ -703,7 +760,8 @@ public class IsmFragment extends Fragment {
         }
 
         for (int i = 0; i < STATUS_REGISTERS.size(); i++) {
-            final String registerName = STATUS_REGISTERS.get(i);
+            final RegisterSpec spec = STATUS_REGISTERS.get(i);
+            final String registerName = spec.name;
 
             TextView registerAddressTextView = new TextView(requireContext());
             registerAddressTextView.setId(View.generateViewId());
@@ -748,8 +806,9 @@ public class IsmFragment extends Fragment {
                 if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                     return false;
                 }
-                final String registerName = CONFIG_REGISTERS.get(i);
-                byte value = readReg((byte) (i + 1));
+                final RegisterSpec spec = CONFIG_REGISTERS.get(i);
+                final String registerName = spec.name;
+                byte value = readReg(spec.addr);
                 final String hexValue = String.format(Locale.US, "%02X", value & 0xFF);
                 TextView textView = registerTextViews.get(registerName);
                 if (textView != null) {
@@ -765,61 +824,27 @@ public class IsmFragment extends Fragment {
                 incrementProgress();
             }
 
-            byte version = readReg(REG_VERSION);
-            handler.post(() -> {
-                if (binding != null) {
-                    TextView textView = registerTextViews.get("VERSION");
-                    if (textView != null) {
-                        textView.setText(String.format(Locale.US, "%02X", version & 0xFF));
-                    }
+            for (int i = 0; i < STATUS_REGISTERS.size(); i++) {
+                if (loadingCancelled || Thread.currentThread().isInterrupted()) {
+                    return false;
                 }
-            });
-            if (viewModel != null) {
-                viewModel.postRegisterValue("VERSION", String.format(Locale.US, "%02X", version & 0xFF));
-            }
-            incrementProgress();
-
-            byte rssiValue = readReg(REG_RSSIVALUE);
-            handler.post(() -> {
-                if (binding != null) {
-                    TextView textView = registerTextViews.get("RSSIVALUE");
-                    if (textView != null) {
-                        textView.setText(String.format(Locale.US, "%02X", rssiValue & 0xFF));
+                final RegisterSpec spec = STATUS_REGISTERS.get(i);
+                final String registerName = spec.name;
+                byte value = readReg(spec.addr);
+                final String hexValue = String.format(Locale.US, "%02X", value & 0xFF);
+                handler.post(() -> {
+                    if (binding != null) {
+                        TextView textView = registerTextViews.get(registerName);
+                        if (textView != null) {
+                            textView.setText(hexValue);
+                        }
                     }
+                });
+                if (viewModel != null) {
+                    viewModel.postRegisterValue(registerName, hexValue);
                 }
-            });
-            if (viewModel != null) {
-                viewModel.postRegisterValue("RSSIVALUE", String.format(Locale.US, "%02X", rssiValue & 0xFF));
+                incrementProgress();
             }
-            incrementProgress();
-
-            byte temp1 = readReg(REG_TEMP1);
-            handler.post(() -> {
-                if (binding != null) {
-                    TextView textView = registerTextViews.get("TEMP1");
-                    if (textView != null) {
-                        textView.setText(String.format(Locale.US, "%02X", temp1 & 0xFF));
-                    }
-                }
-            });
-            if (viewModel != null) {
-                viewModel.postRegisterValue("TEMP1", String.format(Locale.US, "%02X", temp1 & 0xFF));
-            }
-            incrementProgress();
-
-            byte temp2 = readReg(REG_TEMP2);
-            handler.post(() -> {
-                if (binding != null) {
-                    TextView textView = registerTextViews.get("TEMP2");
-                    if (textView != null) {
-                        textView.setText(String.format(Locale.US, "%02X", temp2 & 0xFF));
-                    }
-                }
-            });
-            if (viewModel != null) {
-                viewModel.postRegisterValue("TEMP2", String.format(Locale.US, "%02X", temp2 & 0xFF));
-            }
-            incrementProgress();
             return true;
         } catch (Exception e) {
             Log.e("ismFragment", "Error reading RFM69 registers", e);
@@ -1060,10 +1085,28 @@ public class IsmFragment extends Fragment {
 
         android.content.SharedPreferences preferences =
                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
-        String csPin = preferences.getString("rfm69_cs_pin", "10");
-        boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", false);
+        String csPin = preferences.getString("rfm69_cs_pin", String.valueOf(DEFAULT_RFM69_CS));
+        boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", DEFAULT_RFM69_CS_ACTIVE_HIGH);
 
-        String cmd = "rfm69 init --cs=" + csPin + " --cs_active_high=" + (csActiveHigh ? "1" : "0");
+        int cs = DEFAULT_RFM69_CS;
+        try {
+            if (csPin != null) {
+                cs = Integer.parseInt(csPin.trim());
+            }
+        } catch (NumberFormatException e) {
+            Log.w("IsmFragment", "Invalid RFM69 CS pin in settings: '" + csPin + "', using default " + DEFAULT_RFM69_CS);
+            cs = DEFAULT_RFM69_CS;
+        }
+
+        String cmd = String.format(
+                Locale.US,
+                "rfm69 init --miso=%d --mosi=%d --sck=%d --cs=%d --cs_active_high=%d",
+                DEFAULT_RFM69_MISO,
+                DEFAULT_RFM69_MOSI,
+                DEFAULT_RFM69_SCK,
+                cs,
+                csActiveHigh ? 1 : 0
+        );
         // First init right after connect can be slow; use a longer timeout and retry once.
         byte[] resp = sendCommand(cmd, 2000);
         if (resp == null || resp.length == 0) {
