@@ -101,7 +101,7 @@ function render() {
         padding: 16,
         spacing: 16,
         children: [
-            UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold" }),
+            UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold", foregroundColor: "#F9FAFB" }),
             UI.row({
                 spacing: 12,
                 children: [
@@ -109,7 +109,7 @@ function render() {
                     UI.button({ label: "InitTx", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: initTx })
                 ]
             }),
-            UI.text({ text: status, fontWeight: "medium", foregroundColor: "#374151" }),
+            UI.text({ text: status, fontWeight: "medium", foregroundColor: "#E5E7EB" }),
             (typeof WaveletConsole === "object" && WaveletConsole && typeof WaveletConsole.view === "function")
                 ? WaveletConsole.view({
                     minHeight: 180,

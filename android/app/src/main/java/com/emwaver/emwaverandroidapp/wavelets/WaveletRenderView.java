@@ -240,6 +240,17 @@ public final class WaveletRenderView extends FrameLayout {
         logText.setTypeface(Typeface.MONOSPACE);
         logText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         logText.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));
+
+        Integer foregroundColor = WaveletValueUtils.parseColor(props.get("foregroundColor"));
+        if (foregroundColor != null) {
+            logText.setTextColor(foregroundColor);
+        }
+
+        Double minHeight = props.getDouble("minHeight");
+        if (minHeight != null) {
+            scrollView.setMinimumHeight(dpToPx(minHeight));
+        }
+
         scrollView.addView(logText, new ScrollView.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         applyCommonStyles(scrollView, props);
         return scrollView;
