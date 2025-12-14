@@ -1,6 +1,7 @@
 // Simple GPIO control wavelet
 let selectedPin = 0;
-let resultText = "";
+let selectedMode = "out";
+let status = "";
 
 const PINS = [
     { label: "GPIO0 (IO0)", value: "0" },
@@ -24,33 +25,16 @@ const PINS = [
 selectedPin = PINS[0].value;
 
 function gpioRead() {
-    console.log("gpioRead called with selectedPin: " + selectedPin);
-    
-    if (!BLEService) {
-        resultText = "BLE Service not connected";
-        render();
-        return;
-    }
-    
-    try {
-        // Create GPIO read command: "gpio" + null + pin + 'R' + 0
-        let pinNumber = parseInt(selectedPin);
-        let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x52, 0x00]); // 'g','p','i','o',0,pin,'R',0
-        let response = BLEService.sendCommand(command, 2000);
-        
-        if (response && response.length > 0) {
-            let state = response[0] !== 0;
-            let pinInfo = PINS.find(p => p.value === selectedPin);
-            let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
-            resultText = "Read " + pinName + ": " + (state ? "HIGH" : "LOW");
-        } else {
-            resultText = "GPIO read failed or timed out";
-        }
-        
-    } catch (error) {
-        resultText = "GPIO read error: " + error;
-    }
-    
+    status = "Reading...";
+    render();
+
+    BLEService.sendCommandString("gpio " + selectedMode + " --pin=" + selectedPin);
+    let response = BLEService.sendCommandString("gpio read --pin=" + selectedPin);
+
+    let state = response && response.length > 0 && response[0] !== 0;
+    let pinInfo = PINS.find(p => p.value === selectedPin);
+    let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
+    status = pinName + " is " + (state ? "HIGH" : "LOW");
     render();
 }
 
@@ -63,35 +47,15 @@ function gpioWriteLow() {
 }
 
 function gpioWrite(value) {
-    console.log("gpioWrite called with value: " + value + " selectedPin: " + selectedPin);
-    
-    if (!BLEService) {
-        resultText = "BLE Service not connected";
-        render();
-        return;
-    }
-    
-    try {
-        // Create GPIO write command: "gpio" + null + pin + 'W' + value
-        let pinNumber = parseInt(selectedPin);
-        let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x57, value]); // 'g','p','i','o',0,pin,'W',value
-        let response = BLEService.sendCommand(command, 2000);
-        
-        if (response && response.length > 0) {
-            let state = response[0] !== 0;
-            let writeAction = value ? "HIGH" : "LOW";
-            let pinInfo = PINS.find(p => p.value === selectedPin);
-            let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
-            let success = (state === (value !== 0));
-            resultText = "Write " + writeAction + " to " + pinName + (success ? " successful" : " failed");
-        } else {
-            resultText = "GPIO write failed or timed out";
-        }
-        
-    } catch (error) {
-        resultText = "GPIO write error: " + error;
-    }
-    
+    status = value ? "Setting HIGH..." : "Setting LOW...";
+    render();
+
+    BLEService.sendCommandString("gpio out --pin=" + selectedPin);
+    BLEService.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+
+    let pinInfo = PINS.find(p => p.value === selectedPin);
+    let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
+    status = "Set " + pinName + " " + (value ? "HIGH" : "LOW");
     render();
 }
 
@@ -110,7 +74,20 @@ function render() {
                 options: PINS,
                 onChange: function(value) {
                     selectedPin = value;
-                    console.log("Pin changed to value: " + selectedPin + " (type: " + typeof value + ")");
+                }
+            }),
+
+            // Mode selection
+            UI.text({ text: "Mode", fontWeight: "medium" }),
+            UI.picker({
+                style: "menu",
+                selected: selectedMode,
+                options: [
+                    { label: "Output", value: "out" },
+                    { label: "Input", value: "in" }
+                ],
+                onChange: function(value) {
+                    selectedMode = value;
                 }
             }),
             
@@ -125,10 +102,10 @@ function render() {
             }),
             
             // Result display
-            resultText ? UI.text({
-                text: resultText,
-                backgroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#DCFCE7" : "#FEE2E2",
-                foregroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#166534" : "#DC2626",
+            status ? UI.text({
+                text: status,
+                backgroundColor: "#111827",
+                foregroundColor: "#FFFFFF",
                 padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
                 cornerRadius: 8
             }) : null
