@@ -97,7 +97,6 @@ static void cc1101_cmd_set_mod(const char *mod_str);
 static void cc1101_cmd_get_mod(void);
 static void cc1101_cmd_set_mod_power(int modulation, int dbm);
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data);
-static void cc1101_cmd_set_pktctrl0(int value);
 
 static esp_err_t cc1101_init_device(void);
 static void cc1101_select(void);
@@ -196,11 +195,6 @@ void cc1101_register_commands(void)
     ok &= register_command("cc1101 set_gdo", (void *)cc1101_cmd_set_gdo,
                            (const cmd_arg_spec_t[]){
                                {"data", CMD_ARG_HEX, true}, // 3 bytes: gdo2,gdo1,gdo0
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-    ok &= register_command("cc1101 set_pktctrl0", (void *)cc1101_cmd_set_pktctrl0,
-                           (const cmd_arg_spec_t[]){
-                               {"val", CMD_ARG_INT, true},
                                {NULL, CMD_ARG_DONE, false}
                            });
     if (!ok) {
@@ -842,19 +836,5 @@ static void cc1101_cmd_set_gdo(const command_hex_arg_t *data)
         return;
     }
     cc1101_set_gdo(data->data[0], data->data[1], data->data[2]);
-    command_send_ok(NULL, 0);
-}
-
-static void cc1101_cmd_set_pktctrl0(int value)
-{
-    if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
-        return;
-    }
-    if (value < 0 || value > 0xFF) {
-        command_send_err("pktctrl0 range");
-        return;
-    }
-    cc1101_write_reg(CC1101_REG_PKTCTRL0, (uint8_t)value);
     command_send_ok(NULL, 0);
 }
