@@ -487,15 +487,49 @@ static void invoke_handler(const command_entry_t *entry,
         return;
     }
 
-    if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_STRING, CMD_ARG_HEX, CMD_ARG_INT}, 3)) {
-        CALL_HANDLER(entry, void (*)(const char *, const command_hex_arg_t *, int),
-                     values[0].str_val, &values[1].hex_val, values[2].int_val);
-        return;
-    }
+    if (entry->argc == 3) {
+        if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_INT}, 3)) {
+            CALL_HANDLER(entry, void (*)(int, int, int),
+                         values[0].int_val, values[1].int_val, values[2].int_val);
+            return;
+        }
 
-    if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_HEX}, 3)) {
-        CALL_HANDLER(entry, void (*)(int, int, const command_hex_arg_t *),
-                     values[0].int_val, values[1].int_val, &values[2].hex_val);
+        if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_BOOL}, 3)) {
+            CALL_HANDLER(entry, void (*)(int, int, bool),
+                         values[0].int_val, values[1].int_val, values[2].bool_val);
+            return;
+        }
+
+        if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_STRING}, 3)) {
+            CALL_HANDLER(entry, void (*)(int, int, const char *),
+                         values[0].int_val, values[1].int_val, values[2].str_val);
+            return;
+        }
+
+        if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_STRING, CMD_ARG_INT, CMD_ARG_INT}, 3)) {
+            CALL_HANDLER(entry, void (*)(const char *, int, int),
+                         values[0].str_val, values[1].int_val, values[2].int_val);
+            return;
+        }
+
+        if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_STRING, CMD_ARG_HEX, CMD_ARG_INT}, 3)) {
+            CALL_HANDLER(entry, void (*)(const char *, const command_hex_arg_t *, int),
+                         values[0].str_val, &values[1].hex_val, values[2].int_val);
+            return;
+        }
+
+        if (types_match(entry, (cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_HEX}, 3)) {
+            CALL_HANDLER(entry, void (*)(int, int, const command_hex_arg_t *),
+                         values[0].int_val, values[1].int_val, &values[2].hex_val);
+            return;
+        }
+
+        ESP_LOGE(TAG, "Unsupported signature for '%s': argc=%d (no matching 3-arg pattern found)", entry->verb, entry->argc);
+        for (int i = 0; i < entry->argc && i < CLI_MAX_ARGS; i++) {
+            ESP_LOGE(TAG, "  arg[%d]: type=%d, required=%d, name=%s",
+                     i, entry->types[i], entry->required[i], entry->names[i]);
+        }
+        command_send_err("unsupported signature");
         return;
     }
 
