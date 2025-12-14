@@ -40,17 +40,46 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="8dp"
-                    android:visibility="gone">
+                    android:visibility="visible">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="RF Parameters"
+                        android:text="Radio"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:layout_marginBottom="8dp" />
 
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Chip:"
+                        android:textSize="14sp" />
+
+                    <Spinner
+                        android:id="@+id/chipSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp" />
+
+                    <Button
+                        android:id="@+id/loadButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Initialize &amp; Read"
+                        android:layout_marginBottom="12dp" />
+
+                    <TextView
+                        android:id="@+id/cc1101HintTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="CC1101 RF parameter controls are not implemented yet; use the Registers panel to inspect/write values."
+                        android:textSize="12sp"
+                        android:visibility="gone"
+                        android:layout_marginBottom="12dp" />
+
                     <LinearLayout
+                        android:id="@+id/rfm69ParametersContainer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
@@ -148,7 +177,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:visibility="visible" />
+                android:visibility="gone" />
 
         </FrameLayout>
 
@@ -201,7 +230,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:visibility="visible" />
+                android:visibility="gone" />
 
         </FrameLayout>
 
