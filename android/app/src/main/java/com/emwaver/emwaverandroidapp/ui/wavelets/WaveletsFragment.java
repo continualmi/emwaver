@@ -41,9 +41,12 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.graphics.drawable.DrawerArrowDrawable;
+import androidx.core.content.ContextCompat;
 import androidx.cardview.widget.CardView;
 import androidx.core.view.MenuHost;
 import androidx.core.view.MenuProvider;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
@@ -134,6 +137,7 @@ public class WaveletsFragment extends Fragment {
     private EditText scriptEditorContentWrap;
     private boolean lineWrapEnabled = false;
     private AlertDialog loadingDialog;
+    private DrawerArrowDrawable drawerArrowDrawable;
 
     private String getCurrentRecordId() {
         if (currentScriptMetadata != null && currentScriptMetadata.getId() != null) {
@@ -1728,12 +1732,6 @@ public class WaveletsFragment extends Fragment {
         if (waveletRenderView != null) {
             waveletRenderView.clear();
         }
-        if (getActivity() != null) {
-            androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();
-            if (activity.getSupportActionBar() != null) {
-                activity.getSupportActionBar().setDisplayHomeAsUpEnabled(false);
-            }
-        }
         updateViewMode();
     }
 
@@ -1781,17 +1779,32 @@ public class WaveletsFragment extends Fragment {
         if (getActivity() != null) {
             androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();
             if (activity.getSupportActionBar() != null) {
+                if (drawerArrowDrawable == null) {
+                    drawerArrowDrawable = new DrawerArrowDrawable(activity);
+                }
+                drawerArrowDrawable.setColor(ContextCompat.getColor(activity, R.color.white));
                 if (hideMainView) {
                     // Show back button when previewing or editing
                     String title = currentScriptName != null ? currentScriptName : "Wavelet Preview";
                     activity.getSupportActionBar().setTitle(title);
                     activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
                     activity.getSupportActionBar().setHomeButtonEnabled(true);
+                    drawerArrowDrawable.setProgress(1f);
+                    activity.getSupportActionBar().setHomeAsUpIndicator(drawerArrowDrawable);
                 } else {
                     activity.getSupportActionBar().setTitle("Wavelets");
-                    activity.getSupportActionBar().setDisplayHomeAsUpEnabled(false);
-                    activity.getSupportActionBar().setHomeButtonEnabled(false);
+                    activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+                    activity.getSupportActionBar().setHomeButtonEnabled(true);
+                    drawerArrowDrawable.setProgress(0f);
+                    activity.getSupportActionBar().setHomeAsUpIndicator(drawerArrowDrawable);
                 }
+            }
+
+            DrawerLayout drawerLayout = activity.findViewById(R.id.drawer_layout);
+            if (drawerLayout != null) {
+                drawerLayout.setDrawerLockMode(hideMainView
+                        ? DrawerLayout.LOCK_MODE_LOCKED_CLOSED
+                        : DrawerLayout.LOCK_MODE_UNLOCKED);
             }
         }
         
