@@ -696,6 +696,7 @@ public class WaveletsFragment extends Fragment {
         List<String> names = new ArrayList<>();
         String[] defaultWavelets = {
             "cc1101_init.js",
+            "rfm69_init.js",
             "rfm69_radio_console.js",
             "rfm69_radio_module.js",
             "hello_world_usb.js",
@@ -717,6 +718,7 @@ public class WaveletsFragment extends Fragment {
         
         String[] assetScriptFiles = {
             "cc1101_init.js",
+            "rfm69_init.js",
             "rfm69_radio_console.js",
             "rfm69_radio_module.js",
             "hello_world_usb.js",
