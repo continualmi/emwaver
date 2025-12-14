@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 public class BLEService extends Service implements DeviceConnectionService {
 
@@ -1024,6 +1025,18 @@ public class BLEService extends Service implements DeviceConnectionService {
             Log.e(TAG, "Error in sendCommand: ", e);
             return null;
         }
+    }
+
+    public byte[] sendCommandString(String command, int timeoutMs) {
+        String framed = command != null ? command : "";
+        if (!framed.endsWith("\n")) {
+            framed += "\n";
+        }
+        return sendCommand(framed.getBytes(StandardCharsets.UTF_8), timeoutMs);
+    }
+
+    public byte[] sendCommandString(String command) {
+        return sendCommandString(command, 2000);
     }
 
     // Send a packet to the device

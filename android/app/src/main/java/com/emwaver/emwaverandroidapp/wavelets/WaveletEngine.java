@@ -259,7 +259,9 @@ public final class WaveletEngine {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 if (args.length > 0) {
-                    dispatchPrint(String.valueOf(args[0]));
+                    String message = String.valueOf(args[0]);
+                    WaveletConsoleState.getInstance().append(message);
+                    dispatchPrint(message);
                 }
                 return Context.getUndefinedValue();
             }
@@ -818,6 +820,7 @@ public final class WaveletEngine {
         "        var text = String(message);\n" +
         "        if (typeof WaveletConsole !== 'undefined' && WaveletConsole && typeof WaveletConsole.append === 'function') {\n" +
         "            WaveletConsole.append(text);\n" +
+        "            return;\n" +
         "        }\n" +
         "        _waveletPrint(text);\n" +
         "    }\n" +
@@ -864,8 +867,8 @@ public final class WaveletEngine {
         "                lines.push(text);\n" +
         "                trim();\n" +
         "                notify();\n" +
-        "                if (typeof _waveletConsoleAppend === 'function') {\n" +
-        "                    _waveletConsoleAppend(text);\n" +
+        "                if (typeof _waveletPrint === 'function') {\n" +
+        "                    _waveletPrint(text);\n" +
         "                }\n" +
         "            },\n" +
         "            clear: function () {\n" +
