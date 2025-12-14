@@ -73,6 +73,14 @@ public class IsmFragment extends Fragment {
     private int totalLoadSteps = 0;
     private int completedSteps = 0;
 
+    private enum RadioChip {
+        UNKNOWN,
+        CC1101,
+        RFM69
+    }
+
+    private RadioChip selectedChip = RadioChip.UNKNOWN;
+
     private static final class RegisterSpec {
         final String name;
         final byte addr;
@@ -87,7 +95,7 @@ public class IsmFragment extends Fragment {
         return new RegisterSpec(name, addr);
     }
 
-    private static final List<RegisterSpec> CONFIG_REGISTERS = Arrays.asList(
+    private static final List<RegisterSpec> RFM69_CONFIG_REGISTERS = Arrays.asList(
             reg("OPMODE", 0x01),
             reg("DATAMODUL", 0x02),
             reg("BITRATEMSB", 0x03),
@@ -137,11 +145,78 @@ public class IsmFragment extends Fragment {
             reg("PACKETCONFIG2", 0x3D)
     );
 
-    private static final List<RegisterSpec> STATUS_REGISTERS = Arrays.asList(
+    private static final List<RegisterSpec> RFM69_STATUS_REGISTERS = Arrays.asList(
             reg("VERSION", 0x10),
             reg("RSSIVALUE", 0x24),
             reg("TEMP1", 0x4E),
             reg("TEMP2", 0x4F)
+    );
+
+    private static final List<RegisterSpec> CC1101_CONFIG_REGISTERS = Arrays.asList(
+            reg("IOCFG2", 0x00),
+            reg("IOCFG1", 0x01),
+            reg("IOCFG0", 0x02),
+            reg("FIFOTHR", 0x03),
+            reg("SYNC1", 0x04),
+            reg("SYNC0", 0x05),
+            reg("PKTLEN", 0x06),
+            reg("PKTCTRL1", 0x07),
+            reg("PKTCTRL0", 0x08),
+            reg("ADDR", 0x09),
+            reg("CHANNR", 0x0A),
+            reg("FSCTRL1", 0x0B),
+            reg("FSCTRL0", 0x0C),
+            reg("FREQ2", 0x0D),
+            reg("FREQ1", 0x0E),
+            reg("FREQ0", 0x0F),
+            reg("MDMCFG4", 0x10),
+            reg("MDMCFG3", 0x11),
+            reg("MDMCFG2", 0x12),
+            reg("MDMCFG1", 0x13),
+            reg("MDMCFG0", 0x14),
+            reg("DEVIATN", 0x15),
+            reg("MCSM2", 0x16),
+            reg("MCSM1", 0x17),
+            reg("MCSM0", 0x18),
+            reg("FOCCFG", 0x19),
+            reg("BSCFG", 0x1A),
+            reg("AGCCTRL2", 0x1B),
+            reg("AGCCTRL1", 0x1C),
+            reg("AGCCTRL0", 0x1D),
+            reg("WOREVT1", 0x1E),
+            reg("WOREVT0", 0x1F),
+            reg("WORCTRL", 0x20),
+            reg("FREND1", 0x21),
+            reg("FREND0", 0x22),
+            reg("FSCAL3", 0x23),
+            reg("FSCAL2", 0x24),
+            reg("FSCAL1", 0x25),
+            reg("FSCAL0", 0x26),
+            reg("RCCTRL1", 0x27),
+            reg("RCCTRL0", 0x28),
+            reg("FSTEST", 0x29),
+            reg("PTEST", 0x2A),
+            reg("AGCTEST", 0x2B),
+            reg("TEST2", 0x2C),
+            reg("TEST1", 0x2D),
+            reg("TEST0", 0x2E)
+    );
+
+    private static final List<RegisterSpec> CC1101_STATUS_REGISTERS = Arrays.asList(
+            reg("PARTNUM", 0x30),
+            reg("VERSION", 0x31),
+            reg("FREQEST", 0x32),
+            reg("LQI", 0x33),
+            reg("RSSI", 0x34),
+            reg("MARCSTATE", 0x35),
+            reg("WORTIME1", 0x36),
+            reg("WORTIME0", 0x37),
+            reg("PKTSTATUS", 0x38),
+            reg("VCO_VC_DAC", 0x39),
+            reg("TXBYTES", 0x3A),
+            reg("RXBYTES", 0x3B),
+            reg("RCCTRL1_STATUS", 0x3C),
+            reg("RCCTRL0_STATUS", 0x3D)
     );
 
     private static final int RF_PARAMETER_STEPS = 6;
@@ -152,6 +227,13 @@ public class IsmFragment extends Fragment {
     private static final int DEFAULT_RFM69_SCK = 12;
     private static final int DEFAULT_RFM69_CS = 36;
     private static final boolean DEFAULT_RFM69_CS_ACTIVE_HIGH = true;
+
+    // Defaults aligned with CC1101 wiring used elsewhere in the repo (IO10 for NSS).
+    private static final int DEFAULT_CC1101_MISO = 13;
+    private static final int DEFAULT_CC1101_MOSI = 11;
+    private static final int DEFAULT_CC1101_SCK = 12;
+    private static final int DEFAULT_CC1101_CS = 10;
+    private static final boolean DEFAULT_CC1101_CS_ACTIVE_HIGH = false;
 
     // Modulation values (must match firmware expectations)
     private static final int MOD_FSK = 0;
@@ -169,15 +251,8 @@ public class IsmFragment extends Fragment {
             Log.i("service binding", "onServiceConnected");
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (isServiceBound && bleService != null && bleService.checkConnection()) {
-                    // Open SPI device before any operations
-                    if (ensureRfm69Open()) {
-                        Log.i("IsmFragment", "RFM69 SPI device opened successfully");
-                        startInitialLoad();
-                    } else {
-                        Log.e("IsmFragment", "Failed to open RFM69 SPI device");
-                        showDisconnectedState();
-                        showToast("Failed to initialize RFM69");
-                    }
+                    // Do not auto-initialize/read on connect; user selects chip + triggers refresh.
+                    showContent();
                 } else {
                     showDisconnectedState();
                     showToast("Please connect to the BLE device first");
@@ -216,12 +291,14 @@ public class IsmFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        // Initially show progress wheels and hide content
-        binding.registersProgressBar.setVisibility(View.VISIBLE);
-        binding.registersContainer.setVisibility(View.GONE);
-        binding.rfParametersProgressBar.setVisibility(View.VISIBLE);
-        binding.rfParametersContainer.setVisibility(View.GONE);
+        // Show UI immediately; loading happens only when the user triggers it.
+        binding.registersProgressBar.setVisibility(View.GONE);
+        binding.registersContainer.setVisibility(View.VISIBLE);
+        binding.rfParametersProgressBar.setVisibility(View.GONE);
+        binding.rfParametersContainer.setVisibility(View.VISIBLE);
         
+        setupChipSpinner();
+
         // Set up spinners
         setupSpinners();
 
@@ -230,6 +307,7 @@ public class IsmFragment extends Fragment {
         setupObservers();
         restoreCachedStateIfAvailable();
         setupClickListeners();
+        updateChipDependentVisibility();
     }
 
     private class ModulationAdapter extends ArrayAdapter<String> {
@@ -364,25 +442,43 @@ public class IsmFragment extends Fragment {
 
 
     private void setupClickListeners() {
+        binding.loadButton.setOnClickListener(v -> refreshData(true));
+
         binding.frequencyTextView.setOnClickListener(v -> {
+            if (selectedChip != RadioChip.RFM69) {
+                showToast("RF parameters are currently available only for RFM69");
+                return;
+            }
             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
                 showToast("Not connected"); return;
             }
             showEditDialog("Frequency", binding.frequencyTextView.getText().toString(), this::updateFrequency);
         });
         binding.dataRateTextView.setOnClickListener(v -> {
+             if (selectedChip != RadioChip.RFM69) {
+                 showToast("RF parameters are currently available only for RFM69");
+                 return;
+             }
              if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
                  showToast("Not connected"); return;
              }
             showEditDialog("Data Rate", binding.dataRateTextView.getText().toString(), this::updateDataRate);
         });
         binding.bandwidthTextView.setOnClickListener(v -> {
+             if (selectedChip != RadioChip.RFM69) {
+                 showToast("RF parameters are currently available only for RFM69");
+                 return;
+             }
              if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
                  showToast("Not connected"); return;
              }
             showEditDialog("Bandwidth", binding.bandwidthTextView.getText().toString(), this::updateBandwidth);
         });
         binding.deviationTextView.setOnClickListener(v -> {
+             if (selectedChip != RadioChip.RFM69) {
+                 showToast("RF parameters are currently available only for RFM69");
+                 return;
+             }
              if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
                  showToast("Not connected"); return;
              }
@@ -423,6 +519,9 @@ public class IsmFragment extends Fragment {
         if (viewModel == null) {
             return;
         }
+        if (selectedChip == RadioChip.UNKNOWN) {
+            return;
+        }
         if (Boolean.TRUE.equals(viewModel.hasLoaded().getValue())) {
             Map<String, String> cachedRegisters = viewModel.getRegisterValues().getValue();
             if (cachedRegisters != null) {
@@ -449,7 +548,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void applyRfParameters(IsmViewModel.RfParameters params) {
-        if (params == null || binding == null) {
+        if (selectedChip != RadioChip.RFM69 || params == null || binding == null) {
             return;
         }
         binding.frequencyTextView.setText(String.format(Locale.US, "%.6f", params.getFrequencyMHz()));
@@ -475,6 +574,7 @@ public class IsmFragment extends Fragment {
         binding.registersContainer.setVisibility(View.VISIBLE);
         binding.rfParametersProgressBar.setVisibility(View.GONE);
         binding.rfParametersContainer.setVisibility(View.VISIBLE);
+        updateChipDependentVisibility();
     }
 
     private void startInitialLoad() {
@@ -567,7 +667,11 @@ public class IsmFragment extends Fragment {
     }
 
     private int calculateTotalLoadSteps() {
-        return CONFIG_REGISTERS.size() + STATUS_REGISTERS.size() + RF_PARAMETER_STEPS;
+        int steps = getConfigRegisters().size() + getStatusRegisters().size();
+        if (selectedChip == RadioChip.RFM69) {
+            steps += RF_PARAMETER_STEPS;
+        }
+        return steps;
     }
 
     private void updateLoadingProgressUI() {
@@ -628,16 +732,22 @@ public class IsmFragment extends Fragment {
             return;
         }
 
+        if (selectedChip == RadioChip.UNKNOWN) {
+            showToast("Select a radio chip first");
+            showContent();
+            return;
+        }
+
         if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             handler.post(this::showDisconnectedState);
             return;
         }
 
-        // Ensure SPI device is open before any operations
-        if (!ensureRfm69Open()) {
-            Log.e("IsmFragment", "Failed to open RFM69 SPI device");
+        // Ensure radio is initialized before any operations
+        if (!ensureSelectedChipOpen()) {
+            Log.e("IsmFragment", "Failed to initialize radio: " + selectedChip);
             handler.post(this::showDisconnectedState);
-            showToast("Failed to initialize RFM69");
+            showToast("Failed to initialize " + selectedChip);
             return;
         }
 
@@ -651,8 +761,9 @@ public class IsmFragment extends Fragment {
 
         binding.registersProgressBar.setVisibility(View.VISIBLE);
         binding.registersContainer.setVisibility(View.GONE);
-        binding.rfParametersProgressBar.setVisibility(View.VISIBLE);
-        binding.rfParametersContainer.setVisibility(View.GONE);
+        binding.rfParametersProgressBar.setVisibility(selectedChip == RadioChip.RFM69 ? View.VISIBLE : View.GONE);
+        binding.rfParametersContainer.setVisibility(View.VISIBLE);
+        updateChipDependentVisibility();
 
         buildRegisterViews();
         final Consumer<String> commandObserver = this::updateLoadingCommand;
@@ -660,8 +771,8 @@ public class IsmFragment extends Fragment {
 
         loadingThread = new Thread(() -> {
             boolean registersLoaded = populateRegisterValues();
-            boolean rfLoaded = false;
-            if (!loadingCancelled && registersLoaded) {
+            boolean rfLoaded = selectedChip != RadioChip.RFM69;
+            if (!loadingCancelled && registersLoaded && selectedChip == RadioChip.RFM69) {
                 rfLoaded = loadRfParametersData();
             }
             final boolean success = !loadingCancelled && registersLoaded && rfLoaded;
@@ -679,8 +790,20 @@ public class IsmFragment extends Fragment {
                 loadingCancelled = false;
             });
             loadingThread = null;
-        }, "RFM69-LoadThread");
+        }, "ISM-LoadThread");
         loadingThread.start();
+    }
+
+    private List<RegisterSpec> getConfigRegisters() {
+        if (selectedChip == RadioChip.RFM69) return RFM69_CONFIG_REGISTERS;
+        if (selectedChip == RadioChip.CC1101) return CC1101_CONFIG_REGISTERS;
+        return java.util.Collections.emptyList();
+    }
+
+    private List<RegisterSpec> getStatusRegisters() {
+        if (selectedChip == RadioChip.RFM69) return RFM69_STATUS_REGISTERS;
+        if (selectedChip == RadioChip.CC1101) return CC1101_STATUS_REGISTERS;
+        return java.util.Collections.emptyList();
     }
 
     private void buildRegisterViews() {
@@ -698,8 +821,28 @@ public class IsmFragment extends Fragment {
         TextView previousTextView = binding.registersTitle;
         int marginInPixels = (int) (8 * getResources().getDisplayMetrics().density);
 
-        for (int i = 0; i < CONFIG_REGISTERS.size(); i++) {
-            final RegisterSpec spec = CONFIG_REGISTERS.get(i);
+        if (selectedChip == RadioChip.UNKNOWN) {
+            TextView hint = new TextView(requireContext());
+            hint.setId(View.generateViewId());
+            hint.setText("Select a chip, then tap “Initialize & Read”.");
+            ConstraintLayout.LayoutParams layoutParams = new ConstraintLayout.LayoutParams(
+                    ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                    ConstraintLayout.LayoutParams.WRAP_CONTENT
+            );
+            layoutParams.topMargin = marginInPixels;
+            hint.setLayoutParams(layoutParams);
+            registersContainer.addView(hint);
+
+            ConstraintSet constraintSet = new ConstraintSet();
+            constraintSet.clone(registersContainer);
+            constraintSet.connect(hint.getId(), ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+            constraintSet.connect(hint.getId(), ConstraintSet.TOP, binding.registersTitle.getId(), ConstraintSet.BOTTOM);
+            constraintSet.applyTo(registersContainer);
+            return;
+        }
+
+        for (int i = 0; i < getConfigRegisters().size(); i++) {
+            final RegisterSpec spec = getConfigRegisters().get(i);
             final String registerName = spec.name;
             final byte registerAddress = spec.addr;
 
@@ -759,8 +902,8 @@ public class IsmFragment extends Fragment {
             previousTextView = registerAddressTextView;
         }
 
-        for (int i = 0; i < STATUS_REGISTERS.size(); i++) {
-            final RegisterSpec spec = STATUS_REGISTERS.get(i);
+        for (int i = 0; i < getStatusRegisters().size(); i++) {
+            final RegisterSpec spec = getStatusRegisters().get(i);
             final String registerName = spec.name;
 
             TextView registerAddressTextView = new TextView(requireContext());
@@ -802,11 +945,11 @@ public class IsmFragment extends Fragment {
         }
 
         try {
-            for (int i = 0; i < CONFIG_REGISTERS.size(); i++) {
+            for (int i = 0; i < getConfigRegisters().size(); i++) {
                 if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                     return false;
                 }
-                final RegisterSpec spec = CONFIG_REGISTERS.get(i);
+                final RegisterSpec spec = getConfigRegisters().get(i);
                 final String registerName = spec.name;
                 byte value = readReg(spec.addr);
                 final String hexValue = String.format(Locale.US, "%02X", value & 0xFF);
@@ -824,11 +967,11 @@ public class IsmFragment extends Fragment {
                 incrementProgress();
             }
 
-            for (int i = 0; i < STATUS_REGISTERS.size(); i++) {
+            for (int i = 0; i < getStatusRegisters().size(); i++) {
                 if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                     return false;
                 }
-                final RegisterSpec spec = STATUS_REGISTERS.get(i);
+                final RegisterSpec spec = getStatusRegisters().get(i);
                 final String registerName = spec.name;
                 byte value = readReg(spec.addr);
                 final String hexValue = String.format(Locale.US, "%02X", value & 0xFF);
@@ -847,13 +990,16 @@ public class IsmFragment extends Fragment {
             }
             return true;
         } catch (Exception e) {
-            Log.e("ismFragment", "Error reading RFM69 registers", e);
+            Log.e("ismFragment", "Error reading registers for " + selectedChip, e);
             handler.post(() -> showToast("Error reading registers. Check connection."));
             return false;
         }
     }
 
     private boolean loadRfParametersData() {
+        if (selectedChip != RadioChip.RFM69) {
+            return true;
+        }
         if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
             return false;
         }
@@ -1159,7 +1305,8 @@ public class IsmFragment extends Fragment {
     }
 
     private byte readReg(byte addr) {
-        byte[] resp = sendCommand(String.format(Locale.US, "rfm69 read --reg=%d", addr & 0xFF), 1000);
+        String verb = selectedChip == RadioChip.RFM69 ? "rfm69" : "cc1101";
+        byte[] resp = sendCommand(String.format(Locale.US, "%s read --reg=%d", verb, addr & 0xFF), 1000);
         if (isErr(resp)) {
             return 0;
         }
@@ -1167,10 +1314,14 @@ public class IsmFragment extends Fragment {
     }
 
     private void writeReg(byte addr, byte value) {
-        sendCommand(String.format(Locale.US, "rfm69 write --reg=%d --val=%d", addr & 0xFF, value & 0xFF), 1000);
+        String verb = selectedChip == RadioChip.RFM69 ? "rfm69" : "cc1101";
+        sendCommand(String.format(Locale.US, "%s write --reg=%d --val=%d", verb, addr & 0xFF, value & 0xFF), 1000);
     }
 
     private double getFrequency() {
+        if (selectedChip != RadioChip.RFM69) {
+            return 0.0;
+        }
         String s = parseRawString(sendCommand("rfm69 get_freq", 1000));
         try {
             return Double.parseDouble(s);
@@ -1180,10 +1331,16 @@ public class IsmFragment extends Fragment {
     }
 
     private void setFrequencyMHz(float freqMHz) {
+        if (selectedChip != RadioChip.RFM69) {
+            return;
+        }
         sendCommand(String.format(Locale.US, "rfm69 set_freq --mhz=%.6f", freqMHz), 1000);
     }
 
     private int getDataRate() {
+        if (selectedChip != RadioChip.RFM69) {
+            return 0;
+        }
         String s = parseRawString(sendCommand("rfm69 get_bitrate", 1000));
         try {
             return Integer.parseInt(s);
@@ -1193,10 +1350,16 @@ public class IsmFragment extends Fragment {
     }
 
     private void setDataRate(int bps) {
+        if (selectedChip != RadioChip.RFM69) {
+            return;
+        }
         sendCommand("rfm69 set_bitrate --bps=" + bps, 1000);
     }
 
     private double getBandwidth() {
+        if (selectedChip != RadioChip.RFM69) {
+            return 0.0;
+        }
         String s = parseRawString(sendCommand("rfm69 get_bw", 1000));
         try {
             return Double.parseDouble(s);
@@ -1206,10 +1369,16 @@ public class IsmFragment extends Fragment {
     }
 
     private void setBandwidth(byte bw) {
+        if (selectedChip != RadioChip.RFM69) {
+            return;
+        }
         sendCommand("rfm69 set_bw --val=" + (bw & 0xFF), 1000);
     }
 
     private int getDeviation() {
+        if (selectedChip != RadioChip.RFM69) {
+            return 0;
+        }
         String s = parseRawString(sendCommand("rfm69 get_dev", 1000));
         try {
             return Integer.parseInt(s);
@@ -1219,15 +1388,24 @@ public class IsmFragment extends Fragment {
     }
 
     private void setDeviation(int hz) {
+        if (selectedChip != RadioChip.RFM69) {
+            return;
+        }
         sendCommand("rfm69 set_dev --hz=" + hz, 1000);
     }
 
     private int getModulation() {
+        if (selectedChip != RadioChip.RFM69) {
+            return MOD_FSK;
+        }
         String s = parseRawString(sendCommand("rfm69 get_mod", 1000));
         return "ook".equalsIgnoreCase(s) ? MOD_OOK : MOD_FSK;
     }
 
     private int getPowerLevel() {
+        if (selectedChip != RadioChip.RFM69) {
+            return 0;
+        }
         String s = parseRawString(sendCommand("rfm69 get_power", 1000));
         try {
             return Integer.parseInt(s);
@@ -1270,10 +1448,126 @@ public class IsmFragment extends Fragment {
         dismissLoadingDialog();
         if (binding != null) {
             binding.registersProgressBar.setVisibility(View.GONE);
-            binding.registersContainer.setVisibility(View.GONE);
+            binding.registersContainer.setVisibility(View.VISIBLE);
             binding.rfParametersProgressBar.setVisibility(View.GONE);
-            binding.rfParametersContainer.setVisibility(View.GONE);
+            binding.rfParametersContainer.setVisibility(View.VISIBLE);
+            updateChipDependentVisibility();
         }
         Log.d("ismFragment", "UI updated to disconnected state.");
+    }
+
+    private void setupChipSpinner() {
+        if (binding == null) {
+            return;
+        }
+
+        if (selectedChip == RadioChip.UNKNOWN) {
+            android.content.SharedPreferences preferences =
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
+            String saved = preferences.getString("ism_selected_chip", "");
+            if ("CC1101".equalsIgnoreCase(saved)) selectedChip = RadioChip.CC1101;
+            else if ("RFM69".equalsIgnoreCase(saved)) selectedChip = RadioChip.RFM69;
+        }
+
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                requireContext(),
+                android.R.layout.simple_spinner_item,
+                new String[]{"Select chip…", "CC1101", "RFM69"}
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        binding.chipSpinner.setAdapter(adapter);
+
+        int initialSelection;
+        if (selectedChip == RadioChip.CC1101) initialSelection = 1;
+        else if (selectedChip == RadioChip.RFM69) initialSelection = 2;
+        else initialSelection = 0;
+        binding.chipSpinner.setSelection(initialSelection, false);
+
+        binding.chipSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                RadioChip newChip;
+                if (position == 2) newChip = RadioChip.RFM69;
+                else if (position == 1) newChip = RadioChip.CC1101;
+                else newChip = RadioChip.UNKNOWN;
+                if (newChip == selectedChip) {
+                    return;
+                }
+                selectedChip = newChip;
+                android.content.SharedPreferences preferences =
+                        androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
+                preferences.edit().putString(
+                        "ism_selected_chip",
+                        selectedChip == RadioChip.RFM69 ? "RFM69" : (selectedChip == RadioChip.CC1101 ? "CC1101" : "")
+                ).apply();
+                if (viewModel != null) {
+                    viewModel.clearRegisterValues();
+                    viewModel.resetLoadingState();
+                }
+                buildRegisterViews();
+                showContent();
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void updateChipDependentVisibility() {
+        if (binding == null) return;
+        binding.rfm69ParametersContainer.setVisibility(selectedChip == RadioChip.RFM69 ? View.VISIBLE : View.GONE);
+        binding.cc1101HintTextView.setVisibility(selectedChip == RadioChip.CC1101 ? View.VISIBLE : View.GONE);
+        binding.loadButton.setEnabled(selectedChip != RadioChip.UNKNOWN);
+    }
+
+    private boolean ensureSelectedChipOpen() {
+        return selectedChip == RadioChip.RFM69 ? ensureRfm69Open() : ensureCc1101Open();
+    }
+
+    private boolean ensureCc1101Open() {
+        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+            return false;
+        }
+
+        String command = String.format(
+                Locale.US,
+                "cc1101 init --miso=%d --mosi=%d --sck=%d --cs=%d --cs_active_high=%d",
+                DEFAULT_CC1101_MISO,
+                DEFAULT_CC1101_MOSI,
+                DEFAULT_CC1101_SCK,
+                DEFAULT_CC1101_CS,
+                DEFAULT_CC1101_CS_ACTIVE_HIGH ? 1 : 0
+        );
+
+        byte[] resp = sendCommand(command, 1500);
+        if (resp == null || resp.length == 0) {
+            Log.e("IsmFragment", "cc1101 init failed: empty response (timeout?)");
+            showToast("CC1101 init failed: no response");
+            return false;
+        }
+
+        if ((resp[0] & 0xFF) == 0x00) {
+            if (resp.length != 1) {
+                Log.w("IsmFragment", "cc1101 init: ACK with extra bytes (" + resp.length + "): " + bytesToHex(resp));
+            }
+            return true;
+        }
+
+        if (isErr(resp)) {
+            Log.e("IsmFragment", "cc1101 init failed: device returned ERR (0xFF)");
+            showToast("CC1101 init failed: device returned error (0xFF)");
+            return false;
+        }
+
+        if (resp.length >= 2 && (resp[0] == 'o' || resp[0] == 'O') && (resp[1] == 'k' || resp[1] == 'K')) {
+            Log.e("IsmFragment", "cc1101 init failed: device returned legacy ASCII ok/err format: " + bytesToHex(resp));
+            showToast("CC1101 init failed: firmware still on ASCII protocol");
+            return false;
+        }
+
+        Log.e("IsmFragment", "cc1101 init failed: unexpected response (" + resp.length + "): " + bytesToHex(resp));
+        showToast("CC1101 init failed: unexpected response");
+        return false;
     }
 }
