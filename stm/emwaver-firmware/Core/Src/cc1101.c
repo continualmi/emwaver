@@ -179,7 +179,7 @@ static uint8_t cc1101_read_reg(uint8_t addr)
     HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, CC1101_SPI_TIMEOUT_MS);
     cc1101_deselect();
     if (st != HAL_OK) {
-        (void)HAL_SPI_Abort(&hspi1);
+        return 0;
     }
     return rx[1];
 }
@@ -188,22 +188,16 @@ static void cc1101_write_reg(uint8_t addr, uint8_t value)
 {
     uint8_t tx[2] = {addr, value};
     cc1101_select();
-    HAL_StatusTypeDef st = HAL_SPI_Transmit(&hspi1, tx, 2, CC1101_SPI_TIMEOUT_MS);
+    (void)HAL_SPI_Transmit(&hspi1, tx, 2, CC1101_SPI_TIMEOUT_MS);
     cc1101_deselect();
-    if (st != HAL_OK) {
-        (void)HAL_SPI_Abort(&hspi1);
-    }
 }
 
 static void cc1101_strobe(uint8_t cmd)
 {
     uint8_t tx[1] = {cmd};
     cc1101_select();
-    HAL_StatusTypeDef st = HAL_SPI_Transmit(&hspi1, tx, 1, CC1101_SPI_TIMEOUT_MS);
+    (void)HAL_SPI_Transmit(&hspi1, tx, 1, CC1101_SPI_TIMEOUT_MS);
     cc1101_deselect();
-    if (st != HAL_OK) {
-        (void)HAL_SPI_Abort(&hspi1);
-    }
 }
 
 static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
@@ -219,12 +213,9 @@ static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
     cc1101_select();
     HAL_StatusTypeDef st = HAL_SPI_Transmit(&hspi1, &cmd, 1, CC1101_SPI_TIMEOUT_MS);
     if (st == HAL_OK) {
-        st = HAL_SPI_Receive(&hspi1, out, (uint16_t)len, CC1101_SPI_TIMEOUT_MS);
+        (void)HAL_SPI_Receive(&hspi1, out, (uint16_t)len, CC1101_SPI_TIMEOUT_MS);
     }
     cc1101_deselect();
-    if (st != HAL_OK) {
-        (void)HAL_SPI_Abort(&hspi1);
-    }
 }
 
 static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
@@ -240,12 +231,9 @@ static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
     cc1101_select();
     HAL_StatusTypeDef st = HAL_SPI_Transmit(&hspi1, &cmd, 1, CC1101_SPI_TIMEOUT_MS);
     if (st == HAL_OK) {
-        st = HAL_SPI_Transmit(&hspi1, (uint8_t *)data, (uint16_t)len, CC1101_SPI_TIMEOUT_MS);
+        (void)HAL_SPI_Transmit(&hspi1, (uint8_t *)data, (uint16_t)len, CC1101_SPI_TIMEOUT_MS);
     }
     cc1101_deselect();
-    if (st != HAL_OK) {
-        (void)HAL_SPI_Abort(&hspi1);
-    }
 }
 
 static void cc1101_apply_defaults(void)
@@ -458,11 +446,11 @@ static void cc1101_cmd_init(int miso, int mosi, int sck, int cs)
 static void cc1101_cmd_write_reg(int reg, int val)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (reg < 0 || reg > 0x3F) {
-        command_send_err("cc1101 reg range");
+        command_send_err(NULL);
         return;
     }
 
@@ -473,11 +461,11 @@ static void cc1101_cmd_write_reg(int reg, int val)
 static void cc1101_cmd_read_reg(int reg)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (reg < 0 || reg > 0x3F) {
-        command_send_err("cc1101 reg range");
+        command_send_err(NULL);
         return;
     }
 
@@ -488,11 +476,11 @@ static void cc1101_cmd_read_reg(int reg)
 static void cc1101_cmd_strobe(int cmd)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (cmd < 0 || cmd > 0x3D) {
-        command_send_err("cc1101 strobe range");
+        command_send_err(NULL);
         return;
     }
     cc1101_strobe((uint8_t)cmd);
@@ -502,15 +490,15 @@ static void cc1101_cmd_strobe(int cmd)
 static void cc1101_cmd_read_burst(int reg, int len)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (reg < 0 || reg > 0x3F) {
-        command_send_err("cc1101 reg range");
+        command_send_err(NULL);
         return;
     }
     if (len <= 0 || len > CLI_VALUE_MAX) {
-        command_send_err("cc1101 len range");
+        command_send_err(NULL);
         return;
     }
 
@@ -522,19 +510,19 @@ static void cc1101_cmd_read_burst(int reg, int len)
 static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (reg < 0 || reg > 0x3F) {
-        command_send_err("cc1101 reg range");
+        command_send_err(NULL);
         return;
     }
     if (!data || data->length == 0) {
-        command_send_err("cc1101 data empty");
+        command_send_err(NULL);
         return;
     }
     if (data->length > CLI_VALUE_MAX) {
-        command_send_err("cc1101 data too long");
+        command_send_err(NULL);
         return;
     }
 
@@ -545,7 +533,7 @@ static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
 static void cc1101_cmd_apply_defaults(void)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     cc1101_apply_defaults();
@@ -555,21 +543,21 @@ static void cc1101_cmd_apply_defaults(void)
 static void cc1101_cmd_set_freq(const char *freq_str)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (!freq_str || freq_str[0] == '\0') {
-        command_send_err("freq missing");
+        command_send_err(NULL);
         return;
     }
 
     uint32_t freq_hz = 0;
     if (!cc1101_parse_mhz_string_to_hz(freq_str, &freq_hz)) {
-        command_send_err("invalid freq");
+        command_send_err(NULL);
         return;
     }
     if (!cc1101_set_frequency_hz(freq_hz)) {
-        command_send_err("freq range");
+        command_send_err(NULL);
         return;
     }
     command_send_ok(NULL, 0);
@@ -578,7 +566,7 @@ static void cc1101_cmd_set_freq(const char *freq_str)
 static void cc1101_cmd_get_freq(void)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     uint32_t freq_hz = cc1101_get_frequency_hz();
@@ -598,11 +586,11 @@ static void cc1101_cmd_get_freq(void)
 static void cc1101_cmd_set_datarate(int bps)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (!cc1101_set_datarate(bps)) {
-        command_send_err("invalid datarate");
+        command_send_err(NULL);
         return;
     }
     command_send_ok(NULL, 0);
@@ -611,7 +599,7 @@ static void cc1101_cmd_set_datarate(int bps)
 static void cc1101_cmd_get_datarate(void)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
 
@@ -643,12 +631,12 @@ static int cc1101_parse_modulation(const char *mod_str)
 static void cc1101_cmd_set_mod(const char *mod_str)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     int mod = cc1101_parse_modulation(mod_str);
     if (mod < 0) {
-        command_send_err("invalid mod");
+        command_send_err(NULL);
         return;
     }
 
@@ -662,7 +650,7 @@ static void cc1101_cmd_set_mod(const char *mod_str)
 static void cc1101_cmd_get_mod(void)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     uint8_t mdmcfg2 = cc1101_read_reg(CC1101_REG_MDMCFG2);
@@ -673,15 +661,15 @@ static void cc1101_cmd_get_mod(void)
 static void cc1101_cmd_set_mod_power(int modulation, int dbm)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (modulation < 0 || modulation > 7) {
-        command_send_err("mod range");
+        command_send_err(NULL);
         return;
     }
     if (!cc1101_set_modulation_and_power(modulation, dbm)) {
-        command_send_err("invalid power");
+        command_send_err(NULL);
         return;
     }
     command_send_ok(NULL, 0);
@@ -690,11 +678,11 @@ static void cc1101_cmd_set_mod_power(int modulation, int dbm)
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data)
 {
     if (!cc1101_initialized) {
-        command_send_err("cc1101 not initialized");
+        command_send_err(NULL);
         return;
     }
     if (!data || data->length < 3) {
-        command_send_err("gdo needs 3 bytes");
+        command_send_err(NULL);
         return;
     }
     cc1101_set_gdo(data->data[0], data->data[1], data->data[2]);

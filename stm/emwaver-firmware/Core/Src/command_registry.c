@@ -116,7 +116,7 @@ void command_registry_handle(const command_t *cmd)
 
     cli_command_t parsed;
     if (!parse_cli_command(cmd, &parsed)) {
-        command_send_err("parse error");
+        command_send_err(NULL);
         return;
     }
 
@@ -147,7 +147,7 @@ void command_registry_handle(const command_t *cmd)
         entry = find_entry(parsed.verb);
     }
     if (!entry) {
-        command_send_err("unknown command");
+        command_send_err(NULL);
         return;
     }
 
@@ -161,7 +161,7 @@ void command_registry_handle(const command_t *cmd)
 
     for (const cmd_arg_spec_t *spec = entry->args; spec && spec->type != CMD_ARG_DONE; ++spec) {
         if (argc >= CLI_MAX_ARGS) {
-            command_send_err("too many args");
+            command_send_err(NULL);
             return;
         }
 
@@ -177,7 +177,7 @@ void command_registry_handle(const command_t *cmd)
 
         if (!raw) {
             if (spec->required) {
-                command_send_err("missing arg");
+                command_send_err(NULL);
                 return;
             }
 
@@ -208,7 +208,7 @@ void command_registry_handle(const command_t *cmd)
             case CMD_ARG_INT: {
                 int value = 0;
                 if (!cli_parse_int(raw, &value)) {
-                    command_send_err("invalid int");
+                    command_send_err(NULL);
                     return;
                 }
                 values[argc].int_val = value;
@@ -220,7 +220,7 @@ void command_registry_handle(const command_t *cmd)
             case CMD_ARG_BOOL: {
                 bool value = false;
                 if (!cli_parse_bool(raw, &value)) {
-                    command_send_err("invalid bool");
+                    command_send_err(NULL);
                     return;
                 }
                 values[argc].bool_val = value;
@@ -229,7 +229,7 @@ void command_registry_handle(const command_t *cmd)
             case CMD_ARG_HEX: {
                 size_t length = 0;
                 if (!cli_parse_hex_bytes(raw, hex_buffers[argc], CLI_VALUE_MAX, &length)) {
-                    command_send_err("invalid hex");
+                    command_send_err(NULL);
                     return;
                 }
                 values[argc].hex_val.data = hex_buffers[argc];
@@ -237,7 +237,7 @@ void command_registry_handle(const command_t *cmd)
                 break;
             }
             default:
-                command_send_err("unsupported type");
+                command_send_err(NULL);
                 return;
         }
         argc++;
@@ -330,7 +330,7 @@ static void invoke_handler(const command_entry_t *entry,
         return;
     }
 
-    command_send_err("unsupported signature");
+    command_send_err(NULL);
 }
 
 static void skip_spaces(const uint8_t *buf, size_t len, size_t *pos)
