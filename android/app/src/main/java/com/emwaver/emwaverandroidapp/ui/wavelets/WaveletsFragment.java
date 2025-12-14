@@ -2616,7 +2616,6 @@ public class WaveletsFragment extends Fragment {
 
     private String buildNewScriptTemplate() {
         return "// Wavelet script\n" +
-            "WaveletConsole.subscribe(render);\n" +
             "render();\n\n" +
             "function render() {\n" +
             "    UI.render(UI.column({\n" +
@@ -2624,8 +2623,8 @@ public class WaveletsFragment extends Fragment {
             "        spacing: 12,\n" +
             "        children: [\n" +
             "            UI.text({ text: 'Wavelet Title', font: 'title2', fontWeight: 'semibold' }),\n" +
-            "            UI.text({ text: 'Customize this script to add controls and logic.', foregroundColor: '#6B7280' }),\n" +
-            "            WaveletConsole.view({ minHeight: 160, backgroundColor: '#111827', foregroundColor: '#F9FAFB', padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
+            "            UI.text({ text: 'Tap a button and use print(...) to log output.', foregroundColor: '#6B7280' }),\n" +
+            "            UI.button({ label: 'Example', onTap: function () { print('hello from wavelet'); } })\n" +
             "        ]\n" +
             "    }));\n" +
             "}\n";
