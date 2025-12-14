@@ -25,6 +25,8 @@
 #include <stdio.h>
 #include "usbd_cdc_if.h"
 #include "MFRC522.h"
+#include "command_registry.h"
+#include "cc1101.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -504,6 +506,8 @@ int main(void)
   MX_TIM3_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  command_registry_init();
+  cc1101_register_commands();
 
   /* USER CODE END 2 */
 
@@ -534,6 +538,17 @@ volatile int transmitDutyCycle = 50; // Default 50%
           free_bulk_packet(); // Free the bulk_packet immediately after copying
 
           // Process the command string
+          if (strncmp(cmd_str, "cc1101", 6) == 0) {
+              command_t cmd = {0};
+              size_t cmd_len = strlen(cmd_str);
+              if (cmd_len > sizeof(cmd.data)) {
+                  cmd_len = sizeof(cmd.data);
+              }
+              memcpy(cmd.data, cmd_str, cmd_len);
+              cmd.length = (uint16_t)cmd_len;
+              command_registry_handle(&cmd);
+              continue;
+          }
           if (strncmp(cmd_str, "sample start", 12) == 0) {
               int pin_num;
               if (sscanf(cmd_str, "sample start --pin=%d", &pin_num) == 1) {

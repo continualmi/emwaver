@@ -1,12 +1,8 @@
 package com.emwaver.emwaverandroidapp.ui.ism;
 
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
@@ -47,7 +43,8 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.databinding.FragmentIsmBinding;
-import com.emwaver.emwaverandroidapp.BLEService;
+import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
+import com.emwaver.emwaverandroidapp.DeviceConnectionService;
 import com.emwaver.emwaverandroidapp.Utils;
 
 
@@ -61,8 +58,8 @@ import java.util.function.Consumer;
 public class IsmFragment extends Fragment {
 
     private FragmentIsmBinding binding;
-    private BLEService bleService;
-    private boolean isServiceBound = false;
+    private DeviceConnectionManager connectionManager;
+    private DeviceConnectionService activeService;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private IsmViewModel viewModel;
     private Map<String, TextView> registerTextViews = new HashMap<>();
@@ -283,35 +280,6 @@ public class IsmFragment extends Fragment {
 
     // Command observer for loading dialog
     private volatile Consumer<String> commandObserver;
-
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
-            bleService = binder.getService();
-            isServiceBound = true;
-            Log.i("service binding", "onServiceConnected");
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (isServiceBound && bleService != null && bleService.checkConnection()) {
-                    // Do not auto-initialize/read on connect; user selects chip + triggers refresh.
-                    showContent();
-                } else {
-                    showDisconnectedState();
-                    showToast("Please connect to the BLE device first");
-                }
-            }, 500); // 0.5 second delay
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName arg0) {
-            isServiceBound = false;
-            commandObserver = null;
-            cancelLoadingThread();
-            dismissLoadingDialog();
-            loadingCancelled = false;
-            Log.i("service binding", "onServiceDisconnected");
-        }
-    };
 
     public static IsmFragment newInstance() {
         return new IsmFragment();
@@ -551,10 +519,7 @@ public class IsmFragment extends Fragment {
                 if (suppressRfControlCallbacks || selectedChip == RadioChip.UNKNOWN) return;
                 // Only act on user-driven changes (avoid programmatic adapter/selection updates).
                 if (parent != null && !parent.isPressed()) return;
-                if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                    showToast("Not connected");
-                    return;
-                }
+                if (!ensureConnected()) return;
                 if (!ensureSelectedChipOpen()) {
                     return;
                 }
@@ -572,10 +537,7 @@ public class IsmFragment extends Fragment {
                 if (suppressRfControlCallbacks || selectedChip == RadioChip.UNKNOWN) return;
                 // Only act on user-driven changes (avoid programmatic adapter/selection updates).
                 if (parent != null && !parent.isPressed()) return;
-                if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                    showToast("Not connected");
-                    return;
-                }
+                if (!ensureConnected()) return;
                 if (!ensureSelectedChipOpen()) {
                     return;
                 }
@@ -621,10 +583,19 @@ public class IsmFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        if (!isServiceBound && getActivity() != null) {
-            Intent intent = new Intent(getActivity(), BLEService.class);
-            getActivity().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-        }
+        connectionManager = DeviceConnectionManager.getInstance(requireContext());
+        activeService = connectionManager.getActiveService();
+
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isAdded()) {
+                return;
+            }
+            if (isConnected()) {
+                showContent();
+            } else {
+                showDisconnectedState();
+            }
+        }, 250);
     }
 
     @Override
@@ -635,40 +606,51 @@ public class IsmFragment extends Fragment {
         commandObserver = null;
         dismissLoadingDialog();
         loadingCancelled = false;
-        if (isServiceBound && getActivity() != null) {
-            getActivity().unbindService(serviceConnection);
-            isServiceBound = false;
-        }
     }
 
+    private DeviceConnectionService getActiveService() {
+        if (connectionManager == null && isAdded()) {
+            connectionManager = DeviceConnectionManager.getInstance(requireContext());
+        }
+        if (connectionManager != null) {
+            activeService = connectionManager.getActiveService();
+        }
+        return activeService;
+    }
+
+    private boolean isConnected() {
+        DeviceConnectionService service = getActiveService();
+        return service != null && service.checkConnection();
+    }
+
+    private boolean ensureConnected() {
+        if (isConnected()) {
+            return true;
+        }
+        showToast("Not connected");
+        showDisconnectedState();
+        return false;
+    }
 
 
     private void setupClickListeners() {
         binding.loadButton.setOnClickListener(v -> refreshData(true));
 
         binding.frequencyTextView.setOnClickListener(v -> {
-            if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                showToast("Not connected"); return;
-            }
+            if (!ensureConnected()) return;
             showNumberEditDialog("Frequency (MHz)", binding.frequencyTextView.getText().toString(), true, this::updateFrequency);
         });
         binding.dataRateTextView.setOnClickListener(v -> {
-             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                 showToast("Not connected"); return;
-             }
+             if (!ensureConnected()) return;
             showNumberEditDialog("Data Rate", binding.dataRateTextView.getText().toString(), false, this::updateDataRate);
         });
         binding.bandwidthTextView.setOnClickListener(v -> {
-             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                 showToast("Not connected"); return;
-             }
+             if (!ensureConnected()) return;
             boolean allowDecimal = selectedChip == RadioChip.CC1101;
             showNumberEditDialog("Bandwidth (kHz)", binding.bandwidthTextView.getText().toString(), allowDecimal, this::updateBandwidth);
         });
         binding.deviationTextView.setOnClickListener(v -> {
-             if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                 showToast("Not connected"); return;
-             }
+             if (!ensureConnected()) return;
             showNumberEditDialog("Deviation (Hz)", binding.deviationTextView.getText().toString(), false, this::updateDeviation);
         });
     }
@@ -938,7 +920,7 @@ public class IsmFragment extends Fragment {
             return;
         }
 
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
+        if (!isConnected()) {
             handler.post(this::showDisconnectedState);
             return;
         }
@@ -1065,10 +1047,7 @@ public class IsmFragment extends Fragment {
                 registerValueTextView.setBackground(configBackground);
             }
             registerValueTextView.setOnClickListener(v -> showEditDialog(registerName, registerValueTextView.getText().toString(), newValue -> {
-                if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                    showToast("Not connected. Cannot write register.");
-                    return;
-                }
+                if (!ensureConnected()) return;
                 try {
                     byte value = (byte) Integer.parseInt(newValue, 16);
                     writeReg(registerAddress, value);
@@ -1162,10 +1141,7 @@ public class IsmFragment extends Fragment {
                     registerValueTextView.setBackground(paBackground);
                 }
                 registerValueTextView.setOnClickListener(v -> showEditDialog(registerName, registerValueTextView.getText().toString(), newValue -> {
-                    if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-                        showToast("Not connected. Cannot write PA table.");
-                        return;
-                    }
+                    if (!ensureConnected()) return;
                     try {
                         byte value = (byte) Integer.parseInt(newValue, 16);
                         byte[] table = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
@@ -1226,9 +1202,7 @@ public class IsmFragment extends Fragment {
     }
 
     private boolean populateRegisterValues() {
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            return false;
-        }
+        if (!isConnected()) return false;
 
         try {
             for (int i = 0; i < getConfigRegisters().size(); i++) {
@@ -1307,9 +1281,7 @@ public class IsmFragment extends Fragment {
 
     private boolean loadRfParametersData() {
         if (selectedChip == RadioChip.UNKNOWN) return true;
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            return false;
-        }
+        if (!isConnected()) return false;
 
         try {
             double frequency = selectedChip == RadioChip.CC1101 ? cc1101GetFrequencyMHz() : getFrequency();
@@ -1505,10 +1477,7 @@ public class IsmFragment extends Fragment {
 
     private void updateFrequency(String newValue) {
         Log.d("updateFrequency", "update freq");
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            showToast("Not connected");
-            return;
-        }
+        if (!ensureConnected()) return;
         try {
             double frequency = Double.parseDouble(newValue);
             if (!ensureSelectedChipOpen()) {
@@ -1529,10 +1498,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void updateDataRate(String newValue) {
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            showToast("Not connected");
-            return;
-        }
+        if (!ensureConnected()) return;
         try {
             int dataRate = Integer.parseInt(newValue);
             if (!ensureSelectedChipOpen()) {
@@ -1553,10 +1519,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void updateBandwidth(String newValue) {
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            showToast("Not connected");
-            return;
-        }
+        if (!ensureConnected()) return;
         try {
             if (!ensureSelectedChipOpen()) {
                 return;
@@ -1578,10 +1541,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void updateDeviation(String newValue) {
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            showToast("Not connected");
-            return;
-        }
+        if (!ensureConnected()) return;
         try {
             int deviation = Integer.parseInt(newValue);
             if (!ensureSelectedChipOpen()) {
@@ -1611,11 +1571,12 @@ public class IsmFragment extends Fragment {
     }
 
     private byte[] sendCommand(String command, int timeoutMs) {
-        if (bleService == null) {
+        DeviceConnectionService service = getActiveService();
+        if (service == null) {
             return new byte[0];
         }
         notifyCommandObserver(command);
-        byte[] resp = bleService.sendCommand((command + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8), timeoutMs);
+        byte[] resp = service.sendCommand((command + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8), timeoutMs);
         return resp != null ? resp : new byte[0];
     }
 
@@ -1640,7 +1601,7 @@ public class IsmFragment extends Fragment {
     }
 
     private boolean ensureRfm69Open() {
-        if (bleService == null) return false;
+        if (!ensureConnected()) return false;
 
         android.content.SharedPreferences preferences =
                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
@@ -2227,9 +2188,7 @@ public class IsmFragment extends Fragment {
     }
 
     private boolean ensureCc1101Open() {
-        if (!isServiceBound || bleService == null || !bleService.checkConnection()) {
-            return false;
-        }
+        if (!ensureConnected()) return false;
 
         String command = String.format(
                 Locale.US,
