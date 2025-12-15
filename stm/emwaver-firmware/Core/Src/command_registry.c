@@ -8,17 +8,17 @@
 #define COMMAND_REGISTRY_MAX 64
 
 typedef struct {
-    char key[CLI_KEY_MAX];
-    char value[CLI_VALUE_MAX];
-} cli_arg_t;
+    const char *key;
+    const char *value;
+} cli_arg_view_t;
 
 typedef struct {
-    char verb[CLI_VERB_MAX];
-    cli_arg_t args[CLI_MAX_ARGS];
+    char *verb;
+    cli_arg_view_t args[CLI_MAX_ARGS];
     size_t arg_count;
-    char positional[CLI_MAX_POSITIONAL][CLI_VALUE_MAX];
+    char *positional[CLI_MAX_POSITIONAL];
     size_t positional_count;
-} cli_command_t;
+} cli_command_view_t;
 
 typedef union {
     int int_val;
@@ -36,8 +36,8 @@ typedef struct {
 static command_entry_t registry[COMMAND_REGISTRY_MAX];
 static size_t registry_count = 0;
 
-static bool parse_cli_command(const command_t *cmd, cli_command_t *out);
-static const char *cli_get_arg(const cli_command_t *cmd, const char *key);
+static bool parse_cli_command_inplace(char *line, cli_command_view_t *out);
+static const char *cli_get_arg_view(const cli_command_view_t *cmd, const char *key);
 static bool cli_parse_int(const char *str, int *out_value);
 static bool cli_parse_bool(const char *str, bool *out_value);
 static bool cli_parse_hex_bytes(const char *str, uint8_t *out, size_t max_len, size_t *out_len);
@@ -114,8 +114,18 @@ void command_registry_handle(const command_t *cmd)
         return;
     }
 
-    cli_command_t parsed;
-    if (!parse_cli_command(cmd, &parsed)) {
+    // The STM32F042 linker script reserves a small stack; parse in-place with a
+    // single line buffer to avoid stack overflows (HardFault => USB appears dead).
+    char line[CLI_COMMAND_BUFFER + 1];
+    size_t line_len = cmd->length;
+    if (line_len > CLI_COMMAND_BUFFER) {
+        line_len = CLI_COMMAND_BUFFER;
+    }
+    memcpy(line, cmd->data, line_len);
+    line[line_len] = '\0';
+
+    cli_command_view_t parsed;
+    if (!parse_cli_command_inplace(line, &parsed)) {
         command_send_err(NULL);
         return;
     }
@@ -154,8 +164,10 @@ void command_registry_handle(const command_t *cmd)
     command_arg_value_t values[CLI_MAX_ARGS];
     memset(values, 0, sizeof(values));
 
-    uint8_t hex_buffers[CLI_MAX_ARGS][CLI_VALUE_MAX];
     cmd_arg_type_t types[CLI_MAX_ARGS];
+    uint8_t hex_buffer[CLI_VALUE_MAX];
+    bool hex_buffer_used = false;
+
     size_t argc = 0;
     size_t positional_index = 0;
 
@@ -172,7 +184,7 @@ void command_registry_handle(const command_t *cmd)
             }
             positional_index++;
         } else {
-            raw = cli_get_arg(&parsed, spec->name);
+            raw = cli_get_arg_view(&parsed, spec->name);
         }
 
         if (!raw) {
@@ -228,11 +240,16 @@ void command_registry_handle(const command_t *cmd)
             }
             case CMD_ARG_HEX: {
                 size_t length = 0;
-                if (!cli_parse_hex_bytes(raw, hex_buffers[argc], CLI_VALUE_MAX, &length)) {
+                if (hex_buffer_used) {
                     command_send_err(NULL);
                     return;
                 }
-                values[argc].hex_val.data = hex_buffers[argc];
+                if (!cli_parse_hex_bytes(raw, hex_buffer, CLI_VALUE_MAX, &length)) {
+                    command_send_err(NULL);
+                    return;
+                }
+                hex_buffer_used = true;
+                values[argc].hex_val.data = hex_buffer;
                 values[argc].hex_val.length = length;
                 break;
             }
@@ -333,116 +350,103 @@ static void invoke_handler(const command_entry_t *entry,
     command_send_err(NULL);
 }
 
-static void skip_spaces(const uint8_t *buf, size_t len, size_t *pos)
+static bool is_cli_space(char ch)
 {
-    while (*pos < len) {
-        uint8_t ch = buf[*pos];
-        if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
-            (*pos)++;
-            continue;
-        }
-        break;
-    }
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
 }
 
-static bool copy_token(const uint8_t *buf, size_t len, size_t *pos, char *out, size_t out_len)
+static char *next_token(char **cursor)
 {
-    skip_spaces(buf, len, pos);
-    if (*pos >= len) {
-        return false;
+    if (!cursor || !*cursor) {
+        return NULL;
     }
 
-    size_t start = *pos;
-    while (*pos < len) {
-        uint8_t ch = buf[*pos];
-        if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
-            break;
-        }
-        (*pos)++;
+    char *p = *cursor;
+    while (*p && is_cli_space(*p)) {
+        p++;
+    }
+    if (!*p) {
+        *cursor = p;
+        return NULL;
     }
 
-    size_t tok_len = *pos - start;
-    if (tok_len == 0) {
-        return false;
+    char *start = p;
+    while (*p && !is_cli_space(*p)) {
+        p++;
     }
-
-    if (tok_len >= out_len) {
-        tok_len = out_len - 1;
+    if (*p) {
+        *p = '\0';
+        p++;
     }
-    memcpy(out, &buf[start], tok_len);
-    out[tok_len] = '\0';
-    return true;
+    *cursor = p;
+    return start;
 }
 
-static bool parse_cli_command(const command_t *cmd, cli_command_t *out)
+static bool parse_cli_command_inplace(char *line, cli_command_view_t *out)
 {
-    if (!cmd || !out) {
+    if (!line || !out) {
         return false;
     }
 
     memset(out, 0, sizeof(*out));
 
-    size_t pos = 0;
-    if (!copy_token(cmd->data, cmd->length, &pos, out->verb, sizeof(out->verb))) {
+    char *cursor = line;
+    char *verb = next_token(&cursor);
+    if (!verb) {
         return false;
     }
+    out->verb = verb;
 
-    while (pos < cmd->length) {
-        char token[CLI_VALUE_MAX + CLI_KEY_MAX + 4];
-        if (!copy_token(cmd->data, cmd->length, &pos, token, sizeof(token))) {
+    char *pending = NULL;
+    while (1) {
+        char *token = pending ? pending : next_token(&cursor);
+        pending = NULL;
+        if (!token) {
             break;
         }
 
         if (strncmp(token, "--", 2) == 0) {
-            const char *key = token + 2;
+            char *key = token + 2;
             const char *value = NULL;
-            char *eq = strchr(token + 2, '=');
+            char *eq = strchr(key, '=');
             if (eq) {
                 *eq = '\0';
                 value = eq + 1;
             } else {
                 // Support `--key value` and bare bool flags like `--open`.
-                size_t saved_pos = pos;
-                char next[CLI_VALUE_MAX + 4];
-                if (copy_token(cmd->data, cmd->length, &pos, next, sizeof(next))) {
-                    if (strncmp(next, "--", 2) == 0) {
-                        pos = saved_pos;
-                        value = "1";
-                    } else {
-                        value = next;
-                    }
-                } else {
+                char *next = next_token(&cursor);
+                if (!next) {
                     value = "1";
+                } else if (strncmp(next, "--", 2) == 0) {
+                    value = "1";
+                    pending = next;
+                } else {
+                    value = next;
                 }
             }
-            if (out->arg_count >= CLI_MAX_ARGS) {
-                continue;
+            if (out->arg_count < CLI_MAX_ARGS) {
+                out->args[out->arg_count].key = key;
+                out->args[out->arg_count].value = value ? value : "";
+                out->arg_count++;
             }
-            strncpy(out->args[out->arg_count].key, key, CLI_KEY_MAX - 1);
-            out->args[out->arg_count].key[CLI_KEY_MAX - 1] = '\0';
-            strncpy(out->args[out->arg_count].value, value ? value : "", CLI_VALUE_MAX - 1);
-            out->args[out->arg_count].value[CLI_VALUE_MAX - 1] = '\0';
-            out->arg_count++;
         } else {
-            if (out->positional_count >= CLI_MAX_POSITIONAL) {
-                continue;
+            if (out->positional_count < CLI_MAX_POSITIONAL) {
+                out->positional[out->positional_count] = token;
+                out->positional_count++;
             }
-            strncpy(out->positional[out->positional_count], token, CLI_VALUE_MAX - 1);
-            out->positional[out->positional_count][CLI_VALUE_MAX - 1] = '\0';
-            out->positional_count++;
         }
     }
 
     return true;
 }
 
-static const char *cli_get_arg(const cli_command_t *cmd, const char *key)
+static const char *cli_get_arg_view(const cli_command_view_t *cmd, const char *key)
 {
     if (!cmd || !key) {
         return NULL;
     }
     for (size_t i = 0; i < cmd->arg_count; ++i) {
-        if (strcmp(cmd->args[i].key, key) == 0) {
+        if (cmd->args[i].key && strcmp(cmd->args[i].key, key) == 0) {
             return cmd->args[i].value;
         }
     }
