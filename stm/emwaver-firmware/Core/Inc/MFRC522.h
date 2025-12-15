@@ -132,6 +132,8 @@ u_char MFRC522_Write(u_char, u_char*);
 void MFRC522_Halt();
 void MFRC522_StopCrypto1(void);
 
+void mfrc522_register_commands(void);
+
 // Add these function prototypes
 u_char MFRC522_Request(u_char reqMode, u_char *TagType);
 u_char MFRC522_Anticoll(u_char *serNum);

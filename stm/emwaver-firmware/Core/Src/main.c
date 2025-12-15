@@ -39,16 +39,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define READ_BYTE 		0x30
-#define READ_BURST      0xC0            //read burst
-#define WRITE_BURST     0x40            //write burst
-#define GDO_OUTPUT		1
-#define GDO_INPUT 		0
-
 #define CDC_TIMEOUT 100
-
-#define MAX_BLOCKS 64
-#define BYTES_PER_BLOCK 16
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -86,15 +77,11 @@ static void MX_SPI1_Init(void);
 static void stm_register_commands(void);
 
 static void cmd_version(void);
-static void cmd_rfid_read(void);
-static void cmd_rfid_write(void);
 
 static void stm_register_commands(void)
 {
     static const command_entry_t stm_command_table[] = {
         {.verb = "version", .args = NULL, .handler = (void *)cmd_version},
-        {.verb = "read", .args = NULL, .handler = (void *)cmd_rfid_read},
-        {.verb = "write", .args = NULL, .handler = (void *)cmd_rfid_write},
     };
 
     (void)command_registry_add_table(stm_command_table,
@@ -111,55 +98,6 @@ void startPWM_TIM2_CH3() {
 void stopPWM_TIM2_CH3() {
     // Disable only the channel, keep timer running
     TIM2->CCER &= ~TIM_CCER_CC3E;
-}
-
-void writeReg(uint8_t addr, uint8_t value) {
-    uint8_t address = addr; // Clear the read bit
-    uint8_t val = value;
-    HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_RESET);
-    HAL_SPI_Transmit(&hspi1, &address, 1, HAL_MAX_DELAY);
-    HAL_SPI_Transmit(&hspi1, &val, 1, HAL_MAX_DELAY);
-    HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
-}
-
-uint8_t readReg(uint8_t addr){
-	uint8_t reading;
-	uint8_t address = addr | 0x80;
-	uint8_t zero = 0x00;
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_RESET);
-	HAL_SPI_TransmitReceive(&hspi1, &address, &reading, 1, HAL_MAX_DELAY);
-	HAL_SPI_TransmitReceive(&hspi1, &zero, &reading, 1, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
-	return reading;
-}
-
-uint8_t spiStrobe (uint8_t value) {
-	uint8_t status;
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_RESET);
-	HAL_SPI_TransmitReceive (&hspi1, &value, &status, 1, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
-	return status;
-}
-
-uint8_t writeBurstReg(uint8_t addr, uint8_t *buffer, uint8_t num){
-	uint8_t i, temp, status;
-	temp = addr | WRITE_BURST;
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_RESET);
-	HAL_SPI_TransmitReceive(&hspi1, &temp, &status, 1, HAL_MAX_DELAY);
-	for (i = 0; i < num; i++){
-	 HAL_SPI_Transmit (&hspi1, &buffer[i], 1, HAL_MAX_DELAY);
-	}
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
-	return status;
-}
-
-void readBurstReg(uint8_t addr, uint8_t *buffer, uint8_t num){
-	uint8_t temp;
-	temp = addr | READ_BURST;
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_RESET);
-	HAL_SPI_Transmit (&hspi1, &temp, 1, HAL_MAX_DELAY);
-	HAL_SPI_Receive (&hspi1, buffer, num, HAL_MAX_DELAY);
-	HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
 }
 
 uint32_t getCurrentFrequency() {
@@ -260,38 +198,6 @@ void setDutyCycle_TIM2_CH3(uint8_t percentage) {
     TIM2->CCR3 = new_ccr;
 }
 
-void requestCard() {
-    uint8_t response[6] = {0};
-    u_char status;
-    u_char TagType[2];
-
-    status = MFRC522_Request(PICC_REQIDL, TagType);
-
-    response[0] = status;
-    response[1] = TagType[0];
-    response[2] = TagType[1];
-    // Fill remaining bytes with zeros
-
-    CDC_Transmit_FS(response, 6);
-}
-
-void antiCollision() {
-    uint8_t response[5] = {69, 69, 69, 69, 69};
-    u_char status;
-    u_char cardstr[5];
-
-    status = MFRC522_Anticoll(cardstr);
-
-    response[0] = status;
-    if (status == MI_OK) {
-        for (int i = 0; i < 4; i++) {
-            response[i+1] = cardstr[i];
-        }
-    }
-
-    CDC_Transmit_FS(response, 5);
-}
-
 /* USER CODE END 0 */
 
 /**
@@ -332,6 +238,7 @@ int main(void)
 	  cc1101_register_commands();
 	  stm_gpio_register_commands();
 	  stm_sampler_register_commands();
+	  mfrc522_register_commands();
 	  stm_register_commands();
 
 	  /* USER CODE END 2 */
@@ -671,16 +578,6 @@ static void cmd_version(void)
 {
     static const uint8_t versionMsg[] = "OK: 1.0.0 - Welcome to EMWaver!\n";
     (void)CDC_SendResponsePkt_FS((uint8_t *)versionMsg, (uint16_t)(sizeof(versionMsg) - 1), CDC_TIMEOUT);
-}
-
-static void cmd_rfid_read(void)
-{
-    CDC_Print_FS("ERR: RFID commands not yet supported as string commands\n");
-}
-
-static void cmd_rfid_write(void)
-{
-    CDC_Print_FS("ERR: RFID commands not yet supported as string commands\n");
 }
 
 /* USER CODE END 4 */

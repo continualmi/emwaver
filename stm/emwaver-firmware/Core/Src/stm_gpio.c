@@ -5,7 +5,6 @@
 #include "usbd_cdc_if.h"
 
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdint.h>
 
 #define CDC_TIMEOUT 100
@@ -96,11 +95,11 @@ static void disable_tim2_output_if_needed(uint8_t port, uint8_t pin)
 static void cmd_gpio_info(int port_int, int pin_int)
 {
     if (!((port_int == 0) || (port_int == 1))) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
+        command_send_ok(NULL, 0);
         return;
     }
     if (pin_int < 0 || pin_int > 15) {
-        CDC_Print_FS("ERR: Invalid GPIO pin\n");
+        command_send_ok(NULL, 0);
         return;
     }
 
@@ -108,7 +107,7 @@ static void cmd_gpio_info(int port_int, int pin_int)
     uint8_t pin = (uint8_t)pin_int;
     GPIO_TypeDef *gpio_port = get_gpio_port(port);
     if (!gpio_port) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
+        command_send_ok(NULL, 0);
         return;
     }
 
@@ -127,45 +126,17 @@ static void cmd_gpio_info(int port_int, int pin_int)
     uint8_t af = (uint8_t)((afr >> ((pin % 8) * 4)) & 0x0F);
 
     uint8_t response[6] = {mode, otype, pupd, af, idr_bit, odr_bit};
-    (void)CDC_SendResponsePkt_FS(response, sizeof(response), CDC_TIMEOUT);
-
-    const char *mode_str = "unknown";
-    switch (mode) {
-        case 0: mode_str = "input"; break;
-        case 1: mode_str = "output"; break;
-        case 2: mode_str = "af"; break;
-        case 3: mode_str = "analog"; break;
-    }
-
-    const char *pupd_str = "unknown";
-    switch (pupd) {
-        case 0: pupd_str = "none"; break;
-        case 1: pupd_str = "pullup"; break;
-        case 2: pupd_str = "pulldown"; break;
-        case 3: pupd_str = "reserved"; break;
-    }
-
-    static char line[96];
-    (void)snprintf(line,
-                   sizeof(line),
-                   "OK: GPIO info mode=%s otype=%u pupd=%s af=%u idr=%u odr=%u\n",
-                   mode_str,
-                   (unsigned)otype,
-                   pupd_str,
-                   (unsigned)af,
-                   (unsigned)idr_bit,
-                   (unsigned)odr_bit);
-    CDC_Print_FS(line);
+    command_send_ok(response, sizeof(response));
 }
 
 static void cmd_gpio_read(int port_int, int pin_int)
 {
     if (!((port_int == 0) || (port_int == 1))) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
+        command_send_ok(NULL, 0);
         return;
     }
     if (pin_int < 0 || pin_int > 15) {
-        CDC_Print_FS("ERR: Invalid GPIO pin\n");
+        command_send_ok(NULL, 0);
         return;
     }
 
@@ -173,7 +144,7 @@ static void cmd_gpio_read(int port_int, int pin_int)
     uint8_t pin = (uint8_t)pin_int;
     GPIO_TypeDef *gpio_port = get_gpio_port(port);
     if (!gpio_port) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
+        command_send_ok(NULL, 0);
         return;
     }
     uint16_t gpio_pin = (uint16_t)(1u << pin);
@@ -181,18 +152,17 @@ static void cmd_gpio_read(int port_int, int pin_int)
     disable_tim2_output_if_needed(port, pin);
     set_pin_mode(port, pin, 0);
     uint8_t response_val = (uint8_t)HAL_GPIO_ReadPin(gpio_port, gpio_pin);
-    (void)CDC_SendResponsePkt_FS(&response_val, 1, CDC_TIMEOUT);
-    CDC_Print_FS("OK: GPIO read\n");
+    command_send_ok(&response_val, 1);
 }
 
 static void cmd_gpio_write(int port_int, int pin_int, int value_int)
 {
     if (!((port_int == 0) || (port_int == 1))) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
+        command_send_ok(NULL, 0);
         return;
     }
     if (pin_int < 0 || pin_int > 15) {
-        CDC_Print_FS("ERR: Invalid GPIO pin\n");
+        command_send_ok(NULL, 0);
         return;
     }
 
@@ -200,7 +170,7 @@ static void cmd_gpio_write(int port_int, int pin_int, int value_int)
     uint8_t pin = (uint8_t)pin_int;
     GPIO_TypeDef *gpio_port = get_gpio_port(port);
     if (!gpio_port) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
+        command_send_ok(NULL, 0);
         return;
     }
     uint16_t gpio_pin = (uint16_t)(1u << pin);
@@ -211,8 +181,7 @@ static void cmd_gpio_write(int port_int, int pin_int, int value_int)
     set_pin_mode(port, pin, 1);
     HAL_GPIO_WritePin(gpio_port, gpio_pin, value ? GPIO_PIN_SET : GPIO_PIN_RESET);
     uint8_t response_val = (uint8_t)HAL_GPIO_ReadPin(gpio_port, gpio_pin);
-    (void)CDC_SendResponsePkt_FS(&response_val, 1, CDC_TIMEOUT);
-    CDC_Print_FS("OK: GPIO written\n");
+    command_send_ok(&response_val, 1);
 }
 
 void stm_gpio_register_commands(void)

@@ -3,7 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include "MFRC522.h"
+#include "command_registry.h"
+#include "usbd_cdc_if.h"
 //------------------------------------------------------
 /*
  * Function Nameï¼šWrite_MFRC5200
@@ -568,3 +571,240 @@ void MFRC522_StopCrypto1(void) {
 	// Clear MFCrypto1On bit
 	ClearBitMask(Status2Reg, 0x08); // Status2Reg[7..0] bits are: TempSensClear I2CForceHS reserved reserved   MFCrypto1On ModemState[2:0]
 } // End PCD_StopCrypto1()
+
+static bool mfrc522_initialized = false;
+
+static bool mfrc522_is_present(void)
+{
+  u_char version = Read_MFRC522(VersionReg);
+  return version == 0xB2 || version == 0x92 || version == 0x91;
+}
+
+static void mfrc522_ensure_initialized(void)
+{
+  if (mfrc522_initialized) {
+    return;
+  }
+  MFRC522_Init();
+  mfrc522_initialized = true;
+}
+
+static int hex_nibble(char c)
+{
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+  return -1;
+}
+
+static bool parse_hex_bytes_relaxed(const char *str, uint8_t *out, size_t out_max, size_t *out_len)
+{
+  if (!str || !out || !out_len) {
+    return false;
+  }
+
+  size_t written = 0;
+  int pending = -1;
+
+  for (const char *p = str; *p; ++p) {
+    char c = *p;
+    if (c == '0' && (p[1] == 'x' || p[1] == 'X')) {
+      ++p;
+      continue;
+    }
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',' || c == ':' || c == '_' || c == '-') {
+      continue;
+    }
+
+    int nib = hex_nibble(c);
+    if (nib < 0) {
+      return false;
+    }
+
+    if (pending < 0) {
+      pending = nib;
+    } else {
+      if (written >= out_max) {
+        return false;
+      }
+      out[written++] = (uint8_t)((pending << 4) | nib);
+      pending = -1;
+    }
+  }
+
+  if (pending >= 0) {
+    return false;
+  }
+
+  *out_len = written;
+  return true;
+}
+
+static void mfrc522_send_text(const char *text)
+{
+  if (!text) {
+    command_send_ok(NULL, 0);
+    return;
+  }
+  (void)CDC_SendResponsePkt_FS((uint8_t *)text, (uint16_t)strlen(text), 100);
+}
+
+static void mfrc522_cmd_init(void)
+{
+  mfrc522_ensure_initialized();
+  if (!mfrc522_is_present()) {
+    mfrc522_send_text("ERR: MFRC522 not detected");
+    return;
+  }
+  command_send_ok(NULL, 0);
+}
+
+static bool mfrc522_get_card(u_char tag_type[2], u_char uid[5])
+{
+  if (!tag_type || !uid) {
+    return false;
+  }
+
+  u_char status = MFRC522_Request(PICC_REQIDL, tag_type);
+  if (status != MI_OK) {
+    return false;
+  }
+
+  status = MFRC522_Anticoll(uid);
+  if (status != MI_OK) {
+    return false;
+  }
+
+  (void)MFRC522_SelectTag(uid);
+  return true;
+}
+
+static void mfrc522_cmd_read(int block, int auth, const char *key_str)
+{
+  mfrc522_ensure_initialized();
+  if (!mfrc522_is_present()) {
+    mfrc522_send_text("ERR: MFRC522 not detected");
+    return;
+  }
+
+  uint8_t key_bytes[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  size_t key_len = 0;
+  // Treat malformed/short keys as "use default key" to keep the transport simple.
+  // (MIFARE default key is 0xFF repeated 6 times.)
+  if (parse_hex_bytes_relaxed(key_str, key_bytes, sizeof(key_bytes), &key_len) && key_len == sizeof(key_bytes)) {
+    // Parsed successfully into key_bytes.
+  } else {
+    // Keep default.
+    memset(key_bytes, 0xFF, sizeof(key_bytes));
+  }
+
+  u_char tag_type[2] = {0};
+  u_char uid[5] = {0};
+  if (!mfrc522_get_card(tag_type, uid)) {
+    mfrc522_send_text("No card detected");
+    return;
+  }
+
+  u_char status = MFRC522_Auth((u_char)auth, (u_char)block, (u_char *)key_bytes, uid);
+  if (status != MI_OK) {
+    MFRC522_StopCrypto1();
+    mfrc522_send_text("ERR: auth failed");
+    return;
+  }
+
+  u_char block_data[18] = {0};
+  status = MFRC522_Read((u_char)block, block_data);
+
+  MFRC522_StopCrypto1();
+  MFRC522_Halt();
+
+  if (status != MI_OK) {
+    mfrc522_send_text("ERR: read failed");
+    return;
+  }
+
+  uint8_t response[2 + 4 + 16] = {0};
+  response[0] = tag_type[0];
+  response[1] = tag_type[1];
+  memcpy(&response[2], uid, 4);
+  memcpy(&response[6], block_data, 16);
+  (void)CDC_SendResponsePkt_FS(response, sizeof(response), 100);
+}
+
+static void mfrc522_cmd_write(int block, int auth, const char *key_str, const char *data_str)
+{
+  mfrc522_ensure_initialized();
+  if (!mfrc522_is_present()) {
+    mfrc522_send_text("ERR: MFRC522 not detected");
+    return;
+  }
+
+  uint8_t key_bytes[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  size_t key_len = 0;
+  // Treat malformed/short keys as "use default key" to keep the transport simple.
+  if (parse_hex_bytes_relaxed(key_str, key_bytes, sizeof(key_bytes), &key_len) && key_len == sizeof(key_bytes)) {
+    // Parsed successfully into key_bytes.
+  } else {
+    memset(key_bytes, 0xFF, sizeof(key_bytes));
+  }
+
+  uint8_t data_bytes[16] = {0};
+  size_t data_len = 0;
+  if (!parse_hex_bytes_relaxed(data_str, data_bytes, sizeof(data_bytes), &data_len) || data_len != sizeof(data_bytes)) {
+    mfrc522_send_text("ERR: data must be 16 bytes");
+    return;
+  }
+
+  u_char tag_type[2] = {0};
+  u_char uid[5] = {0};
+  if (!mfrc522_get_card(tag_type, uid)) {
+    mfrc522_send_text("No card detected");
+    return;
+  }
+
+  u_char status = MFRC522_Auth((u_char)auth, (u_char)block, (u_char *)key_bytes, uid);
+  if (status != MI_OK) {
+    MFRC522_StopCrypto1();
+    mfrc522_send_text("ERR: auth failed");
+    return;
+  }
+
+  status = MFRC522_Write((u_char)block, (u_char *)data_bytes);
+
+  MFRC522_StopCrypto1();
+  MFRC522_Halt();
+
+  if (status != MI_OK) {
+    mfrc522_send_text("ERR: write failed");
+    return;
+  }
+
+  mfrc522_send_text("Success");
+}
+
+void mfrc522_register_commands(void)
+{
+  static const cmd_arg_spec_t read_args[] = {
+    {.name = "block", .type = CMD_ARG_INT, .required = true},
+    {.name = "auth", .type = CMD_ARG_INT, .required = true},
+    {.name = "key", .type = CMD_ARG_STRING, .required = true},
+    {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+  };
+
+  static const cmd_arg_spec_t write_args[] = {
+    {.name = "block", .type = CMD_ARG_INT, .required = true},
+    {.name = "auth", .type = CMD_ARG_INT, .required = true},
+    {.name = "key", .type = CMD_ARG_STRING, .required = true},
+    {.name = "data", .type = CMD_ARG_STRING, .required = true},
+    {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+  };
+
+  static const command_entry_t mfrc522_command_table[] = {
+    {.verb = "rfid init", .args = NULL, .handler = (void *)mfrc522_cmd_init},
+    {.verb = "rfid read", .args = read_args, .handler = (void *)mfrc522_cmd_read},
+    {.verb = "rfid write", .args = write_args, .handler = (void *)mfrc522_cmd_write},
+  };
+
+  (void)command_registry_add_table(mfrc522_command_table,
+                                  sizeof(mfrc522_command_table) / sizeof(mfrc522_command_table[0]));
+}

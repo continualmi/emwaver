@@ -12,21 +12,28 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Block Address (Hex):"
-        app:layout_constraintBottom_toBottomOf="@+id/edit_text_block_address"
+        app:layout_constraintBottom_toBottomOf="@+id/layout_block_address"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <EditText
-        android:id="@+id/edit_text_block_address"
-        android:layout_width="80dp"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_block_address"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="100dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:background="@android:drawable/edit_text"
-        android:inputType="text"
-        android:maxLength="2"
-        android:padding="8dp"
+        app:boxBackgroundMode="outline"
         app:layout_constraintStart_toEndOf="@id/text_block_address"
-        app:layout_constraintTop_toTopOf="@id/text_block_address" />
+        app:layout_constraintTop_toTopOf="@id/text_block_address">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/edit_text_block_address"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789abcdefABCDEF"
+            android:inputType="textNoSuggestions|textVisiblePassword"
+            android:maxLength="2" />
+    </com.google.android.material.textfield.TextInputLayout>
 
     <TextView
         android:id="@+id/text_key"
@@ -36,7 +43,7 @@
         android:text="Key (6 bytes, Hex):"
         app:layout_constraintBottom_toBottomOf="@+id/layout_key_inputs"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/edit_text_block_address" />
+        app:layout_constraintTop_toBottomOf="@id/layout_block_address" />
 
     <LinearLayout
         android:id="@+id/layout_key_inputs"
@@ -44,75 +51,117 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:layout_marginTop="16dp"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/text_key"
-        app:layout_constraintTop_toBottomOf="@id/edit_text_block_address">
+        app:layout_constraintTop_toBottomOf="@id/layout_block_address">
 
-        <EditText
-            android:id="@+id/edit_text_key1"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:background="@android:drawable/edit_text"
-            android:inputType="text"
-            android:maxLength="2"
-            android:padding="8dp" />
+            android:orientation="horizontal">
 
-        <EditText
-            android:id="@+id/edit_text_key2"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:background="@android:drawable/edit_text"
-            android:inputType="text"
-            android:maxLength="2"
-            android:padding="8dp" />
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                app:boxBackgroundMode="outline">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_key1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:digits="0123456789abcdefABCDEF"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLength="2" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <EditText
-            android:id="@+id/edit_text_key3"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:background="@android:drawable/edit_text"
-            android:inputType="text"
-            android:maxLength="2"
-            android:padding="8dp" />
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                app:boxBackgroundMode="outline">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_key2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:digits="0123456789abcdefABCDEF"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLength="2" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <EditText
-            android:id="@+id/edit_text_key4"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:background="@android:drawable/edit_text"
-            android:inputType="text"
-            android:maxLength="2"
-            android:padding="8dp" />
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:boxBackgroundMode="outline">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_key3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:digits="0123456789abcdefABCDEF"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLength="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
 
-        <EditText
-            android:id="@+id/edit_text_key5"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="4dp"
-            android:layout_weight="1"
-            android:background="@android:drawable/edit_text"
-            android:inputType="text"
-            android:maxLength="2"
-            android:padding="8dp" />
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
 
-        <EditText
-            android:id="@+id/edit_text_key6"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@android:drawable/edit_text"
-            android:inputType="text"
-            android:maxLength="2"
-            android:padding="8dp" />
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                app:boxBackgroundMode="outline">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_key4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:digits="0123456789abcdefABCDEF"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLength="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                app:boxBackgroundMode="outline">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_key5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:digits="0123456789abcdefABCDEF"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLength="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                app:boxBackgroundMode="outline">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/edit_text_key6"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:digits="0123456789abcdefABCDEF"
+                    android:inputType="textNoSuggestions|textVisiblePassword"
+                    android:maxLength="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
 
     </LinearLayout>
 
@@ -142,17 +191,24 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/text_auth_mode" />
 
-    <EditText
-        android:id="@+id/edit_text_combined_data"
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/layout_write_data"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:background="@android:drawable/edit_text"
-        android:inputType="text"
-        android:padding="8dp"
+        app:boxBackgroundMode="outline"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/text_write_data" />
+        app:layout_constraintTop_toBottomOf="@id/text_write_data">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/edit_text_combined_data"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:digits="0123456789abcdefABCDEF "
+            android:inputType="textNoSuggestions|textVisiblePassword" />
+    </com.google.android.material.textfield.TextInputLayout>
 
     <Button
         android:id="@+id/button_read"
@@ -164,7 +220,7 @@
         app:iconGravity="start"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/edit_text_combined_data" />
+        app:layout_constraintTop_toBottomOf="@id/layout_write_data" />
 
     <Button
         android:id="@+id/button_write"
@@ -190,4 +246,3 @@
         app:layout_constraintTop_toBottomOf="@id/button_write" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
-
