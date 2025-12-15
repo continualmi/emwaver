@@ -714,106 +714,88 @@ static void cc1101_cmd_set_gdo(const command_hex_arg_t *data)
 
 void cc1101_register_commands(void)
 {
-    (void)register_command("cc1101 init", (void *)cc1101_cmd_init,
-                           (const cmd_arg_spec_t[]){
-                               {"miso", CMD_ARG_INT, false},
-                               {"mosi", CMD_ARG_INT, false},
-                               {"sck", CMD_ARG_INT, false},
-                               {"cs", CMD_ARG_INT, false},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t init_args[] = {
+        {.name = "miso", .type = CMD_ARG_INT, .required = false},
+        {.name = "mosi", .type = CMD_ARG_INT, .required = false},
+        {.name = "sck", .type = CMD_ARG_INT, .required = false},
+        {.name = "cs", .type = CMD_ARG_INT, .required = false},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 probe", (void *)cc1101_cmd_probe,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t write_args[] = {
+        {.name = "reg", .type = CMD_ARG_INT, .required = true},
+        {.name = "val", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 status", (void *)cc1101_cmd_status,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t read_args[] = {
+        {.name = "reg", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 write", (void *)cc1101_cmd_write_reg,
-                           (const cmd_arg_spec_t[]){
-                               {"reg", CMD_ARG_INT, true},
-                               {"val", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t strobe_args[] = {
+        {.name = "cmd", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 read", (void *)cc1101_cmd_read_reg,
-                           (const cmd_arg_spec_t[]){
-                               {"reg", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t read_burst_args[] = {
+        {.name = "reg", .type = CMD_ARG_INT, .required = true},
+        {.name = "len", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 strobe", (void *)cc1101_cmd_strobe,
-                           (const cmd_arg_spec_t[]){
-                               {"cmd", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t write_burst_args[] = {
+        {.name = "reg", .type = CMD_ARG_INT, .required = true},
+        {.name = "data", .type = CMD_ARG_HEX, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 read_burst", (void *)cc1101_cmd_read_burst,
-                           (const cmd_arg_spec_t[]){
-                               {"reg", CMD_ARG_INT, true},
-                               {"len", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t set_freq_args[] = {
+        {.name = "mhz", .type = CMD_ARG_STRING, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 write_burst", (void *)cc1101_cmd_write_burst,
-                           (const cmd_arg_spec_t[]){
-                               {"reg", CMD_ARG_INT, true},
-                               {"data", CMD_ARG_HEX, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t set_datarate_args[] = {
+        {.name = "bps", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 apply_defaults", (void *)cc1101_cmd_apply_defaults,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t set_mod_args[] = {
+        {.name = "mod", .type = CMD_ARG_STRING, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 set_freq", (void *)cc1101_cmd_set_freq,
-                           (const cmd_arg_spec_t[]){
-                               {"mhz", CMD_ARG_STRING, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t set_mod_power_args[] = {
+        {.name = "mod", .type = CMD_ARG_INT, .required = true},
+        {.name = "dbm", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 get_freq", (void *)cc1101_cmd_get_freq,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const cmd_arg_spec_t set_gdo_args[] = {
+        {.name = "data", .type = CMD_ARG_HEX, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
 
-    (void)register_command("cc1101 set_datarate", (void *)cc1101_cmd_set_datarate,
-                           (const cmd_arg_spec_t[]){
-                               {"bps", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    static const command_entry_t cc1101_command_table[] = {
+        {.verb = "cc1101 init", .args = init_args, .handler = (void *)cc1101_cmd_init},
+        {.verb = "cc1101 probe", .args = NULL, .handler = (void *)cc1101_cmd_probe},
+        {.verb = "cc1101 status", .args = NULL, .handler = (void *)cc1101_cmd_status},
+        {.verb = "cc1101 write", .args = write_args, .handler = (void *)cc1101_cmd_write_reg},
+        {.verb = "cc1101 read", .args = read_args, .handler = (void *)cc1101_cmd_read_reg},
+        {.verb = "cc1101 strobe", .args = strobe_args, .handler = (void *)cc1101_cmd_strobe},
+        {.verb = "cc1101 read_burst", .args = read_burst_args, .handler = (void *)cc1101_cmd_read_burst},
+        {.verb = "cc1101 write_burst", .args = write_burst_args, .handler = (void *)cc1101_cmd_write_burst},
+        {.verb = "cc1101 apply_defaults", .args = NULL, .handler = (void *)cc1101_cmd_apply_defaults},
+        {.verb = "cc1101 set_freq", .args = set_freq_args, .handler = (void *)cc1101_cmd_set_freq},
+        {.verb = "cc1101 get_freq", .args = NULL, .handler = (void *)cc1101_cmd_get_freq},
+        {.verb = "cc1101 set_datarate", .args = set_datarate_args, .handler = (void *)cc1101_cmd_set_datarate},
+        {.verb = "cc1101 get_datarate", .args = NULL, .handler = (void *)cc1101_cmd_get_datarate},
+        {.verb = "cc1101 set_mod", .args = set_mod_args, .handler = (void *)cc1101_cmd_set_mod},
+        {.verb = "cc1101 get_mod", .args = NULL, .handler = (void *)cc1101_cmd_get_mod},
+        {.verb = "cc1101 set_mod_power", .args = set_mod_power_args, .handler = (void *)cc1101_cmd_set_mod_power},
+        {.verb = "cc1101 set_gdo", .args = set_gdo_args, .handler = (void *)cc1101_cmd_set_gdo},
+    };
 
-    (void)register_command("cc1101 get_datarate", (void *)cc1101_cmd_get_datarate,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-
-    (void)register_command("cc1101 set_mod", (void *)cc1101_cmd_set_mod,
-                           (const cmd_arg_spec_t[]){
-                               {"mod", CMD_ARG_STRING, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-
-    (void)register_command("cc1101 get_mod", (void *)cc1101_cmd_get_mod,
-                           (const cmd_arg_spec_t[]){
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-
-    (void)register_command("cc1101 set_mod_power", (void *)cc1101_cmd_set_mod_power,
-                           (const cmd_arg_spec_t[]){
-                               {"mod", CMD_ARG_INT, true},
-                               {"dbm", CMD_ARG_INT, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-
-    (void)register_command("cc1101 set_gdo", (void *)cc1101_cmd_set_gdo,
-                           (const cmd_arg_spec_t[]){
-                               {"data", CMD_ARG_HEX, true},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
+    (void)command_registry_add_table(cc1101_command_table,
+                                    sizeof(cc1101_command_table) / sizeof(cc1101_command_table[0]));
 }
