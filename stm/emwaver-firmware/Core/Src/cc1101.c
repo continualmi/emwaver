@@ -12,6 +12,20 @@ extern SPI_HandleTypeDef hspi1;
 #define CC1101_FOSC_HZ 26000000u
 #define CC1101_SPI_TIMEOUT_MS 20u
 
+#ifndef CC1101_CS_GPIO_Port
+#define CC1101_CS_GPIO_Port NSS_RFID_GPIO_Port
+#endif
+#ifndef CC1101_CS_Pin
+#define CC1101_CS_Pin NSS_RFID_Pin
+#endif
+
+#ifndef CC1101_MISO_GPIO_Port
+#define CC1101_MISO_GPIO_Port GPIOA
+#endif
+#ifndef CC1101_MISO_Pin
+#define CC1101_MISO_Pin GPIO_PIN_6
+#endif
+
 #define CC1101_REG_IOCFG2   0x00
 #define CC1101_REG_IOCFG1   0x01
 #define CC1101_REG_IOCFG0   0x02
@@ -158,12 +172,48 @@ static bool cc1101_parse_mhz_string_to_hz(const char *str, uint32_t *out_hz)
 static void cc1101_select(void)
 {
     // CC1101 CS is active-low on all our supported boards.
-    HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(CC1101_CS_GPIO_Port, CC1101_CS_Pin, GPIO_PIN_RESET);
 }
 
 static void cc1101_deselect(void)
 {
-    HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(CC1101_CS_GPIO_Port, CC1101_CS_Pin, GPIO_PIN_SET);
+}
+
+static bool cc1101_wait_miso(GPIO_PinState expected, uint32_t timeout_ms)
+{
+    const uint32_t start = HAL_GetTick();
+    while (HAL_GPIO_ReadPin(CC1101_MISO_GPIO_Port, CC1101_MISO_Pin) != expected) {
+        if ((HAL_GetTick() - start) > timeout_ms) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool cc1101_reset_sequence(void)
+{
+    // CC1101 reset sequence from TI datasheet: CS toggle + wait for SO(MISO) low.
+    cc1101_deselect();
+    HAL_Delay(1);
+
+    cc1101_select();
+    HAL_Delay(1);
+    cc1101_deselect();
+    HAL_Delay(1);
+
+    cc1101_select();
+    if (!cc1101_wait_miso(GPIO_PIN_RESET, 10)) {
+        cc1101_deselect();
+        return false;
+    }
+
+    uint8_t tx = CC1101_SRES;
+    uint8_t rx = 0;
+    (void)HAL_SPI_TransmitReceive(&hspi1, &tx, &rx, 1, CC1101_SPI_TIMEOUT_MS);
+    cc1101_deselect();
+    HAL_Delay(1);
+    return true;
 }
 
 static uint8_t cc1101_read_reg(uint8_t addr)
@@ -433,14 +483,28 @@ static void cc1101_cmd_init(int miso, int mosi, int sck, int cs)
     (void)sck;
     (void)cs;
     // Always active-low on STM32 builds.
-    cc1101_deselect();
-    HAL_Delay(1);
-    cc1101_strobe(CC1101_SRES);
-    HAL_Delay(1);
+    if (!cc1101_reset_sequence()) {
+        cc1101_initialized = false;
+        command_send_err("cc1101 reset timeout");
+        return;
+    }
     cc1101_apply_defaults();
 
     cc1101_initialized = true;
     command_send_ok(NULL, 0);
+}
+
+static void cc1101_cmd_probe(void)
+{
+    uint8_t out[4] = {0};
+    out[0] = (uint8_t)HAL_GPIO_ReadPin(CC1101_MISO_GPIO_Port, CC1101_MISO_Pin);
+    cc1101_select();
+    HAL_Delay(1);
+    out[1] = (uint8_t)HAL_GPIO_ReadPin(CC1101_MISO_GPIO_Port, CC1101_MISO_Pin);
+    cc1101_deselect();
+    out[2] = cc1101_read_reg(0x30); // PARTNUM
+    out[3] = cc1101_read_reg(0x31); // VERSION
+    command_send_ok(out, sizeof(out));
 }
 
 static void cc1101_cmd_write_reg(int reg, int val)
@@ -697,6 +761,11 @@ void cc1101_register_commands(void)
                                {"mosi", CMD_ARG_INT, false},
                                {"sck", CMD_ARG_INT, false},
                                {"cs", CMD_ARG_INT, false},
+                               {NULL, CMD_ARG_DONE, false}
+                           });
+
+    (void)register_command("cc1101 probe", (void *)cc1101_cmd_probe,
+                           (const cmd_arg_spec_t[]){
                                {NULL, CMD_ARG_DONE, false}
                            });
 
