@@ -529,26 +529,29 @@ volatile int transmitDutyCycle = 50; // Default 50%
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1) {
-      if (bulk_packet != NULL) {
-          char cmd_str[bulk_packet_len + 1];
-          memcpy(cmd_str, bulk_packet, bulk_packet_len);
-          cmd_str[bulk_packet_len] = '\0'; // Ensure null termination
-
-          free_bulk_packet(); // Free the bulk_packet immediately after copying
-
-          // Process the command string
-          if (strncmp(cmd_str, "cc1101", 6) == 0) {
-              command_t cmd = {0};
-              size_t cmd_len = strlen(cmd_str);
-              if (cmd_len > sizeof(cmd.data)) {
-                  cmd_len = sizeof(cmd.data);
-              }
-              memcpy(cmd.data, cmd_str, cmd_len);
-              cmd.length = (uint16_t)cmd_len;
-              command_registry_handle(&cmd);
-              continue;
-          }
+	  while (1) {
+		      if (bulk_packet != NULL) {
+		          size_t cmd_len = bulk_packet_len;
+		          if (cmd_len > CLI_COMMAND_BUFFER) {
+		              cmd_len = CLI_COMMAND_BUFFER;
+		          }
+	
+		          // Route CC1101 commands directly to the registry without copying into a
+		          // separate string buffer (keeps stack usage low on STM32F0).
+		          if (cmd_len >= 6 && memcmp(bulk_packet, "cc1101", 6) == 0) {
+		              command_t cmd = {0};
+		              memcpy(cmd.data, bulk_packet, cmd_len);
+		              cmd.length = (uint16_t)cmd_len;
+		              free_bulk_packet();
+		              command_registry_handle(&cmd);
+		              continue;
+		          }
+	
+		          char cmd_str[CLI_COMMAND_BUFFER + 1];
+		          memcpy(cmd_str, bulk_packet, cmd_len);
+		          cmd_str[cmd_len] = '\0'; // Ensure null termination
+	
+		          free_bulk_packet(); // Free the bulk_packet immediately after copying
           if (strncmp(cmd_str, "sample start", 12) == 0) {
               int pin_num;
               if (sscanf(cmd_str, "sample start --pin=%d", &pin_num) == 1) {
