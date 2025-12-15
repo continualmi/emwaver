@@ -37,9 +37,14 @@ typedef struct {
 } cmd_arg_spec_t;
 
 void command_registry_init(void);
-bool register_command(const char *verb,
-                      void *handler,
-                      const cmd_arg_spec_t *args);
+
+typedef struct {
+    const char *verb;
+    const cmd_arg_spec_t *args;
+    void *handler;
+} command_entry_t;
+
+bool command_registry_add_table(const command_entry_t *entries, size_t count);
 
 bool command_registry_is_ascii(const command_t *cmd);
 void command_registry_handle(const command_t *cmd);

@@ -5,7 +5,9 @@
 
 #include "usbd_cdc_if.h"
 
-#define COMMAND_REGISTRY_MAX 64
+// STM32F042 has very limited RAM; keep registry metadata tiny and store
+// command tables in flash (rodata).
+#define COMMAND_REGISTRY_TABLES_MAX 4
 
 typedef struct {
     const char *key;
@@ -27,21 +29,24 @@ typedef union {
     command_hex_arg_t hex_val;
 } command_arg_value_t;
 
-typedef struct {
-    const char *verb;
-    const cmd_arg_spec_t *args;
-    void (*handler)(void);
-} command_entry_t;
+static const command_entry_t *registry_tables[COMMAND_REGISTRY_TABLES_MAX];
+static size_t registry_table_counts[COMMAND_REGISTRY_TABLES_MAX];
+static size_t registry_table_count = 0;
 
-static command_entry_t registry[COMMAND_REGISTRY_MAX];
-static size_t registry_count = 0;
+// The STM32F042 linker script reserves a small stack; keep command dispatch stack
+// usage low by using static scratch buffers (single-threaded firmware).
+static char scratch_line[CLI_COMMAND_BUFFER + 1];
+static cli_command_view_t scratch_parsed;
+static command_arg_value_t scratch_values[CLI_MAX_ARGS];
+static cmd_arg_type_t scratch_types[CLI_MAX_ARGS];
+static uint8_t scratch_hex_buffer[CLI_VALUE_MAX];
 
 static bool parse_cli_command_inplace(char *line, cli_command_view_t *out);
 static const char *cli_get_arg_view(const cli_command_view_t *cmd, const char *key);
 static bool cli_parse_int(const char *str, int *out_value);
 static bool cli_parse_bool(const char *str, bool *out_value);
 static bool cli_parse_hex_bytes(const char *str, uint8_t *out, size_t max_len, size_t *out_len);
-static command_entry_t *find_entry(const char *verb);
+static const command_entry_t *find_entry(const char *verb);
 static void invoke_handler(const command_entry_t *entry,
                            const cmd_arg_type_t *types,
                            size_t argc,
@@ -49,32 +54,24 @@ static void invoke_handler(const command_entry_t *entry,
 
 void command_registry_init(void)
 {
-    memset(registry, 0, sizeof(registry));
-    registry_count = 0;
+    memset(registry_tables, 0, sizeof(registry_tables));
+    memset(registry_table_counts, 0, sizeof(registry_table_counts));
+    registry_table_count = 0;
 }
 
-bool register_command(const char *verb,
-                      void *handler,
-                      const cmd_arg_spec_t *args)
+bool command_registry_add_table(const command_entry_t *entries, size_t count)
 {
-    if (!verb || !handler) {
+    if (!entries || count == 0) {
         return false;
     }
 
-    if (registry_count >= COMMAND_REGISTRY_MAX) {
+    if (registry_table_count >= COMMAND_REGISTRY_TABLES_MAX) {
         return false;
     }
 
-    for (size_t i = 0; i < registry_count; ++i) {
-        if (registry[i].verb && strcmp(registry[i].verb, verb) == 0) {
-            return false;
-        }
-    }
-
-    registry[registry_count].verb = verb;
-    registry[registry_count].args = args;
-    registry[registry_count].handler = (void (*)(void))handler;
-    registry_count++;
+    registry_tables[registry_table_count] = entries;
+    registry_table_counts[registry_table_count] = count;
+    registry_table_count++;
     return true;
 }
 
@@ -85,6 +82,9 @@ bool command_registry_is_ascii(const command_t *cmd)
     }
     for (uint16_t i = 0; i < cmd->length; ++i) {
         uint8_t ch = cmd->data[i];
+        if (ch == '\0') {
+            break;
+        }
         if (ch == '\r' || ch == '\n' || ch == '\t' || ch == ' ') {
             continue;
         }
@@ -95,14 +95,22 @@ bool command_registry_is_ascii(const command_t *cmd)
     return true;
 }
 
-static command_entry_t *find_entry(const char *verb)
+static const command_entry_t *find_entry(const char *verb)
 {
     if (!verb) {
         return NULL;
     }
-    for (size_t i = 0; i < registry_count; ++i) {
-        if (registry[i].verb && strcmp(registry[i].verb, verb) == 0) {
-            return &registry[i];
+
+    for (size_t table_index = 0; table_index < registry_table_count; ++table_index) {
+        const command_entry_t *table = registry_tables[table_index];
+        size_t count = registry_table_counts[table_index];
+        if (!table || count == 0) {
+            continue;
+        }
+        for (size_t entry_index = 0; entry_index < count; ++entry_index) {
+            if (table[entry_index].verb && strcmp(table[entry_index].verb, verb) == 0) {
+                return &table[entry_index];
+            }
         }
     }
     return NULL;
@@ -114,58 +122,58 @@ void command_registry_handle(const command_t *cmd)
         return;
     }
 
-    // The STM32F042 linker script reserves a small stack; parse in-place with a
-    // single line buffer to avoid stack overflows (HardFault => USB appears dead).
-    char line[CLI_COMMAND_BUFFER + 1];
     size_t line_len = cmd->length;
+    for (uint16_t i = 0; i < cmd->length; ++i) {
+        if (cmd->data[i] == '\0') {
+            line_len = i;
+            break;
+        }
+    }
     if (line_len > CLI_COMMAND_BUFFER) {
         line_len = CLI_COMMAND_BUFFER;
     }
-    memcpy(line, cmd->data, line_len);
-    line[line_len] = '\0';
+    memcpy(scratch_line, cmd->data, line_len);
+    scratch_line[line_len] = '\0';
 
-    cli_command_view_t parsed;
-    if (!parse_cli_command_inplace(line, &parsed)) {
+    if (!parse_cli_command_inplace(scratch_line, &scratch_parsed)) {
+        CDC_Print_FS("ERR: Invalid command\n");
         command_send_err(NULL);
         return;
     }
 
-    command_entry_t *entry = NULL;
-    if (parsed.positional_count > 0) {
+    const command_entry_t *entry = NULL;
+    if (scratch_parsed.positional_count > 0) {
         char composite[CLI_VERB_MAX + CLI_VALUE_MAX + 2];
-        size_t verb_len = strnlen(parsed.verb, CLI_VERB_MAX);
-        size_t pos_len = strnlen(parsed.positional[0], CLI_VALUE_MAX);
+        size_t verb_len = strnlen(scratch_parsed.verb, CLI_VERB_MAX);
+        size_t pos_len = strnlen(scratch_parsed.positional[0], CLI_VALUE_MAX);
         if (verb_len > 0 && pos_len > 0 && (verb_len + 1 + pos_len) < sizeof(composite)) {
-            memcpy(composite, parsed.verb, verb_len);
+            memcpy(composite, scratch_parsed.verb, verb_len);
             composite[verb_len] = ' ';
-            memcpy(composite + verb_len + 1, parsed.positional[0], pos_len);
+            memcpy(composite + verb_len + 1, scratch_parsed.positional[0], pos_len);
             composite[verb_len + 1 + pos_len] = '\0';
 
             entry = find_entry(composite);
             if (entry) {
-                if (parsed.positional_count > 1) {
-                    memmove(&parsed.positional[0],
-                            &parsed.positional[1],
-                            (parsed.positional_count - 1) * sizeof(parsed.positional[0]));
+                if (scratch_parsed.positional_count > 1) {
+                    memmove(&scratch_parsed.positional[0],
+                            &scratch_parsed.positional[1],
+                            (scratch_parsed.positional_count - 1) * sizeof(scratch_parsed.positional[0]));
                 }
-                parsed.positional_count -= 1;
-                parsed.positional[parsed.positional_count] = NULL;
+                scratch_parsed.positional_count -= 1;
+                scratch_parsed.positional[scratch_parsed.positional_count] = NULL;
             }
         }
     }
     if (!entry) {
-        entry = find_entry(parsed.verb);
+        entry = find_entry(scratch_parsed.verb);
     }
     if (!entry) {
+        CDC_Print_FS("ERR: Unknown command\n");
         command_send_err(NULL);
         return;
     }
 
-    command_arg_value_t values[CLI_MAX_ARGS];
-    memset(values, 0, sizeof(values));
-
-    cmd_arg_type_t types[CLI_MAX_ARGS];
-    uint8_t hex_buffer[CLI_VALUE_MAX];
+    memset(scratch_values, 0, sizeof(scratch_values));
     bool hex_buffer_used = false;
 
     size_t argc = 0;
@@ -173,40 +181,42 @@ void command_registry_handle(const command_t *cmd)
 
     for (const cmd_arg_spec_t *spec = entry->args; spec && spec->type != CMD_ARG_DONE; ++spec) {
         if (argc >= CLI_MAX_ARGS) {
+            CDC_Print_FS("ERR: Too many args\n");
             command_send_err(NULL);
             return;
         }
 
         const char *raw = NULL;
         if (spec->name == NULL) {
-            if (positional_index < parsed.positional_count) {
-                raw = parsed.positional[positional_index];
+            if (positional_index < scratch_parsed.positional_count) {
+                raw = scratch_parsed.positional[positional_index];
             }
             positional_index++;
         } else {
-            raw = cli_get_arg_view(&parsed, spec->name);
+            raw = cli_get_arg_view(&scratch_parsed, spec->name);
         }
 
         if (!raw) {
             if (spec->required) {
+                CDC_Print_FS("ERR: Missing arg\n");
                 command_send_err(NULL);
                 return;
             }
 
-            types[argc] = spec->type;
+            scratch_types[argc] = spec->type;
             switch (spec->type) {
                 case CMD_ARG_INT:
-                    values[argc].int_val = 0;
+                    scratch_values[argc].int_val = 0;
                     break;
                 case CMD_ARG_STRING:
-                    values[argc].str_val = "";
+                    scratch_values[argc].str_val = "";
                     break;
                 case CMD_ARG_BOOL:
-                    values[argc].bool_val = false;
+                    scratch_values[argc].bool_val = false;
                     break;
                 case CMD_ARG_HEX:
-                    values[argc].hex_val.data = NULL;
-                    values[argc].hex_val.length = 0;
+                    scratch_values[argc].hex_val.data = NULL;
+                    scratch_values[argc].hex_val.length = 0;
                     break;
                 default:
                     break;
@@ -215,52 +225,57 @@ void command_registry_handle(const command_t *cmd)
             continue;
         }
 
-        types[argc] = spec->type;
+        scratch_types[argc] = spec->type;
         switch (spec->type) {
             case CMD_ARG_INT: {
                 int value = 0;
                 if (!cli_parse_int(raw, &value)) {
+                    CDC_Print_FS("ERR: Invalid int\n");
                     command_send_err(NULL);
                     return;
                 }
-                values[argc].int_val = value;
+                scratch_values[argc].int_val = value;
                 break;
             }
             case CMD_ARG_STRING:
-                values[argc].str_val = raw;
+                scratch_values[argc].str_val = raw;
                 break;
             case CMD_ARG_BOOL: {
                 bool value = false;
                 if (!cli_parse_bool(raw, &value)) {
+                    CDC_Print_FS("ERR: Invalid bool\n");
                     command_send_err(NULL);
                     return;
                 }
-                values[argc].bool_val = value;
+                scratch_values[argc].bool_val = value;
                 break;
             }
             case CMD_ARG_HEX: {
                 size_t length = 0;
                 if (hex_buffer_used) {
+                    CDC_Print_FS("ERR: Too many hex args\n");
                     command_send_err(NULL);
                     return;
                 }
-                if (!cli_parse_hex_bytes(raw, hex_buffer, CLI_VALUE_MAX, &length)) {
+                if (!cli_parse_hex_bytes(raw, scratch_hex_buffer, CLI_VALUE_MAX, &length)) {
+                    CDC_Print_FS("ERR: Invalid hex\n");
                     command_send_err(NULL);
                     return;
                 }
                 hex_buffer_used = true;
-                values[argc].hex_val.data = hex_buffer;
-                values[argc].hex_val.length = length;
+                scratch_values[argc].hex_val.data = scratch_hex_buffer;
+                scratch_values[argc].hex_val.length = length;
                 break;
             }
             default:
+                CDC_Print_FS("ERR: Invalid arg type\n");
                 command_send_err(NULL);
                 return;
         }
         argc++;
     }
 
-    invoke_handler(entry, types, argc, values);
+    invoke_handler(entry, scratch_types, argc, scratch_values);
 }
 
 void command_send_ok(const uint8_t *data, size_t len)
