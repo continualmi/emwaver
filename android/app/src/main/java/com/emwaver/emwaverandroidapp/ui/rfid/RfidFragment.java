@@ -67,7 +67,7 @@ public class RfidFragment extends Fragment {
 
         InputFilter hexFilter = (source, start, end, dest, dstart, dend) -> {
             for (int i = start; i < end; i++) {
-                if (!Character.toString(source.charAt(i)).matches("[0-9A-Fa-f ]")) {
+                if (!Character.toString(source.charAt(i)).matches("[0-9A-Fa-f]")) {
                     return "";
                 }
             }
@@ -78,7 +78,15 @@ public class RfidFragment extends Fragment {
         for (EditText keyInput : keyInputs) {
             keyInput.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2), hexFilter});
         }
-        combinedDataInput.setFilters(new InputFilter[]{hexFilter});
+        InputFilter hexAndSpaceFilter = (source, start, end, dest, dstart, dend) -> {
+            for (int i = start; i < end; i++) {
+                if (!Character.toString(source.charAt(i)).matches("[0-9A-Fa-f ]")) {
+                    return "";
+                }
+            }
+            return null;
+        };
+        combinedDataInput.setFilters(new InputFilter[]{hexAndSpaceFilter});
 
         setDefaultValues();
 
@@ -138,19 +146,13 @@ public class RfidFragment extends Fragment {
                 return;
             }
 
-            byte[] command = new byte[12];
-            command[0] = 'r';
-            command[1] = 'e';
-            command[2] = 'a';
-            command[3] = 'd';
-            command[4] = (byte) Integer.parseInt(blockAddress, 16);
-            command[5] = (byte) (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61);
+            int block = Integer.parseInt(blockAddress, 16) & 0xFF;
+            int auth = (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61);
+            String key = buildHexCsv(keyInputs, 6);
 
-            for (int i = 0; i < 6; i++) {
-                command[6 + i] = (byte) Integer.parseInt(keyInputs[i].getText().toString(), 16);
-            }
-
-            byte[] response = usbService.sendCommand(command, 2000);
+            String cmd = String.format("rfid read --block=0x%02X --auth=0x%02X --key=%s", block, auth, key);
+            Log.i("RFID", "TX: " + cmd);
+            byte[] response = sendAsciiCommand(cmd, 2000);
             processReadResponse(response);
         } else {
             binding.textResult.setText("USB Service not bound. Please reconnect.");
@@ -167,25 +169,14 @@ public class RfidFragment extends Fragment {
                 return;
             }
 
-            byte[] command = new byte[29];
-            command[0] = 'w';
-            command[1] = 'r';
-            command[2] = 'i';
-            command[3] = 't';
-            command[4] = 'e';
-            command[5] = (byte) Integer.parseInt(blockAddress, 16);
-            command[6] = (byte) (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61);
+            int block = Integer.parseInt(blockAddress, 16) & 0xFF;
+            int auth = (authModeSpinner.getSelectedItemPosition() == 0 ? 0x60 : 0x61);
+            String key = buildHexCsv(keyInputs, 6);
+            String data = buildHexCsvFromString(combinedDataInput.getText().toString(), 16);
 
-            for (int i = 0; i < 6; i++) {
-                command[7 + i] = (byte) Integer.parseInt(keyInputs[i].getText().toString(), 16);
-            }
-
-            String combinedData = combinedDataInput.getText().toString().replaceAll(" ", "");
-            for (int i = 0; i < 16; i++) {
-                command[13 + i] = (byte) Integer.parseInt(combinedData.substring(i * 2, i * 2 + 2), 16);
-            }
-
-            byte[] response = usbService.sendCommand(command, 2000);
+            String cmd = String.format("rfid write --block=0x%02X --auth=0x%02X --key=%s --data=%s", block, auth, key, data);
+            Log.i("RFID", "TX: " + cmd);
+            byte[] response = sendAsciiCommand(cmd, 2000);
             processWriteResponse(response);
         } else {
             binding.textResult.setText("USB Service not bound. Please reconnect.");
@@ -195,7 +186,8 @@ public class RfidFragment extends Fragment {
 
     private boolean isKeyComplete() {
         for (EditText keyInput : keyInputs) {
-            if (keyInput.getText().toString().isEmpty()) {
+            String v = keyInput.getText().toString().trim();
+            if (v.isEmpty() || !v.matches("^[0-9A-Fa-f]{1,2}$")) {
                 return false;
             }
         }
@@ -204,7 +196,7 @@ public class RfidFragment extends Fragment {
 
     private boolean isCombinedDataComplete() {
         String combinedData = combinedDataInput.getText().toString().replaceAll(" ", "");
-        return combinedData.length() == 32;
+        return combinedData.matches("^[0-9A-Fa-f]{32}$");
     }
 
     private void processReadResponse(byte[] response) {
@@ -213,43 +205,35 @@ public class RfidFragment extends Fragment {
             return;
         }
 
-        String responseString = new String(response, StandardCharsets.US_ASCII);
-        if (responseString.equals("No card detected")) {
-            showError("Error: No card detected");
-            return;
-        }
-
-        if (response.length >= 2) {
+        // Firmware binary reply: [TagType(2)][UID(4)][Data(16)] = 22 bytes
+        if (response.length == 22) {
             String cardType = getTagType(response[0], response[1]);
+            String uid = String.format("%02X %02X %02X %02X",
+                    response[2] & 0xFF, response[3] & 0xFF, response[4] & 0xFF, response[5] & 0xFF);
+
+            StringBuilder data = new StringBuilder();
+            for (int i = 6; i < 22; i++) {
+                if (i > 6) data.append(" ");
+                data.append(String.format("%02X", response[i] & 0xFF));
+            }
+
             StringBuilder result = new StringBuilder();
             result.append("Card Type: ").append(cardType).append("\n");
-
-            if (response.length >= 6) {
-                String uid = String.format("%02X %02X %02X %02X", response[2], response[3], response[4], response[5]);
-                result.append("UID: ").append(uid).append("\n");
-            }
-
-            if (response.length > 6) {
-                if (response[6] == (byte) 0xFF) {
-                    String errorMsg = new String(response, 7, response.length - 7, StandardCharsets.US_ASCII);
-                    result.append("Error: ").append(errorMsg);
-                    showError(result.toString());
-                } else if (response[6] == (byte) 0x00 && response.length >= 23) {
-                    StringBuilder data = new StringBuilder();
-                    for (int i = 7; i < 23; i++) {
-                        data.append(String.format("%02X ", response[i]));
-                    }
-                    result.append("Data: ").append(data.toString().trim());
-                    showResultDialog(result.toString(), data.toString().trim());
-                    clearError();
-                } else {
-                    showError("Unexpected response format.");
-                }
-            } else {
-                showError("Incomplete response received.");
-            }
+            result.append("UID: ").append(uid).append("\n");
+            result.append("Data: ").append(data);
+            showResultDialog(result.toString(), data.toString());
+            clearError();
         } else {
-            showError("Invalid response format.");
+            String responseString = new String(response, StandardCharsets.US_ASCII).trim();
+            if (responseString.equals("No card detected")) {
+                showError("Error: No card detected");
+                return;
+            }
+            if (responseString.startsWith("ERR:")) {
+                showError(responseString);
+                return;
+            }
+            showError("Unexpected response format.");
         }
 
         logResponse("read", response);
@@ -313,7 +297,7 @@ public class RfidFragment extends Fragment {
     }
 
     private String getTagType(byte b1, byte b2) {
-        int tagType = (b1 << 8) | b2;
+        int tagType = ((b1 & 0xFF) << 8) | (b2 & 0xFF);
         switch (tagType) {
             case 0x4400:
                 return "Mifare_UltraLight";
@@ -343,6 +327,34 @@ public class RfidFragment extends Fragment {
         }
     }
 
+    private byte[] sendAsciiCommand(String command, int timeoutMs) {
+        if (usbService == null) return null;
+        return usbService.sendCommand((command + "\n").getBytes(StandardCharsets.UTF_8), timeoutMs);
+    }
+
+    private String buildHexCsv(EditText[] inputs, int expectedCount) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < expectedCount; i++) {
+            if (i > 0) sb.append(",");
+            String v = inputs[i].getText().toString().trim();
+            if (v.length() == 1) v = "0" + v;
+            sb.append("0x").append(v);
+        }
+        return sb.toString();
+    }
+
+    private String buildHexCsvFromString(String hexString, int expectedBytes) {
+        String cleaned = hexString.replaceAll("[^0-9A-Fa-f]", "");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < expectedBytes; i++) {
+            if (i > 0) sb.append(",");
+            int start = i * 2;
+            String byteHex = (start + 2 <= cleaned.length()) ? cleaned.substring(start, start + 2) : "00";
+            sb.append("0x").append(byteHex);
+        }
+        return sb.toString();
+    }
+
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -361,4 +373,3 @@ public class RfidFragment extends Fragment {
         Utils.updateActionBarStatus(this, "");
     }
 }
-

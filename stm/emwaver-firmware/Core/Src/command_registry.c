@@ -7,7 +7,7 @@
 
 // STM32F042 has very limited RAM; keep registry metadata tiny and store
 // command tables in flash (rodata).
-#define COMMAND_REGISTRY_TABLES_MAX 4
+#define COMMAND_REGISTRY_TABLES_MAX 5
 
 typedef struct {
     const char *key;
@@ -136,7 +136,6 @@ void command_registry_handle(const command_t *cmd)
     scratch_line[line_len] = '\0';
 
     if (!parse_cli_command_inplace(scratch_line, &scratch_parsed)) {
-        CDC_Print_FS("ERR: Invalid command\n");
         command_send_err(NULL);
         return;
     }
@@ -168,7 +167,6 @@ void command_registry_handle(const command_t *cmd)
         entry = find_entry(scratch_parsed.verb);
     }
     if (!entry) {
-        CDC_Print_FS("ERR: Unknown command\n");
         command_send_err(NULL);
         return;
     }
@@ -181,7 +179,6 @@ void command_registry_handle(const command_t *cmd)
 
     for (const cmd_arg_spec_t *spec = entry->args; spec && spec->type != CMD_ARG_DONE; ++spec) {
         if (argc >= CLI_MAX_ARGS) {
-            CDC_Print_FS("ERR: Too many args\n");
             command_send_err(NULL);
             return;
         }
@@ -198,7 +195,6 @@ void command_registry_handle(const command_t *cmd)
 
         if (!raw) {
             if (spec->required) {
-                CDC_Print_FS("ERR: Missing arg\n");
                 command_send_err(NULL);
                 return;
             }
@@ -230,7 +226,6 @@ void command_registry_handle(const command_t *cmd)
             case CMD_ARG_INT: {
                 int value = 0;
                 if (!cli_parse_int(raw, &value)) {
-                    CDC_Print_FS("ERR: Invalid int\n");
                     command_send_err(NULL);
                     return;
                 }
@@ -243,7 +238,6 @@ void command_registry_handle(const command_t *cmd)
             case CMD_ARG_BOOL: {
                 bool value = false;
                 if (!cli_parse_bool(raw, &value)) {
-                    CDC_Print_FS("ERR: Invalid bool\n");
                     command_send_err(NULL);
                     return;
                 }
@@ -253,12 +247,10 @@ void command_registry_handle(const command_t *cmd)
             case CMD_ARG_HEX: {
                 size_t length = 0;
                 if (hex_buffer_used) {
-                    CDC_Print_FS("ERR: Too many hex args\n");
                     command_send_err(NULL);
                     return;
                 }
                 if (!cli_parse_hex_bytes(raw, scratch_hex_buffer, CLI_VALUE_MAX, &length)) {
-                    CDC_Print_FS("ERR: Invalid hex\n");
                     command_send_err(NULL);
                     return;
                 }
@@ -268,7 +260,6 @@ void command_registry_handle(const command_t *cmd)
                 break;
             }
             default:
-                CDC_Print_FS("ERR: Invalid arg type\n");
                 command_send_err(NULL);
                 return;
         }
@@ -351,6 +342,18 @@ static void invoke_handler(const command_entry_t *entry,
 
     if (types_match(types, argc, (const cmd_arg_type_t[]){CMD_ARG_STRING}, 1)) {
         CALL_HANDLER(entry, void (*)(const char *), values[0].str_val);
+        return;
+    }
+
+    if (types_match(types, argc, (const cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_STRING}, 3)) {
+        CALL_HANDLER(entry, void (*)(int, int, const char *),
+                     values[0].int_val, values[1].int_val, values[2].str_val);
+        return;
+    }
+
+    if (types_match(types, argc, (const cmd_arg_type_t[]){CMD_ARG_INT, CMD_ARG_INT, CMD_ARG_STRING, CMD_ARG_STRING}, 4)) {
+        CALL_HANDLER(entry, void (*)(int, int, const char *, const char *),
+                     values[0].int_val, values[1].int_val, values[2].str_val, values[3].str_val);
         return;
     }
 
@@ -521,22 +524,42 @@ static bool cli_parse_hex_bytes(const char *str, uint8_t *out, size_t max_len, s
     if (!str || !out || !out_len) {
         return false;
     }
-    size_t len = strlen(str);
-    if (len % 2 != 0) {
-        return false;
-    }
-    size_t bytes = len / 2;
-    if (bytes > max_len) {
-        return false;
-    }
-    for (size_t i = 0; i < bytes; ++i) {
-        int hi = from_hex(str[i * 2]);
-        int lo = from_hex(str[i * 2 + 1]);
-        if (hi < 0 || lo < 0) {
+
+    size_t written = 0;
+    int pending = -1;
+
+    for (const char *p = str; *p; ++p) {
+        char c = *p;
+
+        if (c == '0' && (p[1] == 'x' || p[1] == 'X')) {
+            ++p;
+            continue;
+        }
+
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',' || c == ':' || c == '_' || c == '-') {
+            continue;
+        }
+
+        int nib = from_hex(c);
+        if (nib < 0) {
             return false;
         }
-        out[i] = (uint8_t)((hi << 4) | lo);
+
+        if (pending < 0) {
+            pending = nib;
+        } else {
+            if (written >= max_len) {
+                return false;
+            }
+            out[written++] = (uint8_t)((pending << 4) | nib);
+            pending = -1;
+        }
     }
-    *out_len = bytes;
+
+    if (pending >= 0) {
+        return false;
+    }
+
+    *out_len = written;
     return true;
 }
