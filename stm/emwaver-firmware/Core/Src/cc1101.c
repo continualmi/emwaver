@@ -180,42 +180,6 @@ static void cc1101_deselect(void)
     HAL_GPIO_WritePin(CC1101_CS_GPIO_Port, CC1101_CS_Pin, GPIO_PIN_SET);
 }
 
-static bool cc1101_wait_miso(GPIO_PinState expected, uint32_t timeout_ms)
-{
-    const uint32_t start = HAL_GetTick();
-    while (HAL_GPIO_ReadPin(CC1101_MISO_GPIO_Port, CC1101_MISO_Pin) != expected) {
-        if ((HAL_GetTick() - start) > timeout_ms) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool cc1101_reset_sequence(void)
-{
-    // CC1101 reset sequence from TI datasheet: CS toggle + wait for SO(MISO) low.
-    cc1101_deselect();
-    HAL_Delay(1);
-
-    cc1101_select();
-    HAL_Delay(1);
-    cc1101_deselect();
-    HAL_Delay(1);
-
-    cc1101_select();
-    if (!cc1101_wait_miso(GPIO_PIN_RESET, 10)) {
-        cc1101_deselect();
-        return false;
-    }
-
-    uint8_t tx = CC1101_SRES;
-    uint8_t rx = 0;
-    (void)HAL_SPI_TransmitReceive(&hspi1, &tx, &rx, 1, CC1101_SPI_TIMEOUT_MS);
-    cc1101_deselect();
-    HAL_Delay(1);
-    return true;
-}
-
 static uint8_t cc1101_read_reg(uint8_t addr)
 {
     uint8_t cmd = (uint8_t)(addr | 0x80);
@@ -483,11 +447,8 @@ static void cc1101_cmd_init(int miso, int mosi, int sck, int cs)
     (void)sck;
     (void)cs;
     // Always active-low on STM32 builds.
-    if (!cc1101_reset_sequence()) {
-        cc1101_initialized = false;
-        command_send_err("cc1101 reset timeout");
-        return;
-    }
+    cc1101_deselect();
+    HAL_Delay(1);
     cc1101_apply_defaults();
 
     cc1101_initialized = true;
@@ -507,6 +468,12 @@ static void cc1101_cmd_probe(void)
     command_send_ok(out, sizeof(out));
 }
 
+static void cc1101_cmd_status(void)
+{
+    uint8_t out = cc1101_initialized ? 1 : 0;
+    command_send_ok(&out, 1);
+}
+
 static void cc1101_cmd_write_reg(int reg, int val)
 {
     if (!cc1101_initialized) {
@@ -524,10 +491,6 @@ static void cc1101_cmd_write_reg(int reg, int val)
 
 static void cc1101_cmd_read_reg(int reg)
 {
-    if (!cc1101_initialized) {
-        command_send_err(NULL);
-        return;
-    }
     if (reg < 0 || reg > 0x3F) {
         command_send_err(NULL);
         return;
@@ -553,10 +516,6 @@ static void cc1101_cmd_strobe(int cmd)
 
 static void cc1101_cmd_read_burst(int reg, int len)
 {
-    if (!cc1101_initialized) {
-        command_send_err(NULL);
-        return;
-    }
     if (reg < 0 || reg > 0x3F) {
         command_send_err(NULL);
         return;
@@ -765,6 +724,11 @@ void cc1101_register_commands(void)
                            });
 
     (void)register_command("cc1101 probe", (void *)cc1101_cmd_probe,
+                           (const cmd_arg_spec_t[]){
+                               {NULL, CMD_ARG_DONE, false}
+                           });
+
+    (void)register_command("cc1101 status", (void *)cc1101_cmd_status,
                            (const cmd_arg_spec_t[]){
                                {NULL, CMD_ARG_DONE, false}
                            });

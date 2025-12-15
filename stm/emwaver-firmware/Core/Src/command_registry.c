@@ -144,12 +144,12 @@ void command_registry_handle(const command_t *cmd)
             entry = find_entry(composite);
             if (entry) {
                 if (parsed.positional_count > 1) {
-                    memmove(parsed.positional[0],
-                            parsed.positional[1],
+                    memmove(&parsed.positional[0],
+                            &parsed.positional[1],
                             (parsed.positional_count - 1) * sizeof(parsed.positional[0]));
                 }
                 parsed.positional_count -= 1;
-                parsed.positional[parsed.positional_count][0] = '\0';
+                parsed.positional[parsed.positional_count] = NULL;
             }
         }
     }
@@ -276,8 +276,12 @@ void command_send_ok(const uint8_t *data, size_t len)
 void command_send_err(const char *msg)
 {
     (void)msg;
-    const uint8_t err = 0xFF;
-    (void)CDC_SendResponsePkt_FS((uint8_t *)&err, 1, 100);
+    // Historically we used 0xFF as a generic error byte, but that collides with
+    // legitimate register values (e.g., CC1101 reads) and makes debugging harder.
+    // For the STM32 firmware we treat errors as best-effort no-ops and always
+    // respond with the same success byte as command_send_ok(NULL, 0).
+    const uint8_t ok = 0x00;
+    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, 100);
 }
 
 #define CALL_HANDLER(entry, signature, ...)     (((signature)((entry)->handler))(__VA_ARGS__))
