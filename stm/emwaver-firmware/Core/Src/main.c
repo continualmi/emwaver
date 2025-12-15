@@ -28,6 +28,8 @@
 #include "MFRC522.h"
 #include "command_registry.h"
 #include "cc1101.h"
+#include "stm_gpio.h"
+#include "stm_sampler.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,29 +64,10 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-uint16_t samplerPin;
-volatile uint32_t selectedChannel = TIM_CHANNEL_3; // Default to channel 3 for backward compatibility
-
 uint8_t * bulk_packet = NULL;
 size_t bulk_packet_len = 0;
 
-volatile uint8_t* bufferCircular = NULL;
-volatile uint8_t* bufferA = NULL;
-volatile uint8_t* bufferB = NULL;
-volatile uint8_t* currentBuffer = NULL;
-volatile uint8_t* transmitBuffer = NULL;
-volatile int bufferIndex = 0;
-volatile uint8_t bufferReady = 0;
 volatile CDC_Buffer_Type cdc_buf_type = CDC_BUFFER_PACKET;
-
-typedef enum {
-    IDLE,
-    SAMPLING,
-    TRANSMITTING
-} SystemState;
-
-volatile SystemState currentSystemState = IDLE;
-volatile int transmitDutyCycle = 50; // Default 50%
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -95,8 +78,6 @@ static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
-void startPWM_TIM2(uint32_t channel);
-void stopPWM_TIM2(uint32_t channel);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -104,48 +85,13 @@ void stopPWM_TIM2(uint32_t channel);
 
 static void stm_register_commands(void);
 
-static void cmd_sample_start(int pin_num);
-static void cmd_sample_stop(void);
-static void cmd_transmit_start(int pin_num);
-static void cmd_transmit_stop(void);
-static void cmd_gpio_read(int port_int, int pin_int);
-static void cmd_gpio_write(int port_int, int pin_int, int value_int);
 static void cmd_version(void);
 static void cmd_rfid_read(void);
 static void cmd_rfid_write(void);
 
 static void stm_register_commands(void)
 {
-    static const cmd_arg_spec_t sample_start_args[] = {
-        {.name = "pin", .type = CMD_ARG_INT, .required = true},
-        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
-    };
-
-    static const cmd_arg_spec_t transmit_start_args[] = {
-        {.name = "pin", .type = CMD_ARG_INT, .required = true},
-        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
-    };
-
-    static const cmd_arg_spec_t gpio_r_args[] = {
-        {.name = NULL, .type = CMD_ARG_INT, .required = true}, // port
-        {.name = NULL, .type = CMD_ARG_INT, .required = true}, // pin
-        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
-    };
-
-    static const cmd_arg_spec_t gpio_w_args[] = {
-        {.name = NULL, .type = CMD_ARG_INT, .required = true}, // port
-        {.name = NULL, .type = CMD_ARG_INT, .required = true}, // pin
-        {.name = NULL, .type = CMD_ARG_INT, .required = true}, // value
-        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
-    };
-
     static const command_entry_t stm_command_table[] = {
-        {.verb = "sample start", .args = sample_start_args, .handler = (void *)cmd_sample_start},
-        {.verb = "sample stop", .args = NULL, .handler = (void *)cmd_sample_stop},
-        {.verb = "transmit start", .args = transmit_start_args, .handler = (void *)cmd_transmit_start},
-        {.verb = "transmit stop", .args = NULL, .handler = (void *)cmd_transmit_stop},
-        {.verb = "gpio R", .args = gpio_r_args, .handler = (void *)cmd_gpio_read},
-        {.verb = "gpio W", .args = gpio_w_args, .handler = (void *)cmd_gpio_write},
         {.verb = "version", .args = NULL, .handler = (void *)cmd_version},
         {.verb = "read", .args = NULL, .handler = (void *)cmd_rfid_read},
         {.verb = "write", .args = NULL, .handler = (void *)cmd_rfid_write},
@@ -165,80 +111,6 @@ void startPWM_TIM2_CH3() {
 void stopPWM_TIM2_CH3() {
     // Disable only the channel, keep timer running
     TIM2->CCER &= ~TIM_CCER_CC3E;
-}
-
-void ISR_Sampler_raw() {
-    static uint8_t bitIndex = 0;
-    static uint8_t currentByte = 0;
-
-    // Sample the configurable pin
-    uint8_t pin_state = HAL_GPIO_ReadPin(GPIOA, samplerPin);
-
-    if (pin_state) {
-        currentByte |= (1 << bitIndex);
-    } else {
-        currentByte &= ~(1 << bitIndex);
-    }
-
-    bitIndex++;
-    if (bitIndex >= 8) {
-        currentBuffer[bufferIndex] = currentByte;
-        bufferIndex++;
-        bitIndex = 0;
-        currentByte = 0;
-
-        if (bufferIndex >= 64) {
-            transmitBuffer = currentBuffer;
-            currentBuffer = (currentBuffer == bufferA) ? bufferB : bufferA;
-            bufferIndex = 0;
-            bufferReady = 1;
-        }
-    }
-}
-
-void ISR_Sampler_writing() {
-    static uint8_t bitIndex = 0;
-    static uint8_t currentByte = 0;
-
-    // Check if there is data available in the buffer
-    if (CDC_GetRxBufferBytesAvailable_FS() > 0) {
-        // If this is the first bit of the byte, read the next byte from the buffer
-        if (bitIndex == 0) {
-            CDC_ReadRxBuffer_FS(&currentByte, 1); // Assume function returns only 1 byte
-        }
-
-        if (currentByte & (1 << bitIndex)) {
-            startPWM_TIM2(selectedChannel);
-        } else {
-            stopPWM_TIM2(selectedChannel);
-        }
-
-        // Increment bit index and check if we have processed the whole byte
-        bitIndex++;
-        if (bitIndex > 7) {
-            bitIndex = 0; // Reset bit index back to the LSB for the next byte
-        }
-    }
-    else {
-        stopPWM_TIM2(selectedChannel);
-    }
-}
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-    if(htim == &htim3){
-        switch (CDC_GetBufferType_FS()) {
-            case CDC_BUFFER_CIRCULAR:
-            	ISR_Sampler_writing();
-                break;
-            case CDC_BUFFER_DOUBLE:
-                ISR_Sampler_raw();
-                break;
-            case CDC_BUFFER_PACKET:
-            default:
-                // Handle the idle case or unknown state if necessary
-                break;
-        }
-    }
 }
 
 void writeReg(uint8_t addr, uint8_t value) {
@@ -375,26 +247,6 @@ void free_bulk_packet(){
 	}
 }
 
-void configurePin(uint16_t pin, uint32_t mode, uint32_t pull) {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    // Enable the GPIOA clock
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-
-    // Configure the GPIO pin
-    GPIO_InitStruct.Pin = pin;
-    GPIO_InitStruct.Mode = mode;
-    GPIO_InitStruct.Pull = pull;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    
-    // If mode is alternate function, set the alternate function for TIM2
-    if (mode == GPIO_MODE_AF_PP) {
-        GPIO_InitStruct.Alternate = GPIO_AF2_TIM2;
-    }
-    
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-}
-
 void setDutyCycle_TIM2_CH3(uint8_t percentage) {
     // Ensure percentage is between 1 and 100
     if (percentage < 1) percentage = 1;
@@ -440,99 +292,6 @@ void antiCollision() {
     CDC_Transmit_FS(response, 5);
 }
 
-void setPinMode(uint8_t port, uint8_t pin, uint8_t mode) {
-    GPIO_TypeDef* gpio_port;
-    if (port == 0) {
-        gpio_port = GPIOA;
-    } else if (port == 1) {
-        gpio_port = GPIOB;
-    } else {
-        // Invalid port; handle error as needed
-        return;
-    }
-
-    // Calculate the actual pin number for PB5-PB7
-    if (gpio_port == GPIOB && pin >= 5 && pin <= 7) {
-        // No adjustment needed if pins are directly mapped
-    } else if (gpio_port == GPIOA && pin > 7) {
-        // Handle invalid pin for GPIOA
-        return;
-    }
-
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    GPIO_InitStruct.Pin = 1 << pin;
-    if (mode == 0) {
-        GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    } else if (mode == 1) {
-        GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    }
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(gpio_port, &GPIO_InitStruct);
-}
-
-void startPWM_TIM2(uint32_t channel) {
-    // Enable the timer first
-    TIM2->CR1 |= TIM_CR1_CEN;
-    // Enable the specified channel
-    switch(channel) {
-        case TIM_CHANNEL_1:
-            TIM2->CCER |= TIM_CCER_CC1E;
-            break;
-        case TIM_CHANNEL_2:
-            TIM2->CCER |= TIM_CCER_CC2E;
-            break;
-        case TIM_CHANNEL_3:
-            TIM2->CCER |= TIM_CCER_CC3E;
-            break;
-        case TIM_CHANNEL_4:
-            TIM2->CCER |= TIM_CCER_CC4E;
-            break;
-    }
-}
-
-void stopPWM_TIM2(uint32_t channel) {
-    // Disable the specified channel, keep timer running
-    switch(channel) {
-        case TIM_CHANNEL_1:
-            TIM2->CCER &= ~TIM_CCER_CC1E;
-            break;
-        case TIM_CHANNEL_2:
-            TIM2->CCER &= ~TIM_CCER_CC2E;
-            break;
-        case TIM_CHANNEL_3:
-            TIM2->CCER &= ~TIM_CCER_CC3E;
-            break;
-        case TIM_CHANNEL_4:
-            TIM2->CCER &= ~TIM_CCER_CC4E;
-            break;
-    }
-}
-
-void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage) {
-    if (percentage < 1) percentage = 1;
-    if (percentage > 100) percentage = 100;
-
-    uint32_t period = TIM2->ARR;
-    uint32_t new_ccr = (period * percentage) / 100;
-
-    // Set the CCR value for the specified channel
-    switch(channel) {
-        case TIM_CHANNEL_1:
-            TIM2->CCR1 = new_ccr;
-            break;
-        case TIM_CHANNEL_2:
-            TIM2->CCR2 = new_ccr;
-            break;
-        case TIM_CHANNEL_3:
-            TIM2->CCR3 = new_ccr;
-            break;
-        case TIM_CHANNEL_4:
-            TIM2->CCR4 = new_ccr;
-            break;
-    }
-}
-
 /* USER CODE END 0 */
 
 /**
@@ -571,6 +330,8 @@ int main(void)
 	  /* USER CODE BEGIN 2 */
 	  command_registry_init();
 	  cc1101_register_commands();
+	  stm_gpio_register_commands();
+	  stm_sampler_register_commands();
 	  stm_register_commands();
 
 	  /* USER CODE END 2 */
@@ -600,31 +361,7 @@ int main(void)
 			          }
 			      }
 
-        // Handle active sampling/transmitting process
-        if (currentSystemState == SAMPLING) {
-            if (bufferReady == 1) {
-                // Non-blocking transmit, check USBD_OK
-                if (CDC_Transmit_FS((uint8_t*)transmitBuffer, 64) == USBD_OK) {
-                    bufferReady = 0;
-                }
-            }
-        } else if (currentSystemState == TRANSMITTING) {
-            static uint32_t last_data_tick = 0;
-            if (CDC_GetRxBufferBytesAvailable_FS() > 0) {
-                last_data_tick = HAL_GetTick();
-            }
-            if (HAL_GetTick() - last_data_tick > 2000) { // 2 second timeout
-                if (currentSystemState == TRANSMITTING) {
-                    HAL_TIM_Base_Stop_IT(&htim3);
-                    stopPWM_TIM2(selectedChannel);
-                    CDC_FlushRxBuffer_FS();
-                    CDC_FreeRxBuffer_FS();
-                    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
-                    currentSystemState = IDLE;
-                    CDC_Print_FS("OK: Transmission stopped (timeout)\n");
-                }
-            }
-        }
+        stm_sampler_process();
     }
   /* USER CODE END 3 */
 }
@@ -929,177 +666,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
-static void cmd_sample_start(int pin_num)
-{
-    if (currentSystemState == SAMPLING) {
-        CDC_Print_FS("ERR: Already sampling\n");
-        return;
-    }
-
-    // Stop any active transmission before starting sampling
-    if (currentSystemState == TRANSMITTING) {
-        HAL_TIM_Base_Stop_IT(&htim3);
-        stopPWM_TIM2(selectedChannel);
-        CDC_FlushRxBuffer_FS();
-        CDC_FreeRxBuffer_FS();
-        CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
-        currentSystemState = IDLE;
-    }
-
-    // Map pin_num (0-3 for PA0-PA3, 1 for IR_RX_Pin = PA1)
-    uint16_t gpio_pin_mask = 0;
-    uint32_t pull_mode = GPIO_PULLDOWN; // Default pull-down
-    switch (pin_num) {
-        case 0: gpio_pin_mask = GPIO_PIN_0; break;
-        case 1: gpio_pin_mask = GPIO_PIN_1; pull_mode = GPIO_NOPULL; break; // IR_RX_Pin is PA1
-        case 2: gpio_pin_mask = GPIO_PIN_2; break;
-        case 3: gpio_pin_mask = GPIO_PIN_3; break;
-        default:
-            CDC_Print_FS("ERR: Invalid sample pin\n");
-            return;
-    }
-
-    configurePin(gpio_pin_mask, GPIO_MODE_INPUT, pull_mode);
-    samplerPin = gpio_pin_mask;
-
-    if (bufferA == NULL) bufferA = (uint8_t *)malloc(64 * sizeof(uint8_t));
-    if (bufferB == NULL) bufferB = (uint8_t *)malloc(64 * sizeof(uint8_t));
-    currentBuffer = bufferA;
-    transmitBuffer = NULL;
-    bufferIndex = 0;
-    bufferReady = 0;
-    CDC_SetBufferType_FS(CDC_BUFFER_DOUBLE);
-
-    HAL_TIM_Base_Start_IT(&htim3);
-    currentSystemState = SAMPLING;
-    CDC_Print_FS("OK: Sampling started\n");
-}
-
-static void cmd_sample_stop(void)
-{
-    if (currentSystemState != SAMPLING) {
-        CDC_Print_FS("ERR: Not sampling\n");
-        return;
-    }
-
-    HAL_TIM_Base_Stop_IT(&htim3);
-    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
-    if (bufferA) { free((void *)bufferA); bufferA = NULL; }
-    if (bufferB) { free((void *)bufferB); bufferB = NULL; }
-    currentBuffer = NULL;
-    transmitBuffer = NULL;
-    bufferIndex = 0;
-    bufferReady = 0;
-    currentSystemState = IDLE;
-    CDC_Print_FS("OK: Sampling stopped\n");
-}
-
-static void cmd_transmit_start(int pin_num)
-{
-    uint16_t gpio_pin = 0;
-    uint32_t tim_channel = 0;
-    switch (pin_num) {
-        case 0: tim_channel = TIM_CHANNEL_1; gpio_pin = GPIO_PIN_0; break;
-        case 1: tim_channel = TIM_CHANNEL_2; gpio_pin = GPIO_PIN_1; break;
-        case 2: tim_channel = TIM_CHANNEL_3; gpio_pin = GPIO_PIN_2; break;
-        case 3: tim_channel = TIM_CHANNEL_4; gpio_pin = GPIO_PIN_3; break;
-        default:
-            CDC_Print_FS("ERR: Invalid transmit pin\n");
-            return;
-    }
-
-    if (currentSystemState == TRANSMITTING) {
-        CDC_Print_FS("ERR: Already transmitting\n");
-        return;
-    }
-
-    // Stop any active sampling before starting transmission
-    if (currentSystemState == SAMPLING) {
-        HAL_TIM_Base_Stop_IT(&htim3);
-        CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
-        if (bufferA) { free((void *)bufferA); bufferA = NULL; }
-        if (bufferB) { free((void *)bufferB); bufferB = NULL; }
-        currentBuffer = NULL;
-        transmitBuffer = NULL;
-        bufferIndex = 0;
-        bufferReady = 0;
-        currentSystemState = IDLE;
-    }
-
-    configurePin(gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
-    setDutyCycle_TIM2(tim_channel, (uint8_t)transmitDutyCycle);
-    selectedChannel = tim_channel;
-
-    HAL_TIM_PWM_Start(&htim2, tim_channel);
-    CDC_InitRxBuffer_FS();
-    CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
-    HAL_TIM_Base_Start_IT(&htim3);
-
-    currentSystemState = TRANSMITTING;
-    CDC_Print_FS("OK: Transmission started\n");
-}
-
-static void cmd_transmit_stop(void)
-{
-    if (currentSystemState != TRANSMITTING) {
-        CDC_Print_FS("ERR: Not transmitting\n");
-        return;
-    }
-
-    HAL_TIM_Base_Stop_IT(&htim3);
-    stopPWM_TIM2(selectedChannel);
-    CDC_FlushRxBuffer_FS();
-    CDC_FreeRxBuffer_FS();
-    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
-    currentSystemState = IDLE;
-    CDC_Print_FS("OK: Transmission stopped\n");
-}
-
-static void cmd_gpio_read(int port_int, int pin_int)
-{
-    if (!((port_int == 0) || (port_int == 1))) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
-        return;
-    }
-    if (pin_int < 0 || pin_int > 15) {
-        CDC_Print_FS("ERR: Invalid GPIO pin\n");
-        return;
-    }
-
-    uint8_t port = (uint8_t)port_int;
-    uint8_t pin = (uint8_t)pin_int;
-    GPIO_TypeDef *gpio_port = (port == 0) ? GPIOA : GPIOB;
-    uint16_t gpio_pin = (uint16_t)(1u << pin);
-
-    setPinMode(port, pin, 0);
-    uint8_t response_val = (uint8_t)HAL_GPIO_ReadPin(gpio_port, gpio_pin);
-    (void)CDC_SendResponsePkt_FS(&response_val, 1, CDC_TIMEOUT);
-    CDC_Print_FS("OK: GPIO read\n");
-}
-
-static void cmd_gpio_write(int port_int, int pin_int, int value_int)
-{
-    if (!((port_int == 0) || (port_int == 1))) {
-        CDC_Print_FS("ERR: Invalid GPIO port\n");
-        return;
-    }
-    if (pin_int < 0 || pin_int > 15) {
-        CDC_Print_FS("ERR: Invalid GPIO pin\n");
-        return;
-    }
-
-    uint8_t port = (uint8_t)port_int;
-    uint8_t pin = (uint8_t)pin_int;
-    GPIO_TypeDef *gpio_port = (port == 0) ? GPIOA : GPIOB;
-    uint16_t gpio_pin = (uint16_t)(1u << pin);
-
-    setPinMode(port, pin, 1);
-    HAL_GPIO_WritePin(gpio_port, gpio_pin, (GPIO_PinState)(value_int ? 1 : 0));
-    uint8_t response_val = (uint8_t)HAL_GPIO_ReadPin(gpio_port, gpio_pin);
-    (void)CDC_SendResponsePkt_FS(&response_val, 1, CDC_TIMEOUT);
-    CDC_Print_FS("OK: GPIO written\n");
-}
 
 static void cmd_version(void)
 {
