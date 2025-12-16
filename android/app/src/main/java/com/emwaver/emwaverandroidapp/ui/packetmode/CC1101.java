@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.emwaver.emwaverandroidapp.CommandSender;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 public class CC1101 {
@@ -118,56 +119,86 @@ public class CC1101 {
         this.commandSender = commandSender;
     }
 
+    public boolean isConnected() {
+        byte[] resp = sendCommandString("ble?", 250);
+        return resp != null && resp.length > 0;
+    }
+
+    private byte[] sendCommandString(String command, long timeoutMs) {
+        if (commandSender == null) {
+            return null;
+        }
+        String framed = command != null ? command : "";
+        if (!framed.endsWith("\n")) {
+            framed += "\n";
+        }
+        return commandSender.sendCommandAndGetResponse(
+                framed.getBytes(StandardCharsets.UTF_8),
+                0,
+                0,
+                timeoutMs
+        );
+    }
+
+    private static boolean isAckOk(byte[] response) {
+        return response != null && response.length == 1 && (response[0] & 0xFF) == 0x00;
+    }
+
 
     public void spiStrobe(byte commandStrobe) {
-        byte[] command = new byte[2];
-        byte[] response;
-        command[0] = '%'; // command strobe character
-        command[1] = commandStrobe;
-        response = commandSender.sendCommandAndGetResponse(command, 1, 1, 1000);
-        //Log.i("spiStrobe", Arrays.toString(response));  //response is the status byte
+        sendCommandString(String.format("cc1101 strobe --cmd=0x%02X", commandStrobe & 0xFF), 1000);
     }
 
     public void writeBurstReg(byte addr, byte[] data, byte len){
-        byte [] command = new byte[data.length+3];
-        byte [] response = new byte[1];
-        command[0] = '>'; //write burst reg character
-        command[1] = addr; //burst write >[addr][len][data]
-        command[2] = len;
-        System.arraycopy(data, 0, command, 3, data.length); // Efficient array copy
-        response = commandSender.sendCommandAndGetResponse(command, 1, 1, 1000);
-        //Log.i("writeBurstReg", toHexStringWithHexPrefix(response)); //response is the status byte
+        if (data == null || data.length == 0) {
+            return;
+        }
+        StringBuilder hex = new StringBuilder();
+        for (int i = 0; i < data.length; i++) {
+            if (i > 0) {
+                hex.append(',');
+            }
+            hex.append(String.format("0x%02X", data[i] & 0xFF));
+        }
+        sendCommandString(
+                String.format("cc1101 write_burst --reg=0x%02X --data=%s", addr & 0xFF, hex),
+                1000
+        );
     }
 
     public byte [] readBurstReg(byte addr, int len){
-        byte [] command = new byte[3];
-        byte [] response = new byte[len];
-        command[0] = '<'; //read burst reg character
-        command[1] = addr; ////burst read <[addr][len]
-        command[2] = (byte)len;
-        response = commandSender.sendCommandAndGetResponse(command, (byte)len, 1, 1000);
+        if (len <= 0) {
+            return new byte[0];
+        }
+        byte[] response = sendCommandString(
+                String.format("cc1101 read_burst --reg=0x%02X --len=%d", addr & 0xFF, len),
+                1000
+        );
+        if (response == null || response.length != len) {
+            return null;
+        }
         Log.i("readBurstReg", toHexStringWithHexPrefix(response));
         return response;
     }
 
     public byte readReg(byte addr){
-        byte [] command = new byte[2];
-        byte [] response = new byte[1];
-        command[0] = '?'; //read reg character
-        command[1] = addr; //single read ?[addr]
-        response = commandSender.sendCommandAndGetResponse(command, (byte)1, 1, 1000);
+        byte[] response = sendCommandString(
+                String.format("cc1101 read --reg=0x%02X", addr & 0xFF),
+                1000
+        );
+        if (response == null || response.length < 1) {
+            return 0;
+        }
         Log.i("readReg", toHexStringWithHexPrefix(response));
         return response[0];
     }
 
     public void writeReg(byte addr, byte data){
-        byte [] command = new byte[3];
-        byte [] response = new byte[1];
-        command[0] = '!'; //write reg character
-        command[1] = addr; //single write ![addr][data]
-        command[2] = data;
-        response = commandSender.sendCommandAndGetResponse(command, 1, 1, 1000);
-        Log.i("writeReg", Arrays.toString(response));  //response is the reading at that register
+        byte[] response = sendCommandString(
+                String.format("cc1101 write --reg=0x%02X --val=0x%02X", addr & 0xFF, data & 0xFF),
+                1000
+        );
+        Log.i("writeReg", Arrays.toString(response));
     }
 
 
@@ -204,105 +235,44 @@ public class CC1101 {
 
 
     public void sendInit(){
-        byte[] command = {'t', 'x', 'i', 'n', 'i', 't'}; // Replace with your actual command
-        String responseString = "Transmit init done\n";
-        int length = responseString.length();
-        byte[] response = commandSender.sendCommandAndGetResponse(command, length, 1, 1000);
-        if (response != null) {
-            Log.i("Command Response", Arrays.toString(response));
-        }
+        sendCommandString("cc1101 init", 1500);
+        sendCommandString("cc1101 apply_defaults", 1500);
+        spiStrobe(CC1101_SIDLE);
+        spiStrobe(CC1101_SFTX);
     }
 
     public void sendInitRx(){
-        byte[] command = {'r', 'x', 'i', 'n', 'i', 't'}; // Replace with your actual command
-        String responseString = "Receive init done\n";
-        int length = responseString.length();
-        byte[] response = commandSender.sendCommandAndGetResponse(command, length, 1, 1000);
-        if (response != null) {
-            Log.i("Command Response", Arrays.toString(response));
-        }
+        sendInit();
+        spiStrobe(CC1101_SFRX);
+        spiStrobe(CC1101_SRX);
     }
 
     public void sendInitRxContinuous(){
-        byte[] command = {'r', 'x', 'c', 'o', 'n', 't'}; // Replace with your actual command
-        String responseString = "<STR>Continuous mode 433/Rx values init done\n</STR>";
-        int length = responseString.length();
-        byte[] response = commandSender.sendCommandAndGetResponse(command, length, 1, 1000);
-        if (response != null) {
-            Log.i("Command Response", Arrays.toString(response));
-        }
+        sendInitRx();
     }
 
     public boolean setDataRate(int bitRate) {
-        // Constants for the DRATE register calculation
-        final double F_OSC = 26_000_000; // Oscillator frequency in Hz
-        final int DRATE_M_MAX = 255; // 8-bit DRATE_M has max value 255
-        final int DRATE_E_MAX = 15;  // 4-bit DRATE_E has max value 15
-        double target = bitRate * Math.pow(2, 28) / F_OSC;
-        double minDifference = Double.MAX_VALUE;
-        int bestM = 0;
-        int bestE = 0;
-
-        // Find the closest DRATE_M and DRATE_E for the desired bit rate
-        for (int e = 0; e <= DRATE_E_MAX; e++) {
-            for (int m = 0; m <= DRATE_M_MAX; m++) {
-                double currentValue = (256 + m) * Math.pow(2, e);
-                double difference = Math.abs(currentValue - target);
-                if (difference < minDifference) {
-                    minDifference = difference;
-                    bestM = m;
-                    bestE = e;
-                }
-            }
-        }
-
-        byte [] values= {(byte)bestE, (byte)bestM};
-        // Log the values found
-        Log.i("DataRate", toHexStringWithHexPrefix(values));
-
-        // Read the current value of the MDMCFG4 register to keep the first word
-        byte readValue = readReg(CC1101_MDMCFG4);
-        int bandwidthPart = readValue & 0xF0; // Ensure it is treated as unsigned
-
-        // Combine the read first word with the calculated DRATE_M
-        int combinedE = bandwidthPart | (bestE & 0x0F); // Assumes the first word is the high byte
-
-        // Write the combined value and DRATE_E to the modem configuration registers
-        byte[] mdmcfg = {(byte) combinedE, (byte) bestM};
-        writeBurstReg((byte) CC1101_MDMCFG4, mdmcfg, (byte) 2);
-
-
-        //confirm reading
-        byte [] confirmValue = readBurstReg((byte)CC1101_MDMCFG4, 2);
-        //Log.i("ModemConfig", "CC1101_MDMCFG4: " + (int)readValue[0] + ", CC1101_MDMCFG3: " + (int)readValue[1]);
-        if(Arrays.equals(confirmValue, mdmcfg)){
-            return true;
-        }
-        else{
-            return false;
-        }
+        byte[] response = sendCommandString(String.format("cc1101 set_datarate --bps=%d", bitRate), 1500);
+        return isAckOk(response);
     }
 
     public boolean setModulation(byte modulation) {
-        // Read the current register value
-        byte currentValue = readReg(CC1101_MDMCFG2);
-
-        Log.i("MDMCFG2", "current value: " + currentValue);
-
-        byte mask = 0b01110000; // Mask for the modulation bits (bit 4, 5, 6)
-        currentValue &= ~mask; // Clear the modulation bits
-
-        // Set the new modulation bits
-        // Assuming that the 'modulation' argument is already just the 3 bits needed
-        // If not, it would need to be shifted into place with something like (modulation << 4)
-        currentValue |= (modulation << 4); // Combine the new modulation bits with the current value
-
-        Log.i("MDMCFG2", "modified value: " + currentValue);
-        // Write the new value back to the register
-        writeReg(CC1101_MDMCFG2, currentValue);
-
-        // Assuming writeReg method exists and returns a boolean indicating success
-        return readReg(CC1101_MDMCFG2) == currentValue;
+        String modStr;
+        if (modulation == MOD_ASK) {
+            modStr = "ask";
+        } else if (modulation == MOD_2FSK) {
+            modStr = "2fsk";
+        } else if (modulation == MOD_GFSK) {
+            modStr = "gfsk";
+        } else if (modulation == MOD_4FSK) {
+            modStr = "4fsk";
+        } else if (modulation == MOD_MSK) {
+            modStr = "msk";
+        } else {
+            return false;
+        }
+        byte[] response = sendCommandString(String.format("cc1101 set_mod --mod=%s", modStr), 1500);
+        return isAckOk(response);
     }
 
     public String toHexStringWithHexPrefix(byte[] array) {
@@ -436,18 +406,6 @@ public class CC1101 {
     }
 
     public boolean getGDO() {
-        byte[] command = {'g', 'd', 'o', '0'}; // Replace with your actual command
-        int expectedLength = 4; // Expected length of the response; adjust as needed
-        byte[] response = commandSender.sendCommandAndGetResponse(command, expectedLength, 1, 1000);
-
-        if (response != null) {
-            Log.i("Command Response", Arrays.toString(response));
-            String responseString = new String(response).trim(); // Convert byte[] to String and trim any trailing whitespaces
-
-            // Compare the response string
-            return responseString.equals("HIGH");
-        }
-
         return false;
     }
 

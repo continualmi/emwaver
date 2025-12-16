@@ -1,11 +1,6 @@
 package com.emwaver.emwaverandroidapp.ui.packetmode;
 
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.text.InputFilter;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -20,39 +15,18 @@ import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
-import com.emwaver.emwaverandroidapp.BLEService;
-import com.emwaver.emwaverandroidapp.CommandSender;
+import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.databinding.FragmentPacketModeBinding;
 
-public class PacketModeFragment extends Fragment implements CommandSender {
+public class PacketModeFragment extends Fragment {
 
     private FragmentPacketModeBinding binding;
 
     private PacketModeViewModel packetModeViewModel;
 
     private CC1101 cc;
-    private BLEService bleService;
-    private boolean isServiceBound = false;
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
-            bleService = binder.getService();
-            isServiceBound = true;
-            Log.i("service binding", "onServiceConnected");
-            // Initialize CC1101 with BLEService adapter
-            if (bleService != null) {
-                CommandSender commandSender = new BLEServiceCommandSender(bleService);
-                cc = new CC1101(commandSender);
-            }
-        }
-        @Override
-        public void onServiceDisconnected(ComponentName arg0) {
-            isServiceBound = false;
-            Log.i("service binding", "onServiceDisconnected");
-        }
-    };
+    private DeviceConnectionManager connectionManager;
 
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
@@ -61,6 +35,9 @@ public class PacketModeFragment extends Fragment implements CommandSender {
 
         binding = FragmentPacketModeBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
+
+        connectionManager = DeviceConnectionManager.getInstance(requireContext());
+        cc = new CC1101(new DeviceConnectionCommandSender(connectionManager));
 
         InputFilter hexFilter = (source, start, end, dest, dstart, dend) -> {
             for (int i = start; i < end; i++) {
@@ -75,7 +52,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.sendTesla.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return;
                 }
@@ -90,7 +67,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.manchesterSwitch.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     binding.manchesterSwitch.setChecked(!binding.manchesterSwitch.isChecked());
                     return;
@@ -113,7 +90,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
 
         binding.datarateTextInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return false;
                 }
@@ -139,7 +116,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
 
         binding.deviationTextInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return false;
                 }
@@ -168,7 +145,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.syncwordTextInput.setFilters(new InputFilter[]{hexFilter});
         binding.syncwordTextInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return false;
                 }
@@ -202,7 +179,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.initTransmitButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return;
                 }
@@ -216,7 +193,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.initReceiveButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return;
                 }
@@ -232,7 +209,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.sendPayloadButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return;
                 }
@@ -253,7 +230,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.receivePayloadButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (cc == null) {
+                if (connectionManager == null || !connectionManager.isConnected()) {
                     showToastOnUiThread("Not connected");
                     return;
                 }
@@ -288,7 +265,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.modulationSelector.setOnItemClickListener((parent, view, position, id) -> {
             // Get the selected item
             String selectedItem = (String) parent.getItemAtPosition(position);
-            if (cc == null) {
+            if (connectionManager == null || !connectionManager.isConnected()) {
                 showToastOnUiThread("Not connected");
                 return;
             }
@@ -319,7 +296,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.preambleSelector.setOnClickListener(v -> binding.preambleSelector.showDropDown());
 
         binding.preambleSelector.setOnItemClickListener((parent, view, position, id) -> {
-            if (cc == null) {
+            if (connectionManager == null || !connectionManager.isConnected()) {
                 showToastOnUiThread("Not connected");
                 return;
             }
@@ -339,7 +316,7 @@ public class PacketModeFragment extends Fragment implements CommandSender {
         binding.syncModeSelector.setOnClickListener(v -> binding.syncModeSelector.showDropDown());
 
         binding.syncModeSelector.setOnItemClickListener((parent, view, position, id) -> {
-            if (cc == null) {
+            if (connectionManager == null || !connectionManager.isConnected()) {
                 showToastOnUiThread("Not connected");
                 return;
             }
@@ -358,24 +335,6 @@ public class PacketModeFragment extends Fragment implements CommandSender {
     }
 
     @Override
-    public void onStart() {
-        super.onStart();
-        if (!isServiceBound && getActivity() != null) {
-            Intent intent = new Intent(getActivity(), BLEService.class);
-            getActivity().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-        }
-    }
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        if (isServiceBound && getActivity() != null) {
-            getActivity().unbindService(serviceConnection);
-            isServiceBound = false;
-        }
-    }
-
-    @Override
     public void onDestroyView() {
         super.onDestroyView();
         binding = null;
@@ -389,15 +348,6 @@ public class PacketModeFragment extends Fragment implements CommandSender {
             getActivity().runOnUiThread(() ->
                     Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show());
         }
-    }
-
-    @Override
-    public byte[] sendCommandAndGetResponse(byte[] command, int expectedResponseSize, int busyDelay, long timeoutMillis) {
-        // Send the command
-        if(isServiceBound && bleService != null){
-            return bleService.sendCommand(command, (int) timeoutMillis);
-        }
-        return null;
     }
 
 
