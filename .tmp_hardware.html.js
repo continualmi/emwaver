@@ -53,7 +53,7 @@ tailwind.config = {
       const ICONS = {
         android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
         ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
-        desktop: "https://cdn-icons-png.flaticon.com/512/3381/3381949.png",
+        desktop: "https://static.thenounproject.com/png/1982056-200.png",
       };
 
       function iconImg(src, label) {
