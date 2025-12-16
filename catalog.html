@@ -45,7 +45,7 @@
       }
       @media (min-width: 1024px) {
         .catalog-grid {
-          height: calc(100vh - var(--nav-height) - (2 * var(--page-pad)));
+          height: auto;
         }
       }
     </style>
@@ -98,32 +98,32 @@
               <div class="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm">
                 <button
                   id="tab-current"
-	                  class="px-3 py-1.5 text-sm font-semibold rounded-lg bg-brand-600 text-white transition"
+	                  class="px-4 py-2 text-base font-semibold rounded-lg bg-brand-600 text-white transition"
 	                  type="button"
 	                >
 	                  Current gen
 	                </button>
                 <button
-                  id="tab-old"
-	                  class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
+                  id="tab-experimental"
+                  class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
 	                  type="button"
 	                >
-	                  Previous gen
+	                  Experimental
 	                </button>
                 <button
-                  id="tab-experimental"
+                  id="tab-old"
                   class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
                   type="button"
                 >
-                  Experimental
+                  Previous gen
                 </button>
               </div>
             <div class="text-xs text-slate-500" id="count-pill">…</div>
           </div>
         </div>
 
-        <div id="view-current" class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+        <div id="view-current" class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
               <div class="flex items-center justify-between gap-3">
                 <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -142,10 +142,10 @@
               </div>
               <div class="text-xs text-slate-500 mt-1">Android • iOS • desktop</div>
             </div>
-            <div id="list-esp32" class="p-2 overflow-auto space-y-2"></div>
+            <div id="list-esp32" class="p-2 space-y-2"></div>
           </section>
 
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
               <div class="flex items-center justify-between gap-3">
                 <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -164,10 +164,10 @@
               </div>
               <div class="text-xs text-slate-500 mt-1">Typically USB: Android • desktop</div>
             </div>
-            <div id="list-stm32" class="p-2 overflow-auto space-y-2"></div>
+            <div id="list-stm32" class="p-2 space-y-2"></div>
           </section>
 
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
             <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
               <div class="flex items-center justify-between gap-3">
                 <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
@@ -175,13 +175,13 @@
               </div>
               <div class="text-xs text-slate-500 mt-1">Add-ons (not standalone)</div>
             </div>
-            <div id="list-modules" class="p-2 overflow-auto space-y-2"></div>
+            <div id="list-modules" class="p-2 space-y-2"></div>
           </section>
         </div>
 
 	        <div id="view-experimental" class="hidden">
-	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
 	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
 	                <div class="flex items-center justify-between gap-3">
 	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -200,10 +200,10 @@
 	                </div>
 	                <div class="text-xs text-slate-500 mt-1">Experimental</div>
 	              </div>
-	              <div id="list-esp32-exp" class="p-2 overflow-auto space-y-2"></div>
+	              <div id="list-esp32-exp" class="p-2 space-y-2"></div>
 	            </section>
 	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
 	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
 	                <div class="flex items-center justify-between gap-3">
 	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -222,10 +222,10 @@
 	                </div>
 	                <div class="text-xs text-slate-500 mt-1">Experimental</div>
 	              </div>
-	              <div id="list-stm32-exp" class="p-2 overflow-auto space-y-2"></div>
+	              <div id="list-stm32-exp" class="p-2 space-y-2"></div>
 	            </section>
 	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
 	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
 	                <div class="flex items-center justify-between gap-3">
 	                  <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
@@ -233,14 +233,14 @@
 	                </div>
 	                <div class="text-xs text-slate-500 mt-1">Experimental add-ons</div>
 	              </div>
-	              <div id="list-modules-exp" class="p-2 overflow-auto space-y-2"></div>
+	              <div id="list-modules-exp" class="p-2 space-y-2"></div>
 	            </section>
 	          </div>
 	        </div>
 
 	        <div id="view-old" class="hidden">
-	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
 	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
 	                <div class="flex items-center justify-between gap-3">
 	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -259,10 +259,10 @@
 	                </div>
 		                <div class="text-xs text-slate-500 mt-1">Previous gen devices</div>
 	              </div>
-	              <div id="list-esp32-old" class="p-2 overflow-auto space-y-2"></div>
+	              <div id="list-esp32-old" class="p-2 space-y-2"></div>
 	            </section>
 	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
 	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
 	                <div class="flex items-center justify-between gap-3">
 	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
@@ -281,10 +281,10 @@
 	                </div>
 		                <div class="text-xs text-slate-500 mt-1">Previous gen devices</div>
 	              </div>
-	              <div id="list-stm32-old" class="p-2 overflow-auto space-y-2"></div>
+	              <div id="list-stm32-old" class="p-2 space-y-2"></div>
 	            </section>
 	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden flex flex-col min-h-[320px] shadow-sm">
+	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
 	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
 	                <div class="flex items-center justify-between gap-3">
 	                  <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
@@ -292,7 +292,7 @@
 	                </div>
 		                <div class="text-xs text-slate-500 mt-1">Previous gen add-ons</div>
 	              </div>
-	              <div id="list-modules-old" class="p-2 overflow-auto space-y-2"></div>
+	              <div id="list-modules-old" class="p-2 space-y-2"></div>
 	            </section>
 	          </div>
 	        </div>
@@ -354,6 +354,7 @@
           btn.classList.toggle("text-white", on);
           btn.classList.toggle("text-slate-700", !on);
           btn.classList.toggle("hover:bg-slate-50", !on);
+          btn.setAttribute("aria-selected", String(on));
         };
 
         active(el.tabCurrent, next === "current");
