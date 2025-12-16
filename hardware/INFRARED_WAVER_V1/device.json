@@ -2,7 +2,7 @@
   "title": "INFRARED_WAVER_V1",
   "displayTitle": "Infrared Waver v1",
   "group": "stm32",
-  "image": "INFRARED_WAVER_V1.png",
+  "image": "INFRARED_WAVER_V1.png?v=0ef8dc66",
   "lifecycle": "old",
   "description": "IR board revision (description coming soon).",
   "tags": ["IR", "STM32"],
