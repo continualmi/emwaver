@@ -153,6 +153,7 @@
                 <div class="mt-2 text-sm text-slate-600 leading-relaxed">
                   Fill in links, description, and metadata inside this device’s <code>device.json</code>.
                 </div>
+                <div id="cost" class="mt-3 text-sm text-slate-700"></div>
                 <div id="tags" class="mt-4 flex flex-wrap gap-2"></div>
               </div>
             </div>
@@ -275,14 +276,17 @@
         return derived.filter((x) => map[x]).map((x) => map[x]()).join("");
       }
 
-      function actionButton(label, url, primary) {
+      function actionButton(label, url, primary, iconUrl) {
+        const icon = iconUrl
+          ? `<img src="${iconUrl}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" class="w-4 h-4 rounded object-contain" onerror="this.onerror=null; this.style.display='none';" />`
+          : "";
         if (!url) {
-          return `<button disabled class="px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-sm font-medium cursor-not-allowed">${label}</button>`;
+          return `<button disabled class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-sm font-medium cursor-not-allowed">${icon}<span>${label}</span></button>`;
         }
         if (primary) {
-          return `<a href="${url}" target="_blank" rel="noreferrer" class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-500/10">${label}</a>`;
+          return `<a href="${url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-500/10">${icon}<span>${label}</span></a>`;
         }
-        return `<a href="${url}" target="_blank" rel="noreferrer" class="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium transition">${label}</a>`;
+        return `<a href="${url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium transition">${icon}<span>${label}</span></a>`;
       }
 
       function showError(message, detail) {
@@ -372,12 +376,17 @@
         imgEl.alt = title;
 
 	        const oshwLabUrl = safeUrl(device.oshwLabUrl);
+	        const easyEdaUrl = safeUrl(device.easyEdaUrl);
 	        const githubUrl = safeUrl(device.githubUrl);
 	        const schematicUrl = safeUrl(device.schematicUrl);
 	        const pcbUrl = safeUrl(device.pcbUrl);
 	
+	        const OSHW_ICON = "https://image.easyeda.com/avatars/2024/9/66Hu1UIb1xCgdcRIHsJDvgv7caIeg0LwlK8qwMFN.webp";
+	        const EASYEDA_ICON = "https://easyeda.com/images/easyeda-thumbnail.png?id=d5ed1fe5930602975df1";
+	
 	        document.getElementById("action-buttons").innerHTML = [
-	          actionButton("Open in OSHW Lab", oshwLabUrl, true),
+	          actionButton("Open in OSHW Lab", oshwLabUrl, true, OSHW_ICON),
+	          actionButton("Open in EasyEDA", easyEdaUrl, true, EASYEDA_ICON),
 	          actionButton("GitHub files", githubUrl, false),
 	          actionButton("Schematic", schematicUrl, false),
 	          actionButton("PCB", pcbUrl, false),
@@ -405,6 +414,21 @@
 	              `<span class="text-xs px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-700">${t}</span>`
 	          )
 	          .join("");
+
+	        const costEl = document.getElementById("cost");
+	        const cost = device.reproductionCost;
+	        if (typeof cost === "string" && cost.trim()) {
+	          costEl.innerHTML = `<span class="font-semibold text-slate-900">Build cost:</span> ${safeText(cost)}`;
+	        } else if (cost && typeof cost === "object") {
+	          const amount = Number(cost.amount);
+	          const units = Number(cost.units);
+	          const currency = String(cost.currency || "USD").toUpperCase();
+	          const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : "";
+	          if (Number.isFinite(amount)) {
+	            const unitText = Number.isFinite(units) && units > 0 ? ` (${units} units)` : "";
+	            costEl.innerHTML = `<span class="font-semibold text-slate-900">Build cost:</span> ${symbol}${amount}${symbol ? "" : " " + safeText(currency)}${unitText}`;
+	          }
+	        }
 
 	        const variantsEl = document.getElementById("variants");
 	        const variants = Array.isArray(device.variants) ? device.variants : [];

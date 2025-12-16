@@ -5,10 +5,12 @@
   "parent": "GPIO_WAVER",
   "status": "module",
   "image": "RFID_WAVER.png",
-  "description": "RFID expansion board (description coming soon).",
-  "tags": ["RFID", "module"],
+  "description": "RFID Waver is an add-on module intended to plug into GPIO Waver. Together they form an RFID-capable device based on the MFRC522 (13.56 MHz) reader/writer, enabling card reads and (where supported) cloning to compatible “magic” cards via the EMWaver app.",
+  "tags": ["RFID", "MFRC522", "13.56MHz", "module"],
   "appSupport": ["android", "desktop"],
-  "oshwLabUrl": "",
+  "oshwLabUrl": "https://oshwlab.com/maarnotto/rfid_waver_mirrored",
+  "easyEdaUrl": "https://easyeda.com/editor#project_id=cf5e03b0384a499194ce0b0c5843f05a",
   "githubUrl": "",
-  "schematicUrl": ""
+  "schematicUrl": "",
+  "reproductionCost": { "amount": 45, "currency": "USD", "units": 5 }
 }
