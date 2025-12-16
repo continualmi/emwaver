@@ -420,14 +420,19 @@
         const back = state.view;
         const imageSrc = resolveDeviceImage(device);
         const requirementLabels = [];
+        const requirementSeen = new Set();
         if (parent) {
+          const key = parentTitle.trim().toLowerCase();
+          requirementSeen.add(key);
           requirementLabels.push(`<span class="text-slate-700 font-semibold">${parentTitle}</span>`);
         }
         if (device.requires) {
           const rawRequirements = Array.isArray(device.requires) ? device.requires : [device.requires];
           rawRequirements.forEach((req) => {
             const trimmed = String(req || "").trim();
-            if (trimmed) {
+            const key = trimmed.toLowerCase();
+            if (trimmed && !requirementSeen.has(key)) {
+              requirementSeen.add(key);
               requirementLabels.push(`<span class="text-slate-700 font-semibold">${trimmed}</span>`);
             }
           });

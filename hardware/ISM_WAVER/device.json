@@ -1,7 +1,8 @@
 {
   "title": "ISM_WAVER",
-  "displayTitle": "ISM Waver",
+  "displayTitle": "ISM Waver v2",
   "group": "stm32",
+  "lifecycle": "old",
   "image": "ISM_WAVER.png",
   "description": "433 MHz ISM band board with Rainsun antenna (description coming soon).",
   "tags": ["ISM", "STM32", "433MHz", "Rainsun"],
