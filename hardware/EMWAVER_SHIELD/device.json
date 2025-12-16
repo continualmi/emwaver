@@ -1,0 +1,14 @@
+{
+  "title": "EMWAVER_SHIELD",
+  "displayTitle": "EMWaver Shield",
+  "group": "module",
+  "status": "module",
+  "image": "EMWAVER_SHIELD.png",
+  "description": "EMWaver Shield connector module (description coming soon).",
+  "tags": ["Shield", "ESP32-S3", "RFM69HW", "module"],
+  "requires": ["ESP32-S3 DevKit", "RFM69HW"],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

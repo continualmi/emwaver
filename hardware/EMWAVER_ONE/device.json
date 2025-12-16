@@ -1,0 +1,13 @@
+{
+  "title": "EMWAVER_ONE",
+  "displayTitle": "EMWaver ONE",
+  "group": "esp32",
+  "status": "production",
+  "image": "EMWAVER_ONE.png",
+  "description": "Current EMWaver ONE hardware (description coming soon).",
+  "tags": ["ONE", "ESP32", "CC1101"],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

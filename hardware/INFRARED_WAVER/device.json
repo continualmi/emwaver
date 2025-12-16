@@ -1,0 +1,12 @@
+{
+  "title": "INFRARED_WAVER",
+  "displayTitle": "Infrared Waver",
+  "group": "stm32",
+  "image": "INFRARED_WAVER.png",
+  "description": "Infrared (IR) expansion board (description coming soon).",
+  "tags": ["IR"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

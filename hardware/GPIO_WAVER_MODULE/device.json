@@ -1,0 +1,15 @@
+{
+  "title": "GPIO_WAVER_MODULE",
+  "displayTitle": "GPIO Waver Module",
+  "group": "module",
+  "status": "module",
+  "image": "GPIO_WAVER_MODULE.png",
+  "parent": "EMW1",
+  "experimental": true,
+  "description": "18-pin GPIO add-on (requires EMW1).",
+  "tags": ["GPIO", "18-pin", "module"],
+  "appSupport": [],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

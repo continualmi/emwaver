@@ -1,0 +1,13 @@
+{
+  "title": "ISM_WAVER",
+  "displayTitle": "ISM Waver",
+  "group": "stm32",
+  "image": "ISM_WAVER.png",
+  "description": "433 MHz ISM band board with Rainsun antenna (description coming soon).",
+  "tags": ["ISM", "STM32", "433MHz", "Rainsun"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": "hardware/ISM_WAVER/easyeda/1-Schematic_EMWAVER_V2.json",
+  "pcbUrl": "hardware/ISM_WAVER/easyeda/1-PCB_EMWAVER_V2.json"
+}
