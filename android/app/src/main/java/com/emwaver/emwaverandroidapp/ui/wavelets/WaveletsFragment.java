@@ -63,6 +63,7 @@ import com.emwaver.emwaverandroidapp.ui.wavelets.ScriptMetadata;
 import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletDeviceConnection;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletRenderView;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletTree;
 import com.google.android.material.button.MaterialButton;
@@ -104,6 +105,7 @@ public class WaveletsFragment extends Fragment {
     private boolean isServiceBound;
     private Utils utils;
     private IrEncoderWrapper irEncoderWrapper;
+    private WaveletDeviceConnection waveletDeviceConnection;
 
     private WaveletEngine waveletEngine;
     private WaveletRenderView waveletRenderView;
@@ -1674,6 +1676,12 @@ public class WaveletsFragment extends Fragment {
         Map<String, Object> bindings = new HashMap<>();
         if (utils != null) {
             bindings.put("Utils", utils);
+        }
+        if (waveletDeviceConnection == null && isAdded()) {
+            waveletDeviceConnection = new WaveletDeviceConnection(requireContext());
+        }
+        if (waveletDeviceConnection != null) {
+            bindings.put("DeviceConnection", waveletDeviceConnection);
         }
         if (bleService != null) {
             bindings.put("BLEService", bleService);

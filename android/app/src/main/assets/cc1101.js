@@ -109,12 +109,21 @@ const MODULATION_ALIASES = {
 let spiOpen = false;
 
 function isAvailable() {
-    return typeof BLEService === 'object' && BLEService !== null && typeof BLEService.sendCommand === 'function';
+    if (typeof DeviceConnection !== 'object' || DeviceConnection === null) {
+        return false;
+    }
+    if (typeof DeviceConnection.sendCommand !== 'function') {
+        return false;
+    }
+    if (typeof DeviceConnection.isConnected === 'function') {
+        return !!DeviceConnection.isConnected();
+    }
+    return true;
 }
 
-function ensureBleService() {
+function ensureDeviceConnection() {
     if (!isAvailable()) {
-        throw new Error('BLE service unavailable. Connect to EMWaver first.');
+        throw new Error('Device connection unavailable. Connect an EMWaver device first.');
     }
 }
 
@@ -139,9 +148,9 @@ function bytesToString(bytes) {
 }
 
 function sendCommand(command, timeout) {
-    ensureBleService();
+    ensureDeviceConnection();
     const payload = stringToBytes(command);
-    const response = BLEService.sendCommand(payload, timeout || SPI_TIMEOUT_MS);
+    const response = DeviceConnection.sendCommand(payload, timeout || SPI_TIMEOUT_MS);
     if (!response || response.length === 0) {
         throw new Error('No response from device');
     }

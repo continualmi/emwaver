@@ -3,15 +3,15 @@ let status = "Ready";
 function initRx() {
     status = "Initializing RX...";
     render();
-    BLEService.sendCommandString("cc1101 init");
-    BLEService.sendCommandString("cc1101 strobe --cmd=0x30");
-    BLEService.sendCommandString("cc1101 apply_defaults");
-    BLEService.sendCommandString("cc1101 write --reg=0x08 --val=0x32");
-    BLEService.sendCommandString("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
-    BLEService.sendCommandString("cc1101 set_freq --mhz=433.92");
-    BLEService.sendCommandString("cc1101 set_datarate --bps=100000");
-    BLEService.sendCommandString("cc1101 set_mod_power --mod=3 --dbm=10");
-    BLEService.sendCommandString("cc1101 strobe --cmd=0x34");
+    DeviceConnection.sendCommandString("cc1101 init");
+    DeviceConnection.sendCommandString("cc1101 strobe --cmd=0x30");
+    DeviceConnection.sendCommandString("cc1101 apply_defaults");
+    DeviceConnection.sendCommandString("cc1101 write --reg=0x08 --val=0x32");
+    DeviceConnection.sendCommandString("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
+    DeviceConnection.sendCommandString("cc1101 set_freq --mhz=433.92");
+    DeviceConnection.sendCommandString("cc1101 set_datarate --bps=100000");
+    DeviceConnection.sendCommandString("cc1101 set_mod_power --mod=3 --dbm=10");
+    DeviceConnection.sendCommandString("cc1101 strobe --cmd=0x34");
     status = "RX init complete";
     render();
 }
@@ -19,15 +19,15 @@ function initRx() {
 function initTx() {
     status = "Initializing TX...";
     render();
-    BLEService.sendCommandString("cc1101 init");
-    BLEService.sendCommandString("cc1101 strobe --cmd=0x30");
-    BLEService.sendCommandString("cc1101 apply_defaults");
-    BLEService.sendCommandString("cc1101 write --reg=0x08 --val=0x32");
-    BLEService.sendCommandString("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
-    BLEService.sendCommandString("cc1101 set_freq --mhz=433.92");
-    BLEService.sendCommandString("cc1101 set_datarate --bps=100000");
-    BLEService.sendCommandString("cc1101 set_mod_power --mod=3 --dbm=10");
-    BLEService.sendCommandString("cc1101 strobe --cmd=0x35");
+    DeviceConnection.sendCommandString("cc1101 init");
+    DeviceConnection.sendCommandString("cc1101 strobe --cmd=0x30");
+    DeviceConnection.sendCommandString("cc1101 apply_defaults");
+    DeviceConnection.sendCommandString("cc1101 write --reg=0x08 --val=0x32");
+    DeviceConnection.sendCommandString("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
+    DeviceConnection.sendCommandString("cc1101 set_freq --mhz=433.92");
+    DeviceConnection.sendCommandString("cc1101 set_datarate --bps=100000");
+    DeviceConnection.sendCommandString("cc1101 set_mod_power --mod=3 --dbm=10");
+    DeviceConnection.sendCommandString("cc1101 strobe --cmd=0x35");
     status = "TX init complete";
     render();
 }
