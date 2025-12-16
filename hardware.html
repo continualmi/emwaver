@@ -169,10 +169,11 @@
       const MANIFEST_URL = "hardware/devices.json";
       const FEATURED_IDS = [
         "EMWAVER_ONE",
-        "EMWAVER_SHIELD",
         "ISM_WAVER_DUAL",
-        "GPIO_WAVER",
         "INFRARED_WAVER",
+        "GPIO_WAVER",
+        "EMWAVER_SHIELD",
+        "RFID_WAVER",
       ];
 
       const state = {
@@ -311,6 +312,21 @@
       function render() {
         const byId = new Map(state.devices.map((d) => [d.folder, d]));
         const featured = FEATURED_IDS.map((id) => byId.get(id)).filter(Boolean);
+        if (!featured.length) {
+          el.listFeatured.innerHTML = `
+            <div class="col-span-full rounded-2xl border border-slate-200 bg-white/80 p-6">
+              <div class="text-slate-900 font-semibold">No featured devices found</div>
+              <div class="text-slate-600 text-sm mt-2">
+                Check that <code>hardware/devices.json</code> includes the IDs in <code>FEATURED_IDS</code>.
+              </div>
+              <div class="text-slate-600 text-sm mt-2">
+                You can still browse everything in the <a class="text-brand-600 hover:text-brand-500 font-semibold" href="catalog.html">full catalog</a>.
+              </div>
+            </div>
+          `;
+          return;
+        }
+
         el.listFeatured.innerHTML = featured.map((d) => rowHtml(d)).join("");
       }
 

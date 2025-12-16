@@ -6,9 +6,8 @@
   "status": "module",
   "image": "RFID_WAVER.png",
   "description": "RFID expansion board (description coming soon).",
-  "requires": ["GPIO Waver"],
   "tags": ["RFID", "module"],
-  "appSupport": [],
+  "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",
   "githubUrl": "",
   "schematicUrl": ""
