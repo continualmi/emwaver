@@ -1,181 +1,260 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:fillViewport="true"
     tools:context=".ui.packetmode.PacketModeFragment">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <Button
-        android:id="@+id/sendTesla"
-        android:layout_width="110dp"
-        android:layout_height="55dp"
-        android:text="send tesla"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.1" />
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardUseCompatPadding="true">
 
-    <Button
-        android:id="@+id/transferPayloadTxButton"
-        android:layout_width="120dp"
-        android:layout_height="55dp"
-        android:text="transfer"
-        android:layout_marginLeft="10dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/transmitPayloadDataTextInput" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
 
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/manchesterSwitch"
-        android:layout_width="120dp"
-        android:layout_height="48dp"
-        android:text="Manchester encoding"
-        android:layout_marginLeft="10dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/initReceiveButton" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/sendTesla"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Send (Tesla)" />
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/initTransmitButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="Init TX" />
 
-    <AutoCompleteTextView
-        android:id="@+id/syncModeSelector"
-        android:layout_width="100dp"
-        android:layout_height="48dp"
-        android:focusable="false"
-        android:focusableInTouchMode="false"
-        android:hint="Sync mode"
-        app:layout_constraintEnd_toStartOf="@+id/receivePayloadButton"
-        app:layout_constraintStart_toEndOf="@+id/sendPayloadButton"
-        app:layout_constraintTop_toBottomOf="@+id/receivePayloadDataTextInput" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/initReceiveButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="Init RX" />
+                </LinearLayout>
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
 
-    <AutoCompleteTextView
-        android:id="@+id/modulationSelector"
-        android:layout_width="120dp"
-        android:layout_height="48dp"
-        android:hint="Modulation"
-        app:layout_constraintEnd_toStartOf="@+id/preambleSelector"
-        app:layout_constraintStart_toEndOf="@+id/manchesterSwitch"
-        app:layout_constraintTop_toBottomOf="@+id/sendTesla" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/receivePayloadButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Receive" />
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/transferPayloadTxButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="Copy RX → TX" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
-    <AutoCompleteTextView
-        android:id="@+id/preambleSelector"
-        android:layout_width="120dp"
-        android:layout_height="48dp"
-        android:focusable="false"
-        android:focusableInTouchMode="false"
-        android:hint="Preamble"
-        android:layout_marginRight="10dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/initTransmitButton" />
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardUseCompatPadding="true">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
 
-    <EditText
-        android:id="@+id/datarateTextInput"
-        android:layout_width="120dp"
-        android:layout_height="48dp"
-        android:hint="datarate..."
-        android:layout_marginLeft="10dp"
-        android:imeOptions="actionDone"
-        android:inputType="number"
-        android:padding="8dp"
-        android:textColor="#000"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/manchesterSwitch" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/manchesterSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Manchester encoding" />
 
-    <EditText
-        android:id="@+id/deviationTextInput"
-        android:layout_width="120dp"
-        android:layout_height="48dp"
-        android:hint="deviation..."
-        android:layout_marginRight="10dp"
-        android:imeOptions="actionDone"
-        android:inputType="number"
-        android:padding="8dp"
-        android:textColor="#000"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/preambleSelector" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
 
-    <EditText
-        android:id="@+id/syncwordTextInput"
-        android:layout_width="120dp"
-        android:layout_height="48dp"
-        android:hint="sync word..."
-        android:imeOptions="actionDone"
-        android:inputType="text"
-        android:padding="8dp"
-        android:textColor="#000"
-        app:layout_constraintEnd_toStartOf="@+id/deviationTextInput"
-        app:layout_constraintStart_toEndOf="@+id/datarateTextInput"
-        app:layout_constraintTop_toBottomOf="@+id/modulationSelector" />
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="Modulation"
+                        app:endIconMode="dropdown_menu">
 
-    <Button
-        android:id="@+id/sendPayloadButton"
-        android:layout_width="110dp"
-        android:layout_height="55dp"
-        android:layout_marginLeft="10dp"
-        android:text="SEND PAYLOAD"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/receivePayloadDataTextInput" />
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/modulationSelector"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:focusableInTouchMode="false"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
-    <Button
-        android:id="@+id/receivePayloadButton"
-        android:layout_width="110dp"
-        android:layout_height="55dp"
-        android:layout_marginRight="10dp"
-        android:text="receive payload"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/receivePayloadDataTextInput" />
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:hint="Preamble"
+                        app:endIconMode="dropdown_menu">
 
-    <Button
-        android:id="@+id/initTransmitButton"
-        android:layout_width="110dp"
-        android:layout_height="55dp"
-        android:text="init transmit"
-        android:layout_marginRight="10dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/preambleSelector"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:focusableInTouchMode="false"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
 
-    <Button
-        android:id="@+id/initReceiveButton"
-        android:layout_width="110dp"
-        android:layout_height="55dp"
-        android:text="init receive"
-        android:layout_marginLeft="10dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
 
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="Sync mode"
+                        app:endIconMode="dropdown_menu">
 
-    <EditText
-        android:id="@+id/receivePayloadDataTextInput"
-        android:layout_width="411dp"
-        android:layout_height="100dp"
-        android:background="#EEE"
-        android:gravity="top|start"
-        android:hint="Hex data received..."
-        android:inputType="textMultiLine"
-        android:padding="8dp"
-        android:scrollbars="vertical"
-        android:textColor="#000"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/datarateTextInput" />
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/syncModeSelector"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:focusable="false"
+                            android:focusableInTouchMode="false"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
-    <EditText
-        android:id="@+id/transmitPayloadDataTextInput"
-        android:layout_width="411dp"
-        android:layout_height="100dp"
-        android:background="#EEE"
-        android:gravity="top|start"
-        android:hint="Hex data to transmit..."
-        android:inputType="textMultiLine"
-        android:padding="8dp"
-        android:scrollbars="vertical"
-        android:textColor="#000"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/sendPayloadButton" />
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:hint="Sync word (CB8A)">
 
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/syncwordTextInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="textNoSuggestions" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="Data rate (bps)">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/datarateTextInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="number" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:hint="Deviation (Hz)">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/deviationTextInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionDone"
+                            android:inputType="number" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardUseCompatPadding="true">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:hint="RX (hex)">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/receivePayloadDataTextInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="120dp"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine"
+                    android:scrollbars="vertical" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardUseCompatPadding="true">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:hint="TX payload (hex, no preamble/sync)">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/transmitPayloadDataTextInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="160dp"
+                    android:gravity="top|start"
+                    android:inputType="textMultiLine"
+                    android:scrollbars="vertical" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
