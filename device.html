@@ -163,11 +163,11 @@
     </main>
 
     <script>
-	      const params = new URLSearchParams(window.location.search);
-	      const requestedId = params.get("id");
-	      const requestedVariant = (params.get("variant") || "").trim().toLowerCase();
-	      const from = (params.get("from") || "").trim().toLowerCase();
-	      const back = (params.get("back") || "").trim().toLowerCase();
+		      const params = new URLSearchParams(window.location.search);
+		      const requestedId = params.get("id");
+		      const requestedVariant = (params.get("variant") || "").trim().toLowerCase();
+		      const from = (params.get("from") || "").trim().toLowerCase();
+		      const back = (params.get("back") || "").trim().toLowerCase();
 
 				      const ALIAS = {
 				        EMWAVER_ONE: { id: "emwaver" },
@@ -193,9 +193,7 @@
 			        GPIO_WAVER_18PIN: { id: "GPIO_WAVER_MODULE" },
 				      };
 
-		      const alias = requestedId && ALIAS[requestedId] ? ALIAS[requestedId] : null;
-		      const deviceId = alias ? alias.id : requestedId;
-		      const activeVariant = alias && alias.variant ? alias.variant : requestedVariant;
+			      const alias = requestedId && ALIAS[requestedId] ? ALIAS[requestedId] : null;
 
       function prettyTitle(text) {
         return String(text || "")
@@ -308,15 +306,30 @@
         `;
       }
 
-      async function load() {
-        if (!deviceId) {
-        showError("Missing device id", "Use: device.html?id=emwaver");
-          return;
-        }
+	      async function load() {
+	        if (!requestedId) {
+	          showError("Missing device id", "Use: device.html?id=emwaver");
+	          return;
+	        }
 
-        const res = await fetch(`hardware/${deviceId}/device.json`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`device.json not found for ${deviceId} (${res.status})`);
-        const device = await res.json();
+	        const fetchDevice = async (id) => {
+	          const res = await fetch(`hardware/${id}/device.json`, { cache: "no-store" });
+	          return res;
+	        };
+
+	        let deviceId = requestedId;
+	        let activeVariant = requestedVariant;
+	        let res = await fetchDevice(deviceId);
+
+	        // Only apply aliases if the requested folder doesn't exist.
+	        if (!res.ok && alias && alias.id) {
+	          deviceId = alias.id;
+	          activeVariant = alias.variant ? String(alias.variant).trim().toLowerCase() : activeVariant;
+	          res = await fetchDevice(deviceId);
+	        }
+
+	        if (!res.ok) throw new Error(`device.json not found for ${deviceId} (${res.status})`);
+	        const device = await res.json();
 
         const title = prettyTitle(device.displayTitle || device.title || deviceId);
         document.title = `${title} — EMWaver Hardware`;
