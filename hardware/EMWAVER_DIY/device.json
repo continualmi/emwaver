@@ -1,0 +1,14 @@
+{
+  "title": "EMWAVER_DIY",
+  "displayTitle": "EMWaver DIY",
+  "group": "module",
+  "status": "module",
+  "image": "EMWAVER_DIY.png",
+  "description": "DIY module for EMWaver boards (description coming soon).",
+  "tags": ["DIY", "ESP32", "module"],
+  "requires": ["ESP32-S3 DevKit", "CC1101"],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

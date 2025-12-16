@@ -168,12 +168,11 @@
     <script>
       const MANIFEST_URL = "hardware/devices.json";
       const FEATURED_IDS = [
-        "EMWAVER_UNO_V4",
-        "GPIO_WAVER_V3",
-        "INFRARED_WAVER_V3",
-        "ISM_WAVER_V2",
-        "RFID_WAVER",
-        "EMWAVER_DIY_V2",
+        "EMWAVER_ONE",
+        "EMWAVER_SHIELD",
+        "ISM_WAVER_DUAL",
+        "GPIO_WAVER",
+        "INFRARED_WAVER",
       ];
 
       const state = {
@@ -213,7 +212,7 @@
       }
 
       function platformIcon(group) {
-        if (group === "esp32") return iconImg(ICONS.esp32, "ESP32");
+        if (group === "esp32") return iconImg(ICONS.esp32, "Espressif");
         if (group === "stm32") return iconImg(ICONS.stm32, "STM32");
         return "";
       }

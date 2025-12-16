@@ -1,0 +1,13 @@
+{
+  "title": "GPIO_WAVER_V1",
+  "displayTitle": "GPIO Waver v1",
+  "group": "stm32",
+  "image": "GPIO_WAVER_V1.png",
+  "lifecycle": "old",
+  "description": "GPIO 15-pin variant (description coming soon).",
+  "tags": ["GPIO", "15-pin", "STM32"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}
