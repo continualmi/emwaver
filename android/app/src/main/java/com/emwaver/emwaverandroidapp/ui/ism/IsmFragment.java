@@ -2190,6 +2190,13 @@ public class IsmFragment extends Fragment {
     private boolean ensureCc1101Open() {
         if (!ensureConnected()) return false;
 
+        // Avoid resetting CC1101 state if it's already initialized (e.g., configured by Packet Mode).
+        // `cc1101 init` on some firmware variants also applies defaults, which would clobber user settings.
+        byte[] probe = sendCommand(String.format(Locale.US, "cc1101 read --reg=%d", 0x31), 1000); // VERSION
+        if (probe != null && probe.length > 0 && !isErr(probe)) {
+            return true;
+        }
+
         String command = String.format(
                 Locale.US,
                 "cc1101 init --miso=%d --mosi=%d --sck=%d --cs=%d --cs_active_high=%d",
