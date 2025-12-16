@@ -493,9 +493,13 @@
           }
         });
 
-        const devices = await Promise.all(reads);
-        const lookup = Object.fromEntries(devices.map((d) => [d.folder, d]));
-        devices.sort((a, b) => prettyTitle(a.title || a.folder).localeCompare(prettyTitle(b.title || b.folder)));
+	        const devices = await Promise.all(reads);
+	        const lookup = Object.fromEntries(devices.map((d) => [d.folder, d]));
+	        devices.sort((a, b) => {
+	          return prettyTitle(a.displayTitle || a.title || a.folder).localeCompare(
+	            prettyTitle(b.displayTitle || b.title || b.folder),
+	          );
+	        });
 
         el.countPill.textContent = `${devices.length} entries`;
 
