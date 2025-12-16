@@ -289,7 +289,8 @@ static void cc1101_apply_defaults(void)
     cc1101_write_reg(CC1101_REG_PKTCTRL0, 0x00);
     cc1101_write_reg(CC1101_REG_PKTCTRL1, 0x04);
     cc1101_write_reg(CC1101_REG_ADDR, 0x00);
-    cc1101_write_reg(CC1101_REG_PKTLEN, 0x00);
+    // Avoid an unusable fixed-length default (0x00 bytes). PacketMode will overwrite this per TX.
+    cc1101_write_reg(CC1101_REG_PKTLEN, 0xFF);
 }
 
 static double cc1101_get_frequency_mhz(void)
