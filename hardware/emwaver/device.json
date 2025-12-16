@@ -1,0 +1,13 @@
+{
+  "title": "emwaver",
+  "displayTitle": "EMWaver",
+  "group": "esp32",
+  "status": "production",
+  "image": "emwaver.png",
+  "description": "Current EMWaver hardware (description coming soon).",
+  "tags": ["ESP32", "CC1101"],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

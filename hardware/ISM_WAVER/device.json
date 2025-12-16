@@ -2,7 +2,7 @@
   "title": "ISM_WAVER",
   "displayTitle": "ISM Waver",
   "group": "stm32",
-  "image": "ISM_WAVER.png",
+  "image": "ISM_WAVER_DUAL.png",
   "description": "Dual-band ISM expansion board (description coming soon).",
   "tags": ["ISM"],
   "appSupport": ["android", "desktop"],

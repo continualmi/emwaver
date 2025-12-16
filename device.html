@@ -169,6 +169,8 @@
 	      const back = (params.get("back") || "").trim().toLowerCase();
 
 				      const ALIAS = {
+				        EMWAVER_ONE: { id: "emwaver" },
+				        EMWAVER_ONE_PLUS: { id: "emwaver-plus" },
 				        "EMWAVER_V1.0.1": { id: "ISM_WAVER_V0" },
 				        "EMWAVER_V1.0": { id: "ISM_WAVER_V0" },
 				        "ISM_WAVER_V1.0": { id: "ISM_WAVER_V0" },
@@ -180,9 +182,9 @@
 				        EMWAVER_V2_315: { id: "ISM_WAVER_V2" },
 				        EMWAVER_V2_433: { id: "ISM_WAVER_V2" },
 				        EMWAVER_V2_433_RAINSUN: { id: "ISM_WAVER_V2" },
-					        EMWAVER_UNO_V2: { id: "EMWAVER_ONE_PLUS" },
-				        EMWAVER_UNO_V3: { id: "EMWAVER_ONE_PLUS" },
-				        EMWAVER_UNO_V4: { id: "EMWAVER_ONE" },
+					        EMWAVER_UNO_V2: { id: "emwaver-plus" },
+				        EMWAVER_UNO_V3: { id: "emwaver-plus" },
+				        EMWAVER_UNO_V4: { id: "emwaver" },
 				        INFRARED_WAVER_V0_CHEAP: { id: "INFRARED_WAVER_V0" },
 				        GPIO_WAVER: { id: "GPIO_WAVER_V0" },
 				        GPIO_WAVER_15PIN: { id: "GPIO_WAVER_V1" },
@@ -229,7 +231,7 @@
       const ICONS = {
         android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
         ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
-        desktop: "https://cdn-icons-png.flaticon.com/512/3381/3381949.png",
+        desktop: "https://static.thenounproject.com/png/1982056-200.png",
         esp32: "https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg",
         stm32: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s",
       };
@@ -295,7 +297,7 @@
               ? `<div class="text-slate-600 text-sm mt-2">
                    You’re opening this page via <code>file://</code>, which blocks <code>fetch()</code>.
                    Run a local server: <code>python3 -m http.server 8000</code> then open
-                   <code>http://localhost:8000/device.html?id=EMWAVER_ONE</code>.
+                   <code>http://localhost:8000/device.html?id=emwaver</code>.
                  </div>`
               : ""
           }
@@ -304,7 +306,7 @@
 
       async function load() {
         if (!deviceId) {
-        showError("Missing device id", "Use: device.html?id=EMWAVER_ONE");
+        showError("Missing device id", "Use: device.html?id=emwaver");
           return;
         }
 

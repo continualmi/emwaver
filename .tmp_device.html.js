@@ -40,7 +40,7 @@ tailwind.config = {
       const ICONS = {
         android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
         ios: "https://icons.veryicon.com/png/o/application/skills-section/ios-1.png",
-        desktop: "https://cdn-icons-png.flaticon.com/512/3381/3381949.png",
+        desktop: "https://static.thenounproject.com/png/1982056-200.png",
         esp32: "https://www.mouser.com/Images/espressifsystems/lrg/ESP32-S3FH4R2_SPL.jpg",
         stm32: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s",
       };
