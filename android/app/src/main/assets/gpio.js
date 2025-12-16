@@ -28,8 +28,8 @@ function gpioRead() {
     status = "Reading...";
     render();
 
-    BLEService.sendCommandString("gpio " + selectedMode + " --pin=" + selectedPin);
-    let response = BLEService.sendCommandString("gpio read --pin=" + selectedPin);
+    DeviceConnection.sendCommandString("gpio " + selectedMode + " --pin=" + selectedPin);
+    let response = DeviceConnection.sendCommandString("gpio read --pin=" + selectedPin);
 
     let state = response && response.length > 0 && response[0] !== 0;
     let pinInfo = PINS.find(p => p.value === selectedPin);
@@ -50,8 +50,8 @@ function gpioWrite(value) {
     status = value ? "Setting HIGH..." : "Setting LOW...";
     render();
 
-    BLEService.sendCommandString("gpio out --pin=" + selectedPin);
-    BLEService.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+    DeviceConnection.sendCommandString("gpio out --pin=" + selectedPin);
+    DeviceConnection.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
 
     let pinInfo = PINS.find(p => p.value === selectedPin);
     let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
