@@ -21,11 +21,20 @@ This directory contains the STM32F042G6UX firmware implementation using STM32Cub
 
 ## Building
 
-Open `emwaver-firmware.ioc` in STM32CubeIDE or use the generated Makefile:
+Open `emwaver-firmware.ioc` in STM32CubeIDE or use the generated Makefile.
+
+Requirements:
+- `arm-none-eabi-gcc` toolchain with a working C library/sysroot (headers like `stdint.h`/`stdio.h`)
+- `make`
 
 ```bash
-cd stm
-make -C Release
+make -C stm/emwaver-firmware/Release all
+```
+
+To export a `.bin` and update the Android DFU asset (`android/app/src/main/assets/dfu.dfu`):
+
+```bash
+bash stm/emwaver-firmware/Release/build_android_asset.sh
 ```
 
 ## Communication
