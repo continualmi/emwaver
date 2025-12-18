@@ -206,15 +206,18 @@ public class RfidFragment extends Fragment {
         }
 
         // Firmware binary reply: [TagType(2)][UID(4)][Data(16)] = 22 bytes
-        if (response.length == 22) {
-            String cardType = getTagType(response[0], response[1]);
+        // Some transports can split or coalesce bytes, so tolerate leading/trailing bytes and
+        // extract the first plausible 22-byte payload.
+        byte[] payload = extractRfidReadPayload(response);
+        if (payload != null) {
+            String cardType = getTagType(payload[0], payload[1]);
             String uid = String.format("%02X %02X %02X %02X",
-                    response[2] & 0xFF, response[3] & 0xFF, response[4] & 0xFF, response[5] & 0xFF);
+                    payload[2] & 0xFF, payload[3] & 0xFF, payload[4] & 0xFF, payload[5] & 0xFF);
 
             StringBuilder data = new StringBuilder();
             for (int i = 6; i < 22; i++) {
                 if (i > 6) data.append(" ");
-                data.append(String.format("%02X", response[i] & 0xFF));
+                data.append(String.format("%02X", payload[i] & 0xFF));
             }
 
             StringBuilder result = new StringBuilder();
@@ -245,7 +248,7 @@ public class RfidFragment extends Fragment {
             return;
         }
 
-        String responseString = new String(response, StandardCharsets.US_ASCII);
+        String responseString = new String(response, StandardCharsets.US_ASCII).trim();
         if (responseString.equals("No card detected")) {
             showError("Error: No card detected");
             return;
@@ -259,6 +262,36 @@ public class RfidFragment extends Fragment {
         }
 
         logResponse("write", response);
+    }
+
+    private byte[] extractRfidReadPayload(byte[] response) {
+        if (response == null) return null;
+        if (response.length == 22) return response;
+        if (response.length < 22) return null;
+
+        boolean looksAscii = true;
+        for (byte b : response) {
+            int ch = b & 0xFF;
+            if (ch == '\r' || ch == '\n' || ch == '\t') continue;
+            if (ch < 0x20 || ch > 0x7E) {
+                looksAscii = false;
+                break;
+            }
+        }
+        if (looksAscii) return null;
+
+        for (int offset = 0; offset + 22 <= response.length; offset++) {
+            int tagType = ((response[offset] & 0xFF) << 8) | (response[offset + 1] & 0xFF);
+            if (tagType == 0x4400 || tagType == 0x0400 || tagType == 0x0200 || tagType == 0x0800 || tagType == 0x4403) {
+                byte[] out = new byte[22];
+                System.arraycopy(response, offset, out, 0, 22);
+                return out;
+            }
+        }
+
+        byte[] out = new byte[22];
+        System.arraycopy(response, 0, out, 0, 22);
+        return out;
     }
 
     private void clearError() {
