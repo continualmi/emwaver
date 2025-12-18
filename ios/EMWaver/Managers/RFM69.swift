@@ -173,24 +173,15 @@ class RFM69 {
         let command = "spi open --name=\(RFM69.DEVICE_NAME) --host=2 --miso=13 --mosi=11 --sck=12 --cs=\(csPin) --mode=0 --clock=8000000 --cs_active_high=\(csActiveHigh ? "1" : "0")\n"
         
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-            let responseStr = String(data: response, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if responseStr.starts(with: "ok") {
+            if response.count == 1, response[response.startIndex] == 0xFF {
+                print("RFM69: SPI open failed (device error)")
+                return false
+            }
+            let parsed = parseRawResponse(response)
+            if parsed.isEmpty {
                 deviceOpen = true
                 print("RFM69: SPI device opened successfully")
                 return true
-            }
-            
-            if responseStr.contains("spi open: exists") {
-                print("RFM69: SPI device already open on firmware; attempting to close and retry")
-                _ = closeDevice()
-                if let retryResponse = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-                    let retryStr = String(data: retryResponse, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    if retryStr.starts(with: "ok") {
-                        deviceOpen = true
-                        print("RFM69: SPI device opened successfully after retry")
-                        return true
-                    }
-                }
             }
         }
         
@@ -201,8 +192,12 @@ class RFM69 {
     func closeDevice() -> Bool {
         let command = "spi close --name=\(RFM69.DEVICE_NAME)\n"
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-            let responseStr = String(data: response, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if responseStr.starts(with: "ok") {
+            if response.count == 1, response[response.startIndex] == 0xFF {
+                print("RFM69: SPI close failed (device error)")
+                return false
+            }
+            let parsed = parseRawResponse(response)
+            if parsed.isEmpty {
                 deviceOpen = false
                 print("RFM69: SPI device closed successfully")
                 return true
@@ -222,40 +217,21 @@ class RFM69 {
         return bytes.map { String(format: "0x%02X", $0) }.joined(separator: ",")
     }
     
-    private func parseOkResponse(_ response: Data?) -> [UInt8] {
+    private func parseRawResponse(_ response: Data?) -> [UInt8] {
         guard let response = response, !response.isEmpty else {
             return []
         }
-        
-        guard let responseStr = String(data: response, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            return []
-        }
-        
-        if !responseStr.starts(with: "ok") {
-            print("RFM69: Command failed: \(responseStr)")
-            return []
-        }
-        
-        let payload = responseStr.count > 2 ? String(responseStr.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines) : ""
-        if payload.isEmpty {
-            return []
-        }
-        
-        let tokens = payload.components(separatedBy: CharacterSet(charactersIn: " ,"))
-        var result: [UInt8] = []
-        
-        for token in tokens {
-            if token.isEmpty {
-                continue
+        if response.count == 1 {
+            let byte = response[response.startIndex]
+            if byte == 0x00 {
+                return []
             }
-            var hexStr = token.replacingOccurrences(of: "0x", with: "", options: .caseInsensitive)
-            hexStr = hexStr.replacingOccurrences(of: "0X", with: "")
-            if let value = UInt8(hexStr, radix: 16) {
-                result.append(value)
+            if byte == 0xFF {
+                print("RFM69: Device returned error")
+                return []
             }
         }
-        
-        return result
+        return Array(response)
     }
     
     private func notifyCommandObserver(_ command: String) {
@@ -281,7 +257,7 @@ class RFM69 {
         }
         
         if let response = sendSpiCommand(command, timeoutMs: 1000) {
-            let parsed = parseOkResponse(response)
+            let parsed = parseRawResponse(response)
             if !parsed.isEmpty {
                 return parsed[parsed.count - 1]
             }

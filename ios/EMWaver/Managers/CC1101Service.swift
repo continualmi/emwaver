@@ -32,6 +32,22 @@ final class CC1101Service {
         _ = try sendAck("cc1101 apply_defaults\n", timeoutMs: timeoutMs)
     }
 
+    func openDevice(miso: Int? = nil,
+                    mosi: Int? = nil,
+                    sck: Int? = nil,
+                    cs: Int? = nil,
+                    csActiveHigh: Bool? = nil,
+                    timeoutMs: Int = 1500) throws {
+        var args: [String] = []
+        if let miso = miso { args.append("--miso=\(miso)") }
+        if let mosi = mosi { args.append("--mosi=\(mosi)") }
+        if let sck = sck { args.append("--sck=\(sck)") }
+        if let cs = cs { args.append("--cs=\(cs)") }
+        if let csActiveHigh = csActiveHigh { args.append("--cs_active_high=\(csActiveHigh ? 1 : 0)") }
+        let suffix = args.isEmpty ? "" : " " + args.joined(separator: " ")
+        _ = try sendAck("cc1101 init\(suffix)\n", timeoutMs: timeoutMs)
+    }
+
     func strobe(_ value: UInt8, timeoutMs: Int = 1000) throws {
         _ = try sendAck(String(format: "cc1101 strobe --cmd=0x%02X\n", value), timeoutMs: timeoutMs)
     }
@@ -88,4 +104,3 @@ final class CC1101Service {
         return response
     }
 }
-
