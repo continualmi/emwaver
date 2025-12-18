@@ -3,6 +3,7 @@ const DEFAULT_DUTY_PERCENT = 50;
 
 let selectedSignal = "";
 let repetitionsText = "1";
+let intervalText = "60";
 let status = "Ready";
 
 function listSavedSignals() {
@@ -46,6 +47,14 @@ function signalOptions() {
 function parsePositiveInt(raw, fallback) {
     const value = parseInt(String(raw || "").trim(), 10);
     if (!isFinite(value) || value <= 0) {
+        return fallback;
+    }
+    return value;
+}
+
+function parseNonNegativeInt(raw, fallback) {
+    const value = parseInt(String(raw || "").trim(), 10);
+    if (!isFinite(value) || value < 0) {
         return fallback;
     }
     return value;
@@ -98,6 +107,7 @@ function sendSignal() {
     }
 
     const repetitions = parsePositiveInt(repetitionsText, 1);
+    const intervalMs = parseNonNegativeInt(intervalText, 60);
 
     status = "Sending...";
     render();
@@ -113,13 +123,16 @@ function sendSignal() {
 
         const cmd = "transmit start --pin=4 --pwm --freq=" + DEFAULT_FREQ_HZ + " --duty=" + DEFAULT_DUTY_PERCENT + "\n";
 
-        const pauseMs = estimateDurationMs(data.length) + 60;
         for (let i = 0; i < repetitions; i += 1) {
+            status = "Sending " + (i + 1) + " / " + repetitions + "...";
+            render();
+            Utils.delay(10);
+
             BLEService.loadBuffer(data);
             BLEService.write(bytesFromString(cmd));
             BLEService.transmitBuffer();
             if (i < repetitions - 1) {
-                Utils.delay(pauseMs);
+                Utils.delay(estimateDurationMs(data.length) + intervalMs);
             }
         }
 
@@ -166,6 +179,16 @@ function render() {
                         keyboard: "number",
                         onChange: function (value) {
                             repetitionsText = String(value || "");
+                        }
+                    }),
+
+                    UI.textField({
+                        label: "Interval Between Reps (ms)",
+                        value: String(intervalText),
+                        placeholder: "60",
+                        keyboard: "number",
+                        onChange: function (value) {
+                            intervalText = String(value || "");
                         }
                     }),
 
