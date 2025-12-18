@@ -65,6 +65,7 @@ import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletDeviceConnection;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletRenderView;
+import com.emwaver.emwaverandroidapp.wavelets.WaveletSignalStore;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletTree;
 import com.google.android.material.button.MaterialButton;
 
@@ -106,6 +107,7 @@ public class WaveletsFragment extends Fragment {
     private Utils utils;
     private IrEncoderWrapper irEncoderWrapper;
     private WaveletDeviceConnection waveletDeviceConnection;
+    private WaveletSignalStore waveletSignalStore;
 
     private WaveletEngine waveletEngine;
     private WaveletRenderView waveletRenderView;
@@ -701,7 +703,8 @@ public class WaveletsFragment extends Fragment {
             "rfm69.js",
             "usb.js",
             "wavelet_demo.js",
-            "gpio.js"
+            "gpio.js",
+            "ir_send_saved_signal.js"
         };
         for (String filename : defaultWavelets) {
             names.add(filename);
@@ -721,7 +724,8 @@ public class WaveletsFragment extends Fragment {
             "rfm69.js",
             "usb.js",
             "wavelet_demo.js",
-            "gpio.js"
+            "gpio.js",
+            "ir_send_saved_signal.js"
         };
         
         for (String filename : assetScriptFiles) {
@@ -1678,6 +1682,12 @@ public class WaveletsFragment extends Fragment {
         }
         if (waveletDeviceConnection != null) {
             bindings.put("DeviceConnection", waveletDeviceConnection);
+        }
+        if (waveletSignalStore == null && isAdded()) {
+            waveletSignalStore = new WaveletSignalStore(requireContext());
+        }
+        if (waveletSignalStore != null) {
+            bindings.put("SamplerSignals", waveletSignalStore);
         }
         if (bleService != null) {
             bindings.put("BLEService", bleService);
