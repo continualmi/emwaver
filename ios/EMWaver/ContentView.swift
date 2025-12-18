@@ -60,6 +60,24 @@ struct ContentView: View {
                     Label("Git", systemImage: "arrow.triangle.branch")
                 }
                 .tag("Git")
+                
+                NavigationView {
+                    PacketModeView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("Packet", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .tag("PacketMode")
+                
+                NavigationView {
+                    RFIDView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("RFID", systemImage: "creditcard")
+                }
+                .tag("RFID")
             }
             .onAppear {
                 let appearance = UINavigationBarAppearance()
