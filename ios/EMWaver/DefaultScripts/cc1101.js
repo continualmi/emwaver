@@ -62,7 +62,9 @@ const REG = {
     PATABLE: 0x3E,
     TXFIFO: 0x3F,
     RXFIFO: 0x3F,
-    PKTSTATUS: 0x38
+    PKTSTATUS: 0x38,
+    TXBYTES: 0x3A,
+    RXBYTES: 0x3B
 };
 
 const POWER_LEVELS = [-30, -20, -15, -10, 0, 5, 7, 10];
@@ -233,6 +235,11 @@ function writeReg(addr, value) {
 
 function readReg(addr) {
     const bytes = spiXfer([(READ_SINGLE | addr) & 0xFF, 0x00], 2);
+    return bytes.length >= 2 ? bytes[1] & 0xFF : 0;
+}
+
+function readStatusReg(addr) {
+    const bytes = spiXfer([(READ_BURST | addr) & 0xFF, 0x00], 2);
     return bytes.length >= 2 ? bytes[1] & 0xFF : 0;
 }
 
@@ -427,6 +434,88 @@ function flushFifos() {
     return true;
 }
 
+function sleepMs(durationMs) {
+    const ms = Math.max(0, durationMs | 0);
+    if (ms === 0) {
+        return;
+    }
+    const start = Date.now();
+    while (Date.now() - start < ms) {
+        // busy wait (Wavelet runtime is single-threaded)
+    }
+}
+
+function packetStartRx(overrides, options) {
+    const config = normalizeOverrides(overrides);
+    config.packetControl = 0x00;
+    const applied = applyConfiguration(config);
+
+    const sync = options && Array.isArray(options.syncWord) ? options.syncWord : null;
+    if (sync && sync.length === 2) {
+        writeReg(REG.SYNC1, sync[0] & 0xFF);
+        writeReg(REG.SYNC0, sync[1] & 0xFF);
+    }
+
+    const rxLen = options && options.rxLength != null ? (options.rxLength & 0xFF) : 0x00;
+    writeReg(REG.PKTLEN, rxLen & 0xFF);
+
+    spiStrobe(STROBES.SIDLE);
+    spiStrobe(STROBES.SFRX);
+    spiStrobe(STROBES.SRX);
+    return applied;
+}
+
+function packetPollRx() {
+    ensureSpiOpen();
+    const rxBytes = readStatusReg(REG.RXBYTES) & 0xFF;
+    const overflow = (rxBytes & 0x80) !== 0;
+    const count = rxBytes & 0x7F;
+    if (overflow) {
+        spiStrobe(STROBES.SIDLE);
+        spiStrobe(STROBES.SFRX);
+        spiStrobe(STROBES.SRX);
+        return { error: 'RX overflow (FIFO flushed)' };
+    }
+    if (count === 0) {
+        return null;
+    }
+    const bytes = readBurstReg(REG.RXFIFO, count);
+    spiStrobe(STROBES.SIDLE);
+    spiStrobe(STROBES.SFRX);
+    spiStrobe(STROBES.SRX);
+    return { bytes: bytes };
+}
+
+function packetSendFixed(payloadBytes, overrides, options) {
+    if (!Array.isArray(payloadBytes) || payloadBytes.length === 0) {
+        throw new Error('Payload is required');
+    }
+
+    const config = normalizeOverrides(overrides);
+    config.packetControl = 0x00;
+    const applied = applyConfiguration(config);
+
+    const sync = options && Array.isArray(options.syncWord) ? options.syncWord : null;
+    if (sync && sync.length === 2) {
+        writeReg(REG.SYNC1, sync[0] & 0xFF);
+        writeReg(REG.SYNC0, sync[1] & 0xFF);
+    }
+
+    writeReg(REG.PKTLEN, payloadBytes.length & 0xFF);
+
+    spiStrobe(STROBES.SIDLE);
+    spiStrobe(STROBES.SFTX);
+    writeBurstReg(REG.TXFIFO, payloadBytes, payloadBytes.length);
+    spiStrobe(STROBES.STX);
+
+    const waitMs = options && options.txWaitMs != null ? (options.txWaitMs | 0) : 50;
+    sleepMs(waitMs);
+
+    spiStrobe(STROBES.SIDLE);
+    spiStrobe(STROBES.SFTX);
+    return applied;
+}
+
 function initializeRadio() {
     writeReg(REG.FSCTRL1, 0x06);
     writeReg(REG.MDMCFG1, 0x02);
@@ -570,7 +659,15 @@ module.exports = {
     applyConfig: applyConfiguration,
     startRx,
     startTx,
+    strobe: spiStrobe,
+    readReg,
+    writeReg,
+    readBurst: readBurstReg,
+    writeBurst: writeBurstReg,
     standby,
     flushFifos,
-    constants
+    constants,
+    packetStartRx,
+    packetPollRx,
+    packetSendFixed
 };

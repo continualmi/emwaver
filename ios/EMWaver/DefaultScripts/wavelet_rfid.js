@@ -1,6 +1,6 @@
 // State matching the original RFID fragment exactly
 let blockAddress = "00";
-let authMode = 0; // 0 = Key A, 1 = Key B
+let authMode = "0"; // "0" = Key A, "1" = Key B (Wavelet pickers use string selections)
 let keyInputs = ["FF", "FF", "FF", "FF", "FF", "FF"];
 let combinedData = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
 let resultText = "";
@@ -160,7 +160,7 @@ function sendReadCommand() {
         command[cmdPrefix.length] = parseInt(blockAddress, 16);
         
         // Add auth mode byte (0x60 for Key A, 0x61 for Key B)
-        command[cmdPrefix.length + 1] = authMode === 0 ? 0x60 : 0x61;
+        command[cmdPrefix.length + 1] = authMode === "0" ? 0x60 : 0x61;
         
         // Add 6-byte key
         for (let i = 0; i < 6; i++) {
@@ -246,7 +246,7 @@ function sendWriteCommand() {
         command[cmdPrefix.length] = parseInt(blockAddress, 16);
         
         // Add auth mode byte
-        command[cmdPrefix.length + 1] = authMode === 0 ? 0x60 : 0x61;
+        command[cmdPrefix.length + 1] = authMode === "0" ? 0x60 : 0x61;
         
         // Add 6-byte key
         for (let i = 0; i < 6; i++) {
@@ -278,8 +278,6 @@ function render() {
             UI.column({
                 spacing: 16,
                 children: [
-                    UI.text({ text: "RFID Tools", font: "title2", fontWeight: "semibold" }),
-                    
                     // Block Address
                     UI.text({ text: "Block Address", fontWeight: "medium" }),
                     UI.textField({
@@ -296,8 +294,8 @@ function render() {
                         style: "segmented",
                         selected: authMode,
                         options: [
-                            { label: "Key A", value: 0 },
-                            { label: "Key B", value: 1 }
+                            { label: "Key A", value: "0" },
+                            { label: "Key B", value: "1" }
                         ],
                         onChange: function(value) {
                             authMode = value;
