@@ -124,10 +124,45 @@
                       id="device-image"
                       src=""
                       alt=""
-                      class="w-full h-64 object-cover"
+                      class="w-full h-72 sm:h-[26rem] object-contain bg-slate-50"
                       loading="lazy"
                     />
                     <div class="absolute top-4 left-4" id="status-pill"></div>
+                    <div class="absolute top-4 right-4 flex items-center gap-2">
+                      <button
+                        id="gallery-prev"
+                        type="button"
+                        class="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 hover:bg-white shadow-sm transition"
+                        aria-label="Previous image"
+                        title="Previous"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        id="gallery-next"
+                        type="button"
+                        class="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 hover:bg-white shadow-sm transition"
+                        aria-label="Next image"
+                        title="Next"
+                      >
+                        ›
+                      </button>
+                    </div>
+                    <button
+                      id="gallery-open"
+                      type="button"
+                      class="hidden absolute bottom-4 right-4 px-3 py-1.5 rounded-xl border border-slate-200 bg-white/90 text-xs font-semibold text-slate-700 hover:bg-white shadow-sm transition"
+                      title="Open large view"
+                    >
+                      View
+                      <span id="gallery-counter" class="text-slate-500 font-semibold"></span>
+                    </button>
+                  </div>
+                  <div id="gallery-thumbs-wrap" class="hidden border-t border-slate-200 bg-white">
+                    <div
+                      id="gallery-thumbs"
+                      class="flex gap-2 p-3 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -207,6 +242,32 @@
 	        const s = String(url).trim();
 	        if (!s) return null;
 	        return s;
+	      }
+
+	      function isHttpUrl(s) {
+	        return /^https?:\/\//i.test(String(s || "").trim());
+	      }
+
+	      function resolveHardwareAssetUrl(deviceId, raw) {
+	        const s = String(raw || "").trim();
+	        if (!s) return null;
+	        if (isHttpUrl(s)) return s;
+	        if (s.startsWith("hardware/")) return s;
+	        if (s.startsWith("/")) return s.slice(1);
+	        if (s.includes("/")) return `hardware/${s}`;
+	        return `hardware/${deviceId}/${s}`;
+	      }
+
+	      function uniqueStrings(items) {
+	        const out = [];
+	        const seen = new Set();
+	        for (const item of items) {
+	          const s = String(item || "").trim();
+	          if (!s || seen.has(s)) continue;
+	          seen.add(s);
+	          out.push(s);
+	        }
+	        return out;
 	      }
 
 	      function safeText(text) {
@@ -364,16 +425,104 @@
         document.getElementById("status-pill").innerHTML = statusPill(device.status);
 
         const imgEl = document.getElementById("device-image");
-        const rawImage = device.image ? String(device.image).trim() : "";
-        const isHttp = (s) => /^https?:\/\//i.test(s);
         const defaultImg = `hardware/${deviceId}/${deviceId}.png`;
-        const resolvedImg = !rawImage
-          ? defaultImg
-          : isHttp(rawImage)
-            ? rawImage
-            : rawImage.startsWith("hardware/")
-              ? rawImage
-              : `hardware/${rawImage.includes("/") ? rawImage : `${deviceId}/${rawImage}`}`;
+
+        const rawPrimary = device.image ? String(device.image).trim() : "";
+        const resolvedPrimary = rawPrimary
+          ? resolveHardwareAssetUrl(deviceId, rawPrimary)
+          : defaultImg;
+
+        const rawGallery =
+          Array.isArray(device.images)
+            ? device.images
+            : Array.isArray(device.gallery)
+              ? device.gallery
+              : Array.isArray(device.photos)
+                ? device.photos
+                : [];
+
+        const resolvedGallery = uniqueStrings([
+          resolvedPrimary,
+          ...rawGallery
+            .map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.src || x.url || "" : ""))
+            .map((x) => resolveHardwareAssetUrl(deviceId, x))
+            .filter(Boolean),
+        ]);
+
+        const gallery = resolvedGallery.length ? resolvedGallery : [resolvedPrimary];
+        const galleryAlt = (idx) => `${title}${gallery.length > 1 ? ` (${idx + 1}/${gallery.length})` : ""}`;
+
+        const prevBtn = document.getElementById("gallery-prev");
+        const nextBtn = document.getElementById("gallery-next");
+        const openBtn = document.getElementById("gallery-open");
+        const counterEl = document.getElementById("gallery-counter");
+        const thumbsWrapEl = document.getElementById("gallery-thumbs-wrap");
+        const thumbsEl = document.getElementById("gallery-thumbs");
+
+        const lightboxEl = document.getElementById("lightbox");
+        const lightboxTitleEl = document.getElementById("lightbox-title");
+        const lightboxImgEl = document.getElementById("lightbox-image");
+        const lightboxPrevBtn = document.getElementById("lightbox-prev");
+        const lightboxNextBtn = document.getElementById("lightbox-next");
+        const lightboxCloseBtn = document.getElementById("lightbox-close");
+
+        let currentIndex = 0;
+        const thumbButtons = [];
+
+        function updateNavVisibility() {
+          const show = gallery.length > 1;
+          imgEl.classList.toggle("cursor-zoom-in", show);
+          for (const button of [prevBtn, nextBtn, lightboxPrevBtn, lightboxNextBtn]) {
+            if (!button) continue;
+            button.classList.toggle("hidden", !show);
+            if (show) button.classList.add("inline-flex");
+          }
+          if (openBtn) openBtn.classList.toggle("hidden", !show);
+          if (thumbsWrapEl) thumbsWrapEl.classList.toggle("hidden", !show);
+        }
+
+        function setActiveThumb(idx) {
+          thumbButtons.forEach((b, i) => {
+            b.classList.toggle("border-brand-500", i === idx);
+            b.classList.toggle("ring-2", i === idx);
+            b.classList.toggle("ring-brand-200", i === idx);
+            b.classList.toggle("border-slate-200", i !== idx);
+          });
+        }
+
+        function setIndex(nextIndex, { fromLightbox = false } = {}) {
+          const n = gallery.length;
+          if (!n) return;
+          currentIndex = ((Number(nextIndex) % n) + n) % n;
+          imgEl.src = gallery[currentIndex];
+          imgEl.alt = galleryAlt(currentIndex);
+          if (counterEl) counterEl.textContent = ` ${currentIndex + 1}/${n}`;
+          setActiveThumb(currentIndex);
+          if (fromLightbox && lightboxImgEl) {
+            lightboxImgEl.src = gallery[currentIndex];
+            lightboxImgEl.alt = galleryAlt(currentIndex);
+          }
+        }
+
+        function openLightbox() {
+          if (!lightboxEl) return;
+          lightboxTitleEl.textContent = title;
+          lightboxImgEl.src = gallery[currentIndex];
+          lightboxImgEl.alt = galleryAlt(currentIndex);
+          lightboxEl.classList.remove("hidden");
+          document.body.style.overflow = "hidden";
+        }
+
+        function closeLightbox() {
+          if (!lightboxEl) return;
+          lightboxEl.classList.add("hidden");
+          document.body.style.overflow = "";
+        }
+
+        function step(delta, { fromLightbox = false } = {}) {
+          if (gallery.length <= 1) return;
+          setIndex(currentIndex + delta, { fromLightbox });
+        }
 
         imgEl.onerror = () => {
           if (imgEl.dataset.fallbackDone === "1") {
@@ -385,8 +534,62 @@
           imgEl.src = defaultImg;
         };
 
-        imgEl.src = resolvedImg;
-        imgEl.alt = title;
+        updateNavVisibility();
+
+        if (gallery.length > 1 && thumbsEl) {
+          thumbsEl.innerHTML = "";
+          gallery.forEach((src, idx) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className =
+              "relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white hover:bg-slate-50 transition focus:outline-none focus:ring-2 focus:ring-brand-200";
+            btn.title = `Image ${idx + 1}`;
+
+            const thumb = document.createElement("img");
+            thumb.src = src;
+            thumb.alt = `${title} thumbnail ${idx + 1}`;
+            thumb.loading = "lazy";
+            thumb.className = "w-full h-full object-cover";
+            thumb.onerror = () => {
+              thumb.remove();
+              btn.classList.add("bg-slate-50");
+              const label = document.createElement("div");
+              label.className = "w-full h-full flex items-center justify-center text-[10px] font-semibold text-slate-500 px-2 text-center";
+              const ext = String(src).split("?")[0].split("#")[0].split(".").pop();
+              label.textContent = ext ? ext.toUpperCase() : "IMG";
+              btn.appendChild(label);
+            };
+
+            btn.appendChild(thumb);
+            btn.addEventListener("click", () => setIndex(idx));
+            thumbsEl.appendChild(btn);
+            thumbButtons.push(btn);
+          });
+        }
+
+        if (prevBtn) prevBtn.addEventListener("click", () => step(-1));
+        if (nextBtn) nextBtn.addEventListener("click", () => step(1));
+        if (openBtn) openBtn.addEventListener("click", openLightbox);
+        imgEl.addEventListener("click", () => (gallery.length > 1 ? openLightbox() : null));
+
+        if (lightboxPrevBtn) lightboxPrevBtn.addEventListener("click", () => step(-1, { fromLightbox: true }));
+        if (lightboxNextBtn) lightboxNextBtn.addEventListener("click", () => step(1, { fromLightbox: true }));
+        if (lightboxCloseBtn) lightboxCloseBtn.addEventListener("click", closeLightbox);
+        if (lightboxEl) {
+          lightboxEl.addEventListener("click", (e) => {
+            if (e.target === lightboxEl) closeLightbox();
+          });
+        }
+
+        document.addEventListener("keydown", (e) => {
+          const isOpen = lightboxEl && !lightboxEl.classList.contains("hidden");
+          if (e.key === "Escape" && isOpen) return closeLightbox();
+          if (gallery.length <= 1) return;
+          if (e.key === "ArrowLeft") return step(-1, { fromLightbox: isOpen });
+          if (e.key === "ArrowRight") return step(1, { fromLightbox: isOpen });
+        });
+
+        setIndex(0);
 
 	        const oshwLabUrl = safeUrl(device.oshwLabUrl);
 	        const easyEdaUrl = safeUrl(device.easyEdaUrl);
@@ -508,5 +711,48 @@
 
       load().catch((err) => showError("Couldn’t load device", String(err)));
     </script>
+
+    <div
+      id="lightbox"
+      class="hidden fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="mx-auto max-w-5xl h-full flex flex-col">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div id="lightbox-title" class="text-white font-semibold truncate">Image</div>
+          <button
+            id="lightbox-close"
+            type="button"
+            class="h-10 w-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+            aria-label="Close"
+            title="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="relative flex-1 rounded-2xl overflow-hidden border border-white/10 bg-black/30">
+          <img id="lightbox-image" alt="" class="w-full h-full object-contain" />
+          <button
+            id="lightbox-prev"
+            type="button"
+            class="hidden absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+            aria-label="Previous image"
+            title="Previous"
+          >
+            ‹
+          </button>
+          <button
+            id="lightbox-next"
+            type="button"
+            class="hidden absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+            aria-label="Next image"
+            title="Next"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
