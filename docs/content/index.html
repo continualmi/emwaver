@@ -118,6 +118,14 @@
             border-radius: 12px;
         }
 
+        .hero-banner {
+            width: min(900px, 90vw);
+            margin: 1.5rem auto 1.25rem;
+            display: block;
+            border-radius: 16px;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+        }
+
         .hero .tagline {
             font-size: 1.5rem;
             margin-bottom: 2rem;
@@ -130,6 +138,63 @@
             justify-content: center;
             flex-wrap: wrap;
             margin-top: 2rem;
+        }
+
+        .store-badge {
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .store-badge img {
+            height: 52px;
+            width: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .store-badge:hover img {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .desktop-platforms {
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .platform-logos {
+            display: flex;
+            gap: 1.25rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .platform-logo {
+            width: 64px;
+            height: 64px;
+            background: white;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .platform-logo img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+
+        .desktop-downloads {
+            display: flex;
+            gap: 0.9rem;
+            justify-content: center;
+            flex-wrap: wrap;
         }
 
         .btn {
@@ -157,6 +222,18 @@
             background: rgba(255, 255, 255, 0.2);
             color: white;
             border: 2px solid white;
+        }
+
+        .btn-desktop {
+            background: #0f172a;
+            color: #f8fafc;
+            border: 2px solid rgba(248, 250, 252, 0.6);
+            padding: 0.7rem 1.4rem;
+            font-size: 0.95rem;
+        }
+
+        .btn-desktop:hover {
+            color: #ffffff;
         }
 
         /* Features Section */
@@ -318,6 +395,20 @@
                 height: 44px;
             }
 
+            .hero-banner {
+                width: min(90vw, 680px);
+            }
+
+            .platform-logo {
+                width: 56px;
+                height: 56px;
+            }
+
+            .platform-logo img {
+                width: 30px;
+                height: 30px;
+            }
+
             nav ul {
                 gap: 1rem;
                 font-size: 0.9rem;
@@ -355,20 +446,45 @@
                 <img src="logo.png" alt="EMWaver Logo">
                 EMWaver
             </h1>
-            <p class="tagline">Master Hardware, Firmware, Software</p>
-            <p style="font-size: 1.2rem; max-width: 700px; margin: 0 auto;">
-                Your all-in-one platform for wireless experimentation, device control, and embedded development.
+            <p class="tagline">Your hardware hacking development platform.</p>
+            <img src="banner.jpeg" alt="EMWaver banner" class="hero-banner">
+            <p style="font-size: 1.2rem; max-width: 760px; margin: 0 auto;">
+                Designed to integrate deeply with the EMWaver app across iOS, Android, and desktop.
+            </p>
+            <p style="font-size: 1.05rem; max-width: 700px; margin: 0.75rem auto 0;">
+                Available now for mobile, with the desktop app delivering the same experience on your computer.
             </p>
             <div class="cta-buttons">
-                <a href="https://apps.apple.com/app/emwaver" class="btn btn-primary" target="_blank">
-                    📱 Download for iOS
+                <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" class="store-badge" target="_blank" rel="noopener">
+                    <img src="badges/google-play.png" alt="Get it on Google Play">
                 </a>
-                <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" class="btn btn-primary" target="_blank">
-                    🤖 Download for Android
+                <a href="https://apps.apple.com/app/emwaver" class="store-badge" target="_blank" rel="noopener">
+                    <img src="badges/app-store.png" alt="Download on the App Store">
                 </a>
-                <a href="/documentation/" class="btn btn-secondary">
-                    📚 View Documentation
-                </a>
+            </div>
+            <div class="desktop-platforms">
+                <div class="platform-logos">
+                    <div class="platform-logo">
+                        <img src="logos/windows.svg" alt="Windows">
+                    </div>
+                    <div class="platform-logo">
+                        <img src="logos/apple.svg" alt="macOS">
+                    </div>
+                    <div class="platform-logo">
+                        <img src="logos/ubuntu.svg" alt="Ubuntu Linux">
+                    </div>
+                </div>
+                <div class="desktop-downloads">
+                    <a href="https://www.librasol.com.br/windows-button-download/" class="btn btn-desktop" target="_blank" rel="noopener">
+                        Download for Windows
+                    </a>
+                    <a href="https://github.com/waydabber/BetterDisplay" class="btn btn-desktop" target="_blank" rel="noopener">
+                        Download for macOS
+                    </a>
+                    <a href="/documentation/" class="btn btn-desktop">
+                        Download for Ubuntu
+                    </a>
+                </div>
             </div>
         </div>
     </section>
