@@ -15,7 +15,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #01579b 0%, #0288d1 100%);
             min-height: 100vh;
         }
 
@@ -43,10 +43,19 @@
         }
 
         nav .logo-small {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
             font-size: 1.5rem;
             font-weight: bold;
-            color: #667eea;
+            color: #01579b;
             text-decoration: none;
+        }
+
+        nav .logo-small img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
         }
 
         nav ul {
@@ -64,7 +73,7 @@
         }
 
         nav a:hover {
-            color: #667eea;
+            color: #01579b;
         }
 
         /* Hero Section */
@@ -75,26 +84,19 @@
         }
 
         .hero-logo {
-            width: 300px;
-            height: 300px;
             margin: 0 auto 2rem;
-            background: white;
-            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-20px); }
+            gap: 1.5rem;
+            flex-wrap: wrap;
         }
 
         .hero-logo img {
-            width: 250px;
+            width: 280px;
             height: auto;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
 
         .hero h1 {
@@ -102,6 +104,18 @@
             margin-bottom: 1rem;
             font-weight: 800;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .hero-title img {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
         }
 
         .hero .tagline {
@@ -136,7 +150,7 @@
 
         .btn-primary {
             background: white;
-            color: #667eea;
+            color: #01579b;
         }
 
         .btn-secondary {
@@ -202,7 +216,7 @@
         }
 
         .news-card h3 a:hover {
-            color: #667eea;
+            color: #01579b;
         }
 
         .news-card p {
@@ -212,7 +226,7 @@
         }
 
         .news-link {
-            color: #667eea;
+            color: #01579b;
             text-decoration: none;
             font-weight: 500;
         }
@@ -256,7 +270,7 @@
         .feature-card h3 {
             font-size: 1.5rem;
             margin-bottom: 1rem;
-            color: #667eea;
+            color: #01579b;
         }
 
         .feature-card p {
@@ -295,13 +309,13 @@
                 font-size: 2.5rem;
             }
 
-            .hero-logo {
+            .hero-logo img {
                 width: 200px;
-                height: 200px;
             }
 
-            .hero-logo img {
-                width: 150px;
+            .hero-title img {
+                width: 44px;
+                height: 44px;
             }
 
             nav ul {
@@ -315,7 +329,10 @@
     <!-- Navigation -->
     <nav>
         <div class="container">
-            <a href="/" class="logo-small">EMWaver</a>
+            <a href="/" class="logo-small">
+                <img src="logo.png" alt="EMWaver Logo">
+                EMWaver
+            </a>
             <ul>
                 <li><a href="/news/">News</a></li>
                 <li><a href="/documentation/">Documentation</a></li>
@@ -331,9 +348,13 @@
     <section class="hero">
         <div class="container">
             <div class="hero-logo">
-                <img src="logo.png" alt="EMWaver Logo">
+                <img src="landing1.jpeg" alt="EMWaver landing preview 1">
+                <img src="landing2.jpeg" alt="EMWaver landing preview 2">
             </div>
-            <h1>EMWaver</h1>
+            <h1 class="hero-title">
+                <img src="logo.png" alt="EMWaver Logo">
+                EMWaver
+            </h1>
             <p class="tagline">Master Hardware, Firmware, Software</p>
             <p style="font-size: 1.2rem; max-width: 700px; margin: 0 auto;">
                 Your all-in-one platform for wireless experimentation, device control, and embedded development.
