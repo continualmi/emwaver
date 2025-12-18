@@ -7,6 +7,7 @@ final class WaveletsViewModel: ObservableObject {
         let id: String
         var name: String
         var isDirty: Bool
+        var isAsset: Bool
     }
 
     struct Notice: Identifiable {
@@ -25,13 +26,21 @@ final class WaveletsViewModel: ObservableObject {
         var isDirty: Bool
     }
 
-    @Published private(set) var scripts: [ScriptListItem] = []
+    private struct AssetRecord {
+        let id: String
+        let name: String
+        let content: String
+    }
+
+    @Published private(set) var assetScripts: [ScriptListItem] = []
+    @Published private(set) var customScripts: [ScriptListItem] = []
     @Published var selectedScriptId: String?
     @Published var notice: Notice?
     @Published var isLoading = false
     @Published var isPerformingAction = false
 
     private var records: [String: ScriptRecord] = [:]
+    private var assetRecords: [String: AssetRecord] = [:]
 
     private let fileService: FileService
     private let defaults: UserDefaults
@@ -39,6 +48,15 @@ final class WaveletsViewModel: ObservableObject {
     private let scriptExtension = ".js"
     private let unsavedKey = "__unsaved__"
     private let lastScriptDefaultsKey = "wavelets.last_script_id"
+    private let assetIdPrefix = "__asset__"
+    private let assetScriptNames = [
+        "cc1101.js",
+        "gpio.js",
+        "ir_send_saved_signal.js",
+        "rfm69.js",
+        "usb.js",
+        "wavelet_demo.js"
+    ]
 
     init(
         fileService: FileService = .shared,
@@ -57,6 +75,8 @@ final class WaveletsViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
+        loadAssetScriptsFromBundle()
+
         do {
             let data = try await fileService.listFiles(
                 withExtension: scriptExtension,
@@ -64,25 +84,14 @@ final class WaveletsViewModel: ObservableObject {
                 accessToken: ""
             )
             mergeRemote(data)
-            
-            // If no scripts exist, load default scripts from bundle
-            if scripts.isEmpty {
-                await loadDefaultScriptsFromBundle()
-                // Reload after creating defaults
-                let updatedData = try await fileService.listFiles(
-                    withExtension: scriptExtension,
-                    includeContent: true,
-                    accessToken: ""
-                )
-                mergeRemote(updatedData)
-            }
-            
-            if scripts.isEmpty {
+
+            let allScripts = assetScripts + customScripts
+            if allScripts.isEmpty {
                 selectedScriptId = unsavedKey
-            } else if let selected = selectedScriptId, records[selected] == nil {
-                selectedScriptId = scripts.first?.id
+            } else if let selected = selectedScriptId, !isValidSelection(selected) {
+                selectedScriptId = allScripts.first?.id
             } else if selectedScriptId == nil {
-                selectedScriptId = scripts.first?.id
+                selectedScriptId = allScripts.first?.id
             }
             if let selected = selectedScriptId {
                 defaults.set(selected, forKey: lastScriptDefaultsKey)
@@ -91,82 +100,41 @@ final class WaveletsViewModel: ObservableObject {
             showError(message: error.localizedDescription)
         }
     }
-    
-    private func loadDefaultScriptsFromBundle() async {
-        let defaultScripts = [
-            "cc1101.js",
-            "cc1101_radio_console.js",
-            "cc1101_radio_module.js",
-            "hello_world_usb.js",
-            "wavelet_console_demo.js",
-            "wavelet_demo.js",
-            "wavelet_gpio.js",
-            "wavelet_rfid.js"
-        ]
-        
-        var successCount = 0
-        
-        for filename in defaultScripts {
-            let nameWithoutExt = filename.replacingOccurrences(of: ".js", with: "")
-            
-            // Try to find the file in bundle - first try with subdirectory, then without
-            var url: URL?
-            if let subdirUrl = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js", subdirectory: "DefaultScripts") {
-                url = subdirUrl
-            } else if let directUrl = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js") {
-                url = directUrl
-            }
-            
-            guard let fileUrl = url,
-                  let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
-                continue
-            }
-            
-            let normalized = resolveUniqueScriptName(normalizeScriptName(filename))
-            
-            do {
-                let metadata = try await fileService.createTextFile(name: normalized, content: content, accessToken: "")
-                let id = metadata.id
-                let record = ScriptRecord(
-                    id: id,
-                    metadata: metadata,
-                    name: metadata.name,
-                    draftContent: content,
-                    remoteContent: content,
-                    remoteEtag: metadata.etag,
-                    isDirty: false
-                )
-                records[id] = record
-                successCount += 1
-            } catch {
-                // Ignore errors for individual scripts
-            }
-        }
-        
-        if successCount > 0 {
-            rebuildScriptItems()
-            showInfo(title: "Default Scripts Loaded", message: "Loaded \(successCount) default wavelets")
-        }
-    }
 
     // MARK: - Accessors
 
     func scriptName(for id: String) -> String {
-        records[id]?.name ?? "Unsaved Script"
+        if let asset = assetRecords[id] {
+            return asset.name
+        }
+        return records[id]?.name ?? "Unsaved Script"
     }
 
     var unsavedIdentifier: String { unsavedKey }
 
     func scriptDraft(for id: String) -> String {
-        records[id]?.draftContent ?? ""
+        if let asset = assetRecords[id] {
+            return asset.content
+        }
+        return records[id]?.draftContent ?? ""
     }
 
     func isScriptDirty(_ id: String) -> Bool {
-        records[id]?.isDirty ?? false
+        if assetRecords[id] != nil {
+            return false
+        }
+        return records[id]?.isDirty ?? false
     }
 
     func isExistingScript(_ id: String) -> Bool {
-        records[id]?.metadata != nil
+        if assetRecords[id] != nil {
+            return true
+        }
+        return records[id]?.metadata != nil
+    }
+
+    func isAssetScript(_ id: String) -> Bool {
+        assetRecords[id] != nil
     }
 
     func draftBinding(for id: String) -> Binding<String> {
@@ -178,6 +146,12 @@ final class WaveletsViewModel: ObservableObject {
 
     func moduleSources() -> [String: String] {
         var modules: [String: String] = [:]
+        for asset in assetRecords.values {
+            guard !asset.content.isEmpty else { continue }
+            if isModuleScript(name: asset.name, content: asset.content) {
+                modules[asset.name] = asset.content
+            }
+        }
         for record in records.values {
             guard !record.draftContent.isEmpty else { continue }
             if isModuleScript(name: record.name, content: record.draftContent) {
@@ -188,6 +162,9 @@ final class WaveletsViewModel: ObservableObject {
     }
 
     func updateDraft(for id: String, content: String) {
+        if assetRecords[id] != nil {
+            return
+        }
         var record = ensureRecord(id: id)
         record.draftContent = content
         if let remote = record.remoteContent {
@@ -200,6 +177,9 @@ final class WaveletsViewModel: ObservableObject {
     }
 
     func ensureContent(for id: String) async {
+        if assetRecords[id] != nil {
+            return
+        }
         guard var record = records[id], record.remoteContent == nil, let metadata = record.metadata else {
             return
         }
@@ -220,6 +200,10 @@ final class WaveletsViewModel: ObservableObject {
     // MARK: - CRUD
 
     func saveScript(id: String) async {
+        if assetRecords[id] != nil {
+            notice = Notice(title: "Read-Only", message: "Asset scripts cannot be modified. Create a copy to edit.")
+            return
+        }
         guard var record = records[id] else { return }
 
         if record.metadata == nil {
@@ -289,6 +273,10 @@ final class WaveletsViewModel: ObservableObject {
     }
 
     func renameScript(id: String, newName rawName: String) async {
+        if assetRecords[id] != nil {
+            notice = Notice(title: "Read-Only", message: "Asset scripts cannot be renamed. Create a copy to edit.")
+            return
+        }
         guard var record = records[id], let metadata = record.metadata else { return }
         let normalized = resolveUniqueScriptName(normalizeScriptName(rawName), excluding: id)
 
@@ -308,6 +296,10 @@ final class WaveletsViewModel: ObservableObject {
     }
 
     func deleteScript(id: String) async {
+        if assetRecords[id] != nil {
+            notice = Notice(title: "Read-Only", message: "Asset scripts cannot be deleted.")
+            return
+        }
         guard let record = records[id], let metadata = record.metadata else { return }
 
         isPerformingAction = true
@@ -317,7 +309,8 @@ final class WaveletsViewModel: ObservableObject {
             try await fileService.deleteFile(id: metadata.id, etag: metadata.etag, accessToken: "")
             records.removeValue(forKey: id)
             if selectedScriptId == id {
-                selectedScriptId = scripts.first(where: { records[$0.id]?.metadata != nil })?.id ?? unsavedKey
+                let allScripts = assetScripts + customScripts
+                selectedScriptId = allScripts.first?.id ?? unsavedKey
                 defaults.set(selectedScriptId, forKey: lastScriptDefaultsKey)
             }
             rebuildScriptItems()
@@ -328,15 +321,21 @@ final class WaveletsViewModel: ObservableObject {
     }
 
     func copyScript(id: String, newName rawName: String) async -> String? {
-        guard let record = records[id], let metadata = record.metadata else { return nil }
+        let content: String
+        if let asset = assetRecords[id] {
+            content = asset.content
+        } else if let record = records[id] {
+            content = record.draftContent
+        } else {
+            return nil
+        }
         let normalized = resolveUniqueScriptName(normalizeScriptName(rawName))
-        let content = record.draftContent
 
         isPerformingAction = true
         defer { isPerformingAction = false }
 
         do {
-            let newMetadata = try await fileService.copyFile(sourceId: metadata.id, name: normalized, accessToken: "")
+            let newMetadata = try await fileService.createTextFile(name: normalized, content: content, accessToken: "")
             let newId = newMetadata.id
             let newRecord = ScriptRecord(
                 id: newId,
@@ -373,6 +372,7 @@ final class WaveletsViewModel: ObservableObject {
 
     private func mergeRemote(_ data: [UserFileData]) {
         var updated: [String: ScriptRecord] = [:]
+        let assetNameSet = Set(assetScriptNames.map { $0.lowercased() })
 
         // Preserve unsaved draft if it exists and has content
         if let unsaved = records[unsavedKey], !unsaved.draftContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -385,6 +385,9 @@ final class WaveletsViewModel: ObservableObject {
 
         for entry in data {
             let metadata = entry.metadata
+            if assetNameSet.contains(metadata.name.lowercased()) {
+                continue
+            }
             let id = metadata.id
             let remoteContent = entry.textContent ?? ""
             var record = existing[id] ?? ScriptRecord(
@@ -408,6 +411,27 @@ final class WaveletsViewModel: ObservableObject {
         }
 
         records = updated
+        rebuildScriptItems()
+    }
+
+    private func loadAssetScriptsFromBundle() {
+        var updated: [String: AssetRecord] = [:]
+
+        for filename in assetScriptNames {
+            let nameWithoutExt = filename.replacingOccurrences(of: ".js", with: "")
+            var url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js", subdirectory: "DefaultScripts")
+            if url == nil {
+                url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js")
+            }
+            guard let fileUrl = url,
+                  let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
+                continue
+            }
+            let id = assetIdPrefix + filename
+            updated[id] = AssetRecord(id: id, name: filename, content: content)
+        }
+
+        assetRecords = updated
         rebuildScriptItems()
     }
 
@@ -459,11 +483,18 @@ final class WaveletsViewModel: ObservableObject {
     }
 
     private func rebuildScriptItems() {
-        var items: [ScriptListItem] = records.values
+        var custom: [ScriptListItem] = records.values
             .filter { $0.metadata != nil }
-            .map { ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty) }
-        items.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        scripts = items
+            .map { ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false) }
+        custom.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        var assets = assetRecords.values.map {
+            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true)
+        }
+        assets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        customScripts = custom
+        assetScripts = assets
     }
 
     private func isModuleScript(name: String, content: String) -> Bool {
@@ -496,6 +527,7 @@ final class WaveletsViewModel: ObservableObject {
         let existingNames = Set(records.values
             .filter { $0.id != excludeId }
             .map { $0.name.lowercased() })
+            .union(assetScriptNames.map { $0.lowercased() })
 
         if !existingNames.contains(proposed.lowercased()) {
             return proposed
@@ -536,5 +568,12 @@ final class WaveletsViewModel: ObservableObject {
 
     private func showInfo(title: String, message: String) {
         notice = Notice(title: title, message: message)
+    }
+
+    private func isValidSelection(_ id: String) -> Bool {
+        if assetRecords[id] != nil {
+            return true
+        }
+        return records[id] != nil
     }
 }

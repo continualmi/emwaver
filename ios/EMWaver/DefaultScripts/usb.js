@@ -1,6 +1,15 @@
 WaveletConsole.subscribe(render);
 render();
 
+function writeLine(command) {
+    const text = command.endsWith('\n') ? command : command + '\n';
+    const bytes = new Array(text.length);
+    for (let i = 0; i < text.length; i += 1) {
+        bytes[i] = text.charCodeAt(i) & 0xFF;
+    }
+    DeviceConnection.write(createByteArray(bytes));
+}
+
 function render() {
     UI.render(UI.column({
         padding: 16,
@@ -22,13 +31,13 @@ function render() {
 
 function runDemo() {
     print('[BadUSB] Setting up HID attack mode...');
-    BLEService.sendString('usb ATTACKMODE HID');
+    writeLine('usb ATTACKMODE HID');
     Utils.delay(2000);
-    BLEService.sendString('usb STRING_DELAY 10');
+    writeLine('usb STRING_DELAY 10');
     Utils.delay(500);
-    BLEService.sendString('usb STRING Hello, World!');
+    writeLine('usb STRING Hello, World!');
     Utils.delay(500);
-    BLEService.sendString('usb ENTER');
+    writeLine('usb ENTER');
     Utils.delay(500);
     print('[BadUSB] Payload complete.');
 }
