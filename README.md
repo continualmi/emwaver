@@ -1,4 +1,8 @@
 <div align="center">
+  <img src="banner.jpeg" alt="EMWaver Banner" width="100%">
+</div>
+
+<div align="center">
   <img src="logo.png" alt="EMWaver Logo" width="250">
 </div>
 
