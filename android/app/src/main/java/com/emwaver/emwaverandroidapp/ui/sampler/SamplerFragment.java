@@ -464,7 +464,7 @@ public class SamplerFragment extends Fragment {
                     createNewSignal();
                     return true;
                 } else if (id == R.id.action_save_signal) {
-                    saveSignal();
+                    saveSignalToStorage();
                     return true;
                 } else if (id == R.id.action_rename_signal) {
                     renameSignal();
@@ -1548,10 +1548,14 @@ public class SamplerFragment extends Fragment {
             Toast.makeText(requireContext(), "No signal loaded", Toast.LENGTH_SHORT).show();
             return;
         }
-        
-        File currentFile = new File(signalsDir, currentSignalName);
-        if (!currentFile.exists()) {
-            Toast.makeText(requireContext(), "Current signal file not found", Toast.LENGTH_SHORT).show();
+        renameSignalByName(currentSignalName);
+    }
+
+    private void renameSignalByName(@NonNull String existingName) {
+        File existingFile = new File(signalsDir, existingName);
+        if (!existingFile.exists()) {
+            Toast.makeText(requireContext(), "Signal file not found", Toast.LENGTH_SHORT).show();
+            refreshSignalList();
             return;
         }
 
@@ -1559,9 +1563,9 @@ public class SamplerFragment extends Fragment {
         builder.setTitle("Rename Signal");
         builder.setMessage("Enter a new name:");
         final EditText input = new EditText(requireContext());
-        String currentNameWithoutExt = currentSignalName.replace(".raw", "");
-        input.setText(currentNameWithoutExt);
-        input.setSelection(currentNameWithoutExt.length());
+        String existingNameWithoutExt = existingName.replace(".raw", "");
+        input.setText(existingNameWithoutExt);
+        input.setSelection(existingNameWithoutExt.length());
         builder.setView(input);
         builder.setPositiveButton("Rename", (dialog, which) -> {
             String entered = input.getText() != null ? input.getText().toString().trim() : "";
@@ -1570,27 +1574,37 @@ public class SamplerFragment extends Fragment {
                 return;
             }
             String normalized = normalizeSignalName(entered);
-            if (normalized.equals(currentSignalName)) {
+            if (normalized.equals(existingName)) {
                 Toast.makeText(requireContext(), "Name unchanged", Toast.LENGTH_SHORT).show();
                 return;
             }
-            
+
             File newFile = new File(signalsDir, normalized);
             if (newFile.exists()) {
                 Toast.makeText(requireContext(), "A signal with this name already exists", Toast.LENGTH_SHORT).show();
                 return;
             }
-            
-            if (currentFile.renameTo(newFile)) {
+
+            boolean renamed = existingFile.renameTo(newFile);
+            if (!renamed) {
+                Toast.makeText(requireContext(), "Failed to rename signal", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            if (existingName.equals(currentSignalName)) {
                 currentSignalName = normalized;
                 hasUnsavedChanges = false;
                 saveLastSelectedSignal(normalized);
                 updateStatusBar();
-                refreshSignalList();
-                Toast.makeText(requireContext(), "Signal renamed", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(requireContext(), "Failed to rename signal", Toast.LENGTH_SHORT).show();
             }
+
+            refreshSignalList(() -> {
+                int signalIndex = savedSignalNames.indexOf(currentSignalName);
+                if (signalIndex >= 0 && binding != null) {
+                    binding.signalPicker.setSelection(signalIndex + 1);
+                }
+            });
+            Toast.makeText(requireContext(), "Signal renamed", Toast.LENGTH_SHORT).show();
         });
         builder.setNegativeButton("Cancel", null);
         builder.show();
@@ -1623,52 +1637,62 @@ public class SamplerFragment extends Fragment {
             Toast.makeText(requireContext(), "No signal loaded", Toast.LENGTH_SHORT).show();
             return;
         }
-        
-        File signalFile = new File(signalsDir, currentSignalName);
+        deleteSignalByName(currentSignalName);
+    }
+
+    private void deleteSignalByName(@NonNull String signalName) {
+        File signalFile = new File(signalsDir, signalName);
         if (!signalFile.exists()) {
             Toast.makeText(requireContext(), "Signal file not found", Toast.LENGTH_SHORT).show();
+            refreshSignalList();
             return;
         }
 
-        String signalName = currentSignalName;
-        int currentIndex = savedSignalNames.indexOf(currentSignalName);
-        
+        boolean deletingCurrent = signalName.equals(currentSignalName);
+        int currentIndex = savedSignalNames.indexOf(signalName);
+
         new AlertDialog.Builder(requireContext())
             .setTitle("Delete Signal")
             .setMessage("Delete " + signalName + "?")
             .setPositiveButton("Delete", (dialog, which) -> {
-                if (signalFile.delete()) {
-                    // Determine which signal name to load next before refreshing
-                    String nextSignalName = null;
-                    if (currentIndex >= 0 && savedSignalNames.size() > 1) {
-                        if (currentIndex < savedSignalNames.size() - 1) {
-                            // Load the next signal (at currentIndex + 1)
-                            nextSignalName = savedSignalNames.get(currentIndex + 1);
-                        } else {
-                            // Was last, wrap to first
-                            nextSignalName = savedSignalNames.get(0);
-                        }
-                    }
-                    
-                    final String finalNextSignalName = nextSignalName;
-                    
-                    // Refresh the list and then load the next signal
-                    refreshSignalList(() -> {
-                        if (finalNextSignalName != null && savedSignalNames.contains(finalNextSignalName)) {
-                            // Load the next signal (setting selection will trigger the listener)
-                            int nextIndex = savedSignalNames.indexOf(finalNextSignalName);
-                            binding.signalPicker.setSelection(nextIndex + 1); // +1 because position 0 is "New signal..."
-                        } else {
-                            // No signals left, select "New signal..." (setting selection will trigger the listener)
-                            binding.signalPicker.setSelection(0);
-                            saveLastSelectedSignal(null);
-                        }
-                    });
-                    
-                    Toast.makeText(requireContext(), "Signal deleted", Toast.LENGTH_SHORT).show();
-                } else {
+                if (!signalFile.delete()) {
                     Toast.makeText(requireContext(), "Failed to delete signal", Toast.LENGTH_SHORT).show();
+                    return;
                 }
+
+                if (!deletingCurrent) {
+                    refreshSignalList();
+                    Toast.makeText(requireContext(), "Signal deleted", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                String nextSignalName = null;
+                if (currentIndex >= 0 && savedSignalNames.size() > 1) {
+                    if (currentIndex < savedSignalNames.size() - 1) {
+                        nextSignalName = savedSignalNames.get(currentIndex + 1);
+                    } else {
+                        nextSignalName = savedSignalNames.get(0);
+                    }
+                }
+
+                final String finalNextSignalName = nextSignalName;
+                refreshSignalList(() -> {
+                    if (binding == null) {
+                        return;
+                    }
+                    if (finalNextSignalName != null && savedSignalNames.contains(finalNextSignalName)) {
+                        int nextIndex = savedSignalNames.indexOf(finalNextSignalName);
+                        binding.signalPicker.setSelection(nextIndex + 1);
+                    } else {
+                        binding.signalPicker.setSelection(0);
+                        saveLastSelectedSignal(null);
+                        currentSignalName = null;
+                        hasUnsavedChanges = false;
+                        updateStatusBar();
+                    }
+                });
+
+                Toast.makeText(requireContext(), "Signal deleted", Toast.LENGTH_SHORT).show();
             })
             .setNegativeButton("Cancel", null)
             .show();
