@@ -337,7 +337,7 @@
 
       function actionButton(label, url, primary, iconUrl) {
         const icon = iconUrl
-          ? `<img src="${iconUrl}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" class="w-4 h-4 rounded object-contain" onerror="this.onerror=null; this.style.display='none';" />`
+          ? `<img src="${iconUrl}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" class="w-5 h-5 object-contain" onerror="this.onerror=null; this.style.display='none';" />`
           : "";
         if (!url) {
           return `<button disabled class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-sm font-medium cursor-not-allowed">${icon}<span>${label}</span></button>`;
@@ -346,6 +346,20 @@
           return `<a href="${url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-500/10">${icon}<span>${label}</span></a>`;
         }
         return `<a href="${url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium transition">${icon}<span>${label}</span></a>`;
+      }
+
+      function casingThumbnailButton(id, src) {
+        return `
+          <button id="${id}" type="button" class="group inline-flex items-center gap-3 p-2 pr-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-sm">
+            <span class="relative w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shrink-0">
+              <img src="${src}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.onerror=null; this.style.display='none'; this.parentElement.classList.add('bg-slate-100');" />
+            </span>
+            <span class="text-left">
+              <span class="block text-sm font-semibold text-slate-900">3D casing</span>
+              <span class="block text-xs text-slate-500">Click to view</span>
+            </span>
+          </button>
+        `.trim();
       }
 
       function showError(message, detail) {
@@ -472,7 +486,7 @@
         function updateNavVisibility() {
           const show = gallery.length > 1;
           imgEl.classList.toggle("cursor-zoom-in", show);
-          for (const button of [prevBtn, nextBtn, lightboxPrevBtn, lightboxNextBtn]) {
+          for (const button of [prevBtn, nextBtn]) {
             if (!button) continue;
             button.classList.toggle("hidden", !show);
             if (show) button.classList.add("inline-flex");
@@ -490,7 +504,7 @@
           });
         }
 
-        function setIndex(nextIndex, { fromLightbox = false } = {}) {
+        function setIndex(nextIndex) {
           const n = gallery.length;
           if (!n) return;
           currentIndex = ((Number(nextIndex) % n) + n) % n;
@@ -498,17 +512,43 @@
           imgEl.alt = galleryAlt(currentIndex);
           if (counterEl) counterEl.textContent = ` ${currentIndex + 1}/${n}`;
           setActiveThumb(currentIndex);
-          if (fromLightbox && lightboxImgEl) {
-            lightboxImgEl.src = gallery[currentIndex];
-            lightboxImgEl.alt = galleryAlt(currentIndex);
+        }
+
+        function renderLightbox() {
+          if (!lightboxEl || !lightboxState) return;
+          const { images, title: lbTitle, index } = lightboxState;
+          const count = images.length;
+          const alt = `${lbTitle}${count > 1 ? ` (${index + 1}/${count})` : ""}`;
+          lightboxTitleEl.textContent = lbTitle;
+          lightboxImgEl.src = images[index];
+          lightboxImgEl.alt = alt;
+          for (const button of [lightboxPrevBtn, lightboxNextBtn]) {
+            if (!button) continue;
+            button.classList.toggle("hidden", count <= 1);
+            if (count > 1) button.classList.add("inline-flex");
+          }
+
+          const actionEl = document.getElementById("lightbox-action");
+          if (actionEl) {
+            const url = safeUrl(lightboxState.actionUrl);
+            const label = String(lightboxState.actionLabel || "").trim() || "Open link";
+            const iconUrl = safeUrl(lightboxState.actionIconUrl);
+            if (!url) {
+              actionEl.classList.add("hidden");
+            } else {
+              actionEl.href = url;
+              actionEl.innerHTML = `${iconUrl ? `<img src="${iconUrl}" alt="" aria-hidden="true" loading="lazy" class="w-5 h-5 object-contain" onerror="this.onerror=null; this.style.display='none';" />` : ""}<span>${safeText(label)}</span>`;
+              actionEl.classList.remove("hidden");
+            }
           }
         }
 
-        function openLightbox() {
+        let lightboxState = null;
+
+        function openLightbox(state) {
           if (!lightboxEl) return;
-          lightboxTitleEl.textContent = title;
-          lightboxImgEl.src = gallery[currentIndex];
-          lightboxImgEl.alt = galleryAlt(currentIndex);
+          lightboxState = state;
+          renderLightbox();
           lightboxEl.classList.remove("hidden");
           document.body.style.overflow = "hidden";
         }
@@ -517,11 +557,23 @@
           if (!lightboxEl) return;
           lightboxEl.classList.add("hidden");
           document.body.style.overflow = "";
+          lightboxState = null;
         }
 
-        function step(delta, { fromLightbox = false } = {}) {
+        function step(delta) {
           if (gallery.length <= 1) return;
-          setIndex(currentIndex + delta, { fromLightbox });
+          setIndex(currentIndex + delta);
+        }
+
+        function lightboxStep(delta) {
+          if (!lightboxState) return;
+          const { images } = lightboxState;
+          if (images.length <= 1) return;
+          const n = images.length;
+          const next = ((lightboxState.index + delta) % n + n) % n;
+          lightboxState.index = next;
+          renderLightbox();
+          if (typeof lightboxState.onIndexChange === "function") lightboxState.onIndexChange(next);
         }
 
         imgEl.onerror = () => {
@@ -569,11 +621,18 @@
 
         if (prevBtn) prevBtn.addEventListener("click", () => step(-1));
         if (nextBtn) nextBtn.addEventListener("click", () => step(1));
-        if (openBtn) openBtn.addEventListener("click", openLightbox);
-        imgEl.addEventListener("click", () => (gallery.length > 1 ? openLightbox() : null));
+        if (openBtn)
+          openBtn.addEventListener("click", () =>
+            openLightbox({ title, images: gallery, index: currentIndex, onIndexChange: (idx) => setIndex(idx) })
+          );
+        imgEl.addEventListener("click", () =>
+          gallery.length > 1
+            ? openLightbox({ title, images: gallery, index: currentIndex, onIndexChange: (idx) => setIndex(idx) })
+            : null
+        );
 
-        if (lightboxPrevBtn) lightboxPrevBtn.addEventListener("click", () => step(-1, { fromLightbox: true }));
-        if (lightboxNextBtn) lightboxNextBtn.addEventListener("click", () => step(1, { fromLightbox: true }));
+        if (lightboxPrevBtn) lightboxPrevBtn.addEventListener("click", () => lightboxStep(-1));
+        if (lightboxNextBtn) lightboxNextBtn.addEventListener("click", () => lightboxStep(1));
         if (lightboxCloseBtn) lightboxCloseBtn.addEventListener("click", closeLightbox);
         if (lightboxEl) {
           lightboxEl.addEventListener("click", (e) => {
@@ -584,9 +643,8 @@
         document.addEventListener("keydown", (e) => {
           const isOpen = lightboxEl && !lightboxEl.classList.contains("hidden");
           if (e.key === "Escape" && isOpen) return closeLightbox();
-          if (gallery.length <= 1) return;
-          if (e.key === "ArrowLeft") return step(-1, { fromLightbox: isOpen });
-          if (e.key === "ArrowRight") return step(1, { fromLightbox: isOpen });
+          if (e.key === "ArrowLeft") return isOpen ? lightboxStep(-1) : step(-1);
+          if (e.key === "ArrowRight") return isOpen ? lightboxStep(1) : step(1);
         });
 
         setIndex(0);
@@ -596,17 +654,39 @@
 	        const githubUrl = safeUrl(device.githubUrl);
 	        const schematicUrl = safeUrl(device.schematicUrl);
 	        const pcbUrl = safeUrl(device.pcbUrl);
+	        const onshapeUrl = safeUrl(device.onshapeUrl || (device.casing && device.casing.onshapeUrl));
+	        const casingRaw = device.casingImage || (device.casing && device.casing.image) || null;
+	        const casingImagesRaw = device.casingImages || (device.casing && device.casing.images) || null;
+	        const resolvedCasingImages = uniqueStrings([].concat(casingRaw || []).concat(casingImagesRaw || []))
+	          .map((x) => resolveHardwareAssetUrl(deviceId, x))
+	          .filter(Boolean);
 	
 	        const OSHW_ICON = "https://image.easyeda.com/avatars/2024/9/66Hu1UIb1xCgdcRIHsJDvgv7caIeg0LwlK8qwMFN.webp";
 	        const EASYEDA_ICON = "https://easyeda.com/images/easyeda-thumbnail.png?id=d5ed1fe5930602975df1";
+	        const ONSHAPE_ICON = "assets/onshape.jpg";
 	
 	        document.getElementById("action-buttons").innerHTML = [
+	          ...(resolvedCasingImages.length ? [casingThumbnailButton("open-casing", resolvedCasingImages[0])] : []),
 	          actionButton("Open in OSHW Lab", oshwLabUrl, true, OSHW_ICON),
 	          actionButton("Open in EasyEDA", easyEdaUrl, true, EASYEDA_ICON),
 	          actionButton("GitHub files", githubUrl, false),
 	          actionButton("Schematic", schematicUrl, false),
 	          actionButton("PCB", pcbUrl, false),
 	        ].join("");
+
+	        const openCasingBtn = document.getElementById("open-casing");
+	        if (openCasingBtn) {
+	          openCasingBtn.addEventListener("click", () =>
+	            openLightbox({
+	              title: `${title} — 3D Casing`,
+	              images: resolvedCasingImages,
+	              index: 0,
+	              actionLabel: "Open in Onshape",
+	              actionUrl: onshapeUrl,
+	              actionIconUrl: ONSHAPE_ICON,
+	            })
+	          );
+	        }
 
         const relationsEl = document.getElementById("relations");
         const parent = device.parent ? String(device.parent).trim() : "";
@@ -721,15 +801,26 @@
       <div class="mx-auto max-w-5xl h-full flex flex-col">
         <div class="flex items-center justify-between gap-3 mb-3">
           <div id="lightbox-title" class="text-white font-semibold truncate">Image</div>
-          <button
-            id="lightbox-close"
-            type="button"
-            class="h-10 w-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
-            aria-label="Close"
-            title="Close"
-          >
-            ✕
-          </button>
+          <div class="flex items-center gap-2 shrink-0">
+            <a
+              id="lightbox-action"
+              href="#"
+              target="_blank"
+              rel="noreferrer"
+              class="hidden items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition text-sm font-semibold"
+            >
+              <span>Open link</span>
+            </a>
+            <button
+              id="lightbox-close"
+              type="button"
+              class="h-10 w-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+              aria-label="Close"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         <div class="relative flex-1 rounded-2xl overflow-hidden border border-white/10 bg-black/30">
           <img id="lightbox-image" alt="" class="w-full h-full object-contain" />
