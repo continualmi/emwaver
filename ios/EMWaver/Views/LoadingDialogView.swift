@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LoadingDialogView: View {
+    let title: String
     let progress: Double
     let completedSteps: Int
     let totalSteps: Int
@@ -10,7 +11,7 @@ struct LoadingDialogView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                Text("Initializing RFM69")
+                Text(title)
                     .font(.headline)
                     .padding(.top)
                 
@@ -59,6 +60,7 @@ struct LoadingDialogView: View {
 
 #Preview {
     LoadingDialogView(
+        title: "Initializing RFM69",
         progress: 0.5,
         completedSteps: 25,
         totalSteps: 50,
