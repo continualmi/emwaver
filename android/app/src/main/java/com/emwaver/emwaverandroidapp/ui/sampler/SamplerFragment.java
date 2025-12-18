@@ -157,6 +157,11 @@ public class SamplerFragment extends Fragment {
     private static final String PREF_SELECTED_PIN_INDEX_STM32 = "selectedSamplerPinIndexStm32";
     private static final String PREF_SELECTED_DEVICE_TYPE = "sampler_selected_device_type";
     private static final String PREF_LAST_SELECTED_SIGNAL = "sampler_last_selected_signal";
+    private static final String PREF_TX_PWM_ENABLED = "sampler_tx_pwm_enabled";
+    private static final String PREF_TX_PWM_FREQ_HZ = "sampler_tx_pwm_freq_hz";
+    private static final String PREF_TX_PWM_DUTY_PERCENT = "sampler_tx_pwm_duty_percent";
+    private static final int DEFAULT_TX_PWM_FREQ_HZ = 38000;
+    private static final int DEFAULT_TX_PWM_DUTY_PERCENT = 50;
     private static final String SIGNALS_DIR = "signals";
 
     private File signalsDir;
@@ -235,6 +240,21 @@ public class SamplerFragment extends Fragment {
         View root = binding.getRoot();
 
         chart = binding.chart;
+
+        SharedPreferences pwmPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        boolean pwmEnabled = pwmPrefs.getBoolean(PREF_TX_PWM_ENABLED, false);
+        int pwmFreqHz = pwmPrefs.getInt(PREF_TX_PWM_FREQ_HZ, DEFAULT_TX_PWM_FREQ_HZ);
+        int pwmDutyPercent = pwmPrefs.getInt(PREF_TX_PWM_DUTY_PERCENT, DEFAULT_TX_PWM_DUTY_PERCENT);
+        binding.pwmSwitch.setChecked(pwmEnabled);
+        binding.pwmFreqEdit.setText(String.valueOf(pwmFreqHz));
+        binding.pwmDutyEdit.setText(String.valueOf(pwmDutyPercent));
+        binding.pwmFreqEdit.setEnabled(pwmEnabled);
+        binding.pwmDutyEdit.setEnabled(pwmEnabled);
+        binding.pwmSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            pwmPrefs.edit().putBoolean(PREF_TX_PWM_ENABLED, isChecked).apply();
+            binding.pwmFreqEdit.setEnabled(isChecked);
+            binding.pwmDutyEdit.setEnabled(isChecked);
+        });
 
         // Setup signal picker
         List<String> pickerItems = new ArrayList<>();
@@ -1030,6 +1050,24 @@ public class SamplerFragment extends Fragment {
             
             // Format command for ESP32: "transmit start --pin=<pin>"
             String commandStr = "transmit start --pin=" + pinNumber;
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            if (binding.pwmSwitch.isChecked()) {
+                int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
+                int dutyPercent = parsePwmIntOrDefault(binding.pwmDutyEdit.getText().toString(), DEFAULT_TX_PWM_DUTY_PERCENT);
+                if (freqHz < 1) {
+                    Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (dutyPercent < 1 || dutyPercent > 100) {
+                    Toast.makeText(getContext(), "Invalid PWM duty (1-100)", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                prefs.edit()
+                        .putInt(PREF_TX_PWM_FREQ_HZ, freqHz)
+                        .putInt(PREF_TX_PWM_DUTY_PERCENT, dutyPercent)
+                        .apply();
+                commandStr += " --pwm --freq=" + freqHz + " --duty=" + dutyPercent;
+            }
             byte[] commandBytes = commandStr.getBytes();
             BLEService.write(commandBytes);
 
@@ -1042,6 +1080,21 @@ public class SamplerFragment extends Fragment {
                   " bytes = " + (postTransmitLength * 8) + " bits");
 
             Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples on " + selectedPinString, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private int parsePwmIntOrDefault(String raw, int defaultValue) {
+        if (raw == null) {
+            return defaultValue;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(trimmed);
+        } catch (NumberFormatException e) {
+            return defaultValue;
         }
     }
 
@@ -1344,6 +1397,12 @@ public class SamplerFragment extends Fragment {
         if (!isAdded() || binding == null) {
             return;
         }
+
+        boolean supportsPwmRetransmit = currentDeviceType != DEVICE_STM32;
+        binding.pwmSwitch.setEnabled(supportsPwmRetransmit);
+        boolean pwmEnabled = supportsPwmRetransmit && binding.pwmSwitch.isChecked();
+        binding.pwmFreqEdit.setEnabled(pwmEnabled);
+        binding.pwmDutyEdit.setEnabled(pwmEnabled);
 
         String[] pins = (currentDeviceType == DEVICE_STM32) ? STM32_PINS : ESP32_PINS;
 

@@ -114,6 +114,39 @@
                 app:iconTint="@android:color/white"
                 app:iconTintMode="src_in" />
 
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/pwmSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Use PWM carrier (IR)"
+                android:checked="false" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/pwmFreqEdit"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:hint="Freq (Hz)"
+                    android:inputType="number" />
+
+                <EditText
+                    android:id="@+id/pwmDutyEdit"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:hint="Duty (%)"
+                    android:inputType="number" />
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/getTimingsButton"
                 android:layout_width="match_parent"
