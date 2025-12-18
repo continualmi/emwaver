@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMWaver - Master Hardware, Firmware, Software</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Top Navigation */
+        nav {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        nav .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        nav .logo-small {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            color: #333;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: #667eea;
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 4rem 0 6rem;
+            color: white;
+        }
+
+        .hero-logo {
+            width: 300px;
+            height: 300px;
+            margin: 0 auto 2rem;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .hero-logo img {
+            width: 250px;
+            height: auto;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            font-weight: 800;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero .tagline {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid white;
+        }
+
+        /* Features Section */
+        .features {
+            background: white;
+            padding: 5rem 0;
+        }
+
+        /* News Section */
+        .news {
+            background: #f8f9fa;
+            padding: 5rem 0;
+        }
+
+        .news h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #333;
+        }
+
+        .news-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .news-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .news-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .news-date {
+            color: #999;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .news-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .news-card h3 a {
+            color: #333;
+            text-decoration: none;
+        }
+
+        .news-card h3 a:hover {
+            color: #667eea;
+        }
+
+        .news-card p {
+            color: #666;
+            line-height: 1.8;
+            margin-bottom: 1rem;
+        }
+
+        .news-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .news-link:hover {
+            text-decoration: underline;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            color: #333;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.8;
+        }
+
+        /* Footer */
+        footer {
+            background: #1a1a1a;
+            color: white;
+            padding: 3rem 0;
+            text-align: center;
+        }
+
+        footer .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: none;
+            font-size: 1.5rem;
+            transition: transform 0.2s;
+        }
+
+        footer a:hover {
+            transform: scale(1.2);
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-logo {
+                width: 200px;
+                height: 200px;
+            }
+
+            .hero-logo img {
+                width: 150px;
+            }
+
+            nav ul {
+                gap: 1rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <a href="/" class="logo-small">EMWaver</a>
+            <ul>
+                <li><a href="/news/">News</a></li>
+                <li><a href="/documentation/">Documentation</a></li>
+                <li><a href="https://github.com/luispl77/emwaver" target="_blank">Source Code</a></li>
+                <li><a href="/hardware/">Hardware</a></li>
+                <li><a href="https://github.com/luispl77/emwaver-hardware" target="_blank">Evolution</a></li>
+                <li><a href="/wavelets/">Wavelets</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-logo">
+                <img src="logo.png" alt="EMWaver Logo">
+            </div>
+            <h1>EMWaver</h1>
+            <p class="tagline">Master Hardware, Firmware, Software</p>
+            <p style="font-size: 1.2rem; max-width: 700px; margin: 0 auto;">
+                Your all-in-one platform for wireless experimentation, device control, and embedded development.
+            </p>
+            <div class="cta-buttons">
+                <a href="https://apps.apple.com/app/emwaver" class="btn btn-primary" target="_blank">
+                    📱 Download for iOS
+                </a>
+                <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" class="btn btn-primary" target="_blank">
+                    🤖 Download for Android
+                </a>
+                <a href="/documentation/" class="btn btn-secondary">
+                    📚 View Documentation
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2>Powerful Features</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📜</div>
+                    <h3><a href="https://github.com/luispl77/emwaver-hardware" style="text-decoration: none; color: inherit;" target="_blank">Board Evolution</a></h3>
+                    <p>Explore the history of EMWaver hardware. A visual archive of all 20+ board versions and their design stories.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📡</div>
+                    <h3>Sub-GHz Radio</h3>
+                    <p>Control and analyze sub-GHz signals with CC1101 transceiver. Perfect for IoT, remote controls, and wireless experimentation.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔴</div>
+                    <h3>Infrared Control</h3>
+                    <p>Send and receive IR signals. Learn, analyze, and control IR devices with built-in IR transmitter and receiver.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Wavelets</h3>
+                    <p>Extend functionality with JavaScript-based Wavelets. Create custom UIs and device workflows without firmware changes.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>16 GPIO Pins</h3>
+                    <p>Connect any hardware you need. Full GPIO access for sensors, displays, and custom peripherals.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>Mobile Apps</h3>
+                    <p>Native iOS and Android apps for device control, signal analysis, and Wavelet management.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💻</div>
+                    <h3>CLI Tool</h3>
+                    <p>Command-line interface for automation, scripting, and headless device control.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- News Section -->
+    <section class="news">
+        <div class="container">
+            <h2>Latest News</h2>
+            <div class="news-grid">
+                <div class="news-card">
+                    <div class="news-date">January 9, 2025</div>
+                    <h3><a href="/news/posts/welcome-to-emwaver.html">Welcome to EMWaver</a></h3>
+                    <p>Welcome to the EMWaver blog! This is where we'll share updates, news, and insights about EMWaver hardware and software development.</p>
+                    <a href="/news/posts/welcome-to-emwaver.html" class="news-link">Read more →</a>
+                </div>
+                <!-- Add more news cards here as you create posts -->
+            </div>
+            <div style="text-align: center; margin-top: 2rem;">
+                <a href="/news/" class="btn btn-secondary">View All News</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p style="font-size: 1.2rem; margin-bottom: 1rem;">Connect with us</p>
+            <div class="social-links">
+                <a href="https://github.com/luispl77/emwaver" target="_blank" title="GitHub">🐙</a>
+                <a href="https://twitter.com/emwaver" target="_blank" title="Twitter">🐦</a>
+                <a href="https://discord.gg/emwaver" target="_blank" title="Discord">💬</a>
+                <a href="mailto:contact@emwaver.com" title="Email">✉️</a>
+            </div>
+            <p style="margin-top: 2rem; opacity: 0.8;">
+                © 2025 EMWaver. Open source hardware and software.
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

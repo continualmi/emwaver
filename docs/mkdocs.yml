@@ -1,4 +1,7 @@
 site_name: EMWaver
+site_dir: docs
+site_url: https://emwavers.com/
+docs_dir: content
 theme:
   name: material
   features:
@@ -24,7 +27,7 @@ extra:
   toc:
     sidebar: false
 nav:
-  - Home: /
+  - Overview: overview.md
   - Hardware: hardware.md
   - Wavelets: wavelets.md
   - EMWaver DSL: emwaver-dsl.md
