@@ -1,7 +1,8 @@
 // Simple GPIO control wavelet
 let selectedTarget = "esp32";
 let selectedPin = "";
-let resultText = "";
+let selectedMode = "out";
+let status = "";
 
 const TARGETS = [
     { label: "ESP32-S3", value: "esp32" },
@@ -43,54 +44,19 @@ function pinsForTarget(target) {
     return target === "stm32" ? STM32_PINS : ESP32_PINS;
 }
 
-function ensureBleService() {
-    if (!BLEService || typeof BLEService.sendCommand !== "function") {
-        throw new Error("BLE Service not connected");
-    }
-}
-
-function stringToBytes(command) {
-    const text = command.endsWith("\n") ? command : command + "\n";
-    const bytes = new Array(text.length);
-    for (let i = 0; i < text.length; i += 1) {
-        bytes[i] = text.charCodeAt(i) & 0xFF;
-    }
-    return createByteArray(bytes);
-}
-
-function sendCommand(command, timeoutMs) {
-    ensureBleService();
-    const payload = stringToBytes(command);
-    return BLEService.sendCommand(payload, timeoutMs || 2000);
-}
-
-function isErrorResponse(response) {
-    return response && response.length === 1 && response[0] === 0xFF;
-}
-
 selectedPin = pinsForTarget(selectedTarget)[0].value;
 
 function gpioRead() {
-    console.log("gpioRead called with selectedPin: " + selectedPin);
-    try {
-        const pins = pinsForTarget(selectedTarget);
-        let pinNumber = parseInt(selectedPin, 10);
-        sendCommand("gpio in --pin=" + pinNumber, 1000);
-        let response = sendCommand("gpio read --pin=" + pinNumber, 2000);
+    status = "Reading...";
+    render();
 
-        if (!response || response.length === 0) {
-            resultText = "GPIO read failed or timed out";
-        } else if (isErrorResponse(response)) {
-            resultText = "GPIO read error";
-        } else {
-            let state = response[0] !== 0;
-            let pinInfo = pins.find(p => p.value === selectedPin);
-            let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-            resultText = "Read " + pinName + ": " + (state ? "HIGH" : "LOW");
-        }
-    } catch (error) {
-        resultText = "GPIO read error: " + error;
-    }
+    DeviceConnection.sendCommandString("gpio " + selectedMode + " --pin=" + selectedPin);
+    let response = DeviceConnection.sendCommandString("gpio read --pin=" + selectedPin);
+
+    let state = response && response.length > 0 && response[0] !== 0;
+    let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
+    let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+    status = pinName + " is " + (state ? "HIGH" : "LOW");
     render();
 }
 
@@ -103,28 +69,15 @@ function gpioWriteLow() {
 }
 
 function gpioWrite(value) {
-    console.log("gpioWrite called with value: " + value + " selectedPin: " + selectedPin);
-    try {
-        const pins = pinsForTarget(selectedTarget);
-        let pinNumber = parseInt(selectedPin, 10);
-        sendCommand("gpio out --pin=" + pinNumber, 1000);
-        let response = sendCommand(value ? "gpio high --pin=" + pinNumber : "gpio low --pin=" + pinNumber, 2000);
+    status = value ? "Setting HIGH..." : "Setting LOW...";
+    render();
 
-        if (!response || response.length === 0) {
-            resultText = "GPIO write failed or timed out";
-        } else if (isErrorResponse(response)) {
-            resultText = "GPIO write error";
-        } else {
-            let state = response[0] !== 0;
-            let writeAction = value ? "HIGH" : "LOW";
-            let pinInfo = pins.find(p => p.value === selectedPin);
-            let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-            let success = (state === (value !== 0));
-            resultText = "Write " + writeAction + " to " + pinName + (success ? " successful" : " failed");
-        }
-    } catch (error) {
-        resultText = "GPIO write error: " + error;
-    }
+    DeviceConnection.sendCommandString("gpio out --pin=" + selectedPin);
+    DeviceConnection.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+
+    let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
+    let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+    status = "Set " + pinName + " " + (value ? "HIGH" : "LOW");
     render();
 }
 
@@ -143,7 +96,7 @@ function render() {
                 onChange: function(value) {
                     selectedTarget = value;
                     selectedPin = pinsForTarget(selectedTarget)[0].value;
-                    resultText = "";
+                    status = "";
                     render();
                 }
             }),
@@ -155,7 +108,20 @@ function render() {
                 options: pins,
                 onChange: function(value) {
                     selectedPin = value;
-                    console.log("Pin changed to value: " + selectedPin + " (type: " + typeof value + ")");
+                }
+            }),
+
+            // Mode selection
+            UI.text({ text: "Mode", fontWeight: "medium" }),
+            UI.picker({
+                style: "menu",
+                selected: selectedMode,
+                options: [
+                    { label: "Output", value: "out" },
+                    { label: "Input", value: "in" }
+                ],
+                onChange: function(value) {
+                    selectedMode = value;
                 }
             }),
             
@@ -170,10 +136,10 @@ function render() {
             }),
             
             // Result display
-            resultText ? UI.text({
-                text: resultText,
-                backgroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#DCFCE7" : "#FEE2E2",
-                foregroundColor: resultText.includes("successful") || resultText.includes("HIGH") || resultText.includes("LOW") ? "#166534" : "#DC2626",
+            status ? UI.text({
+                text: status,
+                backgroundColor: "#111827",
+                foregroundColor: "#FFFFFF",
                 padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
                 cornerRadius: 8
             }) : null
