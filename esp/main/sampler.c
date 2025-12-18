@@ -25,6 +25,7 @@
 #include "ble_server.h"
 #include "command_registry.h"
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "driver/timer.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -34,6 +35,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "hal/ledc_ll.h"
 #include "soc/timer_group_reg.h"
 #include "soc/timer_group_struct.h"
 
@@ -46,6 +48,10 @@
 #define TRANSMISSION_TIMEOUT_MS 2000
 #define MONITOR_CHECK_INTERVAL_MS 10
 #define BLE_RX_BUFFER_SIZE 4096
+#define TRANSMIT_PWM_DEFAULT_FREQ_HZ 38000
+#define TRANSMIT_PWM_DEFAULT_DUTY_PERCENT 50
+#define TRANSMIT_PWM_MAX_FREQ_HZ 1000000
+#define TRANSMIT_PWM_MIN_FREQ_HZ 1
 
 static const char *TAG = "SAMPLER";
 
@@ -67,7 +73,7 @@ static bool transmission_active = false;
 
 static void sampler_start_command(int pin);
 static void sampler_stop_command(void);
-static void transmit_start_command(int pin);
+static void transmit_start_command(int pin, bool pwm, int freq_hz, int duty_percent);
 static void transmit_stop_command(void);
 static void sampler_task(void *pv_parameters);
 static void transmission_monitor_task(void *pv_parameters);
@@ -76,8 +82,21 @@ static void IRAM_ATTR sampling_isr(void *arg);
 static void IRAM_ATTR transmission_isr(void *arg);
 static bool sampler_start_impl(int pin, const char **err_msg);
 static bool sampler_stop_impl(const char **err_msg);
-static bool transmit_start_impl(int pin, const char **err_msg);
+static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent, const char **err_msg);
 static bool transmit_stop_impl(const char **err_msg);
+
+static bool transmit_pwm_configure(gpio_num_t gpio, uint32_t freq_hz, uint8_t duty_percent, const char **err_msg);
+static void transmit_pwm_set_enabled_isr(bool enabled);
+static void transmit_pwm_stop(void);
+
+static bool transmit_use_pwm = false;
+static uint32_t transmit_pwm_freq_hz = TRANSMIT_PWM_DEFAULT_FREQ_HZ;
+static uint8_t transmit_pwm_duty_percent = TRANSMIT_PWM_DEFAULT_DUTY_PERCENT;
+static bool transmit_pwm_configured = false;
+static bool transmit_pwm_enabled_state = false;
+static ledc_mode_t transmit_ledc_speed_mode = LEDC_LOW_SPEED_MODE;
+static ledc_timer_t transmit_ledc_timer = LEDC_TIMER_0;
+static ledc_channel_t transmit_ledc_channel = LEDC_CHANNEL_0;
 
 void sampler_module_init(void)
 {
@@ -88,6 +107,12 @@ void sampler_module_init(void)
     transmission_monitor_task_handle = NULL;
     sampling_active = false;
     transmission_active = false;
+
+    transmit_use_pwm = false;
+    transmit_pwm_freq_hz = TRANSMIT_PWM_DEFAULT_FREQ_HZ;
+    transmit_pwm_duty_percent = TRANSMIT_PWM_DEFAULT_DUTY_PERCENT;
+    transmit_pwm_configured = false;
+    transmit_pwm_enabled_state = false;
 }
 
 void sampler_register_commands(void)
@@ -111,6 +136,9 @@ void sampler_register_commands(void)
         (void *)transmit_start_command,
         (const cmd_arg_spec_t[]){
             {"pin", CMD_ARG_INT, true},
+            {"pwm", CMD_ARG_BOOL, false},
+            {"freq", CMD_ARG_INT, false},
+            {"duty", CMD_ARG_INT, false},
             {NULL, CMD_ARG_DONE, false},
         });
     ok &= register_command(
@@ -179,10 +207,10 @@ static void sampler_stop_command(void)
     }
 }
 
-static void transmit_start_command(int pin)
+static void transmit_start_command(int pin, bool pwm, int freq_hz, int duty_percent)
 {
     const char *err = NULL;
-    if (transmit_start_impl(pin, &err)) {
+    if (transmit_start_impl(pin, pwm, freq_hz, duty_percent, &err)) {
         command_send_ok(NULL, 0);
     } else {
         command_send_err(err ? err : "transmit start");
@@ -326,10 +354,14 @@ static void IRAM_ATTR transmission_isr(void *arg)
         }
     }
 
-    if (current_byte & (1U << bit_index)) {
-        gpio_set_level(sampler_pin, 1);
+    bool bit_set = (current_byte & (1U << bit_index)) != 0;
+    if (transmit_use_pwm && transmit_pwm_configured) {
+        transmit_pwm_set_enabled_isr(bit_set);
+        if (!bit_set) {
+            gpio_set_level(sampler_pin, 0);
+        }
     } else {
-        gpio_set_level(sampler_pin, 0);
+        gpio_set_level(sampler_pin, bit_set ? 1 : 0);
     }
 
     bit_index++;
@@ -491,7 +523,7 @@ static bool sampler_stop_impl(const char **err_msg)
     return true;
 }
 
-static bool transmit_start_impl(int pin, const char **err_msg)
+static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent, const char **err_msg)
 {
     if (err_msg) {
         *err_msg = NULL;
@@ -511,6 +543,29 @@ static bool transmit_start_impl(int pin, const char **err_msg)
         return false;
     }
 
+    uint32_t effective_freq_hz = transmit_pwm_freq_hz;
+    uint8_t effective_duty_percent = transmit_pwm_duty_percent;
+
+    if (freq_hz > 0) {
+        if (freq_hz < TRANSMIT_PWM_MIN_FREQ_HZ || freq_hz > TRANSMIT_PWM_MAX_FREQ_HZ) {
+            if (err_msg) {
+                *err_msg = "transmit start: freq";
+            }
+            return false;
+        }
+        effective_freq_hz = (uint32_t)freq_hz;
+    }
+
+    if (duty_percent > 0) {
+        if (duty_percent < 1 || duty_percent > 100) {
+            if (err_msg) {
+                *err_msg = "transmit start: duty";
+            }
+            return false;
+        }
+        effective_duty_percent = (uint8_t)duty_percent;
+    }
+
     gpio_config_t io_conf = {
         .pin_bit_mask = 1ULL << pin,
         .mode = GPIO_MODE_OUTPUT,
@@ -521,6 +576,18 @@ static bool transmit_start_impl(int pin, const char **err_msg)
     gpio_config(&io_conf);
 
     sampler_pin = (uint16_t)pin;
+    transmit_use_pwm = pwm;
+    transmit_pwm_freq_hz = effective_freq_hz;
+    transmit_pwm_duty_percent = effective_duty_percent;
+
+    transmit_pwm_configured = false;
+    if (transmit_use_pwm) {
+        if (!transmit_pwm_configure((gpio_num_t)pin, transmit_pwm_freq_hz, transmit_pwm_duty_percent, err_msg)) {
+            transmit_use_pwm = false;
+            return false;
+        }
+    }
+
     ble_set_transmitter_mode(1);
 
     configure_timer(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER, TRANSMIT_INTERVAL_US, true);
@@ -560,7 +627,8 @@ static bool transmit_start_impl(int pin, const char **err_msg)
         }
     }
 
-    ESP_LOGI(TAG, "Transmission initialized on pin %d", pin);
+    ESP_LOGI(TAG, "Transmission initialized on pin %d (pwm=%d freq=%lu duty=%u%%)",
+             pin, transmit_use_pwm ? 1 : 0, (unsigned long)transmit_pwm_freq_hz, (unsigned int)transmit_pwm_duty_percent);
     return true;
 }
 
@@ -582,6 +650,9 @@ static bool transmit_stop_impl(const char **err_msg)
         transmission_timer_isr_handle = NULL;
     }
 
+    if (transmit_pwm_configured) {
+        transmit_pwm_stop();
+    }
     gpio_set_level(sampler_pin, 0);
     ble_set_transmitter_mode(0);
     transmission_active = false;
@@ -602,10 +673,89 @@ bool sampler_stop_sampling(void)
 
 bool sampler_start_transmission(int pin)
 {
-    return transmit_start_impl(pin, NULL);
+    return transmit_start_impl(pin, false, 0, 0, NULL);
 }
 
 bool sampler_stop_transmission(void)
 {
     return transmit_stop_impl(NULL);
+}
+
+static bool transmit_pwm_configure(gpio_num_t gpio, uint32_t freq_hz, uint8_t duty_percent, const char **err_msg)
+{
+    if (err_msg) {
+        *err_msg = NULL;
+    }
+
+    if (duty_percent == 0 || duty_percent > 100) {
+        if (err_msg) {
+            *err_msg = "transmit pwm: duty";
+        }
+        return false;
+    }
+
+    ledc_timer_config_t timer_conf = {
+        .speed_mode = transmit_ledc_speed_mode,
+        .timer_num = transmit_ledc_timer,
+        .duty_resolution = LEDC_TIMER_10_BIT,
+        .freq_hz = (uint32_t)freq_hz,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    esp_err_t err = ledc_timer_config(&timer_conf);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ledc_timer_config failed: %s", esp_err_to_name(err));
+        if (err_msg) {
+            *err_msg = "transmit pwm: timer";
+        }
+        return false;
+    }
+
+    uint32_t max_duty = (1U << LEDC_TIMER_10_BIT) - 1U;
+    uint32_t duty = (max_duty * (uint32_t)duty_percent) / 100U;
+
+    ledc_channel_config_t ch_conf = {
+        .gpio_num = (int)gpio,
+        .speed_mode = transmit_ledc_speed_mode,
+        .channel = transmit_ledc_channel,
+        .intr_type = LEDC_INTR_DISABLE,
+        .timer_sel = transmit_ledc_timer,
+        .duty = duty,
+        .hpoint = 0,
+    };
+    err = ledc_channel_config(&ch_conf);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ledc_channel_config failed: %s", esp_err_to_name(err));
+        if (err_msg) {
+            *err_msg = "transmit pwm: channel";
+        }
+        return false;
+    }
+
+    ledc_ll_set_idle_level(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, 0);
+    ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, false);
+    ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
+
+    gpio_set_level(gpio, 0);
+    transmit_pwm_configured = true;
+    transmit_pwm_enabled_state = false;
+    return true;
+}
+
+static void IRAM_ATTR transmit_pwm_set_enabled_isr(bool enabled)
+{
+    if (enabled == transmit_pwm_enabled_state) {
+        return;
+    }
+    transmit_pwm_enabled_state = enabled;
+    ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, enabled);
+    ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
+}
+
+static void transmit_pwm_stop(void)
+{
+    ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, false);
+    ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
+    ledc_stop(transmit_ledc_speed_mode, transmit_ledc_channel, 0);
+    transmit_pwm_configured = false;
+    transmit_pwm_enabled_state = false;
 }
