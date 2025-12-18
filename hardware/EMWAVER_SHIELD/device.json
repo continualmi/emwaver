@@ -4,6 +4,16 @@
   "group": "module",
   "status": "module",
   "image": "EMWAVER_SHIELD.png",
+  "images": [
+    "EMWAVER_SHIELD.png",
+    "IMG_0063.jpg",
+    "IMG_0064.jpg",
+    "IMG_0065.jpg",
+    "IMG_0066.jpg",
+    "IMG_0067.jpg",
+    "IMG_0096.jpg",
+    "IMG_0097.jpg"
+  ],
   "description": "EMWaver Shield is a shield-style carrier for an ESP32‑S3 module. It adds the same IR receiver + IR LED and USB feature set as the DIY approach, but in a different form factor. For the sub‑GHz radio, it’s designed for soldering an RFM69HW module with a helical antenna, enabling up to 20 dBm output power. It also breaks out a larger duplicated GPIO header (22 pins) to make prototyping and expansion boards easy. Bonus: the ESP32‑S3 native USB stack also enables USB device emulation.",
   "tags": ["Shield", "ESP32-S3", "RFM69HW", "IR", "USB-C", "module"],
   "requires": ["ESP32-S3 DevKit", "RFM69HW", "Helical antenna"],
