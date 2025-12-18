@@ -368,15 +368,31 @@ public class USBService extends Service implements DeviceConnectionService, Seri
             try {
                 clearBuffer(); // Clear any existing data
                 finalPort.write(command, timeout);
-                
-                // Wait for response
+
+                // Wait for response; USB CDC/serial reads may deliver a single response in multiple chunks.
+                // Collect chunks until the response "settles" (no new data for a short window) or we time out.
+                final int settleWindowMs = 30;
                 long startTime = System.currentTimeMillis();
+                long lastDataTime = 0;
+                java.io.ByteArrayOutputStream collected = new java.io.ByteArrayOutputStream();
+
                 while (System.currentTimeMillis() - startTime < timeout) {
-                    byte[] response = getCommand();
-                    if (response != null && response.length > 0) {
-                        return response;
+                    byte[] chunk = getCommand();
+                    if (chunk != null && chunk.length > 0) {
+                        collected.write(chunk);
+                        lastDataTime = System.currentTimeMillis();
                     }
-                    Thread.sleep(10); // Small delay to prevent busy waiting
+
+                    if (collected.size() > 0 && lastDataTime > 0
+                            && (System.currentTimeMillis() - lastDataTime) >= settleWindowMs) {
+                        return collected.toByteArray();
+                    }
+
+                    Thread.sleep(5); // Small delay to prevent busy waiting
+                }
+
+                if (collected.size() > 0) {
+                    return collected.toByteArray();
                 }
             } catch (IOException | InterruptedException e) {
                 Log.e(TAG, "Error in sendCommand: ", e);
