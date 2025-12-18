@@ -190,6 +190,65 @@
             object-fit: contain;
         }
 
+        .device-showcase {
+            margin-top: 2.5rem;
+            width: min(1100px, 92vw);
+        }
+
+        .device-showcase h2 {
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: white;
+        }
+
+        .device-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .device-row {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 1.25rem;
+        }
+
+        .device-row.center {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            width: min(840px, 100%);
+            margin: 0 auto;
+        }
+
+        .device-card {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 16px;
+            padding: 1.25rem;
+            text-align: center;
+            color: white;
+            backdrop-filter: blur(6px);
+        }
+
+        .device-image {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.12);
+            object-fit: cover;
+            margin-bottom: 0.9rem;
+        }
+
+        .device-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .device-card p {
+            font-size: 0.9rem;
+            opacity: 0.85;
+        }
+
         .desktop-downloads {
             display: flex;
             gap: 0.9rem;
@@ -409,6 +468,19 @@
                 height: 30px;
             }
 
+            .device-showcase h2 {
+                font-size: 1.6rem;
+            }
+
+            .device-row {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .device-row.center {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                width: min(480px, 100%);
+            }
+
             nav ul {
                 gap: 1rem;
                 font-size: 0.9rem;
@@ -484,6 +556,50 @@
                     <a href="/documentation/" class="btn btn-desktop">
                         Download for Ubuntu
                     </a>
+                </div>
+            </div>
+            <div class="device-showcase">
+                <h2>Current Gen Devices</h2>
+                <div class="device-grid">
+                    <div class="device-row">
+                        <div class="device-card">
+                            <img src="EMWAVER.jpg" alt="EMWaver device" class="device-image">
+                            <h3>EMWaver</h3>
+                            <p>ESP32</p>
+                        </div>
+                        <div class="device-card">
+                            <img src="ISM_WAVER.jpg" alt="ISM Waver device" class="device-image">
+                            <h3>ISM Waver</h3>
+                            <p>STM32</p>
+                        </div>
+                        <div class="device-card">
+                            <img src="INFRARED_WAVER.jpg" alt="Infrared Waver device" class="device-image">
+                            <h3>Infrared Waver</h3>
+                            <p>STM32</p>
+                        </div>
+                        <div class="device-card">
+                            <img src="GPIO_WAVER.jpg" alt="GPIO Waver device" class="device-image">
+                            <h3>GPIO Waver</h3>
+                            <p>STM32</p>
+                        </div>
+                    </div>
+                    <div class="device-row center">
+                        <div class="device-card">
+                            <img src="EMWAVER_DIY.jpg" alt="EMWaver DIY device" class="device-image">
+                            <h3>EMWaver DIY</h3>
+                            <p>Module</p>
+                        </div>
+                        <div class="device-card">
+                            <img src="EMWAVER_SHIELD.jpg" alt="EMWaver Shield device" class="device-image">
+                            <h3>EMWaver Shield</h3>
+                            <p>Module</p>
+                        </div>
+                        <div class="device-card">
+                            <img src="RFID_WAVER.jpg" alt="RFID Waver device" class="device-image">
+                            <h3>RFID Waver</h3>
+                            <p>Module</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
