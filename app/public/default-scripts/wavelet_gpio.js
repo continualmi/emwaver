@@ -1,8 +1,14 @@
 // Simple GPIO control wavelet
-let selectedPin = 0;
+let selectedTarget = "esp32";
+let selectedPin = "";
 let resultText = "";
 
-const PINS = [
+const TARGETS = [
+    { label: "ESP32-S3", value: "esp32" },
+    { label: "STM32F042", value: "stm32" }
+];
+
+const ESP32_PINS = [
     { label: "GPIO0 (IO0)", value: "0" },
     { label: "CC1101 GDO0 (IO1)", value: "1" },
     { label: "CC1101 GDO2 (IO2)", value: "2" },
@@ -20,37 +26,71 @@ const PINS = [
     { label: "GPIO16 (IO16)", value: "16" }
 ];
 
-// Initialize selectedPin to first pin's value  
-selectedPin = PINS[0].value;
+const STM32_PINS = [
+    { label: "PA0 (TIM2_CH1)", value: "0" },
+    { label: "PA1 (IR RX / TIM2_CH2)", value: "1" },
+    { label: "PA2 (TIM2_CH3)", value: "2" },
+    { label: "PA3 (TIM2_CH4)", value: "3" },
+    { label: "PA4 (NSS_RFID / CC1101 CS)", value: "4" },
+    { label: "PA5 (SPI1 SCK)", value: "5" },
+    { label: "PA6 (SPI1 MISO)", value: "6" },
+    { label: "PA7 (SPI1 MOSI)", value: "7" },
+    { label: "PB0 (VCTL)", value: "16" },
+    { label: "PB6 (RESET)", value: "22" }
+];
+
+function pinsForTarget(target) {
+    return target === "stm32" ? STM32_PINS : ESP32_PINS;
+}
+
+function ensureBleService() {
+    if (!BLEService || typeof BLEService.sendCommand !== "function") {
+        throw new Error("BLE Service not connected");
+    }
+}
+
+function stringToBytes(command) {
+    const text = command.endsWith("\n") ? command : command + "\n";
+    const bytes = new Array(text.length);
+    for (let i = 0; i < text.length; i += 1) {
+        bytes[i] = text.charCodeAt(i) & 0xFF;
+    }
+    return createByteArray(bytes);
+}
+
+function sendCommand(command, timeoutMs) {
+    ensureBleService();
+    const payload = stringToBytes(command);
+    return BLEService.sendCommand(payload, timeoutMs || 2000);
+}
+
+function isErrorResponse(response) {
+    return response && response.length === 1 && response[0] === 0xFF;
+}
+
+selectedPin = pinsForTarget(selectedTarget)[0].value;
 
 function gpioRead() {
     console.log("gpioRead called with selectedPin: " + selectedPin);
-    
-    if (!BLEService) {
-        resultText = "BLE Service not connected";
-        render();
-        return;
-    }
-    
     try {
-        // Create GPIO read command: "gpio" + null + pin + 'R' + 0
-        let pinNumber = parseInt(selectedPin);
-        let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x52, 0x00]); // 'g','p','i','o',0,pin,'R',0
-        let response = BLEService.sendCommand(command, 2000);
-        
-        if (response && response.length > 0) {
-            let state = response[0] !== 0;
-            let pinInfo = PINS.find(p => p.value === selectedPin);
-            let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
-            resultText = "Read " + pinName + ": " + (state ? "HIGH" : "LOW");
-        } else {
+        const pins = pinsForTarget(selectedTarget);
+        let pinNumber = parseInt(selectedPin, 10);
+        sendCommand("gpio in --pin=" + pinNumber, 1000);
+        let response = sendCommand("gpio read --pin=" + pinNumber, 2000);
+
+        if (!response || response.length === 0) {
             resultText = "GPIO read failed or timed out";
+        } else if (isErrorResponse(response)) {
+            resultText = "GPIO read error";
+        } else {
+            let state = response[0] !== 0;
+            let pinInfo = pins.find(p => p.value === selectedPin);
+            let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+            resultText = "Read " + pinName + ": " + (state ? "HIGH" : "LOW");
         }
-        
     } catch (error) {
         resultText = "GPIO read error: " + error;
     }
-    
     render();
 }
 
@@ -64,50 +104,55 @@ function gpioWriteLow() {
 
 function gpioWrite(value) {
     console.log("gpioWrite called with value: " + value + " selectedPin: " + selectedPin);
-    
-    if (!BLEService) {
-        resultText = "BLE Service not connected";
-        render();
-        return;
-    }
-    
     try {
-        // Create GPIO write command: "gpio" + null + pin + 'W' + value
-        let pinNumber = parseInt(selectedPin);
-        let command = createByteArray([0x67, 0x70, 0x69, 0x6F, 0x00, pinNumber, 0x57, value]); // 'g','p','i','o',0,pin,'W',value
-        let response = BLEService.sendCommand(command, 2000);
-        
-        if (response && response.length > 0) {
+        const pins = pinsForTarget(selectedTarget);
+        let pinNumber = parseInt(selectedPin, 10);
+        sendCommand("gpio out --pin=" + pinNumber, 1000);
+        let response = sendCommand(value ? "gpio high --pin=" + pinNumber : "gpio low --pin=" + pinNumber, 2000);
+
+        if (!response || response.length === 0) {
+            resultText = "GPIO write failed or timed out";
+        } else if (isErrorResponse(response)) {
+            resultText = "GPIO write error";
+        } else {
             let state = response[0] !== 0;
             let writeAction = value ? "HIGH" : "LOW";
-            let pinInfo = PINS.find(p => p.value === selectedPin);
-            let pinName = pinInfo ? pinInfo.label : "IO" + selectedPin;
+            let pinInfo = pins.find(p => p.value === selectedPin);
+            let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
             let success = (state === (value !== 0));
             resultText = "Write " + writeAction + " to " + pinName + (success ? " successful" : " failed");
-        } else {
-            resultText = "GPIO write failed or timed out";
         }
-        
     } catch (error) {
         resultText = "GPIO write error: " + error;
     }
-    
     render();
 }
 
 function render() {
+    const pins = pinsForTarget(selectedTarget);
     UI.render(UI.column({
         padding: 16,
         spacing: 16,
         children: [
             UI.text({ text: "GPIO Control", font: "title2", fontWeight: "semibold" }),
-            
+            UI.text({ text: "Target", fontWeight: "medium" }),
+            UI.picker({
+                style: "menu",
+                selected: selectedTarget,
+                options: TARGETS,
+                onChange: function(value) {
+                    selectedTarget = value;
+                    selectedPin = pinsForTarget(selectedTarget)[0].value;
+                    resultText = "";
+                    render();
+                }
+            }),
             // Pin selection
             UI.text({ text: "Select Pin", fontWeight: "medium" }),
             UI.picker({
                 style: "menu",
                 selected: String(selectedPin),
-                options: PINS,
+                options: pins,
                 onChange: function(value) {
                     selectedPin = value;
                     console.log("Pin changed to value: " + selectedPin + " (type: " + typeof value + ")");

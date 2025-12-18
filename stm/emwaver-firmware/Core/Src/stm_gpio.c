@@ -11,6 +11,24 @@
 
 extern TIM_HandleTypeDef htim2;
 
+static bool decode_encoded_pin(int pin_int, uint8_t *out_port, uint8_t *out_pin)
+{
+    if (!out_port || !out_pin) {
+        return false;
+    }
+    if (pin_int < 0 || pin_int > 31) {
+        return false;
+    }
+    uint8_t port = (uint8_t)((pin_int >> 4) & 0x01); // 0=GPIOA, 1=GPIOB
+    uint8_t pin = (uint8_t)(pin_int & 0x0F);
+    if (pin > 15) {
+        return false;
+    }
+    *out_port = port;
+    *out_pin = pin;
+    return true;
+}
+
 static GPIO_TypeDef *get_gpio_port(uint8_t port)
 {
     switch (port) {
@@ -184,6 +202,121 @@ static void cmd_gpio_write(int port_int, int pin_int, int value_int)
     command_send_ok(&response_val, 1);
 }
 
+static void cmd_gpio_in_encoded(int pin_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+
+    disable_tim2_output_if_needed(port, pin);
+    set_pin_mode(port, pin, 0);
+    command_send_ok(NULL, 0);
+}
+
+static void cmd_gpio_out_encoded(int pin_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+
+    disable_tim2_output_if_needed(port, pin);
+    set_pin_mode(port, pin, 1);
+    command_send_ok(NULL, 0);
+}
+
+static void cmd_gpio_pull_encoded(int pin_int, int pull_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+
+    GPIO_TypeDef *gpio_port = get_gpio_port(port);
+    if (!gpio_port) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+
+    uint32_t pull = GPIO_NOPULL;
+    switch (pull_int) {
+        case 0:
+            pull = GPIO_NOPULL;
+            break;
+        case 1:
+            pull = GPIO_PULLUP;
+            break;
+        case 2:
+            pull = GPIO_PULLDOWN;
+            break;
+        default:
+            command_send_ok(NULL, 0);
+            return;
+    }
+
+    disable_tim2_output_if_needed(port, pin);
+
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = (uint16_t)(1u << pin);
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = pull;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_DeInit(gpio_port, GPIO_InitStruct.Pin);
+    HAL_GPIO_Init(gpio_port, &GPIO_InitStruct);
+    command_send_ok(NULL, 0);
+}
+
+static void cmd_gpio_read_encoded(int pin_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+    cmd_gpio_read(port, pin);
+}
+
+static void cmd_gpio_high_encoded(int pin_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+    cmd_gpio_write(port, pin, 1);
+}
+
+static void cmd_gpio_low_encoded(int pin_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+    cmd_gpio_write(port, pin, 0);
+}
+
+static void cmd_gpio_info_encoded(int pin_int)
+{
+    uint8_t port = 0;
+    uint8_t pin = 0;
+    if (!decode_encoded_pin(pin_int, &port, &pin)) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+    cmd_gpio_info(port, pin);
+}
+
 void stm_gpio_register_commands(void)
 {
     static const cmd_arg_spec_t gpio_r_args[] = {
@@ -205,10 +338,29 @@ void stm_gpio_register_commands(void)
         {.name = NULL, .type = CMD_ARG_DONE, .required = false},
     };
 
+    static const cmd_arg_spec_t gpio_pin_args[] = {
+        {.name = "pin", .type = CMD_ARG_INT, .required = true},
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
+
+    static const cmd_arg_spec_t gpio_pull_args[] = {
+        {.name = "pin", .type = CMD_ARG_INT, .required = true},
+        {.name = "mode", .type = CMD_ARG_INT, .required = true}, // 0=none, 1=up, 2=down
+        {.name = NULL, .type = CMD_ARG_DONE, .required = false},
+    };
+
     static const command_entry_t gpio_command_table[] = {
         {.verb = "gpio R", .args = gpio_r_args, .handler = (void *)cmd_gpio_read},
         {.verb = "gpio W", .args = gpio_w_args, .handler = (void *)cmd_gpio_write},
         {.verb = "gpio I", .args = gpio_i_args, .handler = (void *)cmd_gpio_info},
+        // ESP32-style aliases (single encoded pin: PA0..PA15 => 0..15, PB0..PB15 => 16..31).
+        {.verb = "gpio in", .args = gpio_pin_args, .handler = (void *)cmd_gpio_in_encoded},
+        {.verb = "gpio out", .args = gpio_pin_args, .handler = (void *)cmd_gpio_out_encoded},
+        {.verb = "gpio pull", .args = gpio_pull_args, .handler = (void *)cmd_gpio_pull_encoded},
+        {.verb = "gpio read", .args = gpio_pin_args, .handler = (void *)cmd_gpio_read_encoded},
+        {.verb = "gpio high", .args = gpio_pin_args, .handler = (void *)cmd_gpio_high_encoded},
+        {.verb = "gpio low", .args = gpio_pin_args, .handler = (void *)cmd_gpio_low_encoded},
+        {.verb = "gpio info", .args = gpio_pin_args, .handler = (void *)cmd_gpio_info_encoded},
     };
 
     (void)command_registry_add_table(gpio_command_table,
