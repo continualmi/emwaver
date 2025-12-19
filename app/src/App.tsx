@@ -28,6 +28,8 @@ import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
 import EMWaverFragment from "./components/EMWaverFragment";
+import RfidFragment from "./components/RfidFragment";
+import PacketModeFragment from "./components/PacketModeFragment";
 import HomePage from "./components/HomePage";
 
 type DirectoryEntry = {
@@ -71,7 +73,7 @@ type OpenFile = {
   isDirty: boolean;
   isSaving: boolean;
 };
-export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver";
+export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver" | "rfid" | "packetMode";
 
 type RecentProject = {
   path: string;
@@ -883,6 +885,8 @@ function App() {
   const isISMActive = activePane === "ism";
   const isSamplerActive = activePane === "sampler";
   const isEMWaverActive = activePane === "emwaver";
+  const isRfidActive = activePane === "rfid";
+  const isPacketModeActive = activePane === "packetMode";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -897,6 +901,8 @@ function App() {
         <Pane active={isWaveletsActive}><WaveletsFragment /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
+        <Pane active={isRfidActive}><RfidFragment /></Pane>
+        <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
       </div>
       {isModalOpen && (
         <NewProjectModal
@@ -1087,6 +1093,18 @@ function ActivityBar({ activePane, onFragmentClick }: ActivityBarProps) {
         onClick={() => onFragmentClick("sampler")}
         icon={<SamplerIcon />}
       />
+      <ActivityButton
+        label="RFID"
+        isActive={activePane === "rfid"}
+        onClick={() => onFragmentClick("rfid")}
+        icon={<RfidIcon />}
+      />
+      <ActivityButton
+        label="Packet Mode"
+        isActive={activePane === "packetMode"}
+        onClick={() => onFragmentClick("packetMode")}
+        icon={<PacketModeIcon />}
+      />
     </aside>
   );
 }
@@ -1191,6 +1209,22 @@ function EMWaverIcon() {
       <path d="M270.3,182.1c-6.4,1.2 -11.2,3.8 -12.8,7 -1.7,3.1 -1.9,11.1 -0.8,31.1l0.6,12.8 5.4,-0 5.3,-0 0,-19.5c0,-22 -0.2,-21.5 8.3,-21.5 5,-0 6.4,-1.1 7.3,-5.9 0.5,-2.3 0.3,-3.6 -0.7,-4.2 -1.7,-1 -6.8,-1 -12.6,0.2z" />
       <path d="M17.4,183.5c-0.3,0.8 2.5,12.1 6.3,25.2l6.8,23.7 3.5,0.9c2.2,0.6 4.8,0.5 7.2,-0.2 3.7,-1.1 3.8,-1.4 6.7,-10.9 1.7,-5.3 3.8,-12.5 4.7,-16 1,-3.4 2,-6.2 2.4,-6.2 0.4,-0 2.5,6.8 4.6,15.1 2.1,8.4 4.4,15.8 5,16.6 1.2,1.8 11.7,2.4 13.3,0.8 1.9,-1.9 14.8,-48.4 13.7,-49.5 -1.4,-1.4 -7.9,-1.3 -9.9,0.2 -1.1,0.9 -3,7.4 -5.7,18.7 -2.2,9.6 -4.2,17.6 -4.3,17.8 -0.2,0.2 -2.6,-7.8 -5.2,-17.8 -4.1,-15.2 -5.2,-18.3 -7.1,-19.1 -2.6,-1.2 -8.8,-0.3 -10.1,1.5 -0.6,0.6 -3.2,9 -5.8,18.4 -2.7,9.5 -5.1,17.3 -5.4,17.3 -0.3,-0 -2.3,-7.8 -4.5,-17.3 -2.1,-9.4 -4.2,-18 -4.7,-19 -1.3,-2.2 -10.7,-2.5 -11.5,-0.2z" />
       <path d="M148.1,182.9c-1.1,0.7 0.1,5.3 6.4,24 4.2,12.7 8.3,23.8 9.2,24.6 2.5,2.6 12.9,2.4 15.6,-0.3 2,-2.1 18,-46.9 17.2,-48.3 -0.9,-1.3 -8.9,-1.1 -10.7,0.3 -0.9,0.7 -4.4,10 -7.8,20.7 -3.3,10.6 -6.3,19.1 -6.5,19 -0.2,-0.2 -2.9,-9 -6,-19.4 -3.1,-10.5 -6.4,-19.6 -7.3,-20.3 -1.8,-1.4 -8,-1.6 -10.1,-0.3z" />
+    </svg>
+  );
+}
+
+function RfidIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full">
+      <path d="M12.5,11a1.5,1.5 0,1 0,1.5 1.5,1.502 1.502,0 0,0 -1.5,-1.5zM7.916,17.219a6.769,6.769 0,0 1,0 -9.438l0.718,0.697a5.769,5.769 0,0 0,0 8.044zM5.071,19.914a10.497,10.497 0,0 1,0 -14.828l0.707,0.707a9.497,9.497 0,0 0,0 13.414zM17.084,17.219l-0.718,-0.697a5.769,5.769 0,0 0,0 -8.044l0.718,-0.697a6.769,6.769 0,0 1,0 9.438zM19.929,19.914l-0.707,-0.707a9.497,9.497 0,0 0,0 -13.414l0.707,-0.707a10.497,10.497 0,0 1,0 14.828z" />
+    </svg>
+  );
+}
+
+function PacketModeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full">
+      <path d="M10.5911 2.51301C11.4947 2.14671 12.5053 2.14671 13.4089 2.51301L20.9075 5.55298C21.5679 5.82071 22 6.46216 22 7.17477V16.8275C22 17.5401 21.5679 18.1815 20.9075 18.4493L13.4089 21.4892C12.5053 21.8555 11.4947 21.8555 10.5911 21.4892L3.09252 18.4493C2.43211 18.1815 2 17.5401 2 16.8275V7.17477C2 6.46216 2.43211 5.82071 3.09252 5.55298L10.5911 2.51301ZM12.8453 3.90312C12.3032 3.68334 11.6968 3.68334 11.1547 3.90312L9.24097 4.67894L16.7678 7.60604L19.437 6.57542L12.8453 3.90312ZM14.6911 8.40787L7.21472 5.50039L4.59029 6.56435L12.0013 9.44642L14.6911 8.40787ZM3.5 16.8275C3.5 16.9293 3.56173 17.0209 3.65607 17.0592L11.1547 20.0991C11.1863 20.112 11.2183 20.1241 11.2503 20.1354V10.7638L3.5 7.74979V16.8275ZM12.8453 20.0991L20.3439 17.0592C20.4383 17.0209 20.5 16.9293 20.5 16.8275V7.77292L12.7503 10.7651V20.1352C12.7822 20.1239 12.8139 20.1119 12.8453 20.0991Z" />
     </svg>
   );
 }
