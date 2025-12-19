@@ -18,6 +18,7 @@ export interface WaveletTree {
   type: 'column' | 'row' | 'button' | 'text' | 'logViewer' | 'slider' | 'scroll' | 'textField' | 'textEditor' | 'picker' | 'grid' | 'spacer' | 'divider' | 'progress';
   props?: Record<string, unknown>;
   children?: WaveletTree[];
+  handlers?: Record<string, string>;
 }
 
 export interface ModuleSource {
@@ -249,37 +250,27 @@ export class WaveletEngine {
 
     // Create callback counter in the context
     (this.context as any)._callbackCounter = 0;
+    (this.context as any)._nodeCounter = 0;
     
     // Store reference to context for use in closures
     const ctx = this.context as any;
     
     // Create UI object directly in the context
     ctx.UI = {
-      column: (props: any) => {
-        const { children, ...rest } = props || {};
-        return { type: 'column', children: children || [], ...rest };
-      },
-      row: (props: any) => {
-        const { children, ...rest } = props || {};
-        return { type: 'row', children: children || [], ...rest };
-      },
-      button: (props: any) => {
-        const { onTap, ...rest } = props || {};
-        let callbackToken: string | null = null;
-        if (typeof onTap === 'function') {
-          callbackToken = '_cb_' + (++ctx._callbackCounter);
-          if (typeof ctx._waveletRegisterCallback === 'function') {
-            ctx._waveletRegisterCallback(callbackToken, onTap);
-          }
-        }
-        return { type: 'button', callbackToken, ...rest };
-      },
-      text: (props: any) => {
-        return { type: 'text', ...props };
-      },
-      logViewer: (props: any) => {
-        return { type: 'logViewer', ...props };
-      },
+      column: (props: any) => ctx._waveletMakeNode('column', props || {}),
+      row: (props: any) => ctx._waveletMakeNode('row', props || {}),
+      text: (props: any) => ctx._waveletMakeNode('text', props || {}),
+      button: (props: any) => ctx._waveletMakeNode('button', props || {}),
+      slider: (props: any) => ctx._waveletMakeNode('slider', props || {}),
+      logViewer: (props: any) => ctx._waveletMakeNode('logViewer', props || {}),
+      scroll: (props: any) => ctx._waveletMakeNode('scroll', props || {}),
+      textField: (props: any) => ctx._waveletMakeNode('textField', props || {}),
+      textEditor: (props: any) => ctx._waveletMakeNode('textEditor', props || {}),
+      picker: (props: any) => ctx._waveletMakeNode('picker', props || {}),
+      grid: (props: any) => ctx._waveletMakeNode('grid', props || {}),
+      spacer: (props: any) => ctx._waveletMakeNode('spacer', props || {}),
+      divider: (props: any) => ctx._waveletMakeNode('divider', props || {}),
+      progress: (props: any) => ctx._waveletMakeNode('progress', props || {}),
       render: (tree: any) => {
         console.log('[UI.render] Called with tree:', tree);
         const renderFn = ctx._waveletRender;
@@ -318,6 +309,49 @@ export class WaveletEngine {
         return (this.context as any)._waveletImportModule(moduleName);
       }
       throw new Error('Module loading not available');
+    };
+
+    (this.context as any)._waveletNormalizeProps = (type: string, props: any) => {
+      const raw = props || {};
+      const children = Array.isArray(raw.children) ? raw.children : [];
+      const id = raw.id ? String(raw.id) : `${type}_${++ctx._nodeCounter}`;
+      const { children: _children, id: _id, ...rest } = raw;
+      return { id, props: rest, children };
+    };
+
+    (this.context as any)._waveletCollectHandlers = (id: string, props: any) => {
+      const handlers: Record<string, string> = {};
+      const events = [
+        { key: 'onTap', type: 'tap' },
+        { key: 'onChange', type: 'change' },
+        { key: 'onSubmit', type: 'submit' },
+      ];
+      events.forEach((event) => {
+        const fn = props[event.key];
+        if (typeof fn === 'function') {
+          const token = `${id}:${event.type}`;
+          if (typeof ctx._waveletRegisterCallback === 'function') {
+            ctx._waveletRegisterCallback(token, fn);
+          }
+          handlers[event.type] = token;
+        }
+        if (Object.prototype.hasOwnProperty.call(props, event.key)) {
+          delete props[event.key];
+        }
+      });
+      return handlers;
+    };
+
+    (this.context as any)._waveletMakeNode = (type: string, props: any) => {
+      const normalized = ctx._waveletNormalizeProps(type, props || {});
+      const handlerTokens = ctx._waveletCollectHandlers(normalized.id, normalized.props);
+      return {
+        type,
+        id: normalized.id,
+        props: normalized.props,
+        children: normalized.children,
+        handlers: handlerTokens,
+      };
     };
   }
 
@@ -414,21 +448,30 @@ export class WaveletEngine {
       const obj = value as Record<string, unknown>;
       
       if (typeof obj.type === 'string') {
-        // Extract children if they exist as a property
-        const children = Array.isArray(obj.children) 
-          ? obj.children 
-          : [];
-        
-        // Extract all other properties as props (excluding type and children)
-        const { type, children: _, ...restProps } = obj;
-        
+        const children = Array.isArray(obj.children) ? obj.children : [];
+        const props =
+          typeof obj.props === 'object' && obj.props !== null
+            ? { ...(obj.props as Record<string, unknown>) }
+            : {};
+        const handlers =
+          typeof obj.handlers === 'object' && obj.handlers !== null
+            ? (obj.handlers as Record<string, string>)
+            : undefined;
+
+        const { type, children: _, props: _props, handlers: _handlers, ...restProps } = obj;
+        const mergedProps = { ...props, ...restProps };
+
         const tree: WaveletTree = {
           type: type as WaveletTree['type'],
-          props: restProps as Record<string, unknown>,
+          props: mergedProps,
         };
 
+        if (handlers && Object.keys(handlers).length > 0) {
+          tree.handlers = handlers;
+        }
+
         if (children.length > 0) {
-          tree.children = children.map(child => this.convertToWaveletTree(child));
+          tree.children = children.map((child) => this.convertToWaveletTree(child));
         }
 
         return tree;
