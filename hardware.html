@@ -253,10 +253,13 @@
 	          device.description ||
 	          "Description coming soon. Add it in this device’s device.json.";
 
-	        const img = device.image
-	          ? String(device.image).includes("/")
-	            ? String(device.image)
-	            : `${device.folder}/${device.image}`
+	        const rawImages = Array.isArray(device.images) ? device.images : [];
+	        const preferred = rawImages.length ? String(rawImages[0]).trim() : "";
+	        const raw = preferred || (device.image ? String(device.image) : "");
+	        const img = raw
+	          ? String(raw).includes("/")
+	            ? String(raw)
+	            : `${device.folder}/${raw}`
 	          : `${device.folder}/${device.folder}.png`;
 	        const group = device.group || "";
 	        const platform = platformIcon(group);

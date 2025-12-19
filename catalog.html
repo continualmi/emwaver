@@ -403,7 +403,9 @@
 	      }
 	
 		      function resolveDeviceImage(device) {
-		        const raw = device.image ? String(device.image).trim() : "";
+		        const rawImages = Array.isArray(device.images) ? device.images : [];
+		        const preferred = rawImages.length ? String(rawImages[0]).trim() : "";
+		        const raw = preferred || (device.image ? String(device.image).trim() : "");
 		        if (!raw) return `hardware/${device.folder}/${device.folder}.png`;
 		        if (/^https?:\/\//i.test(raw)) return raw;
 		        if (raw.startsWith("hardware/")) return raw;
