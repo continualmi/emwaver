@@ -58,6 +58,7 @@ const PWM_DUTY_KEY = 'sampler.pwm.duty';
 const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
 const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
 const SETTINGS_MAX_SAMPLES_KEY = 'sampler.settings.maxSamples';
+const SETTINGS_EVENT = 'emwaver-settings-change';
 
 const DEFAULT_PWM_FREQ_HZ = 38000;
 const DEFAULT_PWM_DUTY_PERCENT = 50;
@@ -246,6 +247,24 @@ function SamplerFragment() {
   useEffect(() => {
     localStorage.setItem(SETTINGS_MAX_SAMPLES_KEY, `${maxSamples}`);
   }, [maxSamples]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ scope?: string }>).detail;
+      if (detail?.scope && detail.scope !== 'sampler') {
+        return;
+      }
+      const storedRefresh = Number.parseInt(localStorage.getItem(SETTINGS_REFRESH_KEY) || '50', 10);
+      const storedMaxSamples = Number.parseInt(localStorage.getItem(SETTINGS_MAX_SAMPLES_KEY) || '393216', 10);
+      setRefreshRate(Number.isNaN(storedRefresh) ? 50 : storedRefresh);
+      setMaxSamples(Number.isNaN(storedMaxSamples) ? 393216 : storedMaxSamples);
+    };
+
+    window.addEventListener(SETTINGS_EVENT, handler);
+    return () => {
+      window.removeEventListener(SETTINGS_EVENT, handler);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isTauriAvailable()) {
