@@ -82,7 +82,9 @@ async function readAssetScript(filename: string): Promise<string | null> {
   }
 }
 
-export default function WaveletsFragment() {
+type ThemeMode = "dark" | "light";
+
+export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [waveletsDir, setWaveletsDir] = useState<string | null>(null);
   const [customScripts, setCustomScripts] = useState<ScriptEntry[]>([]);
   const [activeScript, setActiveScript] = useState<ScriptEntry | null>(null);
@@ -582,7 +584,7 @@ export default function WaveletsFragment() {
                       language="javascript"
                       onChange={handleEditorChange}
                       options={editorOptions}
-                      theme="vs-dark"
+                      theme={theme === "light" ? "vs" : "vs-dark"}
                       height="100%"
                       loading={
                         <div className="flex flex-1 items-center justify-center text-sm text-slate-500">

@@ -401,6 +401,13 @@
             gap: 0.7rem;
         }
 
+        .wavelet-output-card.wavelet-output-card--auto {
+            width: fit-content;
+            max-width: 100%;
+            min-height: 0;
+            align-self: center;
+        }
+
         .wavelet-output-title {
             font-weight: 600;
             font-size: 1rem;
@@ -426,6 +433,12 @@
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             object-fit: contain;
+        }
+
+        .wavelet-output-card--auto .wavelet-output-image {
+            width: auto;
+            max-width: 100%;
+            height: auto;
         }
 
         .wavelets-footnote {
@@ -880,9 +893,9 @@ render();</code></pre>
                 </div>
                 <div class="wavelet-output" style="margin-top: 1.75rem;">
                     <div class="flow-arrow"></div>
-                    <div class="wavelet-output-card">
+                    <div class="wavelet-output-card wavelet-output-card--auto">
                         <div class="wavelet-output-title">Desktop Wavelets View</div>
-                        <div class="wavelet-placeholder">Desktop screenshot placeholder</div>
+                        <img src="wavelet_desktop.png" alt="Wavelet UI on desktop" class="wavelet-output-image">
                     </div>
                 </div>
                 <p class="wavelets-footnote">
