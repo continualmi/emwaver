@@ -148,6 +148,11 @@ struct SamplerView: View {
     @State private var selectedPinIndex = 10 // Default to GPIO6 (IO6) to match Android
     @State private var selectedSignalIndex = 0
     @State private var isRecording = false
+    @AppStorage("sampler_tx_pwm_enabled") private var pwmEnabled = false
+    @AppStorage("sampler_tx_pwm_freq_hz") private var pwmFreqHz = 38000
+    @AppStorage("sampler_tx_pwm_duty_percent") private var pwmDutyPercent = 50
+    @State private var pwmFreqText = ""
+    @State private var pwmDutyText = ""
 
     @State private var chartEntries: [ChartDataEntry] = []
     @State private var chartView: LineChartView?
@@ -218,6 +223,7 @@ struct SamplerView: View {
                 handleAppear()
                 viewModel.refreshSignalList()
                 loadLastSelectedSignal()
+                syncPwmTextIfNeeded()
             }
             .onChange(of: bleManager.isConnected) { handleConnectionChange($0) }
             .onDisappear { stopScheduler() }
@@ -369,6 +375,35 @@ struct SamplerView: View {
                 }
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("PWM Infrared", isOn: $pwmEnabled)
+                        .onChange(of: pwmEnabled) { _ in
+                            syncPwmTextIfNeeded()
+                        }
+
+                    HStack(spacing: 12) {
+                        TextField("Freq (Hz)", text: $pwmFreqText)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(!pwmEnabled)
+                            .onChange(of: pwmFreqText) { newValue in
+                                if let value = parsePwmInt(newValue) {
+                                    pwmFreqHz = value
+                                }
+                            }
+
+                        TextField("Duty (%)", text: $pwmDutyText)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(!pwmEnabled)
+                            .onChange(of: pwmDutyText) { newValue in
+                                if let value = parsePwmInt(newValue) {
+                                    pwmDutyPercent = value
+                                }
+                            }
+                    }
+                }
             }
         }
         .padding(.vertical, 12)
@@ -595,24 +630,37 @@ struct SamplerView: View {
 
     private func startRecording() {
         guard let pin = selectedPinNumber() else { return }
-        var command = Data("sample ".utf8)
-        command.append(pin)
+        let command = Data("sample start --pin=\(pin)".utf8)
         bleManager.sendPacket(command)
         isRecording = true
     }
 
     private func stopRecording() {
-        if let command = "stop".data(using: .utf8) {
-            bleManager.sendPacket(command)
-        }
+        let command = Data("sample stop".utf8)
+        bleManager.sendPacket(command)
         isRecording = false
         viewModel.markBufferDirty()
     }
 
     private func retransmitSignal() {
         guard !bleManager.getBuffer().isEmpty, let pin = selectedPinNumber() else { return }
-        var command = Data("transmit ".utf8)
-        command.append(pin)
+        var commandString = "transmit start --pin=\(pin)"
+        if pwmEnabled {
+            let freqHz = parsePwmInt(pwmFreqText) ?? pwmFreqHz
+            let dutyPercent = parsePwmInt(pwmDutyText) ?? pwmDutyPercent
+            if freqHz < 1 {
+                showToast("Invalid PWM frequency")
+                return
+            }
+            if dutyPercent < 1 || dutyPercent > 100 {
+                showToast("Invalid PWM duty (1-100)")
+                return
+            }
+            pwmFreqHz = freqHz
+            pwmDutyPercent = dutyPercent
+            commandString += " --pwm --freq=\(freqHz) --duty=\(dutyPercent)"
+        }
+        let command = Data(commandString.utf8)
         bleManager.sendPacket(command)
         bleManager.transmitBuffer()
     }
@@ -807,6 +855,21 @@ struct SamplerView: View {
         }
         guard let parsed = value else { return nil }
         return sign * parsed
+    }
+
+    private func syncPwmTextIfNeeded() {
+        if pwmFreqText.isEmpty {
+            pwmFreqText = String(pwmFreqHz)
+        }
+        if pwmDutyText.isEmpty {
+            pwmDutyText = String(pwmDutyPercent)
+        }
+    }
+
+    private func parsePwmInt(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return Int(trimmed)
     }
 
     private func generateDefaultFileName() -> String {

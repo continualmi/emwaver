@@ -78,6 +78,15 @@ struct ContentView: View {
                     Label("RFID", systemImage: "creditcard")
                 }
                 .tag("RFID")
+
+                NavigationView {
+                    SettingsView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .tag("Settings")
             }
             .onAppear {
                 let appearance = UINavigationBarAppearance()

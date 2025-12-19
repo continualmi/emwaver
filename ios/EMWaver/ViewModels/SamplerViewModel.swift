@@ -22,14 +22,18 @@ final class SamplerViewModel: ObservableObject {
     private let settingsManager = SettingsManager.shared
     private let fileManager = FileManager.default
     private let signalsDir: URL
+    private let legacySignalsDir: URL?
     
     private static let signalsDirectoryName = "signals"
     private static let lastSelectedSignalKey = "sampler_last_selected_signal"
 
     init() {
+        let appSupportPath = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        signalsDir = appSupportPath.appendingPathComponent(Self.signalsDirectoryName, isDirectory: true)
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        signalsDir = documentsPath.appendingPathComponent(Self.signalsDirectoryName, isDirectory: true)
+        legacySignalsDir = documentsPath.appendingPathComponent(Self.signalsDirectoryName, isDirectory: true)
         try? fileManager.createDirectory(at: signalsDir, withIntermediateDirectories: true)
+        migrateLegacySignalsIfNeeded()
         refreshSignalList()
     }
 
@@ -311,5 +315,18 @@ final class SamplerViewModel: ObservableObject {
         let microseconds = count * 10
         let prefix = state ? "" : "-"
         components.append("\(prefix)\(microseconds)")
+    }
+
+    private func migrateLegacySignalsIfNeeded() {
+        guard let legacyDir = legacySignalsDir else { return }
+        guard fileManager.fileExists(atPath: legacyDir.path) else { return }
+        guard let files = try? fileManager.contentsOfDirectory(at: legacyDir, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension.lowercased() == "raw" {
+            let destination = signalsDir.appendingPathComponent(file.lastPathComponent)
+            if fileManager.fileExists(atPath: destination.path) {
+                continue
+            }
+            try? fileManager.moveItem(at: file, to: destination)
+        }
     }
 }
