@@ -12,7 +12,7 @@ export class SamplerBuffer {
    */
   append(data: Uint8Array): void {
     const newSize = this.buffer.length + data.length;
-    if (newSize > this.maxSize) {
+    if (this.maxSize > 0 && newSize > this.maxSize) {
       // Truncate to max size
       const remaining = this.maxSize - this.buffer.length;
       if (remaining > 0) {
@@ -62,7 +62,7 @@ export class SamplerBuffer {
    */
   setMaxSize(size: number): void {
     this.maxSize = size;
-    if (this.buffer.length > this.maxSize) {
+    if (this.maxSize > 0 && this.buffer.length > this.maxSize) {
       this.buffer = this.buffer.slice(0, this.maxSize);
     }
   }

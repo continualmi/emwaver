@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDevice } from "../utils/DeviceContext";
 import {
   CONFIG_REGISTERS as RFM69_CONFIG_REGISTERS,
@@ -13,6 +13,7 @@ type RadioChip = "UNKNOWN" | "CC1101" | "RFM69";
 const CHIP_STORAGE_KEY = "ism_selected_chip";
 const CS_PIN_STORAGE_KEY = "rfm69_cs_pin";
 const CS_ACTIVE_HIGH_STORAGE_KEY = "rfm69_cs_active_high";
+const SETTINGS_EVENT = "emwaver-settings-change";
 
 const RF_PARAMETER_STEPS = 6;
 
@@ -263,6 +264,28 @@ export default function ISMFragment() {
   });
 
   const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ scope?: string }>).detail;
+      if (detail?.scope && detail.scope !== "ism") {
+        return;
+      }
+      const storedPin = localStorage.getItem(CS_PIN_STORAGE_KEY);
+      const storedActive = localStorage.getItem(CS_ACTIVE_HIGH_STORAGE_KEY);
+      const nextPin = storedPin || String(DEFAULT_RFM69_CS);
+      const nextActive = storedActive ? storedActive === "true" : DEFAULT_RFM69_CS_ACTIVE_HIGH;
+      setCsPin(nextPin);
+      setCsActiveHigh(nextActive);
+      setTempCsPin(nextPin);
+      setTempCsActiveHigh(nextActive);
+    };
+
+    window.addEventListener(SETTINGS_EVENT, handler);
+    return () => {
+      window.removeEventListener(SETTINGS_EVENT, handler);
+    };
+  }, []);
 
   const isConnected = status.connected;
 
