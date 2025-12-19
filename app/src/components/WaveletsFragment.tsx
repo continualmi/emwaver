@@ -571,16 +571,6 @@ export default function WaveletsFragment() {
                       }}
                     />
                   </div>
-                  {consoleOutput.length > 0 && (
-                    <div className="h-48 border-t border-slate-800 overflow-y-auto p-4 bg-slate-900">
-                      <div className="text-xs font-semibold text-slate-400 mb-2">Console</div>
-                      <div className="font-mono text-xs text-slate-300 space-y-1">
-                        {consoleOutput.map((line, index) => (
-                          <div key={index}>{line}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="flex h-full w-full min-h-0">
@@ -601,16 +591,6 @@ export default function WaveletsFragment() {
                       }
                     />
                   </div>
-                  {consoleOutput.length > 0 && (
-                    <div className="w-96 border-l border-slate-800 overflow-y-auto p-4 bg-slate-900">
-                      <div className="text-xs font-semibold text-slate-400 mb-2">Console</div>
-                      <div className="font-mono text-xs text-slate-300 space-y-1">
-                        {consoleOutput.map((line, index) => (
-                          <div key={index}>{line}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )
             ) : isLoadingScript ? (
@@ -851,11 +831,28 @@ function WaveletUIRenderer({
       }
 
       case "picker": {
-        const options = (props.options as string[]) || [];
+        const options = Array.isArray(props.options) ? (props.options as unknown[]) : [];
+        const normalizedOptions = options
+          .map((option) => {
+            if (typeof option === "string") {
+              return { label: option, value: option };
+            }
+            if (option && typeof option === "object") {
+              const raw = option as { label?: unknown; value?: unknown };
+              const label = raw.label ?? raw.value ?? "";
+              const value = raw.value ?? raw.label ?? "";
+              return { label: String(label), value: String(value) };
+            }
+            return { label: "", value: "" };
+          })
+          .filter((option) => option.value !== "");
+        const initialValue =
+          (props.selected as string | undefined) ??
+          (props.value as string | undefined) ??
+          normalizedOptions[0]?.value ??
+          "";
         const value =
-          inputValues[nodeId] !== undefined
-            ? inputValues[nodeId]
-            : ((props.value as string) || options[0] || "");
+          inputValues[nodeId] !== undefined ? inputValues[nodeId] : initialValue;
 
         const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
           const newValue = event.target.value;
@@ -875,9 +872,9 @@ function WaveletUIRenderer({
               onChange={handleChange}
               className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
-              {options.map((option, index) => (
-                <option key={index} value={option}>
-                  {option}
+              {normalizedOptions.map((option, index) => (
+                <option key={index} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
