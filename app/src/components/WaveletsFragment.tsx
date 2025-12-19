@@ -669,11 +669,39 @@ function WaveletUIRenderer({
 }) {
   const [inputValues, setInputValues] = useState<Record<string, any>>({});
 
+  const resolvePadding = (value: unknown): React.CSSProperties | undefined => {
+    if (typeof value === "number") {
+      return { padding: `${value}px` };
+    }
+    if (value && typeof value === "object") {
+      const raw = value as {
+        top?: number;
+        bottom?: number;
+        leading?: number;
+        trailing?: number;
+        left?: number;
+        right?: number;
+      };
+      const top = raw.top ?? 0;
+      const bottom = raw.bottom ?? 0;
+      const left = raw.left ?? raw.leading ?? 0;
+      const right = raw.right ?? raw.trailing ?? 0;
+      return {
+        paddingTop: `${top}px`,
+        paddingBottom: `${bottom}px`,
+        paddingLeft: `${left}px`,
+        paddingRight: `${right}px`,
+      };
+    }
+    return undefined;
+  };
+
   const renderNode = (node: WaveletTree): ReactNode => {
     const props = node.props || {};
     const children = node.children || [];
     const handlers = (node as any).handlers || {};
     const nodeId = (props.id as string) || "node";
+    const paddingStyle = resolvePadding((props as any).padding);
 
     switch (node.type) {
       case "column": {
@@ -685,6 +713,7 @@ function WaveletUIRenderer({
             style={{
               gap: `${spacing}px`,
               padding: `${padding}px`,
+              width: "100%",
             }}
           >
             {children.map((child, index) => (
@@ -697,7 +726,7 @@ function WaveletUIRenderer({
       case "row": {
         const spacing = (props.spacing as number) || 8;
         return (
-          <div className="flex" style={{ gap: `${spacing}px` }}>
+          <div className="flex w-full" style={{ gap: `${spacing}px` }}>
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
@@ -711,10 +740,21 @@ function WaveletUIRenderer({
             onInvokeCallback(handlers.tap, []);
           }
         };
+        const backgroundColor = props.backgroundColor as string | undefined;
+        const foregroundColor = props.foregroundColor as string | undefined;
+        const cornerRadius = props.cornerRadius as number | undefined;
+        const width = props.width as string | number | undefined;
         return (
           <button
             onClick={handleClick}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            style={{
+              backgroundColor,
+              color: foregroundColor,
+              borderRadius: cornerRadius ? `${cornerRadius}px` : undefined,
+              ...(width ? { width } : null),
+              ...paddingStyle,
+            }}
           >
             {(props.label as string) || "Button"}
           </button>
@@ -723,7 +763,20 @@ function WaveletUIRenderer({
 
       case "text":
         return (
-          <div className="text-slate-200 text-sm">{(props.text as string) || ""}</div>
+          <div
+            className="text-slate-200 text-sm"
+            style={{
+              color: (props.foregroundColor as string | undefined) ?? undefined,
+              backgroundColor: props.backgroundColor as string | undefined,
+              borderRadius:
+                typeof props.cornerRadius === "number"
+                  ? `${props.cornerRadius}px`
+                  : undefined,
+              ...paddingStyle,
+            }}
+          >
+            {(props.text as string) || ""}
+          </div>
         );
 
       case "slider": {
@@ -794,7 +847,7 @@ function WaveletUIRenderer({
               placeholder={placeholder}
               onChange={handleChange}
               onKeyDown={handleSubmit}
-              className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
         );
@@ -826,7 +879,7 @@ function WaveletUIRenderer({
               placeholder={placeholder}
               onChange={handleChange}
               rows={rows}
-              className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+              className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
             />
           </div>
         );
@@ -872,7 +925,7 @@ function WaveletUIRenderer({
             <select
               value={value}
               onChange={handleChange}
-              className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               {normalizedOptions.map((option, index) => (
                 <option key={index} value={option.value}>
@@ -885,9 +938,12 @@ function WaveletUIRenderer({
       }
 
       case "scroll": {
-        const maxHeight = (props.maxHeight as number) || 400;
+        const maxHeight = props.maxHeight as number | undefined;
         return (
-          <div className="overflow-y-auto" style={{ maxHeight: `${maxHeight}px` }}>
+          <div
+            className="w-full overflow-y-auto"
+            style={maxHeight ? { maxHeight: `${maxHeight}px` } : { height: "100%" }}
+          >
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
@@ -919,7 +975,14 @@ function WaveletUIRenderer({
       }
 
       case "divider": {
-        return <hr className="border-slate-700 my-2" />;
+        return (
+          <hr
+            className="border-slate-700 my-2"
+            style={{
+              borderColor: props.backgroundColor as string | undefined,
+            }}
+          />
+        );
       }
 
       case "progress": {
