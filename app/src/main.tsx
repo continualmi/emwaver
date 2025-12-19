@@ -23,6 +23,12 @@ import "./index.css";
 import { DeviceProvider } from "./utils/DeviceContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
+if (typeof window !== "undefined") {
+  const storedTheme = window.localStorage.getItem("emwaver.theme");
+  const theme = storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
+  document.documentElement.classList.add(`theme-${theme}`);
+}
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
