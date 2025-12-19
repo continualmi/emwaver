@@ -173,7 +173,7 @@
         "INFRARED_WAVER",
         "GPIO_WAVER",
         "EMWAVER_SHIELD",
-        "RFID_WAVER",
+        "EMWAVER_DIY",
       ];
 
       const state = {
@@ -264,6 +264,28 @@
 	        const group = device.group || "";
 	        const platform = platformIcon(group);
 	        const tags = Array.isArray(device.tags) ? device.tags.slice(0, 5) : [];
+          const reproduction =
+            device.reproductionCost && typeof device.reproductionCost === "object" ? device.reproductionCost : null;
+          const amountRaw = reproduction && reproduction.amount != null ? reproduction.amount : "";
+          const amount =
+            amountRaw === "" || amountRaw == null ? "" : Number.isFinite(Number(amountRaw)) ? Number(amountRaw) : amountRaw;
+          const currency = reproduction && reproduction.currency ? String(reproduction.currency).trim() : "";
+          const unitsRaw = reproduction && reproduction.units != null ? reproduction.units : "";
+          const units =
+            unitsRaw === "" || unitsRaw == null ? "" : Number.isFinite(Number(unitsRaw)) ? Number(unitsRaw) : unitsRaw;
+          const amountLabel = amount !== "" ? String(amount) : "";
+          const costLabel = amountLabel && currency ? `${amountLabel} ${currency}` : amountLabel || currency;
+          const unitsLabel =
+            units !== "" ? `${units} unit${Number(units) === 1 ? "" : "s"}` : "";
+          const reproInline =
+            costLabel || unitsLabel
+              ? `<span class="ml-auto text-xs text-slate-500 whitespace-nowrap">Repro cost: ${[
+                  costLabel,
+                  unitsLabel,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}</span>`
+              : "";
 
         return `
           <div class="rounded-2xl border border-slate-200 bg-white/80 hover:bg-white transition shadow-sm overflow-hidden h-fit">
@@ -284,6 +306,7 @@
 	                    <div class="flex items-center gap-2 min-w-0">
 	                      ${platform ? `<span class="shrink-0">${platform}</span>` : ""}
 	                      <h3 class="text-lg font-bold text-slate-900 group-hover:text-brand-600 transition truncate">${title}</h3>
+                        ${reproInline}
 	                    </div>
                     <div class="mt-2 flex flex-wrap items-center gap-2">
                       ${modulePill(device.status)}
