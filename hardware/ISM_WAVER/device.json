@@ -4,11 +4,11 @@
   "group": "stm32",
   "image": "ISM_WAVER_DUAL.png",
   "images": [
-    "ISM_WAVER_DUAL.png",
-    "IMG_0057.jpg",
-    "IMG_0058.jpg",
     "IMG_0059.jpg",
-    "IMG_0060.jpg"
+    "IMG_0058.jpg",
+    "IMG_0057.jpg",
+    "IMG_0060.jpg",
+    "ISM_WAVER_DUAL.png"
   ],
   "casingImage": "ISM_WAVER_CASING.png",
   "onshapeUrl": "https://cad.onshape.com/documents/64c96d9fdfbfe408494ae01c/w/8d74fa4788d2c808fc71538c/e/3787db3f5f9202ad718d7c51",

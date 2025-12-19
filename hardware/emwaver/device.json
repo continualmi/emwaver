@@ -5,7 +5,6 @@
   "status": "production",
   "image": "emwaver.png",
   "images": [
-    "emwaver.png",
     "IMG_0068.jpg",
     "IMG_0069.jpg",
     "IMG_0070.jpg",
@@ -14,7 +13,8 @@
     "IMG_0073.jpg",
     "IMG_0074.jpg",
     "IMG_0075.jpg",
-    "IMG_0079.jpg"
+    "IMG_0079.jpg",
+    "emwaver.png"
   ],
   "casingImage": "EMWAVER_CASING.png",
   "onshapeUrl": "https://cad.onshape.com/documents/560d616d5af1320f8f40d5ef/w/a1c3d6516848b7cf43675279/e/184d476c73cf63e7fbf1a01a",

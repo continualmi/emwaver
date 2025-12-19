@@ -5,7 +5,6 @@
   "status": "module",
   "image": "EMWAVER_DIY.png",
   "images": [
-    "EMWAVER_DIY.png",
     "IMG_0084.jpg",
     "IMG_0085.jpg",
     "IMG_0086.jpg",
@@ -17,7 +16,8 @@
     "IMG_0092.jpg",
     "IMG_0093.jpg",
     "IMG_0094.jpg",
-    "IMG_0095.jpg"
+    "IMG_0095.jpg",
+    "EMWAVER_DIY.png"
   ],
   "casingImage": "EMWAVER_DIY_CASING.png",
   "onshapeUrl": "https://cad.onshape.com/documents/46528cc3f6bf51d259b3efae/w/aa322902f63dd90c958c8fd1/e/34e00f1462cf9231351b3c0d",

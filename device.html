@@ -442,9 +442,6 @@
         const defaultImg = `hardware/${deviceId}/${deviceId}.png`;
 
         const rawPrimary = device.image ? String(device.image).trim() : "";
-        const resolvedPrimary = rawPrimary
-          ? resolveHardwareAssetUrl(deviceId, rawPrimary)
-          : defaultImg;
 
         const rawGallery =
           Array.isArray(device.images)
@@ -455,13 +452,20 @@
                 ? device.photos
                 : [];
 
-        const resolvedGallery = uniqueStrings([
-          resolvedPrimary,
-          ...rawGallery
-            .map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.src || x.url || "" : ""))
-            .map((x) => resolveHardwareAssetUrl(deviceId, x))
-            .filter(Boolean),
-        ]);
+        const normalizedGallery = rawGallery
+          .map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.src || x.url || "" : ""))
+          .map((x) => (typeof x === "string" ? x.trim() : ""))
+          .filter(Boolean);
+
+        if (rawPrimary && !normalizedGallery.includes(rawPrimary)) normalizedGallery.push(rawPrimary);
+
+        const resolvedGallery = uniqueStrings(
+          normalizedGallery.map((x) => resolveHardwareAssetUrl(deviceId, x)).filter(Boolean),
+        );
+
+        const resolvedPrimary =
+          resolvedGallery[0] ||
+          (rawPrimary ? resolveHardwareAssetUrl(deviceId, rawPrimary) : defaultImg);
 
         const gallery = resolvedGallery.length ? resolvedGallery : [resolvedPrimary];
         const galleryAlt = (idx) => `${title}${gallery.length > 1 ? ` (${idx + 1}/${gallery.length})` : ""}`;
