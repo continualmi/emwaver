@@ -12,7 +12,8 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
-import { safeInvoke } from '../utils/tauri';
+import { appDataDir } from '@tauri-apps/api/path';
+import { isTauriAvailable, safeInvoke, safeJoin } from '../utils/tauri';
 import { SamplerBuffer } from '../utils/SamplerBuffer';
 import { useDevice } from '../utils/DeviceContext';
 
@@ -33,7 +34,36 @@ try {
   console.error('Failed to register Chart.js components:', error);
 }
 
-const PINS = [
+type SamplerDeviceType = 'esp32' | 'stm32';
+
+type SignalEntry = {
+  name: string;
+  path: string;
+};
+
+type DirectoryEntry = {
+  name: string;
+  path: string;
+  kind: 'file' | 'directory';
+  children?: DirectoryEntry[];
+};
+
+const DEVICE_TYPE_KEY = 'sampler.deviceType';
+const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
+const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
+const LAST_SIGNAL_KEY = 'sampler.lastSignal';
+const PWM_ENABLED_KEY = 'sampler.pwm.enabled';
+const PWM_FREQ_KEY = 'sampler.pwm.freq';
+const PWM_DUTY_KEY = 'sampler.pwm.duty';
+const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
+const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
+const SETTINGS_MAX_SAMPLES_KEY = 'sampler.settings.maxSamples';
+
+const DEFAULT_PWM_FREQ_HZ = 38000;
+const DEFAULT_PWM_DUTY_PERCENT = 50;
+const SIGNALS_DIR_NAME = 'signals';
+
+const ESP32_PINS = [
   'RFM69 DIO0 (IO1)',
   'RFM69 DIO1 (IO2)',
   'RFM69 DIO2 (IO42)',
@@ -61,12 +91,46 @@ const PINS = [
   'GPIO14 (IO14)',
 ];
 
-function getPinNumber(pinString: string): number {
+const STM32_PINS = [
+  'IR RX (PA1)',
+  'PA0 (TIM2 CH1)',
+  'PA2 (TIM2 CH3)',
+  'PA3 (TIM2 CH4)',
+];
+
+function getEsp32PinNumber(pinString: string): number {
   const match = pinString.match(/\(IO(\d+)\)/);
   if (match) {
     return parseInt(match[1], 10);
   }
   return -1;
+}
+
+function getStm32PinNumber(pinString: string): number {
+  if (pinString.includes('PA0')) return 0;
+  if (pinString.includes('PA1')) return 1;
+  if (pinString.includes('PA2')) return 2;
+  if (pinString.includes('PA3')) return 3;
+  return -1;
+}
+
+function normalizeSignalName(rawName: string, fallback: string): string {
+  const trimmed = rawName.trim();
+  const baseName = trimmed || fallback;
+  const lower = baseName.toLowerCase();
+  if (lower.endsWith('.raw')) {
+    return baseName;
+  }
+  return `${baseName}.raw`;
+}
+
+function parsePwmIntOrDefault(raw: string, fallback: number): number {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
 }
 
 function SamplerFragment() {
@@ -75,8 +139,19 @@ function SamplerFragment() {
   const isConnected = status.connected;
   
   const [isRecording, setIsRecording] = useState(false);
-  const [selectedPinIndex, setSelectedPinIndex] = useState(10); // GPIO6 default
-  const [signalNames, setSignalNames] = useState<string[]>([]);
+  const [deviceType, setDeviceType] = useState<SamplerDeviceType>(() => {
+    const stored = localStorage.getItem(DEVICE_TYPE_KEY);
+    return stored === 'stm32' ? 'stm32' : 'esp32';
+  });
+  const [selectedPinIndexEsp32, setSelectedPinIndexEsp32] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(PIN_INDEX_ESP32_KEY) || '10', 10);
+    return Number.isNaN(stored) ? 10 : stored;
+  });
+  const [selectedPinIndexStm32, setSelectedPinIndexStm32] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(PIN_INDEX_STM32_KEY) || '0', 10);
+    return Number.isNaN(stored) ? 0 : stored;
+  });
+  const [signalEntries, setSignalEntries] = useState<SignalEntry[]>([]);
   const [selectedSignalIndex, setSelectedSignalIndex] = useState(0); // 0 = "New signal..."
   const [currentSignalName, setCurrentSignalName] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -88,19 +163,102 @@ function SamplerFragment() {
   
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
-  const [chartResolution, setChartResolution] = useState(1000);
-  const [maxSamples, setMaxSamples] = useState(393216);
-  const [refreshRate, setRefreshRate] = useState(50);
+  const [chartResolution, setChartResolution] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(SETTINGS_RESOLUTION_KEY) || '1000', 10);
+    return Number.isNaN(stored) ? 1000 : stored;
+  });
+  const [maxSamples, setMaxSamples] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(SETTINGS_MAX_SAMPLES_KEY) || '393216', 10);
+    return Number.isNaN(stored) ? 393216 : stored;
+  });
+  const [refreshRate, setRefreshRate] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(SETTINGS_REFRESH_KEY) || '50', 10);
+    return Number.isNaN(stored) ? 50 : stored;
+  });
+  const [pwmEnabled, setPwmEnabled] = useState(() => localStorage.getItem(PWM_ENABLED_KEY) === 'true');
+  const [pwmFreqHz, setPwmFreqHz] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(PWM_FREQ_KEY) || `${DEFAULT_PWM_FREQ_HZ}`, 10);
+    return Number.isNaN(stored) ? DEFAULT_PWM_FREQ_HZ : stored;
+  });
+  const [pwmDutyPercent, setPwmDutyPercent] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(PWM_DUTY_KEY) || `${DEFAULT_PWM_DUTY_PERCENT}`, 10);
+    return Number.isNaN(stored) ? DEFAULT_PWM_DUTY_PERCENT : stored;
+  });
+  const [signalsDir, setSignalsDir] = useState<string | null>(null);
 
   const bufferRef = useRef(new SamplerBuffer());
   const chartRef = useRef<any>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const lastBufferSizeRef = useRef(0);
-  
+
+  const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
+  const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
+
   // Update buffer max size when setting changes
   useEffect(() => {
     bufferRef.current.setMaxSize(maxSamples);
   }, [maxSamples]);
+
+  useEffect(() => {
+    localStorage.setItem(DEVICE_TYPE_KEY, deviceType);
+  }, [deviceType]);
+
+  useEffect(() => {
+    localStorage.setItem(PIN_INDEX_ESP32_KEY, `${selectedPinIndexEsp32}`);
+  }, [selectedPinIndexEsp32]);
+
+  useEffect(() => {
+    localStorage.setItem(PIN_INDEX_STM32_KEY, `${selectedPinIndexStm32}`);
+  }, [selectedPinIndexStm32]);
+
+  useEffect(() => {
+    if (selectedPinIndexEsp32 >= ESP32_PINS.length) {
+      setSelectedPinIndexEsp32(0);
+    }
+  }, [selectedPinIndexEsp32]);
+
+  useEffect(() => {
+    if (selectedPinIndexStm32 >= STM32_PINS.length) {
+      setSelectedPinIndexStm32(0);
+    }
+  }, [selectedPinIndexStm32]);
+
+  useEffect(() => {
+    localStorage.setItem(PWM_ENABLED_KEY, pwmEnabled ? 'true' : 'false');
+  }, [pwmEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(PWM_FREQ_KEY, `${pwmFreqHz}`);
+  }, [pwmFreqHz]);
+
+  useEffect(() => {
+    localStorage.setItem(PWM_DUTY_KEY, `${pwmDutyPercent}`);
+  }, [pwmDutyPercent]);
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_RESOLUTION_KEY, `${chartResolution}`);
+  }, [chartResolution]);
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_REFRESH_KEY, `${refreshRate}`);
+  }, [refreshRate]);
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_MAX_SAMPLES_KEY, `${maxSamples}`);
+  }, [maxSamples]);
+
+  useEffect(() => {
+    if (!isTauriAvailable()) {
+      return;
+    }
+    const resolveSignalsDir = async () => {
+      const root = await appDataDir();
+      const dir = await safeJoin(root, SIGNALS_DIR_NAME);
+      await safeInvoke<void>('ensure_dir', { payload: { path: dir } });
+      setSignalsDir(dir);
+    };
+    void resolveSignalsDir();
+  }, []);
 
   // Define refreshChart callback first (before useEffects that depend on it)
   const refreshChart = useCallback((chartInstance?: any) => {
@@ -240,9 +398,19 @@ function SamplerFragment() {
       alert('Not connected to device');
       return;
     }
+    if (deviceType === 'stm32' && status.transport !== 'USB') {
+      alert('USB device not connected');
+      return;
+    }
+    if (deviceType === 'esp32' && status.transport !== 'BLE') {
+      alert('BLE device not connected');
+      return;
+    }
 
-    const selectedPin = PINS[selectedPinIndex];
-    const pinNumber = getPinNumber(selectedPin);
+    const selectedPin = pinOptions[selectedPinIndex];
+    const pinNumber = deviceType === 'stm32'
+      ? getStm32PinNumber(selectedPin)
+      : getEsp32PinNumber(selectedPin);
     if (pinNumber === -1) {
       alert('Invalid pin selected');
       return;
@@ -259,6 +427,14 @@ function SamplerFragment() {
 
   const stopRecording = async () => {
     if (!isConnected) return;
+    if (deviceType === 'stm32' && status.transport !== 'USB') {
+      alert('USB device not connected');
+      return;
+    }
+    if (deviceType === 'esp32' && status.transport !== 'BLE') {
+      alert('BLE device not connected');
+      return;
+    }
 
     // Send "sample stop" command (matching Android/iOS)
     const command = new TextEncoder().encode('sample stop\n');
@@ -272,6 +448,14 @@ function SamplerFragment() {
       alert('Not connected to device');
       return;
     }
+    if (deviceType === 'stm32' && status.transport !== 'USB') {
+      alert('USB device not connected');
+      return;
+    }
+    if (deviceType === 'esp32' && status.transport !== 'BLE') {
+      alert('BLE device not connected');
+      return;
+    }
 
     const buffer = bufferRef.current.getBuffer();
     if (buffer.length === 0) {
@@ -279,16 +463,35 @@ function SamplerFragment() {
       return;
     }
 
-    const selectedPin = PINS[selectedPinIndex];
-    const pinNumber = getPinNumber(selectedPin);
+    const selectedPin = pinOptions[selectedPinIndex];
+    const pinNumber = deviceType === 'stm32'
+      ? getStm32PinNumber(selectedPin)
+      : getEsp32PinNumber(selectedPin);
     if (pinNumber === -1) {
       alert('Invalid pin selected');
       return;
     }
 
     try {
+      let commandStr = `transmit start --pin=${pinNumber}`;
+      if (deviceType === 'esp32' && pwmEnabled) {
+        const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
+        const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
+        if (freqHz < 1) {
+          alert('Invalid PWM frequency');
+          return;
+        }
+        if (dutyPercent < 1 || dutyPercent > 100) {
+          alert('Invalid PWM duty (1-100)');
+          return;
+        }
+        setPwmFreqHz(freqHz);
+        setPwmDutyPercent(dutyPercent);
+        commandStr += ` --pwm --freq=${freqHz} --duty=${dutyPercent}`;
+      }
+
       // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-      const commandStr = `transmit start --pin=${pinNumber}\n`;
+      commandStr += '\n';
       const command = new TextEncoder().encode(commandStr);
       await sendCommand(command);
 
@@ -336,19 +539,33 @@ function SamplerFragment() {
   };
 
   const loadSignal = async (signalName: string) => {
+    if (!signalsDir) {
+      alert('Signals storage is not available');
+      return;
+    }
+    if (signalName === currentSignalName && !hasUnsavedChanges) {
+      return;
+    }
     try {
-      // Load from localStorage (can be enhanced with file system later)
-      const stored = localStorage.getItem(`signal_${signalName}`);
-      if (!stored) {
+      const entry = signalEntries.find((item) => item.name === signalName);
+      if (!entry) {
         alert('Signal file not found');
         return;
       }
 
-      const data = Uint8Array.from(JSON.parse(stored));
-      bufferRef.current.loadBuffer(data);
+      const data = await safeInvoke<number[]>('read_binary_file', {
+        payload: { path: entry.path },
+      });
+      if (!data || data.length === 0) {
+        alert('Signal file is empty');
+        return;
+      }
+
+      bufferRef.current.loadBuffer(new Uint8Array(data));
       lastBufferSizeRef.current = bufferRef.current.getBufferLength();
       setCurrentSignalName(signalName);
       setHasUnsavedChanges(false);
+      localStorage.setItem(LAST_SIGNAL_KEY, signalName);
       resetChartZoom();
       refreshChart();
     } catch (error) {
@@ -364,13 +581,26 @@ function SamplerFragment() {
       return;
     }
 
-    const fileName = currentSignalName || generateNewSignalName();
-    
+    if (!signalsDir) {
+      alert('Signals storage is not available');
+      return;
+    }
+
+    const defaultName = currentSignalName || generateNewSignalName();
+    const entered = window.prompt('Save Signal', defaultName);
+    if (entered === null) {
+      return;
+    }
+    const fileName = normalizeSignalName(entered || defaultName, defaultName);
+
     try {
-      // Save to localStorage (can be enhanced with file system later)
-      localStorage.setItem(`signal_${fileName}`, JSON.stringify(Array.from(buffer)));
+      const targetPath = await safeJoin(signalsDir, fileName);
+      await safeInvoke<void>('write_binary_file', {
+        payload: { path: targetPath, data: Array.from(buffer) },
+      });
       setCurrentSignalName(fileName);
       setHasUnsavedChanges(false);
+      localStorage.setItem(LAST_SIGNAL_KEY, fileName);
       refreshSignalList();
       alert(`Signal saved: ${fileName}`);
     } catch (error) {
@@ -391,12 +621,27 @@ function SamplerFragment() {
 
         try {
           const arrayBuffer = await selectedFile.arrayBuffer();
-          bufferRef.current.loadBuffer(new Uint8Array(arrayBuffer));
+          const buffer = new Uint8Array(arrayBuffer);
+          if (buffer.length === 0) {
+            alert('Selected file is empty');
+            return;
+          }
+
+          const defaultName = selectedFile.name || generateNewSignalName();
+          const fileName = normalizeSignalName(defaultName, generateNewSignalName());
+          if (signalsDir) {
+            const targetPath = await safeJoin(signalsDir, fileName);
+            await safeInvoke<void>('write_binary_file', {
+              payload: { path: targetPath, data: Array.from(buffer) },
+            });
+          }
+
+          bufferRef.current.loadBuffer(buffer);
           lastBufferSizeRef.current = bufferRef.current.getBufferLength();
           
-          const fileName = selectedFile.name || 'imported.raw';
           setCurrentSignalName(fileName);
           setHasUnsavedChanges(false);
+          localStorage.setItem(LAST_SIGNAL_KEY, fileName);
           resetChartZoom();
           refreshChart();
           refreshSignalList();
@@ -416,20 +661,34 @@ function SamplerFragment() {
     clearBuffer();
     setCurrentSignalName(null);
     setSelectedSignalIndex(0);
+    localStorage.removeItem(LAST_SIGNAL_KEY);
   };
 
   const refreshSignalList = () => {
     try {
-      // Get all signal names from localStorage
-      const signals: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith('signal_')) {
-          signals.push(key.replace('signal_', ''));
-        }
+      if (!signalsDir) {
+        setSignalEntries([]);
+        return;
       }
-      signals.sort();
-      setSignalNames(signals);
+
+      const loadSignals = async () => {
+        const entries = await safeInvoke<DirectoryEntry[]>('read_directory', {
+          payload: { path: signalsDir },
+        });
+        const files = (entries || []).filter(
+          (entry) => entry.kind === 'file' && entry.name.toLowerCase().endsWith('.raw')
+        );
+        const mapped: SignalEntry[] = await Promise.all(
+          files.map(async (entry) => ({
+            name: entry.name,
+            path: await safeJoin(signalsDir, entry.path),
+          }))
+        );
+        mapped.sort((a, b) => a.name.localeCompare(b.name));
+        setSignalEntries(mapped);
+      };
+
+      void loadSignals();
     } catch (error) {
       console.error('Failed to refresh signal list:', error);
     }
@@ -438,16 +697,117 @@ function SamplerFragment() {
   // Load signal list on mount
   useEffect(() => {
     refreshSignalList();
-  }, []);
+  }, [signalsDir]);
+
+  useEffect(() => {
+    if (!signalEntries.length || currentSignalName) {
+      return;
+    }
+    const lastSignal = localStorage.getItem(LAST_SIGNAL_KEY);
+    if (lastSignal && signalEntries.some((entry) => entry.name === lastSignal)) {
+      void loadSignal(lastSignal);
+    }
+  }, [signalEntries, currentSignalName]);
+
+  useEffect(() => {
+    if (!currentSignalName) {
+      setSelectedSignalIndex(0);
+      return;
+    }
+    const index = signalEntries.findIndex((entry) => entry.name === currentSignalName);
+    if (index >= 0) {
+      setSelectedSignalIndex(index + 1);
+    }
+  }, [signalEntries, currentSignalName]);
 
   const generateNewSignalName = (): string => {
     let counter = 1;
     let candidate = `signal${counter}.raw`;
-    while (signalNames.includes(candidate)) {
+    while (signalEntries.some((entry) => entry.name === candidate)) {
       counter++;
       candidate = `signal${counter}.raw`;
     }
     return candidate;
+  };
+
+  const renameSignal = async () => {
+    if (!currentSignalName || !signalsDir) {
+      alert('No signal loaded');
+      return;
+    }
+    const existing = currentSignalName.replace(/\.raw$/i, '');
+    const entered = window.prompt('Rename Signal', existing);
+    if (entered === null) {
+      return;
+    }
+    const normalized = normalizeSignalName(entered, currentSignalName);
+    if (normalized === currentSignalName) {
+      alert('Name unchanged');
+      return;
+    }
+    if (signalEntries.some((entry) => entry.name === normalized)) {
+      alert('A signal with this name already exists');
+      return;
+    }
+    const entry = signalEntries.find((item) => item.name === currentSignalName);
+    if (!entry) {
+      alert('Signal file not found');
+      return;
+    }
+    const targetPath = await safeJoin(signalsDir, normalized);
+    try {
+      await safeInvoke<void>('rename_path', {
+        payload: { from: entry.path, to: targetPath },
+      });
+      setCurrentSignalName(normalized);
+      setHasUnsavedChanges(false);
+      localStorage.setItem(LAST_SIGNAL_KEY, normalized);
+      refreshSignalList();
+      alert('Signal renamed');
+    } catch (error) {
+      console.error('Failed to rename signal:', error);
+      alert('Failed to rename signal');
+    }
+  };
+
+  const deleteSignal = async () => {
+    if (!currentSignalName || !signalsDir) {
+      alert('No signal loaded');
+      return;
+    }
+    const entry = signalEntries.find((item) => item.name === currentSignalName);
+    if (!entry) {
+      alert('Signal file not found');
+      return;
+    }
+    const confirmed = window.confirm(`Delete ${currentSignalName}?`);
+    if (!confirmed) {
+      return;
+    }
+    const currentIndex = signalEntries.findIndex((item) => item.name === currentSignalName);
+    try {
+      await safeInvoke<void>('remove_path', { payload: { path: entry.path } });
+      let nextSignal: string | null = null;
+      if (signalEntries.length > 1 && currentIndex >= 0) {
+        if (currentIndex < signalEntries.length - 1) {
+          nextSignal = signalEntries[currentIndex + 1].name;
+        } else {
+          nextSignal = signalEntries[0].name;
+        }
+      }
+      setCurrentSignalName(null);
+      setHasUnsavedChanges(false);
+      localStorage.removeItem(LAST_SIGNAL_KEY);
+      refreshSignalList();
+      if (nextSignal) {
+        setSelectedSignalIndex(0);
+        void loadSignal(nextSignal);
+      }
+      alert('Signal deleted');
+    } catch (error) {
+      console.error('Failed to delete signal:', error);
+      alert('Failed to delete signal');
+    }
   };
 
   const chartOptions = useMemo(() => ({
@@ -564,8 +924,8 @@ function SamplerFragment() {
   }), [chartData]);
 
   return (
-    <section className="flex flex-1 flex-col bg-slate-950">
-      <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
+    <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
+      <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4 flex-shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">Sampler</h2>
           <p className="text-sm text-slate-400">
@@ -584,6 +944,18 @@ function SamplerFragment() {
             className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
           >
             Save
+          </button>
+          <button
+            onClick={renameSignal}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+          >
+            Rename
+          </button>
+          <button
+            onClick={deleteSignal}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+          >
+            Delete
           </button>
           <button
             onClick={importSignal}
@@ -606,10 +978,10 @@ function SamplerFragment() {
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col gap-5 overflow-hidden px-6 py-6">
+      <div className="flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto px-6 py-6">
         {/* Chart */}
-        <div className="flex-1 min-h-0 bg-slate-900 rounded-lg p-4">
-          <div className="h-full w-full" style={{ minHeight: '400px' }}>
+        <div className="flex-shrink-0 bg-slate-900 rounded-lg p-4">
+          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
             {chartError ? (
               <div className="flex h-full items-center justify-center text-slate-400">
                 <p>Chart error: {chartError}</p>
@@ -627,17 +999,86 @@ function SamplerFragment() {
 
         {/* Controls */}
         <div className="flex flex-col gap-4">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDeviceType('esp32')}
+              className={`flex-1 px-4 py-2 rounded border ${
+                deviceType === 'esp32'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-slate-900 border-slate-700 text-slate-200'
+              }`}
+            >
+              ESP32 (BLE)
+            </button>
+            <button
+              onClick={() => setDeviceType('stm32')}
+              className={`flex-1 px-4 py-2 rounded border ${
+                deviceType === 'stm32'
+                  ? 'bg-blue-600 border-blue-500 text-white'
+                  : 'bg-slate-900 border-slate-700 text-slate-200'
+              }`}
+            >
+              STM32 (USB)
+            </button>
+          </div>
           <select
             value={selectedPinIndex}
-            onChange={(e) => setSelectedPinIndex(Number(e.target.value))}
+            onChange={(e) => {
+              const index = Number(e.target.value);
+              if (deviceType === 'stm32') {
+                setSelectedPinIndexStm32(index);
+              } else {
+                setSelectedPinIndexEsp32(index);
+              }
+            }}
             className="px-4 py-2 bg-slate-900 text-slate-200 rounded border border-slate-700"
           >
-            {PINS.map((pin, index) => (
+            {pinOptions.map((pin, index) => (
               <option key={index} value={index}>
                 {pin}
               </option>
             ))}
           </select>
+
+          <div className="rounded border border-slate-800 bg-slate-900 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-100">TX PWM</p>
+                <p className="text-xs text-slate-500">Applies to retransmit for ESP32.</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={pwmEnabled}
+                  onChange={(e) => setPwmEnabled(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Enabled
+              </label>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="text-xs text-slate-400">
+                Frequency (Hz)
+                <input
+                  type="number"
+                  value={pwmFreqHz}
+                  onChange={(e) => setPwmFreqHz(parsePwmIntOrDefault(e.target.value, DEFAULT_PWM_FREQ_HZ))}
+                  disabled={!pwmEnabled}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
+                />
+              </label>
+              <label className="text-xs text-slate-400">
+                Duty (%)
+                <input
+                  type="number"
+                  value={pwmDutyPercent}
+                  onChange={(e) => setPwmDutyPercent(parsePwmIntOrDefault(e.target.value, DEFAULT_PWM_DUTY_PERCENT))}
+                  disabled={!pwmEnabled}
+                  className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
+                />
+              </label>
+            </div>
+          </div>
 
           <div className="flex gap-2">
             <button
@@ -676,8 +1117,8 @@ function SamplerFragment() {
             onChange={(e) => {
               const index = Number(e.target.value);
               setSelectedSignalIndex(index);
-              if (index > 0 && signalNames[index - 1]) {
-                loadSignal(signalNames[index - 1]);
+              if (index > 0 && signalEntries[index - 1]) {
+                loadSignal(signalEntries[index - 1].name);
               } else {
                 createNewSignal();
               }
@@ -685,9 +1126,9 @@ function SamplerFragment() {
             className="px-4 py-2 bg-slate-900 text-slate-200 rounded border border-slate-700"
           >
             <option value={0}>New signal...</option>
-            {signalNames.map((name, index) => (
+            {signalEntries.map((entry, index) => (
               <option key={index} value={index + 1}>
-                {name}
+                {entry.name}
               </option>
             ))}
           </select>

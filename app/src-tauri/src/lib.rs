@@ -65,9 +65,20 @@ struct ReadFilePayload {
 }
 
 #[derive(Deserialize)]
+struct ReadBinaryFilePayload {
+    path: String,
+}
+
+#[derive(Deserialize)]
 struct WriteFilePayload {
     path: String,
     content: String,
+}
+
+#[derive(Deserialize)]
+struct WriteBinaryFilePayload {
+    path: String,
+    data: Vec<u8>,
 }
 
 #[derive(Deserialize)]
@@ -79,6 +90,12 @@ struct EnsureDirPayload {
 struct RemovePathPayload {
     path: String,
     recursive: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct RenamePathPayload {
+    from: String,
+    to: String,
 }
 
 // Firmware task types removed - ESP-IDF build/flash functionality removed
@@ -159,6 +176,15 @@ async fn read_file(payload: ReadFilePayload) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn read_binary_file(payload: ReadBinaryFilePayload) -> Result<Vec<u8>, String> {
+    let path = expand_path(&payload.path);
+    spawn_blocking(move || fs::read(&path).map_err(|error| format!("Failed to read file: {error}")))
+        .await
+        .map_err(|error| format!("Failed to read file: {error}"))
+        .and_then(|result| result)
+}
+
+#[tauri::command]
 async fn write_file(payload: WriteFilePayload) -> Result<(), String> {
     let path = expand_path(&payload.path);
     let content = payload.content;
@@ -170,6 +196,26 @@ async fn write_file(payload: WriteFilePayload) -> Result<(), String> {
             }
         }
         fs::write(&path, content).map_err(|error| format!("Failed to write file: {error}"))
+    })
+    .await
+    .map_err(|error| format!("Failed to write file: {error}"))?
+    .map_err(|error| format!("Failed to write file: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn write_binary_file(payload: WriteBinaryFilePayload) -> Result<(), String> {
+    let path = expand_path(&payload.path);
+    let data = payload.data;
+    spawn_blocking(move || {
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| format!("Failed to create parent directory: {error}"))?;
+            }
+        }
+        fs::write(&path, data).map_err(|error| format!("Failed to write file: {error}"))
     })
     .await
     .map_err(|error| format!("Failed to write file: {error}"))?
@@ -209,6 +255,17 @@ async fn remove_path(payload: RemovePathPayload) -> Result<(), String> {
     .await
     .map_err(|error| format!("Failed to remove path: {error}"))?
     .map_err(|error| format!("Failed to remove path: {error}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn rename_path(payload: RenamePathPayload) -> Result<(), String> {
+    let from = expand_path(&payload.from);
+    let to = expand_path(&payload.to);
+    spawn_blocking(move || fs::rename(&from, &to).map_err(|error| format!("Failed to rename path: {error}")))
+        .await
+        .map_err(|error| format!("Failed to rename path: {error}"))?
+        .map_err(|error| format!("Failed to rename path: {error}"))?;
     Ok(())
 }
 
@@ -723,9 +780,12 @@ pub fn run() {
             create_project,
             read_directory,
             read_file,
+            read_binary_file,
             write_file,
+            write_binary_file,
             ensure_dir,
             remove_path,
+            rename_path,
             reveal_in_finder,
             ble_initialize,
             ble_start_scan,
