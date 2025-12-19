@@ -70,6 +70,17 @@ struct WriteFilePayload {
     content: String,
 }
 
+#[derive(Deserialize)]
+struct EnsureDirPayload {
+    path: String,
+}
+
+#[derive(Deserialize)]
+struct RemovePathPayload {
+    path: String,
+    recursive: Option<bool>,
+}
+
 // Firmware task types removed - ESP-IDF build/flash functionality removed
 
 #[tauri::command]
@@ -164,6 +175,40 @@ async fn write_file(payload: WriteFilePayload) -> Result<(), String> {
     .map_err(|error| format!("Failed to write file: {error}"))?
     .map_err(|error| format!("Failed to write file: {error}"))?;
 
+    Ok(())
+}
+
+#[tauri::command]
+async fn ensure_dir(payload: EnsureDirPayload) -> Result<(), String> {
+    let path = expand_path(&payload.path);
+    spawn_blocking(move || fs::create_dir_all(&path).map_err(|error| format!("Failed to create directory: {error}")))
+        .await
+        .map_err(|error| format!("Failed to create directory: {error}"))?
+        .map_err(|error| format!("Failed to create directory: {error}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn remove_path(payload: RemovePathPayload) -> Result<(), String> {
+    let path = expand_path(&payload.path);
+    let recursive = payload.recursive.unwrap_or(false);
+    spawn_blocking(move || {
+        if path.is_dir() {
+            if recursive {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_dir(&path)
+            }
+        } else if path.is_file() {
+            fs::remove_file(&path)
+        } else {
+            return Ok(());
+        }
+        .map_err(|error| format!("Failed to remove path: {error}"))
+    })
+    .await
+    .map_err(|error| format!("Failed to remove path: {error}"))?
+    .map_err(|error| format!("Failed to remove path: {error}"))?;
     Ok(())
 }
 
@@ -679,6 +724,8 @@ pub fn run() {
             read_directory,
             read_file,
             write_file,
+            ensure_dir,
+            remove_path,
             reveal_in_finder,
             ble_initialize,
             ble_start_scan,

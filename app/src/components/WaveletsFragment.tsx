@@ -1,52 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
-import { safeInvoke, safeListen, safeJoin } from "../utils/tauri";
-import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { appDataDir } from "@tauri-apps/api/path";
 import { WaveletEngine, type WaveletTree } from "../utils/WaveletEngine";
 import { createBLEServiceWrapper } from "../utils/BLEServiceWrapper";
+import { isTauriAvailable, safeInvoke, safeJoin } from "../utils/tauri";
 
-type DirectoryEntry = {
-  name: string;
-  path: string;
-  kind: "file" | "directory";
-  children?: DirectoryEntry[];
-};
+const ASSET_SCRIPT_FILES = [
+  "cc1101.js",
+  "rfm69.js",
+  "usb.js",
+  "wavelet_demo.js",
+  "gpio.js",
+  "ir_send_saved_signal.js",
+];
 
-type TreeNode = {
-  id: string;
-  name: string;
-  path: string;
-  kind: "file" | "directory";
-  children?: TreeNode[];
-};
-
-type Project = {
-  id: string;
-  name: string;
-  path: string;
-  tree: TreeNode[];
-};
-
-type OpenFile = {
-  id: string;
-  name: string;
-  relativePath: string;
-  absolutePath: string;
-  language: string;
-  content: string;
-  isDirty: boolean;
-  isSaving: boolean;
-};
-
-const DEFAULT_SIDEBAR_WIDTH = 288;
-const SIDEBAR_MIN_WIDTH = 220;
-const SIDEBAR_MAX_WIDTH = 520;
-const SIDEBAR_STORAGE_KEY = "emwaver.sidebarWidth";
-const LAST_PROJECT_PATH_STORAGE_KEY = "emwaver.lastProjectPath";
+const WAVELET_ASSET_ROOT = "/wavelet-assets";
+const WAVELETS_DIR_NAME = "wavelets";
+const MIGRATION_CLEAR_KEY = "emwaver.wavelets.clearLegacy";
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   fontFamily: '"Fira Code", "Courier New", monospace',
@@ -64,161 +36,78 @@ const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   },
 };
 
-const DEFAULT_SCRIPTS = [
-  "cc1101.js",
-  "cc1101_radio_console.js",
-  "cc1101_radio_module.js",
-  "hello_world_usb.js",
-  "wavelet_console_demo.js",
-  "wavelet_demo.js",
-  "wavelet_gpio.js",
-  "wavelet_rfid.js",
-];
+type ScriptSource = "asset" | "custom";
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+type ScriptEntry = {
+  id: string;
+  name: string;
+  filename: string;
+  source: ScriptSource;
+  absolutePath?: string;
+};
 
-function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
-  if (typeof window === "undefined") {
-    return fallback;
+type DirectoryEntry = {
+  name: string;
+  path: string;
+  kind: "file" | "directory";
+  children?: DirectoryEntry[];
+};
+
+function normalizeScriptName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
   }
-  const stored = window.localStorage.getItem(key);
-  if (!stored) {
-    return fallback;
+  const safe = trimmed.replace(/\s+/g, "_");
+  return safe.endsWith(".js") ? safe : `${safe}.js`;
+}
+
+function stripExtension(filename: string): string {
+  if (!filename.endsWith(".js")) {
+    return filename;
   }
-  const parsed = Number.parseFloat(stored);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
+  return filename.slice(0, -3);
+}
+
+async function readAssetScript(filename: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${WAVELET_ASSET_ROOT}/${filename}`);
+    if (!response.ok) {
+      return null;
+    }
+    return await response.text();
+  } catch (error) {
+    console.warn("Failed to load asset script:", filename, error);
+    return null;
   }
-  return clamp(parsed, min, max);
-}
-
-function createId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function normaliseTree(entries: DirectoryEntry[]): TreeNode[] {
-  return entries.map((entry) => ({
-    id: entry.path.length > 0 ? entry.path : entry.name,
-    name: entry.name,
-    path: entry.path,
-    kind: entry.kind,
-    children: entry.children ? normaliseTree(entry.children) : undefined,
-  }));
-}
-
-function detectLanguage(filename: string): string {
-  const ext = filename.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "ts":
-    case "mts":
-    case "cts":
-    case "tsx":
-      return "typescript";
-    case "js":
-    case "mjs":
-    case "cjs":
-    case "jsx":
-      return "javascript";
-    case "json":
-      return "json";
-    case "html":
-    case "htm":
-      return "html";
-    case "css":
-      return "css";
-    case "scss":
-      return "scss";
-    case "less":
-      return "less";
-    case "md":
-    case "markdown":
-      return "markdown";
-    case "yaml":
-    case "yml":
-      return "yaml";
-    case "xml":
-    case "svg":
-      return "xml";
-    case "py":
-      return "python";
-    case "c":
-    case "h":
-      return "c";
-    case "cpp":
-    case "cc":
-    case "hpp":
-    case "hh":
-    case "hxx":
-      return "cpp";
-    case "java":
-      return "java";
-    case "cs":
-      return "csharp";
-    case "sql":
-      return "sql";
-    case "ini":
-      return "ini";
-    case "sh":
-    case "bash":
-      return "shell";
-    case "rs":
-    case "toml":
-    case "txt":
-      return "plaintext";
-    default:
-      return "plaintext";
-  }
-}
-
-function deriveProjectName(path: string): string {
-  const segments = path
-    .split(/[\\/]/)
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0);
-  return segments[segments.length - 1] ?? path;
 }
 
 export default function WaveletsFragment() {
-  const [project, setProject] = useState<Project | null>(null);
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
-  const [isLoadingFile, setIsLoadingFile] = useState(false);
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() =>
-    readStoredNumber(SIDEBAR_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH),
-  );
+  const [waveletsDir, setWaveletsDir] = useState<string | null>(null);
+  const [customScripts, setCustomScripts] = useState<ScriptEntry[]>([]);
+  const [activeScript, setActiveScript] = useState<ScriptEntry | null>(null);
+  const [activeContent, setActiveContent] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingScript, setIsLoadingScript] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [renderedTree, setRenderedTree] = useState<WaveletTree | null>(null);
-  
-  // Debug: log when renderedTree changes
-  useEffect(() => {
-    console.log('[WaveletsFragment] renderedTree changed:', renderedTree);
-    console.log('[WaveletsFragment] renderedTree is truthy:', !!renderedTree);
-  }, [renderedTree]);
-  const sidebarResizeActive = useRef(false);
-  const sidebarStartX = useRef(0);
-  const sidebarStartWidth = useRef(0);
+
   const saveTimeoutRef = useRef<number | null>(null);
-  const openFileRef = useRef<OpenFile | null>(null);
-  const treeOpenStateRef = useRef<Map<string, Record<string, boolean>>>(new Map());
+  const activeScriptRef = useRef<ScriptEntry | null>(null);
   const waveletEngineRef = useRef<WaveletEngine | null>(null);
   const monaco = useMonaco();
 
-  const activeFile = useMemo(
-    () => (activeFileId ? openFiles.find((file) => file.id === activeFileId) ?? null : null),
-    [openFiles, activeFileId],
+  const assetScripts = useMemo<ScriptEntry[]>(
+    () =>
+      ASSET_SCRIPT_FILES.map((filename) => ({
+        id: `asset:${filename}`,
+        name: stripExtension(filename),
+        filename,
+        source: "asset",
+      })),
+    [],
   );
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(Math.round(sidebarWidth)));
-  }, [sidebarWidth]);
-
 
   useEffect(() => {
     if (!monaco) {
@@ -243,67 +132,111 @@ export default function WaveletsFragment() {
   }, [monaco]);
 
   useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      if (sidebarResizeActive.current) {
-        const delta = event.clientX - sidebarStartX.current;
-        const max = Math.min(SIDEBAR_MAX_WIDTH, window.innerWidth * 0.6);
-        const width = clamp(sidebarStartWidth.current + delta, SIDEBAR_MIN_WIDTH, max);
-        setSidebarWidth(width);
-      }
+    activeScriptRef.current = activeScript;
+  }, [activeScript]);
+
+  useEffect(() => {
+    if (!isTauriAvailable()) {
+      return;
+    }
+
+    const resolveDir = async () => {
+      const root = await appDataDir();
+      const dir = await safeJoin(root, WAVELETS_DIR_NAME);
+      await safeInvoke<void>("ensure_dir", { payload: { path: dir } });
+      setWaveletsDir(dir);
     };
 
-    const handleMouseUp = () => {
-      if (sidebarResizeActive.current) {
-        sidebarResizeActive.current = false;
-      }
-      document.body.style.removeProperty("cursor");
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
+    void resolveDir();
   }, []);
 
-  useEffect(() => {
-    openFileRef.current = activeFile;
-  }, [activeFile]);
+  const loadCustomScripts = useCallback(
+    async (dir: string): Promise<ScriptEntry[]> => {
+      const entries = await safeInvoke<DirectoryEntry[]>("read_directory", {
+        payload: { path: dir },
+      });
 
-  // Initialize WaveletEngine
+      const scripts = (entries || [])
+        .filter((entry) => entry.kind === "file" && entry.name.endsWith(".js"))
+        .map((entry) => ({
+          id: `custom:${entry.path}`,
+          name: stripExtension(entry.name),
+          filename: entry.name,
+          source: "custom" as const,
+          absolutePath: entry.path,
+        }));
+
+      const normalized = await Promise.all(
+        scripts.map(async (entry) => ({
+          ...entry,
+          absolutePath: await safeJoin(dir, entry.absolutePath || entry.filename),
+        })),
+      );
+
+      normalized.sort((a, b) => a.name.localeCompare(b.name));
+      return normalized;
+    },
+    [],
+  );
+
+  const refreshCustomScripts = useCallback(async () => {
+    if (!waveletsDir) {
+      return;
+    }
+    const scripts = await loadCustomScripts(waveletsDir);
+    setCustomScripts(scripts);
+  }, [loadCustomScripts, waveletsDir]);
+
+  useEffect(() => {
+    if (!waveletsDir) {
+      return;
+    }
+    void refreshCustomScripts();
+  }, [refreshCustomScripts, waveletsDir]);
+
+  useEffect(() => {
+    if (!waveletsDir || typeof window === "undefined") {
+      return;
+    }
+    const cleared = window.localStorage.getItem(MIGRATION_CLEAR_KEY);
+    if (cleared) {
+      return;
+    }
+    const clearLegacy = async () => {
+      const scripts = await loadCustomScripts(waveletsDir);
+      for (const script of scripts) {
+        if (script.absolutePath) {
+          await safeInvoke<void>("remove_path", {
+            payload: { path: script.absolutePath },
+          });
+        }
+      }
+      await refreshCustomScripts();
+      window.localStorage.setItem(MIGRATION_CLEAR_KEY, "true");
+    };
+    void clearLegacy();
+  }, [loadCustomScripts, refreshCustomScripts, waveletsDir]);
+
   useEffect(() => {
     const engine = new WaveletEngine();
-    
+
     const printCallback = (message: string) => {
       setConsoleOutput((prev) => [...prev, message]);
     };
 
     const renderCallback = (tree: WaveletTree) => {
-      console.log('[renderCallback] Called with tree:', tree);
-      setConsoleOutput((prev) => [...prev, `[Render] Received tree: ${tree.type}`]);
-      console.log('[renderCallback] About to call setRenderedTree');
       setRenderedTree(tree);
-      console.log('[renderCallback] setRenderedTree called');
-      setConsoleOutput((prev) => [...prev, `[Render] State updated`]);
     };
 
     const dialogCallback = (title: string, message: string) => {
       alert(`${title}\n\n${message}`);
     };
 
-    // Create BLE bindings
     const bleService = createBLEServiceWrapper();
 
-    engine.setup(
-      printCallback,
-      renderCallback,
-      dialogCallback,
-      {
-        BLEService: bleService,
-      }
-    );
+    engine.setup(printCallback, renderCallback, dialogCallback, {
+      BLEService: bleService,
+    });
 
     waveletEngineRef.current = engine;
 
@@ -312,53 +245,6 @@ export default function WaveletsFragment() {
       waveletEngineRef.current = null;
     };
   }, []);
-
-  // Update module sources when project changes
-  useEffect(() => {
-    if (!project || !waveletEngineRef.current) return;
-
-        const updateModules = async () => {
-      try {
-        const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
-          payload: { path: project.path },
-        });
-        
-        if (result === null) return;
-        
-        const entries = result;
-
-        const moduleSources: Record<string, string> = {};
-        
-        const loadModules = async (dirEntries: DirectoryEntry[], basePath: string = "") => {
-          for (const entry of dirEntries) {
-            if (entry.kind === "file" && entry.name.endsWith(".js")) {
-              const filePath = basePath ? `${basePath}/${entry.name}` : entry.name;
-              try {
-                const fullPath = await safeJoin(project.path, entry.path);
-                const content = await safeInvoke<string>("read_file", {
-                  payload: { path: fullPath },
-                });
-                if (content !== null) {
-                  moduleSources[entry.name] = content;
-                }
-              } catch (error) {
-                console.error(`Failed to load module ${entry.name}:`, error);
-              }
-            } else if (entry.kind === "directory" && entry.children) {
-              await loadModules(entry.children, entry.name);
-            }
-          }
-        };
-
-        await loadModules(entries);
-        waveletEngineRef.current?.updateModuleSources(moduleSources);
-      } catch (error) {
-        console.error("Failed to update module sources:", error);
-      }
-    };
-
-    void updateModules();
-  }, [project]);
 
   useEffect(
     () => () => {
@@ -370,281 +256,35 @@ export default function WaveletsFragment() {
     [],
   );
 
-  const getTreeOpenState = useCallback((projectId: string) => {
-    let state = treeOpenStateRef.current.get(projectId);
-    if (!state) {
-      state = {};
-      treeOpenStateRef.current.set(projectId, state);
+  const readScriptContent = useCallback(async (script: ScriptEntry): Promise<string> => {
+    if (script.source === "asset") {
+      return (await readAssetScript(script.filename)) ?? "";
     }
-    return state;
+
+    if (!script.absolutePath) {
+      return "";
+    }
+    const content = await safeInvoke<string>("read_file", {
+      payload: { path: script.absolutePath },
+    });
+    return content ?? "";
   }, []);
 
-  const updateTreeOpenState = useCallback(
-    (projectId: string, nodeId: string, isOpen: boolean) => {
-      const state = treeOpenStateRef.current.get(projectId);
-      if (state) {
-        if (state[nodeId] !== isOpen) {
-          state[nodeId] = isOpen;
+  const buildModuleSources = useCallback(async () => {
+    const sources: Record<string, string> = {};
+    const allScripts = [...assetScripts, ...customScripts];
+
+    await Promise.all(
+      allScripts.map(async (script) => {
+        const content = await readScriptContent(script);
+        if (content) {
+          sources[script.filename] = content;
         }
-      } else {
-        treeOpenStateRef.current.set(projectId, { [nodeId]: isOpen });
-      }
-    },
-    [],
-  );
+      }),
+    );
 
-  const ensureDefaultScripts = useCallback(async (projectPath: string) => {
-    try {
-      let entries: DirectoryEntry[];
-      try {
-        const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
-          payload: { path: projectPath },
-        });
-        entries = result || [];
-      } catch {
-        // Directory doesn't exist, will be created when writing files
-        entries = [];
-      }
-
-      const jsFiles = entries.filter((e) => e.kind === "file" && e.name.endsWith(".js"));
-      
-      if (jsFiles.length === 0) {
-        // Load default scripts directly into project folder
-        for (const scriptName of DEFAULT_SCRIPTS) {
-          try {
-            const response = await fetch(`/default-scripts/${scriptName}`);
-            if (response.ok) {
-              const content = await response.text();
-              const filePath = await safeJoin(projectPath, scriptName);
-              await safeInvoke<void>("write_file", {
-                payload: { path: filePath, content },
-              });
-            }
-          } catch (error) {
-            console.warn(`Failed to load default script ${scriptName}:`, error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to ensure default scripts:", error);
-    }
-  }, []);
-
-  const openProjectAtPath = useCallback(async (directory: string, options: { initialName?: string; isNewProject?: boolean } = {}) => {
-    const { initialName, isNewProject = false } = options;
-
-    try {
-      // Load default scripts first if it's a new project or if project directory is empty
-      if (isNewProject) {
-        await ensureDefaultScripts(directory);
-      } else {
-        // Check if project directory has JS files
-        try {
-          const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
-            payload: { path: directory },
-          });
-          const jsFiles = (result || []).filter((e) => e.kind === "file" && e.name.endsWith(".js"));
-          if (jsFiles.length === 0) {
-            // Empty, load defaults
-            await ensureDefaultScripts(directory);
-          }
-        } catch {
-          // Directory doesn't exist, load defaults
-          await ensureDefaultScripts(directory);
-        }
-      }
-
-      // Now read the directory structure
-      const entries = await safeInvoke<DirectoryEntry[]>("read_directory", {
-        payload: { path: directory },
-      });
-      if (entries === null) {
-        throw new Error("Failed to read directory");
-      }
-      const tree = normaliseTree(entries);
-      const projectName = initialName ?? deriveProjectName(directory);
-
-      const project: Project = {
-        id: createId(),
-        name: projectName,
-        path: directory,
-        tree,
-      };
-
-      setProject(project);
-      setSelectedFileId(null);
-      setOpenFiles([]);
-      setActiveFileId(null);
-
-      if (!treeOpenStateRef.current.has(project.id)) {
-        treeOpenStateRef.current.set(project.id, {});
-      }
-
-      // Store the project path for restoration on next app launch
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(LAST_PROJECT_PATH_STORAGE_KEY, directory);
-      }
-    } catch (error) {
-      console.error(error);
-      alert(String(error));
-    }
-  }, [ensureDefaultScripts]);
-
-  // Restore last opened project on mount (only once)
-  const hasRestoredRef = useRef(false);
-  const openProjectAtPathRef = useRef<typeof openProjectAtPath | null>(null);
-  
-  // Keep ref updated with latest function
-  useEffect(() => {
-    openProjectAtPathRef.current = openProjectAtPath;
-  }, [openProjectAtPath]);
-
-  useEffect(() => {
-    if (hasRestoredRef.current) {
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    // Wait for openProjectAtPath to be available
-    if (!openProjectAtPathRef.current) {
-      return;
-    }
-
-    const restoreLastProject = async () => {
-      // Mark as restored before attempting, so we don't try multiple times
-      hasRestoredRef.current = true;
-      
-      try {
-        const lastProjectPath = window.localStorage.getItem(LAST_PROJECT_PATH_STORAGE_KEY);
-        if (!lastProjectPath) {
-          return;
-        }
-
-        // Verify the directory still exists before trying to open it
-        try {
-          const result = await safeInvoke<DirectoryEntry[]>("read_directory", {
-            payload: { path: lastProjectPath },
-          });
-          if (result === null) {
-            throw new Error("Directory not found");
-          }
-          // Directory exists, restore it using the ref to avoid dependency issues
-          const openFn = openProjectAtPathRef.current;
-          if (openFn) {
-            await openFn(lastProjectPath);
-          }
-        } catch {
-          // Directory doesn't exist anymore, clear the stored path
-          window.localStorage.removeItem(LAST_PROJECT_PATH_STORAGE_KEY);
-        }
-      } catch (error) {
-        console.error("Failed to restore last project:", error);
-        // Clear invalid stored path
-        if (typeof window !== "undefined") {
-          window.localStorage.removeItem(LAST_PROJECT_PATH_STORAGE_KEY);
-        }
-      }
-    };
-
-    void restoreLastProject();
-  }, [openProjectAtPath]); // Re-run when openProjectAtPath is available
-
-  const handleOpenProject = useCallback(async () => {
-    try {
-      const directory = await openDialog({ directory: true });
-      if (typeof directory !== "string") {
-        return;
-      }
-      await openProjectAtPath(directory);
-    } catch (error) {
-      console.error("Failed to open project:", error);
-      // If it's a Tauri API error, show helpful message
-      if (error instanceof Error && error.message.includes("Tauri")) {
-        alert("Tauri API error. Make sure you're running with: npm run tauri dev");
-      } else {
-        alert(String(error));
-      }
-    }
-  }, [openProjectAtPath]);
-
-  const handleCreateProjectClick = useCallback(async () => {
-    try {
-      // Use save dialog (Save As style) to get location and folder name in one dialog
-      const selectedPath = await saveDialog({
-        title: "Create New Project",
-        defaultPath: "My Wavelet Project",
-        filters: [],
-      });
-      
-      if (typeof selectedPath !== "string") {
-        return;
-      }
-
-      setIsCreatingProject(true);
-      
-      // The selectedPath is the full path to the folder we want to create
-      const projectPath = selectedPath;
-      const folderName = projectPath.split(/[/\\]/).pop() || "My Wavelet Project";
-      
-        // Check if directory exists
-        try {
-          const entries = await safeInvoke<DirectoryEntry[]>("read_directory", {
-            payload: { path: projectPath },
-          });
-          if (entries && entries.length > 0) {
-            alert("Project directory already exists and is not empty");
-            return;
-          }
-        } catch {
-          // Directory doesn't exist, create it by writing a file
-          // write_file creates parent directories automatically
-          const initFile = await safeJoin(projectPath, ".gitkeep");
-          await safeInvoke<void>("write_file", {
-            payload: { path: initFile, content: "" },
-          });
-        }
-      
-      await openProjectAtPath(projectPath, { initialName: folderName, isNewProject: true });
-    } catch (error) {
-      console.error("Failed to create project:", error);
-      alert(String(error));
-    } finally {
-      setIsCreatingProject(false);
-    }
-  }, [openProjectAtPath]);
-
-  const writeContent = useCallback(
-    async (fileId: string, path: string, content: string) => {
-      setOpenFiles((prev) =>
-        prev.map((file) => (file.id === fileId ? { ...file, isSaving: true } : file)),
-      );
-
-      try {
-        const result = await safeInvoke<void>("write_file", {
-          payload: { path, content },
-        });
-        if (result === null) {
-          throw new Error("Failed to write file");
-        }
-        setOpenFiles((prev) =>
-          prev.map((file) =>
-            file.id === fileId ? { ...file, content, isDirty: false, isSaving: false } : file,
-          ),
-        );
-      } catch (error) {
-        console.error(error);
-        alert(String(error));
-        setOpenFiles((prev) =>
-          prev.map((file) => (file.id === fileId ? { ...file, isSaving: false } : file)),
-        );
-        throw error;
-      }
-    },
-    [],
-  );
+    return sources;
+  }, [assetScripts, customScripts, readScriptContent]);
 
   const commitPendingSave = useCallback(async () => {
     if (saveTimeoutRef.current) {
@@ -652,278 +292,222 @@ export default function WaveletsFragment() {
       saveTimeoutRef.current = null;
     }
 
-    const file = openFileRef.current;
-    if (file && file.isDirty) {
-      try {
-        await writeContent(file.id, file.absolutePath, file.content);
-      } catch {
-        // error already surfaced in writeContent
-      }
+    const script = activeScriptRef.current;
+    if (script && script.source === "custom" && script.absolutePath && isDirty) {
+      setIsSaving(true);
+      await safeInvoke<void>("write_file", {
+        payload: { path: script.absolutePath, content: activeContent },
+      });
+      setIsSaving(false);
+      setIsDirty(false);
     }
-  }, [writeContent]);
+  }, [activeContent, isDirty]);
 
-  const handleCloseProject = useCallback(async () => {
-    await commitPendingSave();
-    if (project) {
-      treeOpenStateRef.current.delete(project.id);
-    }
-    setProject(null);
-    setSelectedFileId(null);
-    setOpenFiles([]);
-    setActiveFileId(null);
-  }, [commitPendingSave, project]);
-
-  // Listen for menu-close-folder event
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    const setupListener = async () => {
-      try {
-        unlisten = await safeListen("menu-close-folder", () => {
-          void handleCloseProject();
-        });
-      } catch (error) {
-        console.error("Failed to listen for menu-close-folder event:", error);
-      }
-    };
-
-    void setupListener();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [handleCloseProject]);
-
-  const handleSelectFile = useCallback(
-    async (node: TreeNode) => {
-      if (!project || node.kind !== "file") {
-        return;
-      }
-      if (activeFileId === node.id) {
-        return;
-      }
+  const handleSelectScript = useCallback(
+    async (script: ScriptEntry) => {
       await commitPendingSave();
-      const existing = openFiles.find((file) => file.id === node.id);
-      if (existing) {
-        setSelectedFileId(node.id);
-        setActiveFileId(existing.id);
-        return;
-      }
-      setIsLoadingFile(true);
-      try {
-        const absolutePath = await safeJoin(project.path, node.path);
-        const content = await safeInvoke<string>("read_file", {
-          payload: { path: absolutePath },
-        });
-        if (content === null) {
-          throw new Error("Failed to read file");
-        }
-        const language = detectLanguage(node.name);
-        setSelectedFileId(node.id);
-        const file: OpenFile = {
-          id: node.id,
-          name: node.name,
-          relativePath: node.path,
-          absolutePath,
-          language,
-          content,
-          isDirty: false,
-          isSaving: false,
-        };
-        setOpenFiles((prev) => {
-          if (prev.some((entry) => entry.id === file.id)) {
-            return prev;
-          }
-          return [...prev, file];
-        });
-        setActiveFileId(file.id);
-      } catch (error) {
-        console.error(error);
-        alert(String(error));
-      } finally {
-        setIsLoadingFile(false);
-      }
+      setIsLoadingScript(true);
+      const content = await readScriptContent(script);
+      setActiveScript(script);
+      setActiveContent(content);
+      setIsDirty(false);
+      setRenderedTree(null);
+      setConsoleOutput([]);
+      setIsLoadingScript(false);
     },
-    [activeFileId, commitPendingSave, openFiles, project],
-  );
-
-  const handleTreeSelection = useCallback(
-    (node: TreeNode) => {
-      if (node.kind === "file") {
-        void handleSelectFile(node);
-      } else {
-        void commitPendingSave().finally(() => {
-          setSelectedFileId(null);
-          setActiveFileId(null);
-        });
-      }
-    },
-    [commitPendingSave, handleSelectFile],
+    [commitPendingSave, readScriptContent],
   );
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
-      const file = openFileRef.current;
-      if (!file) {
+      if (!activeScript || activeScript.source !== "custom") {
         return;
       }
 
       const nextContent = value ?? "";
+      setActiveContent(nextContent);
+      setIsDirty(true);
 
       if (saveTimeoutRef.current) {
         window.clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
       }
-
-      setOpenFiles((prev) =>
-        prev.map((entry) =>
-          entry.id === file.id ? { ...entry, content: nextContent, isDirty: true } : entry,
-        ),
-      );
 
       saveTimeoutRef.current = window.setTimeout(() => {
         saveTimeoutRef.current = null;
-        void writeContent(file.id, file.absolutePath, nextContent);
+        void commitPendingSave();
       }, 600);
     },
-    [writeContent],
+    [activeScript, commitPendingSave],
   );
 
-  const handleSelectTab = useCallback((fileId: string) => {
-    setActiveFileId(fileId);
-    setSelectedFileId(fileId);
-  }, []);
-
-  const handleRunWavelet = useCallback(() => {
-    console.log('[handleRunWavelet] Button clicked');
-    console.log('[handleRunWavelet] activeFile:', activeFile?.name);
-    console.log('[handleRunWavelet] waveletEngineRef.current:', waveletEngineRef.current);
-    
-    if (!activeFile || !waveletEngineRef.current) {
-      console.log('[handleRunWavelet] Early return - missing activeFile or engine');
+  const handleRunWavelet = useCallback(async () => {
+    if (!activeScript || !waveletEngineRef.current) {
       return;
     }
 
-    // Clear previous output
     setConsoleOutput([]);
     setRenderedTree(null);
-    
-    console.log('[handleRunWavelet] About to execute script');
-    console.log('[handleRunWavelet] Script content:', activeFile.content.substring(0, 100));
 
-    // Execute the wavelet
+    const moduleSources = await buildModuleSources();
+    waveletEngineRef.current.updateModuleSources(moduleSources);
+
     try {
-      waveletEngineRef.current.execute(activeFile.content, () => {
-        console.log('[handleRunWavelet] Execution completion callback called');
+      waveletEngineRef.current.execute(activeContent, () => {
         setConsoleOutput((prev) => [...prev, "Wavelet execution completed."]);
       });
     } catch (error) {
-      console.error('[handleRunWavelet] Error:', error);
+      console.error("Wavelet execution error:", error);
     }
-  }, [activeFile]);
+  }, [activeContent, activeScript, buildModuleSources]);
 
-  const handleCloseTab = useCallback(
-    (fileId: string) => {
-      setOpenFiles((prev) => {
-        const index = prev.findIndex((file) => file.id === fileId);
-        if (index === -1) {
-          return prev;
-        }
-        const next = [...prev];
-        next.splice(index, 1);
-        const fallback = next[index - 1] ?? next[index] ?? null;
-        if (activeFileId === fileId) {
-          setActiveFileId(fallback ? fallback.id : null);
-          setSelectedFileId(fallback ? fallback.id : null);
-        } else if (selectedFileId === fileId) {
-          setSelectedFileId(fallback ? fallback.id : null);
-        }
-        return next;
-      });
-    },
-    [activeFileId, selectedFileId],
+  const handleCreateScript = useCallback(async () => {
+    if (!waveletsDir) {
+      return;
+    }
+    const name = window.prompt("Script name", "new_wavelet");
+    if (!name) {
+      return;
+    }
+    const filename = normalizeScriptName(name);
+    if (!filename) {
+      return;
+    }
+
+    const assetNames = new Set(assetScripts.map((script) => script.filename.toLowerCase()));
+    const customNames = new Set(customScripts.map((script) => script.filename.toLowerCase()));
+
+    if (assetNames.has(filename.toLowerCase()) || customNames.has(filename.toLowerCase())) {
+      alert("A script with that name already exists.");
+      return;
+    }
+
+    const filePath = await safeJoin(waveletsDir, filename);
+    const template = "// New wavelet\n\nUI.render(UI.column({\n  children: [\n    UI.text({ text: 'Hello from wavelets!' })\n  ]\n}));\n";
+
+    await safeInvoke<void>("write_file", {
+      payload: { path: filePath, content: template },
+    });
+
+    await refreshCustomScripts();
+    await handleSelectScript({
+      id: `custom:${filename}`,
+      name: stripExtension(filename),
+      filename,
+      source: "custom",
+      absolutePath: filePath,
+    });
+  }, [assetScripts, customScripts, handleSelectScript, refreshCustomScripts, waveletsDir]);
+
+  const handleDeleteScript = useCallback(async () => {
+    if (!activeScript || activeScript.source !== "custom" || !activeScript.absolutePath) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${activeScript.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    await safeInvoke<void>("remove_path", {
+      payload: { path: activeScript.absolutePath },
+    });
+
+    setActiveScript(null);
+    setActiveContent("");
+    setIsDirty(false);
+    setRenderedTree(null);
+    setConsoleOutput([]);
+    await refreshCustomScripts();
+  }, [activeScript, refreshCustomScripts]);
+
+  const handleCopyAssetToCustom = useCallback(async () => {
+    if (!activeScript || activeScript.source !== "asset" || !waveletsDir) {
+      return;
+    }
+
+    const defaultName = `${activeScript.name}_copy`;
+    const name = window.prompt("Copy to custom script as", defaultName);
+    if (!name) {
+      return;
+    }
+
+    const filename = normalizeScriptName(name);
+    if (!filename) {
+      return;
+    }
+
+    const assetNames = new Set(assetScripts.map((script) => script.filename.toLowerCase()));
+    const customNames = new Set(customScripts.map((script) => script.filename.toLowerCase()));
+
+    if (assetNames.has(filename.toLowerCase()) || customNames.has(filename.toLowerCase())) {
+      alert("A script with that name already exists.");
+      return;
+    }
+
+    const content = await readScriptContent(activeScript);
+    const filePath = await safeJoin(waveletsDir, filename);
+    await safeInvoke<void>("write_file", {
+      payload: { path: filePath, content },
+    });
+    await refreshCustomScripts();
+    await handleSelectScript({
+      id: `custom:${filename}`,
+      name: stripExtension(filename),
+      filename,
+      source: "custom",
+      absolutePath: filePath,
+    });
+  }, [activeScript, assetScripts, customScripts, handleSelectScript, readScriptContent, refreshCustomScripts, waveletsDir]);
+
+  const editorOptions = useMemo(
+    () => ({
+      ...MONACO_EDITOR_OPTIONS,
+      readOnly: activeScript?.source === "asset",
+    }),
+    [activeScript],
   );
-
-  const handleSidebarMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      sidebarResizeActive.current = true;
-      sidebarStartX.current = event.clientX;
-      sidebarStartWidth.current = sidebarWidth;
-      document.body.style.cursor = "col-resize";
-    },
-    [sidebarWidth],
-  );
-
-  if (!project) {
-    return (
-      <section className="flex flex-1 flex-col bg-slate-950">
-        <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100">Wavelets</h2>
-            <p className="text-sm text-slate-400">Manage and run wavelet scripts</p>
-          </div>
-        </header>
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-sm text-slate-400">No project folder selected</p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleOpenProject}
-                className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-sky-400"
-              >
-                Open Project Folder
-              </button>
-              <button
-                onClick={handleCreateProjectClick}
-                disabled={isCreatingProject}
-                className="rounded-md border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCreatingProject ? "Creating..." : "Create New Project"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section className="flex flex-1 flex-col bg-slate-950">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
-        <div className="flex flex-col min-w-0 flex-1">
+        <div>
           <h2 className="text-lg font-semibold text-slate-100">Wavelets</h2>
-          <p className="text-sm text-slate-400 truncate" title={project.path}>
-            {project.name}
-          </p>
-          <p className="text-xs text-slate-500 truncate mt-0.5" title={project.path}>
-            {project.path}
-          </p>
+          <p className="text-sm text-slate-400">Manage and run wavelet scripts</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCreateScript}
+            className="rounded-md bg-sky-500 px-3 py-1.5 text-xs font-semibold text-slate-900 transition-colors hover:bg-sky-400"
+          >
+            New Script
+          </button>
         </div>
       </header>
       <div className="flex flex-1 min-h-0">
-        <Sidebar
-          width={sidebarWidth}
-          project={project}
-          selectedFileId={selectedFileId}
-          onSelectNode={handleTreeSelection}
-          getInitialOpenState={getTreeOpenState}
-          onToggleNode={updateTreeOpenState}
-        />
-        <div
-          onMouseDown={handleSidebarMouseDown}
-          className="flex w-1 cursor-col-resize items-stretch bg-slate-900"
-        >
-          <span className="mx-auto h-full w-px bg-slate-800" />
-        </div>
+        <aside className="w-72 border-r border-slate-900 bg-slate-950 p-4">
+          <ScriptSection
+            title="Asset Scripts"
+            scripts={assetScripts}
+            activeId={activeScript?.id ?? null}
+            onSelect={handleSelectScript}
+            emptyLabel="No asset scripts found."
+          />
+          <div className="mt-6">
+            <ScriptSection
+              title="Custom Scripts"
+              scripts={customScripts}
+              activeId={activeScript?.id ?? null}
+              onSelect={handleSelectScript}
+              emptyLabel="No custom scripts yet."
+            />
+          </div>
+        </aside>
         <div className="flex flex-1 flex-col min-h-0">
-          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-2">
+          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-4 py-2">
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRunWavelet}
-                disabled={!activeFile || !waveletEngineRef.current}
+                disabled={!activeScript || !waveletEngineRef.current}
                 className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded transition-colors"
                 title="Run wavelet"
               >
@@ -935,15 +519,13 @@ export default function WaveletsFragment() {
                   setRenderedTree(null);
                 }}
                 className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
-                title="Clear output and return to editor"
+                title="Clear output"
               >
                 Clear
               </button>
               {renderedTree && (
                 <button
-                  onClick={() => {
-                    setRenderedTree(null);
-                  }}
+                  onClick={() => setRenderedTree(null)}
                   className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
                   title="Return to editor"
                 >
@@ -951,65 +533,38 @@ export default function WaveletsFragment() {
                 </button>
               )}
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-              {openFiles.map((file) => {
-                const isActive = file.id === activeFileId;
-                const isSaving = file.isSaving;
-                const isDirty = !file.isSaving && file.isDirty;
-                return (
-                  <div
-                    key={file.id}
-                    className={`group flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors ${
-                      isActive
-                        ? "bg-slate-800 text-slate-100"
-                        : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleSelectTab(file.id)}
-                      className="flex max-w-[200px] items-center gap-2 truncate text-left"
-                    >
-                      {(isSaving || isDirty) && (
-                        <span
-                          className={
-                            isSaving
-                              ? "inline-flex h-2.5 w-2.5 shrink-0 animate-spin rounded-full border-2 border-sky-400 border-t-transparent"
-                              : "inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400"
-                          }
-                          aria-label={isSaving ? "Saving" : "Unsaved changes"}
-                        />
-                      )}
-                      <span className="truncate">{file.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCloseTab(file.id)}
-                      className="rounded px-1 text-slate-500 transition-colors hover:text-rose-400"
-                      aria-label={`Close ${file.name}`}
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
-              {openFiles.length === 0 && (
-                <span className="shrink-0 px-3 py-2 text-xs text-slate-500">No files open</span>
+            <div className="flex items-center gap-2">
+              {activeScript?.source === "asset" && (
+                <button
+                  onClick={handleCopyAssetToCustom}
+                  className="px-3 py-1.5 text-xs text-slate-200 border border-slate-700 rounded hover:border-sky-500 hover:text-sky-200 transition-colors"
+                >
+                  Copy to Custom
+                </button>
+              )}
+              {activeScript?.source === "custom" && (
+                <button
+                  onClick={handleDeleteScript}
+                  className="px-3 py-1.5 text-xs text-rose-200 border border-rose-800 rounded hover:border-rose-500 transition-colors"
+                >
+                  Delete
+                </button>
+              )}
+              {isSaving && (
+                <span className="text-xs text-slate-500">Saving…</span>
+              )}
+              {!isSaving && isDirty && (
+                <span className="text-xs text-amber-300">Unsaved</span>
               )}
             </div>
           </div>
           <div className="flex-1 min-h-0 bg-slate-950 flex flex-col">
-            {(() => {
-              console.log('[Render] activeFile:', !!activeFile, 'renderedTree:', !!renderedTree);
-              return null;
-            })()}
-            {activeFile ? (
+            {activeScript ? (
               renderedTree ? (
-                // Show preview when wavelet has rendered UI
                 <div className="flex h-full w-full min-h-0 flex-col">
                   <div className="flex-1 min-h-0 overflow-y-auto p-6">
-                    <WaveletUIRenderer 
-                      tree={renderedTree} 
+                    <WaveletUIRenderer
+                      tree={renderedTree}
                       consoleOutput={consoleOutput}
                       onInvokeCallback={(token, args) => {
                         waveletEngineRef.current?.invoke(token, args);
@@ -1028,16 +583,15 @@ export default function WaveletsFragment() {
                   )}
                 </div>
               ) : (
-                // Show editor when no preview is rendered
                 <div className="flex h-full w-full min-h-0">
                   <div className="flex-1 min-h-0">
                     <MonacoEditor
-                      key={activeFile.id}
-                      path={activeFile.relativePath}
-                      value={activeFile.content}
-                      language={activeFile.language}
+                      key={activeScript.id}
+                      path={activeScript.filename}
+                      value={activeContent}
+                      language="javascript"
                       onChange={handleEditorChange}
-                      options={MONACO_EDITOR_OPTIONS}
+                      options={editorOptions}
                       theme="vs-dark"
                       height="100%"
                       loading={
@@ -1059,13 +613,13 @@ export default function WaveletsFragment() {
                   )}
                 </div>
               )
-            ) : isLoadingFile ? (
+            ) : isLoadingScript ? (
               <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-                Loading file...
+                Loading script...
               </div>
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-                Choose a file from the explorer to open it.
+                Select a script to view or run it.
               </div>
             )}
           </div>
@@ -1075,284 +629,80 @@ export default function WaveletsFragment() {
   );
 }
 
-function Sidebar({
-  width,
-  project,
-  selectedFileId,
-  onSelectNode,
-  getInitialOpenState,
-  onToggleNode,
+function ScriptSection({
+  title,
+  scripts,
+  activeId,
+  onSelect,
+  emptyLabel,
 }: {
-  width: number;
-  project: Project | null;
-  selectedFileId: string | null;
-  onSelectNode: (node: TreeNode) => void;
-  getInitialOpenState: (projectId: string) => Record<string, boolean>;
-  onToggleNode: (projectId: string, nodeId: string, isOpen: boolean) => void;
+  title: string;
+  scripts: ScriptEntry[];
+  activeId: string | null;
+  onSelect: (script: ScriptEntry) => void;
+  emptyLabel: string;
 }) {
-  const treeRef = useRef<TreeApi<TreeNode> | null>(null);
-  const treeContainerRef = useRef<HTMLDivElement | null>(null);
-  const [treeSize, setTreeSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
-
-  useEffect(() => {
-    if (!project) {
-      setTreeSize({ width: 0, height: 0 });
-      treeRef.current = null;
-    }
-  }, [project]);
-
-  useEffect(() => {
-    const container = treeContainerRef.current;
-    if (!project || !container || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-      const { width: observedWidth, height: observedHeight } = entry.contentRect;
-      setTreeSize((prev) => {
-        const width = Math.floor(observedWidth);
-        const height = Math.floor(observedHeight);
-        if (prev.width === width && prev.height === height) {
-          return prev;
-        }
-        return { width, height };
-      });
-    });
-
-    observer.observe(container);
-    return () => {
-      observer.disconnect();
-    };
-  }, [project]);
-
-  const handleToggle = useCallback(
-    (projectId: string, nodeId: string) => {
-      const api = treeRef.current;
-      const node = api?.get(nodeId);
-      if (!node) {
-        return;
-      }
-      onToggleNode(projectId, nodeId, node.isOpen);
-    },
-    [onToggleNode],
-  );
-
   return (
-    <aside
-      style={{ width }}
-      className="flex h-full shrink-0 flex-col border-r border-slate-900 bg-slate-950"
-    >
-      <nav className="flex-1 min-h-0 p-3 text-[13px]">
-        {project ? (
-          <div ref={treeContainerRef} className="flex h-full min-h-0">
-            {treeSize.height > 0 && treeSize.width > 0 ? (
-              <Tree
-                ref={(api) => {
-                  treeRef.current = api ?? null;
-                }}
-                data={project.tree}
-                selection={selectedFileId ?? undefined}
-                onSelect={(nodes) => {
-                  const [node] = nodes;
-                  if (node) {
-                    onSelectNode(node.data);
-                  }
-                }}
-                onToggle={(id) => handleToggle(project.id, id)}
-                disableDrag
-                paddingTop={2}
-                paddingBottom={2}
-                rowHeight={24}
-                indent={18}
-                overscanCount={5}
-                initialOpenState={getInitialOpenState(project.id)}
-                openByDefault={false}
-                height={treeSize.height}
-                width={treeSize.width}
-                className="w-full"
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2">
+        {title}
+      </h3>
+      {scripts.length === 0 ? (
+        <p className="text-xs text-slate-600">{emptyLabel}</p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {scripts.map((script) => {
+            const isActive = script.id === activeId;
+            return (
+              <button
+                key={script.id}
+                onClick={() => onSelect(script)}
+                className={`flex items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  isActive
+                    ? "bg-slate-800 text-slate-100"
+                    : "text-slate-300 hover:bg-slate-900 hover:text-slate-100"
+                }`}
               >
-                {(props) => <FileTreeNode {...props} projectPath={project.path} />}
-              </Tree>
-            ) : null}
-          </div>
-        ) : (
-          <p className="px-2 text-xs text-slate-500">
-            Use the Projects menu to open or create a project.
-          </p>
-        )}
-      </nav>
-    </aside>
-  );
-}
-
-function FileTreeNode({ node, style, projectPath }: NodeRendererProps<TreeNode> & { projectPath: string }) {
-  const isSelected = node.isSelected;
-  const isFolder = node.data.kind === "directory";
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-
-  const handleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    node.handleClick(event);
-    if (isFolder && event.button === 0 && event.detail === 1) {
-      node.toggle();
-    }
-  };
-
-  const handleToggle = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    node.toggle();
-  };
-
-  const handleContextMenu = async (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!isFolder) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    setContextMenu({ x: event.clientX, y: event.clientY });
-  };
-
-  const handleShowInFinder = async () => {
-    if (!isFolder) {
-      return;
-    }
-    setContextMenu(null);
-    try {
-        // If path is empty or just the folder name, it's the root project folder
-        const absolutePath = node.data.path === "" || node.data.path === node.data.name
-          ? projectPath
-          : await safeJoin(projectPath, node.data.path);
-      await safeInvoke<void>("reveal_in_finder", {
-        payload: { path: absolutePath },
-      });
-    } catch (error) {
-      console.error("Failed to reveal in Finder:", error);
-      alert(String(error));
-    }
-  };
-
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setContextMenu(null);
-    };
-    if (contextMenu) {
-      document.addEventListener("click", handleClickOutside);
-      return () => {
-        document.removeEventListener("click", handleClickOutside);
-      };
-    }
-  }, [contextMenu]);
-
-  return (
-    <>
-      <div
-        style={style}
-        className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-tight transition-colors ${
-          isSelected ? "bg-slate-800 text-sky-100" : "text-slate-300 hover:bg-slate-800/60"
-        }`}
-        onClick={handleClick}
-        onContextMenu={handleContextMenu}
-      >
-        {isFolder ? (
-          <button
-            type="button"
-            onClick={handleToggle}
-            className="flex h-5 w-5 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-300"
-            aria-label={node.isOpen ? "Collapse folder" : "Expand folder"}
-          >
-            {node.isOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
-          </button>
-        ) : (
-          <span className="h-5 w-5" aria-hidden="true">
-            <FileIcon />
-          </span>
-        )}
-        <span className={`truncate text-left ${isSelected ? "text-slate-100" : "text-slate-200"}`}>
-          {node.data.name}
-        </span>
-      </div>
-      {contextMenu && isFolder && (
-        <div
-          className="fixed z-50 rounded-md border border-slate-700 bg-slate-900 py-1 shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={handleShowInFinder}
-            className="w-full px-4 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800 hover:text-sky-200"
-          >
-            Show in Finder
-          </button>
+                <span className="truncate">{script.name}</span>
+                <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                  {script.source === "asset" ? "Asset" : "Custom"}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
-function ChevronDownIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-full w-full">
-      <polyline points="5 8 10 13 15 8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-full w-full">
-      <polyline points="8 5 13 10 8 15" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-full w-full">
-      <path d="M6 3h5l4 4v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M11 3v4h4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function WaveletUIRenderer({ 
-  tree, 
-  consoleOutput = [], 
-  onInvokeCallback 
-}: { 
-  tree: WaveletTree; 
-  consoleOutput?: string[]; 
+function WaveletUIRenderer({
+  tree,
+  consoleOutput = [],
+  onInvokeCallback,
+}: {
+  tree: WaveletTree;
+  consoleOutput?: string[];
   onInvokeCallback?: (token: string, args: unknown[]) => void;
 }) {
-
   const [inputValues, setInputValues] = useState<Record<string, any>>({});
-
-  const handleEvent = (nodeId: string, eventType: string, value?: any) => {
-    const handlers = (tree as any).handlers || {};
-    const token = handlers[eventType];
-    if (token && onInvokeCallback) {
-      onInvokeCallback(token, value !== undefined ? [value] : []);
-    }
-  };
 
   const renderNode = (node: WaveletTree): ReactNode => {
     const props = node.props || {};
     const children = node.children || [];
     const handlers = (node as any).handlers || {};
-    const nodeId = (props.id as string) || 'node';
+    const nodeId = (props.id as string) || "node";
 
     switch (node.type) {
-      case 'column': {
+      case "column": {
         const spacing = (props.spacing as number) || 12;
         const padding = (props.padding as number) || 0;
         return (
-          <div 
-            className="flex flex-col" 
-            style={{ 
+          <div
+            className="flex flex-col"
+            style={{
               gap: `${spacing}px`,
-              padding: `${padding}px`
+              padding: `${padding}px`,
             }}
           >
             {children.map((child, index) => (
@@ -1362,13 +712,10 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'row': {
+      case "row": {
         const spacing = (props.spacing as number) || 8;
         return (
-          <div 
-            className="flex"
-            style={{ gap: `${spacing}px` }}
-          >
+          <div className="flex" style={{ gap: `${spacing}px` }}>
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
@@ -1376,7 +723,7 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'button': {
+      case "button": {
         const handleClick = () => {
           if (handlers.tap && onInvokeCallback) {
             onInvokeCallback(handlers.tap, []);
@@ -1387,27 +734,28 @@ function WaveletUIRenderer({
             onClick={handleClick}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
           >
-            {(props.label as string) || 'Button'}
+            {(props.label as string) || "Button"}
           </button>
         );
       }
 
-      case 'text':
+      case "text":
         return (
-          <div className="text-slate-200 text-sm">
-            {(props.text as string) || ''}
-          </div>
+          <div className="text-slate-200 text-sm">{(props.text as string) || ""}</div>
         );
 
-      case 'slider': {
+      case "slider": {
         const min = (props.min as number) || 0;
         const max = (props.max as number) || 100;
-        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as number) || 0);
+        const value =
+          inputValues[nodeId] !== undefined
+            ? inputValues[nodeId]
+            : ((props.value as number) || 0);
         const step = (props.step as number) || 1;
-        
-        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-          const newValue = parseFloat(e.target.value);
-          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+
+        const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+          const newValue = parseFloat(event.target.value);
+          setInputValues((prev) => ({ ...prev, [nodeId]: newValue }));
           if (handlers.change && onInvokeCallback) {
             onInvokeCallback(handlers.change, [newValue]);
           }
@@ -1415,7 +763,9 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            {props.label && (
+              <label className="text-slate-300 text-sm">{props.label as string}</label>
+            )}
             <input
               type="range"
               min={min}
@@ -1430,27 +780,32 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'textField': {
-        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || '');
-        const placeholder = (props.placeholder as string) || '';
-        
-        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-          const newValue = e.target.value;
-          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+      case "textField": {
+        const value =
+          inputValues[nodeId] !== undefined
+            ? inputValues[nodeId]
+            : ((props.value as string) || "");
+        const placeholder = (props.placeholder as string) || "";
+
+        const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+          const newValue = event.target.value;
+          setInputValues((prev) => ({ ...prev, [nodeId]: newValue }));
           if (handlers.change && onInvokeCallback) {
             onInvokeCallback(handlers.change, [newValue]);
           }
         };
 
-        const handleSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
-          if (e.key === 'Enter' && handlers.submit && onInvokeCallback) {
+        const handleSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
+          if (event.key === "Enter" && handlers.submit && onInvokeCallback) {
             onInvokeCallback(handlers.submit, [value]);
           }
         };
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            {props.label && (
+              <label className="text-slate-300 text-sm">{props.label as string}</label>
+            )}
             <input
               type="text"
               value={value}
@@ -1463,14 +818,17 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'textEditor': {
-        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || '');
-        const placeholder = (props.placeholder as string) || '';
+      case "textEditor": {
+        const value =
+          inputValues[nodeId] !== undefined
+            ? inputValues[nodeId]
+            : ((props.value as string) || "");
+        const placeholder = (props.placeholder as string) || "";
         const rows = (props.rows as number) || 4;
-        
-        const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-          const newValue = e.target.value;
-          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+
+        const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+          const newValue = event.target.value;
+          setInputValues((prev) => ({ ...prev, [nodeId]: newValue }));
           if (handlers.change && onInvokeCallback) {
             onInvokeCallback(handlers.change, [newValue]);
           }
@@ -1478,7 +836,9 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            {props.label && (
+              <label className="text-slate-300 text-sm">{props.label as string}</label>
+            )}
             <textarea
               value={value}
               placeholder={placeholder}
@@ -1490,13 +850,16 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'picker': {
+      case "picker": {
         const options = (props.options as string[]) || [];
-        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || options[0] || '');
-        
-        const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-          const newValue = e.target.value;
-          setInputValues(prev => ({ ...prev, [nodeId]: newValue }));
+        const value =
+          inputValues[nodeId] !== undefined
+            ? inputValues[nodeId]
+            : ((props.value as string) || options[0] || "");
+
+        const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+          const newValue = event.target.value;
+          setInputValues((prev) => ({ ...prev, [nodeId]: newValue }));
           if (handlers.change && onInvokeCallback) {
             onInvokeCallback(handlers.change, [newValue]);
           }
@@ -1504,27 +867,28 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            {props.label && (
+              <label className="text-slate-300 text-sm">{props.label as string}</label>
+            )}
             <select
               value={value}
               onChange={handleChange}
               className="px-3 py-2 bg-slate-800 text-slate-200 border border-slate-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
               {options.map((option, index) => (
-                <option key={index} value={option}>{option}</option>
+                <option key={index} value={option}>
+                  {option}
+                </option>
               ))}
             </select>
           </div>
         );
       }
 
-      case 'scroll': {
+      case "scroll": {
         const maxHeight = (props.maxHeight as number) || 400;
         return (
-          <div 
-            className="overflow-y-auto"
-            style={{ maxHeight: `${maxHeight}px` }}
-          >
+          <div className="overflow-y-auto" style={{ maxHeight: `${maxHeight}px` }}>
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
@@ -1532,15 +896,15 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'grid': {
+      case "grid": {
         const columns = (props.columns as number) || 2;
         const spacing = (props.spacing as number) || 8;
         return (
-          <div 
+          <div
             className="grid"
-            style={{ 
+            style={{
               gridTemplateColumns: `repeat(${columns}, 1fr)`,
-              gap: `${spacing}px`
+              gap: `${spacing}px`,
             }}
           >
             {children.map((child, index) => (
@@ -1550,25 +914,27 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'spacer': {
+      case "spacer": {
         const height = (props.height as number) || 16;
         return <div style={{ height: `${height}px` }} />;
       }
 
-      case 'divider': {
+      case "divider": {
         return <hr className="border-slate-700 my-2" />;
       }
 
-      case 'progress': {
+      case "progress": {
         const value = (props.value as number) || 0;
         const max = (props.max as number) || 100;
         const percentage = (value / max) * 100;
-        
+
         return (
           <div className="flex flex-col gap-2">
-            {props.label && <label className="text-slate-300 text-sm">{props.label as string}</label>}
+            {props.label && (
+              <label className="text-slate-300 text-sm">{props.label as string}</label>
+            )}
             <div className="w-full bg-slate-800 rounded-full h-2">
-              <div 
+              <div
                 className="bg-blue-600 h-2 rounded-full transition-all"
                 style={{ width: `${percentage}%` }}
               />
@@ -1577,8 +943,7 @@ function WaveletUIRenderer({
         );
       }
 
-      case 'logViewer': {
-        // Show console output if available, otherwise show placeholder text
+      case "logViewer": {
         const hasOutput = consoleOutput.length > 0;
         return (
           <div className="bg-slate-900 rounded p-3 font-mono text-xs text-slate-300 min-h-[100px] max-h-[300px] overflow-y-auto">
@@ -1590,7 +955,7 @@ function WaveletUIRenderer({
               </div>
             ) : (
               <div className="text-slate-500">
-                {(props.text as string) || 'Console messages will appear here...'}
+                {(props.text as string) || "Console messages will appear here..."}
               </div>
             )}
           </div>
