@@ -10,8 +10,6 @@ import android.widget.Button;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
 
-import com.emwaver.emwaverandroidapp.auth.AuthenticationManager;
-
 public class WelcomeActivity extends AppCompatActivity {
 
     private static final String PREF_HAS_SEEN_WELCOME = "hasSeenWelcome";
@@ -60,18 +58,7 @@ public class WelcomeActivity extends AppCompatActivity {
     }
     
     private void startNextStep() {
-        if (AuthenticationManager.getInstance(this).isLoggedIn()) {
-            startMainActivity();
-        } else {
-            startLoginActivity();
-        }
-    }
-
-    private void startLoginActivity() {
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
+        startMainActivity();
     }
 
     private void startMainActivity() {

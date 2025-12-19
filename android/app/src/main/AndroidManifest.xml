@@ -70,32 +70,10 @@
                 android:value=".MainActivity" />
         </activity>
         <activity
-            android:name=".RegisterActivity"
-            android:label="@string/register_title"
-            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
-            android:exported="false" />
-        <activity
-            android:name=".LoginActivity"
-            android:label="@string/login_title"
-            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
-            android:exported="false" />
-        <activity
             android:name=".WelcomeActivity"
             android:label="Welcome"
             android:theme="@style/Theme.MaterialComponents.Light.NoActionBar"
             android:exported="false" />
-        <activity
-            android:name=".ui.wavelets.irdb.IrdBrandSelectionActivity"
-            android:exported="false"
-            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
-        <activity
-            android:name=".ui.wavelets.irdb.IrdRemoteSelectionActivity"
-            android:exported="false"
-            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
-        <activity
-            android:name=".ui.wavelets.irdb.IrdCsvSelectionActivity"
-            android:exported="false"
-            android:theme="@style/Theme.MaterialComponents.Light.NoActionBar" />
     </application>
 
 </manifest>
