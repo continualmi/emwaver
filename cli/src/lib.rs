@@ -30,7 +30,12 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
         Some(cli::Command::Init {
             target,
-        }) => init::run_init(target),
+            components,
+            path,
+        }) => {
+            let destination = path.unwrap_or(std::env::current_dir()?);
+            init::run_init(target, components, destination)
+        }
         None => interactive::run_menu(),
     }
 }

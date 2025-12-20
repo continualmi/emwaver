@@ -16,74 +16,63 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::io::{self, Write};
 use anyhow::Result;
+use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect, Select};
 
-use crate::cli::Target;
+use crate::cli::{Component, Target};
 use crate::{init, shell};
 
 pub fn run_menu() -> Result<()> {
-    loop {
-        println!("EMWaver CLI");
-        println!("1) Device shell");
-        println!("2) Init firmware project");
-        println!("3) Exit");
-        print!("Select an option: ");
-        io::stdout().flush()?;
+    let theme = ColorfulTheme::default();
 
-        let choice = read_line()?;
-        match choice.as_str() {
-            "1" => {
-                let verbose = prompt_yes_no("Verbose output? [y/N]: ")?;
-                shell::run_shell(verbose)?;
-            }
-            "2" => {
-                let target = prompt_target()?;
-                let cwd = std::env::current_dir()?;
-                println!("Create EMWaver project in {}?", cwd.display());
-                let proceed = prompt_yes_no_default("Continue? [Y/n]: ", true)?;
-                if proceed {
-                    init::run_init(target)?;
-                }
-                return Ok(());
-            }
-            "3" => return Ok(()),
-            _ => {
-                println!("Invalid selection.");
-            }
+    let selection = Select::with_theme(&theme)
+        .with_prompt("EMWaver CLI")
+        .default(0)
+        .items(&["Device shell", "Init firmware project", "Exit"])
+        .interact()?;
+
+    match selection {
+        0 => {
+            let verbose = Confirm::with_theme(&theme)
+                .with_prompt("Verbose output?")
+                .default(false)
+                .interact()?;
+            shell::run_shell(verbose)
         }
+        1 => {
+            let target = Target::Esp32s3;
+            let cwd = std::env::current_dir()?;
+            let proceed = Confirm::with_theme(&theme)
+                .with_prompt(format!(
+                    "Create EMWaver firmware project in {}? (will overwrite files)",
+                    cwd.display()
+                ))
+                .default(true)
+                .interact()?;
+            if proceed {
+                let components = prompt_components(&theme)?;
+                init::run_init(target, components, cwd)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
 }
 
-fn read_line() -> Result<String> {
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    Ok(input.trim().to_string())
-}
+fn prompt_components(theme: &ColorfulTheme) -> Result<Vec<Component>> {
+    let choices = [
+        (Component::Gpio, "GPIO commands"),
+        (Component::Sampler, "Sampler commands"),
+        (Component::Cc1101, "CC1101 radio"),
+        (Component::Rfm69, "RFM69 radio"),
+        (Component::Mfrc522, "MFRC522 RFID"),
+    ];
+    let labels: Vec<&str> = choices.iter().map(|(_, label)| *label).collect();
 
-fn prompt_yes_no(prompt: &str) -> Result<bool> {
-    prompt_yes_no_default(prompt, false)
-}
+    let selections = MultiSelect::with_theme(theme)
+        .with_prompt("Select optional components (space toggles, enter confirms). Core is always included.")
+        .items(&labels)
+        .interact()?;
 
-fn prompt_yes_no_default(prompt: &str, default_yes: bool) -> Result<bool> {
-    print!("{prompt}");
-    io::stdout().flush()?;
-    let input = read_line()?;
-    if input.is_empty() {
-        return Ok(default_yes);
-    }
-    Ok(matches!(input.as_str(), "y" | "Y" | "yes" | "YES" | "Yes"))
-}
-
-
-fn prompt_target() -> Result<Target> {
-    print!("Target [esp32s3]: ");
-    io::stdout().flush()?;
-    let input = read_line()?;
-    if input.is_empty() || input.eq_ignore_ascii_case("esp32s3") {
-        Ok(Target::Esp32s3)
-    } else {
-        println!("Unknown target, defaulting to esp32s3.");
-        Ok(Target::Esp32s3)
-    }
+    Ok(selections.into_iter().map(|idx| choices[idx].0).collect())
 }

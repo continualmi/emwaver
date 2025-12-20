@@ -43,6 +43,8 @@ cargo build --release
 
 ## Usage
 
+`emwaver init` writes/overwrites the firmware template files in the destination directory.
+
 ```bash
 # Launch the interactive menu
 emwaver
@@ -55,6 +57,15 @@ emwaver shell --verbose
 
 # Initialize a new ESP32-S3 firmware project in the current folder
 emwaver init --target esp32s3
+
+# Initialize in a specific folder (created if missing)
+emwaver init --target esp32s3 --path ./my-firmware
+
+# Initialize with optional components
+emwaver init --target esp32s3 --components gpio,sampler,cc1101
+
+# Initialize with optional components into a specific folder
+emwaver init --target esp32s3 --path ./my-firmware --components gpio,cc1101
 ```
 
 ## Development
