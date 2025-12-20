@@ -21,27 +21,27 @@ Follow Espressif’s official “Get Started” guide for ESP-IDF (prereqs + Pyt
 We recommend keeping ESP-IDF in a dedicated folder under your home directory:
 
 ```bash
-mkdir -p ~/ESP_on_home/ESP
-cd ~/ESP_on_home/ESP
+mkdir -p ~/esp
+cd ~/esp
 git clone --recursive https://github.com/espressif/esp-idf.git
 ```
 
 Set the ESP-IDF tools path (recommended so tools live under the same folder):
 
 ```bash
-export IDF_TOOLS_PATH="$HOME/ESP_on_home/ESP/tools"
+export IDF_TOOLS_PATH="$HOME/esp/tools"
 ```
 
 Then install ESP-IDF tools:
 
 ```bash
-cd ~/ESP_on_home/ESP/esp-idf
-./install.sh
+cd ~/esp/esp-idf
+./install.sh esp32
 ```
 
 ### 2) Install `emwaver-cli`
 
-Install the CLI (this gives you the interactive terminal UI and `init` project generator):
+Install the CLI (this gives you the terminal UI and `init` project generator):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/emwaver/emwaver/main/cli/install.sh | sh
@@ -88,7 +88,7 @@ idf.py -p <PORT> flash
 idf.py -p <PORT> monitor
 ```
 
-## macOS (Coming Soon)
+## macOS
 
 The overall flow is the same as Linux (ESP-IDF + `emwaver-cli` + `idf.py flash`), with these macOS-specific notes:
 
@@ -96,7 +96,11 @@ The overall flow is the same as Linux (ESP-IDF + `emwaver-cli` + `idf.py flash`)
 
 If your device shows up as a CH34* USB-serial bridge, install the WCH serial driver so macOS creates a serial device node.
 
-- Driver: WCH CH34x serial (vendor-provided)
+- Homebrew cask: https://formulae.brew.sh/cask/wch-ch34x-usb-serial-driver
+
+```bash
+brew install --cask wch-ch34x-usb-serial-driver
+```
 
 ### Find The Port
 
@@ -154,17 +158,3 @@ newgrp dialout
 ### 3) Build + Flash (Inside WSL)
 
 From here, follow the **Linux** steps above inside WSL (install ESP-IDF, install `emwaver-cli`, run `emwaver init`, then `idf.py -p <PORT> flash`).
-
-## Device Notes
-
-### EMWaver DIY
-
-- TODO: Add the exact port/connector to use for flashing and the bootloader button sequence.
-
-### EMWaver Shield
-
-- TODO: Add the exact port/connector to use for flashing and the bootloader button sequence.
-
-### EMWaver (Flagship)
-
-- TODO: Add the exact port/connector to use for flashing and the bootloader button sequence.
