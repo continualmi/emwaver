@@ -9,13 +9,16 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 
 legacy_root="${HOME}/esp"
-default_root="${HOME}/ESP_on_home/ESP"
+default_root="${HOME}/esp"
+older_root="${HOME}/ESP_on_home/ESP"
 
 idf_root=""
 if [[ -d "${default_root}/esp-idf" ]]; then
     idf_root="${default_root}/esp-idf"
-elif [[ -d "${legacy_root}/esp-idf" ]]; then
-    idf_root="${legacy_root}/esp-idf"
+elif [[ -d "${HOME}/ESP/esp-idf" ]]; then
+    idf_root="${HOME}/ESP/esp-idf"
+elif [[ -d "${older_root}/esp-idf" ]]; then
+    idf_root="${older_root}/esp-idf"
 else
     idf_root="${default_root}/esp-idf"
 fi
@@ -25,6 +28,10 @@ export_script="${idf_root}/export.sh"
 tools_default=""
 if [[ -d "${default_root}/tools" ]]; then
     tools_default="${default_root}/tools"
+elif [[ -d "${HOME}/ESP/tools" ]]; then
+    tools_default="${HOME}/ESP/tools"
+elif [[ -d "${older_root}/tools" ]]; then
+    tools_default="${older_root}/tools"
 else
     tools_default="${legacy_root}/tools"
 fi

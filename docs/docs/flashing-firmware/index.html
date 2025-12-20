@@ -598,13 +598,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#macos-coming-soon" class="md-nav__link">
+  <a href="#macos" class="md-nav__link">
     <span class="md-ellipsis">
-      macOS (Coming Soon)
+      macOS
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="macOS (Coming Soon)">
+    <nav class="md-nav" aria-label="macOS">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -662,48 +662,6 @@
   <a href="#3-build-flash-inside-wsl" class="md-nav__link">
     <span class="md-ellipsis">
       3) Build + Flash (Inside WSL)
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#device-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      Device Notes
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Device Notes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#emwaver-diy" class="md-nav__link">
-    <span class="md-ellipsis">
-      EMWaver DIY
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#emwaver-shield" class="md-nav__link">
-    <span class="md-ellipsis">
-      EMWaver Shield
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#emwaver-flagship" class="md-nav__link">
-    <span class="md-ellipsis">
-      EMWaver (Flagship)
     </span>
   </a>
   
@@ -800,13 +758,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#macos-coming-soon" class="md-nav__link">
+  <a href="#macos" class="md-nav__link">
     <span class="md-ellipsis">
-      macOS (Coming Soon)
+      macOS
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="macOS (Coming Soon)">
+    <nav class="md-nav" aria-label="macOS">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -874,48 +832,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#device-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      Device Notes
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Device Notes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#emwaver-diy" class="md-nav__link">
-    <span class="md-ellipsis">
-      EMWaver DIY
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#emwaver-shield" class="md-nav__link">
-    <span class="md-ellipsis">
-      EMWaver Shield
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#emwaver-flagship" class="md-nav__link">
-    <span class="md-ellipsis">
-      EMWaver (Flagship)
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -946,19 +862,19 @@
 <li>https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/get-started/</li>
 </ul>
 <p>We recommend keeping ESP-IDF in a dedicated folder under your home directory:</p>
-<pre><code class="language-bash">mkdir -p ~/ESP_on_home/ESP
-cd ~/ESP_on_home/ESP
+<pre><code class="language-bash">mkdir -p ~/esp
+cd ~/esp
 git clone --recursive https://github.com/espressif/esp-idf.git
 </code></pre>
 <p>Set the ESP-IDF tools path (recommended so tools live under the same folder):</p>
-<pre><code class="language-bash">export IDF_TOOLS_PATH=&quot;$HOME/ESP_on_home/ESP/tools&quot;
+<pre><code class="language-bash">export IDF_TOOLS_PATH=&quot;$HOME/esp/tools&quot;
 </code></pre>
 <p>Then install ESP-IDF tools:</p>
-<pre><code class="language-bash">cd ~/ESP_on_home/ESP/esp-idf
-./install.sh
+<pre><code class="language-bash">cd ~/esp/esp-idf
+./install.sh esp32
 </code></pre>
 <h3 id="2-install-emwaver-cli">2) Install <code>emwaver-cli</code></h3>
-<p>Install the CLI (this gives you the interactive terminal UI and <code>init</code> project generator):</p>
+<p>Install the CLI (this gives you the terminal UI and <code>init</code> project generator):</p>
 <pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/emwaver/emwaver/main/cli/install.sh | sh
 </code></pre>
 <h3 id="3-create-a-firmware-project">3) Create a Firmware Project</h3>
@@ -990,13 +906,15 @@ idf.py build
 idf.py -p &lt;PORT&gt; flash
 idf.py -p &lt;PORT&gt; monitor
 </code></pre>
-<h2 id="macos-coming-soon">macOS (Coming Soon)</h2>
+<h2 id="macos">macOS</h2>
 <p>The overall flow is the same as Linux (ESP-IDF + <code>emwaver-cli</code> + <code>idf.py flash</code>), with these macOS-specific notes:</p>
 <h3 id="usb-to-serial-driver-ch34x">USB-to-Serial Driver (CH34x)</h3>
 <p>If your device shows up as a CH34* USB-serial bridge, install the WCH serial driver so macOS creates a serial device node.</p>
 <ul>
-<li>Driver: WCH CH34x serial (vendor-provided)</li>
+<li>Homebrew cask: https://formulae.brew.sh/cask/wch-ch34x-usb-serial-driver</li>
 </ul>
+<pre><code class="language-bash">brew install --cask wch-ch34x-usb-serial-driver
+</code></pre>
 <h3 id="find-the-port">Find The Port</h3>
 <p>Ports are typically under <code>/dev/cu.*</code>:</p>
 <ul>
@@ -1028,19 +946,6 @@ newgrp dialout
 </code></pre>
 <h3 id="3-build-flash-inside-wsl">3) Build + Flash (Inside WSL)</h3>
 <p>From here, follow the <strong>Linux</strong> steps above inside WSL (install ESP-IDF, install <code>emwaver-cli</code>, run <code>emwaver init</code>, then <code>idf.py -p &lt;PORT&gt; flash</code>).</p>
-<h2 id="device-notes">Device Notes</h2>
-<h3 id="emwaver-diy">EMWaver DIY</h3>
-<ul>
-<li>TODO: Add the exact port/connector to use for flashing and the bootloader button sequence.</li>
-</ul>
-<h3 id="emwaver-shield">EMWaver Shield</h3>
-<ul>
-<li>TODO: Add the exact port/connector to use for flashing and the bootloader button sequence.</li>
-</ul>
-<h3 id="emwaver-flagship">EMWaver (Flagship)</h3>
-<ul>
-<li>TODO: Add the exact port/connector to use for flashing and the bootloader button sequence.</li>
-</ul>
 
 
 
