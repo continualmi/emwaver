@@ -17,6 +17,8 @@
  */
 
 mod cli;
+mod init;
+mod interactive;
 mod shell;
 
 use anyhow::Result;
@@ -24,7 +26,13 @@ use clap::Parser;
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
-    shell::run_shell(cli.verbose)
+    match cli.command {
+        Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
+        Some(cli::Command::Init {
+            target,
+        }) => init::run_init(target),
+        None => interactive::run_menu(),
+    }
 }
 
 #[cfg(test)]

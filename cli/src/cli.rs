@@ -16,12 +16,32 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use clap::Parser;
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
-#[command(name = "emw", version, about = "EMWaver device shell")]
+#[command(name = "emwaver", version, about = "EMWaver CLI")]
 pub struct Cli {
-    /// Show raw hex payloads alongside ASCII output.
-    #[arg(long)]
-    pub verbose: bool,
+    #[command(subcommand)]
+    pub command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Open an interactive shell to a nearby EMWaver device.
+    Shell {
+        /// Show raw hex payloads alongside ASCII output.
+        #[arg(long)]
+        verbose: bool,
+    },
+    /// Initialize a new firmware project.
+    Init {
+        /// Target platform template to use.
+        #[arg(long, value_enum, default_value_t = Target::Esp32s3)]
+        target: Target,
+    },
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum Target {
+    Esp32s3,
 }
