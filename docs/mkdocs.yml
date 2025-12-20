@@ -29,11 +29,11 @@ extra:
 nav:
   - Overview: overview.md
   - Hardware: hardware.md
-  - Wavelets: wavelets.md
-  - EMWaver DSL: emwaver-dsl.md
+  - Wavelets:
+      - Overview: wavelets.md
+      - EMWaver DSL: emwaver-dsl.md
   - App Overview: documentation.md
-  - Firmware Update: firmware.md
-  - Store: https://emwavers.com/store
+  - Flashing Firmware: flashing-firmware.md
 
 extra_css:
   - styles/hide-toc.css
