@@ -285,7 +285,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-hidden px-6 py-4">
+      <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-y-auto px-6 py-4">
         {/* Quick Access to Fragments */}
         <div className="flex-shrink-0">
           <h3 className="text-sm font-semibold text-slate-100 mb-2">Quick Access</h3>
