@@ -2,6 +2,8 @@
 .gradle/
 build/
 */build/
+target/
+*/target/
 
 # Local configuration file (sdk path, etc)
 local.properties
@@ -68,6 +70,9 @@ lint/tmp/
 
 # macOS
 .DS_Store
+
+# Node
+node_modules/
 
 # Xcode user-specific data
 xcuserdata/
