@@ -44,11 +44,17 @@ cargo build --release
 ## Usage
 
 ```bash
+# Launch the interactive menu
+emwaver
+
 # Connect to a nearby EMWaver device and open an interactive shell
 emwaver shell
 
 # Show raw hex payloads alongside ASCII output
 emwaver shell --verbose
+
+# Initialize a new ESP32-S3 firmware project in the current folder
+emwaver init --target esp32s3
 ```
 
 ## Development
