@@ -40,7 +40,7 @@ pub fn run_menu() -> Result<()> {
             shell::run_shell(verbose)
         }
         1 => {
-            let target = Target::Esp32s3;
+            let target = prompt_target(&theme)?;
             let cwd = std::env::current_dir()?;
             let proceed = Confirm::with_theme(&theme)
                 .with_prompt(format!(
@@ -50,7 +50,7 @@ pub fn run_menu() -> Result<()> {
                 .default(true)
                 .interact()?;
             if proceed {
-                let components = prompt_components(&theme)?;
+                let components = prompt_components(&theme, target)?;
                 init::run_init(target, components, cwd)?;
             }
             Ok(())
@@ -59,18 +59,47 @@ pub fn run_menu() -> Result<()> {
     }
 }
 
-fn prompt_components(theme: &ColorfulTheme) -> Result<Vec<Component>> {
-    let choices = [
-        (Component::Gpio, "GPIO commands"),
-        (Component::Sampler, "Sampler commands"),
-        (Component::Cc1101, "CC1101 radio"),
-        (Component::Rfm69, "RFM69 radio"),
-        (Component::Mfrc522, "MFRC522 RFID"),
-    ];
+fn prompt_target(theme: &ColorfulTheme) -> Result<Target> {
+    let selection = Select::with_theme(theme)
+        .with_prompt("Target")
+        .default(0)
+        .items(&["esp32s3", "stm32f042"])
+        .interact()?;
+    Ok(match selection {
+        0 => Target::Esp32s3,
+        _ => Target::Stm32f042,
+    })
+}
+
+fn prompt_components(theme: &ColorfulTheme, target: Target) -> Result<Vec<Component>> {
+    let (choices, core_label) = match target {
+        Target::Esp32s3 => (
+            vec![
+                (Component::Gpio, "GPIO commands"),
+                (Component::Sampler, "Sampler commands"),
+                (Component::Cc1101, "CC1101 radio"),
+                (Component::Rfm69, "RFM69 radio"),
+                (Component::Mfrc522, "MFRC522 RFID"),
+            ],
+            "Core: BLE server + command registry + init (always included).",
+        ),
+        Target::Stm32f042 => (
+            vec![
+                (Component::Gpio, "GPIO commands"),
+                (Component::Sampler, "Sampler commands"),
+                (Component::Cc1101, "CC1101 radio"),
+                (Component::Mfrc522, "MFRC522 RFID"),
+            ],
+            "Core: USB transport + command registry + init (always included).",
+        ),
+    };
+
     let labels: Vec<&str> = choices.iter().map(|(_, label)| *label).collect();
 
     let selections = MultiSelect::with_theme(theme)
-        .with_prompt("Select optional components (space toggles, enter confirms). Core is always included.")
+        .with_prompt(format!(
+            "Select optional components (space toggles, enter confirms). {core_label}"
+        ))
         .items(&labels)
         .interact()?;
 

@@ -46,3 +46,20 @@ fn init_writes_selected_components() {
     assert!(temp.path().join("main").join("spi.c").exists());
     assert!(temp.path().join("main").join("spi.h").exists());
 }
+
+#[test]
+fn init_stm32f042_creates_project_files() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let project_dir = temp.path().join("my-stm32-proj");
+
+    let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
+    cmd.args(["init", "--target", "stm32f042", "--path"])
+        .arg(&project_dir)
+        .args(["--components", "gpio,cc1101"]);
+    cmd.assert().success();
+
+    assert!(project_dir.join(".project").exists());
+    assert!(project_dir.join(".cproject").exists());
+    assert!(project_dir.join("my-stm32-proj.ioc").exists());
+    assert!(project_dir.join("Core/Src/main.c").exists());
+}
