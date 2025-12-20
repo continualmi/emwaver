@@ -74,6 +74,11 @@ lint/tmp/
 # Node
 node_modules/
 
+# Vim swap files
+*.swp
+*.swo
+*.swx
+
 # Xcode user-specific data
 xcuserdata/
 *.xcuserstate

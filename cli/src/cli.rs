@@ -17,6 +17,7 @@
  */
 
 use clap::{Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "emwaver", version, about = "EMWaver CLI")]
@@ -38,10 +39,25 @@ pub enum Command {
         /// Target platform template to use.
         #[arg(long, value_enum, default_value_t = Target::Esp32s3)]
         target: Target,
+        /// Optional components to include (comma-separated).
+        #[arg(long, value_enum, value_delimiter = ',')]
+        components: Vec<Component>,
+        /// Destination directory (defaults to current directory).
+        #[arg(long)]
+        path: Option<PathBuf>,
     },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Target {
     Esp32s3,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq, Hash)]
+pub enum Component {
+    Gpio,
+    Sampler,
+    Cc1101,
+    Rfm69,
+    Mfrc522,
 }
