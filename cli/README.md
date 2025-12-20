@@ -66,6 +66,9 @@ emwaver init --target esp32s3 --components gpio,sampler,cc1101
 
 # Initialize with optional components into a specific folder
 emwaver init --target esp32s3 --path ./my-firmware --components gpio,cc1101
+
+# Initialize an STM32F042 CubeIDE/CubeMX project
+emwaver init --target stm32f042 --path ./my-stm32-proj --components gpio,cc1101
 ```
 
 ## Development

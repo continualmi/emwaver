@@ -51,6 +51,7 @@ pub enum Command {
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Target {
     Esp32s3,
+    Stm32f042,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq, Hash)]

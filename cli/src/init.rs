@@ -26,6 +26,7 @@ use include_dir::{include_dir, Dir};
 use crate::cli::{Component, Target};
 
 static ESP32S3_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../esp");
+static STM32F042_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-firmware");
 
 pub fn run_init(target: Target, components: Vec<Component>, destination: PathBuf) -> Result<()> {
     let component_set: HashSet<Component> = components.into_iter().collect();
@@ -41,10 +42,20 @@ pub fn run_init(target: Target, components: Vec<Component>, destination: PathBuf
 
     match target {
         Target::Esp32s3 => write_esp32s3(&destination, &component_set),
+        Target::Stm32f042 => write_stm32f042(&destination, &component_set),
     }?;
 
     println!("Initialized {target:?} project at {}", destination.display());
-    println!("Next: `cd {}` then `source setup.sh`.", destination.display());
+    match target {
+        Target::Esp32s3 => println!("Next: `cd {}` then `source setup.sh`.", destination.display()),
+        Target::Stm32f042 => {
+            let project_name = destination
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("emwaver-firmware");
+            println!("Next: open `{project_name}.ioc` in STM32CubeIDE, generate code if prompted, then build/flash.");
+        }
+    }
     Ok(())
 }
 
@@ -96,6 +107,24 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     Ok(())
 }
 
+fn write_stm32f042(destination: &Path, components: &HashSet<Component>) -> Result<()> {
+    if components.contains(&Component::Rfm69) {
+        bail!("stm32f042 target does not support rfm69 yet");
+    }
+
+    write_dir_recursive(&STM32F042_TEMPLATE, destination)?;
+
+    let project_name = destination
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("emwaver-firmware");
+
+    rename_and_rewrite_stm32_project_files(destination, project_name)?;
+    patch_stm32_main(destination, components)?;
+    Ok(())
+}
+
 fn write_template_file(path: &str, destination: &Path) -> Result<()> {
     let file = ESP32S3_TEMPLATE
         .get_file(path)
@@ -124,6 +153,149 @@ fn make_executable_if_shell_script(path: &Path) -> Result<()> {
     permissions.set_mode(0o755);
     fs::set_permissions(path, permissions)?;
     Ok(())
+}
+
+fn write_dir_recursive(source: &Dir, destination: &Path) -> Result<()> {
+    for entry in source.find("**/*").into_iter().flatten() {
+        let Some(file) = entry.as_file() else {
+            continue;
+        };
+        let relative = file.path();
+        let target = destination.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+        }
+        fs::write(&target, file.contents())
+            .with_context(|| format!("failed to write {}", target.display()))?;
+    }
+    Ok(())
+}
+
+fn rename_and_rewrite_stm32_project_files(destination: &Path, project_name: &str) -> Result<()> {
+    let template_name = "emwaver-firmware";
+
+    let project_path = destination.join(".project");
+    if project_path.exists() {
+        let contents = fs::read_to_string(&project_path)?;
+        let updated = contents.replace("<name>emwaver-firmware</name>", &format!("<name>{project_name}</name>"));
+        fs::write(&project_path, updated)?;
+    }
+
+    let cproject_path = destination.join(".cproject");
+    if cproject_path.exists() {
+        let contents = fs::read_to_string(&cproject_path)?;
+        let updated = contents.replace(template_name, project_name);
+        fs::write(&cproject_path, updated)?;
+    }
+
+    let old_ioc_path = destination.join("emwaver-firmware.ioc");
+    let new_ioc_path = destination.join(format!("{project_name}.ioc"));
+    let ioc_path = if old_ioc_path.exists() {
+        fs::rename(&old_ioc_path, &new_ioc_path)?;
+        new_ioc_path
+    } else {
+        new_ioc_path
+    };
+
+    if ioc_path.exists() {
+        let contents = fs::read_to_string(&ioc_path)?;
+        let updated = contents
+            .replace("ProjectManager.ProjectName=emwaver-firmware", &format!("ProjectManager.ProjectName={project_name}"))
+            .replace(
+                "ProjectManager.ProjectFileName=emwaver-firmware.ioc",
+                &format!("ProjectManager.ProjectFileName={project_name}.ioc"),
+            )
+            .replace(template_name, project_name);
+        fs::write(&ioc_path, updated)?;
+    }
+
+    Ok(())
+}
+
+fn patch_stm32_main(destination: &Path, components: &HashSet<Component>) -> Result<()> {
+    let main_path = destination.join("Core/Src/main.c");
+    if !main_path.exists() {
+        bail!("stm32f042 template missing Core/Src/main.c");
+    }
+
+    let contents = fs::read_to_string(&main_path)?;
+
+    let includes = {
+        let mut lines = vec![
+            "#include <stdio.h>",
+            "#include <stdlib.h>",
+            "#include \"usbd_cdc_if.h\"",
+            "#include \"command_registry.h\"",
+        ];
+        if components.contains(&Component::Cc1101) {
+            lines.push("#include \"cc1101.h\"");
+        }
+        if components.contains(&Component::Gpio) {
+            lines.push("#include \"stm_gpio.h\"");
+        }
+        if components.contains(&Component::Sampler) {
+            lines.push("#include \"stm_sampler.h\"");
+        }
+        if components.contains(&Component::Mfrc522) {
+            lines.push("#include \"MFRC522.h\"");
+        }
+        lines.join("\n")
+    };
+
+    let init_calls = {
+        let mut lines = vec!["  command_registry_init();"];
+        if components.contains(&Component::Cc1101) {
+            lines.push("  cc1101_register_commands();");
+        }
+        if components.contains(&Component::Gpio) {
+            lines.push("  stm_gpio_register_commands();");
+        }
+        if components.contains(&Component::Sampler) {
+            lines.push("  stm_sampler_register_commands();");
+        }
+        if components.contains(&Component::Mfrc522) {
+            lines.push("  mfrc522_register_commands();");
+        }
+        lines.push("  stm_register_commands();");
+        lines.join("\n")
+    };
+
+    let updated = replace_between_markers(
+        &contents,
+        "/* USER CODE BEGIN Includes */",
+        "/* USER CODE END Includes */",
+        &format!("\n{includes}\n"),
+    )
+    .context("failed to patch USER CODE Includes block")?;
+
+    let updated = replace_between_markers(
+        &updated,
+        "/* USER CODE BEGIN 2 */",
+        "/* USER CODE END 2 */",
+        &format!("\n{init_calls}\n"),
+    )
+    .context("failed to patch USER CODE 2 block")?;
+
+    fs::write(&main_path, updated)?;
+    Ok(())
+}
+
+fn replace_between_markers(haystack: &str, start: &str, end: &str, replacement: &str) -> Result<String> {
+    let start_idx = haystack
+        .find(start)
+        .ok_or_else(|| anyhow::anyhow!("missing start marker: {start}"))?;
+    let after_start = start_idx + start.len();
+    let end_idx = haystack[after_start..]
+        .find(end)
+        .map(|idx| after_start + idx)
+        .ok_or_else(|| anyhow::anyhow!("missing end marker: {end}"))?;
+
+    let mut out = String::with_capacity(haystack.len() + replacement.len());
+    out.push_str(&haystack[..after_start]);
+    out.push_str(replacement);
+    out.push_str(&haystack[end_idx..]);
+    Ok(out)
 }
 
 fn write_generated_main(destination: &Path) -> Result<()> {
