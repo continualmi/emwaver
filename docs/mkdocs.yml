@@ -5,7 +5,9 @@ docs_dir: content
 theme:
   name: material
   features:
-    - navigation.tabs
+    - navigation.indexes
+    - navigation.sections
+    - navigation.expand
   logo: logo.png
   favicon: logo.png
   toc:
@@ -26,6 +28,10 @@ theme:
 extra:
   toc:
     sidebar: false
+  social:
+    - icon: fontawesome/brands/youtube
+      link: https://www.youtube.com/@EMWavers
+      name: EMWavers on YouTube
 nav:
   - Overview: overview.md
   - Hardware: hardware.md
@@ -33,7 +39,10 @@ nav:
       - Overview: wavelets.md
       - EMWaver DSL: emwaver-dsl.md
   - App Overview: documentation.md
-  - Flashing Firmware: flashing-firmware.md
+  - Flashing Firmware:
+      - Overview: flashing-firmware/index.md
+      - STM32 (STM32F042): flashing-firmware/stm32.md
+      - ESP32 (ESP32-S3): flashing-firmware/esp32.md
 
 extra_css:
   - styles/hide-toc.css

@@ -1,5 +1,5 @@
 Flashing guide (docs)
-https://luispl77.github.io/emwaver/flashing-firmware/#esp32-esp32-s3
+https://luispl77.github.io/emwaver/flashing-firmware/esp32/
 
 This video walks through building and flashing custom firmware onto ESP32-S3 EMWaver devices (Flagship, Shield, DIY, and ESP32-S3 dev boards).
 
@@ -14,7 +14,7 @@ ESP-IDF (ESP32-S3 “Get Started”)
 https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/get-started/
 
 Install emwaver-cli
-curl -fsSL https://raw.githubusercontent.com/emwaver/emwaver/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
 
 Create a firmware project
 mkdir -p ~/projects/emwaver-firmware && cd ~/projects/emwaver-firmware

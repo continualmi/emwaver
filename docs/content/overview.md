@@ -16,41 +16,29 @@ Get started with EMWaver by downloading the app for your platform or installing 
 
 ### Mobile Apps
 
-<div style="display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: 2em;">
-  <a href="https://apps.apple.com/app/emwaver" style="text-decoration: none;">
-    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #007AFF; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
-      <span>🍎</span>
-      <span>Download for iOS</span>
-    </button>
+<div class="emw-store-badges">
+  <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" target="_blank" rel="noopener">
+    <img src="../badges/google-play.png" alt="Get it on Google Play">
   </a>
-  <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" style="text-decoration: none;">
-    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #34A853; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
-      <span>🤖</span>
-      <span>Download for Android</span>
-    </button>
+  <a href="https://apps.apple.com/app/emwaver" target="_blank" rel="noopener">
+    <img src="../badges/app-store.png" alt="Download on the App Store">
   </a>
 </div>
 
 ### Desktop App
 
-<div style="display: flex; gap: 1em; flex-wrap: wrap; margin-bottom: 2em;">
-  <a href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-macOS.dmg" style="text-decoration: none;">
-    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #333; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
-      <span>🍎</span>
-      <span>Download for macOS</span>
-    </button>
+<div class="emw-platform-buttons">
+  <a class="emw-platform-button emw-platform-button--windows" href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-Windows.exe" target="_blank" rel="noopener">
+    <img src="../logos/windows.svg" alt="Windows">
+    <span>Download for Windows</span>
   </a>
-  <a href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-Windows.exe" style="text-decoration: none;">
-    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #0078D4; color: white; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
-      <span>🪟</span>
-      <span>Download for Windows</span>
-    </button>
+  <a class="emw-platform-button emw-platform-button--macos" href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-macOS.dmg" target="_blank" rel="noopener">
+    <img src="../logos/apple.svg" alt="macOS">
+    <span>Download for macOS</span>
   </a>
-  <a href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-Linux.AppImage" style="text-decoration: none;">
-    <button style="display: inline-flex; align-items: center; gap: 0.5em; padding: 0.75em 1.5em; background: #FCC624; color: #333; border: none; border-radius: 8px; font-size: 1em; cursor: pointer; font-weight: 500; transition: background 0.2s;">
-      <span>🐧</span>
-      <span>Download for Linux</span>
-    </button>
+  <a class="emw-platform-button emw-platform-button--linux" href="https://github.com/emwaver/emwaver/releases/latest/download/EMWaver-Linux.AppImage" target="_blank" rel="noopener">
+    <img src="../logos/ubuntu.svg" alt="Linux">
+    <span>Download for Linux</span>
   </a>
 </div>
 
@@ -59,7 +47,7 @@ Get started with EMWaver by downloading the app for your platform or installing 
 Install the EMWaver CLI tool with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/emwaver/emwaver/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
 ```
 
 The installer automatically detects your platform (macOS, Linux, or Windows) and installs the appropriate binary.
@@ -144,4 +132,3 @@ Firmware lives in `main/` and is built with ESP-IDF. Core modules include BLE co
 ## Documentation
 
 This site consolidates quickstarts, tooling references, and runtime guides. Explore the dedicated pages for firmware builds, Wavelets authoring, and the EMWaver DSL to dive deeper into each layer of the platform.
-

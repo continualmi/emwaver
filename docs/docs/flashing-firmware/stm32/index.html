@@ -8,25 +8,31 @@
       
       
       
+        <link rel="canonical" href="https://luispl77.github.io/emwaver/flashing-firmware/stm32/">
       
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../esp32/">
       
       
         
       
       
-      <link rel="icon" href="/emwaver/logo.png">
+      <link rel="icon" href="../../logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>EMWaver</title>
+        <title>STM32 (STM32F042) Flashing - EMWaver</title>
       
     
     
-      <link rel="stylesheet" href="/emwaver/assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="/emwaver/assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -45,9 +51,9 @@
       
     
     
-      <link rel="stylesheet" href="/emwaver/styles/hide-toc.css">
+      <link rel="stylesheet" href="../../styles/hide-toc.css">
     
-    <script>__md_scope=new URL("/emwaver/",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -71,6 +77,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#stm32-stm32f042-flashing" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -83,9 +94,9 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="/emwaver/." title="EMWaver" class="md-header__button md-logo" aria-label="EMWaver" data-md-component="logo">
+    <a href="../.." title="EMWaver" class="md-header__button md-logo" aria-label="EMWaver" data-md-component="logo">
       
-  <img src="/emwaver/logo.png" alt="logo">
+  <img src="../../logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -102,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              
+              STM32 (STM32F042) Flashing
             
           </span>
         </div>
@@ -206,9 +217,9 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="/emwaver/." title="EMWaver" class="md-nav__button md-logo" aria-label="EMWaver" data-md-component="logo">
+    <a href="../.." title="EMWaver" class="md-nav__button md-logo" aria-label="EMWaver" data-md-component="logo">
       
-  <img src="/emwaver/logo.png" alt="logo">
+  <img src="../../logo.png" alt="logo">
 
     </a>
     EMWaver
@@ -223,7 +234,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/emwaver/overview/" class="md-nav__link">
+      <a href="../../overview/" class="md-nav__link">
         
   
   
@@ -250,7 +261,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/emwaver/hardware/" class="md-nav__link">
+      <a href="../../hardware/" class="md-nav__link">
         
   
   
@@ -337,7 +348,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/emwaver/wavelets/" class="md-nav__link">
+      <a href="../../wavelets/" class="md-nav__link">
         
   
   
@@ -365,7 +376,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/emwaver/emwaver-dsl/" class="md-nav__link">
+      <a href="../../emwaver-dsl/" class="md-nav__link">
         
   
   
@@ -400,7 +411,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/emwaver/documentation/" class="md-nav__link">
+      <a href="../../documentation/" class="md-nav__link">
         
   
   
@@ -424,6 +435,8 @@
       
   
   
+    
+  
   
   
     
@@ -446,17 +459,15 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="/emwaver/flashing-firmware/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -480,7 +491,7 @@
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -497,10 +508,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="/emwaver/flashing-firmware/stm32/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    STM32 (STM32F042)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -516,6 +554,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-install-st-tools-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1) Install ST Tools (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-generate-a-project-emwaver-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2) Generate a Project (emwaver-cli)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-build-stm32cubeide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3) Build (STM32CubeIDE)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-flash-stm32cubeprogrammer-usb-dfu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4) Flash (STM32CubeProgrammer, USB DFU)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-quick-test-emwaver-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5) Quick Test (EMWaver App)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -528,7 +641,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/emwaver/flashing-firmware/esp32/" class="md-nav__link">
+      <a href="../esp32/" class="md-nav__link">
         
   
   
@@ -573,6 +686,71 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-install-st-tools-windows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1) Install ST Tools (Windows)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-generate-a-project-emwaver-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2) Generate a Project (emwaver-cli)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-build-stm32cubeide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3) Build (STM32CubeIDE)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-flash-stm32cubeprogrammer-usb-dfu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4) Flash (STM32CubeProgrammer, USB DFU)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-quick-test-emwaver-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5) Quick Test (EMWaver App)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -585,8 +763,93 @@
               
               <article class="md-content__inner md-typeset">
                 
-  <h1>404 - Not found</h1>
+                  
 
+
+
+<h1 id="stm32-stm32f042-flashing">STM32 (STM32F042) Flashing</h1>
+<p>This guide covers manual firmware build + flashing for <strong>STM32-based EMWaver devices</strong>:</p>
+<ul>
+<li>Infrared Waver</li>
+<li>ISM Waver</li>
+<li>RFID Waver</li>
+</ul>
+<p>All STM32 devices in the lineup use the same MCU (<strong>STM32F042</strong>, 48 MHz, native USB 2.0) and flash over <strong>USB DFU</strong> using ST’s tools.</p>
+<div class="emw-youtube">
+  <iframe
+    src="https://www.youtube.com/embed/vVpXeJAoiaE"
+    title="EMWaver STM32 Flashing"
+    frameborder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowfullscreen
+  ></iframe>
+</div>
+
+<p><a href="https://www.youtube.com/@EMWavers"><img alt="EMWavers YouTube Channel" class="emw-icon" src="../../assets/emwavers-youtube-channel.jpg" width="28" /></a>
+<a class="md-button md-button--primary" href="https://www.youtube.com/@EMWavers">EMWavers YouTube Channel</a></p>
+<h2 id="1-install-st-tools-windows">1) Install ST Tools (Windows)</h2>
+<p>The STM32 workflow is easiest with ST’s GUI tools. Install:</p>
+<ul>
+<li>STM32CubeIDE (build)</li>
+<li>STM32CubeMX (code generation)</li>
+<li>STM32CubeProgrammer (flash over USB DFU)</li>
+</ul>
+<p>Official downloads:</p>
+<ul>
+<li>https://www.st.com/en/development-tools/stm32cubeide.html</li>
+<li>https://www.st.com/en/development-tools/stm32cubeprog.html</li>
+<li>https://www.st.com/en/development-tools/stm32cubemx.html</li>
+</ul>
+<h2 id="2-generate-a-project-emwaver-cli">2) Generate a Project (<code>emwaver-cli</code>)</h2>
+<p>You can run <code>emwaver-cli</code> on Windows or in WSL. If you use WSL, <strong>copy the generated project to a normal Windows folder</strong> (for example <code>Documents/</code>) before opening it in STM32CubeIDE (CubeIDE doesn’t like WSL paths).</p>
+<p>Install the CLI:</p>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+</code></pre>
+<p>Generate a project:</p>
+<pre><code class="language-bash">emwaver init --target stm32f042 --path ./my-stm32-proj
+</code></pre>
+<h2 id="3-build-stm32cubeide">3) Build (STM32CubeIDE)</h2>
+<ol>
+<li>File → Open Projects from File System... → select the project folder.</li>
+<li>Open the project’s <code>.ioc</code> file and click <strong>Generate Code</strong>.</li>
+<li>Build using the <strong>Release</strong> configuration (Debug may not fit on STM32F042).</li>
+<li>The output <code>.elf</code> is under <code>Release/</code>.</li>
+</ol>
+<h2 id="4-flash-stm32cubeprogrammer-usb-dfu">4) Flash (STM32CubeProgrammer, USB DFU)</h2>
+<p>Hardware setup:</p>
+<ol>
+<li>Set the device BOOT/FLASH switch to <strong>flash mode</strong> (gear icon).</li>
+<li>Connect the device via USB. (Optional: use a small USB-C female-to-female adapter to reduce wear from plugging/unplugging directly.)</li>
+</ol>
+<p>Flashing in STM32CubeProgrammer:</p>
+<ol>
+<li>Select <strong>USB</strong> (not ST-LINK). You should see a USB connector entry (for example, <code>USB1</code>).</li>
+<li>Click <strong>Connect</strong>.</li>
+<li>Open the firmware <code>.elf</code>.</li>
+<li>Click <strong>Download</strong> to flash.</li>
+<li>Unplug, switch to <strong>run mode</strong> (play icon), and reconnect to test in the EMWaver app.</li>
+</ol>
+<h2 id="5-quick-test-emwaver-app">5) Quick Test (EMWaver App)</h2>
+<ol>
+<li>Switch to <strong>run mode</strong> (play icon) and reconnect the device.</li>
+<li>Open the EMWaver app and connect to the device to confirm it enumerates and responds.</li>
+</ol>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
               </article>
             </div>
           
@@ -636,10 +899,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "/emwaver/", "features": ["navigation.indexes", "navigation.sections", "navigation.expand"], "search": "/emwaver/assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "navigation.sections", "navigation.expand"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="/emwaver/assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
