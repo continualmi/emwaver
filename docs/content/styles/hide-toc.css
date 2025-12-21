@@ -124,3 +124,46 @@
   background: #FCC624;
   color: #2a2a2a;
 }
+
+.md-typeset .emw-device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 1rem 0 1.5rem;
+}
+
+.md-typeset .emw-device-card {
+  display: block;
+  text-decoration: none;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.10);
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.md-typeset .emw-device-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.14);
+}
+
+.md-typeset .emw-device-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 0;
+  display: block;
+}
+
+.md-typeset .emw-device-title {
+  padding: 12px 14px 0;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.md-typeset .emw-device-subtitle {
+  padding: 2px 14px 14px;
+  font-size: 0.9rem;
+  color: rgba(15, 23, 42, 0.7);
+}

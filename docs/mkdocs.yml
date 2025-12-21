@@ -34,7 +34,9 @@ extra:
       name: EMWavers on YouTube
 nav:
   - Overview: overview.md
-  - Hardware: hardware.md
+  - Hardware:
+      - Overview: hardware.md
+      - Build & Reproduce: hardware-catalog.md
   - Wavelets:
       - Overview: wavelets.md
       - EMWaver DSL: emwaver-dsl.md
