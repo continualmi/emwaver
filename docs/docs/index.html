@@ -228,6 +228,14 @@
             text-align: center;
             color: white;
             backdrop-filter: blur(6px);
+            text-decoration: none;
+            display: block;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .device-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
         }
 
         .device-image {
@@ -790,43 +798,43 @@
                 <h2>Current Gen Devices</h2>
                 <div class="device-grid">
                     <div class="device-row">
-                        <div class="device-card">
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=emwaver" target="_blank" rel="noopener">
                             <img src="EMWAVER.jpg" alt="EMWaver device" class="device-image">
                             <h3>EMWaver</h3>
                             <p>ESP32</p>
-                        </div>
-                        <div class="device-card">
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=ISM_WAVER" target="_blank" rel="noopener">
                             <img src="ISM_WAVER.jpg" alt="ISM Waver device" class="device-image">
                             <h3>ISM Waver</h3>
                             <p>STM32</p>
-                        </div>
-                        <div class="device-card">
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=INFRARED_WAVER" target="_blank" rel="noopener">
                             <img src="INFRARED_WAVER.jpg" alt="Infrared Waver device" class="device-image">
                             <h3>Infrared Waver</h3>
                             <p>STM32</p>
-                        </div>
-                        <div class="device-card">
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=GPIO_WAVER" target="_blank" rel="noopener">
                             <img src="GPIO_WAVER.jpg" alt="GPIO Waver device" class="device-image">
                             <h3>GPIO Waver</h3>
                             <p>STM32</p>
-                        </div>
+                        </a>
                     </div>
                     <div class="device-row center">
-                        <div class="device-card">
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=EMWAVER_DIY" target="_blank" rel="noopener">
                             <img src="EMWAVER_DIY.jpg" alt="EMWaver DIY device" class="device-image">
                             <h3>EMWaver DIY</h3>
                             <p>Module</p>
-                        </div>
-                        <div class="device-card">
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=EMWAVER_SHIELD" target="_blank" rel="noopener">
                             <img src="EMWAVER_SHIELD.jpg" alt="EMWaver Shield device" class="device-image">
                             <h3>EMWaver Shield</h3>
                             <p>Module</p>
-                        </div>
-                        <div class="device-card">
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=RFID_WAVER" target="_blank" rel="noopener">
                             <img src="RFID_WAVER.jpg" alt="RFID Waver device" class="device-image">
                             <h3>RFID Waver</h3>
                             <p>Module</p>
-                        </div>
+                        </a>
                     </div>
                 </div>
             </div>
