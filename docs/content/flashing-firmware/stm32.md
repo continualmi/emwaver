@@ -67,7 +67,7 @@ emwaver init --target stm32f042 --path ./my-stm32-proj
 Hardware setup:
 
 1. Set the device BOOT/FLASH switch to **flash mode** (gear icon).
-2. Connect the device via USB. (Optional: use a small USB-C female-to-female adapter to reduce wear from plugging/unplugging directly.)
+2. Connect the device via USB.
 
 Flashing in STM32CubeProgrammer:
 

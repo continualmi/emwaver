@@ -2,7 +2,7 @@
   <img src="../docs/content/logo.png" alt="EMWaver Logo" width="250">
 </div>
 
-This folder contains the EMWaver ESP32-S3 firmware (ESP-IDF). For the broader product docs, visit https://docs.emwaver.com. The BLE Waver Dongle USB↔BLE adapter firmware lives in `../adapter/`.
+This folder contains the EMWaver ESP32-S3 firmware (ESP-IDF). For the broader product docs, visit https://luispl77.github.io/emwaver/.
 
 # EMWaver ESP32-S3 Firmware
 

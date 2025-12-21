@@ -12,7 +12,6 @@ EMWaver is a monorepo: firmware + apps + desktop + CLI + documentation live toge
 | --- | --- |
 | `esp/` | ESP32-S3 firmware (ESP-IDF project) |
 | `stm/` | STM32 firmware (STM32CubeIDE project, `stm/emwaver-firmware/`) |
-| `adapter/` | ESP32-S3 USB↔BLE adapter firmware (“BLE Waver Dongle”) |
 | `cli/` | Rust CLI (`emwaver`) for project init + device shell |
 | `android/` | Android companion app |
 | `ios/` | iOS companion app (SwiftUI) |
@@ -32,6 +31,6 @@ So “`main/`” may refer to either:
 
 ## Where To Go Next
 
-- Firmware: [ESP32-S3](firmware-esp32.md), [STM32F042](firmware-stm32.md), [BLE Adapter](firmware-adapter.md)
+- Firmware: [ESP32-S3](firmware-esp32.md), [STM32F042](firmware-stm32.md)
 - Tooling: [CLI](cli.md)
 - Protocol: [Transport & Command Format](protocol.md)

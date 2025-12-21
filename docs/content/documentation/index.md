@@ -12,7 +12,6 @@ This section is the technical reference for the open-source EMWaver project (fir
 - Firmware
   - [ESP32-S3 (ESP-IDF)](firmware-esp32.md)
   - [STM32F042 (STM32CubeIDE)](firmware-stm32.md)
-  - [BLE Adapter (USB↔BLE)](firmware-adapter.md)
 - [Transport & Command Format](protocol.md)
 - [CLI](cli.md)
 - Apps
@@ -31,4 +30,3 @@ EMWaver is a multi-target project:
 - **MkDocs documentation** (this site)
 
 If you’re new and just want to flash a device, start with the **Flashing Firmware** tab.
-

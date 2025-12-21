@@ -54,7 +54,6 @@ emwaver init --target stm32f042 --path ./my-stm32-fw
 
 - ESP32-S3 firmware (ESP-IDF): `esp/`
 - STM32F042 firmware (STM32CubeIDE/CubeMX): `stm/emwaver-firmware/`
-- BLE adapter firmware (USB↔BLE dongle, ESP32-S3): `adapter/`
 
 ## Documentation
 
