@@ -18,7 +18,6 @@ EMWaver is a monorepo: firmware + apps + desktop + CLI + documentation live toge
 | `ios/` | iOS companion app (SwiftUI) |
 | `app/` | Desktop app (Tauri) mirroring mobile features |
 | `docs/` | MkDocs source + generated site output (`docs/content`, `docs/mkdocs.yml`, `docs/docs`) |
-| `skills/` | Internal orchestration helpers for local dev environments |
 
 ## Firmware Templates vs. Firmware Sources
 
@@ -36,4 +35,3 @@ So “`main/`” may refer to either:
 - Firmware: [ESP32-S3](firmware-esp32.md), [STM32F042](firmware-stm32.md), [BLE Adapter](firmware-adapter.md)
 - Tooling: [CLI](cli.md)
 - Protocol: [Transport & Command Format](protocol.md)
-

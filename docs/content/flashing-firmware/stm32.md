@@ -22,7 +22,7 @@ All STM32 devices in the lineup use the same MCU (**STM32F042**, 48 MHz, native 
   ></iframe>
 </div>
 
-[![EMWavers YouTube Channel](../../assets/emwavers-youtube-channel.jpg){ .emw-icon width="28" }](https://www.youtube.com/@EMWavers)
+[![EMWavers YouTube Channel](../assets/emwavers-youtube-channel.jpg){ .emw-icon width="28" }](https://www.youtube.com/@EMWavers)
 [EMWavers YouTube Channel](https://www.youtube.com/@EMWavers){ .md-button .md-button--primary }
 
 ## 1) Install ST Tools (Windows)

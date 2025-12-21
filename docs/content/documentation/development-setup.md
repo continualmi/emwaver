@@ -40,6 +40,5 @@ The desktop app is a Tauri project under `app/` (Vite + Rust).
 
 ## Optional: Dev Orchestration Helpers
 
-This repo includes tmux helpers under `skills/environment/scripts/` to bring up common panes for docs, firmware, CLI, etc.
+This repo keeps each environment self-contained; use the build/run instructions in each subproject (`docs/`, `esp/`, `stm/`, `cli/`, `android/`, `ios/`, `app/`).
 They’re optional—use them if they match your workflow.
-
