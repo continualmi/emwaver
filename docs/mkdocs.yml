@@ -51,7 +51,6 @@ nav:
       - Firmware:
           - ESP32-S3 (ESP-IDF): documentation/firmware-esp32.md
           - STM32F042 (CubeIDE): documentation/firmware-stm32.md
-          - BLE Adapter (USB↔BLE): documentation/firmware-adapter.md
       - Protocol:
           - Transport & Command Format: documentation/protocol.md
       - CLI: documentation/cli.md
