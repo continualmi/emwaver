@@ -22,7 +22,7 @@ All ESP32 devices use the same **ESP32-S3** MCU, so the flashing workflow is the
   ></iframe>
 </div>
 
-[![EMWavers YouTube Channel](../../assets/emwavers-youtube-channel.jpg){ .emw-icon width="28" }](https://www.youtube.com/@EMWavers)
+[![EMWavers YouTube Channel](../assets/emwavers-youtube-channel.jpg){ .emw-icon width="28" }](https://www.youtube.com/@EMWavers)
 [EMWavers YouTube Channel](https://www.youtube.com/@EMWavers){ .md-button .md-button--primary }
 
 ## Linux

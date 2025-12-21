@@ -25,15 +25,14 @@ jobs:
       
       - name: Install MkDocs
         run: |
-          pip install mkdocs-material
+          pip install -r docs/requirements.txt
       
       - name: Build MkDocs
         run: |
-          cd docs
-          mkdocs build
+          mkdocs build -f docs/mkdocs.yml
       
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/site
+          publish_dir: ./docs/docs
