@@ -8,29 +8,31 @@
       
       
       
-        <link rel="canonical" href="https://luispl77.github.io/emwaver/overview/">
+        <link rel="canonical" href="https://luispl77.github.io/emwaver/documentation/firmware-adapter/">
       
       
+        <link rel="prev" href="../firmware-stm32/">
       
-        <link rel="next" href="../hardware-catalog/">
+      
+        <link rel="next" href="../protocol/">
       
       
         
       
       
-      <link rel="icon" href="../logo.png">
+      <link rel="icon" href="../../logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>Get Started - EMWaver</title>
+        <title>BLE Adapter Firmware (USB↔BLE) - EMWaver</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,11 +51,11 @@
       
     
     
-      <link rel="stylesheet" href="../styles/theme.css">
+      <link rel="stylesheet" href="../../styles/theme.css">
     
-      <link rel="stylesheet" href="../styles/hide-toc.css">
+      <link rel="stylesheet" href="../../styles/hide-toc.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#get-started" class="md-skip">
+        <a href="#ble-adapter-firmware-usbble" class="md-skip">
           Skip to content
         </a>
       
@@ -94,9 +96,9 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="EMWaver" class="md-header__button md-logo" aria-label="EMWaver" data-md-component="logo">
+    <a href="../.." title="EMWaver" class="md-header__button md-logo" aria-label="EMWaver" data-md-component="logo">
       
-  <img src="../logo.png" alt="logo">
+  <img src="../../logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -113,7 +115,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Get Started
+              BLE Adapter Firmware (USB↔BLE)
             
           </span>
         </div>
@@ -204,11 +206,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../../overview/" class="md-tabs__link">
         
   
   
@@ -229,7 +229,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../hardware-catalog/" class="md-tabs__link">
+        <a href="../../hardware-catalog/" class="md-tabs__link">
           
   
   
@@ -251,7 +251,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../flashing-firmware/" class="md-tabs__link">
+        <a href="../../flashing-firmware/" class="md-tabs__link">
           
   
   
@@ -269,11 +269,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../documentation/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -315,9 +317,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="EMWaver" class="md-nav__button md-logo" aria-label="EMWaver" data-md-component="logo">
+    <a href="../.." title="EMWaver" class="md-nav__button md-logo" aria-label="EMWaver" data-md-component="logo">
       
-  <img src="../logo.png" alt="logo">
+  <img src="../../logo.png" alt="logo">
 
     </a>
     EMWaver
@@ -329,37 +331,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Get Started
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../overview/" class="md-nav__link">
         
   
   
@@ -375,98 +350,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#download-the-apps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Download The Apps
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Download The Apps">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mobile-apps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Mobile Apps
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#desktop-app" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Desktop App
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#install-the-cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install The CLI
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#video-guides" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Video Guides
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-to-do-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What To Do Next
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -536,7 +419,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../hardware-catalog/" class="md-nav__link">
+      <a href="../../hardware-catalog/" class="md-nav__link">
         
   
   
@@ -600,7 +483,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../flashing-firmware/" class="md-nav__link ">
+            <a href="../../flashing-firmware/" class="md-nav__link ">
               
   
   
@@ -644,7 +527,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../flashing-firmware/stm32/" class="md-nav__link">
+      <a href="../../flashing-firmware/stm32/" class="md-nav__link">
         
   
   
@@ -672,7 +555,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../flashing-firmware/esp32/" class="md-nav__link">
+      <a href="../../flashing-firmware/esp32/" class="md-nav__link">
         
   
   
@@ -704,6 +587,8 @@
       
   
   
+    
+  
   
   
     
@@ -735,22 +620,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../documentation/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -768,13 +654,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -794,7 +680,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/repository-layout/" class="md-nav__link">
+      <a href="../repository-layout/" class="md-nav__link">
         
   
   
@@ -822,7 +708,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/development-setup/" class="md-nav__link">
+      <a href="../development-setup/" class="md-nav__link">
         
   
   
@@ -850,7 +736,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/contributing/" class="md-nav__link">
+      <a href="../contributing/" class="md-nav__link">
         
   
   
@@ -878,7 +764,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../hardware/" class="md-nav__link">
+      <a href="../../hardware/" class="md-nav__link">
         
   
   
@@ -903,8 +789,10 @@
                 
   
   
+    
   
   
+  
     
     
       
@@ -919,20 +807,21 @@
     
       
       
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
         
           
+          
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_6" >
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_6" checked>
         
           
-          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="">
             
   
   
@@ -950,7 +839,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -968,7 +857,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/firmware-esp32/" class="md-nav__link">
+      <a href="../firmware-esp32/" class="md-nav__link">
         
   
   
@@ -996,7 +885,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/firmware-stm32/" class="md-nav__link">
+      <a href="../firmware-stm32/" class="md-nav__link">
         
   
   
@@ -1021,10 +910,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../documentation/firmware-adapter/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    BLE Adapter (USB↔BLE)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1040,6 +956,59 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What It Does
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ble-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        BLE Interface
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-flash-esp-idf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build &amp; Flash (ESP-IDF)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1070,10 +1039,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1082,7 +1054,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_7" >
         
           
-          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="">
             
   
   
@@ -1118,7 +1090,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/protocol/" class="md-nav__link">
+      <a href="../protocol/" class="md-nav__link">
         
   
   
@@ -1154,7 +1126,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1194,10 +1166,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1206,7 +1181,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_9" >
         
           
-          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="">
             
   
   
@@ -1242,7 +1217,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/apps/" class="md-nav__link">
+      <a href="../apps/" class="md-nav__link">
         
   
   
@@ -1270,7 +1245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../documentation/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -1318,10 +1293,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1330,7 +1308,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_10" >
         
           
-          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="">
             
   
   
@@ -1366,7 +1344,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../wavelets/" class="md-nav__link">
+      <a href="../../wavelets/" class="md-nav__link">
         
   
   
@@ -1394,7 +1372,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../emwaver-dsl/" class="md-nav__link">
+      <a href="../../emwaver-dsl/" class="md-nav__link">
         
   
   
@@ -1457,49 +1435,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#download-the-apps" class="md-nav__link">
+  <a href="#what-it-does" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Download The Apps
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Download The Apps">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mobile-apps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Mobile Apps
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#desktop-app" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Desktop App
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#install-the-cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install The CLI
+        What It Does
       
     </span>
   </a>
@@ -1507,10 +1446,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#video-guides" class="md-nav__link">
+  <a href="#ble-interface" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Video Guides
+        BLE Interface
       
     </span>
   </a>
@@ -1518,10 +1457,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-to-do-next" class="md-nav__link">
+  <a href="#build-flash-esp-idf" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What To Do Next
+        Build &amp; Flash (ESP-IDF)
       
     </span>
   </a>
@@ -1545,82 +1484,40 @@
 
 
 
-<h1 id="get-started">Get Started</h1>
-<p>Install the apps, grab the CLI, and follow the flashing guides for your device family.</p>
-<h2 id="download-the-apps">Download The Apps</h2>
-<p>Mobile apps are the primary UI for connecting to devices and running workflows.</p>
-<h3 id="mobile-apps">Mobile Apps</h3>
-<div class="emw-store-badges">
-  <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" target="_blank" rel="noopener">
-    <img src="../badges/google-play.png" alt="Get it on Google Play">
-  </a>
-  <a href="https://apps.apple.com/app/emwaver" target="_blank" rel="noopener">
-    <img src="../badges/app-store.png" alt="Download on the App Store">
-  </a>
-</div>
-
-<h3 id="desktop-app">Desktop App</h3>
-<div class="emw-platform-buttons">
-  <a class="emw-platform-button emw-platform-button--windows" href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-Windows.exe" target="_blank" rel="noopener">
-    <img src="../logos/windows.svg" alt="Windows">
-    <span>Download for Windows</span>
-  </a>
-  <a class="emw-platform-button emw-platform-button--macos" href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-macOS.dmg" target="_blank" rel="noopener">
-    <img src="../logos/apple.svg" alt="macOS">
-    <span>Download for macOS</span>
-  </a>
-  <a class="emw-platform-button emw-platform-button--linux" href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-Linux.AppImage" target="_blank" rel="noopener">
-    <img src="../logos/ubuntu.svg" alt="Linux">
-    <span>Download for Linux</span>
-  </a>
-</div>
-
-<h2 id="install-the-cli">Install The CLI</h2>
-<p>Install the EMWaver CLI tool with a single command:</p>
-<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+<h1 id="ble-adapter-firmware-usbble">BLE Adapter Firmware (USB↔BLE)</h1>
+<p>The BLE adapter firmware lives in <code>adapter/</code> and targets an ESP32-S3 “BLE Waver Dongle”.</p>
+<h2 id="what-it-does">What It Does</h2>
+<p>It bridges:</p>
+<ul>
+<li><strong>USB CDC-ACM</strong> (to a host / serial device)</li>
+<li><strong>BLE</strong> (to a phone/desktop client)</li>
+</ul>
+<p>Data flow:</p>
+<ul>
+<li>Client → dongle: BLE write → forwarded to USB TX</li>
+<li>USB RX → dongle: forwarded to BLE notify</li>
+</ul>
+<h2 id="ble-interface">BLE Interface</h2>
+<ul>
+<li><strong>Service UUID</strong>: <code>45c7158e-0c3b-4e90-a847-452a15b14191</code></li>
+<li><strong>Characteristic UUID</strong>: <code>46c7158e-0c3b-4e90-a847-452a15b14191</code></li>
+</ul>
+<h2 id="build-flash-esp-idf">Build &amp; Flash (ESP-IDF)</h2>
+<pre><code class="language-bash">cd adapter
+idf.py set-target esp32s3
+idf.py build
+idf.py -p &lt;PORT&gt; flash monitor
 </code></pre>
-<p>The installer automatically detects your platform (macOS, Linux, or Windows) and installs the appropriate binary.</p>
-<div class="grid cards">
-<ul>
-<li>
-<p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg></span> <strong>Flash Firmware</strong></p>
-<hr />
-<p>Follow the step-by-step flashing guides (STM32 and ESP32).</p>
-<p><a href="../flashing-firmware/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Open Flashing Guides</a></p>
-</li>
-<li>
-<p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m13.78 15.3 6 6 2.11-2.16-6-6zm3.72-5.2c-.39 0-.81-.05-1.14-.19L4.97 21.25l-2.11-2.11 7.41-7.4L8.5 9.96l-.72.7-1.45-1.41v2.86l-.7.7-3.52-3.56.7-.7h2.81l-1.4-1.41 3.56-3.56a2.976 2.976 0 0 1 4.22 0L9.89 5.74l1.41 1.4-.71.71 1.79 1.78 1.82-1.88c-.14-.33-.2-.75-.2-1.12a3.49 3.49 0 0 1 3.5-3.52c.59 0 1.11.14 1.58.42L16.41 6.2l1.5 1.5 2.67-2.67c.28.47.42.97.42 1.6 0 1.92-1.55 3.47-3.5 3.47"/></svg></span> <strong>Build &amp; Reproduce</strong></p>
-<hr />
-<p>Build the boards and 3D-printed casings from the open hardware catalog.</p>
-<p><a href="../hardware-catalog/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Open Hardware Catalog Guide</a></p>
-</li>
-<li>
-<p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 21.5c-1.35-.85-3.8-1.5-5.5-1.5-1.65 0-3.35.3-4.75 1.05-.1.05-.15.05-.25.05-.25 0-.5-.25-.5-.5V6c.6-.45 1.25-.75 2-1 1.11-.35 2.33-.5 3.5-.5 1.95 0 4.05.4 5.5 1.5 1.45-1.1 3.55-1.5 5.5-1.5 1.17 0 2.39.15 3.5.5.75.25 1.4.55 2 1v14.6c0 .25-.25.5-.5.5-.1 0-.15 0-.25-.05-1.4-.75-3.1-1.05-4.75-1.05-1.7 0-4.15.65-5.5 1.5M12 8v11.5c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5V7c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5m1 3.5c1.11-.68 2.6-1 4.5-1 .91 0 1.76.09 2.5.28V9.23c-.87-.15-1.71-.23-2.5-.23q-2.655 0-4.5.84zm4.5.17c-1.71 0-3.21.26-4.5.79v1.69c1.11-.65 2.6-.99 4.5-.99 1.04 0 1.88.08 2.5.24v-1.5c-.87-.16-1.71-.23-2.5-.23m2.5 2.9c-.87-.16-1.71-.24-2.5-.24-1.83 0-3.33.27-4.5.8v1.69c1.11-.66 2.6-.99 4.5-.99 1.04 0 1.88.08 2.5.24z"/></svg></span> <strong>Technical Reference</strong></p>
-<hr />
-<p>Full project documentation: repo layout, firmware, CLI, apps, protocol.</p>
-<p><a href="../documentation/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Open Documentation</a></p>
-</li>
-</ul>
-</div>
-<h2 id="video-guides">Video Guides</h2>
-<ul>
-<li>YouTube channel: https://www.youtube.com/@EMWavers</li>
-<li>STM32 flashing: https://youtu.be/vVpXeJAoiaE</li>
-<li>ESP32 flashing: https://youtu.be/L5RjArbZA84</li>
-</ul>
-<h2 id="what-to-do-next">What To Do Next</h2>
-<ul>
-<li>If you have an <strong>STM32-based device</strong> (Infrared/ISM/RFID Waver), start with <strong>Flashing Firmware → STM32</strong>.</li>
-<li>If you have an <strong>ESP32-S3 device</strong> (Flagship/Shield/DIY), start with <strong>Flashing Firmware → ESP32</strong>.</li>
-<li>If you want to build hardware, go to <strong>Hardware → Build &amp; Reproduce</strong>.</li>
-<li>For deep technical details, use the <strong>Documentation</strong> tab.</li>
-</ul>
+<p>Configuration is available via <code>idf.py menuconfig</code> → <code>Adapter Configuration</code>.</p>
 
 
 
 
 
 
+
+  
+  
 
 
 
@@ -1677,10 +1574,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.indexes", "navigation.sections", "navigation.expand"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.indexes", "navigation.sections", "navigation.expand"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
