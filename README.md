@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="banner.jpeg" alt="EMWaver Banner" width="100%">
+  <img src="docs/content/banner.jpeg" alt="EMWaver Banner" width="100%">
 </div>
 
 <div align="center">

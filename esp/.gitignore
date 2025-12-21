@@ -1,0 +1,8 @@
+# ESP-IDF build output
+build/
+
+# ESP-IDF generated config backups
+sdkconfig.old
+
+# Managed components are regenerated via `idf.py reconfigure`
+managed_components/

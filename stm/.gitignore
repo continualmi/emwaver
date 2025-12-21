@@ -1,0 +1,7 @@
+# STM32CubeIDE outputs
+**/Debug/
+**/Release/
+
+# Eclipse / CubeIDE metadata
+**/.settings/
+**/.metadata/
