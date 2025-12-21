@@ -1,5 +1,5 @@
 Flashing guide (docs)
-https://luispl77.github.io/emwaver/flashing-firmware/#stm32-stm32f042
+https://luispl77.github.io/emwaver/flashing-firmware/stm32/
 
 This video shows how to build and flash custom firmware onto STM32-based EMWaver devices (Infrared Waver, ISM Waver, RFID Waver). All STM32 devices use the STM32F042 and flash over USB DFU using ST’s tools.
 
@@ -11,7 +11,7 @@ You’ll learn
 - Flash over USB DFU with STM32CubeProgrammer
 
 Install emwaver-cli (used only to generate the project)
-curl -fsSL https://raw.githubusercontent.com/emwaver/emwaver/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
 
 Generate a project
 emwaver init --target stm32f042 --path ./my-stm32-proj
