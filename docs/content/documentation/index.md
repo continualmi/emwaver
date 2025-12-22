@@ -30,3 +30,35 @@ EMWaver is a multi-target project:
 - **MkDocs documentation** (this site)
 
 If you’re new and just want to flash a device, start with the **Flashing Firmware** tab.
+
+## Stack Overview (In Depth)
+
+The EMWaver stack spans firmware, transports, clients, and the Wavelet runtime:
+
+### Firmware (ESP32-S3)
+
+- **Entry point**: `esp/main/init.c` initializes the command registry, SPI/GPIO/sampler/USB/radio drivers, and BLE server.
+- **Command registry**: `esp/main/command_registry.c` parses ASCII commands, dispatches handlers, and sends raw response bytes over BLE.
+- **Transport**: `esp/main/ble_server.c` exposes the custom BLE service + characteristics for command write and notify responses.
+- **Device drivers**:
+  - SPI bus + device registry: `esp/main/spi.c`
+  - GPIO helpers: `esp/main/gpio_commands.c`
+  - Sampler + transmit PWM: `esp/main/sampler.c`
+  - USB HID (BadUSB-style): `esp/main/usb.c`
+  - Sub-GHz radios: `esp/main/cc1101.c`, `esp/main/rfm69.c`
+
+### Firmware (STM32F042)
+
+- **Project**: `stm/emwaver-firmware/` (CubeIDE project + `.ioc` config).
+- **Transport**: USB CDC virtual serial (115200) using the same ASCII command protocol.
+
+### Client Surfaces
+
+- **Android/iOS apps**: Pair over BLE/USB, render wavelets, and surface the command protocol behind UI fragments.
+- **Desktop app**: Local Git repo editor + wavelet preview, mirroring mobile feature parity.
+- **CLI**: `emwaver shell` provides an interactive prompt that sends commands and formats raw responses.
+
+### Wavelet Runtime
+
+- **Wavelets**: JavaScript bundles using the EMWaver DSL to declare UI and call device APIs.
+- **Sync**: Git/GitHub as the source of truth; mobile Git fragment and desktop editor manage clone/pull/push.
