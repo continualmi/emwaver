@@ -6,6 +6,9 @@
 # OS
 .DS_Store
 
+# ESP-IDF managed components (generated)
+managed_components/
+
 # Editors / IDEs
 *.iml
 node_modules/
