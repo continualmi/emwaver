@@ -1,0 +1,9 @@
+# GitHub Linguist hints to keep language stats focused on hand-written code.
+# These attributes do not affect builds; they only influence GitHub's repo analysis.
+
+# STM32CubeMX / ST HAL / CMSIS sources
+emwaver-firmware/Drivers/** linguist-vendored
+emwaver-firmware/Middlewares/** linguist-vendored
+
+# Auto-generated peripheral glue (still source, but typically generated)
+emwaver-firmware/USB_DEVICE/** linguist-generated
