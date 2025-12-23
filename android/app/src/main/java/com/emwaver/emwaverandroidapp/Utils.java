@@ -24,10 +24,6 @@ public class Utils {
     private Context context;
     private Handler mainHandler;
 
-    static {
-        System.loadLibrary("native-lib");
-    }
-
     public Utils() {
         // Initialize mainHandler with the main looper
         this.mainHandler = new Handler(Looper.getMainLooper());
@@ -165,8 +161,6 @@ public class Utils {
         hexString.append("]");
         return hexString.toString();
     }
-
-    public native float[] encodeIR(String protocol, int device, int subdevice, int function);
 
     public void showToast(final String message) {
         if (context == null) {

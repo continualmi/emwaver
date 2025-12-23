@@ -60,7 +60,6 @@ import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ui.wavelets.ScriptMetadata;
-import com.emwaver.emwaverandroidapp.ir.IrEncoderWrapper;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletDeviceConnection;
@@ -105,7 +104,6 @@ public class WaveletsFragment extends Fragment {
     private BLEService bleService;
     private boolean isServiceBound;
     private Utils utils;
-    private IrEncoderWrapper irEncoderWrapper;
     private WaveletDeviceConnection waveletDeviceConnection;
     private WaveletSignalStore waveletSignalStore;
 
@@ -215,7 +213,6 @@ public class WaveletsFragment extends Fragment {
 
         utils = new Utils();
         utils.setContext(requireContext());
-        irEncoderWrapper = new IrEncoderWrapper();
 
         setupMenu();
         setupFileLaunchers();
@@ -1691,9 +1688,6 @@ public class WaveletsFragment extends Fragment {
         }
         if (bleService != null) {
             bindings.put("BLEService", bleService);
-        }
-        if (irEncoderWrapper != null) {
-            bindings.put("IrEncoder", irEncoderWrapper);
         }
         return bindings;
     }

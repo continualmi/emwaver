@@ -3,9 +3,6 @@
 #include <vector>
 #include <android/log.h>
 
-// Forward declaration for main in EncodeIR.cpp
-int main(int argc, char** argv);
-
 // Define these macros for easier logging
 #define TAG "NATIVELib"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -303,38 +300,6 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_USBService_invertBuffe
     for (size_t i = 0; i < ble_buffer.size(); ++i) {
         ble_buffer[i] = ~ble_buffer[i];  // Bitwise NOT operation inverts all bits
     }
-}
-
-JNIEXPORT jfloatArray JNICALL Java_com_emwaver_emwaverandroidapp_Utils_encodeIR(JNIEnv *env, jobject obj, jstring protocol, jint device, jint subdevice, jint function) {
-    const char* nativeProtocol = env->GetStringUTFChars(protocol, 0);
-
-    char arg1[1024], arg2[50], arg3[50], arg4[50];
-    strcpy(arg1, nativeProtocol);
-    sprintf(arg2, "%d", device);
-    sprintf(arg3, "%d", subdevice);
-    sprintf(arg4, "%d", function);
-
-    const char* argv[] = { "encodeir", arg1, arg2, arg3, arg4 };
-    int argc = 5;
-
-    int result = main(argc, (char**)argv);
-    if (result != 0) {
-        env->ReleaseStringUTFChars(protocol, nativeProtocol);
-        return NULL;
-    }
-
-    extern float seq[];
-    extern int seq_size;
-    jfloatArray jResult = env->NewFloatArray(seq_size);
-    if (jResult == NULL) {
-        env->ReleaseStringUTFChars(protocol, nativeProtocol);
-        return NULL;
-    }
-    env->SetFloatArrayRegion(jResult, 0, seq_size, seq);
-
-    env->ReleaseStringUTFChars(protocol, nativeProtocol);
-
-    return jResult;
 }
 
 } 
