@@ -418,10 +418,6 @@ struct EMWaverView: View {
                 self.serialMonitorText += "JS: \(message)\n"
             }
         })
-        
-        
-        // Set up IR encoder
-        jsEngine?.setupIR()
     }
     
     // Request firmware version method to match Android implementation
