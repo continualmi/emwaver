@@ -64,6 +64,7 @@ typedef struct {
 
 static const char *TAG = "CMD_REG";
 static command_entry_t registry[COMMAND_REGISTRY_MAX];
+static char last_cmd_text[CLI_COMMAND_BUFFER];
 
 static bool parse_cli_command(const command_t *cmd, cli_command_t *out);
 static const char *cli_get_arg(const cli_command_t *cmd, const char *key);
@@ -189,6 +190,15 @@ void command_registry_handle(const command_t *cmd)
     if (!cmd) {
         return;
     }
+
+    // Keep a best-effort copy of the incoming command for debugging. This is
+    // used by command_send_err() since the error protocol is just a single 0xFF.
+    size_t copy_len = cmd->length;
+    if (copy_len >= sizeof(last_cmd_text)) {
+        copy_len = sizeof(last_cmd_text) - 1;
+    }
+    memcpy(last_cmd_text, cmd->data, copy_len);
+    last_cmd_text[copy_len] = '\0';
 
     cli_command_t parsed;
     if (!parse_cli_command(cmd, &parsed)) {
@@ -327,7 +337,7 @@ void command_send_ok(const uint8_t *data, size_t len)
 
 void command_send_err(const char *msg)
 {
-    (void)msg;
+    ESP_LOGW(TAG, "ERR: %s (cmd='%s')", msg ? msg : "(null)", last_cmd_text);
     // Raw response protocol:
     // - Error: send a single 0xFF byte.
     const uint8_t err = 0xFF;
