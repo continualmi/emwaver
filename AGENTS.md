@@ -9,7 +9,7 @@
 - **Docs**: MkDocs-based documentation in `docs/`
 
 ## Environment Skills & Worktrees
-When the user asks to start or restart any environment, refer to `skills/environment/setup.md` for detailed orchestration steps. Launch necessary tmux helpers directly from their roots and only escalate to troubleshooting when something fails.
+This repo previously included local tmux helpers, but they have been removed; follow per-platform build instructions in the relevant subprojects instead (`esp/`, `stm/`, `cli/`, `docs/`, `android/`, `ios/`, `app/`).
 
 ## Project Structure & Module Organization
 Firmware for the ESP32-S3 resides in `main/` and is split into modules (`ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`) with matching headers. ESP-IDF managed components live in `managed_components/`; regenerate them with `idf.py reconfigure` rather than editing by hand. Companion apps sit under `android/`, `ios/`, and `app/` (desktop), while `docs/` with `mkdocs.yml` drives the user-facing site. CLI tool lives in `cli/`. Treat `build/` and generated `.elf`/`.bin` files as temporary artifacts.
