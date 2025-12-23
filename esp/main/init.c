@@ -42,7 +42,8 @@
 #define FIRMWARE_VERSION "1.0.0"
 #define CMD_QUEUE_LEN 10
 #define STARTUP_LED GPIO_NUM_1
-#define IR_TX_PIN GPIO_NUM_37
+#define IR_TX_PIN_SHIELD GPIO_NUM_37
+#define IR_TX_PIN_DEFAULT GPIO_NUM_4
 
 static const char *TAG = "INIT";
 static QueueHandle_t cmd_queue;
@@ -53,12 +54,11 @@ static void register_core_commands(void);
 static void version_command(void);
 static void ble_status_command(void);
 static void stop_command(void);
+static void init_ir_tx_pins(void);
 
 void emwaver_init(void)
 {
-    gpio_reset_pin(IR_TX_PIN);
-    gpio_set_direction(IR_TX_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(IR_TX_PIN, 0);
+    init_ir_tx_pins();
 
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -110,6 +110,16 @@ void emwaver_init(void)
 
     ESP_LOGI(TAG, "Firmware initialized. Free heap: %u bytes",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
+}
+
+static void init_ir_tx_pins(void)
+{
+    const gpio_num_t pins[] = {IR_TX_PIN_DEFAULT, IR_TX_PIN_SHIELD};
+    for (int i = 0; i < (int)(sizeof(pins) / sizeof(pins[0])); ++i) {
+        gpio_reset_pin(pins[i]);
+        gpio_set_direction(pins[i], GPIO_MODE_OUTPUT);
+        gpio_set_level(pins[i], 0);
+    }
 }
 
 static void command_task(void *pv_parameters)

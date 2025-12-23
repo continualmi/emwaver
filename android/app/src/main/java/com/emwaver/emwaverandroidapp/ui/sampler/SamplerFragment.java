@@ -250,12 +250,10 @@ public class SamplerFragment extends Fragment {
         binding.pwmSwitch.setChecked(pwmEnabled);
         binding.pwmFreqEdit.setText(String.valueOf(pwmFreqHz));
         binding.pwmDutyEdit.setText(String.valueOf(pwmDutyPercent));
-        binding.pwmFreqEdit.setEnabled(pwmEnabled);
-        binding.pwmDutyEdit.setEnabled(pwmEnabled);
+        updatePwmUiState();
         binding.pwmSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             pwmPrefs.edit().putBoolean(PREF_TX_PWM_ENABLED, isChecked).apply();
-            binding.pwmFreqEdit.setEnabled(isChecked);
-            binding.pwmDutyEdit.setEnabled(isChecked);
+            updatePwmUiState();
         });
 
         // Setup signal picker
@@ -1412,9 +1410,7 @@ public class SamplerFragment extends Fragment {
 
         boolean supportsPwmRetransmit = currentDeviceType != DEVICE_STM32;
         binding.pwmSwitch.setEnabled(supportsPwmRetransmit);
-        boolean pwmEnabled = supportsPwmRetransmit && binding.pwmSwitch.isChecked();
-        binding.pwmFreqEdit.setEnabled(pwmEnabled);
-        binding.pwmDutyEdit.setEnabled(pwmEnabled);
+        updatePwmUiState();
 
         String[] pins = (currentDeviceType == DEVICE_STM32) ? STM32_PINS : ESP32_PINS;
 
@@ -1474,6 +1470,18 @@ public class SamplerFragment extends Fragment {
         } else if (gpioAdapter.getCount() > 0) {
             binding.gpioSpinner.setSelection(0);
         }
+    }
+
+    private void updatePwmUiState() {
+        if (!isAdded() || binding == null) {
+            return;
+        }
+
+        boolean supportsPwmRetransmit = currentDeviceType != DEVICE_STM32;
+        boolean pwmEnabled = supportsPwmRetransmit && binding.pwmSwitch.isChecked();
+        binding.pwmOptionsGroup.setVisibility(pwmEnabled ? View.VISIBLE : View.GONE);
+        binding.pwmFreqEdit.setEnabled(pwmEnabled);
+        binding.pwmDutyEdit.setEnabled(pwmEnabled);
     }
 
     private void resetChartZoom() {
