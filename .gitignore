@@ -8,6 +8,7 @@
 
 # ESP-IDF managed components (generated)
 managed_components/
+adapter/managed_components/
 
 # Editors / IDEs
 *.iml
