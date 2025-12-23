@@ -1081,30 +1081,30 @@ function SamplerFragment() {
                 />
                 Enabled
               </label>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="text-xs text-slate-400">
-                Frequency (Hz)
-                <input
-                  type="number"
-                  value={pwmFreqHz}
-                  onChange={(e) => setPwmFreqHz(parsePwmIntOrDefault(e.target.value, DEFAULT_PWM_FREQ_HZ))}
-                  disabled={!pwmEnabled}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
-                />
-              </label>
-              <label className="text-xs text-slate-400">
-                Duty (%)
-                <input
-                  type="number"
-                  value={pwmDutyPercent}
-                  onChange={(e) => setPwmDutyPercent(parsePwmIntOrDefault(e.target.value, DEFAULT_PWM_DUTY_PERCENT))}
-                  disabled={!pwmEnabled}
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
-                />
-              </label>
-            </div>
-          </div>
+	            </div>
+	            {pwmEnabled ? (
+	              <div className="mt-3 grid gap-3 md:grid-cols-2">
+	                <label className="text-xs text-slate-400">
+	                  Frequency (Hz)
+	                  <input
+	                    type="number"
+	                    value={pwmFreqHz}
+	                    onChange={(e) => setPwmFreqHz(parsePwmIntOrDefault(e.target.value, DEFAULT_PWM_FREQ_HZ))}
+	                    className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+	                  />
+	                </label>
+	                <label className="text-xs text-slate-400">
+	                  Duty (%)
+	                  <input
+	                    type="number"
+	                    value={pwmDutyPercent}
+	                    onChange={(e) => setPwmDutyPercent(parsePwmIntOrDefault(e.target.value, DEFAULT_PWM_DUTY_PERCENT))}
+	                    className="mt-1 w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100"
+	                  />
+	                </label>
+	              </div>
+	            ) : null}
+	          </div>
 
           <div className="flex gap-2">
             <button

@@ -382,26 +382,26 @@ struct SamplerView: View {
                             syncPwmTextIfNeeded()
                         }
 
-                    HStack(spacing: 12) {
-                        TextField("Freq (Hz)", text: $pwmFreqText)
-                            .keyboardType(.numberPad)
-                            .textFieldStyle(.roundedBorder)
-                            .disabled(!pwmEnabled)
-                            .onChange(of: pwmFreqText) { newValue in
-                                if let value = parsePwmInt(newValue) {
-                                    pwmFreqHz = value
+                    if pwmEnabled {
+                        HStack(spacing: 12) {
+                            TextField("Freq (Hz)", text: $pwmFreqText)
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: pwmFreqText) { newValue in
+                                    if let value = parsePwmInt(newValue) {
+                                        pwmFreqHz = value
+                                    }
                                 }
-                            }
 
-                        TextField("Duty (%)", text: $pwmDutyText)
-                            .keyboardType(.numberPad)
-                            .textFieldStyle(.roundedBorder)
-                            .disabled(!pwmEnabled)
-                            .onChange(of: pwmDutyText) { newValue in
-                                if let value = parsePwmInt(newValue) {
-                                    pwmDutyPercent = value
+                            TextField("Duty (%)", text: $pwmDutyText)
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: pwmDutyText) { newValue in
+                                    if let value = parsePwmInt(newValue) {
+                                        pwmDutyPercent = value
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
             }

@@ -110,10 +110,12 @@
                 android:checked="false" />
 
             <LinearLayout
+                android:id="@+id/pwmOptionsGroup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <EditText
                     android:id="@+id/pwmFreqEdit"
