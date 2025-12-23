@@ -44,27 +44,14 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <RadioGroup
-                android:id="@+id/deviceRadioGroup"
+            <TextView
+                android:id="@+id/deviceLabel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="8dp">
-
-                <RadioButton
-                    android:id="@+id/radioEsp32"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ESP32 (BLE)"
-                    android:layout_weight="1"/>
-
-                <RadioButton
-                    android:id="@+id/radioStm32"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="STM32 (USB)"
-                    android:layout_weight="1"/>
-            </RadioGroup>
+                android:layout_marginBottom="8dp"
+                android:text="Device: —"
+                android:textColor="@color/textSecondary"
+                android:textSize="12sp" />
 
             <Spinner
                 android:id="@+id/gpioSpinner"

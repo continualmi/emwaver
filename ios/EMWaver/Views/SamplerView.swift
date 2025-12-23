@@ -145,7 +145,7 @@ struct SamplerView: View {
     @EnvironmentObject var bleManager: BLEManager
     @StateObject private var viewModel = SamplerViewModel()
 
-    @State private var selectedPinIndex = 10 // Default to GPIO6 (IO6) to match Android
+    @State private var selectedPinIndex = 5 // Default to GPIO6 (IO6) to match Android
     @State private var selectedSignalIndex = 0
     @State private var isRecording = false
     @AppStorage("sampler_tx_pwm_enabled") private var pwmEnabled = false
@@ -174,31 +174,31 @@ struct SamplerView: View {
 
 
     private let pins = [
-        "RFM69 DIO0 (IO1)",
-        "RFM69 DIO1 (IO2)",
-        "RFM69 DIO2 (IO42)",
-        "RFM69 DIO3 (IO41)",
-        "RFM69 DIO4 (IO40)",
-        "RFM69 DIO5 (IO39)",
-        "IR RX (IO38)",
-        "IR TX (IO37)",
-        "GPIO4 (IO4)",
-        "GPIO5 (IO5)",
-        "GPIO6 (IO6)",
-        "GPIO7 (IO7)",
-        "GPIO15 (IO15)",
-        "GPIO16 (IO16)",
-        "GPIO17 (IO17)",
-        "GPIO18 (IO18)",
-        "GPIO8 (IO8)",
-        "GPIO3 (IO3)",
-        "GPIO46 (IO46)",
-        "GPIO9 (IO9)",
-        "GPIO10 (IO10)",
-        "GPIO11 (IO11)",
-        "GPIO12 (IO12)",
-        "GPIO13 (IO13)",
-        "GPIO14 (IO14)"
+        "IO1 DIO0[S]/GDO0[F]",
+        "IO2 DIO1[S]/GDO2[F]",
+        "IO3 GPIO3",
+        "IO4 IR TX[F/D]",
+        "IO5 IR RX[F/D]",
+        "IO6 GPIO6",
+        "IO7 GPIO7",
+        "IO8 GPIO8",
+        "IO9 GPIO9",
+        "IO10 GPIO10",
+        "IO11 GPIO11",
+        "IO12 GPIO12",
+        "IO13 GPIO13",
+        "IO14 GPIO14",
+        "IO15 GPIO15",
+        "IO16 GPIO16",
+        "IO17 GPIO17",
+        "IO18 GPIO18",
+        "IO37 IR TX[S]",
+        "IO38 IR RX[S]",
+        "IO39 DIO5[S]",
+        "IO40 DIO4[S]",
+        "IO41 DIO3[S]",
+        "IO42 DIO2[S]",
+        "IO46 GPIO46"
     ]
 
     var body: some View {
@@ -823,10 +823,10 @@ struct SamplerView: View {
     private func selectedPinNumber() -> UInt8? {
         guard selectedPinIndex >= 0 && selectedPinIndex < pins.count else { return nil }
         let text = pins[selectedPinIndex]
-        let pattern = "\\(IO(\\d+)\\)"
+        let pattern = "\\bIO(\\d+)\\b"
         if let range = text.range(of: pattern, options: .regularExpression) {
             let match = text[range]
-            let digits = match.dropFirst(3).dropLast()
+            let digits = match.dropFirst(2)
             return UInt8(String(digits))
         }
         return nil

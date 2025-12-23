@@ -48,9 +48,9 @@ type DirectoryEntry = {
   children?: DirectoryEntry[];
 };
 
-const DEVICE_TYPE_KEY = 'sampler.deviceType';
 const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
+const PIN_IO_ESP32_KEY = 'sampler.pinIo.esp32';
 const LAST_SIGNAL_KEY = 'sampler.lastSignal';
 const PWM_ENABLED_KEY = 'sampler.pwm.enabled';
 const PWM_FREQ_KEY = 'sampler.pwm.freq';
@@ -65,16 +65,44 @@ const DEFAULT_PWM_DUTY_PERCENT = 50;
 const SIGNALS_DIR_NAME = 'signals';
 
 const ESP32_PINS = [
-  'RFM69 DIO0 (IO1)',
-  'RFM69 DIO1 (IO2)',
+  'IO1 DIO0[S]/GDO0[F]',
+  'IO2 DIO1[S]/GDO2[F]',
+  'IO3 GPIO3',
+  'IO4 IR TX[F/D]',
+  'IO5 IR RX[F/D]',
+  'IO6 GPIO6',
+  'IO7 GPIO7',
+  'IO8 GPIO8',
+  'IO9 GPIO9',
+  'IO10 GPIO10',
+  'IO11 GPIO11',
+  'IO12 GPIO12',
+  'IO13 GPIO13',
+  'IO14 GPIO14',
+  'IO15 GPIO15',
+  'IO16 GPIO16',
+  'IO17 GPIO17',
+  'IO18 GPIO18',
+  'IO37 IR TX[S]',
+  'IO38 IR RX[S]',
+  'IO39 DIO5[S]',
+  'IO40 DIO4[S]',
+  'IO41 DIO3[S]',
+  'IO42 DIO2[S]',
+  'IO46 GPIO46',
+];
+
+const LEGACY_ESP32_PINS = [
+  'RFM69 DIO0 / CC1101 GDO0 (IO1)',
+  'RFM69 DIO1 / CC1101 GDO2 (IO2)',
   'RFM69 DIO2 (IO42)',
   'RFM69 DIO3 (IO41)',
   'RFM69 DIO4 (IO40)',
   'RFM69 DIO5 (IO39)',
   'IR RX (IO38)',
   'IR TX (IO37)',
-  'GPIO4 (IO4)',
-  'GPIO5 (IO5)',
+  'GPIO4 / IR TX (IO4)',
+  'GPIO5 / IR RX (IO5)',
   'GPIO6 (IO6)',
   'GPIO7 (IO7)',
   'GPIO15 (IO15)',
@@ -85,10 +113,10 @@ const ESP32_PINS = [
   'GPIO3 (IO3)',
   'GPIO46 (IO46)',
   'GPIO9 (IO9)',
-  'GPIO10 (IO10)',
-  'GPIO11 (IO11)',
-  'GPIO12 (IO12)',
-  'GPIO13 (IO13)',
+  'GPIO10 / CC1101 NSS (IO10)',
+  'GPIO11 / CC1101 MOSI (IO11)',
+  'GPIO12 / CC1101 SCK (IO12)',
+  'GPIO13 / CC1101 MISO (IO13)',
   'GPIO14 (IO14)',
 ];
 
@@ -100,11 +128,20 @@ const STM32_PINS = [
 ];
 
 function getEsp32PinNumber(pinString: string): number {
-  const match = pinString.match(/\(IO(\d+)\)/);
+  const match = pinString.match(/\bIO(\d+)\b/);
   if (match) {
     return parseInt(match[1], 10);
   }
   return -1;
+}
+
+function findEsp32PinIndexByNumber(ioPin: number): number {
+  for (let i = 0; i < ESP32_PINS.length; i++) {
+    if (getEsp32PinNumber(ESP32_PINS[i]) === ioPin) {
+      return i;
+    }
+  }
+  return 0;
 }
 
 function getStm32PinNumber(pinString: string): number {
@@ -138,15 +175,24 @@ function SamplerFragment() {
   // Use Device context instead of polling directly
   const { status, addNotificationListener, removeNotificationListener, sendCommand, transmitBuffer } = useDevice();
   const isConnected = status.connected;
+  const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
   
   const [isRecording, setIsRecording] = useState(false);
-  const [deviceType, setDeviceType] = useState<SamplerDeviceType>(() => {
-    const stored = localStorage.getItem(DEVICE_TYPE_KEY);
-    return stored === 'stm32' ? 'stm32' : 'esp32';
-  });
   const [selectedPinIndexEsp32, setSelectedPinIndexEsp32] = useState(() => {
-    const stored = Number.parseInt(localStorage.getItem(PIN_INDEX_ESP32_KEY) || '10', 10);
-    return Number.isNaN(stored) ? 10 : stored;
+    const storedIo = Number.parseInt(localStorage.getItem(PIN_IO_ESP32_KEY) || '', 10);
+    if (!Number.isNaN(storedIo) && storedIo >= 0) {
+      return findEsp32PinIndexByNumber(storedIo);
+    }
+
+    const storedIndex = Number.parseInt(localStorage.getItem(PIN_INDEX_ESP32_KEY) || '', 10);
+    if (!Number.isNaN(storedIndex) && storedIndex >= 0 && storedIndex < LEGACY_ESP32_PINS.length) {
+      const legacyIo = getEsp32PinNumber(LEGACY_ESP32_PINS[storedIndex]);
+      if (legacyIo >= 0) {
+        return findEsp32PinIndexByNumber(legacyIo);
+      }
+    }
+
+    return findEsp32PinIndexByNumber(6);
   });
   const [selectedPinIndexStm32, setSelectedPinIndexStm32] = useState(() => {
     const stored = Number.parseInt(localStorage.getItem(PIN_INDEX_STM32_KEY) || '0', 10);
@@ -201,11 +247,15 @@ function SamplerFragment() {
   }, [maxSamples]);
 
   useEffect(() => {
-    localStorage.setItem(DEVICE_TYPE_KEY, deviceType);
-  }, [deviceType]);
+    localStorage.setItem(PIN_INDEX_ESP32_KEY, `${selectedPinIndexEsp32}`);
+  }, [selectedPinIndexEsp32]);
 
   useEffect(() => {
-    localStorage.setItem(PIN_INDEX_ESP32_KEY, `${selectedPinIndexEsp32}`);
+    const selected = ESP32_PINS[selectedPinIndexEsp32];
+    const io = selected ? getEsp32PinNumber(selected) : -1;
+    if (io >= 0) {
+      localStorage.setItem(PIN_IO_ESP32_KEY, `${io}`);
+    }
   }, [selectedPinIndexEsp32]);
 
   useEffect(() => {
@@ -214,7 +264,7 @@ function SamplerFragment() {
 
   useEffect(() => {
     if (selectedPinIndexEsp32 >= ESP32_PINS.length) {
-      setSelectedPinIndexEsp32(0);
+      setSelectedPinIndexEsp32(findEsp32PinIndexByNumber(6));
     }
   }, [selectedPinIndexEsp32]);
 
@@ -417,14 +467,6 @@ function SamplerFragment() {
       alert('Not connected to device');
       return;
     }
-    if (deviceType === 'stm32' && status.transport !== 'USB') {
-      alert('USB device not connected');
-      return;
-    }
-    if (deviceType === 'esp32' && status.transport !== 'BLE') {
-      alert('BLE device not connected');
-      return;
-    }
 
     const selectedPin = pinOptions[selectedPinIndex];
     const pinNumber = deviceType === 'stm32'
@@ -446,14 +488,6 @@ function SamplerFragment() {
 
   const stopRecording = async () => {
     if (!isConnected) return;
-    if (deviceType === 'stm32' && status.transport !== 'USB') {
-      alert('USB device not connected');
-      return;
-    }
-    if (deviceType === 'esp32' && status.transport !== 'BLE') {
-      alert('BLE device not connected');
-      return;
-    }
 
     // Send "sample stop" command (matching Android/iOS)
     const command = new TextEncoder().encode('sample stop\n');
@@ -465,14 +499,6 @@ function SamplerFragment() {
   const retransmitSignal = async () => {
     if (!isConnected) {
       alert('Not connected to device');
-      return;
-    }
-    if (deviceType === 'stm32' && status.transport !== 'USB') {
-      alert('USB device not connected');
-      return;
-    }
-    if (deviceType === 'esp32' && status.transport !== 'BLE') {
-      alert('BLE device not connected');
       return;
     }
 
@@ -1018,27 +1044,8 @@ function SamplerFragment() {
 
         {/* Controls */}
         <div className="flex flex-col gap-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setDeviceType('esp32')}
-              className={`flex-1 px-4 py-2 rounded border ${
-                deviceType === 'esp32'
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-slate-900 border-slate-700 text-slate-200'
-              }`}
-            >
-              ESP32 (BLE)
-            </button>
-            <button
-              onClick={() => setDeviceType('stm32')}
-              className={`flex-1 px-4 py-2 rounded border ${
-                deviceType === 'stm32'
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-slate-900 border-slate-700 text-slate-200'
-              }`}
-            >
-              STM32 (USB)
-            </button>
+          <div className="text-xs text-slate-400">
+            Device: {status.transport ? `${status.transport} (${deviceType})` : '—'}
           </div>
           <select
             value={selectedPinIndex}
