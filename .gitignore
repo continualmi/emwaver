@@ -22,6 +22,10 @@ node_modules/
 # CMake
 cmake-build-*/
 
+# ESP-IDF build output (generated)
+build/
+esp/build/
+
 # Backup files
 *.bak
 
