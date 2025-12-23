@@ -1,41 +1,68 @@
 site_name: EMWaver
 site_dir: docs
-site_url: https://emwavers.com/
+site_url: https://luispl77.github.io/emwaver/
 docs_dir: content
 theme:
   name: material
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.indexes
+    - navigation.sections
+    - navigation.expand
   logo: logo.png
   favicon: logo.png
   toc:
     permalink: false
   palette:
     - scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
 extra:
   toc:
     sidebar: false
+  social:
+    - icon: fontawesome/brands/youtube
+      link: https://www.youtube.com/@EMWavers
+      name: EMWavers on YouTube
 nav:
-  - Overview: overview.md
-  - Hardware: hardware.md
-  - Wavelets:
-      - Overview: wavelets.md
-      - EMWaver DSL: emwaver-dsl.md
-  - App Overview: documentation.md
-  - Flashing Firmware: flashing-firmware.md
+  - Get Started: overview.md
+  - Hardware:
+      - Build & Reproduce: hardware-catalog.md
+  - Flashing Firmware:
+      - Overview: flashing-firmware/index.md
+      - STM32 (STM32F042): flashing-firmware/stm32.md
+      - ESP32 (ESP32-S3): flashing-firmware/esp32.md
+  - Documentation:
+      - Overview: documentation/index.md
+      - Repository Layout: documentation/repository-layout.md
+      - Development Setup: documentation/development-setup.md
+      - Contributing: documentation/contributing.md
+      - Hardware Reference: hardware.md
+      - Firmware:
+          - ESP32-S3 (ESP-IDF): documentation/firmware-esp32.md
+          - STM32F042 (CubeIDE): documentation/firmware-stm32.md
+      - Protocol:
+          - Transport & Command Format: documentation/protocol.md
+      - CLI: documentation/cli.md
+      - Apps:
+          - Overview: documentation/apps.md
+          - App UI (Fragments): documentation.md
+      - Wavelets:
+          - Overview: wavelets.md
+          - EMWaver DSL: emwaver-dsl.md
 
 extra_css:
+  - styles/theme.css
   - styles/hide-toc.css
 markdown_extensions:
   - attr_list

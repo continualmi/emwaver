@@ -1,0 +1,37 @@
+Flashing guide (docs)
+https://luispl77.github.io/emwaver/flashing-firmware/stm32/
+
+This video shows how to build and flash custom firmware onto STM32-based EMWaver devices (Infrared Waver, ISM Waver, RFID Waver). All STM32 devices use the STM32F042 and flash over USB DFU using ST’s tools.
+
+You’ll learn
+- Generate an STM32 firmware project with emwaver-cli
+- Open/import the project in STM32CubeIDE
+- Generate code from the .ioc file (CubeMX)
+- Build the Release firmware (.elf)
+- Flash over USB DFU with STM32CubeProgrammer
+
+Install emwaver-cli (used only to generate the project)
+curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+
+Generate a project
+emwaver init --target stm32f042 --path ./my-stm32-proj
+
+Important (if you used WSL)
+Copy the project folder to a normal Windows path (e.g. Documents) before opening it in STM32CubeIDE.
+
+Required software (Windows)
+- STM32CubeIDE
+- STM32CubeMX
+- STM32CubeProgrammer
+
+Build (STM32CubeIDE)
+1) File → Open Projects from File System... → select the project folder
+2) Open the .ioc file → click “Generate Code”
+3) Build using the Release configuration (Debug may not fit on STM32F042)
+4) Find the output .elf under Release/
+
+Flash (STM32CubeProgrammer, USB DFU)
+1) Set the device BOOT/FLASH switch to flash mode (gear icon)
+2) Connect the device via USB
+3) In CubeProgrammer: select USB, connect to the DFU device, open the .elf, click Download
+4) Unplug, switch to run mode (play icon), and reconnect to test in the EMWaver app

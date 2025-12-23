@@ -1,0 +1,50 @@
+# Gradle
+.gradle/
+**/build/
+
+# Local SDK config
+local.properties
+
+# Android Studio
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IntelliJ / Android Studio project files
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/jarRepositories.xml
+.idea/modules.xml
+.idea/*.iws
+vcs.xml
+
+# Keystores (usually local)
+*.jks
+*.keystore
+
+# Lint
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+
+# Profiling dumps
+*.hprof
+
+# Build artifacts
+*.apk
+*.ap_
+*.aab
+
+# fastlane (if used)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/readme.md

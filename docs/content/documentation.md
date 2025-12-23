@@ -1,6 +1,6 @@
 # App Overview
 
-The EMWaver application guides every interaction with the device—from pairing and diagnostics to capturing signals, managing scripts, and collaborating with the built-in agent. This overview surfaces each fragment, the functionality it exposes, and where upcoming screenshots will live.
+The EMWaver applications guide every interaction with the device—from pairing and diagnostics to capturing signals and managing wavelets. This overview surfaces each fragment, the functionality it exposes, and where upcoming screenshots will live.
 
 ## Fragment Guide
 
@@ -32,22 +32,22 @@ The EMWaver application guides every interaction with the device—from pairing 
 
 - Browse, edit, and sync JavaScript bundles that render UI with the EMWaver DSL.
 - Run scripts with live console output and integrate `UI.logViewer` panes for inline diagnostics.
-- Share bundles through backend storage so every device stays in sync.
+- Manage wavelet repositories through Git sync.
 
 ![Wavelets fragment screenshot placeholder](https://placehold.co/1200x650?text=Wavelets+Fragment)
 
-### Agents Fragment
+### Git Fragment
 
-- Chat with the EMWaver LLM agent for clarification on hardware behavior, application workflows, or documentation references.
-- Request help generating or debugging wavelet scripts—the agent reads console output and suggests targeted fixes.
-- Trigger context-aware guidance, such as reviewing sampler traces or debugging signal captures.
+- Configure GitHub repository + personal access token.
+- Clone/pull wavelet assets from a repo.
+- Push local changes back to GitHub with status indicators and conflict resolution.
 
-![Agents fragment screenshot placeholder](https://placehold.co/1200x650?text=Agents+Fragment)
+![Git fragment screenshot placeholder](https://placehold.co/1200x650?text=Git+Fragment)
 
 ## Wavelet Console Integration
 
-- The Wavelets fragment surfaces runtime logs next to the editor and mirrors them to the Agents fragment for collaborative debugging.
-- Console history persists with each bundle revision, making it easy to share context when requesting agent assistance or collaborating with teammates.
+- The Wavelets fragment surfaces runtime logs next to the editor for in-wavelet debugging.
+- Console history persists with each bundle revision, making it easy to share context during collaboration.
 
 ## Quick Reference
 
@@ -57,4 +57,4 @@ The EMWaver application guides every interaction with the device—from pairing 
 | ISM | Sub-GHz presets, modulation configuration, compliance helpers |
 | Sampler | RF capture, waveform visualization |
 | Wavelets | Script editor, console integration |
-| Agents | LLM assistance, wavelet debugging, contextual guidance |
+| Git | GitHub repo sync, clone/pull/push workflows |
