@@ -107,6 +107,9 @@ public class BLEService extends Service implements DeviceConnectionService {
     // BLE File Sync Server (for CLI connection)
     private BLEFileSyncServer fileSyncServer;
 
+    private volatile boolean notificationsSuppressed = false;
+    private volatile boolean isForeground = false;
+
     // Native method declarations
     public native void storeBulkPkt(byte[] data);
     public native byte[] getCommand();
@@ -139,6 +142,7 @@ public class BLEService extends Service implements DeviceConnectionService {
         
         // Start as a foreground service with initial "Not connected" notification
         startForeground(NOTIFICATION_ID, createNotification("Not connected"));
+        isForeground = true;
         
         Log.d(TAG, "=== About to start BLE file sync server ===");
         
@@ -202,6 +206,10 @@ public class BLEService extends Service implements DeviceConnectionService {
     
     // Update notification with current status
     private void updateNotification(String status) {
+        if (notificationsSuppressed) {
+            Log.d(TAG, "Notifications suppressed; skipping update: " + status);
+            return;
+        }
         NotificationManager notificationManager = 
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (notificationManager != null) {
@@ -233,7 +241,29 @@ public class BLEService extends Service implements DeviceConnectionService {
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
+        notificationsSuppressed = false;
+        if (!isForeground) {
+            startForeground(
+                    NOTIFICATION_ID,
+                    createNotification(isConnected ? "Connected to EMWaver" : "Not connected"));
+            isForeground = true;
+        }
         return binder;
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        Log.d(TAG, "App task removed; stopping foreground notification");
+        notificationsSuppressed = true;
+        if (isForeground) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE);
+            } else {
+                stopForeground(true);
+            }
+            isForeground = false;
+        }
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override
