@@ -1,0 +1,75 @@
+Build & Reproduce guide (docs)
+https://luispl77.github.io/emwaver/hardware-catalog/
+
+Hardware catalog (EasyEDA designs + casings)
+https://luispl77.github.io/emwaver-hardware/
+
+In this video we go through the full EMWaver lineup and the end-to-end manufacturing workflow: choosing the right board, ordering PCBs + assembly through JLCPCB, sourcing the parts you’ll need to buy separately, and (when available) printing 3D cases.
+
+If you’re deciding what to build:
+- iOS users: focus on the ESP32-S3 lineup (STM32 devices don’t support iPhone).
+- Android users: both STM32 (USB) and ESP32 (BLE/Wi-Fi) are viable depending on what you want to do.
+- Cost: low-volume PCBA has setup fees (minimum order is typically 2), so the flagship EMWaver is the most expensive build; Shield/DIY are great starting points on ESP32.
+
+Support the project (Patreon)
+REPLACE_WITH_PATREON_LINK
+
+You’ll learn
+- How to use the hardware catalog to open boards in EasyEDA and order PCBs + PCBA
+- JLCPCB settings that matter (Qty 2, top-side assembly, confirm placement)
+- Economic vs standard PCBA, and when you’re forced to switch
+- How to review/fix BOM issues (missing parts, wrong values, IR receiver selection quirks)
+- How to handle out-of-stock parts with global sourcing / “My Parts” inventory (antennas)
+- What you must hand-solder / buy separately (headers, modules, antennas, dev boards)
+- 3D printed casings: Onshape export (STL) → JLC3DP materials → assembly screws
+- Optional add-on modules (RC522, CC1101, NRF24) and quick prototyping with jumper wires
+
+Ordering links
+JLCPCB
+https://jlcpcb.com/
+
+EasyEDA editor
+https://easyeda.com/editor
+
+JLCPCB Global Sourcing / Parts Inventory
+REPLACE_WITH_JLCPCB_GLOBAL_SOURCING_LINK
+
+3D printing (JLC3DP)
+REPLACE_WITH_JLC3DP_LINK
+
+Onshape (casing CAD)
+REPLACE_WITH_ONSHAPE_CASING_LINK
+
+Direct STL download (if you don’t want to use Onshape)
+REPLACE_WITH_STL_DOWNLOAD_LINK
+
+Parts links (AliExpress)
+RFM69HW module (choose the correct frequency variant; 433 MHz is a good default starter)
+REPLACE_WITH_ALIEXPRESS_RFM69HW_LINK
+
+ESP32-S3 dev board (2x USB-C + RGB LED)
+REPLACE_WITH_ALIEXPRESS_ESP32S3_DEVBOARD_LINK
+
+433 MHz helical/coil antenna
+REPLACE_WITH_ALIEXPRESS_433_HELICAL_ANTENNA_LINK
+
+Headers (22-pin; single-row and/or double-row)
+REPLACE_WITH_ALIEXPRESS_22PIN_HEADERS_LINK
+
+M1.2 x 4 mm self-tapping screws (for 3D printed cases)
+REPLACE_WITH_ALIEXPRESS_M1_2X4_SELF_TAPPING_SCREWS_LINK
+
+Optional add-on modules
+RC522 RFID/NFC module
+REPLACE_WITH_ALIEXPRESS_RC522_LINK
+
+CC1101 module
+REPLACE_WITH_ALIEXPRESS_CC1101_LINK
+
+NRF24L01+ module (2x4 / 8-pin variant)
+REPLACE_WITH_ALIEXPRESS_NRF24_LINK
+
+Female-to-female jumper wires
+REPLACE_WITH_ALIEXPRESS_F2F_JUMPER_WIRES_LINK
+
+Note: Only test/clone/transmit against devices and systems you own or have explicit permission to work with.
