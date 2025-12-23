@@ -1,0 +1,63 @@
+Command: ninja flash
+[1/5] cd /Users/luispl/emwaver/build/esp-idf/esptool_py && /Users/luispl/esp/tools/python_env/idf5.5_py3.12_env/bin/python /Users/luispl/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /Users/luispl/emwaver/build/partition_table/partition-table.bin /Users/luispl/emwaver/build/emwaveresp.bin
+emwaveresp.bin binary size 0x94c60 bytes. Smallest app partition is 0x100000 bytes. 0x6b3a0 bytes (42%) free.
+[2/5] Performing build step for 'bootloader'
+[1/1] cd /Users/luispl/emwaver/build/bootloader/esp-idf/esptool_py && /Users/luispl/esp/tools/python_env/idf5.5_py3.12_env/bin/python /Users/luispl/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 /Users/luispl/emwaver/build/bootloader/bootloader.bin
+Bootloader binary size 0x5240 bytes. 0x2dc0 bytes (36%) free.
+[3/5] No install step for 'bootloader'
+[4/5] Completed 'bootloader'
+[4/5] cd /Users/luispl/esp/esp-idf/components/esptool_py && /usr/local/bin/cmake -D IDF_PATH=/Users/luispl/esp/esp-idf -D "SERIAL_TOOL=/Users/luispl/esp/tools/python_env/idf5.5_py3.12_env/bin/python;;/Users/luispl/esp/esp-idf/components/esptool_py/esptool/esptool.py;--chip;esp32s3" -D "SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args" -D WORKING_DIRECTORY=/Users/luispl/emwaver/build -P /Users/luispl/esp/esp-idf/components/esptool_py/run_serial_tool.cmake
+esptool.py --chip esp32s3 -p /dev/cu.wchusbserial58A60793011 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 80m --flash_size 2MB 0x0 bootloader/bootloader.bin 0x10000 emwaveresp.bin 0x8000 partition_table/partition-table.bin
+esptool.py v4.10.0
+Serial port /dev/cu.wchusbserial58A60793011
+Connecting....
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 8MB (AP_3v3)
+Crystal is 40MHz
+MAC: d8:3b:da:a4:ec:7c
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 460800
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00010000 to 0x000a4fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+SHA digest in image updated
+Compressed 21056 bytes to 13396...
+Writing at 0x00000000... (100 %)
+Wrote 21056 bytes (13396 compressed) at 0x00000000 in 0.6 seconds (effective 270.2 kbit/s)...
+Hash of data verified.
+Compressed 609376 bytes to 355363...
+Writing at 0x00010000... (4 %)
+Writing at 0x0001c8c3... (9 %)
+Writing at 0x00026b15... (13 %)
+Writing at 0x0002f9e9... (18 %)
+Writing at 0x00035bd6... (22 %)
+Writing at 0x0003c207... (27 %)
+Writing at 0x000427d5... (31 %)
+Writing at 0x000486b6... (36 %)
+Writing at 0x0004e682... (40 %)
+Writing at 0x00053f09... (45 %)
+Writing at 0x00059aed... (50 %)
+Writing at 0x0005f63c... (54 %)
+Writing at 0x00065c51... (59 %)
+Writing at 0x0006be5d... (63 %)
+Writing at 0x00071fec... (68 %)
+Writing at 0x00077c9b... (72 %)
+Writing at 0x0007d644... (77 %)
+Writing at 0x0008739a... (81 %)
+Writing at 0x0008e726... (86 %)
+Writing at 0x00093ca7... (90 %)
+Writing at 0x00099bda... (95 %)
+Writing at 0x000a0671... (100 %)
+Wrote 609376 bytes (355363 compressed) at 0x00010000 in 8.1 seconds (effective 602.2 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 103...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (103 compressed) at 0x00008000 in 0.1 seconds (effective 450.7 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...

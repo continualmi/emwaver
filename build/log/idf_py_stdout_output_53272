@@ -1,0 +1,111 @@
+Command: /Users/luispl/esp/tools/python_env/idf5.5_py3.12_env/bin/python /Users/luispl/esp/esp-idf/tools/idf_monitor.py -p /dev/cu.wchusbserial58A60798751 -b 115200 --toolchain-prefix xtensa-esp32s3-elf- --target esp32s3 --revision 0 /Users/luispl/emwaver/build/emwaveresp.elf /Users/luispl/emwaver/build/bootloader/bootloader.elf -m '/Users/luispl/esp/tools/python_env/idf5.5_py3.12_env/bin/python' '/Users/luispl/esp/esp-idf/tools/idf.py'
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x158c
+load:0x403c8700,len:0xd24
+load:0x403cb700,len:0x2f34
+entry 0x403c8924
+[0;32mI (24) boot: ESP-IDF v5.5.1-dirty 2nd stage bootloader[0m
+[0;32mI (25) boot: compile time Dec  8 2025 10:29:05[0m
+[0;32mI (25) boot: Multicore bootloader[0m
+[0;32mI (25) boot: chip revision: v0.2[0m
+[0;32mI (28) boot: efuse block revision: v1.3[0m
+[0;32mI (32) boot.esp32s3: Boot SPI Speed : 80MHz[0m
+[0;32mI (36) boot.esp32s3: SPI Mode       : DIO[0m
+[0;32mI (39) boot.esp32s3: SPI Flash Size : 2MB[0m
+[0;32mI (43) boot: Enabling RNG early entropy source...[0m
+[0;32mI (48) boot: Partition Table:[0m
+[0;32mI (50) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (63) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (70) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (76) boot: End of partition table[0m
+[0;32mI (79) esp_image: segment 0: paddr=00010020 vaddr=3c070020 size=19328h (103208) map[0m
+[0;32mI (105) esp_image: segment 1: paddr=00029350 vaddr=3fc9bd00 size=0422ch ( 16940) load[0m
+[0;32mI (109) esp_image: segment 2: paddr=0002d584 vaddr=40374000 size=02a94h ( 10900) load[0m
+[0;32mI (112) esp_image: segment 3: paddr=00030020 vaddr=42000020 size=60564h (394596) map[0m
+[0;32mI (186) esp_image: segment 4: paddr=0009058c vaddr=40376a94 size=15178h ( 86392) load[0m
+[0;32mI (205) esp_image: segment 5: paddr=000a570c vaddr=50000000 size=00020h (    32) load[0m
+[0;32mI (214) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (215) boot: Disabling RNG early entropy source...[0m
+[0;32mI (225) cpu_start: Multicore app[0m
+[0;32mI (234) cpu_start: Pro cpu start user code[0m
+[0;32mI (234) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (234) app_init: Application information:[0m
+[0;32mI (234) app_init: Project name:     emwaveresp[0m
+[0;32mI (238) app_init: App version:      238d9aa-dirty[0m
+[0;32mI (243) app_init: Compile time:     Dec  8 2025 10:26:19[0m
+[0;32mI (248) app_init: ELF file SHA256:  7077c16ed...[0m
+[0;32mI (252) app_init: ESP-IDF:          v5.5.1-dirty[0m
+[0;32mI (256) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (260) efuse_init: Max chip rev:     v0.99 [0m
+[0;32mI (264) efuse_init: Chip rev:         v0.2[0m
+[0;32mI (268) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (274) heap_init: At 3FCA3FE8 len 00045728 (277 KiB): RAM[0m
+[0;32mI (279) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM[0m
+[0;32mI (285) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM[0m
+[0;32mI (290) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM[0m
+[0;32mI (296) spi_flash: detected chip: generic[0m
+[0;32mI (299) spi_flash: flash io: dio[0m
+[0;33mW (302) spi_flash: Detected size(16384k) larger than the size in the binary image header(2048k). Using the size in the binary image header.[0m
+[0;33mW (314) timer_group: legacy driver is deprecated, please migrate to `driver/gptimer.h`[0m
+[0;32mI (322) sleep_gpio: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (328) sleep_gpio: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (335) coexist: coex firmware version: b0bcc39[0m
+[0;32mI (345) coexist: coexist rom version e7ae62f[0m
+[0;32mI (346) main_task: Started on CPU0[0m
+[0;32mI (347) main_task: Calling app_main()[0m
+[0;32mI (1568) FILE_SYNC: File sync initialized (buffer: 128 KB)[0m
+[0;32mI (1568) CMD_REG: registered command 'spi open' (9 args)[0m
+[0;32mI (1568) CMD_REG: registered command 'spi close' (1 args)[0m
+[0;32mI (1572) CMD_REG: registered command 'spi xfer' (3 args)[0m
+[0;32mI (1577) CMD_REG: registered command 'sample start' (1 args)[0m
+[0;32mI (1583) CMD_REG: registered command 'sample stop' (0 args)[0m
+[0;32mI (1588) CMD_REG: registered command 'transmit start' (1 args)[0m
+[0;32mI (1594) CMD_REG: registered command 'transmit stop' (0 args)[0m
+[0;32mI (1599) CMD_REG: registered command 'usb' (2 args)[0m
+[0;32mI (1604) CMD_REG: registered command 'sync' (7 args)[0m
+[0;32mI (1608) CMD_REG: registered command 'version' (0 args)[0m
+[0;32mI (1613) CMD_REG: registered command 'ble?' (0 args)[0m
+[0;32mI (1618) CMD_REG: registered command 'stop' (0 args)[0m
+[0;32mI (1623) BLE_INIT: BT controller compile version [2edb0b0][0m
+[0;32mI (1628) BLE_INIT: Using main XTAL as clock source[0m
+[0;32mI (1633) BLE_INIT: Feature Config, ADV:1, BLE_50:1, DTM:1, SCAN:1, CCA:0, SMP:1, CONNECT:1[0m
+[0;32mI (1641) BLE_INIT: Bluetooth MAC: d8:3b:da:a3:f8:0a[0m
+[0;32mI (1646) phy_init: phy_version 701,f4f1da3a,Mar  3 2025,15:50:10[0m
+[0;32mI (1687) BLE_SERVER: Current preferred MTU: 256 bytes[0m
+[0;32mI (1687) BLE_SERVER: Setting preferred MTU to 256 bytes[0m
+[0;32mI (1688) BLE_SERVER: BLE Host Task Started[0m
+[0;32mI (1693) NimBLE: GAP procedure initiated: stop advertising.[0m
+
+[0;32mI (1696) NimBLE: Failed to restore IRKs from store; status=8[0m
+
+[0;32mI (1701) BLE_SERVER: Device Address: [0m
+[0;32mI (1704) BLE_SERVER: d8:3b:da:a3:f8:0a[0m
+[0;32mI (1708) NimBLE: GAP procedure initiated: advertise; [0m
+[0;32mI (1712) NimBLE: disc_mode=2[0m
+[0;32mI (1715) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=0 adv_itvl_max=0[0m
+[0;32mI (1724) NimBLE: [0m
+
+[0;32mI (1726) BLE_SERVER: BLE advertising started[0m
+[0;32mI (1730) BLE_SERVER: BLE server initialized[0m
+[0;32mI (1734) INIT: Firmware initialized. Free heap: 120644 bytes[0m
+[0;32mI (4565) BLE_SERVER: Connection established[0m
+[0;32mI (4566) NimBLE: GAP procedure initiated: [0m
+[0;32mI (4566) NimBLE: connection parameter update; conn_handle=1 itvl_min=12 itvl_max=12 latency=0 supervision_timeout=200 min_ce_len=0 max_ce_len=0[0m
+[0;32mI (4575) NimBLE: [0m
+
+[0;32mI (4577) BLE_SERVER: Requested connection interval: 15ms[0m
+[0;32mI (5361) BLE_SERVER: MTU update: 256[0m
+[0;32mI (5362) BLE_SERVER: MTU update for connection handle: 1[0m
+[0;32mI (5362) BLE_SERVER: New preferred MTU: 256[0m
+[0;32mI (5503) BLE_SERVER: Subscribe event; conn_handle=1 attr_handle=18 reason=1 prevn=0 curn=1 previ=0 curi=0[0m
+
+[0;32mI (6013) BLE_SERVER: Subscribe event; conn_handle=1 attr_handle=21 reason=1 prevn=0 curn=1 previ=0 curi=0[0m
+
+[0;32mI (6748) NimBLE: GATT procedure initiated: notify; [0m
+[0;32mI (6749) NimBLE: att_handle=18[0m
+

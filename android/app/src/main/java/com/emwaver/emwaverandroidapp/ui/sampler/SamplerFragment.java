@@ -115,31 +115,31 @@ public class SamplerFragment extends Fragment {
 
     // ESP32 pins (BLE sampler)
     private static final String[] ESP32_PINS = {
-            "RFM69 DIO0 (IO1)",
-            "RFM69 DIO1 (IO2)",
-            "RFM69 DIO2 (IO42)",
-            "RFM69 DIO3 (IO41)",
-            "RFM69 DIO4 (IO40)",
-            "RFM69 DIO5 (IO39)",
-            "IR RX (IO38)",
-            "IR TX (IO37)",
-            "GPIO4 (IO4)",
-            "GPIO5 (IO5)",
-            "GPIO6 (IO6)",
-            "GPIO7 (IO7)",
-            "GPIO15 (IO15)",
-            "GPIO16 (IO16)",
-            "GPIO17 (IO17)",
-            "GPIO18 (IO18)",
-            "GPIO8 (IO8)",
-            "GPIO3 (IO3)",
-            "GPIO46 (IO46)",
-            "GPIO9 (IO9)",
-            "GPIO10 (IO10)",
-            "GPIO11 (IO11)",
-            "GPIO12 (IO12)",
-            "GPIO13 (IO13)",
-            "GPIO14 (IO14)"
+            "IO1 DIO0[S]/GDO0[F]",
+            "IO2 DIO1[S]/GDO2[F]",
+            "IO3 GPIO3",
+            "IO4 IR TX[F/D]",
+            "IO5 IR RX[F/D]",
+            "IO6 GPIO6",
+            "IO7 GPIO7",
+            "IO8 GPIO8",
+            "IO9 GPIO9",
+            "IO10 GPIO10",
+            "IO11 GPIO11",
+            "IO12 GPIO12",
+            "IO13 GPIO13",
+            "IO14 GPIO14",
+            "IO15 GPIO15",
+            "IO16 GPIO16",
+            "IO17 GPIO17",
+            "IO18 GPIO18",
+            "IO37 IR TX[S]",
+            "IO38 IR RX[S]",
+            "IO39 DIO5[S]",
+            "IO40 DIO4[S]",
+            "IO41 DIO3[S]",
+            "IO42 DIO2[S]",
+            "IO46 GPIO46"
     };
 
     // STM32 pins (USB sampler)
@@ -155,7 +155,7 @@ public class SamplerFragment extends Fragment {
     private static final String PREF_SELECTED_PIN_INDEX = "selectedSamplerPinIndex";
     private static final String PREF_SELECTED_PIN_INDEX_ESP32 = "selectedSamplerPinIndexEsp32";
     private static final String PREF_SELECTED_PIN_INDEX_STM32 = "selectedSamplerPinIndexStm32";
-    private static final String PREF_SELECTED_DEVICE_TYPE = "sampler_selected_device_type";
+    private static final String PREF_SELECTED_PIN_IO_ESP32 = "selectedSamplerPinIoEsp32";
     private static final String PREF_LAST_SELECTED_SIGNAL = "sampler_last_selected_signal";
     private static final String PREF_TX_PWM_ENABLED = "sampler_tx_pwm_enabled";
     private static final String PREF_TX_PWM_FREQ_HZ = "sampler_tx_pwm_freq_hz";
@@ -181,6 +181,7 @@ public class SamplerFragment extends Fragment {
             BLEService = binder.getService();
             isServiceBound = true;
             Log.i("service binding", "onServiceConnected");
+            updateDeviceTypeFromConnection();
             initChart();
             refreshChart(); // Refresh the chart with the new buffer
             // Try to load last selected signal if not already loaded
@@ -202,6 +203,7 @@ public class SamplerFragment extends Fragment {
             USBService = binder.getService();
             isUsbServiceBound = true;
             Log.i("usb service binding", "onServiceConnected");
+            updateDeviceTypeFromConnection();
         }
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
@@ -282,34 +284,7 @@ public class SamplerFragment extends Fragment {
         };
         binding.signalPicker.setOnItemSelectedListener(signalPickerListener);
 
-        // Restore device selection from preferences
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        currentDeviceType = prefs.getInt(PREF_SELECTED_DEVICE_TYPE, DEVICE_ESP32);
-
-        if (currentDeviceType == DEVICE_STM32) {
-            binding.deviceRadioGroup.check(R.id.radioStm32);
-        } else {
-            currentDeviceType = DEVICE_ESP32;
-            binding.deviceRadioGroup.check(R.id.radioEsp32);
-        }
-
-        // Initial GPIO spinner setup based on current device type
-        updateGpioSpinnerForCurrentDevice();
-
-        // React to device type changes
-        binding.deviceRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (!isAdded()) {
-                return;
-            }
-            if (checkedId == R.id.radioStm32) {
-                currentDeviceType = DEVICE_STM32;
-            } else {
-                currentDeviceType = DEVICE_ESP32;
-            }
-            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            sp.edit().putInt(PREF_SELECTED_DEVICE_TYPE, currentDeviceType).apply();
-            updateGpioSpinnerForCurrentDevice();
-        });
+        updateDeviceTypeFromConnection();
 
         binding.gpioSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -320,12 +295,18 @@ public class SamplerFragment extends Fragment {
                 // Save the selected pin index for the current device type
                 SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(requireContext());
                 SharedPreferences.Editor editor = sp.edit();
-                if (currentDeviceType == DEVICE_STM32) {
+                int deviceType = getActiveDeviceType();
+                if (deviceType == DEVICE_STM32) {
                     editor.putInt(PREF_SELECTED_PIN_INDEX_STM32, position);
                 } else {
                     editor.putInt(PREF_SELECTED_PIN_INDEX_ESP32, position);
                     // Also update legacy key for backwards compatibility
                     editor.putInt(PREF_SELECTED_PIN_INDEX, position);
+                    String selection = (String) parent.getItemAtPosition(position);
+                    int io = getPinNumberFromSelection(selection);
+                    if (io >= 0) {
+                        editor.putInt(PREF_SELECTED_PIN_IO_ESP32, io);
+                    }
                 }
                 editor.apply();
             }
@@ -445,6 +426,32 @@ public class SamplerFragment extends Fragment {
         updateStatusBar();
 
         return root;
+    }
+
+    private int getActiveDeviceType() {
+        if (USBService != null && USBService.checkConnection()) {
+            return DEVICE_STM32;
+        }
+        if (BLEService != null && BLEService.checkConnection()) {
+            return DEVICE_ESP32;
+        }
+        return currentDeviceType;
+    }
+
+    private void updateDeviceTypeFromConnection() {
+        if (!isAdded() || binding == null) {
+            return;
+        }
+
+        currentDeviceType = getActiveDeviceType();
+        if (currentDeviceType == DEVICE_STM32) {
+            binding.deviceLabel.setText("Device: STM32 (USB)");
+        } else if (currentDeviceType == DEVICE_ESP32) {
+            binding.deviceLabel.setText("Device: ESP32 (BLE)");
+        } else {
+            binding.deviceLabel.setText("Device: —");
+        }
+        updateGpioSpinnerForCurrentDevice();
     }
 
     private void setupMenu() {
@@ -901,6 +908,7 @@ public class SamplerFragment extends Fragment {
     }
 
     private void startRecording() {
+        updateDeviceTypeFromConnection();
         if (currentDeviceType == DEVICE_STM32) {
             if (USBService == null) {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
@@ -974,6 +982,7 @@ public class SamplerFragment extends Fragment {
     }
 
     private void stopRecording() {
+        updateDeviceTypeFromConnection();
         if (currentDeviceType == DEVICE_STM32) {
              if (USBService != null) {
                  byte[] command = "sample stop".getBytes();
@@ -1000,6 +1009,7 @@ public class SamplerFragment extends Fragment {
     }
 
     private void retransmitSignal() {
+        updateDeviceTypeFromConnection();
         if (currentDeviceType == DEVICE_STM32) {
             if (USBService == null) {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
@@ -1248,6 +1258,8 @@ public class SamplerFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+
+        updateDeviceTypeFromConnection();
         
         // Initialize scheduler with the latest settings
         initScheduler();
@@ -1418,17 +1430,42 @@ public class SamplerFragment extends Fragment {
         }
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        int defaultEsp32PinIndex = 10; // GPIO6 (IO6)
         int selectedPinIndex;
 
         if (currentDeviceType == DEVICE_STM32) {
             selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_STM32, 0);
         } else {
-            if (prefs.contains(PREF_SELECTED_PIN_INDEX_ESP32)) {
-                selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_ESP32, defaultEsp32PinIndex);
+            Integer selectedIo = null;
+            if (prefs.contains(PREF_SELECTED_PIN_IO_ESP32)) {
+                int io = prefs.getInt(PREF_SELECTED_PIN_IO_ESP32, -1);
+                if (io >= 0) {
+                    selectedIo = io;
+                }
+            }
+
+            if (selectedIo == null) {
+                int legacyIndex;
+                if (prefs.contains(PREF_SELECTED_PIN_INDEX_ESP32)) {
+                    legacyIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_ESP32, -1);
+                } else {
+                    legacyIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, -1);
+                }
+
+                if (legacyIndex >= 0 && legacyIndex < LEGACY_ESP32_PINS.length) {
+                    int io = getPinNumberFromSelection(LEGACY_ESP32_PINS[legacyIndex]);
+                    if (io >= 0) {
+                        prefs.edit().putInt(PREF_SELECTED_PIN_IO_ESP32, io).apply();
+                        selectedIo = io;
+                    }
+                }
+            }
+
+            if (selectedIo != null) {
+                selectedPinIndex = findEsp32IndexForIo(selectedIo);
+            } else if (prefs.contains(PREF_SELECTED_PIN_INDEX_ESP32)) {
+                selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_ESP32, findEsp32IndexForIo(6));
             } else {
-                // Fall back to legacy key if present
-                selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, defaultEsp32PinIndex);
+                selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX, findEsp32IndexForIo(6));
             }
         }
 
@@ -1454,8 +1491,8 @@ public class SamplerFragment extends Fragment {
     }
 
     private byte getPinNumberFromSelection(String selectedPinString) {
-        // Extracts the IO number, e.g., from "IR TX (IO4)" or "GPIO0 (IO0)"
-        Pattern pattern = Pattern.compile("\\(IO(\\d+)\\)");
+        // Extracts the IO number from strings like "IO4 IR TX" or "IR TX (IO4)".
+        Pattern pattern = Pattern.compile("\\bIO(\\d+)\\b");
         Matcher matcher = pattern.matcher(selectedPinString);
         if (matcher.find()) {
             try {
@@ -1468,6 +1505,43 @@ public class SamplerFragment extends Fragment {
         Log.e("SamplerFragment", "Could not extract IO number from: " + selectedPinString + ". Check PINS array format and regex.");
         Toast.makeText(getContext(), "Error: Could not parse pin number from '" + selectedPinString + "'", Toast.LENGTH_LONG).show();
         return -1; // Indicates an error
+    }
+
+    private static final String[] LEGACY_ESP32_PINS = {
+            "RFM69 DIO0 / CC1101 GDO0 (IO1)",
+            "RFM69 DIO1 / CC1101 GDO2 (IO2)",
+            "RFM69 DIO2 (IO42)",
+            "RFM69 DIO3 (IO41)",
+            "RFM69 DIO4 (IO40)",
+            "RFM69 DIO5 (IO39)",
+            "IR RX (IO38)",
+            "IR TX (IO37)",
+            "GPIO4 / IR TX (IO4)",
+            "GPIO5 / IR RX (IO5)",
+            "GPIO6 (IO6)",
+            "GPIO7 (IO7)",
+            "GPIO15 (IO15)",
+            "GPIO16 (IO16)",
+            "GPIO17 (IO17)",
+            "GPIO18 (IO18)",
+            "GPIO8 (IO8)",
+            "GPIO3 (IO3)",
+            "GPIO46 (IO46)",
+            "GPIO9 (IO9)",
+            "GPIO10 / CC1101 NSS (IO10)",
+            "GPIO11 / CC1101 MOSI (IO11)",
+            "GPIO12 / CC1101 SCK (IO12)",
+            "GPIO13 / CC1101 MISO (IO13)",
+            "GPIO14 (IO14)"
+    };
+
+    private int findEsp32IndexForIo(int ioPin) {
+        for (int i = 0; i < ESP32_PINS.length; i++) {
+            if (getPinNumberFromSelection(ESP32_PINS[i]) == (byte) ioPin) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     private void updateStatusBar() {
