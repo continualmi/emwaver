@@ -197,7 +197,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const connectUSB = useCallback(async (port: string) => {
-    await safeInvoke('usb_connect', { port_name: port }, { throwOnError: true });
+    await safeInvoke('usb_connect', { portName: port }, { throwOnError: true });
   }, []);
 
   const disconnect = useCallback(async () => {
