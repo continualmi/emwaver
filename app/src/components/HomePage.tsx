@@ -280,7 +280,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">EMWaver</h2>
-          <p className="text-sm text-slate-400">Main hardware control and device management</p>
         </div>
         <div className="flex items-center">
           <img 
@@ -292,9 +291,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       </header>
 
       <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-y-auto px-6 py-4">
-        {/* Quick Access to Fragments */}
         <div className="flex-shrink-0">
-          <h3 className="text-sm font-semibold text-slate-100 mb-2">Quick Access</h3>
           <div className="grid grid-cols-2 gap-3">
             {fragments.map((fragment) => (
               <button
@@ -476,7 +473,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         </div>
 
         {/* Serial Monitor */}
-        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-0">
+        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
             <div className="text-sm font-semibold text-slate-400">Serial Monitor</div>
             <button

@@ -268,11 +268,10 @@ export default function EMWaverFragment() {
   }, [serialMonitor, status.connected]);
 
   return (
-    <section className="flex flex-1 flex-col bg-slate-950">
+    <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">EMWaver</h2>
-          <p className="text-sm text-slate-400">Main hardware control and device management</p>
         </div>
         <button
           onClick={clearMonitor}
@@ -282,7 +281,7 @@ export default function EMWaverFragment() {
         </button>
       </header>
 
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-6 py-6">
+      <div className="flex flex-1 flex-col min-h-0 gap-4 overflow-y-auto px-6 py-6">
         {/* Connection Status */}
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <div className="flex items-center justify-between">
@@ -386,7 +385,7 @@ export default function EMWaverFragment() {
         </div>
 
         {/* Serial Monitor */}
-        <div className="flex-1 rounded-xl border border-slate-800 bg-slate-950 p-4 overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-[18rem] rounded-xl border border-slate-800 bg-slate-950 p-4 overflow-hidden flex flex-col">
           <div className="text-sm font-semibold text-slate-400 mb-2">Serial Monitor</div>
           <div className="flex-1 overflow-y-auto font-mono text-sm text-slate-300 bg-slate-900 rounded p-3">
             {serialMonitor.length === 0 ? (
