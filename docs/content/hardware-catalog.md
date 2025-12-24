@@ -52,8 +52,8 @@ The full hardware catalog (PCBs, BOM cost notes, CAD, EasyEDA/OSHWLab links, pho
 
 <div class="emw-youtube">
   <iframe
-    src="https://www.youtube-nocookie.com/embed/REPLACE_WITH_VIDEO_ID"
-    title="Build & Reproduce EMWaver Hardware (Coming Soon)"
+    src="https://www.youtube-nocookie.com/embed/PNf2JGsF1Mk"
+    title="EMWaver Hardware Lineup - Building and Ordering"
     frameborder="0"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     referrerpolicy="strict-origin-when-cross-origin"
@@ -61,7 +61,11 @@ The full hardware catalog (PCBs, BOM cost notes, CAD, EasyEDA/OSHWLab links, pho
   ></iframe>
 </div>
 
-Placeholder video: replace `REPLACE_WITH_VIDEO_ID` once the tutorial is published.
+## Written Guide
+
+Follow the step-by-step written guide here:
+
+- [Build & Reproduce Guide](hardware/build-reproduce.md)
 
 ## Quick Guide (EasyEDA → JLCPCB)
 
