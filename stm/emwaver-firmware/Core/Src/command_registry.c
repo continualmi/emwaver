@@ -318,6 +318,11 @@ static void invoke_handler(const command_entry_t *entry,
         return;
     }
 
+    if (types_match(types, argc, (const cmd_arg_type_t[]){CMD_ARG_HEX}, 1)) {
+        CALL_HANDLER(entry, void (*)(const command_hex_arg_t *), &values[0].hex_val);
+        return;
+    }
+
     if (types_match(types, argc, (const cmd_arg_type_t[]){CMD_ARG_INT}, 1)) {
         CALL_HANDLER(entry, void (*)(int), values[0].int_val);
         return;
