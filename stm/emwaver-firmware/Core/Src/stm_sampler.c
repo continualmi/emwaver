@@ -310,6 +310,8 @@ static void cmd_transmit_start(int pin_num)
     HAL_TIM_PWM_Start(&htim2, tim_channel);
     CDC_InitRxBuffer_FS();
     CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
+    while (CDC_GetRxBufferBytesAvailable_FS() < 250) {
+    }
     HAL_TIM_Base_Start_IT(&htim3);
 
     current_state = TRANSMITTING;
@@ -372,4 +374,3 @@ void stm_sampler_process(void)
         }
     }
 }
-
