@@ -78,7 +78,52 @@ jobs:
         shell: bash
         run: |
           cd app
-          npm run tauri build -- --ci
+          # Be explicit about the Rust target so the produced macOS bundles match the intended architecture.
+          TARGET_ARGS=()
+          if [[ "${{ matrix.platform }}" == "macos-x64" ]]; then
+            TARGET_ARGS+=(--target x86_64-apple-darwin)
+          elif [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
+            TARGET_ARGS+=(--target aarch64-apple-darwin)
+          fi
+
+          npm run tauri build -- --ci "${TARGET_ARGS[@]}"
+
+      - name: Verify macOS bundle (arch + minimum OS)
+        if: startsWith(matrix.platform, 'macos-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE_MACOS_DIR="app/src-tauri/target/release/bundle/macos"
+          if [ ! -d "$BUNDLE_MACOS_DIR" ]; then
+            echo "macOS bundle directory not found: $BUNDLE_MACOS_DIR"
+            exit 1
+          fi
+
+          APP_PATH="$(find "$BUNDLE_MACOS_DIR" -maxdepth 1 -name "*.app" -print | head -n 1)"
+          if [ -z "${APP_PATH:-}" ]; then
+            echo "No .app found under $BUNDLE_MACOS_DIR"
+            find "$BUNDLE_MACOS_DIR" -maxdepth 2 -type f -print || true
+            exit 1
+          fi
+
+          echo "App bundle: $APP_PATH"
+          INFO_PLIST="$APP_PATH/Contents/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            echo "LSMinimumSystemVersion:"
+            /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$INFO_PLIST" 2>/dev/null || true
+          fi
+
+          BIN_PATH="$(find "$APP_PATH/Contents/MacOS" -maxdepth 1 -type f -print | head -n 1)"
+          if [ -z "${BIN_PATH:-}" ]; then
+            echo "No executable found under $APP_PATH/Contents/MacOS"
+            exit 1
+          fi
+
+          echo "Binary: $BIN_PATH"
+          file "$BIN_PATH"
+          if command -v lipo >/dev/null 2>&1; then
+            lipo -info "$BIN_PATH" || true
+          fi
 
       - name: Collect artifacts
         shell: bash
