@@ -133,18 +133,22 @@ public class USBService extends Service implements DeviceConnectionService, Seri
 
             startTime += period;
             int bufferStatus = getLogStatus();
-            if (bufferStatus > 200 && bufferStatus < 300) {
+            if (bufferStatus < 0) {
+                // No status packet parsed yet; keep default pacing.
+                write(packet);
+                Log.i("TransmitBuffer", "Wrote packet: unknown status");
+            } else if (bufferStatus > 200 && bufferStatus < 300) {
                 write(packet);
                 Log.i("TransmitBuffer", "Wrote packet: normal speed, status: " + bufferStatus);
             } else if (bufferStatus > 300) {
                 write(packet);
                 startTime += flow_time_delta;
                 Log.i("TransmitBuffer", "Wrote packet: slower speed, status: " + bufferStatus);
-            } else if (bufferStatus < 300) {
+            } else {
                 write(packet);
                 startTime -= flow_time_delta;
-                Log.i("TransmitBuffer", String.format("Wrote packet: faster speed, status: %d, nanoTime: %d", 
-                    bufferStatus, System.nanoTime()));
+                Log.i("TransmitBuffer", String.format("Wrote packet: faster speed, status: %d, nanoTime: %d",
+                        bufferStatus, System.nanoTime()));
             }
             while (System.nanoTime() < startTime) {
                 // Busy wait

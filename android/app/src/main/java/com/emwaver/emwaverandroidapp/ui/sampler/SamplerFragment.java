@@ -1006,6 +1006,15 @@ public class SamplerFragment extends Fragment {
             }
             
             int bufferLength = USBService.getBufferLength();
+            if (bufferLength <= 0) {
+                Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            byte[] savedBuffer = USBService.getBuffer();
+            if (savedBuffer == null || savedBuffer.length == 0) {
+                Toast.makeText(getContext(), "Buffer is empty", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
             String selected = binding.gpioSpinner.getSelectedItem().toString();
             int encodedPin = getStm32EncodedPinFromSelection(selected);
@@ -1019,9 +1028,19 @@ public class SamplerFragment extends Fragment {
             }
             
             // Format command: "transmit start --pin=<pin>"
-            String commandStr = "transmit start --pin=" + encodedPin;
+            String commandStr = "transmit start --pin=" + encodedPin + "\n";
             byte[] commandBytes = commandStr.getBytes();
-            USBService.write(commandBytes);
+            byte[] responseBytes = USBService.sendCommand(commandBytes, 2000);
+            USBService.loadBuffer(savedBuffer);
+            if (responseBytes == null || responseBytes.length == 0) {
+                Toast.makeText(getContext(), "STM32 transmit start failed (no response)", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String response = new String(responseBytes);
+            if (response.contains("ERR:") || response.contains("err")) {
+                Toast.makeText(getContext(), "STM32 transmit start failed: " + response.trim(), Toast.LENGTH_LONG).show();
+                return;
+            }
 
             // Now call the transmitBuffer method
             USBService.transmitBuffer();
