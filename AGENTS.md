@@ -110,3 +110,6 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 ## Operational Guardrails
 - Treat build artifacts (`build/`, `.elf`, `.bin`) as disposable; avoid committing them.
 - Document timing-critical code paths and hardware-specific configurations inline.
+
+## Agent Workflow Guardrails
+- Do **not** `git commit` or `git push` unless the user explicitly requests it in the current conversation.
