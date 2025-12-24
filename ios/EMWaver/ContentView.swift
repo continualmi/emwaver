@@ -12,7 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @State private var selection: String = "EMWaver"
     @State private var showWelcome: Bool = false
-    
+
     var body: some View {
         ZStack {
             TabView(selection: $selection) {
@@ -21,7 +21,8 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("EMWaver", systemImage: "house")
+                    Image("TabEMWaver").renderingMode(.template)
+                    Text("EMWaver")
                 }
                 .tag("EMWaver")
 
@@ -30,7 +31,8 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("ISM", systemImage: "memorychip")
+                    Image("TabISM").renderingMode(.template)
+                    Text("ISM")
                 }
                 .tag("ISM")
 
@@ -39,7 +41,8 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Sampler", systemImage: "waveform")
+                    Image("TabSampler").renderingMode(.template)
+                    Text("Sampler")
                 }
                 .tag("Sampler")
 
@@ -48,7 +51,8 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Wavelets", systemImage: "text.and.command.macwindow")
+                    Image("TabWavelets").renderingMode(.template)
+                    Text("Wavelets")
                 }
                 .tag("Wavelets")
 
@@ -57,25 +61,28 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Git", systemImage: "arrow.triangle.branch")
+                    Image("TabGit").renderingMode(.template)
+                    Text("Git")
                 }
                 .tag("Git")
-                
+
                 NavigationView {
                     PacketModeView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Packet", systemImage: "dot.radiowaves.left.and.right")
+                    Image("TabPacket").renderingMode(.template)
+                    Text("Packet")
                 }
                 .tag("PacketMode")
-                
+
                 NavigationView {
                     RFIDView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("RFID", systemImage: "creditcard")
+                    Image("TabRFID").renderingMode(.template)
+                    Text("RFID")
                 }
                 .tag("RFID")
 
@@ -84,7 +91,8 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Label("Settings", systemImage: "gearshape")
+                    Image("TabSettings").renderingMode(.template)
+                    Text("Settings")
                 }
                 .tag("Settings")
             }
@@ -109,7 +117,7 @@ struct ContentView: View {
             }
         }
     }
-    
+
     private func checkFirstLaunch() {
         let hasSeenWelcome = UserDefaults.standard.bool(forKey: "hasSeenWelcome")
         if !hasSeenWelcome {
