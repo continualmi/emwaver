@@ -30,14 +30,17 @@ const ESP32_PINS = [
 const STM32_PINS = [
     { label: "PA0 (TIM2_CH1)", value: "0" },
     { label: "PA1 (IR RX / TIM2_CH2)", value: "1" },
-    { label: "PA2 (TIM2_CH3)", value: "2" },
+    { label: "PA2 (IR TX on Infrared Waver / GDO0 on ISM Waver, TIM2_CH3)", value: "2" },
     { label: "PA3 (TIM2_CH4)", value: "3" },
     { label: "PA4 (NSS_RFID / CC1101 CS)", value: "4" },
     { label: "PA5 (SPI1 SCK)", value: "5" },
     { label: "PA6 (SPI1 MISO)", value: "6" },
     { label: "PA7 (SPI1 MOSI)", value: "7" },
+    { label: "PA13", value: "13" },
+    { label: "PA14", value: "14" },
     { label: "PB0 (VCTL)", value: "16" },
-    { label: "PB6 (RESET)", value: "22" }
+    { label: "PB6 (RESET)", value: "22" },
+    { label: "PB7", value: "23" }
 ];
 
 function pinsForTarget(target) {
