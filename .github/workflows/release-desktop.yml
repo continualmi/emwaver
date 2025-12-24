@@ -23,8 +23,12 @@ jobs:
             platform: linux
           - os: windows-latest
             platform: windows
-          - os: macos-latest
-            platform: macos
+          # GitHub's `macos-latest` currently targets Apple Silicon (ARM64).
+          # Build both Intel and Apple Silicon bundles so users can download the right DMG.
+          - os: macos-13
+            platform: macos-x64
+          - os: macos-14
+            platform: macos-arm64
 
     steps:
       - name: Checkout code
