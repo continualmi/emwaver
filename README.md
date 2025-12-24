@@ -11,7 +11,9 @@
   </p>
 </div>
 
-EMWaver is an open-source, multi-target project: firmware (ESP32-S3 + STM32F042), companion apps (Android/iOS/Desktop), a Rust CLI, and MkDocs documentation.
+EMWaver is a high-performance, low-cost hardware hacking and development platform designed around a deep connection between hardware, firmware, and companion software (mobile + desktop). Devices connect directly to your phone or PC over BLE or USB, and the apps can offload heavy UI and processing (memory, analysis, automation) so firmware can stay lean and the workflow stays portable.
+
+On top of that, EMWaver includes Wavelets: self-contained scripts written in a JavaScript-like language (EMWaver DSL) that can automate hardware interactions and render portable UI components across Android, iOS, and desktop.
 
 ## Get Started
 

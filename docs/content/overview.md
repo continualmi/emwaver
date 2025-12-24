@@ -2,6 +2,8 @@
 
 Install the apps, grab the CLI, and follow the flashing guides for your device family.
 
+EMWaver is a high-performance, low-cost hardware hacking and development platform. Devices connect directly to your phone or PC over BLE or USB, and the companion apps can offload heavy UI and processing so you can build richer workflows than firmware alone. Wavelets (EMWaver DSL) let you automate procedures and ship portable UIs across Android, iOS, and desktop.
+
 ## Download The Apps
 
 Mobile apps are the primary UI for connecting to devices and running workflows.
