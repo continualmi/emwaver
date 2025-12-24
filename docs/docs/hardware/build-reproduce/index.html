@@ -8,13 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://luispl77.github.io/emwaver/documentation/repository-layout/">
+        <link rel="canonical" href="https://luispl77.github.io/emwaver/hardware/build-reproduce/">
       
       
-        <link rel="prev" href="../">
+        <link rel="prev" href="../../hardware-catalog/">
       
       
-        <link rel="next" href="../development-setup/">
+        <link rel="next" href="../../flashing-firmware/">
       
       
       <link rel="icon" href="../../logo.png">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Repository Layout - EMWaver</title>
+        <title>Build & Reproduce Guide - EMWaver</title>
       
     
     
@@ -78,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#repository-layout" class="md-skip">
+        <a href="#build-reproduce-guide" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Repository Layout
+              Build & Reproduce Guide
             
           </span>
         </div>
@@ -223,10 +223,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../../hardware-catalog/" class="md-tabs__link">
           
   
@@ -267,13 +269,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../documentation/" class="md-tabs__link">
           
   
   
@@ -351,8 +351,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -364,21 +366,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
-        
-          
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
             
   
   
@@ -391,7 +394,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             Hardware
@@ -425,10 +428,32 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../hardware/build-reproduce/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Written Guide
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -439,6 +464,206 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-choose-what-to-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      1) Choose what to build
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1) Choose what to build">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#platform-choice-stm32-vs-esp32-s3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Platform choice: STM32 vs ESP32-S3
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cost-reality-prototype-volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost reality (prototype volumes)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-use-the-hardware-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      2) Use the hardware catalog
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-order-a-board-easyeda-jlcpcb-pcba" class="md-nav__link">
+    <span class="md-ellipsis">
+      3) Order a board (EasyEDA → JLCPCB PCBA)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3) Order a board (EasyEDA → JLCPCB PCBA)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#open-the-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      Open the design
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-the-one-click-order-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Start the one-click order flow
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jlcpcb-settings-that-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      JLCPCB settings that matter
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-bom-cpl-review-common-pitfalls" class="md-nav__link">
+    <span class="md-ellipsis">
+      4) BOM / CPL review (common pitfalls)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-economic-vs-standard-pcba-and-global-sourcing" class="md-nav__link">
+    <span class="md-ellipsis">
+      5) Economic vs standard PCBA (and global sourcing)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5) Economic vs standard PCBA (and global sourcing)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#economic-pcba-preferred-when-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      Economic PCBA (preferred when possible)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standard-pcba-sometimes-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      Standard PCBA (sometimes required)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#out-of-stock-special-parts-antennas-via-my-parts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Out-of-stock / special parts (antennas) via “My Parts”
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-parts-you-buy-solder-yourself-example-emwaver-shield" class="md-nav__link">
+    <span class="md-ellipsis">
+      6) Parts you buy + solder yourself (example: EMWaver Shield)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-3d-printed-cases-onshape-stl-jlc3dp" class="md-nav__link">
+    <span class="md-ellipsis">
+      7) 3D printed cases (Onshape → STL → JLC3DP)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-optional-add-on-modules-quick-prototyping" class="md-nav__link">
+    <span class="md-ellipsis">
+      8) Optional add-on modules + quick prototyping
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#support-the-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support the project
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#legal-ethical-note" class="md-nav__link">
+    <span class="md-ellipsis">
+      Legal / ethical note
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -572,8 +797,6 @@
       
   
   
-    
-  
   
   
     
@@ -605,23 +828,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../documentation/" class="md-nav__link ">
               
   
   
@@ -634,13 +856,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Documentation
@@ -653,32 +875,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Repository Layout
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../documentation/repository-layout/" class="md-nav__link">
         
   
   
@@ -689,53 +889,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#top-level-folders" class="md-nav__link">
-    <span class="md-ellipsis">
-      Top-Level Folders
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#firmware-templates-vs-firmware-sources" class="md-nav__link">
-    <span class="md-ellipsis">
-      Firmware Templates vs. Firmware Sources
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#where-to-go-next" class="md-nav__link">
-    <span class="md-ellipsis">
-      Where To Go Next
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -748,7 +901,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../development-setup/" class="md-nav__link">
+      <a href="../../documentation/development-setup/" class="md-nav__link">
         
   
   
@@ -771,7 +924,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../../documentation/contributing/" class="md-nav__link">
         
   
   
@@ -794,7 +947,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../hardware/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -829,13 +982,10 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
@@ -844,7 +994,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_6" >
         
           
-          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
             
   
   
@@ -871,7 +1021,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../firmware-esp32/" class="md-nav__link">
+      <a href="../../documentation/firmware-esp32/" class="md-nav__link">
         
   
   
@@ -894,7 +1044,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../firmware-stm32/" class="md-nav__link">
+      <a href="../../documentation/firmware-stm32/" class="md-nav__link">
         
   
   
@@ -935,13 +1085,10 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
@@ -950,7 +1097,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_7" >
         
           
-          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
             
   
   
@@ -977,7 +1124,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../protocol/" class="md-nav__link">
+      <a href="../../documentation/protocol/" class="md-nav__link">
         
   
   
@@ -1008,7 +1155,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../../documentation/cli/" class="md-nav__link">
         
   
   
@@ -1043,13 +1190,10 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
@@ -1058,7 +1202,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_9" >
         
           
-          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="0">
             
   
   
@@ -1085,7 +1229,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../apps/" class="md-nav__link">
+      <a href="../../documentation/apps/" class="md-nav__link">
         
   
   
@@ -1108,7 +1252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../documentation/" class="md-nav__link">
         
   
   
@@ -1151,13 +1295,10 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
@@ -1166,7 +1307,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_10" >
         
           
-          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
             
   
   
@@ -1274,27 +1415,180 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#top-level-folders" class="md-nav__link">
+  <a href="#1-choose-what-to-build" class="md-nav__link">
     <span class="md-ellipsis">
-      Top-Level Folders
+      1) Choose what to build
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1) Choose what to build">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#platform-choice-stm32-vs-esp32-s3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Platform choice: STM32 vs ESP32-S3
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cost-reality-prototype-volumes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cost reality (prototype volumes)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-use-the-hardware-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      2) Use the hardware catalog
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#firmware-templates-vs-firmware-sources" class="md-nav__link">
+  <a href="#3-order-a-board-easyeda-jlcpcb-pcba" class="md-nav__link">
     <span class="md-ellipsis">
-      Firmware Templates vs. Firmware Sources
+      3) Order a board (EasyEDA → JLCPCB PCBA)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3) Order a board (EasyEDA → JLCPCB PCBA)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#open-the-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      Open the design
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-the-one-click-order-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Start the one-click order flow
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jlcpcb-settings-that-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      JLCPCB settings that matter
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-bom-cpl-review-common-pitfalls" class="md-nav__link">
+    <span class="md-ellipsis">
+      4) BOM / CPL review (common pitfalls)
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#where-to-go-next" class="md-nav__link">
+  <a href="#5-economic-vs-standard-pcba-and-global-sourcing" class="md-nav__link">
     <span class="md-ellipsis">
-      Where To Go Next
+      5) Economic vs standard PCBA (and global sourcing)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5) Economic vs standard PCBA (and global sourcing)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#economic-pcba-preferred-when-possible" class="md-nav__link">
+    <span class="md-ellipsis">
+      Economic PCBA (preferred when possible)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standard-pcba-sometimes-required" class="md-nav__link">
+    <span class="md-ellipsis">
+      Standard PCBA (sometimes required)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#out-of-stock-special-parts-antennas-via-my-parts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Out-of-stock / special parts (antennas) via “My Parts”
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-parts-you-buy-solder-yourself-example-emwaver-shield" class="md-nav__link">
+    <span class="md-ellipsis">
+      6) Parts you buy + solder yourself (example: EMWaver Shield)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-3d-printed-cases-onshape-stl-jlc3dp" class="md-nav__link">
+    <span class="md-ellipsis">
+      7) 3D printed cases (Onshape → STL → JLC3DP)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-optional-add-on-modules-quick-prototyping" class="md-nav__link">
+    <span class="md-ellipsis">
+      8) Optional add-on modules + quick prototyping
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#support-the-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      Support the project
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#legal-ethical-note" class="md-nav__link">
+    <span class="md-ellipsis">
+      Legal / ethical note
     </span>
   </a>
   
@@ -1316,62 +1610,128 @@
 
 
 
-<h1 id="repository-layout">Repository Layout</h1>
-<p>EMWaver is a monorepo: firmware + apps + desktop + CLI + documentation live together so they can evolve in lockstep.</p>
-<h2 id="top-level-folders">Top-Level Folders</h2>
-<table>
-<thead>
-<tr>
-<th>Path</th>
-<th>What it is</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>esp/</code></td>
-<td>ESP32-S3 firmware (ESP-IDF project)</td>
-</tr>
-<tr>
-<td><code>stm/</code></td>
-<td>STM32 firmware (STM32CubeIDE project, <code>stm/emwaver-firmware/</code>)</td>
-</tr>
-<tr>
-<td><code>cli/</code></td>
-<td>Rust CLI (<code>emwaver</code>) for project init + device shell</td>
-</tr>
-<tr>
-<td><code>android/</code></td>
-<td>Android companion app</td>
-</tr>
-<tr>
-<td><code>ios/</code></td>
-<td>iOS companion app (SwiftUI)</td>
-</tr>
-<tr>
-<td><code>app/</code></td>
-<td>Desktop app (Tauri) mirroring mobile features</td>
-</tr>
-<tr>
-<td><code>docs/</code></td>
-<td>MkDocs source + generated site output (<code>docs/content</code>, <code>docs/mkdocs.yml</code>, <code>docs/docs</code>)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="firmware-templates-vs-firmware-sources">Firmware Templates vs. Firmware Sources</h2>
-<p>You’ll see references to a <code>main/</code> firmware layout in a few places:</p>
+<h1 id="build-reproduce-guide">Build &amp; Reproduce Guide</h1>
+<p>This guide walks you through the end-to-end EMWaver manufacturing workflow: picking the right device, ordering PCBs + PCBA through JLCPCB, sourcing the parts you’ll buy separately, and (when available) printing 3D cases.</p>
+<p>If you prefer video, the full walkthrough is here: https://youtu.be/PNf2JGsF1Mk</p>
+<h2 id="1-choose-what-to-build">1) Choose what to build</h2>
+<h3 id="platform-choice-stm32-vs-esp32-s3">Platform choice: STM32 vs ESP32-S3</h3>
 <ul>
-<li>The <strong>ESP32 firmware source</strong> in this repo is under <code>esp/main/</code>.</li>
-<li>The <strong>CLI</strong> can generate a <strong>new firmware project</strong> template that contains a <code>main/</code> folder at the project root (matching ESP-IDF conventions).</li>
+<li><strong>STM32 devices (USB)</strong>: Great for <strong>PC + Android</strong>, typically <strong>smaller</strong> and <strong>ultra low cost</strong>, but <strong>not compatible with iPhone/iOS</strong>.</li>
+<li><strong>ESP32-S3 devices (BLE/Wi‑Fi)</strong>: Works with <strong>iOS, Android, and desktop</strong>, can be <strong>wireless</strong>, and is the most general-purpose lineup.</li>
 </ul>
-<p>So “<code>main/</code>” may refer to either:
-- <code>esp/main/</code> (this repo), or
-- <code>./main/</code> inside a <em>generated</em> firmware project created by <code>emwaver init</code>.</p>
-<h2 id="where-to-go-next">Where To Go Next</h2>
+<h3 id="cost-reality-prototype-volumes">Cost reality (prototype volumes)</h3>
+<p>JLCPCB PCBA usually has a <strong>minimum order of 2</strong> assembled units, and at low volume the cost is dominated by <strong>setup fees</strong> and <strong>small-quantity component pricing</strong>.</p>
 <ul>
-<li>Firmware: <a href="../firmware-esp32/">ESP32-S3</a>, <a href="../firmware-stm32/">STM32F042</a></li>
-<li>Tooling: <a href="../cli/">CLI</a></li>
-<li>Protocol: <a href="../protocol/">Transport &amp; Command Format</a></li>
+<li>The <strong>flagship EMWaver</strong> is typically the most expensive build (often <strong>$100+</strong> once you include assembly and separately sourced items like antennas).</li>
+<li>For most people, <strong>EMWaver Shield</strong> and/or <strong>EMWaver DIY</strong> are the best ESP32-S3 starting points.</li>
 </ul>
+<h2 id="2-use-the-hardware-catalog">2) Use the hardware catalog</h2>
+<ul>
+<li>Build &amp; reproduce guide (docs): https://luispl77.github.io/emwaver/hardware/</li>
+<li>Hardware catalog (EasyEDA designs + casings): https://luispl77.github.io/emwaver-hardware/</li>
+</ul>
+<p>On the hardware catalog, each device page includes:</p>
+<ul>
+<li>A brief description and rough reproduction cost estimate</li>
+<li>Buttons/links to open the design in EasyEDA (and casings in Onshape when available)</li>
+</ul>
+<h2 id="3-order-a-board-easyeda-jlcpcb-pcba">3) Order a board (EasyEDA → JLCPCB PCBA)</h2>
+<h3 id="open-the-design">Open the design</h3>
+<ol>
+<li>Open the hardware catalog and pick a device.</li>
+<li>Click <strong>Open in EasyEDA</strong>.</li>
+<li>In EasyEDA, optionally view the PCB and 3D model to confirm you’re ordering the correct revision.</li>
+</ol>
+<h3 id="start-the-one-click-order-flow">Start the one-click order flow</h3>
+<ol>
+<li>In EasyEDA, click <strong>Fabrication</strong>.</li>
+<li>Click <strong>One‑click Order PCB/SMT</strong>.</li>
+<li>Log into JLCPCB (create an account if you don’t have one).</li>
+</ol>
+<h3 id="jlcpcb-settings-that-matter">JLCPCB settings that matter</h3>
+<ul>
+<li><strong>PCB Qty</strong>: set to <code>2</code> (minimum for most prototype PCBA orders).</li>
+<li><strong>PCB Assembly</strong>: enable it.</li>
+<li><strong>Assembly Side</strong>: choose <strong>Top</strong> (you generally don’t want JLCPCB assembling bottom-side headers; solder those yourself).</li>
+<li><strong>Confirm parts placement</strong>: recommended (catch flipped parts / polarity issues).</li>
+<li><strong>PCB color</strong>: optional (purely aesthetic).</li>
+</ul>
+<h2 id="4-bom-cpl-review-common-pitfalls">4) BOM / CPL review (common pitfalls)</h2>
+<p>When the BOM loads, spend time confirming the component selections. Some common issues:</p>
+<ul>
+<li><strong>“Do Not Place” parts</strong>: Some parts (like certain antennas) are better sourced and soldered manually; mark them as <strong>Do Not Place</strong> and keep the cheaper assembly option where possible.</li>
+<li><strong>USB connector not selected</strong>: Occasionally a connector is present but not selected by default—toggle it on.</li>
+<li><strong>IR receiver duplicate listing quirk</strong>: If the IR receiver shows multiple options, choose the <strong>first option with stock</strong> (some options appear but have no available parts).</li>
+<li><strong>Yellow warnings / wrong values</strong>: JLCPCB may auto-pick the wrong capacitor/inductor/resistor value (especially small passives). Fix each warning by selecting a part whose <strong>value</strong> matches the <strong>comment</strong>, and confirm the <strong>package size</strong> matches the footprint (e.g., <code>0402</code>).</li>
+</ul>
+<h2 id="5-economic-vs-standard-pcba-and-global-sourcing">5) Economic vs standard PCBA (and global sourcing)</h2>
+<h3 id="economic-pcba-preferred-when-possible">Economic PCBA (preferred when possible)</h3>
+<p>If your board supports it, <strong>Economic</strong> assembly is cheaper. Keep it if all required parts are compatible.</p>
+<h3 id="standard-pcba-sometimes-required">Standard PCBA (sometimes required)</h3>
+<p>Some boards include parts that force <strong>Standard</strong> assembly (higher fees). If a required part isn’t compatible with economic assembly, you may have to switch.</p>
+<h3 id="out-of-stock-special-parts-antennas-via-my-parts">Out-of-stock / special parts (antennas) via “My Parts”</h3>
+<p>Some antennas won’t be in JLCPCB’s standard part stock and may show stock <code>0</code>. In that case:</p>
+<ol>
+<li>Go to <strong>Parts Inventory / My Parts</strong>.</li>
+<li>Use <strong>Global Sourcing</strong> to search the part number.</li>
+<li>Buy a small quantity (often minimum <code>10</code>) from a vendor that supports low-volume.</li>
+<li>Once in inventory, select it in the BOM as <strong>My Parts</strong>.</li>
+</ol>
+<p>Useful links:</p>
+<ul>
+<li>JLCPCB: https://jlcpcb.com/</li>
+<li>EasyEDA editor: https://easyeda.com/editor</li>
+<li>JLCPCB Global Sourcing / Parts Inventory: https://jlcpcb.com/user-center/smtPrivateLibrary/orderParts/?global=1</li>
+</ul>
+<h2 id="6-parts-you-buy-solder-yourself-example-emwaver-shield">6) Parts you buy + solder yourself (example: EMWaver Shield)</h2>
+<p>For boards like <strong>EMWaver Shield</strong>, you’ll typically hand-solder:</p>
+<ul>
+<li>The RF module (example: <strong>RFM69HW</strong>)</li>
+<li>The antenna</li>
+<li>GPIO headers (single-row and/or double-row)</li>
+<li>You’ll also need an <strong>ESP32-S3 dev board</strong> to plug into the shield</li>
+</ul>
+<p>Assembly notes:</p>
+<ul>
+<li>Check module orientation carefully (align with the PCB silkscreen outline).</li>
+<li>For small RF modules, tape can help hold the module in place while you tack the first pad.</li>
+<li>Helical antennas usually need a <strong>90° bend</strong> before soldering.</li>
+</ul>
+<p>AliExpress parts links (placeholders are fine to swap later):</p>
+<ul>
+<li>RFM69HW module: https://www.aliexpress.us/item/3256806162958228.html</li>
+<li>ESP32‑S3 dev board (2× USB‑C + RGB LED): https://www.aliexpress.us/item/3256808023363384.html</li>
+<li>433 MHz helical/coil antenna: https://www.aliexpress.us/item/3256805261694510.html</li>
+<li>Female headers (22‑pin): https://www.aliexpress.us/item/2255801012106911.html and https://www.aliexpress.us/item/3256808780541467.html</li>
+</ul>
+<h2 id="7-3d-printed-cases-onshape-stl-jlc3dp">7) 3D printed cases (Onshape → STL → JLC3DP)</h2>
+<p>Some devices have printable cases.</p>
+<ol>
+<li>On a device page in the hardware catalog, open the <strong>3D case</strong> entry:</li>
+<li><strong>Open in OnShape</strong> (CAD)</li>
+<li>Or <strong>Download STL</strong> (direct STL download)</li>
+<li>If using Onshape: right‑click the part/assembly → <strong>Export</strong> → choose <strong>STL</strong>.</li>
+<li>Upload the STL to JLC3DP and pick a material.</li>
+<li>Assemble the PCB into the case using <strong>M1.2 × 4 mm self‑tapping screws</strong>.</li>
+</ol>
+<p>Links:</p>
+<ul>
+<li>Onshape (via hardware catalog device page): https://luispl77.github.io/emwaver-hardware/</li>
+<li>3D printing (JLC3DP): https://jlc3dp.com/</li>
+<li>M1.2 × 4 mm self‑tapping screws: https://www.aliexpress.us/item/2251832857570651.html</li>
+</ul>
+<h2 id="8-optional-add-on-modules-quick-prototyping">8) Optional add-on modules + quick prototyping</h2>
+<p>You can expand boards (or even prototype directly on the ESP32‑S3 dev board) using jumper wires:</p>
+<ul>
+<li>RC522 RFID/NFC module: https://www.aliexpress.us/item/3256807702682933.html</li>
+<li>CC1101 module: https://www.aliexpress.us/item/3256806852075714.html</li>
+<li>NRF24L01+ module (pick 2×4 / 8‑pin variant): https://www.aliexpress.us/item/3256806641760729.html</li>
+<li>Female‑to‑female jumper wires: https://www.aliexpress.us/item/3256809822786806.html</li>
+</ul>
+<h2 id="support-the-project">Support the project</h2>
+<p>Patreon: (placeholder – link coming soon)</p>
+<h2 id="legal-ethical-note">Legal / ethical note</h2>
+<p>Only test/clone/transmit against devices and systems you own or have explicit permission to work with.</p>
 
 
 
