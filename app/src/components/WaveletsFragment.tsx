@@ -798,7 +798,7 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && (
+            {Boolean(props.label) && (
               <label className="text-slate-300 text-sm">{props.label as string}</label>
             )}
             <input
@@ -838,7 +838,7 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && (
+            {Boolean(props.label) && (
               <label className="text-slate-300 text-sm">{props.label as string}</label>
             )}
             <input
@@ -871,7 +871,7 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && (
+            {Boolean(props.label) && (
               <label className="text-slate-300 text-sm">{props.label as string}</label>
             )}
             <textarea
@@ -919,7 +919,7 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && (
+            {Boolean(props.label) && (
               <label className="text-slate-300 text-sm">{props.label as string}</label>
             )}
             <select
@@ -992,7 +992,7 @@ function WaveletUIRenderer({
 
         return (
           <div className="flex flex-col gap-2">
-            {props.label && (
+            {Boolean(props.label) && (
               <label className="text-slate-300 text-sm">{props.label as string}</label>
             )}
             <div className="w-full bg-slate-800 rounded-full h-2">

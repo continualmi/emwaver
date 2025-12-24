@@ -30,8 +30,8 @@ const BUFFER_OPTIONS = [
 
 async function openExternal(url: string) {
   if (isTauriAvailable()) {
-    const { open } = await import("@tauri-apps/plugin-opener");
-    await open(url);
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
     return;
   }
 

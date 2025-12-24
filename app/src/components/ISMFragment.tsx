@@ -759,9 +759,7 @@ export default function ISMFragment() {
     if (selectedChip === "CC1101") {
       steps += CC1101_PA_TABLE_SIZE;
     }
-    if (selectedChip !== "UNKNOWN") {
-      steps += RF_PARAMETER_STEPS;
-    }
+    steps += RF_PARAMETER_STEPS;
     setTotalLoadSteps(steps);
 
     try {
