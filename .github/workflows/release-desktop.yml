@@ -75,13 +75,18 @@ jobs:
           npm ci
 
       - name: Setup macOS signing keychain
-        if: startsWith(matrix.platform, 'macos-') && secrets.APPLE_CERTIFICATE != ''
+        if: startsWith(matrix.platform, 'macos-')
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
+
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            echo "APPLE_CERTIFICATE secret not set; skipping macOS signing setup."
+            exit 0
+          fi
 
           CERT_P12_PATH="$RUNNER_TEMP/apple_cert.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
@@ -121,9 +126,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BUNDLE_MACOS_DIR="app/src-tauri/target/release/bundle/macos"
-          if [ ! -d "$BUNDLE_MACOS_DIR" ]; then
-            echo "macOS bundle directory not found: $BUNDLE_MACOS_DIR"
+          BUNDLE_MACOS_DIR="$(find app/src-tauri/target -type d -path '*/release/bundle/macos' -print | head -n 1)"
+          if [ -z "${BUNDLE_MACOS_DIR:-}" ] || [ ! -d "$BUNDLE_MACOS_DIR" ]; then
+            echo "macOS bundle directory not found under app/src-tauri/target"
+            find app/src-tauri/target -maxdepth 5 -type d -name bundle -print || true
             exit 1
           fi
 
@@ -154,7 +160,7 @@ jobs:
           fi
 
       - name: Sign + notarize macOS DMG
-        if: startsWith(matrix.platform, 'macos-') && secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_API_KEY != ''
+        if: startsWith(matrix.platform, 'macos-')
         shell: bash
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -164,15 +170,20 @@ jobs:
         run: |
           set -euo pipefail
 
-          BUNDLE_MACOS_DIR="app/src-tauri/target/release/bundle/macos"
+          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ] || [ -z "${APPLE_API_KEY:-}" ] || [ -z "${APPLE_API_KEY_ID:-}" ] || [ -z "${APPLE_API_ISSUER:-}" ]; then
+            echo "Notarization secrets not set; skipping macOS signing + notarization."
+            exit 0
+          fi
+
+          BUNDLE_MACOS_DIR="$(find app/src-tauri/target -type d -path '*/release/bundle/macos' -print | head -n 1)"
+          if [ -z "${BUNDLE_MACOS_DIR:-}" ] || [ ! -d "$BUNDLE_MACOS_DIR" ]; then
+            echo "macOS bundle directory not found under app/src-tauri/target"
+            find app/src-tauri/target -maxdepth 5 -type d -name bundle -print || true
+            exit 1
+          fi
           APP_PATH="$(find "$BUNDLE_MACOS_DIR" -maxdepth 1 -name "*.app" -print | head -n 1)"
           if [ -z "${APP_PATH:-}" ]; then
             echo "No .app found under $BUNDLE_MACOS_DIR"
-            exit 1
-          fi
-
-          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
-            echo "APPLE_SIGNING_IDENTITY is not set (expected a secret like: Developer ID Application: ...)"
             exit 1
           fi
 
@@ -211,10 +222,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          BUNDLE_DIR="app/src-tauri/target/release/bundle"
+          BUNDLE_DIR="$(find app/src-tauri/target -type d -path '*/release/bundle' -print | head -n 1)"
 
-          if [ ! -d "$BUNDLE_DIR" ]; then
-            echo "Bundle directory not found: $BUNDLE_DIR"
+          if [ -z "${BUNDLE_DIR:-}" ] || [ ! -d "$BUNDLE_DIR" ]; then
+            echo "Bundle directory not found under app/src-tauri/target"
+            find app/src-tauri/target -maxdepth 5 -type d -name bundle -print || true
             exit 1
           fi
 
