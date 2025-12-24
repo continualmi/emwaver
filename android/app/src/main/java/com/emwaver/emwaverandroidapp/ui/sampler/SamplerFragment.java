@@ -143,12 +143,22 @@ public class SamplerFragment extends Fragment {
     };
 
     // STM32 pins (USB sampler)
-    // Note: PA1 is IR_RX, PA0/PA2/PA3 are TIM2 CH1/CH3/CH4 outputs
+    // Encoded pin format matches STM32 firmware gpio aliases:
+    // - PA0..PA15 => 0..15
+    // - PB0..PB15 => 16..31
     private static final String[] STM32_PINS = {
-            "IR RX (PA1)",
             "PA0 (TIM2 CH1)",
-            "PA2 (TIM2 CH3)",
-            "PA3 (TIM2 CH4)"
+            "PA1 (IR_RX)",
+            "PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)",
+            "PA3 (TIM2 CH4)",
+            "PA4",
+            "PA5",
+            "PA6",
+            "PA7",
+            "PA13",
+            "PA14",
+            "PB6",
+            "PB7"
     };
 
     // Legacy single-device preference key kept for backwards compatibility
@@ -156,6 +166,7 @@ public class SamplerFragment extends Fragment {
     private static final String PREF_SELECTED_PIN_INDEX_ESP32 = "selectedSamplerPinIndexEsp32";
     private static final String PREF_SELECTED_PIN_INDEX_STM32 = "selectedSamplerPinIndexStm32";
     private static final String PREF_SELECTED_PIN_IO_ESP32 = "selectedSamplerPinIoEsp32";
+    private static final String PREF_SELECTED_PIN_ENCODED_STM32 = "selectedSamplerPinEncodedStm32";
     private static final String PREF_LAST_SELECTED_SIGNAL = "sampler_last_selected_signal";
     private static final String PREF_TX_PWM_ENABLED = "sampler_tx_pwm_enabled";
     private static final String PREF_TX_PWM_FREQ_HZ = "sampler_tx_pwm_freq_hz";
@@ -296,6 +307,11 @@ public class SamplerFragment extends Fragment {
                 int deviceType = getActiveDeviceType();
                 if (deviceType == DEVICE_STM32) {
                     editor.putInt(PREF_SELECTED_PIN_INDEX_STM32, position);
+                    String selection = (String) parent.getItemAtPosition(position);
+                    int encodedPin = getStm32EncodedPinFromSelection(selection);
+                    if (encodedPin >= 0) {
+                        editor.putInt(PREF_SELECTED_PIN_ENCODED_STM32, encodedPin);
+                    }
                 } else {
                     editor.putInt(PREF_SELECTED_PIN_INDEX_ESP32, position);
                     // Also update legacy key for backwards compatibility
@@ -912,40 +928,15 @@ public class SamplerFragment extends Fragment {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
                 return;
             }
-            
-            // Note: STM32 Pins are simpler, we might need to adjust extraction if format changes
-            // For now, assume format is "Name (PA0)" etc.
-            // But getPinNumberFromSelection extracts "IOx".
-            // STM32 strings are "IR RX (PA1)", "PA0 (TIM2 CH1)" etc.
-            // My getPinNumberFromSelection regex is "\\(IO(\\d+)\\)"
-            // It won't work for STM32 strings.
-            // I need to update pin extraction or parsing for STM32.
-            
-            // For now, let's just send the index or a mapped value?
-            // The previous STM32 code used pin number in bulk_packet.
-            // I should stick to the "sample start --pin=X" string format.
-            // I need to map the selection to a pin number the firmware understands.
-            // Firmware: PA0=0, PA1=1, PA2=2, PA3=3.
-            
-            // Let's look at STM32_PINS:
-            // "IR RX (PA1)" -> 1
-            // "PA0 (TIM2 CH1)" -> 0
-            // "PA2 (TIM2 CH3)" -> 2
-            // "PA3 (TIM2 CH4)" -> 3
-            
-            int pinNumber = -1;
+
             String selected = binding.gpioSpinner.getSelectedItem().toString();
-            if (selected.contains("PA0")) pinNumber = 0;
-            else if (selected.contains("PA1")) pinNumber = 1;
-            else if (selected.contains("PA2")) pinNumber = 2;
-            else if (selected.contains("PA3")) pinNumber = 3;
-            
-            if (pinNumber == -1) {
-                 Toast.makeText(getContext(), "Invalid STM32 pin selected", Toast.LENGTH_SHORT).show();
-                 return;
+            int encodedPin = getStm32EncodedPinFromSelection(selected);
+            if (encodedPin < 0) {
+                Toast.makeText(getContext(), "Invalid STM32 pin selected", Toast.LENGTH_SHORT).show();
+                return;
             }
 
-            String commandStr = "sample start --pin=" + pinNumber;
+            String commandStr = "sample start --pin=" + encodedPin;
             byte[] command = commandStr.getBytes();
             USBService.write(command);
             
@@ -1015,21 +1006,20 @@ public class SamplerFragment extends Fragment {
             }
             
             int bufferLength = USBService.getBufferLength();
-            
-            int pinNumber = -1;
+
             String selected = binding.gpioSpinner.getSelectedItem().toString();
-            if (selected.contains("PA0")) pinNumber = 0;
-            else if (selected.contains("PA1")) pinNumber = 1;
-            else if (selected.contains("PA2")) pinNumber = 2;
-            else if (selected.contains("PA3")) pinNumber = 3;
-            
-            if (pinNumber == -1) {
-                 Toast.makeText(getContext(), "Invalid STM32 pin selected", Toast.LENGTH_SHORT).show();
-                 return;
+            int encodedPin = getStm32EncodedPinFromSelection(selected);
+            if (encodedPin < 0) {
+                Toast.makeText(getContext(), "Invalid STM32 pin selected", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (encodedPin < 0 || encodedPin > 3) {
+                Toast.makeText(getContext(), "STM32 retransmit supports PA0–PA3 only", Toast.LENGTH_SHORT).show();
+                return;
             }
             
             // Format command: "transmit start --pin=<pin>"
-            String commandStr = "transmit start --pin=" + pinNumber;
+            String commandStr = "transmit start --pin=" + encodedPin;
             byte[] commandBytes = commandStr.getBytes();
             USBService.write(commandBytes);
 
@@ -1429,7 +1419,30 @@ public class SamplerFragment extends Fragment {
         int selectedPinIndex;
 
         if (currentDeviceType == DEVICE_STM32) {
-            selectedPinIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_STM32, 0);
+            Integer encodedPin = null;
+            if (prefs.contains(PREF_SELECTED_PIN_ENCODED_STM32)) {
+                int encoded = prefs.getInt(PREF_SELECTED_PIN_ENCODED_STM32, -1);
+                if (encoded >= 0) {
+                    encodedPin = encoded;
+                }
+            }
+
+            if (encodedPin == null && prefs.contains(PREF_SELECTED_PIN_INDEX_STM32)) {
+                int legacyIndex = prefs.getInt(PREF_SELECTED_PIN_INDEX_STM32, -1);
+                if (legacyIndex >= 0 && legacyIndex < LEGACY_STM32_PINS.length) {
+                    int migrated = getStm32EncodedPinFromSelection(LEGACY_STM32_PINS[legacyIndex]);
+                    if (migrated >= 0) {
+                        prefs.edit().putInt(PREF_SELECTED_PIN_ENCODED_STM32, migrated).apply();
+                        encodedPin = migrated;
+                    }
+                }
+            }
+
+            if (encodedPin != null) {
+                selectedPinIndex = findStm32IndexForEncodedPin(encodedPin);
+            } else {
+                selectedPinIndex = 0;
+            }
         } else {
             Integer selectedIo = null;
             if (prefs.contains(PREF_SELECTED_PIN_IO_ESP32)) {
@@ -1470,6 +1483,43 @@ public class SamplerFragment extends Fragment {
         } else if (gpioAdapter.getCount() > 0) {
             binding.gpioSpinner.setSelection(0);
         }
+    }
+
+    private int findStm32IndexForEncodedPin(int encodedPin) {
+        for (int i = 0; i < STM32_PINS.length; i++) {
+            if (getStm32EncodedPinFromSelection(STM32_PINS[i]) == encodedPin) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    private int getStm32EncodedPinFromSelection(String selectedPinString) {
+        if (selectedPinString == null) {
+            return -1;
+        }
+        Pattern pattern = Pattern.compile("\\bP([AB])(\\d{1,2})\\b");
+        Matcher matcher = pattern.matcher(selectedPinString);
+        if (!matcher.find()) {
+            return -1;
+        }
+        String port = matcher.group(1);
+        int pin;
+        try {
+            pin = Integer.parseInt(matcher.group(2));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+        if (pin < 0 || pin > 15) {
+            return -1;
+        }
+        if ("A".equals(port)) {
+            return pin;
+        }
+        if ("B".equals(port)) {
+            return 16 + pin;
+        }
+        return -1;
     }
 
     private void updatePwmUiState() {
@@ -1541,6 +1591,13 @@ public class SamplerFragment extends Fragment {
             "GPIO12 / CC1101 SCK (IO12)",
             "GPIO13 / CC1101 MISO (IO13)",
             "GPIO14 (IO14)"
+    };
+
+    private static final String[] LEGACY_STM32_PINS = {
+            "IR RX (PA1)",
+            "PA0 (TIM2 CH1)",
+            "PA2 (TIM2 CH3)",
+            "PA3 (TIM2 CH4)"
     };
 
     private int findEsp32IndexForIo(int ioPin) {
