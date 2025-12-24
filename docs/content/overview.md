@@ -8,6 +8,8 @@ Instead of cramming everything into firmware, EMWaver devices connect directly o
 
 Hardware comes in two platform families: STM32 devices are ultra low-cost, USB-only, and optimized for the smallest form factors (Android/PC focused), while ESP32-S3 devices support all platforms including iOS, enable wireless workflows (BLE/Wi‑Fi), and serve as the more general-purpose, multi-function boards.
 
+The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shield, EMWaver DIY, ISM Waver, Infrared Waver, RFID Waver, GPIO Waver) with capabilities like Sub‑GHz ISM radio (RFM69HW / CC1101), infrared RX + TX, GPIO expansion, USB scripting/BadUSB, RFID (RC522), and 2.4 GHz modules (NRF24L01+). Browse the hardware catalog and build guides here: https://luispl77.github.io/emwaver/hardware/
+
 ## Download The Apps
 
 Mobile apps are the primary UI for connecting to devices and running workflows.
