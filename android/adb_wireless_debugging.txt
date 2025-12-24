@@ -1,0 +1,22 @@
+Wireless ADB (Android 11+)
+
+1) On the phone:
+   - Settings → Developer options → Wireless debugging → ON
+   - Tap "Pair device with pairing code"
+   - Note:
+     - IP address
+     - Pairing port
+     - Pairing code
+   - Also note the "IP address & port" shown in Wireless debugging (this is the CONNECT port; it may be different from the pairing port)
+
+2) On your computer (Terminal):
+   adb pair <phone-ip>:<pairing-port>
+   # enter the pairing code when prompted
+
+3) Connect:
+   adb connect <phone-ip>:<connect-port>
+
+4) Verify:
+   adb devices
+
+Tip: If you see "unauthorized", accept the prompt on the phone and run adb connect again.
