@@ -106,6 +106,24 @@ final class WaveletEngine {
             }
             context?.setObject(sendCommandBlock, forKeyedSubscript: "_manualSendCommand" as NSString)
 
+            // Android parity: DeviceConnection.sendCommandString appends newline and defaults timeout to 2000ms.
+            let sendCommandStringBlock: @convention(block) (String, Int) -> JSValue? = { [weak self] command, timeout in
+                guard let context else { return nil }
+                guard let bleServiceWrapper = self?.globalBindings["BLEService"] as? BLEServiceWrapper else {
+                    return JSValue(nullIn: context)
+                }
+
+                var framed = command
+                if !framed.hasSuffix("\n") {
+                    framed += "\n"
+                }
+
+                let result = bleServiceWrapper.sendCommand(Data(framed.utf8), timeout: timeout)
+                guard let result else { return JSValue(nullIn: context) }
+                return JSValue(object: Array(result), in: context)
+            }
+            context?.setObject(sendCommandStringBlock, forKeyedSubscript: "_waveletSendCommandString" as NSString)
+
             let dialogBlock: @convention(block) (String, String) -> Void = { [weak self] title, message in
                 guard let self else { return }
                 self.printHandler?("[WaveletEngine] dialog requested: \(title)")
@@ -383,24 +401,36 @@ private extension WaveletEngine {
     static let dslBootstrap = """
         'use strict';
 
-	        var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
-	            render(node) {
-	                _waveletRender(node);
-	            },
+        var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
+            render(node) {
+                _waveletRender(node);
+            },
             registerCallback(token, fn) {
                 if (typeof fn === 'function') {
                     _waveletRegisterCallback(token, fn);
                 }
-	            },
-	            log(message) {
-	                var text = String(message);
-	                _waveletPrint(text);
-	            }
-	        };
+            },
+            log(message) {
+                var text = String(message);
+                _waveletPrint(text);
+            }
+        };
 
-	        if (typeof WaveletModules === 'undefined') {
-	            var WaveletModules = (function () {
-	                var cache = {};
+        if (typeof DeviceConnection === 'undefined') {
+            var DeviceConnection = {
+                sendCommandString: function (command, timeoutMs) {
+                    var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
+                    if (typeof _waveletSendCommandString !== 'function') {
+                        throw new Error('DeviceConnection unavailable (missing _waveletSendCommandString)');
+                    }
+                    return _waveletSendCommandString(String(command || ''), timeout);
+                }
+            };
+        }
+
+        if (typeof WaveletModules === 'undefined') {
+            var WaveletModules = (function () {
+                var cache = {};
                 var normalize = function (name) {
                     return String(name || '').trim();
                 };
