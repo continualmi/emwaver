@@ -1,5 +1,5 @@
 Build & Reproduce guide (docs)
-https://luispl77.github.io/emwaver/hardware-catalog/
+https://luispl77.github.io/emwaver/hardware/
 
 Hardware catalog (EasyEDA designs + casings)
 https://luispl77.github.io/emwaver-hardware/
@@ -12,7 +12,7 @@ If you’re deciding what to build:
 - Cost: low-volume PCBA has setup fees (minimum order is typically 2), so the flagship EMWaver is the most expensive build; Shield/DIY are great starting points on ESP32.
 
 Support the project (Patreon)
-REPLACE_WITH_PATREON_LINK
+(placeholder – link coming soon)
 
 You’ll learn
 - How to use the hardware catalog to open boards in EasyEDA and order PCBs + PCBA
@@ -32,44 +32,47 @@ EasyEDA editor
 https://easyeda.com/editor
 
 JLCPCB Global Sourcing / Parts Inventory
-REPLACE_WITH_JLCPCB_GLOBAL_SOURCING_LINK
+https://jlcpcb.com/user-center/smtPrivateLibrary/orderParts/?global=1
 
 3D printing (JLC3DP)
-REPLACE_WITH_JLC3DP_LINK
+https://jlc3dp.com/
 
 Onshape (casing CAD)
-REPLACE_WITH_ONSHAPE_CASING_LINK
+https://luispl77.github.io/emwaver-hardware/
+EMWaver device , 3D case , Open in OnShape
 
 Direct STL download (if you don’t want to use Onshape)
-REPLACE_WITH_STL_DOWNLOAD_LINK
+https://luispl77.github.io/emwaver-hardware/
+EMWaver device , 3D case , Download STL
 
 Parts links (AliExpress)
 RFM69HW module (choose the correct frequency variant; 433 MHz is a good default starter)
-REPLACE_WITH_ALIEXPRESS_RFM69HW_LINK
+https://www.aliexpress.us/item/3256806162958228.html
 
 ESP32-S3 dev board (2x USB-C + RGB LED)
-REPLACE_WITH_ALIEXPRESS_ESP32S3_DEVBOARD_LINK
+https://www.aliexpress.us/item/3256808023363384.html
 
 433 MHz helical/coil antenna
-REPLACE_WITH_ALIEXPRESS_433_HELICAL_ANTENNA_LINK
+https://www.aliexpress.us/item/3256805261694510.html
 
-Headers (22-pin; single-row and/or double-row)
-REPLACE_WITH_ALIEXPRESS_22PIN_HEADERS_LINK
+Female Headers (22-pin; single-row and/or double-row)
+https://www.aliexpress.us/item/2255801012106911.html
+https://www.aliexpress.us/item/3256808780541467.html
 
 M1.2 x 4 mm self-tapping screws (for 3D printed cases)
-REPLACE_WITH_ALIEXPRESS_M1_2X4_SELF_TAPPING_SCREWS_LINK
+https://www.aliexpress.us/item/2251832857570651.html
 
 Optional add-on modules
 RC522 RFID/NFC module
-REPLACE_WITH_ALIEXPRESS_RC522_LINK
+https://www.aliexpress.us/item/3256807702682933.html
 
 CC1101 module
-REPLACE_WITH_ALIEXPRESS_CC1101_LINK
+https://www.aliexpress.us/item/3256806852075714.html
 
-NRF24L01+ module (2x4 / 8-pin variant)
-REPLACE_WITH_ALIEXPRESS_NRF24_LINK
+NRF24L01+ module (pick 2x4 / 8-pin variant)
+https://www.aliexpress.us/item/3256806641760729.html
 
 Female-to-female jumper wires
-REPLACE_WITH_ALIEXPRESS_F2F_JUMPER_WIRES_LINK
+https://www.aliexpress.us/item/3256809822786806.html
 
 Note: Only test/clone/transmit against devices and systems you own or have explicit permission to work with.
