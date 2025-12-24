@@ -90,26 +90,26 @@ jobs:
 
           # Grab common installer formats across platforms.
           # Note: file names vary by platform and bundler target, so match by extension.
-          mapfile -t FILES < <(find "$BUNDLE_DIR" -type f \( \
-            -name "*.dmg" -o \
-            -name "*.app.tar.gz" -o \
-            -name "*.msi" -o \
-            -name "*.exe" -o \
-            -name "*.deb" -o \
-            -name "*.rpm" -o \
-            -name "*.AppImage" \
-          \))
+          found=0
+          while IFS= read -r -d '' f; do
+            found=1
+            base="$(basename "$f")"
+            cp "$f" "artifacts/emwaver-${{ matrix.platform }}-${base}"
+          done < <(find "$BUNDLE_DIR" -type f \( \
+              -name "*.dmg" -o \
+              -name "*.app.tar.gz" -o \
+              -name "*.msi" -o \
+              -name "*.exe" -o \
+              -name "*.deb" -o \
+              -name "*.rpm" -o \
+              -name "*.AppImage" \
+            \) -print0)
 
-          if [ "${#FILES[@]}" -eq 0 ]; then
+          if [ "$found" -eq 0 ]; then
             echo "No bundle artifacts found under $BUNDLE_DIR"
             find "$BUNDLE_DIR" -maxdepth 3 -type f -print || true
             exit 1
           fi
-
-          for f in "${FILES[@]}"; do
-            base="$(basename "$f")"
-            cp "$f" "artifacts/emwaver-${{ matrix.platform }}-${base}"
-          done
 
           ls -la artifacts
 
