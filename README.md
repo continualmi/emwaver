@@ -19,6 +19,9 @@ EMWaver is an open-source, multi-target project: firmware (ESP32-S3 + STM32F042)
   <a href="https://play.google.com/store/apps/details?id=com.emwaver.app">
     <img src="docs/content/badges/google-play.png" alt="Get it on Google Play" height="52">
   </a>
+  <a href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-Android.apk">
+    <img src="docs/content/badges/android-apk.png" alt="Download APK" height="52">
+  </a>
   <a href="https://apps.apple.com/app/emwaver">
     <img src="docs/content/badges/app-store.png" alt="Download on the App Store" height="52">
   </a>
