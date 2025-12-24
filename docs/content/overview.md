@@ -12,6 +12,9 @@ Mobile apps are the primary UI for connecting to devices and running workflows.
   <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" target="_blank" rel="noopener">
     <img src="../badges/google-play.png" alt="Get it on Google Play">
   </a>
+  <a href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-Android.apk" target="_blank" rel="noopener">
+    <img src="../badges/android-apk.png" alt="Download APK">
+  </a>
   <a href="https://apps.apple.com/app/emwaver" target="_blank" rel="noopener">
     <img src="../badges/app-store.png" alt="Download on the App Store">
   </a>
