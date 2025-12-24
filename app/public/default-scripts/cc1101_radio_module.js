@@ -11,10 +11,12 @@ const state = {
     profileIndex: 0,
     message: cc1101.isAvailable() ? 'Ready' : 'CC1101 bridge unavailable. Connect your EMWaver.',
     isError: !cc1101.isAvailable(),
-    lastConfig: null
+    lastConfig: null,
+    logLines: []
 };
 
 let cachedConstants = null;
+const nativePrint = print;
 
 function getConstants() {
     if (cachedConstants !== null) {
@@ -38,7 +40,12 @@ function currentOverrides() {
 }
 
 function log(message) {
-    WaveletConsole.append(message);
+    const text = String(message);
+    state.logLines.push(text);
+    if (state.logLines.length > 200) {
+        state.logLines = state.logLines.slice(state.logLines.length - 200);
+    }
+    nativePrint(text);
 }
 
 function applyOperation(label, task) {
@@ -174,7 +181,8 @@ function render() {
         children.push(UI.text({ text: describeConfig(state.lastConfig), foregroundColor: '#374151' }));
     }
     children.push(
-        WaveletConsole.view({
+        UI.logViewer({
+            text: state.logLines.join('\n'),
             minHeight: 160,
             backgroundColor: '#111827',
             foregroundColor: '#F9FAFB',
@@ -185,8 +193,6 @@ function render() {
     UI.render(UI.column({ padding: 16, spacing: 16, children }));
 }
 
-WaveletConsole.clear();
-WaveletConsole.subscribe(render);
 if (!cc1101.isAvailable()) {
     log('CC1101 binding unavailable. Connect an EMWaver device to run radio commands.');
 }

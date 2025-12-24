@@ -236,7 +236,8 @@ public final class WaveletRenderView extends FrameLayout {
         WaveletNodeProps props = node.getProps();
         ScrollView scrollView = new ScrollView(getContext());
         TextView logText = new TextView(getContext());
-        logText.setText(props.getString("text") != null ? props.getString("text") : "");
+        String explicitText = props.getString("text");
+        logText.setText(explicitText != null ? explicitText : "");
         logText.setTypeface(Typeface.MONOSPACE);
         logText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         logText.setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12));

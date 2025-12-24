@@ -1,5 +1,17 @@
-WaveletConsole.subscribe(render);
+let logLines = [];
+const nativePrint = print;
+
 render();
+
+function log(message) {
+    const text = String(message);
+    logLines.push(text);
+    if (logLines.length > 200) {
+        logLines = logLines.slice(logLines.length - 200);
+    }
+    nativePrint(text);
+    render();
+}
 
 function render() {
     UI.render(UI.column({
@@ -9,7 +21,8 @@ function render() {
             UI.text({ text: 'BadUSB Hello World', font: 'title2', fontWeight: 'semibold' }),
             UI.text({ text: 'Send a simple HID payload to the connected host.', foregroundColor: '#6B7280' }),
             UI.button({ label: 'Execute Payload', backgroundColor: '#1D4ED8', foregroundColor: '#FFFFFF', onTap: runDemo }),
-            WaveletConsole.view({
+            UI.logViewer({
+                text: logLines.join('\n'),
                 minHeight: 160,
                 backgroundColor: '#111827',
                 foregroundColor: '#F9FAFB',
@@ -21,7 +34,7 @@ function render() {
 }
 
 function runDemo() {
-    print('[BadUSB] Setting up HID attack mode...');
+    log('[BadUSB] Setting up HID attack mode...');
     BLEService.sendString('usb ATTACKMODE HID');
     Utils.delay(2000);
     BLEService.sendString('usb STRING_DELAY 10');
@@ -30,5 +43,5 @@ function runDemo() {
     Utils.delay(500);
     BLEService.sendString('usb ENTER');
     Utils.delay(500);
-    print('[BadUSB] Payload complete.');
+    log('[BadUSB] Payload complete.');
 }

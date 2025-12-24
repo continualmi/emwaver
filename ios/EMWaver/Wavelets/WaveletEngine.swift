@@ -383,100 +383,24 @@ private extension WaveletEngine {
     static let dslBootstrap = """
         'use strict';
 
-        var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
-            render(node) {
-                _waveletRender(node);
-            },
+	        var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
+	            render(node) {
+	                _waveletRender(node);
+	            },
             registerCallback(token, fn) {
                 if (typeof fn === 'function') {
                     _waveletRegisterCallback(token, fn);
                 }
-            },
-            log(message) {
-                var text = String(message);
-                if (typeof WaveletConsole !== 'undefined' && WaveletConsole && typeof WaveletConsole.append === 'function') {
-                    WaveletConsole.append(text);
-                }
-                _waveletPrint(text);
-            }
-        };
+	            },
+	            log(message) {
+	                var text = String(message);
+	                _waveletPrint(text);
+	            }
+	        };
 
-        if (typeof WaveletConsole === 'undefined') {
-            var WaveletConsole = (function () {
-                var lines = [];
-                var subscribers = [];
-                var limit = 500;
-
-                var notify = function () {
-                    for (var i = 0; i < subscribers.length; i += 1) {
-                        try {
-                            subscribers[i](lines.slice());
-                        } catch (err) {
-                            // ignore subscriber errors
-                        }
-                    }
-                };
-
-                var trim = function () {
-                    if (lines.length > limit) {
-                        lines.splice(0, lines.length - limit);
-                    }
-                };
-
-                var api = {
-                    setLimit: function (value) {
-                        if (typeof value === 'number' && value > 0) {
-                            limit = value;
-                            trim();
-                        }
-                        return limit;
-                    },
-                    append: function (message) {
-                        lines.push(String(message));
-                        trim();
-                        notify();
-                    },
-                    clear: function () {
-                        lines.length = 0;
-                        notify();
-                    },
-                    subscribe: function (fn) {
-                        if (typeof fn !== 'function') {
-                            return function () {};
-                        }
-                        subscribers.push(fn);
-                        try {
-                            fn(lines.slice());
-                        } catch (err) {
-                            // ignore initial subscriber error
-                        }
-                        return function () {
-                            var index = subscribers.indexOf(fn);
-                            if (index >= 0) {
-                                subscribers.splice(index, 1);
-                            }
-                        };
-                    },
-                    lines: function () {
-                        return lines.slice();
-                    },
-                    text: function () {
-                        return lines.join('\\n');
-                    },
-                    view: function (props) {
-                        var assigned = props ? Object.assign({}, props) : {};
-                        assigned.text = api.text();
-                        return UI.logViewer(assigned);
-                    }
-                };
-
-                return api;
-            })();
-        }
-
-        if (typeof WaveletModules === 'undefined') {
-            var WaveletModules = (function () {
-                var cache = {};
+	        if (typeof WaveletModules === 'undefined') {
+	            var WaveletModules = (function () {
+	                var cache = {};
                 var normalize = function (name) {
                     return String(name || '').trim();
                 };
