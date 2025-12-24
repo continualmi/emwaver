@@ -87,6 +87,7 @@ struct WaveletsView: View {
                         previewManager.invoke(token: token, arguments: args)
                     }
                     .opacity(previewManager.waveletTree == nil ? 0 : 1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     
                     if previewManager.waveletTree == nil {
                         VStack {
