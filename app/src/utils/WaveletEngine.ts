@@ -404,13 +404,13 @@ export class WaveletEngine {
         throw new Error('Context not available');
       }
 
-      const wrappedModule = `(function() {
+      const wrappedModule = `return (function() {
         const module = { exports: {} };
         ${source.content}
         return module.exports;
       })();`;
 
-      const func = new this.context.Function(wrappedModule);
+      const func = new Function(wrappedModule);
       const exports = func.call(this.context);
       
       // Cache result

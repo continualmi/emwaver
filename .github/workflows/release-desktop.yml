@@ -1,0 +1,183 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'app-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+
+jobs:
+  build:
+    name: Build Desktop for ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri -> target
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            pkg-config \
+            libdbus-1-dev \
+            libbluetooth-dev \
+            libudev-dev \
+            rpm \
+            squashfs-tools
+          # Some runners ship `libfuse2` under a different package name.
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
+
+      - name: Install npm deps
+        run: |
+          cd app
+          npm ci
+
+      - name: Build bundles
+        shell: bash
+        run: |
+          cd app
+          npm run tauri build -- --ci
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          BUNDLE_DIR="app/src-tauri/target/release/bundle"
+
+          if [ ! -d "$BUNDLE_DIR" ]; then
+            echo "Bundle directory not found: $BUNDLE_DIR"
+            exit 1
+          fi
+
+          # Grab common installer formats across platforms.
+          # Note: file names vary by platform and bundler target, so match by extension.
+          mapfile -t FILES < <(find "$BUNDLE_DIR" -type f \( \
+            -name "*.dmg" -o \
+            -name "*.app.tar.gz" -o \
+            -name "*.msi" -o \
+            -name "*.exe" -o \
+            -name "*.deb" -o \
+            -name "*.rpm" -o \
+            -name "*.AppImage" \
+          \))
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "No bundle artifacts found under $BUNDLE_DIR"
+            find "$BUNDLE_DIR" -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
+          for f in "${FILES[@]}"; do
+            base="$(basename "$f")"
+            cp "$f" "artifacts/emwaver-${{ matrix.platform }}-${base}"
+          done
+
+          ls -la artifacts
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: emwaver-desktop-${{ matrix.platform }}
+          path: artifacts/*
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="app-${VERSION}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#app-}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+          echo "Tag: $TAG"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd artifacts
+          find . -type f ! -name "*.sha256" -print0 | while IFS= read -r -d '' file; do
+            sha256sum "$file" > "${file}.sha256"
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: EMWaver Desktop ${{ steps.version.outputs.version }}
+          body: |
+            ## EMWaver Desktop ${{ steps.version.outputs.version }}
+
+            Downloads for macOS, Windows, and Linux are attached below.
+
+            ### Notes
+            - macOS builds are unsigned unless explicitly configured for signing/notarization.
+            - Only use EMWaver on devices and systems you own or have permission to test.
+          files: artifacts/**/*
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

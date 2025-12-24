@@ -414,7 +414,7 @@ function App() {
         setOpenFiles([]);
         setActiveFileId(null);
         setShouldRestoreProject(false);
-        setActivePane("explorer");
+        setActivePane("wavelets");
         updateRecentProjects((prev) => {
           const filtered = prev.filter((entry) => entry.path !== directory);
           return [
@@ -567,7 +567,7 @@ function App() {
         return;
       }
       if (activeFileId === node.id) {
-        setActivePane("explorer");
+        setActivePane("wavelets");
         return;
       }
       await commitPendingSave();
@@ -575,7 +575,7 @@ function App() {
       if (existing) {
         setSelectedFileId(node.id);
         setActiveFileId(existing.id);
-        setActivePane("explorer");
+        setActivePane("wavelets");
         return;
       }
       setIsLoadingFile(true);
@@ -606,7 +606,7 @@ function App() {
           return [...prev, file];
         });
         setActiveFileId(file.id);
-        setActivePane("explorer");
+        setActivePane("wavelets");
       } catch (error) {
         console.error(error);
         window.alert(String(error));
@@ -801,7 +801,7 @@ function App() {
   const handleSelectTab = useCallback((fileId: string) => {
     setActiveFileId(fileId);
     setSelectedFileId(fileId);
-    setActivePane("explorer");
+    setActivePane("wavelets");
   }, []);
 
   const handleCloseTab = useCallback(
@@ -927,7 +927,7 @@ function App() {
       />
       <div className="relative flex flex-1 min-h-0">
         <Pane active={isEMWaverActive}>
-          <HomePage onNavigateToFragment={handleFragmentClick} isActive={isEMWaverActive} />
+          <HomePage onNavigateToFragment={handleFragmentClick} />
         </Pane>
         <Pane active={isWaveletsActive}><WaveletsFragment theme={theme} /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
