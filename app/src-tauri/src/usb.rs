@@ -46,8 +46,15 @@ impl USBState {
     pub async fn list_ports() -> Result<Vec<String>, String> {
         spawn_blocking(move || {
             let ports = serialport::available_ports().map_err(|e| format!("Failed to list ports: {}", e))?;
-            let port_names: Vec<String> = ports.into_iter().map(|p| p.port_name).collect();
-            Ok(port_names)
+            let (mut usb, mut other): (Vec<SerialPortInfo>, Vec<SerialPortInfo>) =
+                ports.into_iter().partition(|p| matches!(p.port_type, SerialPortType::UsbPort(_)));
+
+            if usb.is_empty() {
+                usb.append(&mut other);
+            }
+
+            usb.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+            Ok(usb.into_iter().map(|p| p.port_name).collect())
         })
         .await
         .map_err(|e| format!("Task failed: {}", e))?
@@ -61,7 +68,22 @@ impl USBState {
             serialport::new(port_name_clone, 115200)
                 .timeout(Duration::from_millis(100))
                 .open()
-                .map_err(|e| format!("Failed to open port: {}", e))
+                .map_err(|e| {
+                    let message = e.to_string();
+                    if message.contains("Permission denied") {
+                        format!(
+                            "Failed to open port (permission denied): {}. On Linux, ensure your user is in the 'dialout' group and re-login.",
+                            message
+                        )
+                    } else if message.contains("Device or resource busy") || message.contains("Resource busy") {
+                        format!(
+                            "Failed to open port (busy): {}. Close any other serial monitors (idf.py monitor, screen, ModemManager) and try again.",
+                            message
+                        )
+                    } else {
+                        format!("Failed to open port: {}", message)
+                    }
+                })
         })
         .await
         .map_err(|e| format!("Task failed: {}", e))??;

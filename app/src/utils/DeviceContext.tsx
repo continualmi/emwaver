@@ -197,7 +197,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const connectUSB = useCallback(async (port: string) => {
-    await safeInvoke('usb_connect', { portName: port });
+    await safeInvoke('usb_connect', { port_name: port }, { throwOnError: true });
   }, []);
 
   const disconnect = useCallback(async () => {
@@ -209,26 +209,26 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [status.transport]);
 
   const listUSBPorts = useCallback(async () => {
-      const ports = await safeInvoke<string[]>('usb_list_ports');
+      const ports = await safeInvoke<string[]>('usb_list_ports', undefined, { throwOnError: true });
       return ports || [];
   }, []);
 
   const sendCommand = useCallback(async (data: Uint8Array) => {
     if (status.transport === 'BLE') {
-        await safeInvoke('ble_send_packet', { data: Array.from(data) });
+        await safeInvoke('ble_send_packet', { data: Array.from(data) }, { throwOnError: true });
     } else if (status.transport === 'USB') {
-        await safeInvoke('usb_send_packet', { data: Array.from(data) });
+        await safeInvoke('usb_send_packet', { data: Array.from(data) }, { throwOnError: true });
     }
   }, [status.transport]);
 
   const transmitBuffer = useCallback(async (data: Uint8Array) => {
     if (status.transport === 'BLE') {
-        await safeInvoke('ble_transmit_buffer', { data: Array.from(data) });
+        await safeInvoke('ble_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
     } else if (status.transport === 'USB') {
         // For USB, we can just send the packet for now, or implement specific flow control if needed.
         // The firmware likely expects the same streaming behavior.
         // For now, mapping to usb_send_packet.
-        await safeInvoke('usb_send_packet', { data: Array.from(data) });
+        await safeInvoke('usb_send_packet', { data: Array.from(data) }, { throwOnError: true });
     }
   }, [status.transport]);
 

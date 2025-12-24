@@ -34,3 +34,8 @@ sudo add-apt-repository -y ppa:webkit-team/ppa
 sudo apt-get update
 sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 ```
+- USB serial access often requires Linux permissions:
+```bash
+sudo usermod -a -G dialout "$USER"
+# then log out/in (or reboot)
+```

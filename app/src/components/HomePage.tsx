@@ -98,6 +98,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
         }
     } catch (e) {
         console.error("Failed to list ports", e);
+        alert(`Failed to list USB ports: ${String(e)}`);
     } finally {
         setIsRefreshingPorts(false);
     }
@@ -188,14 +189,19 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   };
 
   const handleConnect = async () => {
-      if (selectedTransport === 'BLE') {
-          await connectBLE();
-      } else {
-          if (!selectedPort) {
-              alert("Please select a USB port");
-              return;
-          }
-          await connectUSB(selectedPort);
+      try {
+        if (selectedTransport === 'BLE') {
+            await connectBLE();
+        } else {
+            if (!selectedPort) {
+                alert("Please select a USB port");
+                return;
+            }
+            await connectUSB(selectedPort);
+        }
+      } catch (e) {
+        console.error("Connect failed", e);
+        alert(`Connect failed: ${String(e)}`);
       }
   };
 
