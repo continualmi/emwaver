@@ -115,9 +115,13 @@ public final class WaveletEngine {
                 try {
                     cx.evaluateString(scope, wrapped, "WaveletScript", 1, null);
                 } catch (RhinoException ex) {
-                    String message = "Wavelet error: " + formatRhinoException(ex);
-                    WaveletConsoleState.getInstance().append(message);
-                    dispatchPrint(message);
+                    String summary = "Wavelet error: " + formatRhinoException(ex);
+                    dispatchPrint(summary);
+                    dispatchDialog("Wavelet Error", summary + "\n\n" + fullRhinoTrace(ex));
+                } catch (Exception ex) {
+                    String summary = "Wavelet error: " + ex.getMessage();
+                    dispatchPrint(summary);
+                    dispatchDialog("Wavelet Error", summary + "\n\n" + android.util.Log.getStackTraceString(ex));
                 }
             } finally {
                 Context.exit();
@@ -137,7 +141,6 @@ public final class WaveletEngine {
             Function function = callbackRegistry.get(token);
             if (function == null) {
                 String message = "No callback registered for token " + token;
-                WaveletConsoleState.getInstance().append(message);
                 dispatchPrint(message);
                 return;
             }
@@ -150,9 +153,13 @@ public final class WaveletEngine {
                 android.util.Log.d("WaveletEngine", "calling JS function for token=" + token);
                 function.call(cx, scope, scope, jsArgs);
             } catch (RhinoException ex) {
-                String message = "Wavelet callback error: " + formatRhinoException(ex);
-                WaveletConsoleState.getInstance().append(message);
-                dispatchPrint(message);
+                String summary = "Wavelet callback error: " + formatRhinoException(ex);
+                dispatchPrint(summary);
+                dispatchDialog("Wavelet Error", summary + "\n\n" + fullRhinoTrace(ex));
+            } catch (Exception ex) {
+                String summary = "Wavelet callback error: " + ex.getMessage();
+                dispatchPrint(summary);
+                dispatchDialog("Wavelet Error", summary + "\n\n" + android.util.Log.getStackTraceString(ex));
             } finally {
                 Context.exit();
             }
@@ -260,7 +267,6 @@ public final class WaveletEngine {
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 if (args.length > 0) {
                     String message = String.valueOf(args[0]);
-                    WaveletConsoleState.getInstance().append(message);
                     dispatchPrint(message);
                 }
                 return Context.getUndefinedValue();
@@ -272,7 +278,6 @@ public final class WaveletEngine {
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 if (args.length == 0 || !(args[0] instanceof Scriptable)) {
                     String message = "Wavelet render called with invalid node";
-                    WaveletConsoleState.getInstance().append(message);
                     dispatchPrint(message);
                     return Context.getUndefinedValue();
                 }
@@ -281,7 +286,6 @@ public final class WaveletEngine {
                     dispatchRender(tree);
                 } else {
                     String message = "Wavelet render received malformed node";
-                    WaveletConsoleState.getInstance().append(message);
                     dispatchPrint(message);
                 }
                 return Context.getUndefinedValue();
@@ -350,37 +354,6 @@ public final class WaveletEngine {
                 }
                 
                 return Context.getUndefinedValue();
-            }
-        });
-
-        ScriptableObject.putProperty(scope, "_waveletConsoleAppend", new BaseFunction() {
-            @Override
-            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length > 0 && args[0] != null && args[0] != Undefined.instance) {
-                    String message = String.valueOf(args[0]);
-                    WaveletConsoleState.getInstance().append(message);
-                }
-                return Context.getUndefinedValue();
-            }
-        });
-
-        ScriptableObject.putProperty(scope, "_waveletConsoleClear", new BaseFunction() {
-            @Override
-            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                WaveletConsoleState.getInstance().clear();
-                return Context.getUndefinedValue();
-            }
-        });
-
-        ScriptableObject.putProperty(scope, "_waveletConsoleSetLimit", new BaseFunction() {
-            @Override
-            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length > 0 && args[0] instanceof Number) {
-                    int requested = ((Number) args[0]).intValue();
-                    int applied = WaveletConsoleState.getInstance().setLimit(requested);
-                    return applied;
-                }
-                return WaveletConsoleState.getInstance().getLimit();
             }
         });
 
@@ -473,12 +446,10 @@ public final class WaveletEngine {
             return exportsValue;
         } catch (RhinoException ex) {
             String message = "Failed to load module '" + source.name + "': " + formatRhinoException(ex);
-            WaveletConsoleState.getInstance().append(message);
             dispatchPrint(message);
             throw ex;
         } catch (Exception ex) {
             String message = "Failed to load module '" + source.name + "': " + ex.getMessage();
-            WaveletConsoleState.getInstance().append(message);
             dispatchPrint(message);
             EvaluatorException evaluatorException = new EvaluatorException(message);
             evaluatorException.initCause(ex);
@@ -515,6 +486,24 @@ public final class WaveletEngine {
         }
 
         return builder.toString();
+    }
+
+    private String fullRhinoTrace(RhinoException ex) {
+        if (ex == null) {
+            return "";
+        }
+        String trace = ex.getScriptStackTrace();
+        if (trace == null || trace.trim().isEmpty()) {
+            return ex.toString();
+        }
+        return trace.trim();
+    }
+
+    private void dispatchDialog(String title, String message) {
+        if (dialogCallback == null) {
+            return;
+        }
+        mainHandler.post(() -> dialogCallback.showDialog(title, message));
     }
 
     private String normalizeModuleName(String rawName) {
@@ -818,99 +807,9 @@ public final class WaveletEngine {
         "    },\n" +
         "    log: function (message) {\n" +
         "        var text = String(message);\n" +
-        "        if (typeof WaveletConsole !== 'undefined' && WaveletConsole && typeof WaveletConsole.append === 'function') {\n" +
-        "            WaveletConsole.append(text);\n" +
-        "            return;\n" +
-        "        }\n" +
         "        _waveletPrint(text);\n" +
         "    }\n" +
         "};\n" +
-        "\n" +
-        "if (typeof WaveletConsole === 'undefined') {\n" +
-        "    var WaveletConsole = (function () {\n" +
-        "        var lines = [];\n" +
-        "        var subscribers = [];\n" +
-        "        var limit = 500;\n" +
-        "\n" +
-        "        var notify = function () {\n" +
-        "            for (var i = 0; i < subscribers.length; i += 1) {\n" +
-        "                try {\n" +
-        "                    subscribers[i](lines.slice());\n" +
-        "                } catch (err) {\n" +
-        "                    // ignore subscriber errors\n" +
-        "                }\n" +
-        "            }\n" +
-        "        };\n" +
-        "\n" +
-        "        var trim = function () {\n" +
-        "            if (lines.length > limit) {\n" +
-        "                lines.splice(0, lines.length - limit);\n" +
-        "            }\n" +
-        "        };\n" +
-        "\n" +
-        "        var api = {\n" +
-        "            setLimit: function (value) {\n" +
-        "                if (typeof value === 'number' && value > 0) {\n" +
-        "                    limit = value;\n" +
-        "                    if (typeof _waveletConsoleSetLimit === 'function') {\n" +
-        "                        var applied = _waveletConsoleSetLimit(value);\n" +
-        "                        if (typeof applied === 'number' && applied > 0) {\n" +
-        "                            limit = applied;\n" +
-        "                        }\n" +
-        "                    }\n" +
-        "                    trim();\n" +
-        "                }\n" +
-        "                return limit;\n" +
-        "            },\n" +
-        "            append: function (message) {\n" +
-        "                var text = String(message);\n" +
-        "                lines.push(text);\n" +
-        "                trim();\n" +
-        "                notify();\n" +
-        "                if (typeof _waveletPrint === 'function') {\n" +
-        "                    _waveletPrint(text);\n" +
-        "                }\n" +
-        "            },\n" +
-        "            clear: function () {\n" +
-        "                lines.length = 0;\n" +
-        "                notify();\n" +
-        "                if (typeof _waveletConsoleClear === 'function') {\n" +
-        "                    _waveletConsoleClear();\n" +
-        "                }\n" +
-        "            },\n" +
-        "            subscribe: function (fn) {\n" +
-        "                if (typeof fn !== 'function') {\n" +
-        "                    return function () {};\n" +
-        "                }\n" +
-        "                subscribers.push(fn);\n" +
-        "                try {\n" +
-        "                    fn(lines.slice());\n" +
-        "                } catch (err) {\n" +
-        "                    // ignore initial subscriber error\n" +
-        "                }\n" +
-        "                return function () {\n" +
-        "                    var index = subscribers.indexOf(fn);\n" +
-        "                    if (index >= 0) {\n" +
-        "                        subscribers.splice(index, 1);\n" +
-        "                    }\n" +
-        "                };\n" +
-        "            },\n" +
-        "            lines: function () {\n" +
-        "                return lines.slice();\n" +
-        "            },\n" +
-        "            text: function () {\n" +
-        "                return lines.join('\\n');\n" +
-        "            },\n" +
-        "            view: function (props) {\n" +
-        "                var assigned = props ? Object.assign({}, props) : {};\n" +
-        "                assigned.text = api.text();\n" +
-        "                return UI.logViewer(assigned);\n" +
-        "            }\n" +
-        "        };\n" +
-        "\n" +
-        "        return api;\n" +
-        "    })();\n" +
-        "}\n" +
         "\n" +
         "if (typeof WaveletModules === 'undefined') {\n" +
         "    var WaveletModules = (function () {\n" +

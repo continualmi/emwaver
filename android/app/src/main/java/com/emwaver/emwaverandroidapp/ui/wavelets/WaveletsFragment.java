@@ -60,7 +60,6 @@ import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ui.wavelets.ScriptMetadata;
-import com.emwaver.emwaverandroidapp.wavelets.WaveletConsoleState;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletEngine;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletDeviceConnection;
 import com.emwaver.emwaverandroidapp.wavelets.WaveletRenderView;
@@ -130,10 +129,6 @@ public class WaveletsFragment extends Fragment {
     private CardView assetScriptsCard;
     private TextView customScriptsTitle;
     private CardView customScriptsCard;
-    private TextView consoleTitle;
-    private CardView consoleCard;
-    private ScrollView consoleScrollView;
-    private TextView consoleTextView;
     private ScrollView editorScrollViewWrap;
     private HorizontalScrollView editorScrollViewNoWrap;
     private EditText scriptEditorContentWrap;
@@ -217,16 +212,9 @@ public class WaveletsFragment extends Fragment {
         setupMenu();
         setupFileLaunchers();
         setupScriptList();
-        setupConsoleSection();
+        setupEditorSection();
         setupCollapsibleSections();
         showingPreview = false;
-        // Ensure console is hidden by default
-        if (consoleTitle != null) {
-            consoleTitle.setVisibility(View.GONE);
-        }
-        if (consoleCard != null) {
-            consoleCard.setVisibility(View.GONE);
-        }
         updateViewMode();
         updateWaveletPlaceholder();
         restoreFromViewModel();
@@ -262,10 +250,6 @@ public class WaveletsFragment extends Fragment {
         }
         waveletRenderView = null;
         showingPreview = false;
-        consoleTitle = null;
-        consoleCard = null;
-        consoleScrollView = null;
-        consoleTextView = null;
         hideLoadingDialog();
         binding = null;
         super.onDestroyView();
@@ -285,7 +269,6 @@ public class WaveletsFragment extends Fragment {
                 MenuItem renameItem = menu.findItem(R.id.editor_rename);
                 MenuItem deleteItem = menu.findItem(R.id.editor_delete);
                 MenuItem lineWrapItem = menu.findItem(R.id.editor_line_wrap);
-                MenuItem clearConsoleItem = menu.findItem(R.id.action_clear_console);
                 
                 boolean showEditorItems = showingEditor;
                 boolean isAssetScript = currentScriptMetadata != null && currentScriptMetadata.isAssetScript();
@@ -298,8 +281,6 @@ public class WaveletsFragment extends Fragment {
                     lineWrapItem.setVisible(showEditorItems);
                     lineWrapItem.setChecked(lineWrapEnabled);
                 }
-                // Show clear console menu item only when previewing
-                if (clearConsoleItem != null) clearConsoleItem.setVisible(showingPreview);
             }
 
             @Override
@@ -357,9 +338,6 @@ public class WaveletsFragment extends Fragment {
                     return true;
                 } else if (itemId == R.id.reset_defaults) {
                     showResetDefaultsConfirmationDialog();
-                    return true;
-                } else if (itemId == R.id.action_clear_console) {
-                    WaveletConsoleState.getInstance().clear();
                     return true;
                 }
                 return false;
@@ -429,12 +407,7 @@ public class WaveletsFragment extends Fragment {
         updateArrow(customScriptsTitle, customScriptsCard.getVisibility() == View.VISIBLE);
     }
 
-    private void setupConsoleSection() {
-        consoleTitle = binding.consoleTitle;
-        consoleCard = binding.consoleCard;
-        consoleScrollView = binding.consoleScroll;
-        consoleTextView = binding.consoleText;
-
+    private void setupEditorSection() {
         scriptEditorContainer = binding.scriptEditorContainer;
         scriptEditorContent = binding.scriptEditorContent;
         editorScrollViewWrap = binding.editorScrollViewWrap;
@@ -498,25 +471,6 @@ public class WaveletsFragment extends Fragment {
         });
         
         updateLineWrap();
-
-        updateConsoleText(WaveletConsoleState.getInstance().snapshot());
-        WaveletConsoleState.getInstance().observe().observe(getViewLifecycleOwner(), this::updateConsoleText);
-    }
-
-    private void updateConsoleText(List<String> lines) {
-        if (consoleTextView == null) {
-            return;
-        }
-        String text;
-        if (lines == null || lines.isEmpty()) {
-            text = "Console is empty.";
-        } else {
-            text = TextUtils.join("\n", lines);
-        }
-        consoleTextView.setText(text);
-        if (consoleScrollView != null && lines != null && !lines.isEmpty()) {
-            consoleScrollView.post(() -> consoleScrollView.fullScroll(View.FOCUS_DOWN));
-        }
     }
 
     private void refreshScriptList() {
@@ -1598,18 +1552,6 @@ public class WaveletsFragment extends Fragment {
 
     private void setupCollapsibleSections() {
         // Asset and custom scripts sections are set up in setupScriptList()
-        
-        if (consoleTitle != null && consoleCard != null) {
-            // Only allow collapsing/expanding when previewing
-            consoleTitle.setOnClickListener(v -> {
-                if (showingPreview) {
-                    toggleVisibility(consoleCard);
-                    updateArrow((TextView) v, consoleCard.getVisibility() == View.VISIBLE);
-                }
-            });
-            // Initialize arrow state based on current visibility
-            updateArrow(consoleTitle, consoleCard.getVisibility() == View.VISIBLE);
-        }
     }
 
     private void renderWavelet(String script) {
@@ -1630,16 +1572,6 @@ public class WaveletsFragment extends Fragment {
         isRenderingWavelet = true;
         activeWaveletTree = null;
         showingPreview = true;
-        // Show console title when previewing, but collapse console card by default
-        if (consoleTitle != null) {
-            consoleTitle.setVisibility(View.VISIBLE);
-        }
-        if (consoleCard != null) {
-            consoleCard.setVisibility(View.GONE); // Collapsed by default
-        }
-        if (consoleTitle != null) {
-            updateArrow(consoleTitle, false); // Update arrow to show collapsed state
-        }
         updateViewMode();
         ensureWaveletRenderView();
         if (waveletRenderView != null) {
@@ -1769,22 +1701,6 @@ public class WaveletsFragment extends Fragment {
         }
         binding.waveletContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         scriptEditorContainer.setVisibility(showingEditor ? View.VISIBLE : View.GONE);
-        
-        // Console title and card should ONLY be visible when previewing
-        if (consoleTitle != null) {
-            consoleTitle.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
-        }
-        if (consoleCard != null) {
-            // Only show console card when previewing
-            if (showingPreview) {
-                // Console card starts collapsed (GONE) when preview begins, user can expand it via console title click
-                // Don't change visibility here if it's already set (allows user to expand/collapse)
-                // But ensure it's hidden if we're exiting preview
-            } else {
-                // Hide console card completely when not previewing
-                consoleCard.setVisibility(View.GONE);
-            }
-        }
         
         if (getActivity() != null) {
             androidx.appcompat.app.AppCompatActivity activity = (androidx.appcompat.app.AppCompatActivity) getActivity();

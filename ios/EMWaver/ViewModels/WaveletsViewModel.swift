@@ -547,7 +547,17 @@ final class WaveletsViewModel: ObservableObject {
 
     private func defaultTemplate() -> String {
         "// Wavelet script\n" +
-        "WaveletConsole.subscribe(render);\n" +
+        "let logLines = [];\n" +
+        "const nativePrint = print;\n\n" +
+        "function log(message) {\n" +
+        "    const text = String(message);\n" +
+        "    logLines.push(text);\n" +
+        "    if (logLines.length > 200) {\n" +
+        "        logLines.splice(0, logLines.length - 200);\n" +
+        "    }\n" +
+        "    nativePrint(text);\n" +
+        "    render();\n" +
+        "}\n\n" +
         "render();\n\n" +
         "function render() {\n" +
         "    UI.render(UI.column({\n" +
@@ -556,7 +566,7 @@ final class WaveletsViewModel: ObservableObject {
         "        children: [\n" +
         "            UI.text({ text: 'Wavelet Title', font: 'title2', fontWeight: 'semibold' }),\n" +
         "            UI.text({ text: 'Customize this script to add controls and logic.', foregroundColor: '#6B7280' }),\n" +
-        "            WaveletConsole.view({ minHeight: 160, backgroundColor: '#111827', foregroundColor: '#F9FAFB', padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
+        "            UI.logViewer({ text: logLines.join('\\n'), minHeight: 160, backgroundColor: '#111827', foregroundColor: '#F9FAFB', padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
         "        ]\n" +
         "    }));\n" +
         "}\n"

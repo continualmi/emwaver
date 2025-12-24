@@ -11,7 +11,7 @@ The EMWaver DSL defines how Wavelets describe user interfaces and bind hardware 
 - Instantiate global state at the top of the script.
 - Implement a `render()` function that constructs the UI tree and calls `UI.render(...)`.
 - Update state inside event handlers, then call `render()` again to refresh the view.
-- Subscribe to console streams with `WaveletConsole.subscribe(render)` when the layout should react to new log lines.
+- If you want logs to appear inside the UI, append them to state and pass them into `UI.logViewer({ text: ... })`.
 
 ```javascript title="default_files/wavelet_demo.js"
 const root = UI.column({
@@ -104,10 +104,21 @@ UI.column({
 ## Console Integration
 
 - `UI.logViewer()` streams `print` and `console.*` output inline, as shown in `wavelet_demo.js` and `wavelet_gpio.js`.
-- For richer terminals, `WaveletConsole.view(...)` mirrors the execution log with theming options. Pair it with `WaveletConsole.subscribe(render)` to re-render as new lines arrive (`hello_world_usb.js`).
+- A common pattern is to wrap `print()` so it also appends to a local buffer that you render via `UI.logViewer`.
 
 ```javascript title="default_files/hello_world_usb.js"
-WaveletConsole.subscribe(render);
+let logLines = [];
+const nativePrint = print;
+
+function log(message) {
+    const text = String(message);
+    logLines.push(text);
+    if (logLines.length > 200) {
+        logLines = logLines.slice(logLines.length - 200);
+    }
+    nativePrint(text);
+    render();
+}
 
 function render() {
     UI.render(UI.column({
@@ -116,7 +127,8 @@ function render() {
         children: [
             UI.text({ text: 'BadUSB Hello World', font: 'title2', fontWeight: 'semibold' }),
             UI.button({ label: 'Execute Payload', backgroundColor: '#1D4ED8', foregroundColor: '#FFFFFF', onTap: runDemo }),
-            WaveletConsole.view({
+            UI.logViewer({
+                text: logLines.join('\\n'),
                 minHeight: 160,
                 backgroundColor: '#111827',
                 foregroundColor: '#F9FAFB',
@@ -171,4 +183,3 @@ function gpioRead() {
 - **Reuse helpers:** extract repeated command builders or parsing utilities to shared modules when authoring complex wavelets.
 
 These examples ship with the EMWaver backend (`default_files/*.js`) and provide a solid starting point for building your own interfaces. Extend them to integrate new hardware workflows while retaining consistent UI behavior across platforms.
-
