@@ -22,3 +22,15 @@ git push origin app-v0.1.0
 ```
 
 3) Download artifacts from the GitHub Release created by `.github/workflows/release-desktop.yml`.
+
+## Linux Notes
+
+- The Linux AppImage is built on Ubuntu 22.04 to avoid requiring a very new `glibc`.
+- Tauri v2 depends on WebKitGTK 4.1. On Ubuntu 22.04, you may need the upstream WebKit PPA:
+```bash
+sudo apt-get update
+sudo apt-get install -y software-properties-common
+sudo add-apt-repository -y ppa:webkit-team/ppa
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+```
