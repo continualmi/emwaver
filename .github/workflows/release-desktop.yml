@@ -23,11 +23,11 @@ jobs:
             platform: linux
           - os: windows-latest
             platform: windows
-          # GitHub's `macos-latest` currently targets Apple Silicon (ARM64).
           # Build both Intel and Apple Silicon bundles so users can download the right DMG.
-          - os: macos-13
+          # `macos-15-intel` is the current Intel runner label; `macos-latest` targets Apple Silicon (ARM64).
+          - os: macos-15-intel
             platform: macos-x64
-          - os: macos-14
+          - os: macos-latest
             platform: macos-arm64
 
     steps:
