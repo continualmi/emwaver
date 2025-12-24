@@ -143,7 +143,7 @@ function render() {
 
 Wavelets can call into hardware abstractions exposed by the runtime:
 
-- `CC1101.*` handles radio configuration (`cc1101_radio_console.js`).
+- `DeviceConnection.sendCommandString("cc1101 ...")` sends ASCII command-protocol verbs to firmware (`cc1101.js`).
 - `BLEService.sendCommand(...)` exchanges raw packets with the firmware (`wavelet_gpio.js`, `wavelet_rfid.js`).
 - `BLEService.sendString(...)` and `Utils.delay(...)` orchestrate BadUSB attacks (`hello_world_usb.js`).
 
