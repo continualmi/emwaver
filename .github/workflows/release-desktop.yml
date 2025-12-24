@@ -216,6 +216,14 @@ jobs:
 
           echo "Stapling notarization ticket..."
           xcrun stapler staple "$DMG_PATH"
+          xcrun stapler staple "$APP_PATH"
+
+          echo "Validating staple..."
+          xcrun stapler validate "$DMG_PATH" || true
+          xcrun stapler validate "$APP_PATH" || true
+
+          echo "Gatekeeper assessment (app):"
+          spctl -a -vv --type execute "$APP_PATH" || true
 
       - name: Collect artifacts
         shell: bash
@@ -233,19 +241,28 @@ jobs:
           # Grab common installer formats across platforms.
           # Note: file names vary by platform and bundler target, so match by extension.
           found=0
-          while IFS= read -r -d '' f; do
-            found=1
-            base="$(basename "$f")"
-            cp "$f" "artifacts/emwaver-${{ matrix.platform }}-${base}"
-          done < <(find "$BUNDLE_DIR" -type f \( \
-              -name "*.dmg" -o \
-              -name "*.app.tar.gz" -o \
-              -name "*.msi" -o \
-              -name "*.exe" -o \
-              -name "*.deb" -o \
-              -name "*.rpm" -o \
-              -name "*.AppImage" \
-            \) -print0)
+          if [[ "${{ matrix.platform }}" == macos-* ]]; then
+            # Only ship the notarized DMG we generate under `bundle/macos/`.
+            while IFS= read -r -d '' f; do
+              found=1
+              base="$(basename "$f")"
+              cp "$f" "artifacts/emwaver-${{ matrix.platform }}-${base}"
+            done < <(find "$BUNDLE_DIR/macos" -maxdepth 1 -type f -name "*.dmg" -print0)
+          else
+            while IFS= read -r -d '' f; do
+              found=1
+              base="$(basename "$f")"
+              cp "$f" "artifacts/emwaver-${{ matrix.platform }}-${base}"
+            done < <(find "$BUNDLE_DIR" -type f \( \
+                -name "*.dmg" -o \
+                -name "*.app.tar.gz" -o \
+                -name "*.msi" -o \
+                -name "*.exe" -o \
+                -name "*.deb" -o \
+                -name "*.rpm" -o \
+                -name "*.AppImage" \
+              \) -print0)
+          fi
 
           if [ "$found" -eq 0 ]; then
             echo "No bundle artifacts found under $BUNDLE_DIR"
