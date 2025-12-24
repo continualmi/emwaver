@@ -8,8 +8,11 @@ function initRx() {
     DeviceConnection.sendCommandString("cc1101 apply_defaults");
     DeviceConnection.sendCommandString("cc1101 write --reg=0x08 --val=0x32");
     DeviceConnection.sendCommandString("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
-    // Ensure the MCU pin connected to CC1101 GDO0 (IO1) is configured as input.
+    // Ensure the MCU pins connected to CC1101 GDO0 are configured as input.
+    // - ESP32-S3 wiring uses IO1.
+    // - STM32F042 wiring uses PA2 (encoded as pin 2 in `gpio --pin`).
     DeviceConnection.sendCommandString("gpio in --pin=1");
+    DeviceConnection.sendCommandString("gpio in --pin=2");
     DeviceConnection.sendCommandString("cc1101 set_freq --mhz=433.92");
     DeviceConnection.sendCommandString("cc1101 set_datarate --bps=100000");
     DeviceConnection.sendCommandString("cc1101 set_mod_power --mod=3 --dbm=10");
@@ -26,6 +29,8 @@ function initTx() {
     DeviceConnection.sendCommandString("cc1101 apply_defaults");
     DeviceConnection.sendCommandString("cc1101 write --reg=0x08 --val=0x32");
     DeviceConnection.sendCommandString("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
+    DeviceConnection.sendCommandString("gpio in --pin=1");
+    DeviceConnection.sendCommandString("gpio in --pin=2");
     DeviceConnection.sendCommandString("cc1101 set_freq --mhz=433.92");
     DeviceConnection.sendCommandString("cc1101 set_datarate --bps=100000");
     DeviceConnection.sendCommandString("cc1101 set_mod_power --mod=3 --dbm=10");
