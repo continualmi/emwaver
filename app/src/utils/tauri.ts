@@ -40,10 +40,13 @@ export function isTauriAvailable(): boolean {
  */
 export async function safeInvoke<T>(
   cmd: string,
-  args?: Record<string, unknown>
+  args?: Record<string, unknown>,
+  options?: { throwOnError?: boolean }
 ): Promise<T | null> {
   if (!isTauriAvailable()) {
-    console.warn(`Tauri not available: cannot invoke ${cmd}`);
+    const error = new Error(`Tauri not available: cannot invoke ${cmd}`);
+    if (options?.throwOnError) throw error;
+    console.warn(error.message);
     return null;
   }
   
@@ -51,6 +54,7 @@ export async function safeInvoke<T>(
     const { invoke } = await import("@tauri-apps/api/core");
     return await invoke<T>(cmd, args);
   } catch (error) {
+    if (options?.throwOnError) throw error;
     console.error(`Failed to invoke ${cmd}:`, error);
     return null;
   }
