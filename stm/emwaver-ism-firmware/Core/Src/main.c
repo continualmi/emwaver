@@ -24,6 +24,8 @@
 /* USER CODE BEGIN Includes */
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include "usbd_cdc_if.h"
 #include "cc1101.h"
 /* USER CODE END Includes */
@@ -51,7 +53,8 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-uint16_t samplerPin;
+static GPIO_TypeDef *samplerPort = GPIOA;
+static uint16_t samplerPin = GPIO_PIN_0;
 volatile uint32_t selectedChannel = TIM_CHANNEL_3; // Default to channel 3 for backward compatibility
 
 uint8_t * bulk_packet = NULL;
@@ -85,9 +88,11 @@ static void MX_SPI1_Init(void);
 typedef enum {
     ISM_MODE_IDLE = 0,
     ISM_MODE_RAW_SAMPLING = 1,
+    ISM_MODE_TRANSMITTING = 2,
 } ism_mode_t;
 
 static volatile ism_mode_t ism_mode = ISM_MODE_IDLE;
+static volatile uint32_t transmit_last_data_tick = 0;
 
 static void free_bulk_packet(void)
 {
@@ -98,16 +103,22 @@ static void free_bulk_packet(void)
     }
 }
 
-static void send_err(void)
+static void command_send_ok(const uint8_t *data, size_t len)
 {
-    static const uint8_t msg[] = "ERR";
-    (void)CDC_SendResponsePkt_FS((uint8_t *)msg, (uint16_t)(sizeof(msg) - 1), CDC_TIMEOUT);
+    if (data && len > 0) {
+        (void)CDC_SendResponsePkt_FS((uint8_t *)data, (uint16_t)len, CDC_TIMEOUT);
+        return;
+    }
+    const uint8_t ok = 0x00;
+    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, CDC_TIMEOUT);
 }
 
-static void send_ok(void)
+static void command_send_err(const char *msg)
 {
-    static const uint8_t msg[] = "OK";
-    (void)CDC_SendResponsePkt_FS((uint8_t *)msg, (uint16_t)(sizeof(msg) - 1), CDC_TIMEOUT);
+    (void)msg;
+    // Match the registry firmware behavior: errors are best-effort no-ops.
+    const uint8_t ok = 0x00;
+    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, CDC_TIMEOUT);
 }
 
 static void ISR_Sampler_raw(void)
@@ -115,7 +126,7 @@ static void ISR_Sampler_raw(void)
     static uint8_t bitIndex = 0;
     static uint8_t currentByte = 0;
 
-    uint8_t pin_state = HAL_GPIO_ReadPin(GPIOA, samplerPin);
+    uint8_t pin_state = HAL_GPIO_ReadPin(samplerPort, samplerPin);
 
     if (pin_state) {
         currentByte |= (uint8_t)(1u << bitIndex);
@@ -222,11 +233,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
-static void configurePin(uint16_t pin, uint32_t mode, uint32_t pull)
+static void enable_gpio_clock(GPIO_TypeDef *port)
+{
+    if (port == GPIOA) {
+        __HAL_RCC_GPIOA_CLK_ENABLE();
+    } else if (port == GPIOB) {
+        __HAL_RCC_GPIOB_CLK_ENABLE();
+    }
+}
+
+static void configurePin(GPIO_TypeDef *port, uint16_t pin, uint32_t mode, uint32_t pull)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-    __HAL_RCC_GPIOA_CLK_ENABLE();
+    enable_gpio_clock(port);
     GPIO_InitStruct.Pin = pin;
     GPIO_InitStruct.Mode = mode;
     GPIO_InitStruct.Pull = pull;
@@ -234,7 +254,7 @@ static void configurePin(uint16_t pin, uint32_t mode, uint32_t pull)
     if (mode == GPIO_MODE_AF_PP) {
         GPIO_InitStruct.Alternate = GPIO_AF2_TIM2;
     }
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    HAL_GPIO_Init(port, &GPIO_InitStruct);
 }
 
 static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
@@ -261,6 +281,297 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
         default:
             break;
     }
+}
+
+static void stop_sampling(void)
+{
+    HAL_TIM_Base_Stop_IT(&htim3);
+    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+
+    free((void *)bufferA);
+    free((void *)bufferB);
+    bufferA = NULL;
+    bufferB = NULL;
+    currentBuffer = NULL;
+    transmitBuffer = NULL;
+    bufferIndex = 0;
+    bufferReady = 0;
+    ism_mode = ISM_MODE_IDLE;
+}
+
+static void stop_transmitting(void)
+{
+    HAL_TIM_Base_Stop_IT(&htim3);
+    stopPWM_TIM2(selectedChannel);
+    CDC_FlushRxBuffer_FS();
+    CDC_FreeRxBuffer_FS();
+    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+    ism_mode = ISM_MODE_IDLE;
+}
+
+static bool decode_encoded_pin(int encoded, GPIO_TypeDef **out_port, uint16_t *out_pin)
+{
+    if (!out_port || !out_pin) {
+        return false;
+    }
+    if (encoded >= 0 && encoded <= 15) {
+        *out_port = GPIOA;
+        *out_pin = (uint16_t)(1u << encoded);
+        return true;
+    }
+    if (encoded >= 16 && encoded <= 31) {
+        *out_port = GPIOB;
+        *out_pin = (uint16_t)(1u << (encoded - 16));
+        return true;
+    }
+    return false;
+}
+
+// Minimal CLI parsing (copied/adapted from stm/emwaver-firmware command_registry.c).
+#define CLI_MAX_ARGS 10
+#define CLI_MAX_POSITIONAL 4
+#define CLI_COMMAND_BUFFER 256
+
+typedef struct {
+    const char *key;
+    const char *value;
+} cli_arg_view_t;
+
+typedef struct {
+    char *verb;
+    cli_arg_view_t args[CLI_MAX_ARGS];
+    size_t arg_count;
+    char *positional[CLI_MAX_POSITIONAL];
+    size_t positional_count;
+} cli_command_view_t;
+
+static bool is_cli_space(char ch)
+{
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
+static char *next_token(char **cursor)
+{
+    if (!cursor || !*cursor) {
+        return NULL;
+    }
+
+    char *p = *cursor;
+    while (*p && is_cli_space(*p)) {
+        p++;
+    }
+    if (!*p) {
+        *cursor = p;
+        return NULL;
+    }
+
+    char *start = p;
+    while (*p && !is_cli_space(*p)) {
+        p++;
+    }
+    if (*p) {
+        *p = '\0';
+        p++;
+    }
+    *cursor = p;
+    return start;
+}
+
+static bool parse_cli_command_inplace(char *line, cli_command_view_t *out)
+{
+    if (!line || !out) {
+        return false;
+    }
+
+    memset(out, 0, sizeof(*out));
+
+    char *cursor = line;
+    char *verb = next_token(&cursor);
+    if (!verb) {
+        return false;
+    }
+    out->verb = verb;
+
+    char *pending = NULL;
+    while (1) {
+        char *token = pending ? pending : next_token(&cursor);
+        pending = NULL;
+        if (!token) {
+            break;
+        }
+
+        if (strncmp(token, "--", 2) == 0) {
+            char *key = token + 2;
+            const char *value = NULL;
+            char *eq = strchr(key, '=');
+            if (eq) {
+                *eq = '\0';
+                value = eq + 1;
+            } else {
+                char *next = next_token(&cursor);
+                if (!next) {
+                    value = "1";
+                } else if (strncmp(next, "--", 2) == 0) {
+                    value = "1";
+                    pending = next;
+                } else {
+                    value = next;
+                }
+            }
+            if (out->arg_count < CLI_MAX_ARGS) {
+                out->args[out->arg_count].key = key;
+                out->args[out->arg_count].value = value ? value : "";
+                out->arg_count++;
+            }
+        } else {
+            if (out->positional_count < CLI_MAX_POSITIONAL) {
+                out->positional[out->positional_count] = token;
+                out->positional_count++;
+            }
+        }
+    }
+
+    return true;
+}
+
+static const char *cli_get_arg_view(const cli_command_view_t *cmd, const char *key)
+{
+    if (!cmd || !key) {
+        return NULL;
+    }
+    for (size_t i = 0; i < cmd->arg_count; ++i) {
+        if (cmd->args[i].key && strcmp(cmd->args[i].key, key) == 0) {
+            return cmd->args[i].value;
+        }
+    }
+    return NULL;
+}
+
+static bool cli_parse_int(const char *str, int *out_value)
+{
+    if (!str || !out_value) {
+        return false;
+    }
+    char *end = NULL;
+    long value = strtol(str, &end, 0);
+    if (end == str || (end && *end != '\0')) {
+        return false;
+    }
+    *out_value = (int)value;
+    return true;
+}
+
+static int from_hex(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    return -1;
+}
+
+static bool cli_parse_hex_bytes(const char *str, uint8_t *out, size_t max_len, size_t *out_len)
+{
+    if (!str || !out || !out_len) {
+        return false;
+    }
+
+    size_t written = 0;
+    int pending = -1;
+
+    for (const char *p = str; *p; ++p) {
+        char c = *p;
+
+        if (c == '0' && (p[1] == 'x' || p[1] == 'X')) {
+            ++p;
+            continue;
+        }
+
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',' || c == ':' || c == '_' || c == '-') {
+            continue;
+        }
+
+        int nib = from_hex(c);
+        if (nib < 0) {
+            return false;
+        }
+
+        if (pending < 0) {
+            pending = nib;
+        } else {
+            if (written >= max_len) {
+                return false;
+            }
+            out[written++] = (uint8_t)((pending << 4) | nib);
+            pending = -1;
+        }
+    }
+
+    if (pending >= 0) {
+        return false;
+    }
+
+    *out_len = written;
+    return true;
+}
+
+static bool cc1101_set_modulation_and_power(int modulation, int dbm)
+{
+    // Copied from stm/emwaver-firmware (command-driven CC1101 implementation).
+    static const int power_levels[8] = {-30, -20, -15, -10, 0, 5, 7, 10};
+    static const uint8_t power_315[8] = {0x12, 0x0D, 0x1C, 0x34, 0x51, 0x85, 0xCB, 0xC2};
+    static const uint8_t power_433[8] = {0x12, 0x0E, 0x1D, 0x34, 0x60, 0x84, 0xC8, 0xC0};
+    static const uint8_t power_868[8] = {0x03, 0x0F, 0x1E, 0x27, 0x50, 0x81, 0xCB, 0xC2};
+    static const uint8_t power_915[8] = {0x03, 0x0E, 0x1E, 0x27, 0x8E, 0xCD, 0xC7, 0xC0};
+
+    int power_index = -1;
+    for (int i = 0; i < 8; i++) {
+        if (power_levels[i] == dbm) {
+            power_index = i;
+            break;
+        }
+    }
+    if (power_index < 0) {
+        return false;
+    }
+
+    const uint8_t freq2 = cc1101_read_reg(0x0D);
+    const uint8_t freq1 = cc1101_read_reg(0x0E);
+    const uint8_t freq0 = cc1101_read_reg(0x0F);
+    const uint32_t freq_word = ((uint32_t)freq2 << 16) | ((uint32_t)freq1 << 8) | (uint32_t)freq0;
+    const uint32_t freq_hz = (uint32_t)((((uint64_t)freq_word * 26000000ULL) + (1u << 15)) >> 16);
+
+    const uint8_t *power_table = NULL;
+    if (freq_hz >= 300000000u && freq_hz <= 348000000u) {
+        power_table = power_315;
+    } else if (freq_hz >= 378000000u && freq_hz <= 464000000u) {
+        power_table = power_433;
+    } else if (freq_hz >= 779000000u && freq_hz <= 899990000u) {
+        power_table = power_868;
+    } else if (freq_hz >= 900000000u && freq_hz <= 928000000u) {
+        power_table = power_915;
+    } else {
+        return false;
+    }
+
+    uint8_t power_setting = power_table[power_index];
+
+    uint8_t current_mdmcfg2 = cc1101_read_reg(0x12);
+    uint8_t mdmcfg2_value = (uint8_t)((current_mdmcfg2 & 0x0F) | ((modulation & 0x07) << 4));
+    uint8_t frend0_value = (modulation == 3) ? 0x11 : 0x10; // 3 == ASK/OOK in CC1101
+
+    cc1101_write_reg(0x12, mdmcfg2_value);
+    cc1101_write_reg(0x22, frend0_value);
+
+    uint8_t pa_table[8] = {0};
+    if (modulation == 3) {
+        pa_table[0] = 0x00;
+        pa_table[1] = power_setting;
+    } else {
+        pa_table[0] = power_setting;
+        pa_table[1] = 0x00;
+    }
+    (void)cc1101_write_burst(0x3E, pa_table, sizeof(pa_table));
+    return true;
 }
 
 /* USER CODE END 0 */
@@ -319,19 +630,31 @@ int main(void)
               bufferReady = 0;
           }
 
-          if (bulk_packet != NULL && bulk_packet_len >= 1 && bulk_packet[0] == 's') {
-              HAL_TIM_Base_Stop_IT(&htim3);
-              CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+          if (bulk_packet != NULL) {
+              // `sample stop`
+              if (bulk_packet_len >= 11 && memcmp((const void *)bulk_packet, "sample stop", 11) == 0) {
+                  stop_sampling();
+              }
+              free_bulk_packet();
+          }
+          continue;
+      }
 
-              free((void *)bufferA);
-              free((void *)bufferB);
-              bufferA = NULL;
-              bufferB = NULL;
-              currentBuffer = NULL;
-              transmitBuffer = NULL;
-              bufferIndex = 0;
-              bufferReady = 0;
-              ism_mode = ISM_MODE_IDLE;
+      if (ism_mode == ISM_MODE_TRANSMITTING) {
+          if (CDC_GetRxBufferBytesAvailable_FS() > 0) {
+              transmit_last_data_tick = HAL_GetTick();
+          }
+
+          if ((HAL_GetTick() - transmit_last_data_tick) > 2000) {
+              stop_transmitting();
+          }
+
+          if (bulk_packet != NULL) {
+              // `transmit stop`
+              if (bulk_packet_len >= 13 && memcmp((const void *)bulk_packet, "transmit stop", 13) == 0) {
+                  stop_transmitting();
+                  command_send_ok(NULL, 0);
+              }
               free_bulk_packet();
           }
           continue;
@@ -342,178 +665,237 @@ int main(void)
       }
 
       if (bulk_packet_len < 1) {
-          send_err();
+          command_send_err(NULL);
           free_bulk_packet();
           continue;
       }
 
-      // Legacy CC1101 register access protocol (from ../emwaver-firmware):
-      //  ! [addr] [val]            => write reg, returns readback (1 byte)
-      //  ? [addr]                  => read reg, returns value (1 byte)
-      //  % [cmd]                   => strobe, returns status (1 byte)
-      //  > [addr] [len] [data...]  => burst write, returns status (1 byte)
-      //  < [addr] [len]            => burst read, returns data (len bytes)
-      //  I                         => init cc1101, returns "OK"
-      // Legacy sampler/tx (from ../emwaver-firmware):
-      //  raw [pin]                 => start sampler (64-byte packets) until 's'
-      //  tran [pin#][duty%]        => transmit using circular CDC buffer (auto-stops when drained)
+      static char scratch_line[CLI_COMMAND_BUFFER + 1];
+      size_t line_len = bulk_packet_len;
+      if (line_len > CLI_COMMAND_BUFFER) {
+          line_len = CLI_COMMAND_BUFFER;
+      }
+      size_t effective = 0;
+      for (size_t i = 0; i < line_len; i++) {
+          if (bulk_packet[i] == '\0') {
+              break;
+          }
+          scratch_line[i] = (char)bulk_packet[i];
+          effective++;
+      }
+      scratch_line[effective] = '\0';
+      // Trim trailing whitespace/newlines.
+      while (effective > 0 && is_cli_space(scratch_line[effective - 1])) {
+          scratch_line[effective - 1] = '\0';
+          effective--;
+      }
 
-      if (bulk_packet[0] == '!') {
-          if (bulk_packet_len < 3) {
-              send_err();
-              free_bulk_packet();
-              continue;
-          }
-          uint8_t addr = bulk_packet[1];
-          uint8_t val = bulk_packet[2];
-          cc1101_write_reg(addr, val);
-          uint8_t readback = cc1101_read_reg(addr);
-          (void)CDC_SendResponsePkt_FS(&readback, 1, CDC_TIMEOUT);
+      cli_command_view_t cmd;
+      if (!parse_cli_command_inplace(scratch_line, &cmd)) {
+          command_send_err(NULL);
           free_bulk_packet();
-      } else if (bulk_packet[0] == '?') {
-          if (bulk_packet_len < 2) {
-              send_err();
-              free_bulk_packet();
-              continue;
-          }
-          uint8_t addr = bulk_packet[1];
-          uint8_t reading = cc1101_read_reg(addr);
-          (void)CDC_SendResponsePkt_FS(&reading, 1, CDC_TIMEOUT);
-          free_bulk_packet();
-      } else if (bulk_packet[0] == '%') {
-          if (bulk_packet_len < 2) {
-              send_err();
-              free_bulk_packet();
-              continue;
-          }
-          uint8_t cmd = bulk_packet[1];
-          uint8_t status = cc1101_strobe(cmd);
-          (void)CDC_SendResponsePkt_FS(&status, 1, CDC_TIMEOUT);
-          free_bulk_packet();
-      } else if (bulk_packet[0] == '>') {
-          if (bulk_packet_len < 3) {
-              send_err();
-              free_bulk_packet();
-              continue;
-          }
-          uint8_t addr = bulk_packet[1];
-          uint8_t len = bulk_packet[2];
-          if (len > ISM_BURST_MAX) {
-              len = ISM_BURST_MAX;
-          }
-          if (bulk_packet_len < (size_t)(3u + len)) {
-              send_err();
-              free_bulk_packet();
-              continue;
-          }
-          uint8_t status = cc1101_write_burst(addr, &bulk_packet[3], (size_t)len);
-          (void)CDC_SendResponsePkt_FS(&status, 1, CDC_TIMEOUT);
-          free_bulk_packet();
-      } else if (bulk_packet[0] == '<') {
-          if (bulk_packet_len < 3) {
-              send_err();
-              free_bulk_packet();
-              continue;
-          }
-          uint8_t addr = bulk_packet[1];
-          uint8_t len = bulk_packet[2];
-          if (len > ISM_BURST_MAX) {
-              len = ISM_BURST_MAX;
-          }
-          uint8_t out[ISM_BURST_MAX] = {0};
-          cc1101_read_burst(addr, out, (size_t)len);
-          (void)CDC_SendResponsePkt_FS(out, len, CDC_TIMEOUT);
-          free_bulk_packet();
-      } else if (bulk_packet[0] == 'I') {
-          cc1101_init();
-          send_ok();
-          free_bulk_packet();
-      } else if (bulk_packet_len >= 4 && memcmp((const void *)bulk_packet, "raw", 3) == 0) {
-          // raw [pin] (same packet layout as legacy): bulk_packet[3] is GPIO_PIN_0..GPIO_PIN_7
-          uint32_t pull = (bulk_packet[3] == GPIO_PIN_1) ? GPIO_NOPULL : GPIO_PULLDOWN;
-          configurePin(bulk_packet[3], GPIO_MODE_INPUT, pull);
-          samplerPin = bulk_packet[3];
+          continue;
+      }
 
-          bufferA = (uint8_t *)malloc(64);
-          bufferB = (uint8_t *)malloc(64);
-          if (bufferA == NULL || bufferB == NULL) {
-              send_err();
-              free((void *)bufferA);
-              free((void *)bufferB);
-              bufferA = NULL;
-              bufferB = NULL;
-              free_bulk_packet();
-              continue;
+      if (cmd.verb && strcmp(cmd.verb, "cc1101") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+          if (strcmp(sub, "init") == 0) {
+              cc1101_init();
+              command_send_ok(NULL, 0);
+          } else if (strcmp(sub, "apply_defaults") == 0) {
+              cc1101_apply_defaults();
+              command_send_ok(NULL, 0);
+          } else if (strcmp(sub, "status") == 0) {
+              uint8_t out = cc1101_is_initialized() ? 1u : 0u;
+              command_send_ok(&out, 1);
+          } else if (strcmp(sub, "probe") == 0) {
+              uint8_t out[4] = {0};
+              out[0] = (uint8_t)HAL_GPIO_ReadPin(CC1101_MISO_GPIO_Port, CC1101_MISO_Pin);
+              HAL_GPIO_WritePin(CC1101_CS_GPIO_Port, CC1101_CS_Pin, GPIO_PIN_RESET);
+              HAL_Delay(1);
+              out[1] = (uint8_t)HAL_GPIO_ReadPin(CC1101_MISO_GPIO_Port, CC1101_MISO_Pin);
+              HAL_GPIO_WritePin(CC1101_CS_GPIO_Port, CC1101_CS_Pin, GPIO_PIN_SET);
+              out[2] = cc1101_read_reg(0x30); // PARTNUM
+              out[3] = cc1101_read_reg(0x31); // VERSION
+              command_send_ok(out, sizeof(out));
+          } else if (strcmp(sub, "write") == 0) {
+              int reg = 0, val = 0;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              const char *val_str = cli_get_arg_view(&cmd, "val");
+              if (!cli_parse_int(reg_str, &reg) || !cli_parse_int(val_str, &val)) {
+                  command_send_err(NULL);
+              } else {
+                  cc1101_write_reg((uint8_t)reg, (uint8_t)val);
+                  command_send_ok(NULL, 0);
+              }
+          } else if (strcmp(sub, "read") == 0) {
+              int reg = 0;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              if (!cli_parse_int(reg_str, &reg)) {
+                  command_send_err(NULL);
+              } else {
+                  uint8_t value = cc1101_read_reg((uint8_t)reg);
+                  command_send_ok(&value, 1);
+              }
+          } else if (strcmp(sub, "strobe") == 0) {
+              int cmd_strobe = 0;
+              const char *cmd_str = cli_get_arg_view(&cmd, "cmd");
+              if (!cli_parse_int(cmd_str, &cmd_strobe)) {
+                  command_send_err(NULL);
+              } else {
+                  (void)cc1101_strobe((uint8_t)cmd_strobe);
+                  command_send_ok(NULL, 0);
+              }
+          } else if (strcmp(sub, "write_burst") == 0) {
+              int reg = 0;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              const char *data_str = cli_get_arg_view(&cmd, "data");
+              uint8_t bytes[ISM_BURST_MAX] = {0};
+              size_t bytes_len = 0;
+              if (!cli_parse_int(reg_str, &reg) ||
+                  !cli_parse_hex_bytes(data_str, bytes, sizeof(bytes), &bytes_len) ||
+                  bytes_len == 0) {
+                  command_send_err(NULL);
+              } else {
+                  (void)cc1101_write_burst((uint8_t)reg, bytes, bytes_len);
+                  command_send_ok(NULL, 0);
+              }
+          } else if (strcmp(sub, "read_burst") == 0) {
+              int reg = 0, len = 0;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              const char *len_str = cli_get_arg_view(&cmd, "len");
+              if (!cli_parse_int(reg_str, &reg) || !cli_parse_int(len_str, &len) || len <= 0) {
+                  command_send_err(NULL);
+              } else {
+                  if (len > (int)ISM_BURST_MAX) {
+                      len = (int)ISM_BURST_MAX;
+                  }
+                  uint8_t out[ISM_BURST_MAX] = {0};
+                  cc1101_read_burst((uint8_t)reg, out, (size_t)len);
+                  command_send_ok(out, (size_t)len);
+              }
+          } else if (strcmp(sub, "set_mod_power") == 0) {
+              int mod = 0, dbm = 0;
+              const char *mod_str = cli_get_arg_view(&cmd, "mod");
+              const char *dbm_str = cli_get_arg_view(&cmd, "dbm");
+              if (!cli_parse_int(mod_str, &mod) || !cli_parse_int(dbm_str, &dbm)) {
+                  command_send_err(NULL);
+              } else if (!cc1101_set_modulation_and_power(mod, dbm)) {
+                  command_send_err(NULL);
+              } else {
+                  command_send_ok(NULL, 0);
+              }
+          } else {
+              command_send_err(NULL);
           }
-          currentBuffer = bufferA;
-          transmitBuffer = NULL;
-          bufferIndex = 0;
-          bufferReady = 0;
-          CDC_SetBufferType_FS(CDC_BUFFER_DOUBLE);
-          ism_mode = ISM_MODE_RAW_SAMPLING;
 
-          HAL_TIM_Base_Start_IT(&htim3);
           free_bulk_packet();
-      } else if (bulk_packet_len >= 6 && memcmp((const void *)bulk_packet, "tran", 4) == 0) {
-          uint8_t pin_number = bulk_packet[4];
-          uint8_t duty_cycle = bulk_packet[5];
-          uint32_t tim_channel;
-          uint16_t gpio_pin;
+          continue;
+      }
 
-          switch (pin_number) {
-              case 0:
-                  tim_channel = TIM_CHANNEL_1;
-                  gpio_pin = GPIO_PIN_0;
-                  break;
-              case 1:
-                  tim_channel = TIM_CHANNEL_2;
-                  gpio_pin = GPIO_PIN_1;
-                  break;
-              case 2:
-                  tim_channel = TIM_CHANNEL_3;
-                  gpio_pin = GPIO_PIN_2;
-                  break;
-              case 3:
-                  tim_channel = TIM_CHANNEL_4;
-                  gpio_pin = GPIO_PIN_3;
-                  break;
-              default:
-                  send_err();
+      if (cmd.verb && strcmp(cmd.verb, "sample") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+          if (strcmp(sub, "start") == 0) {
+              int pin_enc = -1;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              if (!cli_parse_int(pin_str, &pin_enc)) {
+                  command_send_err(NULL);
                   free_bulk_packet();
                   continue;
-          }
-
-          configurePin(gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
-          setDutyCycle_TIM2(tim_channel, duty_cycle);
-          selectedChannel = tim_channel;
-          (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
-
-          CDC_InitRxBuffer_FS();
-          CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
-
-          uint32_t start = HAL_GetTick();
-          while (CDC_GetRxBufferBytesAvailable_FS() < 250) {
-              if ((HAL_GetTick() - start) > 2000) {
-                  break;
               }
+
+              GPIO_TypeDef *port = NULL;
+              uint16_t pin_mask = 0;
+              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint32_t pull = (port == GPIOA && pin_mask == GPIO_PIN_1) ? GPIO_NOPULL : GPIO_PULLDOWN;
+              configurePin(port, pin_mask, GPIO_MODE_INPUT, pull);
+              samplerPort = port;
+              samplerPin = pin_mask;
+
+              bufferA = (uint8_t *)malloc(64);
+              bufferB = (uint8_t *)malloc(64);
+              if (bufferA == NULL || bufferB == NULL) {
+                  command_send_err(NULL);
+                  free((void *)bufferA);
+                  free((void *)bufferB);
+                  bufferA = NULL;
+                  bufferB = NULL;
+                  free_bulk_packet();
+                  continue;
+              }
+              currentBuffer = bufferA;
+              transmitBuffer = NULL;
+              bufferIndex = 0;
+              bufferReady = 0;
+
+              CDC_SetBufferType_FS(CDC_BUFFER_DOUBLE);
+              ism_mode = ISM_MODE_RAW_SAMPLING;
+              HAL_TIM_Base_Start_IT(&htim3);
+              command_send_ok(NULL, 0);
+          } else if (strcmp(sub, "stop") == 0) {
+              command_send_ok(NULL, 0);
+          } else {
+              command_send_err(NULL);
           }
 
-          HAL_TIM_Base_Start_IT(&htim3);
-          while (CDC_GetRxBufferBytesAvailable_FS() != 0) {
-          }
-          CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
-          HAL_TIM_Base_Stop_IT(&htim3);
-
-          stopPWM_TIM2(tim_channel);
-          CDC_FlushRxBuffer_FS();
-          CDC_FreeRxBuffer_FS();
-
-          send_ok();
           free_bulk_packet();
-      } else {
-          send_err();
-          free_bulk_packet();
+          continue;
       }
+
+      if (cmd.verb && strcmp(cmd.verb, "transmit") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+          if (strcmp(sub, "start") == 0) {
+              int pin_enc = -1;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              if (!cli_parse_int(pin_str, &pin_enc)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              if (pin_enc < 0 || pin_enc > 3) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint32_t tim_channel = 0;
+              uint16_t gpio_pin = 0;
+              switch (pin_enc) {
+                  case 0: tim_channel = TIM_CHANNEL_1; gpio_pin = GPIO_PIN_0; break;
+                  case 1: tim_channel = TIM_CHANNEL_2; gpio_pin = GPIO_PIN_1; break;
+                  case 2: tim_channel = TIM_CHANNEL_3; gpio_pin = GPIO_PIN_2; break;
+                  case 3: tim_channel = TIM_CHANNEL_4; gpio_pin = GPIO_PIN_3; break;
+              }
+
+              configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
+              setDutyCycle_TIM2(tim_channel, 50);
+              selectedChannel = tim_channel;
+              (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
+
+              CDC_InitRxBuffer_FS();
+              CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
+              transmit_last_data_tick = HAL_GetTick();
+
+              HAL_TIM_Base_Start_IT(&htim3);
+              ism_mode = ISM_MODE_TRANSMITTING;
+              command_send_ok(NULL, 0);
+          } else if (strcmp(sub, "stop") == 0) {
+              command_send_ok(NULL, 0);
+          } else {
+              command_send_err(NULL);
+          }
+
+          free_bulk_packet();
+          continue;
+      }
+
+      command_send_err(NULL);
+      free_bulk_packet();
   }
   /* USER CODE END 3 */
 }
