@@ -32,6 +32,7 @@ import RfidFragment from "./components/RfidFragment";
 import PacketModeFragment from "./components/PacketModeFragment";
 import SettingsFragment from "./components/SettingsFragment";
 import HomePage from "./components/HomePage";
+import FlashFragment from "./components/FlashFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -74,7 +75,7 @@ type OpenFile = {
   isDirty: boolean;
   isSaving: boolean;
 };
-export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver" | "rfid" | "packetMode" | "settings";
+export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver" | "rfid" | "packetMode" | "flash" | "settings";
 
 type RecentProject = {
   path: string;
@@ -915,6 +916,7 @@ function App() {
   const isEMWaverActive = activePane === "emwaver";
   const isRfidActive = activePane === "rfid";
   const isPacketModeActive = activePane === "packetMode";
+  const isFlashActive = activePane === "flash";
   const isSettingsActive = activePane === "settings";
 
   return (
@@ -934,6 +936,7 @@ function App() {
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
         <Pane active={isRfidActive}><RfidFragment /></Pane>
         <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
+        <Pane active={isFlashActive}><FlashFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
       </div>
       {isModalOpen && (
@@ -1140,6 +1143,12 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<PacketModeIcon />}
       />
       <ActivityButton
+        label="Flash"
+        isActive={activePane === "flash"}
+        onClick={() => onFragmentClick("flash")}
+        icon={<FlashIcon />}
+      />
+      <ActivityButton
         label="Settings"
         isActive={activePane === "settings"}
         onClick={() => onFragmentClick("settings")}
@@ -1149,6 +1158,19 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         <ThemeToggleButton theme={theme} onToggle={onToggleTheme} />
       </div>
     </aside>
+  );
+}
+
+function FlashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" aria-hidden="true">
+      <path
+        d="M13 2L3 14h7l-1 8 12-14h-7l1-6z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
