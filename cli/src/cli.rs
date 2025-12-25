@@ -42,6 +42,9 @@ pub enum Command {
         /// Optional components to include (comma-separated).
         #[arg(long, value_enum, value_delimiter = ',')]
         components: Vec<Component>,
+        /// STM32 starting firmware template to use (defaults to gpio).
+        #[arg(long, value_enum)]
+        stm32_firmware: Option<Stm32Firmware>,
         /// Destination directory (defaults to current directory).
         #[arg(long)]
         path: Option<PathBuf>,
@@ -52,6 +55,14 @@ pub enum Command {
 pub enum Target {
     Esp32s3,
     Stm32f042,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum Stm32Firmware {
+    Gpio,
+    Ir,
+    Ism,
+    Rfid,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq, Hash)]

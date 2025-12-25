@@ -49,7 +49,7 @@ Then:
 ```bash
 emwaver shell
 emwaver init --target esp32s3 --path ./my-esp32-fw
-emwaver init --target stm32f042 --path ./my-stm32-fw
+emwaver init --target stm32f042 --stm32-firmware ism --path ./my-stm32-fw
 ```
 
 ## Apps & Tools
@@ -62,7 +62,7 @@ emwaver init --target stm32f042 --path ./my-stm32-fw
 ## Firmware
 
 - ESP32-S3 firmware (ESP-IDF): `esp/`
-- STM32F042 firmware (STM32CubeIDE/CubeMX): `stm/emwaver-firmware/`
+- STM32F042 firmwares (STM32CubeIDE/CubeMX): `stm/emwaver-gpio-firmware/`, `stm/emwaver-ir-firmware/`, `stm/emwaver-ism-firmware/`, `stm/emwaver-rfid-firmware/`
 
 ## Documentation
 

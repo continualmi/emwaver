@@ -55,7 +55,7 @@ fn init_stm32f042_creates_project_files() {
     let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
     cmd.args(["init", "--target", "stm32f042", "--path"])
         .arg(&project_dir)
-        .args(["--components", "gpio,cc1101"]);
+        .args(["--stm32-firmware", "ism"]);
     cmd.assert().success();
 
     assert!(project_dir.join(".project").exists());

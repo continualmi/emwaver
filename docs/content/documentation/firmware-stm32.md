@@ -4,7 +4,12 @@ title: STM32F042 Firmware (STM32CubeIDE)
 
 # STM32F042 Firmware (STM32CubeIDE)
 
-The STM32 firmware lives in `stm/emwaver-firmware/` and targets the **STM32F042** family of EMWaver devices.
+The STM32 firmware lives under `stm/` as multiple STM32CubeIDE projects targeting the **STM32F042** family of EMWaver devices:
+
+- `stm/emwaver-gpio-firmware/`
+- `stm/emwaver-ir-firmware/`
+- `stm/emwaver-ism-firmware/`
+- `stm/emwaver-rfid-firmware/`
 
 ## Devices (STM32 Family)
 
@@ -24,8 +29,8 @@ The STM32 workflow uses ST’s tools:
 
 ## Build (CubeIDE)
 
-1. Open the project from `stm/emwaver-firmware/` in **STM32CubeIDE**.
-2. Open `emwaver-firmware.ioc` and click **Generate Code**.
+1. Open the matching project folder under `stm/` in **STM32CubeIDE**.
+2. Open the corresponding `.ioc` file and click **Generate Code**.
 3. Build using the **Release** configuration (Debug often won’t fit).
 4. The build output includes an `.elf` under the `Release/` output folder.
 
@@ -44,4 +49,3 @@ For the full step-by-step guide, see **Flashing Firmware → STM32 (STM32F042)**
 The STM32 family communicates over **USB CDC** (virtual serial port), typically at **115200**.
 
 The higher-level command protocol is documented in [Transport & Command Format](protocol.md).
-

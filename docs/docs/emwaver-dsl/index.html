@@ -1393,7 +1393,7 @@
 <li>Instantiate global state at the top of the script.</li>
 <li>Implement a <code>render()</code> function that constructs the UI tree and calls <code>UI.render(...)</code>.</li>
 <li>Update state inside event handlers, then call <code>render()</code> again to refresh the view.</li>
-<li>Subscribe to console streams with <code>WaveletConsole.subscribe(render)</code> when the layout should react to new log lines.</li>
+<li>If you want logs to appear inside the UI, append them to state and pass them into <code>UI.logViewer({ text: ... })</code>.</li>
 </ul>
 <div class="highlight"><span class="filename">default_files/wavelet_demo.js</span><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">UI</span><span class="p">.</span><span class="nx">column</span><span class="p">({</span>
 <span class="w">    </span><span class="nx">spacing</span><span class="o">:</span><span class="w"> </span><span class="mf">12</span><span class="p">,</span>
@@ -1477,9 +1477,20 @@
 <h2 id="console-integration">Console Integration</h2>
 <ul>
 <li><code>UI.logViewer()</code> streams <code>print</code> and <code>console.*</code> output inline, as shown in <code>wavelet_demo.js</code> and <code>wavelet_gpio.js</code>.</li>
-<li>For richer terminals, <code>WaveletConsole.view(...)</code> mirrors the execution log with theming options. Pair it with <code>WaveletConsole.subscribe(render)</code> to re-render as new lines arrive (<code>hello_world_usb.js</code>).</li>
+<li>A common pattern is to wrap <code>print()</code> so it also appends to a local buffer that you render via <code>UI.logViewer</code>.</li>
 </ul>
-<div class="highlight"><span class="filename">default_files/hello_world_usb.js</span><pre><span></span><code><span class="nx">WaveletConsole</span><span class="p">.</span><span class="nx">subscribe</span><span class="p">(</span><span class="nx">render</span><span class="p">);</span>
+<div class="highlight"><span class="filename">default_files/hello_world_usb.js</span><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="nx">logLines</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">nativePrint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">print</span><span class="p">;</span>
+
+<span class="kd">function</span><span class="w"> </span><span class="nx">log</span><span class="p">(</span><span class="nx">message</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">text</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">String</span><span class="p">(</span><span class="nx">message</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">logLines</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">text</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">logLines</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">200</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">logLines</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">logLines</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="nx">logLines</span><span class="p">.</span><span class="nx">length</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">200</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">nativePrint</span><span class="p">(</span><span class="nx">text</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">render</span><span class="p">();</span>
+<span class="p">}</span>
 
 <span class="kd">function</span><span class="w"> </span><span class="nx">render</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nx">UI</span><span class="p">.</span><span class="nx">render</span><span class="p">(</span><span class="nx">UI</span><span class="p">.</span><span class="nx">column</span><span class="p">({</span>
@@ -1488,7 +1499,8 @@
 <span class="w">        </span><span class="nx">children</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">            </span><span class="nx">UI</span><span class="p">.</span><span class="nx">text</span><span class="p">({</span><span class="w"> </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;BadUSB Hello World&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">font</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;title2&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">fontWeight</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;semibold&#39;</span><span class="w"> </span><span class="p">}),</span>
 <span class="w">            </span><span class="nx">UI</span><span class="p">.</span><span class="nx">button</span><span class="p">({</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;Execute Payload&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">backgroundColor</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;#1D4ED8&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">foregroundColor</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;#FFFFFF&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">onTap</span><span class="o">:</span><span class="w"> </span><span class="nx">runDemo</span><span class="w"> </span><span class="p">}),</span>
-<span class="w">            </span><span class="nx">WaveletConsole</span><span class="p">.</span><span class="nx">view</span><span class="p">({</span>
+<span class="w">            </span><span class="nx">UI</span><span class="p">.</span><span class="nx">logViewer</span><span class="p">({</span>
+<span class="w">                </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="nx">logLines</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;\\n&#39;</span><span class="p">),</span>
 <span class="w">                </span><span class="nx">minHeight</span><span class="o">:</span><span class="w"> </span><span class="mf">160</span><span class="p">,</span>
 <span class="w">                </span><span class="nx">backgroundColor</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;#111827&#39;</span><span class="p">,</span>
 <span class="w">                </span><span class="nx">foregroundColor</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;#F9FAFB&#39;</span><span class="p">,</span>
@@ -1501,7 +1513,7 @@
 <h2 id="hardware-and-device-apis">Hardware and Device APIs</h2>
 <p>Wavelets can call into hardware abstractions exposed by the runtime:</p>
 <ul>
-<li><code>CC1101.*</code> handles radio configuration (<code>cc1101_radio_console.js</code>).</li>
+<li><code>DeviceConnection.sendCommandString("cc1101 ...")</code> sends ASCII command-protocol verbs to firmware (<code>cc1101.js</code>).</li>
 <li><code>BLEService.sendCommand(...)</code> exchanges raw packets with the firmware (<code>wavelet_gpio.js</code>, <code>wavelet_rfid.js</code>).</li>
 <li><code>BLEService.sendString(...)</code> and <code>Utils.delay(...)</code> orchestrate BadUSB attacks (<code>hello_world_usb.js</code>).</li>
 </ul>
