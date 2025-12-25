@@ -86,7 +86,15 @@ impl PtyManager {
                 })
                 .map_err(|error| format!("Failed to create PTY: {error}"))?;
 
-            let mut cmd = CommandBuilder::new("/bin/zsh");
+            // When the desktop app is launched via `npm run tauri dev`, npm injects environment
+            // variables like `npm_config_prefix` that can trigger warnings in nvm-powered shells.
+            // Wrap the shell spawn in `/usr/bin/env -u ...` to ensure a clean interactive session.
+            let mut cmd = CommandBuilder::new("/usr/bin/env");
+            cmd.arg("-u");
+            cmd.arg("npm_config_prefix");
+            cmd.arg("-u");
+            cmd.arg("NPM_CONFIG_PREFIX");
+            cmd.arg("/bin/zsh");
             cmd.arg("-l");
             cmd.arg("-i");
 
