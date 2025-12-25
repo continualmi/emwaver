@@ -37,12 +37,12 @@ const MENU_SHOW_WAVELETS_EVENT: &str = "menu-show-wavelets";
 const MENU_SHOW_ISM_EVENT: &str = "menu-show-ism";
 const MENU_SHOW_SAMPLER_EVENT: &str = "menu-show-sampler";
 const MENU_SHOW_EMWAVER_EVENT: &str = "menu-show-emwaver";
-const MENU_SHOW_DEVTOOLS_EVENT: &str = "menu-show-devtools";
+const MENU_SHOW_IDE_EVENT: &str = "menu-show-ide";
 const MENU_INCREASE_LAYOUT_EVENT: &str = "menu-increase-layout";
 const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
-const MENU_DEVTOOLS_OPEN_FOLDER_EVENT: &str = "menu-devtools-open-folder";
-const MENU_DEVTOOLS_SAVE_FILE_EVENT: &str = "menu-devtools-save-file";
+const MENU_IDE_OPEN_FOLDER_EVENT: &str = "menu-ide-open-folder";
+const MENU_IDE_SAVE_FILE_EVENT: &str = "menu-ide-save-file";
 
 // ESP-IDF types and managers removed - desktop app doesn't need ESP-IDF toolchain
 
@@ -403,7 +403,7 @@ async fn reveal_in_finder(payload: RevealInFinderPayload) -> Result<(), String> 
     .map_err(|error| format!("Failed to reveal in Finder: {error}"))?
 }
 
-// ESP-IDF build/flash removed; Dev Tools uses a minimal shell runner for local workflows.
+// ESP-IDF build/flash removed; IDE uses a minimal shell runner for local workflows.
 
 #[tauri::command]
 async fn pty_start(app: tauri::AppHandle, state: State<'_, Arc<PtyManager>>, payload: PtyStartPayload) -> Result<PtyStartResponse, String> {
@@ -823,16 +823,16 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+W"),
             )?;
-            let devtools_open_folder_item = MenuItem::with_id(
+            let ide_open_folder_item = MenuItem::with_id(
                 app,
-                "menu-devtools-open-folder",
+                "menu-ide-open-folder",
                 "Open Folder…",
                 true,
                 Some("CmdOrCtrl+Shift+O"),
             )?;
-            let devtools_save_file_item = MenuItem::with_id(
+            let ide_save_file_item = MenuItem::with_id(
                 app,
-                "menu-devtools-save-file",
+                "menu-ide-save-file",
                 "Save",
                 true,
                 Some("CmdOrCtrl+S"),
@@ -879,10 +879,10 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let show_devtools_item = MenuItem::with_id(
+            let show_ide_item = MenuItem::with_id(
                 app,
-                "menu-show-devtools",
-                "Show Dev Tools",
+                "menu-show-ide",
+                "Show IDE",
                 true,
                 None::<&str>,
             )?;
@@ -917,8 +917,8 @@ pub fn run() {
                     if let MenuItemKind::Submenu(submenu) = item {
                         if let Ok(label) = submenu.text() {
                             if label == "File" {
-                                submenu.append(&devtools_open_folder_item)?;
-                                submenu.append(&devtools_save_file_item)?;
+                                submenu.append(&ide_open_folder_item)?;
+                                submenu.append(&ide_save_file_item)?;
                                 submenu.append(&close_item)?;
                                 close_item_added = true;
                             } else if label == "View" {
@@ -931,7 +931,7 @@ pub fn run() {
                                 submenu.append(&show_ism_item)?;
                                 submenu.append(&show_sampler_item)?;
                                 submenu.append(&show_emwaver_item)?;
-                                submenu.append(&show_devtools_item)?;
+                                submenu.append(&show_ide_item)?;
                                 view_menu_added = true;
                             }
                         }
@@ -941,8 +941,8 @@ pub fn run() {
 
             if !close_item_added {
                 let file_menu = Submenu::new(app, "File", true)?;
-                file_menu.append(&devtools_open_folder_item)?;
-                file_menu.append(&devtools_save_file_item)?;
+                file_menu.append(&ide_open_folder_item)?;
+                file_menu.append(&ide_save_file_item)?;
                 file_menu.append(&close_item)?;
                 menu.append(&file_menu)?;
             }
@@ -958,7 +958,7 @@ pub fn run() {
                 view_menu.append(&show_ism_item)?;
                 view_menu.append(&show_sampler_item)?;
                 view_menu.append(&show_emwaver_item)?;
-                view_menu.append(&show_devtools_item)?;
+                view_menu.append(&show_ide_item)?;
                 menu.append(&view_menu)?;
             }
 
@@ -1000,8 +1000,8 @@ pub fn run() {
                 "menu-show-emwaver" => {
                     let _ = app.emit(MENU_SHOW_EMWAVER_EVENT, ());
                 }
-                "menu-show-devtools" => {
-                    let _ = app.emit(MENU_SHOW_DEVTOOLS_EVENT, ());
+                "menu-show-ide" => {
+                    let _ = app.emit(MENU_SHOW_IDE_EVENT, ());
                 }
                 "menu-increase-layout" => {
                     let _ = app.emit(MENU_INCREASE_LAYOUT_EVENT, ());
@@ -1012,11 +1012,11 @@ pub fn run() {
                 "menu-reset-layout" => {
                     let _ = app.emit(MENU_RESET_LAYOUT_EVENT, ());
                 }
-                "menu-devtools-open-folder" => {
-                    let _ = app.emit(MENU_DEVTOOLS_OPEN_FOLDER_EVENT, ());
+                "menu-ide-open-folder" => {
+                    let _ = app.emit(MENU_IDE_OPEN_FOLDER_EVENT, ());
                 }
-                "menu-devtools-save-file" => {
-                    let _ = app.emit(MENU_DEVTOOLS_SAVE_FILE_EVENT, ());
+                "menu-ide-save-file" => {
+                    let _ = app.emit(MENU_IDE_SAVE_FILE_EVENT, ());
                 }
                 _ => {}
             }

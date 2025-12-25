@@ -33,7 +33,7 @@ import PacketModeFragment from "./components/PacketModeFragment";
 import SettingsFragment from "./components/SettingsFragment";
 import HomePage from "./components/HomePage";
 import FlashFragment from "./components/FlashFragment";
-import DevToolsFragment from "./components/DevToolsFragment";
+import IDEFragment from "./components/IDEFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -85,7 +85,7 @@ export type FragmentType =
   | "packetMode"
   | "flash"
   | "settings"
-  | "devtools";
+  | "ide";
 
 type RecentProject = {
   path: string;
@@ -886,8 +886,8 @@ function App() {
         );
 
         disposers.push(
-          await safeListen("menu-show-devtools", () => {
-            handleFragmentClick("devtools");
+          await safeListen("menu-show-ide", () => {
+            handleFragmentClick("ide");
           }),
         );
 
@@ -934,7 +934,7 @@ function App() {
   const isPacketModeActive = activePane === "packetMode";
   const isFlashActive = activePane === "flash";
   const isSettingsActive = activePane === "settings";
-  const isDevToolsActive = activePane === "devtools";
+  const isIDEActive = activePane === "ide";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -955,7 +955,7 @@ function App() {
         <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
         <Pane active={isFlashActive}><FlashFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
-        <Pane active={isDevToolsActive}><DevToolsFragment theme={theme} /></Pane>
+        <Pane active={isIDEActive}><IDEFragment theme={theme} /></Pane>
       </div>
       {isModalOpen && (
         <NewProjectModal
@@ -1167,10 +1167,10 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<FlashIcon />}
       />
       <ActivityButton
-        label="Dev Tools"
-        isActive={activePane === "devtools"}
-        onClick={() => onFragmentClick("devtools")}
-        icon={<DevToolsIcon />}
+        label="IDE"
+        isActive={activePane === "ide"}
+        onClick={() => onFragmentClick("ide")}
+        icon={<IDEIcon />}
       />
       <ActivityButton
         label="Settings"
@@ -1198,7 +1198,7 @@ function FlashIcon() {
   );
 }
 
-function DevToolsIcon() {
+function IDEIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" aria-hidden="true">
       <path

@@ -42,6 +42,14 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       iconClass: "text-sky-400",
     },
     {
+      id: "ide" as FragmentType,
+      name: "IDE",
+      description: "Edit firmware and run commands",
+      icon: <IDEIcon />,
+      borderClass: "hover:border-slate-400/60",
+      iconClass: "text-slate-300",
+    },
+    {
       id: "ism" as FragmentType,
       name: "ISM (RFM69)",
       description: "Sub-GHz radio control and signal capture",
@@ -285,19 +293,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
-      <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-100">EMWaver</h2>
-        </div>
-        <div className="flex items-center">
-          <img 
-            src="/emwaver-logo.png" 
-            alt="EMWaver Logo" 
-            className="h-12 w-12 object-contain"
-          />
-        </div>
-      </header>
-
       <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-y-auto px-6 py-4">
         <div className="flex-shrink-0">
           <div className="grid grid-cols-2 gap-3">
@@ -520,6 +515,20 @@ function WaveletIcon() {
       <g transform="translate(12, 12) scale(1.3) translate(-10.5, -12)">
         <path d="M5.64645 9.14645C5.84171 8.95118 6.15829 8.95118 6.35355 9.14645L8.35355 11.1464C8.44732 11.2402 8.5 11.3674 8.5 11.5C8.5 11.6326 8.44732 11.7598 8.35355 11.8536L6.35355 13.8536C6.15829 14.0488 5.84171 14.0488 5.64645 13.8536C5.45118 13.6583 5.45118 13.3417 5.64645 13.1464L7.29289 11.5L5.64645 9.85355C5.45118 9.65829 5.45118 9.34171 5.64645 9.14645ZM14.5 13H9.5C9.22386 13 9 13.2239 9 13.5C9 13.7761 9.22386 14 9.5 14H14.5C14.7761 14 15 13.7761 15 13.5C15 13.2239 14.7761 13 14.5 13ZM2.99609 5.5C2.99609 4.11929 4.11538 3 5.49609 3H14.4961C15.8768 3 16.9961 4.11929 16.9961 5.5V6H16.999V7H16.9961V14.5C16.9961 15.8807 15.8768 17 14.4961 17H5.49609C4.11538 17 2.99609 15.8807 2.99609 14.5V5.5ZM15.9961 6V5.5C15.9961 4.67157 15.3245 4 14.4961 4H5.49609C4.66767 4 3.99609 4.67157 3.99609 5.5V6H15.9961ZM3.99609 7V14.5C3.99609 15.3284 4.66767 16 5.49609 16H14.4961C15.3245 16 15.9961 15.3284 15.9961 14.5V7H3.99609Z" />
       </g>
+    </svg>
+  );
+}
+
+function IDEIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" aria-hidden="true">
+      <path
+        d="M7 8l-3 4 3 4M17 8l3 4-3 4M14 6l-4 12"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
