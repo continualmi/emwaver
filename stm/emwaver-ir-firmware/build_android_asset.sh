@@ -6,7 +6,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 ELF="$SCRIPT_DIR/Release/emwaver-ir-firmware.elf"
 BIN="$SCRIPT_DIR/Release/emwaver-ir-firmware.bin"
-ANDROID_ASSET="$REPO_ROOT/android/app/src/main/assets/dfu.dfu"
+ANDROID_ASSET_DIR="$REPO_ROOT/android/app/src/main/assets/dfu"
+ANDROID_ASSET="$ANDROID_ASSET_DIR/ir.dfu"
 
 verbose() {
   [[ "${EMWAVER_VERBOSE:-0}" == "1" ]]
@@ -94,7 +95,11 @@ if [[ ! -d "$SCRIPT_DIR/Release" ]]; then
   echo "error: missing Release/ folder; build the project in STM32CubeIDE first (Release configuration)." >&2
   exit 1
 fi
-make -C "$SCRIPT_DIR/Release" -j"$JOBS" all
+if [[ "${EMWAVER_SKIP_BUILD:-0}" != "1" ]]; then
+  make -C "$SCRIPT_DIR/Release" -j"$JOBS" all
+else
+  echo "Skipping build (EMWAVER_SKIP_BUILD=1)."
+fi
 
 if [[ ! -f "$ELF" ]]; then
   echo "error: expected ELF not found: $ELF" >&2
@@ -104,10 +109,7 @@ fi
 echo "Exporting binary: $BIN"
 arm-none-eabi-objcopy -O binary "$ELF" "$BIN"
 
-if [[ ! -f "$ANDROID_ASSET" ]]; then
-  echo "error: expected Android asset not found: $ANDROID_ASSET" >&2
-  exit 1
-fi
+mkdir -p "$ANDROID_ASSET_DIR"
 
 echo "Updating Android asset: $ANDROID_ASSET"
 cp -f "$BIN" "$ANDROID_ASSET"
