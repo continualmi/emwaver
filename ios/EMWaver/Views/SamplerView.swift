@@ -674,18 +674,6 @@ struct SamplerView: View {
         viewModel.outputText = viewModel.buildSignedRawTimings(from: buffer)
     }
 
-
-    private func convertToIR() {
-        let buffer = bleManager.getBuffer()
-        guard !buffer.isEmpty else { return }
-        let utils = Utils()
-        let converted = utils.convertToIRBuffer(buffer)
-        bleManager.loadBuffer(data: converted)
-        viewModel.markBufferDirty()
-        refreshChart(force: true)
-        showToast("Signal converted to 38kHz IR format")
-    }
-
     private func clearBufferAndChart() {
         bleManager.clearBuffer()
         viewModel.markBufferDirty()
