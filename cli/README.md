@@ -69,6 +69,15 @@ emwaver init --target esp32s3 --path ./my-firmware --components gpio,cc1101
 
 # Initialize an STM32F042 CubeIDE/CubeMX project
 emwaver init --target stm32f042 --path ./my-stm32-proj --components gpio,cc1101
+
+# Build the ESP-IDF firmware (auto-detects the project, e.g. `./esp`)
+emwaver build
+
+# Flash the ESP-IDF firmware (optionally specifying a serial port)
+emwaver flash --port /dev/ttyACM0
+
+# Monitor the device
+emwaver monitor --port /dev/ttyACM0
 ```
 
 ## Development
