@@ -48,6 +48,8 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public native byte[] getCommand();
     public native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
     public native int getStatusNumber();
+    public native void clearCommandBuffer();
+    public native void setCaptureMode(boolean enabled);
     public native void clearBuffer();
     public native int getBufferLength();
     public native void loadBuffer(byte[] data);
@@ -366,7 +368,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public byte[] sendCommand(byte[] command, int timeout) {
         if (command != null && finalPort != null) {
             try {
-                clearBuffer(); // Clear any existing data
+                clearCommandBuffer(); // Clear any existing command/status data
                 finalPort.write(command, timeout);
 
                 // Wait for response; USB CDC/serial reads may deliver a single response in multiple chunks.
