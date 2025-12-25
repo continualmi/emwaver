@@ -37,6 +37,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define CDC_TIMEOUT 100
+#define EMWAVER_FIRMWARE_WELCOME "Welcome to IR Waver firmware"
+#define EMWAVER_FIRMWARE_VERSION "1.0.0"
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -671,6 +673,13 @@ int main(void)
       cli_command_view_t cmd;
       if (!parse_cli_command_inplace(scratch_line, &cmd)) {
           command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
+          static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION;
+          (void)CDC_SendResponsePkt_FS((uint8_t *)msg, (uint16_t)(sizeof(msg) - 1u), CDC_TIMEOUT);
           free_bulk_packet();
           continue;
       }

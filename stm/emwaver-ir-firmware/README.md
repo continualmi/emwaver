@@ -45,6 +45,7 @@ bash stm/emwaver-ir-firmware/build_android_asset.sh
 - GPIO command protocol (`gpio in/out/read/high/low/pull/info`)
 - Sampler stream (`sample start --pin=<encodedPin>`, `sample stop`)
 - Retransmit stream (`transmit start --pin=<encodedPin>`, `transmit stop`)
+- Version command (`version`) prints a firmware-specific welcome string ending in `1.0.0`
 
 ## IDE Files
 

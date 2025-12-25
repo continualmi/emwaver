@@ -44,6 +44,7 @@ bash stm/emwaver-rfid-firmware/build_android_asset.sh
 - USB CDC communication
 - GPIO command protocol (`gpio in/out/read/high/low/pull/info`)
 - RFID command protocol (`rfid init`, `rfid read --block=<n> --auth=<0x60|0x61> --key=<12-hex>`, `rfid write --block=<n> --auth=<0x60|0x61> --key=<12-hex> --data=<32-hex>`)
+- Version command (`version`) prints a firmware-specific welcome string ending in `1.0.0`
 
 ## IDE Files
 

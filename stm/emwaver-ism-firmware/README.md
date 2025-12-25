@@ -45,6 +45,7 @@ bash stm/emwaver-ism-firmware/build_android_asset.sh
 - CC1101 command protocol (`cc1101 init/read/write/read_burst/write_burst/strobe/apply_defaults/set_mod_power`)
 - Sampler stream (`sample start --pin=<encodedPin>`, `sample stop`)
 - Retransmit stream (`transmit start --pin=<encodedPin>`, `transmit stop`)
+- Version command (`version`) prints a firmware-specific welcome string ending in `1.0.0`
 
 ## IDE Files
 
