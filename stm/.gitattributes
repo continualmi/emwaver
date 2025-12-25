@@ -4,6 +4,9 @@
 # STM32CubeMX / ST HAL / CMSIS sources
 emwaver-firmware/Drivers/** linguist-vendored
 emwaver-firmware/Middlewares/** linguist-vendored
+emwaver-ism-firmware/Drivers/** linguist-vendored
+emwaver-ism-firmware/Middlewares/** linguist-vendored
 
 # Auto-generated peripheral glue (still source, but typically generated)
 emwaver-firmware/USB_DEVICE/** linguist-generated
+emwaver-ism-firmware/USB_DEVICE/** linguist-generated
