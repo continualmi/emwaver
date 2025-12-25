@@ -35,6 +35,7 @@ const DEFAULT_TERMINAL_TITLE = "zsh";
 
 const ROOT_STORAGE_KEY = "emwaver.devtools.root";
 const SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.devtools.sidebarWidth";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "emwaver.devtools.sidebarCollapsed";
 const TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.devtools.terminalHeight";
 const TERMINAL_LIST_WIDTH_STORAGE_KEY = "emwaver.devtools.terminalListWidth";
 
@@ -91,6 +92,17 @@ function readStoredSidebarWidth(): number {
     return DEFAULT_SIDEBAR_WIDTH;
   }
   return clamp(parsed, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
+}
+
+function readStoredSidebarCollapsed(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+  if (!stored) {
+    return false;
+  }
+  return stored === "true";
 }
 
 function readStoredTerminalHeight(): number {
@@ -221,6 +233,15 @@ function CloseIcon({ className }: { className?: string }) {
   );
 }
 
+function PanelLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
+      <path d="M2.5 3.5h11v9h-11z" />
+      <path d="M6 3.5v9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function formatConsoleArgs(args: unknown[]): string {
   return args
     .map((arg) => {
@@ -252,6 +273,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const [openFile, setOpenFile] = useState<OpenFile | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => readStoredSidebarCollapsed());
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth());
 
   const explorerResizeActiveRef = useRef(false);
@@ -279,6 +301,8 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const outputScrollRef = useRef<HTMLDivElement | null>(null);
 
   const sessionsRef = useRef<TerminalSession[]>([]);
+  const didAutoStartTerminalRef = useRef(false);
+  const closingTerminalSessionsRef = useRef<Set<string>>(new Set());
 
   const terminalPanelRef = useRef<HTMLDivElement | null>(null);
   const terminalContainerBySessionRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -298,6 +322,26 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   useEffect(() => {
     sessionsRef.current = terminalSessions;
   }, [terminalSessions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    const unlistenTogglePromise = safeListen("menu-toggle-explorer", () => {
+      setIsSidebarCollapsed((prev) => !prev);
+    });
+    const unlistenShowPromise = safeListen("menu-show-explorer", () => {
+      setIsSidebarCollapsed(false);
+    });
+    return () => {
+      void unlistenTogglePromise.then((unlisten) => unlisten());
+      void unlistenShowPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     if (!isTerminalPickerOpen) {
@@ -597,11 +641,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   );
 
   const closeTerminalSession = useCallback(async (sessionId: string) => {
-    try {
-      await safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
-    } catch {
-      // ignore
-    }
+    closingTerminalSessionsRef.current.add(sessionId);
 
     const terminal = terminalBySessionRef.current.get(sessionId);
     if (terminal) {
@@ -616,18 +656,35 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     pendingTerminalOutputRef.current.delete(sessionId);
     terminalContainerBySessionRef.current.delete(sessionId);
 
+    const remaining = sessionsRef.current.filter((session) => session.id !== sessionId);
+    if (remaining.length === 0) {
+      setIsTerminalVisible(false);
+      setBottomPanelTab("terminal");
+    }
+
     setTerminalSessions((prev) => prev.filter((session) => session.id !== sessionId));
     setActiveTerminalSessionId((prev) => {
       if (prev !== sessionId) {
         return prev;
       }
-      const remaining = sessionsRef.current.filter((session) => session.id !== sessionId);
       return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
     });
+
+    try {
+      await safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
+    } catch {
+      // ignore
+    } finally {
+      window.setTimeout(() => closingTerminalSessionsRef.current.delete(sessionId), 750);
+    }
   }, []);
 
   const ensureInitialTerminalSession = useCallback(async () => {
+    if (didAutoStartTerminalRef.current) {
+      return;
+    }
     if (terminalSessions.length > 0) {
+      didAutoStartTerminalRef.current = true;
       return;
     }
     try {
@@ -635,6 +692,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     } catch {
       // ignore
     }
+    didAutoStartTerminalRef.current = true;
   }, [startTerminalSession, terminalSessions.length]);
 
   useEffect(() => {
@@ -680,11 +738,18 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       if (!payload) {
         return;
       }
+      if (closingTerminalSessionsRef.current.has(payload.session_id)) {
+        pendingTerminalOutputRef.current.delete(payload.session_id);
+        return;
+      }
       const bytes = new Uint8Array(payload.data);
       const terminal = terminalBySessionRef.current.get(payload.session_id);
       if (terminal) {
         const decoder = outputDecoderRef.current;
         terminal.write(decoder.decode(bytes, { stream: true }));
+        return;
+      }
+      if (!sessionsRef.current.some((session) => session.id === payload.session_id)) {
         return;
       }
       const buffers = pendingTerminalOutputRef.current.get(payload.session_id) ?? [];
@@ -790,14 +855,23 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     setOpenDirs(new Set());
   }, []);
 
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      if (!explorerResizeActiveRef.current) {
-        return;
-      }
-      const delta = event.clientX - explorerResizeStartXRef.current;
-      setSidebarWidth(clamp(explorerResizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
-    };
+	  useEffect(() => {
+	    const handleMove = (event: MouseEvent) => {
+	      if (!explorerResizeActiveRef.current) {
+	        return;
+	      }
+	      const delta = event.clientX - explorerResizeStartXRef.current;
+	      const rawWidth = explorerResizeStartWidthRef.current + delta;
+	      if (rawWidth < 120) {
+	        explorerResizeActiveRef.current = false;
+	        document.body.style.cursor = "";
+	        document.body.style.userSelect = "";
+	        setIsSidebarCollapsed(true);
+	        return;
+	      }
+	      setIsSidebarCollapsed(false);
+	      setSidebarWidth(clamp(rawWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
+	    };
 
     const handleUp = () => {
       if (!explorerResizeActiveRef.current) {
@@ -1008,35 +1082,62 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="shrink-0 border-r border-slate-900" style={{ width: sidebarWidth }}>
-          <div className="border-b border-slate-900 px-4 py-3">
-            <h2 className="truncate text-sm font-semibold text-slate-200" title={rootDir ?? "Dev Tools"}>
-              {rootDir ? basename(rootDir) : "Dev Tools"}
-            </h2>
-            <p className="truncate text-xs text-slate-500" title={rootDir ?? undefined}>
-              {rootDir ?? "Pick a folder to start"}
-            </p>
-          </div>
-          <div className="h-full min-h-0 overflow-auto p-2">
-            {explorerRoot ? renderDirectory(explorerRoot, 0) : (
-              <p className="px-2 text-xs text-slate-500">No folder open.</p>
-            )}
-          </div>
-        </aside>
+        {isSidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(false)}
+            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-900 bg-slate-950 text-slate-500 hover:bg-slate-900/30 hover:text-slate-200"
+            title="Show Explorer (Cmd/Ctrl+B)"
+          >
+            <PanelLeftIcon className="h-4 w-4" />
+          </button>
+        ) : (
+          <>
+            <aside className="shrink-0 border-r border-slate-900" style={{ width: sidebarWidth }}>
+              <div className="border-b border-slate-900 px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-semibold text-slate-200" title={rootDir ?? "Dev Tools"}>
+                      {rootDir ? basename(rootDir) : "Dev Tools"}
+                    </h2>
+                    <p className="truncate text-xs text-slate-500" title={rootDir ?? undefined}>
+                      {rootDir ?? "Pick a folder to start"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                    title="Hide Explorer (Cmd/Ctrl+B)"
+                  >
+                    <PanelLeftIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="h-full min-h-0 overflow-auto p-2">
+                {explorerRoot ? renderDirectory(explorerRoot, 0) : (
+                  <p className="px-2 text-xs text-slate-500">No folder open.</p>
+                )}
+              </div>
+            </aside>
 
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          title="Drag to resize explorer"
-          onMouseDown={(event) => {
-            explorerResizeActiveRef.current = true;
-            explorerResizeStartXRef.current = event.clientX;
-            explorerResizeStartWidthRef.current = sidebarWidth;
-            document.body.style.cursor = "col-resize";
-            document.body.style.userSelect = "none";
-          }}
-          className="w-1 cursor-col-resize bg-slate-900/60 hover:bg-slate-700/80"
-        />
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              title="Drag to resize explorer"
+              onDoubleClick={() => setIsSidebarCollapsed(true)}
+              onMouseDown={(event) => {
+                setIsSidebarCollapsed(false);
+                explorerResizeActiveRef.current = true;
+                explorerResizeStartXRef.current = event.clientX;
+                explorerResizeStartWidthRef.current = sidebarWidth;
+                document.body.style.cursor = "col-resize";
+                document.body.style.userSelect = "none";
+              }}
+              className="w-1 cursor-col-resize bg-slate-900/60 hover:bg-slate-700/80"
+            />
+          </>
+        )}
 
         <main className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-slate-900 px-4 py-2">
