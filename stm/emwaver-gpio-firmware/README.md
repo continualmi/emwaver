@@ -43,6 +43,7 @@ bash stm/emwaver-gpio-firmware/build_android_asset.sh
 
 - USB CDC communication
 - GPIO command protocol (`gpio in/out/read/high/low/pull/info`)
+- Version command (`version`) prints a firmware-specific welcome string ending in `1.0.0`
 
 ## IDE Files
 
