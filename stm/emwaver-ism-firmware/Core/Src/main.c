@@ -88,11 +88,9 @@ static void MX_SPI1_Init(void);
 typedef enum {
     ISM_MODE_IDLE = 0,
     ISM_MODE_RAW_SAMPLING = 1,
-    ISM_MODE_TRANSMITTING = 2,
 } ism_mode_t;
 
 static volatile ism_mode_t ism_mode = ISM_MODE_IDLE;
-static volatile uint32_t transmit_last_data_tick = 0;
 
 static void free_bulk_packet(void)
 {
@@ -296,16 +294,6 @@ static void stop_sampling(void)
     transmitBuffer = NULL;
     bufferIndex = 0;
     bufferReady = 0;
-    ism_mode = ISM_MODE_IDLE;
-}
-
-static void stop_transmitting(void)
-{
-    HAL_TIM_Base_Stop_IT(&htim3);
-    stopPWM_TIM2(selectedChannel);
-    CDC_FlushRxBuffer_FS();
-    CDC_FreeRxBuffer_FS();
-    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
     ism_mode = ISM_MODE_IDLE;
 }
 
@@ -634,25 +622,6 @@ int main(void)
               // `sample stop`
               if (bulk_packet_len >= 11 && memcmp((const void *)bulk_packet, "sample stop", 11) == 0) {
                   stop_sampling();
-              }
-              free_bulk_packet();
-          }
-          continue;
-      }
-
-      if (ism_mode == ISM_MODE_TRANSMITTING) {
-          if (CDC_GetRxBufferBytesAvailable_FS() > 0) {
-              transmit_last_data_tick = HAL_GetTick();
-          }
-
-          if ((HAL_GetTick() - transmit_last_data_tick) > 2000) {
-              stop_transmitting();
-          }
-
-          if (bulk_packet != NULL) {
-              // `transmit stop`
-              if (bulk_packet_len >= 13 && memcmp((const void *)bulk_packet, "transmit stop", 13) == 0) {
-                  stop_transmitting();
                   command_send_ok(NULL, 0);
               }
               free_bulk_packet();
@@ -872,6 +841,11 @@ int main(void)
                   case 3: tim_channel = TIM_CHANNEL_4; gpio_pin = GPIO_PIN_3; break;
               }
 
+              // Keep the legacy "tran" flow:
+              // - switch to circular RX buffer
+              // - wait for initial fill (or timeout)
+              // - enable TIM3 ISR which drains RX buffer into PWM gating
+              // - block until RX buffer drains to 0
               configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
               setDutyCycle_TIM2(tim_channel, 50);
               selectedChannel = tim_channel;
@@ -879,10 +853,24 @@ int main(void)
 
               CDC_InitRxBuffer_FS();
               CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
-              transmit_last_data_tick = HAL_GetTick();
+
+              uint32_t start = HAL_GetTick();
+              while (CDC_GetRxBufferBytesAvailable_FS() < 250) {
+                  if ((HAL_GetTick() - start) > 2000) {
+                      break;
+                  }
+              }
 
               HAL_TIM_Base_Start_IT(&htim3);
-              ism_mode = ISM_MODE_TRANSMITTING;
+              while (CDC_GetRxBufferBytesAvailable_FS() != 0) {
+              }
+
+              HAL_TIM_Base_Stop_IT(&htim3);
+              CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+              stopPWM_TIM2(tim_channel);
+              CDC_FlushRxBuffer_FS();
+              CDC_FreeRxBuffer_FS();
+
               command_send_ok(NULL, 0);
           } else if (strcmp(sub, "stop") == 0) {
               command_send_ok(NULL, 0);
