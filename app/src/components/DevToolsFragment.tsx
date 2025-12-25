@@ -29,6 +29,8 @@ type OpenFile = {
   isDirty: boolean;
 };
 
+const DEFAULT_TERMINAL_TITLE = "zsh";
+
 const ROOT_STORAGE_KEY = "emwaver.devtools.root";
 const SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.devtools.sidebarWidth";
 const TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.devtools.terminalHeight";
@@ -158,6 +160,30 @@ function defaultIgnoredName(name: string): boolean {
   );
 }
 
+function nextTerminalTitle(existing: TerminalSession[], baseTitle: string): string {
+  const taken = existing
+    .map((session) => session.title)
+    .filter((title) => title === baseTitle || title.startsWith(`${baseTitle} `)).length;
+  return taken === 0 ? baseTitle : `${baseTitle} ${taken + 1}`;
+}
+
+function TerminalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      className={className ?? "h-4 w-4"}
+      aria-hidden="true"
+    >
+      <path d="M2.5 3.5h11v9h-11z" />
+      <path d="M4.6 6.1l2 1.9-2 1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7.6 10.1h3.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -187,7 +213,6 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
 
   const sessionsRef = useRef<TerminalSession[]>([]);
-  const sessionCounterRef = useRef(1);
 
   const terminalPanelRef = useRef<HTMLDivElement | null>(null);
   const terminalContainerBySessionRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -382,9 +407,10 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
         throw new Error("PTY start returned no session id");
       }
 
+      const title = nextTerminalTitle(sessionsRef.current, DEFAULT_TERMINAL_TITLE);
       const session: TerminalSession = {
         id: sessionId,
-        title: `Terminal ${sessionCounterRef.current++}`,
+        title,
         createdAt: Date.now(),
       };
       setTerminalSessions((prev) => [...prev, session]);
@@ -1022,12 +1048,13 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                                     focusActiveTerminal();
                                   });
                                 }}
-                                className={`min-w-0 flex-1 truncate px-2 py-1 text-left text-xs transition-colors ${
+                                className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
                                   isActive ? "text-sky-200" : "text-slate-300"
                                 }`}
                                 title={session.title}
                               >
-                                {session.title}
+                                <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
+                                <span className="min-w-0 flex-1 truncate">{session.title}</span>
                               </button>
                               <button
                                 type="button"
@@ -1050,7 +1077,10 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                             className="w-full rounded px-2 py-1 text-left text-xs font-semibold text-slate-300 hover:bg-slate-900/50 hover:text-slate-100"
                             title="New terminal"
                           >
-                            + New Terminal
+                            <span className="inline-flex items-center gap-2">
+                              <TerminalIcon className="h-4 w-4 text-slate-500" />
+                              <span>New Terminal</span>
+                            </span>
                           </button>
                         </div>
                       </div>
