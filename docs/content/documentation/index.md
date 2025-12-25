@@ -49,7 +49,7 @@ The EMWaver stack spans firmware, transports, clients, and the Wavelet runtime:
 
 ### Firmware (STM32F042)
 
-- **Project**: `stm/emwaver-firmware/` (CubeIDE project + `.ioc` config).
+- **Projects**: `stm/emwaver-gpio-firmware/`, `stm/emwaver-ir-firmware/`, `stm/emwaver-ism-firmware/`, `stm/emwaver-rfid-firmware/` (CubeIDE projects + `.ioc` configs).
 - **Transport**: USB CDC virtual serial (115200) using the same ASCII command protocol.
 
 ### Client Surfaces

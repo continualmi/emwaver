@@ -19,7 +19,7 @@
 use anyhow::Result;
 use dialoguer::{theme::ColorfulTheme, Confirm, MultiSelect, Select};
 
-use crate::cli::{Component, Target};
+use crate::cli::{Component, Stm32Firmware, Target};
 use crate::{init, shell};
 
 pub fn run_menu() -> Result<()> {
@@ -50,8 +50,16 @@ pub fn run_menu() -> Result<()> {
                 .default(true)
                 .interact()?;
             if proceed {
-                let components = prompt_components(&theme, target)?;
-                init::run_init(target, components, cwd)?;
+                match target {
+                    Target::Esp32s3 => {
+                        let components = prompt_components(&theme, target)?;
+                        init::run_init(target, components, None, cwd)?;
+                    }
+                    Target::Stm32f042 => {
+                        let firmware = prompt_stm32_firmware(&theme)?;
+                        init::run_init(target, Vec::new(), Some(firmware), cwd)?;
+                    }
+                }
             }
             Ok(())
         }
@@ -104,4 +112,18 @@ fn prompt_components(theme: &ColorfulTheme, target: Target) -> Result<Vec<Compon
         .interact()?;
 
     Ok(selections.into_iter().map(|idx| choices[idx].0).collect())
+}
+
+fn prompt_stm32_firmware(theme: &ColorfulTheme) -> Result<Stm32Firmware> {
+    let selection = Select::with_theme(theme)
+        .with_prompt("STM32 firmware")
+        .default(0)
+        .items(&["gpio", "ir", "ism", "rfid"])
+        .interact()?;
+    Ok(match selection {
+        0 => Stm32Firmware::Gpio,
+        1 => Stm32Firmware::Ir,
+        2 => Stm32Firmware::Ism,
+        _ => Stm32Firmware::Rfid,
+    })
 }

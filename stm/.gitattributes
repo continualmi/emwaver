@@ -2,8 +2,6 @@
 # These attributes do not affect builds; they only influence GitHub's repo analysis.
 
 # STM32CubeMX / ST HAL / CMSIS sources
-emwaver-firmware/Drivers/** linguist-vendored
-emwaver-firmware/Middlewares/** linguist-vendored
 emwaver-ism-firmware/Drivers/** linguist-vendored
 emwaver-ism-firmware/Middlewares/** linguist-vendored
 emwaver-ir-firmware/Drivers/** linguist-vendored
@@ -14,7 +12,6 @@ emwaver-gpio-firmware/Drivers/** linguist-vendored
 emwaver-gpio-firmware/Middlewares/** linguist-vendored
 
 # Auto-generated peripheral glue (still source, but typically generated)
-emwaver-firmware/USB_DEVICE/** linguist-generated
 emwaver-ism-firmware/USB_DEVICE/** linguist-generated
 emwaver-ir-firmware/USB_DEVICE/** linguist-generated
 emwaver-rfid-firmware/USB_DEVICE/** linguist-generated

@@ -31,10 +31,11 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Init {
             target,
             components,
+            stm32_firmware,
             path,
         }) => {
             let destination = path.unwrap_or(std::env::current_dir()?);
-            init::run_init(target, components, destination)
+            init::run_init(target, components, stm32_firmware, destination)
         }
         None => interactive::run_menu(),
     }

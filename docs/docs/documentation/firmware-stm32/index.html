@@ -1353,7 +1353,13 @@
 
 
 <h1 id="stm32f042-firmware-stm32cubeide">STM32F042 Firmware (STM32CubeIDE)</h1>
-<p>The STM32 firmware lives in <code>stm/emwaver-firmware/</code> and targets the <strong>STM32F042</strong> family of EMWaver devices.</p>
+<p>The STM32 firmware lives under <code>stm/</code> as multiple STM32CubeIDE projects targeting the <strong>STM32F042</strong> family of EMWaver devices:</p>
+<ul>
+<li><code>stm/emwaver-gpio-firmware/</code></li>
+<li><code>stm/emwaver-ir-firmware/</code></li>
+<li><code>stm/emwaver-ism-firmware/</code></li>
+<li><code>stm/emwaver-rfid-firmware/</code></li>
+</ul>
 <h2 id="devices-stm32-family">Devices (STM32 Family)</h2>
 <p>This firmware applies to the smaller STM32-based devices (all built around <strong>STM32F042</strong>, 48 MHz, native USB 2.0), including:</p>
 <ul>
@@ -1370,8 +1376,8 @@
 </ul>
 <h2 id="build-cubeide">Build (CubeIDE)</h2>
 <ol>
-<li>Open the project from <code>stm/emwaver-firmware/</code> in <strong>STM32CubeIDE</strong>.</li>
-<li>Open <code>emwaver-firmware.ioc</code> and click <strong>Generate Code</strong>.</li>
+<li>Open the matching project folder under <code>stm/</code> in <strong>STM32CubeIDE</strong>.</li>
+<li>Open the corresponding <code>.ioc</code> file and click <strong>Generate Code</strong>.</li>
 <li>Build using the <strong>Release</strong> configuration (Debug often won’t fit).</li>
 <li>The build output includes an <code>.elf</code> under the <code>Release/</code> output folder.</li>
 </ol>

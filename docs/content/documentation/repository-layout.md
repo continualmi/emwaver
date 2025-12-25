@@ -11,7 +11,7 @@ EMWaver is a monorepo: firmware + apps + desktop + CLI + documentation live toge
 | Path | What it is |
 | --- | --- |
 | `esp/` | ESP32-S3 firmware (ESP-IDF project) |
-| `stm/` | STM32 firmware (STM32CubeIDE project, `stm/emwaver-firmware/`) |
+| `stm/` | STM32 firmwares (STM32CubeIDE projects: `stm/emwaver-gpio-firmware/`, `stm/emwaver-ir-firmware/`, `stm/emwaver-ism-firmware/`, `stm/emwaver-rfid-firmware/`) |
 | `cli/` | Rust CLI (`emwaver`) for project init + device shell |
 | `android/` | Android companion app |
 | `ios/` | iOS companion app (SwiftUI) |

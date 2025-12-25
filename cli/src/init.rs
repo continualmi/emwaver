@@ -23,12 +23,20 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use include_dir::{include_dir, Dir};
 
-use crate::cli::{Component, Target};
+use crate::cli::{Component, Stm32Firmware, Target};
 
 static ESP32S3_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../esp");
-static STM32F042_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-firmware");
+static STM32F042_GPIO_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-gpio-firmware");
+static STM32F042_IR_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-ir-firmware");
+static STM32F042_ISM_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-ism-firmware");
+static STM32F042_RFID_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-rfid-firmware");
 
-pub fn run_init(target: Target, components: Vec<Component>, destination: PathBuf) -> Result<()> {
+pub fn run_init(
+    target: Target,
+    components: Vec<Component>,
+    stm32_firmware: Option<Stm32Firmware>,
+    destination: PathBuf,
+) -> Result<()> {
     let component_set: HashSet<Component> = components.into_iter().collect();
 
     if destination.exists() {
@@ -42,7 +50,7 @@ pub fn run_init(target: Target, components: Vec<Component>, destination: PathBuf
 
     match target {
         Target::Esp32s3 => write_esp32s3(&destination, &component_set),
-        Target::Stm32f042 => write_stm32f042(&destination, &component_set),
+        Target::Stm32f042 => write_stm32f042(&destination, &component_set, stm32_firmware),
     }?;
 
     println!("Initialized {target:?} project at {}", destination.display());
@@ -52,7 +60,7 @@ pub fn run_init(target: Target, components: Vec<Component>, destination: PathBuf
             let project_name = destination
                 .file_name()
                 .and_then(|s| s.to_str())
-                .unwrap_or("emwaver-firmware");
+                .unwrap_or("emwaver-gpio-firmware");
             println!("Next: open `{project_name}.ioc` in STM32CubeIDE, generate code if prompted, then build/flash.");
         }
     }
@@ -107,21 +115,27 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     Ok(())
 }
 
-fn write_stm32f042(destination: &Path, components: &HashSet<Component>) -> Result<()> {
+fn write_stm32f042(
+    destination: &Path,
+    components: &HashSet<Component>,
+    stm32_firmware: Option<Stm32Firmware>,
+) -> Result<()> {
     if components.contains(&Component::Rfm69) {
         bail!("stm32f042 target does not support rfm69 yet");
     }
 
-    write_dir_recursive(&STM32F042_TEMPLATE, destination)?;
+    let firmware = stm32_firmware.unwrap_or_else(|| derive_stm32_firmware(components));
+    let (template, template_name, template_ioc_filename) = stm32_template(firmware);
+
+    write_dir_recursive(template, destination)?;
 
     let project_name = destination
         .file_name()
         .and_then(|s| s.to_str())
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or("emwaver-firmware");
+        .unwrap_or(template_name);
 
-    rename_and_rewrite_stm32_project_files(destination, project_name)?;
-    patch_stm32_main(destination, components)?;
+    rename_and_rewrite_stm32_project_files(destination, template_name, template_ioc_filename, project_name)?;
     Ok(())
 }
 
@@ -172,13 +186,44 @@ fn write_dir_recursive(source: &Dir, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn rename_and_rewrite_stm32_project_files(destination: &Path, project_name: &str) -> Result<()> {
-    let template_name = "emwaver-firmware";
+fn derive_stm32_firmware(components: &HashSet<Component>) -> Stm32Firmware {
+    if components.contains(&Component::Cc1101) {
+        return Stm32Firmware::Ism;
+    }
+    if components.contains(&Component::Sampler) {
+        return Stm32Firmware::Ir;
+    }
+    if components.contains(&Component::Mfrc522) {
+        return Stm32Firmware::Rfid;
+    }
+    Stm32Firmware::Gpio
+}
+
+fn stm32_template(firmware: Stm32Firmware) -> (&'static Dir<'static>, &'static str, &'static str) {
+    match firmware {
+        Stm32Firmware::Gpio => (&STM32F042_GPIO_TEMPLATE, "emwaver-gpio-firmware", "emwaver-gpio-firmware.ioc"),
+        Stm32Firmware::Ir => (&STM32F042_IR_TEMPLATE, "emwaver-ir-firmware", "emwaver-ir-firmware.ioc"),
+        // ISM template still uses the legacy internal project name "emwaver-firmware".
+        Stm32Firmware::Ism => (&STM32F042_ISM_TEMPLATE, "emwaver-firmware", "emwaver-firmware.ioc"),
+        Stm32Firmware::Rfid => (
+            &STM32F042_RFID_TEMPLATE,
+            "emwaver-rfid-firmware",
+            "emwaver-rfid-firmware.ioc",
+        ),
+    }
+}
+
+fn rename_and_rewrite_stm32_project_files(
+    destination: &Path,
+    template_name: &str,
+    template_ioc_filename: &str,
+    project_name: &str,
+) -> Result<()> {
 
     let project_path = destination.join(".project");
     if project_path.exists() {
         let contents = fs::read_to_string(&project_path)?;
-        let updated = contents.replace("<name>emwaver-firmware</name>", &format!("<name>{project_name}</name>"));
+        let updated = contents.replace(&format!("<name>{template_name}</name>"), &format!("<name>{project_name}</name>"));
         fs::write(&project_path, updated)?;
     }
 
@@ -189,7 +234,7 @@ fn rename_and_rewrite_stm32_project_files(destination: &Path, project_name: &str
         fs::write(&cproject_path, updated)?;
     }
 
-    let old_ioc_path = destination.join("emwaver-firmware.ioc");
+    let old_ioc_path = destination.join(template_ioc_filename);
     let new_ioc_path = destination.join(format!("{project_name}.ioc"));
     let ioc_path = if old_ioc_path.exists() {
         fs::rename(&old_ioc_path, &new_ioc_path)?;
@@ -201,18 +246,49 @@ fn rename_and_rewrite_stm32_project_files(destination: &Path, project_name: &str
     if ioc_path.exists() {
         let contents = fs::read_to_string(&ioc_path)?;
         let updated = contents
-            .replace("ProjectManager.ProjectName=emwaver-firmware", &format!("ProjectManager.ProjectName={project_name}"))
+            .replace(&format!("ProjectManager.ProjectName={template_name}"), &format!("ProjectManager.ProjectName={project_name}"))
             .replace(
-                "ProjectManager.ProjectFileName=emwaver-firmware.ioc",
+                &format!("ProjectManager.ProjectFileName={template_ioc_filename}"),
                 &format!("ProjectManager.ProjectFileName={project_name}.ioc"),
             )
             .replace(template_name, project_name);
         fs::write(&ioc_path, updated)?;
     }
 
+    patch_text_file(destination, "README.md", template_name, project_name, template_ioc_filename)?;
+    patch_text_file(
+        destination,
+        "build_android_asset.sh",
+        template_name,
+        project_name,
+        template_ioc_filename,
+    )?;
+
     Ok(())
 }
 
+fn patch_text_file(
+    destination: &Path,
+    relative_path: &str,
+    template_name: &str,
+    project_name: &str,
+    template_ioc_filename: &str,
+) -> Result<()> {
+    let path = destination.join(relative_path);
+    if !path.exists() {
+        return Ok(());
+    }
+    let contents = fs::read_to_string(&path)?;
+    let updated = contents
+        .replace(template_name, project_name)
+        .replace(template_ioc_filename, &format!("{project_name}.ioc"));
+    if updated != contents {
+        fs::write(&path, updated)?;
+    }
+    Ok(())
+}
+
+#[allow(dead_code)]
 fn patch_stm32_main(destination: &Path, components: &HashSet<Component>) -> Result<()> {
     let main_path = destination.join("Core/Src/main.c");
     if !main_path.exists() {
@@ -281,6 +357,7 @@ fn patch_stm32_main(destination: &Path, components: &HashSet<Component>) -> Resu
     Ok(())
 }
 
+#[allow(dead_code)]
 fn replace_between_markers(haystack: &str, start: &str, end: &str, replacement: &str) -> Result<String> {
     let start_idx = haystack
         .find(start)
