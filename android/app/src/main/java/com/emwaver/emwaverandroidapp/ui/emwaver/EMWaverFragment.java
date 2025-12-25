@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.nio.charset.StandardCharsets;
 
 public class EMWaverFragment extends Fragment {
 
@@ -551,8 +552,8 @@ public class EMWaverFragment extends Fragment {
                     String asciiData = bytesToAscii(response);
                     updateResponse(hexData, asciiData);
                     
-                    // Parse the version from the welcome message
-                    String fullMessage = bytesToAscii(response);
+                    // Parse the version from the welcome message (ASCII bytes)
+                    String fullMessage = new String(response, StandardCharsets.US_ASCII);
                     String version = extractVersion(fullMessage);
                     
                     // Store the version in BLE service if connected via BLE (for persistence)
@@ -585,18 +586,23 @@ public class EMWaverFragment extends Fragment {
     
     // Extract version from the welcome message
     private String extractVersion(String message) {
-        // Format is now "1.0.0 - Welcome to EMWaver!"
-        if (message == null || message.isEmpty()) {
+        // STM32 firmwares reply to `version` with a welcome string that ends in X.X.X, e.g.
+        // "Welcome to ISM Waver firmware 1.0.0"
+        if (message == null) {
             return "Unknown";
         }
-        
-        // The version is at the beginning up to the first dash
-        int dashIndex = message.indexOf('-');
-        if (dashIndex > 0) {
-            return message.substring(0, dashIndex).trim();
+
+        String trimmed = message.replace("\u0000", "").trim();
+        if (trimmed.isEmpty()) {
+            return "Unknown";
         }
-        
-        // If parsing fails (no dash found), just return the original message
-        return message;
+
+        Pattern semverAtEnd = Pattern.compile("(\\d+\\.\\d+\\.\\d+)\\s*$");
+        Matcher matcher = semverAtEnd.matcher(trimmed);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+
+        return "Unknown";
     }
-} 
+}
