@@ -40,8 +40,8 @@ const TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.devtools.terminalHeight";
 const TERMINAL_LIST_WIDTH_STORAGE_KEY = "emwaver.devtools.terminalListWidth";
 
 const DEFAULT_SIDEBAR_WIDTH = 320;
-const SIDEBAR_MIN_WIDTH = 240;
-const SIDEBAR_MAX_WIDTH = 560;
+const SIDEBAR_MIN_WIDTH = 200;
+const SIDEBAR_MAX_WIDTH = 920;
 
 const DEFAULT_TERMINAL_HEIGHT = 260;
 const TERMINAL_MIN_HEIGHT = 180;
@@ -225,6 +225,14 @@ function ChevronDownIcon({ className }: { className?: string }) {
   );
 }
 
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
+      <path d="M6.2 4.2l3.8 3.8-3.8 3.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function CloseIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
@@ -238,6 +246,17 @@ function PanelLeftIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
       <path d="M2.5 3.5h11v9h-11z" />
       <path d="M6 3.5v9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FolderIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
+      <path
+        d="M2.6 4.6c0-.6.4-1 1-1h3l1.1 1.1H12.4c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H3.6c-.6 0-1-.4-1-1z"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -265,16 +284,33 @@ function timestampLabel(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
 }
 
+function iconLabelForPath(path: string): { label: string; accentClass: string } {
+  const ext = extension(path);
+  if (ext === "ts" || ext === "tsx") return { label: "TS", accentClass: "text-sky-400" };
+  if (ext === "js" || ext === "jsx") return { label: "JS", accentClass: "text-amber-300" };
+  if (ext === "json") return { label: "{}", accentClass: "text-yellow-200" };
+  if (ext === "md") return { label: "MD", accentClass: "text-slate-300" };
+  if (ext === "rs") return { label: "RS", accentClass: "text-orange-300" };
+  if (ext === "c") return { label: "C", accentClass: "text-sky-300" };
+  if (ext === "h") return { label: "H", accentClass: "text-sky-300" };
+  if (ext === "toml") return { label: "T", accentClass: "text-slate-300" };
+  if (ext === "yml" || ext === "yaml") return { label: "Y", accentClass: "text-emerald-300" };
+  if (ext === "sh") return { label: "$", accentClass: "text-emerald-300" };
+  return { label: "•", accentClass: "text-slate-400" };
+}
+
 export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
-  const [openFile, setOpenFile] = useState<OpenFile | null>(null);
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => readStoredSidebarCollapsed());
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth());
+  const openingFilePathsRef = useRef<Set<string>>(new Set());
 
   const explorerResizeActiveRef = useRef(false);
   const explorerResizeStartXRef = useRef(0);
@@ -319,6 +355,12 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     () => terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? DEFAULT_TERMINAL_TITLE,
     [activeTerminalSessionId, terminalSessions],
   );
+  const activeFile = useMemo(() => {
+    if (!activeFilePath) {
+      return null;
+    }
+    return openFiles.find((file) => file.path === activeFilePath) ?? null;
+  }, [activeFilePath, openFiles]);
 
   useEffect(() => {
     sessionsRef.current = terminalSessions;
@@ -858,7 +900,8 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 
     setRootDir(selected);
     setSelectedPath(null);
-    setOpenFile(null);
+    setOpenFiles([]);
+    setActiveFilePath(null);
     setDirChildren({});
     setOpenDirs(new Set());
   }, []);
@@ -975,45 +1018,80 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     if (!isTauriAvailable()) {
       return;
     }
+    setSelectedPath(path);
+    setActiveFilePath(path);
+    if (openFiles.some((file) => file.path === path)) {
+      return;
+    }
+    if (openingFilePathsRef.current.has(path)) {
+      return;
+    }
+    openingFilePathsRef.current.add(path);
     setIsLoadingFile(true);
     try {
       const content = await safeInvoke<string>("read_file", { payload: { path } });
-      setOpenFile({
+      const next: OpenFile = {
         path,
         name: basename(path),
         content: content ?? "",
         language: languageForPath(path),
         isDirty: false,
-      });
-      setSelectedPath(path);
+      };
+      setOpenFiles((prev) => (prev.some((file) => file.path === path) ? prev : [...prev, next]));
     } finally {
+      openingFilePathsRef.current.delete(path);
       setIsLoadingFile(false);
     }
+  }, [openFiles]);
+
+  const closeFile = useCallback((path: string) => {
+    setOpenFiles((prev) => {
+      const next = prev.filter((file) => file.path !== path);
+      setActiveFilePath((prevActive) => {
+        if (prevActive !== path) {
+          return prevActive;
+        }
+        return next.length > 0 ? next[next.length - 1].path : null;
+      });
+      setSelectedPath((prevSelected) => {
+        if (prevSelected !== path) {
+          return prevSelected;
+        }
+        return next.length > 0 ? next[next.length - 1].path : null;
+      });
+      return next;
+    });
   }, []);
 
   const handleSaveFile = useCallback(async () => {
-    if (!openFile || !isTauriAvailable()) {
+    if (!activeFile || !isTauriAvailable()) {
       return;
     }
-    if (!openFile.isDirty) {
+    if (!activeFile.isDirty) {
       return;
     }
 
     setIsSaving(true);
     try {
-      await safeInvoke<void>("write_file", { payload: { path: openFile.path, content: openFile.content } });
-      setOpenFile((prev) => (prev ? { ...prev, isDirty: false } : prev));
+      await safeInvoke<void>("write_file", { payload: { path: activeFile.path, content: activeFile.content } });
+      setOpenFiles((prev) => prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false } : file)));
     } finally {
       setIsSaving(false);
     }
-  }, [openFile]);
+  }, [activeFile]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (!openFile) {
+      if (!activeFile) {
         return;
       }
+      const isClose = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "w";
       const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s";
+      if (isClose) {
+        event.preventDefault();
+        closeFile(activeFile.path);
+        return;
+      }
       if (!isSave) {
         return;
       }
@@ -1022,7 +1100,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleSaveFile, openFile]);
+  }, [activeFile, closeFile, handleSaveFile]);
 
   const renderDirectory = useCallback(
     (dir: string, depth: number) => {
@@ -1030,7 +1108,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       return (
         <div>
           {children.map((entry) => {
-            const paddingLeft = 10 + depth * 14;
+            const paddingLeft = 6 + depth * 10;
             const isDir = entry.kind === "directory";
             const isOpen = isDir ? openDirs.has(entry.path) : false;
             const isSelected = selectedPath === entry.path;
@@ -1045,15 +1123,26 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                       void handleOpenFile(entry.path);
                     }
                   }}
-                  className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
+                  className={`group flex w-full items-center gap-2 rounded px-2 py-[3px] text-left text-xs transition-colors ${
                     isSelected ? "bg-slate-900 text-sky-200" : "text-slate-300 hover:bg-slate-900/70"
                   }`}
                   style={{ paddingLeft }}
                   title={entry.path}
                 >
-                  <span className="w-4 text-slate-500" aria-hidden="true">
-                    {isDir ? (isOpen ? "▾" : "▸") : " "}
+                  <span className="flex w-4 items-center justify-center text-slate-500" aria-hidden="true">
+                    {isDir ? (isOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />) : null}
                   </span>
+                  <span className="flex h-4 w-5 items-center justify-center text-slate-500" aria-hidden="true">
+                    {isDir ? <FolderIcon className="h-3.5 w-3.5" /> : null}
+                  </span>
+                  {!isDir ? (
+                    <span
+                      className={`flex h-4 w-6 items-center justify-center rounded bg-slate-900/50 text-[10px] font-semibold ${iconLabelForPath(entry.path).accentClass}`}
+                      aria-hidden="true"
+                    >
+                      {iconLabelForPath(entry.path).label}
+                    </span>
+                  ) : null}
                   <span className={`truncate ${isDir ? "text-slate-200" : ""}`}>{entry.name}</span>
                 </button>
                 {isDir && isOpen ? <div>{renderDirectory(entry.path, depth + 1)}</div> : null}
@@ -1080,7 +1169,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
           <button
             type="button"
             onClick={() => void handleSaveFile()}
-            disabled={!openFile?.isDirty || isSaving}
+            disabled={!activeFile?.isDirty || isSaving}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-100 enabled:hover:bg-slate-800 disabled:opacity-50"
             title="Save (Cmd/Ctrl+S)"
           >
@@ -1123,9 +1212,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                 </div>
               </div>
               <div className="h-full min-h-0 overflow-auto p-2">
-                {explorerRoot ? renderDirectory(explorerRoot, 0) : (
-                  <p className="px-2 text-xs text-slate-500">No folder open.</p>
-                )}
+                {explorerRoot ? renderDirectory(explorerRoot, 0) : <p className="px-2 text-xs text-slate-500">No folder open.</p>}
               </div>
             </aside>
 
@@ -1148,27 +1235,80 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
         )}
 
         <main className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center justify-between border-b border-slate-900 px-4 py-2">
-            <div className="min-w-0">
-              <p className="truncate text-xs text-slate-300">{openFile ? openFile.path : "Select a file to edit"}</p>
+          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950">
+            <div className="flex min-w-0 flex-1 items-center overflow-hidden">
+              <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+                {openFiles.length === 0 ? (
+                  <div className="px-4 py-2 text-xs text-slate-500">Select a file to edit</div>
+                ) : (
+                  openFiles.map((file) => {
+                    const isActive = file.path === activeFilePath;
+                    const icon = iconLabelForPath(file.path);
+                    return (
+                      <div
+                        key={file.path}
+                        className={`group flex shrink-0 items-center border-r border-slate-900 ${
+                          isActive ? "bg-slate-900" : "bg-slate-950 hover:bg-slate-900/60"
+                        }`}
+                        title={file.path}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveFilePath(file.path);
+                            setSelectedPath(file.path);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 text-left text-xs ${
+                            isActive ? "text-slate-100" : "text-slate-400 group-hover:text-slate-200"
+                          }`}
+                        >
+                          <span
+                            className={`flex h-4 w-6 items-center justify-center rounded bg-slate-950/40 text-[10px] font-semibold ${icon.accentClass}`}
+                            aria-hidden="true"
+                          >
+                            {icon.label}
+                          </span>
+                          <span className="max-w-[12rem] truncate">{file.name}</span>
+                          {file.isDirty ? <span className="text-amber-300">●</span> : null}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => closeFile(file.path)}
+                          className="ml-1 mr-2 hidden rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200 group-hover:block"
+                          title="Close (Cmd/Ctrl+W)"
+                        >
+                          <CloseIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3 text-xs text-slate-500">
+
+            <div className="flex shrink-0 items-center gap-3 px-4 py-2 text-xs text-slate-500">
               {isLoadingFile ? <span>Loading…</span> : null}
-              {openFile?.isDirty ? <span className="text-amber-300">Unsaved</span> : null}
+              {activeFile?.isDirty ? <span className="text-amber-300">Unsaved</span> : null}
             </div>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-              {openFile ? (
+              {activeFile ? (
                 <div className="h-full select-text">
                   <MonacoEditor
                     theme={theme === "light" ? "vs-light" : "vs-dark"}
-                    language={openFile.language}
-                    value={openFile.content}
+                    path={activeFile.path}
+                    language={activeFile.language}
+                    value={activeFile.content}
                     options={MONACO_EDITOR_OPTIONS}
                     onChange={(value) => {
-                      setOpenFile((prev) => (prev ? { ...prev, content: value ?? "", isDirty: true } : prev));
+                      setOpenFiles((prev) =>
+                        prev.map((file) =>
+                          file.path === activeFile.path ? { ...file, content: value ?? "", isDirty: true } : file,
+                        ),
+                      );
                     }}
                   />
                 </div>
