@@ -42,9 +42,9 @@ bash stm/emwaver-ism-firmware/build_android_asset.sh
 ## Features
 
 - USB CDC communication
-- CC1101 SPI register access (ISM)
-- Raw sampler stream (`raw`/`s`)
-- TX stream helper (`tran`)
+- CC1101 command protocol (`cc1101 init/read/write/read_burst/write_burst/strobe/apply_defaults/set_mod_power`)
+- Sampler stream (`sample start --pin=<encodedPin>`, `sample stop`)
+- Retransmit stream (`transmit start --pin=<encodedPin>`, `transmit stop`)
 
 ## IDE Files
 
