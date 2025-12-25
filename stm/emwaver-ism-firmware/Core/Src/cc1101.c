@@ -48,6 +48,7 @@ extern SPI_HandleTypeDef hspi1;
 #define CC1101_REG_PKTCTRL0 0x08
 #define CC1101_REG_ADDR     0x09
 #define CC1101_REG_PKTLEN   0x06
+#define CC1101_REG_CHANNR   0x0A
 
 static bool cc1101_initialized = false;
 
@@ -138,15 +139,9 @@ uint8_t cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
 void cc1101_apply_defaults(void)
 {
     cc1101_write_reg(CC1101_REG_FSCTRL1, 0x06);
-    cc1101_write_reg(CC1101_REG_FSCTRL0, 0x00);
-    cc1101_write_reg(CC1101_REG_FREQ2, 0x10);
-    cc1101_write_reg(CC1101_REG_FREQ1, 0xA7);
-    cc1101_write_reg(CC1101_REG_FREQ0, 0x62);
-    cc1101_write_reg(CC1101_REG_MDMCFG4, 0xF5);
-    cc1101_write_reg(CC1101_REG_MDMCFG3, 0x83);
-    cc1101_write_reg(CC1101_REG_MDMCFG2, 0x13);
     cc1101_write_reg(CC1101_REG_MDMCFG1, 0x02);
     cc1101_write_reg(CC1101_REG_MDMCFG0, 0xF8);
+    cc1101_write_reg(CC1101_REG_CHANNR, 0x00);
     cc1101_write_reg(CC1101_REG_DEVIATN, 0x47);
     cc1101_write_reg(CC1101_REG_MCSM0, 0x18);
     cc1101_write_reg(CC1101_REG_FOCCFG, 0x16);
@@ -155,7 +150,6 @@ void cc1101_apply_defaults(void)
     cc1101_write_reg(CC1101_REG_AGCCTRL1, 0x00);
     cc1101_write_reg(CC1101_REG_AGCCTRL0, 0xB2);
     cc1101_write_reg(CC1101_REG_FREND1, 0x56);
-    cc1101_write_reg(CC1101_REG_FREND0, 0x10);
     cc1101_write_reg(CC1101_REG_FSCAL3, 0xE9);
     cc1101_write_reg(CC1101_REG_FSCAL2, 0x2A);
     cc1101_write_reg(CC1101_REG_FSCAL1, 0x00);
@@ -182,4 +176,3 @@ bool cc1101_is_initialized(void)
 {
     return cc1101_initialized;
 }
-

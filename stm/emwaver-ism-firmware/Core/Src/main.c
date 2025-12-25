@@ -634,6 +634,165 @@ static bool cc1101_set_modulation_and_power(int modulation, int dbm)
     return true;
 }
 
+// CC1101 helpers (ported from stm/emwaver-firmware to keep Android/ESP command parity).
+#define CC1101_FOSC_HZ 26000000u
+#define CC1101_REG_IOCFG2  0x00
+#define CC1101_REG_IOCFG1  0x01
+#define CC1101_REG_IOCFG0  0x02
+#define CC1101_REG_FREQ2   0x0D
+#define CC1101_REG_FREQ1   0x0E
+#define CC1101_REG_FREQ0   0x0F
+#define CC1101_REG_MDMCFG4 0x10
+#define CC1101_REG_MDMCFG3 0x11
+#define CC1101_REG_TEST0   0x2E
+#define CC1101_REG_FSCAL2  0x24
+
+static bool cc1101_parse_mhz_string_to_hz(const char *str, uint32_t *out_hz)
+{
+    if (!str || !out_hz) {
+        return false;
+    }
+
+    uint64_t whole = 0;
+    uint64_t frac = 0;
+    uint32_t frac_digits = 0;
+    bool seen_digit = false;
+    bool seen_dot = false;
+
+    for (const char *p = str; *p; ++p) {
+        char c = *p;
+        if (c >= '0' && c <= '9') {
+            seen_digit = true;
+            uint32_t d = (uint32_t)(c - '0');
+            if (!seen_dot) {
+                whole = whole * 10u + d;
+            } else {
+                if (frac_digits >= 6) {
+                    return false;
+                }
+                frac = frac * 10u + d;
+                frac_digits++;
+            }
+            continue;
+        }
+
+        if (c == '.' && !seen_dot) {
+            seen_dot = true;
+            continue;
+        }
+
+        return false;
+    }
+
+    if (!seen_digit) {
+        return false;
+    }
+
+    while (frac_digits < 6) {
+        frac *= 10u;
+        frac_digits++;
+    }
+
+    uint64_t hz = whole * 1000000u + frac;
+    if (hz == 0 || hz > 0xFFFFFFFFu) {
+        return false;
+    }
+
+    *out_hz = (uint32_t)hz;
+    return true;
+}
+
+static void cc1101_calibrate_for_freq_hz(uint32_t freq_hz)
+{
+    if ((freq_hz >= 300000000u && freq_hz <= 348000000u) ||
+        (freq_hz >= 378000000u && freq_hz <= 464000000u) ||
+        (freq_hz >= 779000000u && freq_hz <= 899990000u)) {
+        uint32_t boundary_hz = 0;
+        if (freq_hz >= 300000000u && freq_hz <= 348000000u) {
+            boundary_hz = 322880000u;
+        } else if (freq_hz >= 378000000u && freq_hz <= 464000000u) {
+            boundary_hz = 430500000u;
+        } else {
+            boundary_hz = 861000000u;
+        }
+
+        if (freq_hz < boundary_hz) {
+            cc1101_write_reg(CC1101_REG_TEST0, 0x0B);
+        } else {
+            cc1101_write_reg(CC1101_REG_TEST0, 0x09);
+            uint8_t fscal2 = cc1101_read_reg(CC1101_REG_FSCAL2);
+            if (fscal2 < 32) {
+                cc1101_write_reg(CC1101_REG_FSCAL2, (uint8_t)(fscal2 + 32));
+            }
+        }
+        return;
+    }
+
+    if (freq_hz >= 900000000u && freq_hz <= 928000000u) {
+        cc1101_write_reg(CC1101_REG_TEST0, 0x09);
+        uint8_t fscal2 = cc1101_read_reg(CC1101_REG_FSCAL2);
+        if (fscal2 < 32) {
+            cc1101_write_reg(CC1101_REG_FSCAL2, (uint8_t)(fscal2 + 32));
+        }
+    }
+}
+
+static bool cc1101_set_frequency_hz(uint32_t freq_hz)
+{
+    if (freq_hz == 0) {
+        return false;
+    }
+
+    const uint64_t num = (uint64_t)freq_hz * (uint64_t)(1u << 16);
+    const uint32_t freq_word = (uint32_t)((num + (CC1101_FOSC_HZ / 2u)) / (uint64_t)CC1101_FOSC_HZ);
+
+    cc1101_write_reg(CC1101_REG_FREQ2, (uint8_t)((freq_word >> 16) & 0xFF));
+    cc1101_write_reg(CC1101_REG_FREQ1, (uint8_t)((freq_word >> 8) & 0xFF));
+    cc1101_write_reg(CC1101_REG_FREQ0, (uint8_t)(freq_word & 0xFF));
+
+    cc1101_calibrate_for_freq_hz(freq_hz);
+    return true;
+}
+
+static uint32_t cc1101_compute_bitrate_bps(uint8_t drate_e, uint8_t drate_m)
+{
+    const uint32_t denom_shift = 28u - (uint32_t)(drate_e & 0x0Fu);
+    const uint64_t denom = 1ULL << denom_shift;
+    const uint64_t num = (uint64_t)(256u + (uint32_t)drate_m) * (uint64_t)CC1101_FOSC_HZ;
+    return (uint32_t)((num + (denom / 2u)) / denom);
+}
+
+static bool cc1101_set_datarate_bps(int bps)
+{
+    if (bps <= 0) {
+        return false;
+    }
+
+    const uint32_t target = (uint32_t)bps;
+
+    int best_m = 0;
+    int best_e = 0;
+    uint32_t best_error = 0xFFFFFFFFu;
+
+    for (int e = 0; e <= 15; e++) {
+        for (int m = 0; m <= 255; m++) {
+            uint32_t bitrate = cc1101_compute_bitrate_bps((uint8_t)e, (uint8_t)m);
+            uint32_t error = (bitrate >= target) ? (bitrate - target) : (target - bitrate);
+            if (error < best_error) {
+                best_error = (uint32_t)error;
+                best_m = m;
+                best_e = e;
+            }
+        }
+    }
+
+    uint8_t mdmcfg4 = cc1101_read_reg(CC1101_REG_MDMCFG4);
+    uint8_t preserved_bw = mdmcfg4 & 0xF0;
+    cc1101_write_reg(CC1101_REG_MDMCFG4, (uint8_t)(preserved_bw | (best_e & 0x0F)));
+    cc1101_write_reg(CC1101_REG_MDMCFG3, (uint8_t)(best_m & 0xFF));
+    return true;
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -738,11 +897,11 @@ int main(void)
           continue;
       }
 
-      if (cmd.verb && strcmp(cmd.verb, "cc1101") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
-          if (strcmp(sub, "init") == 0) {
-              cc1101_init();
-              command_send_ok(NULL, 0);
+	      if (cmd.verb && strcmp(cmd.verb, "cc1101") == 0 && cmd.positional_count > 0) {
+	          const char *sub = cmd.positional[0];
+	          if (strcmp(sub, "init") == 0) {
+	              cc1101_init();
+	              command_send_ok(NULL, 0);
           } else if (strcmp(sub, "apply_defaults") == 0) {
               cc1101_apply_defaults();
               command_send_ok(NULL, 0);
@@ -815,20 +974,48 @@ int main(void)
                   cc1101_read_burst((uint8_t)reg, out, (size_t)len);
                   command_send_ok(out, (size_t)len);
               }
-          } else if (strcmp(sub, "set_mod_power") == 0) {
-              int mod = 0, dbm = 0;
-              const char *mod_str = cli_get_arg_view(&cmd, "mod");
-              const char *dbm_str = cli_get_arg_view(&cmd, "dbm");
-              if (!cli_parse_int(mod_str, &mod) || !cli_parse_int(dbm_str, &dbm)) {
-                  command_send_err(NULL);
-              } else if (!cc1101_set_modulation_and_power(mod, dbm)) {
-                  command_send_err(NULL);
-              } else {
-                  command_send_ok(NULL, 0);
-              }
-          } else {
-              command_send_err(NULL);
-          }
+	          } else if (strcmp(sub, "set_mod_power") == 0) {
+	              int mod = 0, dbm = 0;
+	              const char *mod_str = cli_get_arg_view(&cmd, "mod");
+	              const char *dbm_str = cli_get_arg_view(&cmd, "dbm");
+	              if (!cli_parse_int(mod_str, &mod) || !cli_parse_int(dbm_str, &dbm)) {
+	                  command_send_err(NULL);
+	              } else if (!cc1101_set_modulation_and_power(mod, dbm)) {
+	                  command_send_err(NULL);
+	              } else {
+	                  command_send_ok(NULL, 0);
+	              }
+	          } else if (strcmp(sub, "set_gdo") == 0) {
+	              const char *data_str = cli_get_arg_view(&cmd, "data");
+	              uint8_t bytes[8] = {0};
+	              size_t bytes_len = 0;
+	              if (!cli_parse_hex_bytes(data_str, bytes, sizeof(bytes), &bytes_len) || bytes_len != 3) {
+	                  command_send_err(NULL);
+	              } else {
+	                  cc1101_write_reg(CC1101_REG_IOCFG2, bytes[0]);
+	                  cc1101_write_reg(CC1101_REG_IOCFG1, bytes[1]);
+	                  cc1101_write_reg(CC1101_REG_IOCFG0, bytes[2]);
+	                  command_send_ok(NULL, 0);
+	              }
+	          } else if (strcmp(sub, "set_freq") == 0) {
+	              const char *mhz_str = cli_get_arg_view(&cmd, "mhz");
+	              uint32_t hz = 0;
+	              if (!cc1101_parse_mhz_string_to_hz(mhz_str, &hz) || !cc1101_set_frequency_hz(hz)) {
+	                  command_send_err(NULL);
+	              } else {
+	                  command_send_ok(NULL, 0);
+	              }
+	          } else if (strcmp(sub, "set_datarate") == 0) {
+	              int bps = 0;
+	              const char *bps_str = cli_get_arg_view(&cmd, "bps");
+	              if (!cli_parse_int(bps_str, &bps) || !cc1101_set_datarate_bps(bps)) {
+	                  command_send_err(NULL);
+	              } else {
+	                  command_send_ok(NULL, 0);
+	              }
+	          } else {
+	              command_send_err(NULL);
+	          }
 
           free_bulk_packet();
           continue;
