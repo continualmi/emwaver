@@ -27,6 +27,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ProgressBar;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -57,8 +59,21 @@ public class FlashFragment extends Fragment {
     private TextView progressTextView;
     private Button okButton;
     private ProgressBar progressBar;
+    private String selectedAssetPath = "dfu/ism.dfu";
 
     private static final String TAG = "FlashFragment";
+    private static final String[] FIRMWARE_LABELS = new String[]{
+        "ISM",
+        "GPIO",
+        "IR",
+        "RFID"
+    };
+    private static final String[] FIRMWARE_ASSETS = new String[]{
+        "dfu/ism.dfu",
+        "dfu/gpio.dfu",
+        "dfu/ir.dfu",
+        "dfu/rfid.dfu"
+    };
 
 
     @Override
@@ -86,6 +101,30 @@ public class FlashFragment extends Fragment {
         // Set up click listeners for the buttons
         binding.buttonConnect.setOnClickListener(v -> requestOrConnectDFU());
         binding.buttonFlashFile.setOnClickListener(v -> flashFile());
+
+        ArrayAdapter<String> firmwareAdapter = new ArrayAdapter<>(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            FIRMWARE_LABELS
+        );
+        firmwareAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        binding.spinnerFirmware.setAdapter(firmwareAdapter);
+        binding.spinnerFirmware.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position < 0 || position >= FIRMWARE_ASSETS.length) {
+                    return;
+                }
+                selectedAssetPath = FIRMWARE_ASSETS[position];
+                selectedFileUri = null;
+                binding.textViewFileName.setText(selectedAssetPath);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Keep existing selection.
+            }
+        });
 
         // Set up the options menu
         requireActivity().addMenuProvider(new MenuProvider() {
@@ -202,7 +241,7 @@ public class FlashFragment extends Fragment {
                         updateProgressDialog("Mass erase complete. Setting address pointer...");
                         setAddressPointer(0x08000000);
                         updateProgressDialog("Address pointer set. Starting flash write...");
-                        writeFlashFromAssetsFile();
+                        writeFlashFromAssetsFile(selectedAssetPath);
                         updateProgressDialog("Flash write completed successfully!");
                     } catch (Exception e) {
                         updateProgressDialog("Error writing flash: " + e.getMessage());
@@ -329,9 +368,9 @@ public class FlashFragment extends Fragment {
         }
     }
 
-    private void writeFlashFromAssetsFile() throws Exception {
+    private void writeFlashFromAssetsFile(String assetPath) throws Exception {
         AssetManager assetManager = getContext().getAssets();
-        InputStream inputStream = assetManager.open("dfu.dfu");
+        InputStream inputStream = assetManager.open(assetPath);
 
         byte[] writeBuffer = new byte[Dfu.BLOCK_SIZE];
         byte[] readBuffer = new byte[Dfu.BLOCK_SIZE];
