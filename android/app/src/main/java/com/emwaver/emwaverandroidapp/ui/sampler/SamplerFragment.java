@@ -171,6 +171,7 @@ public class SamplerFragment extends Fragment {
     private static final String PREF_TX_PWM_ENABLED = "sampler_tx_pwm_enabled";
     private static final String PREF_TX_PWM_FREQ_HZ = "sampler_tx_pwm_freq_hz";
     private static final String PREF_TX_PWM_DUTY_PERCENT = "sampler_tx_pwm_duty_percent";
+    private static final String PREF_INVERT_RECORDING = "sampler_invert_recording";
     private static final int DEFAULT_TX_PWM_FREQ_HZ = 38000;
     private static final int DEFAULT_TX_PWM_DUTY_PERCENT = 50;
     private static final String SIGNALS_DIR = "signals";
@@ -923,6 +924,8 @@ public class SamplerFragment extends Fragment {
 
     private void startRecording() {
         updateDeviceTypeFromConnection();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        boolean invertRecording = prefs.getBoolean(PREF_INVERT_RECORDING, false);
         if (currentDeviceType == DEVICE_STM32) {
             if (USBService == null) {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
@@ -930,6 +933,7 @@ public class SamplerFragment extends Fragment {
             }
 
             USBService.clearBuffer();
+            USBService.setCaptureInvert(invertRecording);
             USBService.setCaptureMode(true);
 
             String selected = binding.gpioSpinner.getSelectedItem().toString();
@@ -949,6 +953,7 @@ public class SamplerFragment extends Fragment {
                 return;
             }
             BLEService.clearBuffer();
+            BLEService.setCaptureInvert(invertRecording);
             BLEService.setCaptureMode(true);
             String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
             byte pinNumber = getPinNumberFromSelection(selectedPinString);
@@ -980,12 +985,14 @@ public class SamplerFragment extends Fragment {
         if (currentDeviceType == DEVICE_STM32) {
              if (USBService != null) {
                  USBService.setCaptureMode(false);
+                 USBService.setCaptureInvert(false);
                  byte[] command = "sample stop".getBytes();
                  USBService.write(command);
              }
         } else {
             if (BLEService != null) {
                 BLEService.setCaptureMode(false);
+                BLEService.setCaptureInvert(false);
                 // Use firmware command format: "sample stop"
                 byte[] command = "sample stop".getBytes();
                 BLEService.write(command);

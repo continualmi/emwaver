@@ -7,6 +7,13 @@
         android:title="Sampler Settings"
         app:iconSpaceReserved="false">
 
+        <SwitchPreferenceCompat
+            android:key="sampler_invert_recording"
+            android:title="Invert Recorded Signal"
+            android:summary="Invert 0/1 samples while recording"
+            android:defaultValue="false"
+            app:iconSpaceReserved="false" />
+
         <ListPreference
             android:key="refresh_time"
             android:title="Refresh Time"

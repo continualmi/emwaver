@@ -122,6 +122,7 @@ public class BLEService extends Service implements DeviceConnectionService {
     public native void loadBuffer(byte[] data);
     public native byte[] getBuffer();
     public native void invertBuffer();
+    public native void setCaptureInvert(boolean enabled);
 
     public class LocalBinder extends Binder {
         public BLEService getService() {
