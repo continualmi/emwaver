@@ -302,6 +302,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
+  const terminalStartInFlightRef = useRef(false);
   const closingTerminalSessionsRef = useRef<Set<string>>(new Set());
 
   const terminalPanelRef = useRef<HTMLDivElement | null>(null);
@@ -607,6 +608,10 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       if (!isTauriAvailable()) {
         return;
       }
+      if (terminalStartInFlightRef.current) {
+        return;
+      }
+      terminalStartInFlightRef.current = true;
       const makeActive = options?.makeActive ?? true;
 
       let cols = 80;
@@ -618,23 +623,27 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
         rows = Math.max(1, terminal?.rows ?? rows);
       }
 
-      const response = await safeInvoke<{ session_id: string }>("pty_start", {
-        payload: { cwd: rootDir, cols, rows },
-      });
-      const sessionId = response?.session_id;
-      if (!sessionId) {
-        throw new Error("PTY start returned no session id");
-      }
+      try {
+        const response = await safeInvoke<{ session_id: string }>("pty_start", {
+          payload: { cwd: rootDir, cols, rows },
+        });
+        const sessionId = response?.session_id;
+        if (!sessionId) {
+          throw new Error("PTY start returned no session id");
+        }
 
-      const title = nextTerminalTitle(sessionsRef.current, DEFAULT_TERMINAL_TITLE);
-      const session: TerminalSession = {
-        id: sessionId,
-        title,
-        createdAt: Date.now(),
-      };
-      setTerminalSessions((prev) => [...prev, session]);
-      if (makeActive) {
-        setActiveTerminalSessionId(sessionId);
+        const title = nextTerminalTitle(sessionsRef.current, DEFAULT_TERMINAL_TITLE);
+        const session: TerminalSession = {
+          id: sessionId,
+          title,
+          createdAt: Date.now(),
+        };
+        setTerminalSessions((prev) => [...prev, session]);
+        if (makeActive) {
+          setActiveTerminalSessionId(sessionId);
+        }
+      } finally {
+        terminalStartInFlightRef.current = false;
       }
     },
     [activeTerminalSessionId, rootDir],
@@ -683,8 +692,8 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     if (didAutoStartTerminalRef.current) {
       return;
     }
+    didAutoStartTerminalRef.current = true;
     if (terminalSessions.length > 0) {
-      didAutoStartTerminalRef.current = true;
       return;
     }
     try {
@@ -692,7 +701,6 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     } catch {
       // ignore
     }
-    didAutoStartTerminalRef.current = true;
   }, [startTerminalSession, terminalSessions.length]);
 
   useEffect(() => {
@@ -762,24 +770,24 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     };
   }, []);
 
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const isToggle = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "j";
-      if (!isToggle) {
-        return;
-      }
-      event.preventDefault();
-      setIsTerminalVisible((prev) => {
-        const next = !prev;
-        if (next && terminalSessions.length === 0) {
-          void startTerminalSession({ makeActive: true });
-        }
-        return next;
-      });
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [startTerminalSession, terminalSessions.length]);
+	  useEffect(() => {
+	    const handler = (event: KeyboardEvent) => {
+	      const isToggle = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "j";
+	      if (!isToggle) {
+	        return;
+	      }
+	      event.preventDefault();
+	      setIsTerminalVisible((prev) => {
+	        const next = !prev;
+	        if (next && terminalSessions.length === 0 && !terminalStartInFlightRef.current) {
+	          void startTerminalSession({ makeActive: true });
+	        }
+	        return next;
+	      });
+	    };
+	    window.addEventListener("keydown", handler);
+	    return () => window.removeEventListener("keydown", handler);
+	  }, [startTerminalSession, terminalSessions.length]);
 
   useEffect(() => {
     return () => {
@@ -1172,15 +1180,15 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
             <div className="border-t border-slate-900 bg-slate-950">
               <button
                 type="button"
-                onClick={() => {
-                  setIsTerminalVisible((prev) => {
-                    const next = !prev;
-                    if (next && terminalSessions.length === 0) {
-                      void startTerminalSession({ makeActive: true });
-                    }
-                    return next;
-                  });
-                }}
+	                onClick={() => {
+	                  setIsTerminalVisible((prev) => {
+	                    const next = !prev;
+	                    if (next && terminalSessions.length === 0 && !terminalStartInFlightRef.current) {
+	                      void startTerminalSession({ makeActive: true });
+	                    }
+	                    return next;
+	                  });
+	                }}
                 className={`flex w-full items-center justify-between px-4 py-2 text-left ${isTerminalVisible ? "hidden" : ""}`}
                 title="Toggle terminal (Cmd/Ctrl+J)"
               >
