@@ -784,7 +784,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-950 text-slate-100">
+    <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
       <div className="flex items-center gap-3 border-b border-slate-900 px-4 py-3">
         <div className="flex items-center gap-2">
           <button
@@ -851,47 +851,48 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
               {openFile ? (
-                <MonacoEditor
-                  theme={theme === "light" ? "vs-light" : "vs-dark"}
-                  language={openFile.language}
-                  value={openFile.content}
-                  options={MONACO_EDITOR_OPTIONS}
-                  onChange={(value) => {
-                    setOpenFile((prev) => (prev ? { ...prev, content: value ?? "", isDirty: true } : prev));
-                  }}
-                />
+                <div className="h-full select-text">
+                  <MonacoEditor
+                    theme={theme === "light" ? "vs-light" : "vs-dark"}
+                    language={openFile.language}
+                    value={openFile.content}
+                    options={MONACO_EDITOR_OPTIONS}
+                    onChange={(value) => {
+                      setOpenFile((prev) => (prev ? { ...prev, content: value ?? "", isDirty: true } : prev));
+                    }}
+                  />
+                </div>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-slate-500">Open a file from the explorer.</div>
               )}
             </div>
 
             <div className="border-t border-slate-900 bg-slate-950">
-              {!isTerminalVisible ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsTerminalVisible((prev) => {
-                      const next = !prev;
-                      if (next && terminalSessions.length === 0) {
-                        void startTerminalSession({ makeActive: true });
-                      }
-                      return next;
-                    });
-                  }}
-                  className="flex w-full items-center justify-between px-4 py-2 text-left"
-                  title="Toggle terminal (Cmd/Ctrl+J)"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-200">Terminal</span>
-                    <span className="text-xs text-slate-600">▸</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span>{rootDir ? `root: ${rootDir}` : "No folder"}</span>
-                    <span className="text-slate-600">Cmd/Ctrl+J</span>
-                  </div>
-                </button>
-              ) : (
-                <>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTerminalVisible((prev) => {
+                    const next = !prev;
+                    if (next && terminalSessions.length === 0) {
+                      void startTerminalSession({ makeActive: true });
+                    }
+                    return next;
+                  });
+                }}
+                className={`flex w-full items-center justify-between px-4 py-2 text-left ${isTerminalVisible ? "hidden" : ""}`}
+                title="Toggle terminal (Cmd/Ctrl+J)"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-200">Terminal</span>
+                  <span className="text-xs text-slate-600">▸</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>{rootDir ? `root: ${rootDir}` : "No folder"}</span>
+                  <span className="text-slate-600">Cmd/Ctrl+J</span>
+                </div>
+              </button>
+
+              <div className={isTerminalVisible ? "" : "hidden"}>
                   <div
                     role="separator"
                     aria-orientation="horizontal"
@@ -904,11 +905,11 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                       document.body.style.userSelect = "none";
                     }}
                     className="h-2 cursor-row-resize bg-slate-900/50 hover:bg-slate-700/80"
-                  />
+                    />
 
-                  <div
-                    ref={terminalPanelRef}
-                    className={`flex overflow-hidden ${theme === "light" ? "bg-slate-50" : "bg-slate-950"}`}
+                    <div
+                      ref={terminalPanelRef}
+                      className={`flex overflow-hidden ${theme === "light" ? "bg-slate-50" : "bg-slate-950"}`}
                     style={{ height: terminalHeight }}
                   >
                     <div className="flex min-w-0 flex-1 flex-col">
@@ -943,9 +944,11 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                                 return;
                               }
                               terminalContainerBySessionRef.current.set(session.id, node);
-                              ensureSessionTerminal(session.id);
+                              if (isTerminalVisible) {
+                                ensureSessionTerminal(session.id);
+                              }
                             }}
-                            className={`absolute inset-0 px-2 py-2 ${session.id === activeTerminalSessionId ? "block" : "hidden"}`}
+                            className={`absolute inset-0 select-text px-2 py-2 ${session.id === activeTerminalSessionId ? "block" : "hidden"}`}
                           />
                         ))}
                         {terminalSessions.length === 0 ? (
@@ -1042,8 +1045,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                       </div>
                     </aside>
                   </div>
-                </>
-              )}
+              </div>
             </div>
           </div>
         </main>
