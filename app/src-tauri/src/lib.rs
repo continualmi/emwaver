@@ -1,4 +1,5 @@
 mod ble;
+mod dfu;
 mod usb;
 
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ use tauri::{
 };
 use tempfile::Builder;
 use ble::{BLEState, BLEStatus, BLENotification};
+use dfu::{DfuDevice, EmbeddedFirmware};
 use usb::{USBState, USBStatus, USBNotification};
 
 #[derive(Deserialize)]
@@ -96,6 +98,12 @@ struct RemovePathPayload {
 struct RenamePathPayload {
     from: String,
     to: String,
+}
+
+#[derive(Clone, Serialize)]
+struct DfuProgressEvent {
+    message: String,
+    timestamp_ms: u64,
 }
 
 // Firmware task types removed - ESP-IDF build/flash functionality removed
@@ -581,6 +589,68 @@ async fn usb_get_notification(state: State<'_, Arc<USBState>>) -> Result<Option<
     Ok(state.get_notification().await)
 }
 
+// DFU Commands
+#[tauri::command]
+async fn dfu_is_connected() -> Result<bool, String> {
+    spawn_blocking(move || match DfuDevice::open() {
+        Ok(_) => Ok(true),
+        Err(err) if err.contains("No STM32 DFU device found") => Ok(false),
+        Err(err) => Err(err),
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
+}
+
+fn emit_dfu_progress(app: &tauri::AppHandle, message: impl Into<String>) {
+    let _ = app.emit(
+        "dfu-progress",
+        DfuProgressEvent {
+            message: message.into(),
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        },
+    );
+}
+
+#[tauri::command]
+async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
+    let selection = EmbeddedFirmware::from_str(&firmware)
+        .ok_or_else(|| format!("Unknown embedded firmware: {firmware}"))?;
+    let bytes = selection.bytes();
+    let app_handle = app.clone();
+
+    spawn_blocking(move || {
+        emit_dfu_progress(&app_handle, "Opening DFU device...");
+        let mut device = DfuDevice::open()?;
+        device.flash(bytes, |msg| emit_dfu_progress(&app_handle, msg))?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
+}
+
+#[tauri::command]
+async fn dfu_flash_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let firmware_path = expand_path(&path);
+    let app_handle = app.clone();
+
+    spawn_blocking(move || {
+        emit_dfu_progress(&app_handle, format!("Reading firmware file: {}", firmware_path.display()));
+        let bytes = fs::read(&firmware_path)
+            .map_err(|e| format!("Failed to read firmware file {}: {e}", firmware_path.display()))?;
+        emit_dfu_progress(&app_handle, format!("Firmware size: {} bytes", bytes.len()));
+
+        emit_dfu_progress(&app_handle, "Opening DFU device...");
+        let mut device = DfuDevice::open()?;
+        device.flash(&bytes, |msg| emit_dfu_progress(&app_handle, msg))?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -776,7 +846,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Arc::new(BLEState::new()))
         .manage(Arc::new(USBState::new()))
-        .invoke_handler(tauri::generate_handler![
+	        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
             read_file,
@@ -798,10 +868,13 @@ pub fn run() {
             usb_list_ports,
             usb_connect,
             usb_disconnect,
-            usb_send_packet,
-            usb_get_status,
-            usb_get_notification
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+	            usb_send_packet,
+	            usb_get_status,
+	            usb_get_notification,
+	            dfu_is_connected,
+	            dfu_flash_embedded,
+	            dfu_flash_file
+	        ])
+	        .run(tauri::generate_context!())
+	        .expect("error while running tauri application");
 }

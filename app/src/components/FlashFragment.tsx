@@ -1,0 +1,225 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { isTauriAvailable, safeInvoke } from "../utils/tauri";
+
+type FirmwareOption = {
+  id: "ism" | "gpio" | "ir" | "rfid";
+  label: string;
+};
+
+type ProgressEventPayload = {
+  message: string;
+  timestamp_ms?: number;
+};
+
+const FIRMWARE_OPTIONS: FirmwareOption[] = [
+  { id: "ism", label: "ISM" },
+  { id: "gpio", label: "GPIO" },
+  { id: "ir", label: "IR" },
+  { id: "rfid", label: "RFID" },
+];
+
+export default function FlashFragment() {
+  const firmwareOptions = useMemo(() => FIRMWARE_OPTIONS, []);
+  const [selectedFirmware, setSelectedFirmware] = useState<FirmwareOption["id"]>("ism");
+  const [externalFilePath, setExternalFilePath] = useState<string | null>(null);
+  const [dfuConnected, setDfuConnected] = useState<boolean>(false);
+  const [isFlashing, setIsFlashing] = useState<boolean>(false);
+  const [progressLines, setProgressLines] = useState<string[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
+
+  const appendProgress = useCallback((line: string) => {
+    const ts = new Date().toLocaleTimeString("en-US", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      fractionalSecondDigits: 3,
+    });
+    setProgressLines((prev) => [...prev.slice(-499), `[${ts}] ${line}`]);
+  }, []);
+
+  useEffect(() => {
+    if (!logRef.current) return;
+    logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [progressLines]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    const register = async () => {
+      if (!isTauriAvailable()) return;
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<ProgressEventPayload>("dfu-progress", (event) => {
+        if (event.payload?.message) {
+          appendProgress(event.payload.message);
+        }
+      });
+    };
+    void register();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [appendProgress]);
+
+  const refreshDfuStatus = useCallback(async () => {
+    try {
+      const connected = await safeInvoke<boolean>("dfu_is_connected", undefined, { throwOnError: true });
+      setDfuConnected(Boolean(connected));
+      appendProgress(Boolean(connected) ? "DFU device detected." : "No DFU device detected.");
+    } catch (error) {
+      console.error(error);
+      appendProgress(`Error checking DFU device: ${String(error)}`);
+      setDfuConnected(false);
+    }
+  }, [appendProgress]);
+
+  const handleSelectExternalFile = useCallback(async () => {
+    try {
+      const path = await openDialog({
+        title: "Select firmware binary",
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Firmware", extensions: ["dfu", "bin"] }],
+      });
+
+      if (typeof path === "string" && path.length > 0) {
+        setExternalFilePath(path);
+        appendProgress(`Selected external file: ${path}`);
+      }
+    } catch (error) {
+      console.error(error);
+      appendProgress(`Failed to select file: ${String(error)}`);
+    }
+  }, [appendProgress]);
+
+  const handleFirmwareChange = useCallback((value: FirmwareOption["id"]) => {
+    setSelectedFirmware(value);
+    setExternalFilePath(null);
+  }, []);
+
+  const handleFlash = useCallback(async () => {
+    if (!dfuConnected) {
+      appendProgress("No DFU device detected. Connect the device in DFU mode and retry.");
+      return;
+    }
+
+    setIsFlashing(true);
+    setProgressLines([]);
+
+    try {
+      if (externalFilePath) {
+        appendProgress("Starting DFU flash (external file)...");
+        await safeInvoke("dfu_flash_file", { path: externalFilePath }, { throwOnError: true });
+      } else {
+        appendProgress(`Starting DFU flash (embedded ${selectedFirmware.toUpperCase()})...`);
+        await safeInvoke("dfu_flash_embedded", { firmware: selectedFirmware }, { throwOnError: true });
+      }
+      appendProgress("Flash write completed successfully!");
+    } catch (error) {
+      console.error(error);
+      appendProgress(`Error writing flash: ${String(error)}`);
+    } finally {
+      setIsFlashing(false);
+      void refreshDfuStatus();
+    }
+  }, [appendProgress, dfuConnected, externalFilePath, refreshDfuStatus, selectedFirmware]);
+
+  return (
+    <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
+      <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4 flex-shrink-0">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-100">Flash</h2>
+          <p className="text-sm text-slate-400">STM32 DFU bootloader flashing over USB.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={isFlashing}
+            onClick={() => void refreshDfuStatus()}
+            className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-60"
+          >
+            Check DFU
+          </button>
+          <div
+            className={`rounded px-3 py-2 text-xs font-medium ${
+              dfuConnected ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/30" : "bg-rose-500/10 text-rose-300 border border-rose-500/30"
+            }`}
+          >
+            {dfuConnected ? "Connected" : "Not Connected"}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0 flex-col gap-6 overflow-y-auto px-6 py-6">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Firmware</h3>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-slate-100">Bundled firmware</p>
+              <select
+                value={selectedFirmware}
+                disabled={isFlashing}
+                onChange={(event) => handleFirmwareChange(event.target.value as FirmwareOption["id"])}
+                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
+              >
+                {firmwareOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400">Selecting a bundled firmware clears any external file selection.</p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-slate-100">External firmware</p>
+              <button
+                type="button"
+                disabled={isFlashing}
+                onClick={() => void handleSelectExternalFile()}
+                className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-60"
+              >
+                Choose file…
+              </button>
+              <p className="text-xs text-slate-400 truncate">
+                {externalFilePath ? externalFilePath : "No external file selected."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <p className="text-xs text-slate-400">
+              Flashing erases and replaces device firmware. Connect the device in DFU mode (BOOT0 set for DFU).
+            </p>
+            <button
+              type="button"
+              disabled={isFlashing || !dfuConnected}
+              onClick={() => void handleFlash()}
+              className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-sky-500 disabled:opacity-60"
+            >
+              {isFlashing ? "Flashing…" : "Flash"}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 flex flex-col min-h-0">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Progress</h3>
+          <div
+            ref={logRef}
+            className="mt-4 flex-1 min-h-0 overflow-y-auto rounded border border-slate-800 bg-slate-950/60 p-3 font-mono text-xs text-slate-200"
+          >
+            {progressLines.length === 0 ? (
+              <div className="text-slate-500">No activity yet.</div>
+            ) : (
+              progressLines.map((line, idx) => (
+                <div key={`${idx}-${line}`} className="whitespace-pre-wrap break-words">
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
