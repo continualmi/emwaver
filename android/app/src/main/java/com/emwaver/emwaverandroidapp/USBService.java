@@ -55,6 +55,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public native void loadBuffer(byte[] data);
     public native byte[] getBuffer();
     public native void invertBuffer();
+    public native void setCaptureInvert(boolean enabled);
 
     private long lastPacketReceivedTime = 0;
 

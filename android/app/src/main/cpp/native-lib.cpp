@@ -15,6 +15,7 @@ static std::vector<char> rx_buffer;
 
 static bool rx_isNewCommandAvailable = false;
 static bool capture_mode = false;
+static bool capture_invert = false;
 
 extern "C" {
 
@@ -51,7 +52,15 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_BLEService_storeBulkPk
     jsize lengthOfArray = env->GetArrayLength(data);
 
     if (capture_mode) {
-        sample_buffer.insert(sample_buffer.end(), bufferPtr, bufferPtr + lengthOfArray);
+        if (capture_invert) {
+            sample_buffer.reserve(sample_buffer.size() + static_cast<size_t>(lengthOfArray));
+            for (jsize i = 0; i < lengthOfArray; i++) {
+                const uint8_t v = static_cast<uint8_t>(bufferPtr[i]);
+                sample_buffer.push_back(static_cast<char>(~v));
+            }
+        } else {
+            sample_buffer.insert(sample_buffer.end(), bufferPtr, bufferPtr + lengthOfArray);
+        }
     } else {
         rx_buffer.insert(rx_buffer.end(), bufferPtr, bufferPtr + lengthOfArray);
         rx_isNewCommandAvailable = true;
@@ -102,6 +111,10 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_BLEService_clearComman
 
 JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_BLEService_setCaptureMode(JNIEnv *env, jobject, jboolean enabled) {
     capture_mode = (enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_BLEService_setCaptureInvert(JNIEnv *env, jobject, jboolean enabled) {
+    capture_invert = (enabled == JNI_TRUE);
 }
 
 JNIEXPORT jobjectArray JNICALL Java_com_emwaver_emwaverandroidapp_BLEService_compressDataBits(JNIEnv *env, jobject, jint rangeStart, jint rangeEnd, jint numberBins) {
@@ -208,7 +221,15 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_USBService_storeBulkPk
     jsize lengthOfArray = env->GetArrayLength(data);
 
     if (capture_mode) {
-        sample_buffer.insert(sample_buffer.end(), bufferPtr, bufferPtr + lengthOfArray);
+        if (capture_invert) {
+            sample_buffer.reserve(sample_buffer.size() + static_cast<size_t>(lengthOfArray));
+            for (jsize i = 0; i < lengthOfArray; i++) {
+                const uint8_t v = static_cast<uint8_t>(bufferPtr[i]);
+                sample_buffer.push_back(static_cast<char>(~v));
+            }
+        } else {
+            sample_buffer.insert(sample_buffer.end(), bufferPtr, bufferPtr + lengthOfArray);
+        }
     } else {
         rx_buffer.insert(rx_buffer.end(), bufferPtr, bufferPtr + lengthOfArray);
         rx_isNewCommandAvailable = true;
@@ -240,6 +261,10 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_USBService_clearComman
 
 JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_USBService_setCaptureMode(JNIEnv *env, jobject, jboolean enabled) {
     capture_mode = (enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_USBService_setCaptureInvert(JNIEnv *env, jobject, jboolean enabled) {
+    capture_invert = (enabled == JNI_TRUE);
 }
 
 JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_USBService_getStatusNumber(JNIEnv *env, jobject) {
