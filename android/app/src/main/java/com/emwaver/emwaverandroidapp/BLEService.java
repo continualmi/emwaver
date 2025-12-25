@@ -115,6 +115,8 @@ public class BLEService extends Service implements DeviceConnectionService {
     public native byte[] getCommand();
     public native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
     public native int getStatusNumber();
+    public native void clearCommandBuffer();
+    public native void setCaptureMode(boolean enabled);
     public native void clearBuffer();
     public native int getBufferLength();
     public native void loadBuffer(byte[] data);
@@ -994,7 +996,7 @@ public class BLEService extends Service implements DeviceConnectionService {
             // Start timing
             long startTime = System.currentTimeMillis();
             
-            clearBuffer(); // Clear any existing data
+            clearCommandBuffer(); // Clear any existing command/status data
             
             // Check permission
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

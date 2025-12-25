@@ -929,6 +929,9 @@ public class SamplerFragment extends Fragment {
                 return;
             }
 
+            USBService.clearBuffer();
+            USBService.setCaptureMode(true);
+
             String selected = binding.gpioSpinner.getSelectedItem().toString();
             int encodedPin = getStm32EncodedPinFromSelection(selected);
             if (encodedPin < 0) {
@@ -945,6 +948,8 @@ public class SamplerFragment extends Fragment {
                 Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
                 return;
             }
+            BLEService.clearBuffer();
+            BLEService.setCaptureMode(true);
             String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
             byte pinNumber = getPinNumberFromSelection(selectedPinString);
 
@@ -974,11 +979,13 @@ public class SamplerFragment extends Fragment {
         updateDeviceTypeFromConnection();
         if (currentDeviceType == DEVICE_STM32) {
              if (USBService != null) {
+                 USBService.setCaptureMode(false);
                  byte[] command = "sample stop".getBytes();
                  USBService.write(command);
              }
         } else {
             if (BLEService != null) {
+                BLEService.setCaptureMode(false);
                 // Use firmware command format: "sample stop"
                 byte[] command = "sample stop".getBytes();
                 BLEService.write(command);
@@ -1004,8 +1011,14 @@ public class SamplerFragment extends Fragment {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
                 return;
             }
-            
+
+            USBService.setCaptureMode(false);
+
             int bufferLength = USBService.getBufferLength();
+            if (bufferLength <= 0) {
+                Toast.makeText(getContext(), "No samples to retransmit", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
             String selected = binding.gpioSpinner.getSelectedItem().toString();
             int encodedPin = getStm32EncodedPinFromSelection(selected);
@@ -1034,7 +1047,13 @@ public class SamplerFragment extends Fragment {
                 return;
             }
 
+            BLEService.setCaptureMode(false);
+
             int bufferLength = BLEService.getBufferLength();
+            if (bufferLength <= 0) {
+                Toast.makeText(getContext(), "No samples to retransmit", Toast.LENGTH_SHORT).show();
+                return;
+            }
             Log.d("SamplerFragment", "BEFORE_RETRANSMIT: Buffer contains " + bufferLength + 
                   " bytes = " + (bufferLength * 8) + " bits");
               
