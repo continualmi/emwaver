@@ -1292,59 +1292,51 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                         >
                           {bottomPanelTab === "terminal" ? (
                             <div className="h-full min-h-0 overflow-auto p-2 pt-3">
-                              {terminalSessions.map((session) => {
-                                const isActive = session.id === activeTerminalSessionId;
-                                return (
-                                  <div
-                                    key={session.id}
-                                    className={`group mb-1 flex items-center gap-2 rounded ${
-                                      isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
-                                    }`}
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveTerminalSessionId(session.id);
-                                        requestAnimationFrame(() => {
-                                          ensureSessionTerminal(session.id);
-                                          focusActiveTerminal();
-                                        });
-                                      }}
-                                      className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
-                                        isActive ? "text-sky-200" : "text-slate-300"
+                              {terminalSessions.length === 0 ? (
+                                <div className="px-2 py-1 text-xs text-slate-500">No terminals yet. Use the + button.</div>
+                              ) : (
+                                terminalSessions.map((session) => {
+                                  const isActive = session.id === activeTerminalSessionId;
+                                  return (
+                                    <div
+                                      key={session.id}
+                                      className={`group mb-1 flex items-center gap-2 rounded ${
+                                        isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
                                       }`}
-                                      title={session.title}
                                     >
-                                      <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                                      <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => void closeTerminalSession(session.id)}
-                                      className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
-                                        isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                                      }`}
-                                      title="Close terminal"
-                                    >
-                                      <CloseIcon className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-
-                              <div className="mt-2 border-t border-slate-800/70 pt-2">
-                                <button
-                                  type="button"
-                                  onClick={() => void startTerminalSession({ makeActive: true })}
-                                  className="w-full rounded px-2 py-1 text-left text-xs font-semibold text-slate-300 hover:bg-slate-900/50 hover:text-slate-100"
-                                  title="New terminal"
-                                >
-                                  <span className="inline-flex items-center gap-2">
-                                    <TerminalIcon className="h-4 w-4 text-slate-500" />
-                                    <span>New Terminal</span>
-                                  </span>
-                                </button>
-                              </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveTerminalSessionId(session.id);
+                                          requestAnimationFrame(() => {
+                                            ensureSessionTerminal(session.id);
+                                            focusActiveTerminal();
+                                          });
+                                        }}
+                                        className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
+                                          isActive ? "text-sky-200" : "text-slate-300"
+                                        }`}
+                                        title={session.title}
+                                      >
+                                        <TerminalIcon
+                                          className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`}
+                                        />
+                                        <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void closeTerminalSession(session.id)}
+                                        className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
+                                          isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                                        }`}
+                                        title="Close terminal"
+                                      >
+                                        <CloseIcon className="h-4 w-4" />
+                                      </button>
+                                    </div>
+                                  );
+                                })
+                              )}
                             </div>
                           ) : (
                             <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
