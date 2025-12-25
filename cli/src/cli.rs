@@ -34,6 +34,30 @@ pub enum Command {
         #[arg(long)]
         verbose: bool,
     },
+    /// Build the ESP-IDF firmware in the current project (runs `idf.py build`).
+    Build {
+        /// ESP-IDF project path (defaults to auto-detect).
+        #[arg(long)]
+        project: Option<PathBuf>,
+    },
+    /// Flash the ESP-IDF firmware in the current project (runs `idf.py flash`).
+    Flash {
+        /// ESP-IDF project path (defaults to auto-detect).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
+        #[arg(long)]
+        port: Option<String>,
+    },
+    /// Monitor the ESP-IDF device in the current project (runs `idf.py monitor`).
+    Monitor {
+        /// ESP-IDF project path (defaults to auto-detect).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
+        #[arg(long)]
+        port: Option<String>,
+    },
     /// Initialize a new firmware project.
     Init {
         /// Target platform template to use.
