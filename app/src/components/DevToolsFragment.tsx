@@ -9,6 +9,8 @@ import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
 
 type ThemeMode = "dark" | "light";
 
+type BottomPanelTab = "terminal" | "output";
+
 type TerminalSession = {
   id: string;
   title: string;
@@ -184,6 +186,64 @@ function TerminalIcon({ className }: { className?: string }) {
   );
 }
 
+function PlusIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
+      <path d="M8 3.3v9.4M3.3 8h9.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
+      <path d="M5.4 5.4v7M8 5.4v7M10.6 5.4v7" strokeLinecap="round" />
+      <path d="M3.6 4.3h8.8" strokeLinecap="round" />
+      <path d="M6.1 4.3l.7-1.4h2.4l.7 1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.5 4.3l.5 9.2h6l.5-9.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
+      <path d="M4.2 6.2l3.8 3.8 3.8-3.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
+      <path d="M4.3 4.3l7.4 7.4M11.7 4.3l-7.4 7.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function formatConsoleArgs(args: unknown[]): string {
+  return args
+    .map((arg) => {
+      if (typeof arg === "string") {
+        return arg;
+      }
+      if (arg instanceof Error) {
+        return arg.stack || arg.message;
+      }
+      try {
+        return JSON.stringify(arg);
+      } catch {
+        return String(arg);
+      }
+    })
+    .join(" ");
+}
+
+function timestampLabel(date: Date): string {
+  const pad = (value: number, size = 2) => String(value).padStart(size, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+}
+
 export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -199,6 +259,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const explorerResizeStartWidthRef = useRef(0);
 
   const [isTerminalVisible, setIsTerminalVisible] = useState(false);
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>("terminal");
   const [terminalHeight, setTerminalHeight] = useState<number>(() => readStoredTerminalHeight());
   const terminalResizeActiveRef = useRef(false);
   const terminalResizeStartYRef = useRef(0);
@@ -211,6 +272,11 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
+  const [isTerminalPickerOpen, setIsTerminalPickerOpen] = useState(false);
+  const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  const [outputLines, setOutputLines] = useState<string[]>([]);
+  const outputScrollRef = useRef<HTMLDivElement | null>(null);
 
   const sessionsRef = useRef<TerminalSession[]>([]);
 
@@ -224,10 +290,119 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const monaco = useMonaco();
 
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
+  const activeTerminalTitle = useMemo(
+    () => terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? DEFAULT_TERMINAL_TITLE,
+    [activeTerminalSessionId, terminalSessions],
+  );
 
   useEffect(() => {
     sessionsRef.current = terminalSessions;
   }, [terminalSessions]);
+
+  useEffect(() => {
+    if (!isTerminalPickerOpen) {
+      return;
+    }
+
+    const onMouseDown = (event: MouseEvent) => {
+      const anchor = terminalPickerAnchorRef.current;
+      if (!anchor) {
+        setIsTerminalPickerOpen(false);
+        return;
+      }
+      if (event.target instanceof Node && anchor.contains(event.target)) {
+        return;
+      }
+      setIsTerminalPickerOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsTerminalPickerOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [isTerminalPickerOpen]);
+
+  useEffect(() => {
+    setIsTerminalPickerOpen(false);
+  }, [bottomPanelTab]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      setIsTerminalPickerOpen(false);
+    }
+  }, [isTerminalVisible]);
+
+  useEffect(() => {
+    if (bottomPanelTab !== "output") {
+      return;
+    }
+    const node = outputScrollRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+  }, [bottomPanelTab, outputLines.length]);
+
+  useEffect(() => {
+    const MAX_LINES = 2000;
+    const pushLine = (line: string) => {
+      setOutputLines((prev) => {
+        const next = [...prev, line];
+        if (next.length <= MAX_LINES) {
+          return next;
+        }
+        return next.slice(next.length - MAX_LINES);
+      });
+    };
+
+    const original = {
+      log: console.log,
+      info: console.info,
+      warn: console.warn,
+      error: console.error,
+    };
+
+    const wrap =
+      (level: "log" | "info" | "warn" | "error") =>
+      (...args: unknown[]) => {
+        original[level](...args);
+        const label = timestampLabel(new Date());
+        pushLine(`[${label}] ${level.toUpperCase()} ${formatConsoleArgs(args)}`);
+      };
+
+    console.log = wrap("log");
+    console.info = wrap("info");
+    console.warn = wrap("warn");
+    console.error = wrap("error");
+
+    const onWindowError = (event: ErrorEvent) => {
+      const label = timestampLabel(new Date());
+      pushLine(`[${label}] ERROR ${event.message}`);
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const label = timestampLabel(new Date());
+      pushLine(`[${label}] ERROR Unhandled rejection: ${formatConsoleArgs([event.reason])}`);
+    };
+    window.addEventListener("error", onWindowError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+
+    return () => {
+      console.log = original.log;
+      console.info = original.info;
+      console.warn = original.warn;
+      console.error = original.error;
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, []);
 
   useEffect(() => {
     if (!monaco) {
@@ -935,157 +1110,251 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 
                     <div
                       ref={terminalPanelRef}
-                      className={`flex overflow-hidden ${theme === "light" ? "bg-slate-50" : "bg-slate-950"}`}
-                    style={{ height: terminalHeight }}
-                  >
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <div className="flex items-center justify-between border-b border-slate-900/70 px-4 py-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsTerminalVisible(false)}
-                          className="flex min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs font-semibold text-slate-200 hover:bg-slate-900/70"
-                          title="Hide terminal (Cmd/Ctrl+J)"
-                        >
-                          <span className="text-slate-500" aria-hidden="true">
-                            ▾
-                          </span>
-                          <span className="truncate">
-                            {terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? "Terminal"}
-                          </span>
-                          <span className="ml-2 text-xs font-normal text-slate-500">{rootDir ? `root: ${rootDir}` : "No folder"}</span>
-                          <span className="ml-2 text-xs font-normal text-slate-600">Cmd/Ctrl+J</span>
-                        </button>
-                        <div className="text-xs text-slate-600" aria-hidden="true">
-                          {/* Actions live in the terminals list to mirror VS Code */}
-                        </div>
-                      </div>
-
-                      <div className="relative min-h-0 flex-1">
-                        {terminalSessions.map((session) => (
-                          <div
-                            key={session.id}
-                            ref={(node) => {
-                              if (!node) {
-                                terminalContainerBySessionRef.current.delete(session.id);
-                                return;
-                              }
-                              terminalContainerBySessionRef.current.set(session.id, node);
-                              if (isTerminalVisible) {
-                                ensureSessionTerminal(session.id);
-                              }
-                            }}
-                            className={`absolute inset-0 select-text px-2 py-2 ${session.id === activeTerminalSessionId ? "block" : "hidden"}`}
-                          />
-                        ))}
-                        {terminalSessions.length === 0 ? (
-                          <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div
-                      role="separator"
-                      aria-orientation="vertical"
-                      title="Drag to resize terminals list"
-                      onMouseDown={(event) => {
-                        terminalListResizeActiveRef.current = true;
-                        terminalListResizeStartXRef.current = event.clientX;
-                        terminalListResizeStartWidthRef.current = terminalListWidth;
-                        document.body.style.cursor = "col-resize";
-                        document.body.style.userSelect = "none";
-                      }}
-                      className="w-2 cursor-col-resize bg-slate-900/40 hover:bg-slate-700/80"
-                    />
-
-                    <aside
-                      className="shrink-0 bg-slate-900/15 shadow-[-10px_0_20px_-20px_rgba(0,0,0,0.9)]"
-                      style={{ width: terminalListWidth }}
+                      className={`flex flex-col overflow-hidden ${theme === "light" ? "bg-slate-50" : "bg-slate-950"}`}
+                      style={{ height: terminalHeight }}
                     >
-                      <div className="group flex items-center justify-between border-b border-slate-800 bg-slate-950/40 px-3 py-2 text-xs font-semibold text-slate-200">
-                        <span>Terminals</span>
-                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      <div className="flex items-center justify-between border-b border-slate-900/70 px-2 py-1 text-xs">
+                        <div className="flex items-end gap-1">
                           <button
                             type="button"
-                            onClick={() => void startTerminalSession({ makeActive: true })}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                            title="New terminal"
+                            onClick={() => setBottomPanelTab("terminal")}
+                            className={`select-none px-3 py-2 font-semibold tracking-wide ${
+                              bottomPanelTab === "terminal"
+                                ? "border-b-2 border-sky-400 text-slate-100"
+                                : "text-slate-400 hover:text-slate-200"
+                            }`}
                           >
-                            +
+                            TERMINAL
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              const sessionId = activeTerminalSessionId;
-                              if (!sessionId) {
-                                return;
-                              }
-                              void closeTerminalSession(sessionId);
-                            }}
-                            disabled={!activeTerminalSessionId}
-                            className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
-                            title="Kill active terminal"
+                            onClick={() => setBottomPanelTab("output")}
+                            className={`select-none px-3 py-2 font-semibold tracking-wide ${
+                              bottomPanelTab === "output"
+                                ? "border-b-2 border-sky-400 text-slate-100"
+                                : "text-slate-400 hover:text-slate-200"
+                            }`}
                           >
-                            ×
+                            OUTPUT
                           </button>
                         </div>
-                      </div>
-                      <div className="h-full min-h-0 overflow-auto p-2">
-                        {terminalSessions.map((session) => {
-                          const isActive = session.id === activeTerminalSessionId;
-                          return (
-                            <div
-                              key={session.id}
-                              className={`group mb-1 flex items-center gap-2 rounded ${
-                                isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
-                              }`}
-                            >
+
+                        <div ref={terminalPickerAnchorRef} className="relative flex items-center gap-1">
+                          {bottomPanelTab === "terminal" ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setIsTerminalPickerOpen((prev) => !prev)}
+                                className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
+                                title="Select terminal"
+                              >
+                                <TerminalIcon className="h-4 w-4 text-slate-500" />
+                                <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
+                                <ChevronDownIcon className="h-4 w-4 text-slate-500" />
+                              </button>
+
+                              {isTerminalPickerOpen ? (
+                                <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
+                                  <div className="max-h-64 overflow-auto p-1">
+                                    {terminalSessions.map((session) => {
+                                      const isActive = session.id === activeTerminalSessionId;
+                                      return (
+                                        <button
+                                          key={session.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setIsTerminalPickerOpen(false);
+                                            setActiveTerminalSessionId(session.id);
+                                            requestAnimationFrame(() => {
+                                              ensureSessionTerminal(session.id);
+                                              focusActiveTerminal();
+                                            });
+                                          }}
+                                          className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
+                                            isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
+                                          }`}
+                                        >
+                                          <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
+                                          <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              <button
+                                type="button"
+                                onClick={() => void startTerminalSession({ makeActive: true })}
+                                className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                                title="New terminal"
+                              >
+                                <PlusIcon />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setActiveTerminalSessionId(session.id);
-                                  requestAnimationFrame(() => {
-                                    ensureSessionTerminal(session.id);
-                                    focusActiveTerminal();
-                                  });
+                                  const sessionId = activeTerminalSessionId;
+                                  if (!sessionId) {
+                                    return;
+                                  }
+                                  void closeTerminalSession(sessionId);
                                 }}
-                                className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
-                                  isActive ? "text-sky-200" : "text-slate-300"
-                                }`}
-                                title={session.title}
+                                disabled={!activeTerminalSessionId}
+                                className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
+                                title="Kill active terminal"
                               >
-                                <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                                <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                                <TrashIcon />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void closeTerminalSession(session.id)}
-                                className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
-                                  isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                                }`}
-                                title="Close terminal"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          );
-                        })}
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setOutputLines([])}
+                              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                              title="Clear output"
+                            >
+                              Clear
+                            </button>
+                          )}
 
-                        <div className="mt-2 border-t border-slate-800/70 pt-2">
                           <button
                             type="button"
-                            onClick={() => void startTerminalSession({ makeActive: true })}
-                            className="w-full rounded px-2 py-1 text-left text-xs font-semibold text-slate-300 hover:bg-slate-900/50 hover:text-slate-100"
-                            title="New terminal"
+                            onClick={() => setIsTerminalVisible(false)}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                            title="Close panel (Cmd/Ctrl+J)"
                           >
-                            <span className="inline-flex items-center gap-2">
-                              <TerminalIcon className="h-4 w-4 text-slate-500" />
-                              <span>New Terminal</span>
-                            </span>
+                            <CloseIcon />
                           </button>
                         </div>
                       </div>
-                    </aside>
-                  </div>
+
+                      <div className="flex min-h-0 flex-1">
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          {bottomPanelTab === "terminal" ? (
+                            <div className="relative min-h-0 flex-1">
+                              {terminalSessions.map((session) => (
+                                <div
+                                  key={session.id}
+                                  ref={(node) => {
+                                    if (!node) {
+                                      terminalContainerBySessionRef.current.delete(session.id);
+                                      return;
+                                    }
+                                    terminalContainerBySessionRef.current.set(session.id, node);
+                                    if (isTerminalVisible) {
+                                      ensureSessionTerminal(session.id);
+                                    }
+                                  }}
+                                  className={`absolute inset-0 select-text px-2 py-2 ${
+                                    session.id === activeTerminalSessionId ? "block" : "hidden"
+                                  }`}
+                                />
+                              ))}
+                              {terminalSessions.length === 0 ? (
+                                <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div
+                              ref={outputScrollRef}
+                              className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30"
+                            >
+                              {outputLines.length === 0 ? (
+                                <div className="text-slate-500">No output yet.</div>
+                              ) : (
+                                <pre className="whitespace-pre-wrap">
+                                  {outputLines.join("\n")}
+                                  {"\n"}
+                                </pre>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div
+                          role="separator"
+                          aria-orientation="vertical"
+                          title="Drag to resize right panel"
+                          onMouseDown={(event) => {
+                            terminalListResizeActiveRef.current = true;
+                            terminalListResizeStartXRef.current = event.clientX;
+                            terminalListResizeStartWidthRef.current = terminalListWidth;
+                            document.body.style.cursor = "col-resize";
+                            document.body.style.userSelect = "none";
+                          }}
+                          className="w-2 cursor-col-resize bg-slate-900/40 hover:bg-slate-700/80"
+                        />
+
+                        <aside
+                          className="shrink-0 bg-slate-900/15 shadow-[-10px_0_20px_-20px_rgba(0,0,0,0.9)]"
+                          style={{ width: terminalListWidth }}
+                        >
+                          {bottomPanelTab === "terminal" ? (
+                            <div className="h-full min-h-0 overflow-auto p-2 pt-3">
+                              {terminalSessions.map((session) => {
+                                const isActive = session.id === activeTerminalSessionId;
+                                return (
+                                  <div
+                                    key={session.id}
+                                    className={`group mb-1 flex items-center gap-2 rounded ${
+                                      isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
+                                    }`}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveTerminalSessionId(session.id);
+                                        requestAnimationFrame(() => {
+                                          ensureSessionTerminal(session.id);
+                                          focusActiveTerminal();
+                                        });
+                                      }}
+                                      className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
+                                        isActive ? "text-sky-200" : "text-slate-300"
+                                      }`}
+                                      title={session.title}
+                                    >
+                                      <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
+                                      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void closeTerminalSession(session.id)}
+                                      className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
+                                        isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                                      }`}
+                                      title="Close terminal"
+                                    >
+                                      <CloseIcon className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+
+                              <div className="mt-2 border-t border-slate-800/70 pt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => void startTerminalSession({ makeActive: true })}
+                                  className="w-full rounded px-2 py-1 text-left text-xs font-semibold text-slate-300 hover:bg-slate-900/50 hover:text-slate-100"
+                                  title="New terminal"
+                                >
+                                  <span className="inline-flex items-center gap-2">
+                                    <TerminalIcon className="h-4 w-4 text-slate-500" />
+                                    <span>New Terminal</span>
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
+                              <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">OUTPUT</div>
+                              <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">DevTools</div>
+                            </div>
+                          )}
+                        </aside>
+                      </div>
+                    </div>
               </div>
             </div>
           </div>
