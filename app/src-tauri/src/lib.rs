@@ -41,6 +41,8 @@ const MENU_SHOW_DEVTOOLS_EVENT: &str = "menu-show-devtools";
 const MENU_INCREASE_LAYOUT_EVENT: &str = "menu-increase-layout";
 const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
+const MENU_DEVTOOLS_OPEN_FOLDER_EVENT: &str = "menu-devtools-open-folder";
+const MENU_DEVTOOLS_SAVE_FILE_EVENT: &str = "menu-devtools-save-file";
 
 // ESP-IDF types and managers removed - desktop app doesn't need ESP-IDF toolchain
 
@@ -821,6 +823,20 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+W"),
             )?;
+            let devtools_open_folder_item = MenuItem::with_id(
+                app,
+                "menu-devtools-open-folder",
+                "Open Folder…",
+                true,
+                Some("CmdOrCtrl+Shift+O"),
+            )?;
+            let devtools_save_file_item = MenuItem::with_id(
+                app,
+                "menu-devtools-save-file",
+                "Save",
+                true,
+                Some("CmdOrCtrl+S"),
+            )?;
             let toggle_explorer_item = MenuItem::with_id(
                 app,
                 "menu-toggle-explorer",
@@ -901,6 +917,8 @@ pub fn run() {
                     if let MenuItemKind::Submenu(submenu) = item {
                         if let Ok(label) = submenu.text() {
                             if label == "File" {
+                                submenu.append(&devtools_open_folder_item)?;
+                                submenu.append(&devtools_save_file_item)?;
                                 submenu.append(&close_item)?;
                                 close_item_added = true;
                             } else if label == "View" {
@@ -923,6 +941,8 @@ pub fn run() {
 
             if !close_item_added {
                 let file_menu = Submenu::new(app, "File", true)?;
+                file_menu.append(&devtools_open_folder_item)?;
+                file_menu.append(&devtools_save_file_item)?;
                 file_menu.append(&close_item)?;
                 menu.append(&file_menu)?;
             }
@@ -991,6 +1011,12 @@ pub fn run() {
                 }
                 "menu-reset-layout" => {
                     let _ = app.emit(MENU_RESET_LAYOUT_EVENT, ());
+                }
+                "menu-devtools-open-folder" => {
+                    let _ = app.emit(MENU_DEVTOOLS_OPEN_FOLDER_EVENT, ());
+                }
+                "menu-devtools-save-file" => {
+                    let _ = app.emit(MENU_DEVTOOLS_SAVE_FILE_EVENT, ());
                 }
                 _ => {}
             }

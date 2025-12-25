@@ -53,6 +53,7 @@ const DEFAULT_TERMINAL_LIST_WIDTH = 224;
 const TERMINAL_LIST_MIN_WIDTH = 140;
 const TERMINAL_LIST_MAX_WIDTH = 720;
 const TERMINAL_LIST_COLLAPSE_THRESHOLD = 90;
+const TERMINAL_VIEW_MIN_WIDTH = 320;
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   fontFamily: '"Fira Code", "Courier New", monospace',
@@ -324,6 +325,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => readStoredSidebarCollapsed());
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth());
+  const sidebarLastExpandedWidthRef = useRef<number>(readStoredSidebarWidth());
   const openingFilePathsRef = useRef<Set<string>>(new Set());
 
   const explorerResizeActiveRef = useRef(false);
@@ -388,19 +390,6 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     }
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
   }, [isSidebarCollapsed]);
-
-  useEffect(() => {
-    const unlistenTogglePromise = safeListen("menu-toggle-explorer", () => {
-      setIsSidebarCollapsed((prev) => !prev);
-    });
-    const unlistenShowPromise = safeListen("menu-show-explorer", () => {
-      setIsSidebarCollapsed(false);
-    });
-    return () => {
-      void unlistenTogglePromise.then((unlisten) => unlisten());
-      void unlistenShowPromise.then((unlisten) => unlisten());
-    };
-  }, []);
 
   useEffect(() => {
     if (!isTerminalPickerOpen) {
@@ -548,6 +537,13 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   }, [sidebarWidth]);
 
   useEffect(() => {
+    if (isSidebarCollapsed) {
+      return;
+    }
+    sidebarLastExpandedWidthRef.current = sidebarWidth;
+  }, [isSidebarCollapsed, sidebarWidth]);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -574,6 +570,39 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     }
     terminalListLastExpandedWidthRef.current = terminalListWidth;
   }, [isTerminalListCollapsed, terminalListWidth]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (isTerminalListCollapsed) {
+      return;
+    }
+    const panel = terminalPanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const raf = requestAnimationFrame(() => {
+      const panelWidth = panel.clientWidth;
+      if (!panelWidth) {
+        return;
+      }
+
+      const maxRightWidth = panelWidth - TERMINAL_VIEW_MIN_WIDTH;
+      if (maxRightWidth < TERMINAL_LIST_COLLAPSE_THRESHOLD) {
+        setIsTerminalListCollapsed(true);
+        return;
+      }
+
+      const nextWidth = clamp(terminalListWidth, TERMINAL_LIST_MIN_WIDTH, Math.min(TERMINAL_LIST_MAX_WIDTH, maxRightWidth));
+      if (nextWidth !== terminalListWidth) {
+        setTerminalListWidth(nextWidth);
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [isTerminalListCollapsed, isTerminalVisible, terminalListWidth]);
 
   const terminalTheme = useMemo(() => {
     if (theme === "light") {
@@ -1124,6 +1153,27 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   }, [activeFile]);
 
   useEffect(() => {
+    const unlistenTogglePromise = safeListen("menu-toggle-explorer", () => {
+      setIsSidebarCollapsed((prev) => !prev);
+    });
+    const unlistenShowPromise = safeListen("menu-show-explorer", () => {
+      setIsSidebarCollapsed(false);
+    });
+    const unlistenOpenFolderPromise = safeListen("menu-devtools-open-folder", () => {
+      void handlePickFolder();
+    });
+    const unlistenSavePromise = safeListen("menu-devtools-save-file", () => {
+      void handleSaveFile();
+    });
+    return () => {
+      void unlistenTogglePromise.then((unlisten) => unlisten());
+      void unlistenShowPromise.then((unlisten) => unlisten());
+      void unlistenOpenFolderPromise.then((unlisten) => unlisten());
+      void unlistenSavePromise.then((unlisten) => unlisten());
+    };
+  }, [handlePickFolder, handleSaveFile]);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!activeFile) {
         return;
@@ -1208,38 +1258,21 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   );
 
   return (
-    <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
-      <div className="flex items-center gap-3 border-b border-slate-900 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void handlePickFolder()}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800"
-          >
-            Open Folder
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSaveFile()}
-            disabled={!activeFile?.isDirty || isSaving}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-100 enabled:hover:bg-slate-800 disabled:opacity-50"
-            title="Save (Cmd/Ctrl+S)"
-          >
-            {isSaving ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
+	    <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
 
-	      <div className="flex min-h-0 flex-1">
-	        {isSidebarCollapsed ? (
-	          <button
-	            type="button"
-            onClick={() => setIsSidebarCollapsed(false)}
-            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-900 bg-slate-950 text-slate-500 hover:bg-slate-900/30 hover:text-slate-200"
-            title="Show Explorer (Cmd/Ctrl+B)"
-          >
-            <PanelLeftIcon className="h-4 w-4" />
-          </button>
+	      <div className="flex min-h-0 flex-1 overflow-hidden">
+		        {isSidebarCollapsed ? (
+		          <button
+		            type="button"
+	            onClick={() => {
+	              setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
+	              setIsSidebarCollapsed(false);
+	            }}
+	            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-900 bg-slate-950 text-slate-500 hover:bg-slate-900/30 hover:text-slate-200"
+	            title="Show Explorer (Cmd/Ctrl+B)"
+	          >
+	            <PanelLeftIcon className="h-4 w-4" />
+	          </button>
 	        ) : (
 	          <>
 	            <aside className="shrink-0 border-r border-slate-900" style={{ width: sidebarWidth }}>
@@ -1265,25 +1298,27 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
               </div>
             </aside>
 
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              title="Drag to resize explorer"
-              onDoubleClick={() => setIsSidebarCollapsed(true)}
-              onMouseDown={(event) => {
-                setIsSidebarCollapsed(false);
-                explorerResizeActiveRef.current = true;
-                explorerResizeStartXRef.current = event.clientX;
-                explorerResizeStartWidthRef.current = sidebarWidth;
-                document.body.style.cursor = "col-resize";
-                document.body.style.userSelect = "none";
-              }}
-              className="w-1 cursor-col-resize bg-slate-900/60 hover:bg-slate-700/80"
-            />
-          </>
-        )}
+	            <div
+	              role="separator"
+	              aria-orientation="vertical"
+	              title="Drag to resize explorer"
+	              onDoubleClick={() => setIsSidebarCollapsed(true)}
+	              onMouseDown={(event) => {
+	                setIsSidebarCollapsed(false);
+	                explorerResizeActiveRef.current = true;
+	                explorerResizeStartXRef.current = event.clientX;
+	                explorerResizeStartWidthRef.current = sidebarWidth;
+	                document.body.style.cursor = "col-resize";
+	                document.body.style.userSelect = "none";
+	              }}
+	              className="group relative w-2 shrink-0 cursor-col-resize bg-transparent hover:bg-slate-800/20"
+	            >
+	              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-900/60 group-hover:bg-slate-700/80" />
+	            </div>
+	          </>
+	        )}
 
-        <main className="flex min-h-0 flex-1 flex-col">
+	        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950">
 	            <div className="flex min-w-0 flex-1 items-center overflow-hidden">
 	              <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
