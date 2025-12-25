@@ -1042,6 +1042,17 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                             </div>
                           );
                         })}
+
+                        <div className="mt-2 border-t border-slate-800/70 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => void startTerminalSession({ makeActive: true })}
+                            className="w-full rounded px-2 py-1 text-left text-xs font-semibold text-slate-300 hover:bg-slate-900/50 hover:text-slate-100"
+                            title="New terminal"
+                          >
+                            + New Terminal
+                          </button>
+                        </div>
                       </div>
                     </aside>
                   </div>
