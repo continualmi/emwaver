@@ -32,6 +32,7 @@ type OpenFile = {
 const ROOT_STORAGE_KEY = "emwaver.devtools.root";
 const SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.devtools.sidebarWidth";
 const TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.devtools.terminalHeight";
+const TERMINAL_LIST_WIDTH_STORAGE_KEY = "emwaver.devtools.terminalListWidth";
 
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 240;
@@ -40,6 +41,10 @@ const SIDEBAR_MAX_WIDTH = 560;
 const DEFAULT_TERMINAL_HEIGHT = 260;
 const TERMINAL_MIN_HEIGHT = 180;
 const TERMINAL_MAX_HEIGHT = 560;
+
+const DEFAULT_TERMINAL_LIST_WIDTH = 224;
+const TERMINAL_LIST_MIN_WIDTH = 180;
+const TERMINAL_LIST_MAX_WIDTH = 420;
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   fontFamily: '"Fira Code", "Courier New", monospace',
@@ -99,6 +104,21 @@ function readStoredTerminalHeight(): number {
   return clamp(parsed, TERMINAL_MIN_HEIGHT, TERMINAL_MAX_HEIGHT);
 }
 
+function readStoredTerminalListWidth(): number {
+  if (typeof window === "undefined") {
+    return DEFAULT_TERMINAL_LIST_WIDTH;
+  }
+  const stored = window.localStorage.getItem(TERMINAL_LIST_WIDTH_STORAGE_KEY);
+  if (!stored) {
+    return DEFAULT_TERMINAL_LIST_WIDTH;
+  }
+  const parsed = Number.parseFloat(stored);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_TERMINAL_LIST_WIDTH;
+  }
+  return clamp(parsed, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH);
+}
+
 function basename(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
   const idx = normalized.lastIndexOf("/");
@@ -146,7 +166,6 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const [openFile, setOpenFile] = useState<OpenFile | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showIgnored, setShowIgnored] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth());
 
   const explorerResizeActiveRef = useRef(false);
@@ -158,6 +177,11 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
   const terminalResizeActiveRef = useRef(false);
   const terminalResizeStartYRef = useRef(0);
   const terminalResizeStartHeightRef = useRef(0);
+
+  const [terminalListWidth, setTerminalListWidth] = useState<number>(() => readStoredTerminalListWidth());
+  const terminalListResizeActiveRef = useRef(false);
+  const terminalListResizeStartXRef = useRef(0);
+  const terminalListResizeStartWidthRef = useRef(0);
 
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
@@ -226,6 +250,13 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     }
     window.localStorage.setItem(TERMINAL_HEIGHT_STORAGE_KEY, String(Math.round(terminalHeight)));
   }, [terminalHeight]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(TERMINAL_LIST_WIDTH_STORAGE_KEY, String(Math.round(terminalListWidth)));
+  }, [terminalListWidth]);
 
   const terminalTheme = useMemo(() => {
     if (theme === "light") {
@@ -508,7 +539,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
         payload: { path: dir },
       });
 
-      const normalized = (entries || []).filter((entry) => (showIgnored ? true : !defaultIgnoredName(entry.name)));
+      const normalized = (entries || []).filter((entry) => !defaultIgnoredName(entry.name));
       normalized.sort((a, b) => {
         if (a.kind !== b.kind) {
           return a.kind === "directory" ? -1 : 1;
@@ -518,7 +549,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 
       setDirChildren((prev) => ({ ...prev, [dir]: normalized }));
     },
-    [showIgnored],
+    [],
   );
 
   const ensureRootLoaded = useCallback(async () => {
@@ -598,6 +629,34 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
         return;
       }
       terminalResizeActiveRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      if (!terminalListResizeActiveRef.current) {
+        return;
+      }
+      const delta = terminalListResizeStartXRef.current - event.clientX;
+      setTerminalListWidth(
+        clamp(terminalListResizeStartWidthRef.current + delta, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH),
+      );
+    };
+
+    const handleUp = () => {
+      if (!terminalListResizeActiveRef.current) {
+        return;
+      }
+      terminalListResizeActiveRef.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -744,10 +803,6 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
           >
             {isSaving ? "Saving…" : "Save"}
           </button>
-          <label className="ml-2 flex items-center gap-2 text-xs text-slate-400">
-            <input type="checkbox" checked={showIgnored} onChange={(event) => setShowIgnored(event.target.checked)} />
-            Show ignored
-          </label>
         </div>
       </div>
 
@@ -873,30 +928,8 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                           <span className="ml-2 text-xs font-normal text-slate-500">{rootDir ? `root: ${rootDir}` : "No folder"}</span>
                           <span className="ml-2 text-xs font-normal text-slate-600">Cmd/Ctrl+J</span>
                         </button>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void startTerminalSession({ makeActive: true })}
-                            className="rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 hover:bg-slate-800"
-                            title="New terminal"
-                          >
-                            +
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const sessionId = activeTerminalSessionId;
-                              if (!sessionId) {
-                                return;
-                              }
-                              void closeTerminalSession(sessionId);
-                            }}
-                            disabled={!activeTerminalSessionId}
-                            className="rounded-md bg-slate-900 px-2 py-1 text-xs font-semibold text-slate-100 enabled:hover:bg-slate-800 disabled:opacity-50"
-                            title="Kill terminal"
-                          >
-                            ×
-                          </button>
+                        <div className="text-xs text-slate-600" aria-hidden="true">
+                          {/* Actions live in the terminals list to mirror VS Code */}
                         </div>
                       </div>
 
@@ -921,15 +954,62 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                       </div>
                     </div>
 
-                    <aside className="w-56 shrink-0 border-l border-slate-900/70 bg-slate-950">
-                      <div className="border-b border-slate-900/70 px-3 py-2 text-xs font-semibold text-slate-200">
-                        Terminals
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Drag to resize terminals list"
+                      onMouseDown={(event) => {
+                        terminalListResizeActiveRef.current = true;
+                        terminalListResizeStartXRef.current = event.clientX;
+                        terminalListResizeStartWidthRef.current = terminalListWidth;
+                        document.body.style.cursor = "col-resize";
+                        document.body.style.userSelect = "none";
+                      }}
+                      className="w-2 cursor-col-resize bg-slate-900/40 hover:bg-slate-700/80"
+                    />
+
+                    <aside
+                      className="shrink-0 bg-slate-900/15 shadow-[-10px_0_20px_-20px_rgba(0,0,0,0.9)]"
+                      style={{ width: terminalListWidth }}
+                    >
+                      <div className="group flex items-center justify-between border-b border-slate-800 bg-slate-950/40 px-3 py-2 text-xs font-semibold text-slate-200">
+                        <span>Terminals</span>
+                        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => void startTerminalSession({ makeActive: true })}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                            title="New terminal"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const sessionId = activeTerminalSessionId;
+                              if (!sessionId) {
+                                return;
+                              }
+                              void closeTerminalSession(sessionId);
+                            }}
+                            disabled={!activeTerminalSessionId}
+                            className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
+                            title="Kill active terminal"
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                       <div className="h-full min-h-0 overflow-auto p-2">
                         {terminalSessions.map((session) => {
                           const isActive = session.id === activeTerminalSessionId;
                           return (
-                            <div key={session.id} className="mb-1 flex items-center gap-2">
+                            <div
+                              key={session.id}
+                              className={`group mb-1 flex items-center gap-2 rounded ${
+                                isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
+                              }`}
+                            >
                               <button
                                 type="button"
                                 onClick={() => {
@@ -939,8 +1019,8 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                                     focusActiveTerminal();
                                   });
                                 }}
-                                className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-left text-xs transition-colors ${
-                                  isActive ? "bg-slate-900 text-sky-200" : "text-slate-300 hover:bg-slate-900/70"
+                                className={`min-w-0 flex-1 truncate px-2 py-1 text-left text-xs transition-colors ${
+                                  isActive ? "text-sky-200" : "text-slate-300"
                                 }`}
                                 title={session.title}
                               >
@@ -949,7 +1029,9 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
                               <button
                                 type="button"
                                 onClick={() => void closeTerminalSession(session.id)}
-                                className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-900/70 hover:text-slate-200"
+                                className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
+                                  isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                                }`}
                                 title="Close terminal"
                               >
                                 ×
