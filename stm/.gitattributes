@@ -8,8 +8,14 @@ emwaver-ism-firmware/Drivers/** linguist-vendored
 emwaver-ism-firmware/Middlewares/** linguist-vendored
 emwaver-ir-firmware/Drivers/** linguist-vendored
 emwaver-ir-firmware/Middlewares/** linguist-vendored
+emwaver-rfid-firmware/Drivers/** linguist-vendored
+emwaver-rfid-firmware/Middlewares/** linguist-vendored
+emwaver-gpio-firmware/Drivers/** linguist-vendored
+emwaver-gpio-firmware/Middlewares/** linguist-vendored
 
 # Auto-generated peripheral glue (still source, but typically generated)
 emwaver-firmware/USB_DEVICE/** linguist-generated
 emwaver-ism-firmware/USB_DEVICE/** linguist-generated
 emwaver-ir-firmware/USB_DEVICE/** linguist-generated
+emwaver-rfid-firmware/USB_DEVICE/** linguist-generated
+emwaver-gpio-firmware/USB_DEVICE/** linguist-generated
