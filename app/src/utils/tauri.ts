@@ -63,9 +63,9 @@ export async function safeInvoke<T>(
 /**
  * Safely listen to a Tauri event, returning a no-op unlisten function if Tauri is not available
  */
-export async function safeListen(
+export async function safeListen<TPayload = unknown>(
   event: string,
-  handler: () => void
+  handler: (event: { payload: TPayload }) => void
 ): Promise<() => void> {
   if (!isTauriAvailable()) {
     console.warn(`Tauri not available: cannot listen to ${event}`);
@@ -74,7 +74,7 @@ export async function safeListen(
   
   try {
     const { listen } = await import("@tauri-apps/api/event");
-    return await listen(event, handler);
+    return await listen<TPayload>(event, handler);
   } catch (error) {
     console.error(`Failed to listen to ${event}:`, error);
     return () => {}; // Return no-op unlisten function

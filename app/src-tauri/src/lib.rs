@@ -1,5 +1,6 @@
 mod ble;
 mod dfu;
+mod pty;
 mod usb;
 
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,7 @@ use tempfile::Builder;
 use ble::{BLEState, BLEStatus, BLENotification};
 use dfu::{DfuDevice, EmbeddedFirmware};
 use usb::{USBState, USBStatus, USBNotification};
+use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 
 #[derive(Deserialize)]
 struct CreateProjectPayload {
@@ -35,6 +37,7 @@ const MENU_SHOW_WAVELETS_EVENT: &str = "menu-show-wavelets";
 const MENU_SHOW_ISM_EVENT: &str = "menu-show-ism";
 const MENU_SHOW_SAMPLER_EVENT: &str = "menu-show-sampler";
 const MENU_SHOW_EMWAVER_EVENT: &str = "menu-show-emwaver";
+const MENU_SHOW_DEVTOOLS_EVENT: &str = "menu-show-devtools";
 const MENU_INCREASE_LAYOUT_EVENT: &str = "menu-increase-layout";
 const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
@@ -59,6 +62,18 @@ enum EntryKind {
 #[derive(Deserialize)]
 struct ReadDirectoryPayload {
     path: String,
+}
+
+#[derive(Deserialize)]
+struct ReadDirectoryChildrenPayload {
+    path: String,
+}
+
+#[derive(Serialize)]
+struct DirectoryChildEntry {
+    name: String,
+    path: String,
+    kind: EntryKind,
 }
 
 #[derive(Deserialize)]
@@ -173,6 +188,22 @@ async fn read_directory(payload: ReadDirectoryPayload) -> Result<Vec<DirectoryEn
 }
 
 #[tauri::command]
+async fn read_directory_children(payload: ReadDirectoryChildrenPayload) -> Result<Vec<DirectoryChildEntry>, String> {
+    let root = expand_path(&payload.path);
+    if !root.exists() {
+        return Err("Directory does not exist".into());
+    }
+    if !root.is_dir() {
+        return Err("Path is not a directory".into());
+    }
+
+    spawn_blocking(move || list_directory_children(&root))
+        .await
+        .map_err(|error| format!("Failed to read directory: {error}"))
+        .and_then(|result| result)
+}
+
+#[tauri::command]
 async fn read_file(payload: ReadFilePayload) -> Result<String, String> {
     let path = expand_path(&payload.path);
     spawn_blocking(move || {
@@ -181,6 +212,53 @@ async fn read_file(payload: ReadFilePayload) -> Result<String, String> {
     .await
     .map_err(|error| format!("Failed to read file: {error}"))
     .and_then(|result| result)
+}
+
+#[derive(Deserialize)]
+struct RunShellCommandPayload {
+    command: String,
+    cwd: Option<String>,
+}
+
+#[derive(Serialize)]
+struct RunShellCommandResult {
+    stdout: String,
+    stderr: String,
+    code: Option<i32>,
+}
+
+#[tauri::command]
+async fn run_shell_command(payload: RunShellCommandPayload) -> Result<RunShellCommandResult, String> {
+    let command = payload.command;
+    let cwd = payload.cwd.map(|value| expand_path(&value));
+
+    spawn_blocking(move || {
+        let mut process = if cfg!(windows) {
+            let mut cmd = Command::new("cmd");
+            cmd.args(["/C", &command]);
+            cmd
+        } else {
+            let mut cmd = Command::new("sh");
+            cmd.args(["-lc", &command]);
+            cmd
+        };
+
+        if let Some(dir) = cwd {
+            process.current_dir(dir);
+        }
+
+        let output = process
+            .output()
+            .map_err(|error| format!("Failed to execute command: {error}"))?;
+
+        Ok::<RunShellCommandResult, String>(RunShellCommandResult {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            code: output.status.code(),
+        })
+    })
+    .await
+    .map_err(|error| format!("Failed to execute command: {error}"))?
 }
 
 #[tauri::command]
@@ -323,7 +401,28 @@ async fn reveal_in_finder(payload: RevealInFinderPayload) -> Result<(), String> 
     .map_err(|error| format!("Failed to reveal in Finder: {error}"))?
 }
 
-// ESP-IDF and shell commands removed - desktop app doesn't need ESP-IDF toolchain or shell sessions
+// ESP-IDF build/flash removed; Dev Tools uses a minimal shell runner for local workflows.
+
+#[tauri::command]
+async fn pty_start(app: tauri::AppHandle, state: State<'_, Arc<PtyManager>>, payload: PtyStartPayload) -> Result<PtyStartResponse, String> {
+    state
+        .start(app, payload)
+}
+
+#[tauri::command]
+async fn pty_write(state: State<'_, Arc<PtyManager>>, payload: PtyWritePayload) -> Result<(), String> {
+    state.write(payload)
+}
+
+#[tauri::command]
+async fn pty_resize(state: State<'_, Arc<PtyManager>>, payload: PtyResizePayload) -> Result<(), String> {
+    state.resize(payload)
+}
+
+#[tauri::command]
+async fn pty_stop(state: State<'_, Arc<PtyManager>>, payload: PtyStopPayload) -> Result<(), String> {
+    state.stop(payload)
+}
 
 
 // ESP-IDF helper functions removed
@@ -468,6 +567,50 @@ fn list_directory(current: &Path, root: &Path) -> Result<Vec<DirectoryEntry>, St
                 path: relative_path(&path, root),
                 kind: EntryKind::File,
                 children: None,
+            });
+        }
+    }
+
+    directories.sort_by(|a, b| a.name.cmp(&b.name));
+    files.sort_by(|a, b| a.name.cmp(&b.name));
+
+    directories.extend(files);
+    Ok(directories)
+}
+
+fn list_directory_children(root: &Path) -> Result<Vec<DirectoryChildEntry>, String> {
+    let mut entries = fs::read_dir(root)
+        .map_err(|error| format!("Failed to read directory entries: {error}"))?
+        .collect::<Result<Vec<_>, io::Error>>()
+        .map_err(|error| format!("Unable to iterate directory: {error}"))?;
+
+    entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+
+    let mut directories = Vec::new();
+    let mut files = Vec::new();
+
+    for entry in entries {
+        let path = entry.path();
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| "Encountered invalid UTF-8 filename".to_string())?;
+
+        if name == ".git" {
+            continue;
+        }
+
+        if path.is_dir() {
+            directories.push(DirectoryChildEntry {
+                name,
+                path: path.to_string_lossy().replace('\\', "/"),
+                kind: EntryKind::Directory,
+            });
+        } else if path.is_file() {
+            files.push(DirectoryChildEntry {
+                name,
+                path: path.to_string_lossy().replace('\\', "/"),
+                kind: EntryKind::File,
             });
         }
     }
@@ -720,6 +863,13 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
+            let show_devtools_item = MenuItem::with_id(
+                app,
+                "menu-show-devtools",
+                "Show Dev Tools",
+                true,
+                None::<&str>,
+            )?;
             let increase_layout_item = MenuItem::with_id(
                 app,
                 "menu-increase-layout",
@@ -763,6 +913,7 @@ pub fn run() {
                                 submenu.append(&show_ism_item)?;
                                 submenu.append(&show_sampler_item)?;
                                 submenu.append(&show_emwaver_item)?;
+                                submenu.append(&show_devtools_item)?;
                                 view_menu_added = true;
                             }
                         }
@@ -787,6 +938,7 @@ pub fn run() {
                 view_menu.append(&show_ism_item)?;
                 view_menu.append(&show_sampler_item)?;
                 view_menu.append(&show_emwaver_item)?;
+                view_menu.append(&show_devtools_item)?;
                 menu.append(&view_menu)?;
             }
 
@@ -828,6 +980,9 @@ pub fn run() {
                 "menu-show-emwaver" => {
                     let _ = app.emit(MENU_SHOW_EMWAVER_EVENT, ());
                 }
+                "menu-show-devtools" => {
+                    let _ = app.emit(MENU_SHOW_DEVTOOLS_EVENT, ());
+                }
                 "menu-increase-layout" => {
                     let _ = app.emit(MENU_INCREASE_LAYOUT_EVENT, ());
                 }
@@ -845,10 +1000,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Arc::new(BLEState::new()))
+        .manage(Arc::new(PtyManager::new()))
         .manage(Arc::new(USBState::new()))
 	        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
+            read_directory_children,
             read_file,
             read_binary_file,
             write_file,
@@ -857,6 +1014,11 @@ pub fn run() {
             remove_path,
             rename_path,
             reveal_in_finder,
+            run_shell_command,
+            pty_start,
+            pty_write,
+            pty_resize,
+            pty_stop,
             ble_initialize,
             ble_start_scan,
             ble_stop_scan,

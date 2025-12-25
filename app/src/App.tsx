@@ -33,6 +33,7 @@ import PacketModeFragment from "./components/PacketModeFragment";
 import SettingsFragment from "./components/SettingsFragment";
 import HomePage from "./components/HomePage";
 import FlashFragment from "./components/FlashFragment";
+import DevToolsFragment from "./components/DevToolsFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -75,7 +76,16 @@ type OpenFile = {
   isDirty: boolean;
   isSaving: boolean;
 };
-export type FragmentType = "wavelets" | "ism" | "sampler" | "emwaver" | "rfid" | "packetMode" | "flash" | "settings";
+export type FragmentType =
+  | "wavelets"
+  | "ism"
+  | "sampler"
+  | "emwaver"
+  | "rfid"
+  | "packetMode"
+  | "flash"
+  | "settings"
+  | "devtools";
 
 type RecentProject = {
   path: string;
@@ -876,6 +886,12 @@ function App() {
         );
 
         disposers.push(
+          await safeListen("menu-show-devtools", () => {
+            handleFragmentClick("devtools");
+          }),
+        );
+
+        disposers.push(
           await safeListen("menu-increase-layout", () => {
             increaseLayoutSize();
           }),
@@ -918,6 +934,7 @@ function App() {
   const isPacketModeActive = activePane === "packetMode";
   const isFlashActive = activePane === "flash";
   const isSettingsActive = activePane === "settings";
+  const isDevToolsActive = activePane === "devtools";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -938,6 +955,7 @@ function App() {
         <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
         <Pane active={isFlashActive}><FlashFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
+        <Pane active={isDevToolsActive}><DevToolsFragment theme={theme} /></Pane>
       </div>
       {isModalOpen && (
         <NewProjectModal
@@ -1149,6 +1167,12 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<FlashIcon />}
       />
       <ActivityButton
+        label="Dev Tools"
+        isActive={activePane === "devtools"}
+        onClick={() => onFragmentClick("devtools")}
+        icon={<DevToolsIcon />}
+      />
+      <ActivityButton
         label="Settings"
         isActive={activePane === "settings"}
         onClick={() => onFragmentClick("settings")}
@@ -1168,6 +1192,20 @@ function FlashIcon() {
         d="M13 2L3 14h7l-1 8 12-14h-7l1-6z"
         stroke="currentColor"
         strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DevToolsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" aria-hidden="true">
+      <path
+        d="M7 8l-3 4 3 4M17 8l3 4-3 4M14 6l-4 12"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>
