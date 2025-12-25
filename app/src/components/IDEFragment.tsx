@@ -33,12 +33,19 @@ type OpenFile = {
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
 
-const ROOT_STORAGE_KEY = "emwaver.devtools.root";
-const SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.devtools.sidebarWidth";
-const SIDEBAR_COLLAPSED_STORAGE_KEY = "emwaver.devtools.sidebarCollapsed";
-const TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.devtools.terminalHeight";
-const TERMINAL_LIST_WIDTH_STORAGE_KEY = "emwaver.devtools.terminalListWidth";
-const TERMINAL_LIST_COLLAPSED_STORAGE_KEY = "emwaver.devtools.terminalListCollapsed";
+const ROOT_STORAGE_KEY = "emwaver.ide.root";
+const SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.ide.sidebarWidth";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "emwaver.ide.sidebarCollapsed";
+const TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.ide.terminalHeight";
+const TERMINAL_LIST_WIDTH_STORAGE_KEY = "emwaver.ide.terminalListWidth";
+const TERMINAL_LIST_COLLAPSED_STORAGE_KEY = "emwaver.ide.terminalListCollapsed";
+
+const LEGACY_ROOT_STORAGE_KEY = "emwaver.devtools.root";
+const LEGACY_SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.devtools.sidebarWidth";
+const LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY = "emwaver.devtools.sidebarCollapsed";
+const LEGACY_TERMINAL_HEIGHT_STORAGE_KEY = "emwaver.devtools.terminalHeight";
+const LEGACY_TERMINAL_LIST_WIDTH_STORAGE_KEY = "emwaver.devtools.terminalListWidth";
+const LEGACY_TERMINAL_LIST_COLLAPSED_STORAGE_KEY = "emwaver.devtools.terminalListCollapsed";
 
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 140;
@@ -76,7 +83,16 @@ function readStoredRoot(): string | null {
     return null;
   }
   const stored = window.localStorage.getItem(ROOT_STORAGE_KEY);
-  return stored ? stored : null;
+  if (stored) {
+    return stored;
+  }
+  const legacy = window.localStorage.getItem(LEGACY_ROOT_STORAGE_KEY);
+  if (!legacy) {
+    return null;
+  }
+  window.localStorage.setItem(ROOT_STORAGE_KEY, legacy);
+  window.localStorage.removeItem(LEGACY_ROOT_STORAGE_KEY);
+  return legacy;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -88,10 +104,15 @@ function readStoredSidebarWidth(): number {
     return DEFAULT_SIDEBAR_WIDTH;
   }
   const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
-  if (!stored) {
+  const selected = stored ?? window.localStorage.getItem(LEGACY_SIDEBAR_WIDTH_STORAGE_KEY);
+  if (!selected) {
     return DEFAULT_SIDEBAR_WIDTH;
   }
-  const parsed = Number.parseFloat(stored);
+  if (!stored) {
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, selected);
+    window.localStorage.removeItem(LEGACY_SIDEBAR_WIDTH_STORAGE_KEY);
+  }
+  const parsed = Number.parseFloat(selected);
   if (!Number.isFinite(parsed)) {
     return DEFAULT_SIDEBAR_WIDTH;
   }
@@ -103,10 +124,15 @@ function readStoredSidebarCollapsed(): boolean {
     return false;
   }
   const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
-  if (!stored) {
+  const selected = stored ?? window.localStorage.getItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY);
+  if (!selected) {
     return false;
   }
-  return stored === "true";
+  if (!stored) {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, selected);
+    window.localStorage.removeItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY);
+  }
+  return selected === "true";
 }
 
 function readStoredTerminalHeight(): number {
@@ -114,10 +140,15 @@ function readStoredTerminalHeight(): number {
     return DEFAULT_TERMINAL_HEIGHT;
   }
   const stored = window.localStorage.getItem(TERMINAL_HEIGHT_STORAGE_KEY);
-  if (!stored) {
+  const selected = stored ?? window.localStorage.getItem(LEGACY_TERMINAL_HEIGHT_STORAGE_KEY);
+  if (!selected) {
     return DEFAULT_TERMINAL_HEIGHT;
   }
-  const parsed = Number.parseFloat(stored);
+  if (!stored) {
+    window.localStorage.setItem(TERMINAL_HEIGHT_STORAGE_KEY, selected);
+    window.localStorage.removeItem(LEGACY_TERMINAL_HEIGHT_STORAGE_KEY);
+  }
+  const parsed = Number.parseFloat(selected);
   if (!Number.isFinite(parsed)) {
     return DEFAULT_TERMINAL_HEIGHT;
   }
@@ -129,10 +160,15 @@ function readStoredTerminalListWidth(): number {
     return DEFAULT_TERMINAL_LIST_WIDTH;
   }
   const stored = window.localStorage.getItem(TERMINAL_LIST_WIDTH_STORAGE_KEY);
-  if (!stored) {
+  const selected = stored ?? window.localStorage.getItem(LEGACY_TERMINAL_LIST_WIDTH_STORAGE_KEY);
+  if (!selected) {
     return DEFAULT_TERMINAL_LIST_WIDTH;
   }
-  const parsed = Number.parseFloat(stored);
+  if (!stored) {
+    window.localStorage.setItem(TERMINAL_LIST_WIDTH_STORAGE_KEY, selected);
+    window.localStorage.removeItem(LEGACY_TERMINAL_LIST_WIDTH_STORAGE_KEY);
+  }
+  const parsed = Number.parseFloat(selected);
   if (!Number.isFinite(parsed)) {
     return DEFAULT_TERMINAL_LIST_WIDTH;
   }
@@ -144,10 +180,15 @@ function readStoredTerminalListCollapsed(): boolean {
     return false;
   }
   const stored = window.localStorage.getItem(TERMINAL_LIST_COLLAPSED_STORAGE_KEY);
-  if (!stored) {
+  const selected = stored ?? window.localStorage.getItem(LEGACY_TERMINAL_LIST_COLLAPSED_STORAGE_KEY);
+  if (!selected) {
     return false;
   }
-  return stored === "true";
+  if (!stored) {
+    window.localStorage.setItem(TERMINAL_LIST_COLLAPSED_STORAGE_KEY, selected);
+    window.localStorage.removeItem(LEGACY_TERMINAL_LIST_COLLAPSED_STORAGE_KEY);
+  }
+  return selected === "true";
 }
 
 function basename(path: string): string {
@@ -314,7 +355,7 @@ function iconLabelForPath(path: string): { label: string; accentClass: string } 
   return { label: "•", accentClass: "text-slate-400" };
 }
 
-export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
+export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
@@ -389,6 +430,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       return;
     }
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
+    window.localStorage.removeItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY);
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
@@ -524,9 +566,11 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     }
     if (!rootDir) {
       window.localStorage.removeItem(ROOT_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_ROOT_STORAGE_KEY);
       return;
     }
     window.localStorage.setItem(ROOT_STORAGE_KEY, rootDir);
+    window.localStorage.removeItem(LEGACY_ROOT_STORAGE_KEY);
   }, [rootDir]);
 
   useEffect(() => {
@@ -534,6 +578,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       return;
     }
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
+    window.localStorage.removeItem(LEGACY_SIDEBAR_WIDTH_STORAGE_KEY);
   }, [sidebarWidth]);
 
   useEffect(() => {
@@ -548,6 +593,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       return;
     }
     window.localStorage.setItem(TERMINAL_HEIGHT_STORAGE_KEY, String(Math.round(terminalHeight)));
+    window.localStorage.removeItem(LEGACY_TERMINAL_HEIGHT_STORAGE_KEY);
   }, [terminalHeight]);
 
   useEffect(() => {
@@ -555,6 +601,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       return;
     }
     window.localStorage.setItem(TERMINAL_LIST_WIDTH_STORAGE_KEY, String(Math.round(terminalListWidth)));
+    window.localStorage.removeItem(LEGACY_TERMINAL_LIST_WIDTH_STORAGE_KEY);
   }, [terminalListWidth]);
 
   useEffect(() => {
@@ -562,6 +609,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
       return;
     }
     window.localStorage.setItem(TERMINAL_LIST_COLLAPSED_STORAGE_KEY, String(isTerminalListCollapsed));
+    window.localStorage.removeItem(LEGACY_TERMINAL_LIST_COLLAPSED_STORAGE_KEY);
   }, [isTerminalListCollapsed]);
 
   useEffect(() => {
@@ -1159,10 +1207,10 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     const unlistenShowPromise = safeListen("menu-show-explorer", () => {
       setIsSidebarCollapsed(false);
     });
-    const unlistenOpenFolderPromise = safeListen("menu-devtools-open-folder", () => {
+    const unlistenOpenFolderPromise = safeListen("menu-ide-open-folder", () => {
       void handlePickFolder();
     });
-    const unlistenSavePromise = safeListen("menu-devtools-save-file", () => {
+    const unlistenSavePromise = safeListen("menu-ide-save-file", () => {
       void handleSaveFile();
     });
     return () => {
@@ -1279,8 +1327,8 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 	              <div className="border-b border-slate-900 px-4 py-3">
 	                <div className="flex items-start justify-between gap-2">
 	                  <div className="min-w-0 cursor-default">
-	                    <h2 className="truncate text-sm font-semibold text-slate-200" title={rootDir ?? "Dev Tools"}>
-	                      {rootDir ? basename(rootDir) : "Dev Tools"}
+	                    <h2 className="truncate text-sm font-semibold text-slate-200" title={rootDir ?? "IDE"}>
+	                      {rootDir ? basename(rootDir) : "IDE"}
 	                    </h2>
 	                  </div>
 	                  <button
@@ -1702,7 +1750,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
 	                                  <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">
 	                                    OUTPUT
 	                                  </div>
-	                                  <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">DevTools</div>
+	                                  <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">IDE</div>
 	                                </div>
 	                              )}
 	                            </aside>
