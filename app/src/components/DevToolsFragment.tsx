@@ -138,10 +138,6 @@ function defaultIgnoredName(name: string): boolean {
   );
 }
 
-function escapeShellPath(path: string): string {
-  return path.replace(/'/g, "'\\''");
-}
-
 export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -560,22 +556,7 @@ export default function DevToolsFragment({ theme = "dark" }: { theme?: ThemeMode
     setOpenFile(null);
     setDirChildren({});
     setOpenDirs(new Set());
-
-    const escaped = escapeShellPath(selected);
-    terminalSessions.forEach((session) => {
-      void safeInvoke<void>("pty_write", { payload: { session_id: session.id, data: `cd '${escaped}'\\n` } });
-    });
-  }, [terminalSessions]);
-
-  useEffect(() => {
-    if (!rootDir) {
-      return;
-    }
-    const escaped = escapeShellPath(rootDir);
-    terminalSessions.forEach((session) => {
-      void safeInvoke<void>("pty_write", { payload: { session_id: session.id, data: `cd '${escaped}'\\n` } });
-    });
-  }, [rootDir, terminalSessions]);
+  }, []);
 
   useEffect(() => {
     const handleMove = (event: MouseEvent) => {
