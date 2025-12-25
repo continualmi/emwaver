@@ -53,10 +53,9 @@ class JavaScriptEngine {
         // Create simple utilities for JavaScript
         let jsUtils = JSUtils()
         context.setObject(jsUtils, forKeyedSubscript: "Utils" as NSString)
-        
-        // Create more advanced Utils for IR conversion
+
         let utils = Utils()
-        
+
         // Register convertTimingsToBinary function
         let convertTimingsToBinaryFunc: @convention(block) ([Double]) -> JSValue = { timings in
             self.printCallback?("Converting \(timings.count) timings to binary")
@@ -79,48 +78,9 @@ class JavaScriptEngine {
             }
         }
         
-        // Register convertToIRBuffer function
-        let convertToIRBufferFunc: @convention(block) (JSValue) -> JSValue = { jsValue in
-            // Convert the JavaScript Uint8Array to Swift Data
-            var byteArray = [UInt8]()
-            
-            // Print debugging info
-            self.printCallback?("convertToIRBuffer called with type: \(jsValue.isArray ? "Array" : jsValue.isObject ? "Object" : "Other")")
-            
-            if let length = jsValue.forProperty("length").toNumber()?.intValue {
-                self.printCallback?("Object has length: \(length)")
-                for i in 0..<length {
-                    if let byteValue = jsValue.atIndex(i)?.toNumber()?.uint8Value {
-                        byteArray.append(byteValue)
-                    }
-                }
-                self.printCallback?("Extracted \(byteArray.count) bytes for IR conversion")
-            }
-            
-            let inputData = Data(byteArray)
-            let irData = utils.convertToIRBuffer(inputData)
-            
-            // Convert back to JavaScript Uint8Array using a more reliable approach
-            if let arrayBuffer = context.globalObject.forProperty("ArrayBuffer")?.construct(withArguments: [irData.count]) {
-                let uint8Array = context.globalObject.forProperty("Uint8Array")?.construct(withArguments: [arrayBuffer])
-                
-                // Copy the data into the Uint8Array
-                for i in 0..<irData.count {
-                    uint8Array?.setObject(Int(irData[i]), atIndexedSubscript: i)
-                }
-                
-                self.printCallback?("Created Uint8Array with \(irData.count) bytes")
-                return uint8Array!
-            } else {
-                self.printCallback?("Error: Failed to create Uint8Array for IR data")
-                return JSValue(nullIn: context)
-            }
-        }
-        
         // Register with JavaScript Utils object
         if let jsUtilsObject = context.globalObject.forProperty("Utils") {
             jsUtilsObject.setObject(convertTimingsToBinaryFunc, forKeyedSubscript: "convertTimingsToBinary" as NSString)
-            jsUtilsObject.setObject(convertToIRBufferFunc, forKeyedSubscript: "convertToIRBuffer" as NSString)
         } else {
             self.printCallback?("Error: Unable to access Utils object in JavaScript context")
         }
@@ -214,7 +174,6 @@ class JavaScriptEngine {
             let bufferData = self.bleManager.getBuffer()
             self.printCallback?("Getting buffer with \(bufferData.count) bytes")
             
-            // Use the same improved approach as in convertToIRBuffer
             if let arrayBuffer = context.globalObject.forProperty("ArrayBuffer")?.construct(withArguments: [bufferData.count]) {
                 let uint8Array = context.globalObject.forProperty("Uint8Array")?.construct(withArguments: [arrayBuffer])
                 

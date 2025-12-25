@@ -3,7 +3,6 @@ import JavaScriptCore
 
 @objc protocol UtilsConversionExport: JSExport {
     func convertTimingsToBinary(_ timings: [Double]) -> Data
-    func convertToIRBuffer(_ buffer: Data) -> Data
     static func logTimings(_ timings: [Double])
     func sleep(_ milliseconds: Int)
 }
@@ -43,42 +42,6 @@ class Utils: NSObject, UtilsConversionExport {
         }
         
         return Data(binaryData)
-    }
-    
-    // Converts a buffer to a 38kHz IR carrier pattern (10us resolution)
-    func convertToIRBuffer(_ buffer: Data) -> Data {
-        if buffer.isEmpty {
-            return buffer
-        }
-        
-        // Create IR carrier pattern (38kHz)
-        var carrierPattern = [Bool](repeating: false, count: 100)
-        for i in 0..<100 {
-            let cyclePosition = (Double(i) * 38.0) / 100.0
-            let fractionalPart = cyclePosition - floor(cyclePosition)
-            carrierPattern[i] = fractionalPart < 0.5
-        }
-        
-        var irBuffer = [UInt8](repeating: 0, count: buffer.count)
-        var patternIndex = 0
-        
-        for i in 0..<buffer.count {
-            let currentByte = buffer[i]
-            var newByte: UInt8 = 0
-            
-            for bit in 0..<8 {
-                let isHigh = ((currentByte >> bit) & 1) != 0
-                if isHigh {
-                    if carrierPattern[patternIndex] {
-                        newByte |= (1 << bit)
-                    }
-                    patternIndex = (patternIndex + 1) % 100
-                }
-            }
-            irBuffer[i] = newByte
-        }
-        
-        return Data(irBuffer)
     }
     
     // Log timing values for debugging
@@ -166,4 +129,4 @@ class Utils: NSObject, UtilsConversionExport {
         hexString += "]"
         return hexString
     }
-} 
+}
