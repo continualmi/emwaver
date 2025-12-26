@@ -25,8 +25,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::env;
 use std::io::Write;
+use std::io::{self, IsTerminal};
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
+
+const STM32_CUBEMX_DOWNLOAD_URL: &str = "https://www.st.com/en/development-tools/stm32cubemx.html";
+const ARM_GNU_TOOLCHAIN_DOWNLOAD_URL: &str =
+    "https://developer.arm.com/downloads/-/gnu-rm";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FirmwareKind {
@@ -263,6 +268,15 @@ fn find_single_ioc(project: &Path) -> Result<PathBuf> {
 }
 
 fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> Result<()> {
+    if verbose {
+        match find_cubemx_optional()? {
+            Some(path) => eprintln!("STM32CubeMX: {}", path.display()),
+            None => eprintln!(
+                "STM32CubeMX: not found (download: {STM32_CUBEMX_DOWNLOAD_URL})"
+            ),
+        }
+    }
+
     match mode {
         CodegenMode::Never => {
             if verbose {
@@ -279,7 +293,12 @@ fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> 
             if verbose {
                 eprintln!("Running STM32CubeMX code generation (`--codegen always`).");
             }
-            stm32_codegen(project)
+            match find_cubemx_optional()? {
+                Some(cubemx) => stm32_codegen_with(&cubemx, project),
+                None => bail!(
+                    "STM32CubeMX not found (required by `--codegen always`). Install it from {STM32_CUBEMX_DOWNLOAD_URL} or set EMWAVER_CUBEMX=/path/to/STM32CubeMX"
+                ),
+            }
         }
         CodegenMode::Auto => {
             if stm32_codegen_needed(project)? {
@@ -294,11 +313,9 @@ fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> 
                         stm32_codegen_with(&cubemx, project)
                     }
                     None => {
-                        if verbose {
-                            eprintln!(
-                                "STM32CubeMX not found; continuing without regeneration (pass `--codegen always` to require CubeMX)."
-                            );
-                        }
+                        eprintln!(
+                            "warning: STM32CubeMX not found; continuing without regeneration (download: {STM32_CUBEMX_DOWNLOAD_URL}, or pass `--codegen always` to require it)."
+                        );
                         Ok(())
                     }
                 }
@@ -345,11 +362,6 @@ fn stm32_codegen_needed(project: &Path) -> Result<bool> {
         None => true,
         Some(generated) => ioc_mtime > generated,
     })
-}
-
-fn stm32_codegen(project: &Path) -> Result<()> {
-    let cubemx = find_cubemx()?;
-    stm32_codegen_with(&cubemx, project)
 }
 
 fn stm32_codegen_with(cubemx: &Path, project: &Path) -> Result<()> {
@@ -506,9 +518,91 @@ fn stm32_build_env() -> Result<Vec<(String, String)>> {
         return Ok(vec![("PATH".to_string(), new_path.to_string_lossy().into_owned())]);
     }
 
+    if try_install_arm_toolchain_interactive()? {
+        if toolchain_ok().unwrap_or(false) {
+            return Ok(Vec::new());
+        }
+    }
+
     bail!(
-        "missing/invalid ARM toolchain: expected `arm-none-eabi-gcc` and `arm-none-eabi-objcopy` on PATH (or install STM32CubeIDE so its bundled toolchain can be auto-detected)"
+        "missing/invalid ARM toolchain: expected `arm-none-eabi-gcc` + `arm-none-eabi-objcopy` (with `nano.specs`) on PATH.\n\
+Options:\n\
+- Install STM32CubeIDE (its bundled toolchain is auto-detected), or\n\
+- Set EMWAVER_ARM_TOOLCHAIN_BIN=/path/to/toolchain/bin, or\n\
+- Install Arm GNU Toolchain from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL}"
     )
+}
+
+fn try_install_arm_toolchain_interactive() -> Result<bool> {
+    if !io::stdin().is_terminal() {
+        return Ok(false);
+    }
+
+    eprintln!(
+        "ARM toolchain missing or incomplete (needs `nano.specs`).\n\
+Install it now?"
+    );
+
+    if !prompt_yes_no("Install ARM GNU toolchain via Homebrew? [Y/n] ", true)? {
+        return Ok(false);
+    }
+
+    if which("brew").is_err() {
+        eprintln!("Homebrew not found. Install manually from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} or install STM32CubeIDE.");
+        return Ok(false);
+    }
+
+    let attempts: &[(&[&str], &str)] = &[
+        (&["install", "arm-none-eabi-gcc"], "brew install arm-none-eabi-gcc"),
+        (
+            &["install", "--cask", "gcc-arm-embedded"],
+            "brew install --cask gcc-arm-embedded",
+        ),
+    ];
+
+    for (args, label) in attempts {
+        eprintln!("Running `{label}`...");
+        let status = Command::new("brew")
+            .args(*args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .with_context(|| format!("failed to run `{label}`"))?;
+
+        if status.success() {
+            return Ok(true);
+        }
+    }
+
+    eprintln!("Toolchain install via Homebrew failed. Install manually from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} or install STM32CubeIDE.");
+    Ok(false)
+}
+
+fn prompt_yes_no(prompt: &str, default_yes: bool) -> Result<bool> {
+    loop {
+        eprint!("{prompt}");
+        let _ = io::stderr().flush();
+
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .context("failed to read user input")?;
+
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return Ok(default_yes);
+        }
+
+        match trimmed.to_ascii_lowercase().as_str() {
+            "y" | "yes" => return Ok(true),
+            "n" | "no" => return Ok(false),
+            _ => eprintln!(
+                "Please answer y/n (default: {}).",
+                if default_yes { "y" } else { "n" }
+            ),
+        }
+    }
 }
 
 fn toolchain_ok() -> Result<bool> {
@@ -598,17 +692,6 @@ fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
     }
 
     Ok(None)
-}
-
-fn find_cubemx() -> Result<PathBuf> {
-    let cubemx = find_cubemx_optional()?;
-    if let Some(path) = cubemx {
-        return Ok(path);
-    }
-
-    bail!(
-        "STM32CubeMX not found. Install it or set EMWAVER_CUBEMX=/path/to/STM32CubeMX (expected e.g. /Applications/STMicroelectronics/STM32CubeMX.app/Contents/MacOS/STM32CubeMX)"
-    )
 }
 
 fn find_cubemx_optional() -> Result<Option<PathBuf>> {
