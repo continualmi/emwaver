@@ -73,6 +73,9 @@ const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
 const MENU_IDE_OPEN_FOLDER_EVENT: &str = "menu-ide-open-folder";
 const MENU_IDE_SAVE_FILE_EVENT: &str = "menu-ide-save-file";
+const MENU_IDE_FIRMWARE_BUILD_EVENT: &str = "menu-ide-firmware-build";
+const MENU_IDE_FIRMWARE_FLASH_EVENT: &str = "menu-ide-firmware-flash";
+const MENU_IDE_FIRMWARE_BUILD_FLASH_EVENT: &str = "menu-ide-firmware-build-flash";
 
 // ESP-IDF types and managers removed - desktop app doesn't need ESP-IDF toolchain
 
@@ -890,6 +893,27 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+S"),
             )?;
+            let firmware_build_item = MenuItem::with_id(
+                app,
+                "menu-ide-firmware-build",
+                "Build Firmware",
+                true,
+                Some("CmdOrCtrl+Shift+B"),
+            )?;
+            let firmware_flash_item = MenuItem::with_id(
+                app,
+                "menu-ide-firmware-flash",
+                "Flash Firmware",
+                true,
+                Some("CmdOrCtrl+Shift+F"),
+            )?;
+            let firmware_build_flash_item = MenuItem::with_id(
+                app,
+                "menu-ide-firmware-build-flash",
+                "Build && Flash Firmware",
+                true,
+                Some("CmdOrCtrl+Shift+R"),
+            )?;
             let toggle_explorer_item = MenuItem::with_id(
                 app,
                 "menu-toggle-explorer",
@@ -1020,6 +1044,12 @@ pub fn run() {
             projects_menu.append(&open_item)?;
             menu.append(&projects_menu)?;
 
+            let firmware_menu = Submenu::new(app, "Firmware", true)?;
+            firmware_menu.append(&firmware_build_item)?;
+            firmware_menu.append(&firmware_flash_item)?;
+            firmware_menu.append(&firmware_build_flash_item)?;
+            menu.append(&firmware_menu)?;
+
             app.set_menu(menu)?;
 
             Ok(())
@@ -1070,6 +1100,15 @@ pub fn run() {
                 }
                 "menu-ide-save-file" => {
                     let _ = app.emit(MENU_IDE_SAVE_FILE_EVENT, ());
+                }
+                "menu-ide-firmware-build" => {
+                    let _ = app.emit(MENU_IDE_FIRMWARE_BUILD_EVENT, ());
+                }
+                "menu-ide-firmware-flash" => {
+                    let _ = app.emit(MENU_IDE_FIRMWARE_FLASH_EVENT, ());
+                }
+                "menu-ide-firmware-build-flash" => {
+                    let _ = app.emit(MENU_IDE_FIRMWARE_BUILD_FLASH_EVENT, ());
                 }
                 _ => {}
             }
