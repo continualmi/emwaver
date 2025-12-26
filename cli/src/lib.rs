@@ -30,8 +30,18 @@ pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
-        Some(cli::Command::Build { project }) => firmware::build(project),
-        Some(cli::Command::Flash { project, port }) => firmware::flash(project, port),
+        Some(cli::Command::Build {
+            project,
+            codegen,
+            verbose,
+        }) => firmware::build(project, codegen, verbose),
+        Some(cli::Command::Flash {
+            project,
+            port,
+            codegen,
+            dfu_alt,
+            verbose,
+        }) => firmware::flash(project, port, codegen, dfu_alt, verbose),
         Some(cli::Command::Monitor { project, port }) => firmware::monitor(project, port),
         Some(cli::Command::Dfu {
             file,

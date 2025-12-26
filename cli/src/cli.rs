@@ -26,6 +26,16 @@ pub struct Cli {
     pub command: Option<Command>,
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum CodegenMode {
+    /// Run STM32CubeMX code generation only when the `.ioc` appears newer than generated sources.
+    Auto,
+    /// Always run STM32CubeMX code generation before building.
+    Always,
+    /// Never run STM32CubeMX code generation (use existing generated files as-is).
+    Never,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Open an interactive shell to a nearby EMWaver device.
@@ -39,6 +49,12 @@ pub enum Command {
         /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
         project: Option<PathBuf>,
+        /// STM32CubeMX code generation mode (STM32 projects only).
+        #[arg(long, value_enum, default_value_t = CodegenMode::Auto)]
+        codegen: CodegenMode,
+        /// Print additional build/codegen details.
+        #[arg(long)]
+        verbose: bool,
     },
     /// Flash the firmware in the current project (ESP-IDF serial flash, or STM32 DFU over USB).
     Flash {
@@ -48,6 +64,15 @@ pub enum Command {
         /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
         #[arg(long)]
         port: Option<String>,
+        /// STM32CubeMX code generation mode (STM32 projects only).
+        #[arg(long, value_enum, default_value_t = CodegenMode::Auto)]
+        codegen: CodegenMode,
+        /// DFU alt setting to use for STM32 USB DFU flashing (overrides auto-selection).
+        #[arg(long)]
+        dfu_alt: Option<u8>,
+        /// Print additional flash/build details (also enables DFU discovery logging on STM32).
+        #[arg(long)]
+        verbose: bool,
     },
     /// Monitor the ESP-IDF device in the current project (runs `idf.py monitor`).
     Monitor {
