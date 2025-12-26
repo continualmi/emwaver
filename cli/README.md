@@ -41,6 +41,14 @@ cargo build --release
 # Binary will be at target/release/emwaver
 ```
 
+#### macOS note (libusb)
+
+On macOS, the CLI uses a vendored libusb build (no Homebrew libusb required). If you previously installed a build that fails with `Library not loaded: ...libusb-1.0.0.dylib`, reinstall from source:
+
+```bash
+cargo install --path cli --bin emwaver --force
+```
+
 ## Usage
 
 `emwaver init` writes/overwrites the firmware template files in the destination directory.

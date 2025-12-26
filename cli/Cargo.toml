@@ -15,12 +15,17 @@ clap = { version = "4.5", features = ["derive"] }
 btleplug = "0.11"
 dialoguer = "0.11"
 include_dir = { version = "0.7", features = ["glob"] }
-rusb = "0.9"
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "io-util", "io-std"] }
 tokio-stream = "0.1"
 uuid = { version = "1", features = ["macro-diagnostics"] }
 walkdir = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+rusb = { version = "0.9", features = ["vendored"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+rusb = "0.9"
 
 [dev-dependencies]
 assert_cmd = "2"
