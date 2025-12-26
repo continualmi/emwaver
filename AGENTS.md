@@ -1,18 +1,45 @@
 # EMWaver Repository Guidelines
 
+## Project Summary
+EMWaver is a comprehensive open-source hardware/software ecosystem for wireless experimentation and hardware hacking, built around a custom ESP32-S3 development board plus low-cost STM32 variants.
+
+EMWaver aims to replace much of the quick-prototyping workflow people reach for with platforms like Arduino, while also targeting Flipper Zero-style portability by shifting UI/compute onto the phone and keeping the hardware focused on reliable I/O and radio capabilities.
+
+Guiding question: how fast can you fully exploit any sensor/chip/module that a microcontroller can control—not just “read a register”, but unlock the full surface area with a real UI—ideally in minutes via Wavelets and the desktop IDE.
+
+### Core Goals & Vision
+1. **Hardware democratization**: interact with and control wireless protocols (Sub-GHz RF, IR, GPIO, USB, etc.) through a unified mobile/desktop interface without requiring custom firmware per use case.
+2. **Wavelet extension system**: a JavaScript-based plugin architecture that enables custom UIs and hardware interactions without modifying core firmware or building native apps.
+3. **Cross-platform parity**: full feature parity across Android, iOS, Desktop, and CLI interfaces.
+
+### Hardware Architecture
+- **Core**: ESP32-S3 MCU with Wi‑Fi, Bluetooth LE, and USB OTG
+- **RF subsystem**: CC1101 transceiver for 315/433/868/915 MHz experimentation
+- **USB connectivity**: dual USB‑C ports (male for device emulation, female for programming)
+- **Expandability**: GPIO headers for custom modules and sensors
+- **Target uses**: RF signal analysis, IR remote cloning, GPIO control, USB device emulation
+
+### Device Lines
+- **Flagship (ESP32, BLE-first)**: 3 devices; more powerful, general-purpose, phone-controlled.
+- **Low-cost (STM32, USB-first)**: 4 devices; smaller/tailored form factors that communicate via USB (not BLE), often focused on a specific application.
+- **Phone-first portability**: boards use a vertical male USB‑C plug so the PCB can connect directly to a phone; the phone provides CPU, power, memory, and UI rather than adding buttons/displays on-device.
+
 ## Overview
-- **Firmware**: ESP32-S3 firmware at repository root with modules in `main/`
+- **ESP32 Firmware**: ESP32-S3 firmware in `esp/` with modules in `esp/main/`
+- **STM32 Firmware**: STM32 firmware projects in `stm/`
 - **Android**: Native Android companion app in `android/`
 - **iOS**: SwiftUI companion app in `ios/`
-- **Desktop App**: Cross-platform EMWaver app in `app/` (formerly `ide/`) - mirrors all mobile views/fragments
+- **Desktop App**: Cross-platform EMWaver app in `app/` (Tauri) - mirrors all mobile views/fragments and includes an IDE fragment
 - **CLI**: Rust command-line tool in `cli/` for device interaction
+- **VS Code Extension**: VS Code extension in `vsc/` (WIP) for build/flash workflows via the CLI
+- **Hardware**: PCB and mechanical artifacts in `hardware/`
 - **Docs**: MkDocs-based documentation in `docs/`
 
 ## Environment Skills & Worktrees
-This repo previously included local tmux helpers, but they have been removed; follow per-platform build instructions in the relevant subprojects instead (`esp/`, `stm/`, `cli/`, `docs/`, `android/`, `ios/`, `app/`).
+This repo previously included local tmux helpers, but they have been removed; follow per-platform build instructions in the relevant subprojects instead (`esp/`, `stm/`, `cli/`, `docs/`, `android/`, `ios/`, `app/`, `vsc/`).
 
 ## Project Structure & Module Organization
-Firmware for the ESP32-S3 resides in `main/` and is split into modules (`ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`) with matching headers. ESP-IDF managed components live in `managed_components/`; regenerate them with `idf.py reconfigure` rather than editing by hand. Companion apps sit under `android/`, `ios/`, and `app/` (desktop), while `docs/` with `mkdocs.yml` drives the user-facing site. CLI tool lives in `cli/`. Treat `build/` and generated `.elf`/`.bin` files as temporary artifacts.
+ESP32 firmware lives in `esp/` (ESP-IDF project) and is split into modules in `esp/main/` (e.g., `ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`) with matching headers. ESP-IDF managed components live under `esp/managed_components/`; regenerate them with `idf.py reconfigure` rather than editing by hand. STM32 firmware lives in `stm/` as multiple focused projects; treat CubeMX-generated output as generated code (regenerate rather than hand-editing the generated layers). Companion apps sit under `android/`, `ios/`, and `app/` (desktop), while `docs/` with `mkdocs.yml` drives the user-facing site. The Rust CLI tool lives in `cli/`. Treat `build/` folders and generated `.elf`/`.bin`/`.dfu` artifacts as temporary.
 
 ## Wavelet Feature
 Wavelets are the user-authored extension bundles (manifest + JavaScript) that plug into the Wavelet Engine sandbox to broaden EMWaver beyond the built-in fragments. They combine UI declarations with scripted logic that talks to firmware through the EMWaver Script SDK. Refer to `TODO.md` for the evolving roadmap, packaging details, and open questions.
@@ -51,15 +78,17 @@ Wavelets and signal assets are managed via **Git/GitHub as the source of truth**
 
 ## Project Playbooks
 
-### Firmware (Repository Root)
-- Firmware lives in `main/` (modules such as `ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`); regenerate ESP-IDF managed components with `idf.py reconfigure` instead of editing generated files.
-- **Environment**: `source setup.sh`, then `idf.py set-target esp32s3`, `idf.py build`, `idf.py -p <port> flash`, `idf.py monitor`; keep hardware ports configurable per developer.
+### ESP32 Firmware (`/esp`)
+- Firmware modules live in `esp/main/` (e.g., `ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`); regenerate ESP-IDF managed components with `idf.py reconfigure` instead of editing generated files.
+- **Environment**: `cd esp && source setup.sh`, then `idf.py set-target esp32s3`, `idf.py build`, `idf.py -p <port> flash`, `idf.py monitor`; keep hardware ports configurable per developer.
 - **Coding style**: 4-space indent, K&R braces, `snake_case`, `static` internals, ESP-IDF headers before project headers; Python helpers follow Black defaults.
 - **Command protocol**: every control packet is ASCII using Unix-style verbs and flags (e.g., `spi --open --name cc1101 --port 2 --miso 13 --mosi 11 --sck 12 --cs 10 --clock 8000000`). Current firmware supports hardware-agnostic SPI operations (`--open`, `--read`, `--write`, `--close` with `--data` hex payloads) and sampler routing (`sample --start --mode pwm --channel 3 --freq 25000 --duty 0.4`, `sample --stop`). Responses echo the same structure (`ok ...`, `err ...`) so smartphone and CLI clients stay aligned.
 - **BLE services**: Custom service (UUID `45c7158e-...`) exposes command characteristic (write) and notification characteristic (read) for device control commands.
 - **Testing**: flash to hardware for smoke verification, extend `pytest_hello_world.py` with `@pytest.mark.host_test` suites, and document timing-sensitive paths inline.
 - **Build commands**:
 ```bash
+cd esp
+source setup.sh
 idf.py set-target esp32s3
 idf.py build
 idf.py -p /dev/ttyACM0 flash
@@ -67,6 +96,15 @@ idf.py monitor
 pytest -m host_test
 ```
 Replace the serial device as appropriate for your platform. Use `idf.py clean` only when caches become inconsistent.
+
+### STM32 Firmware (`/stm`)
+- `stm/` contains multiple STM32 firmware projects (often one per device/application).
+- STM32 devices communicate via USB (not BLE) and support DFU-based flashing for fast iteration.
+- Flashing utilities exist across the ecosystem:
+  - Android DFU helper: `android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/flash/Dfu.java`
+  - Desktop DFU bridge: `app/src-tauri/src/lib.rs` (uses the shared Rust DFU implementation)
+  - CLI DFU implementation: `cli/src/dfu.rs` (exposed via `emwaver` commands)
+- When CubeMX regeneration is required, treat CubeMX output as generated code; keep handwritten logic in the intended user-edit regions/layers and prefer regeneration over manual edits to generated files.
 
 > **Agent Note:** Do not run `xcodebuild` (or other iOS build commands) from the CLI; leave iOS builds to be run manually in Xcode by the user.
 
@@ -92,10 +130,18 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 - Distribution artifacts and installers may be prepared for macOS/Linux/Windows.
 
 ### Desktop App (`/app`, formerly `/ide`)
-- Cross-platform EMWaver app that mirrors all mobile views/fragments (same UI components as Android/iOS).
+- Cross-platform EMWaver app (Tauri) that mirrors all mobile views/fragments (same UI components as Android/iOS).
 - **UI Parity**: All mobile fragments/views (wavelets, IR, sampler, Git fragment, etc.) available on desktop.
 - **Features**: Rich editor (syntax highlighting, linting, templates), live preview, local Git repo clone, commit/push to GitHub, full hardware interaction capabilities.
+- **IDE fragment**: firmware editor + terminal to accelerate hardware bring-up and iteration.
+  - Project creation/open for ESP32 and STM32 targets with EMWaver-ready scaffolds (communication interfaces, sampler, and common modules).
+  - Integrated terminal UI (xterm.js) with a cross-platform PTY backend (portable-pty via Rust).
+  - Orchestrates build/flash by platform: ESP32 via `idf.py`; STM32 via CubeMX (when code generation is needed) + `arm-none-eabi-gcc`, plus DFU flows for supported devices.
 - Development environment and build instructions specific to the desktop app tooling.
+
+### VS Code Extension (`/vsc`)
+- VS Code extension scaffold for a simple **Build & Flash** sidebar, delegating to the `emwaver` CLI (`emwaver build` / `emwaver flash`).
+- Dev workflow is documented in `vsc/README.md`.
 
 ### Docs (`/docs`)
 - MkDocs project with user-facing documentation.
