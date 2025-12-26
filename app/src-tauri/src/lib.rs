@@ -1,5 +1,6 @@
 mod ble;
 mod firmware;
+mod git;
 mod pty;
 mod usb;
 
@@ -14,6 +15,10 @@ use tempfile::Builder;
 use ble::{BLEState, BLEStatus, BLENotification};
 use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use firmware::{firmware_build, firmware_flash};
+use git::{
+    git_commit, git_diff_contents, git_discard, git_push, git_stage, git_stage_all, git_status,
+    git_unstage, git_unstage_all,
+};
 use usb::{USBState, USBStatus, USBNotification};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 
@@ -1155,8 +1160,17 @@ pub fn run() {
 	            dfu_flash_embedded,
 	            dfu_flash_file,
                 firmware_build,
-                firmware_flash
+                firmware_flash,
+                git_status,
+                git_diff_contents,
+                git_stage,
+                git_stage_all,
+                git_unstage,
+                git_unstage_all,
+                git_discard,
+                git_commit,
+                git_push
 	        ])
 	        .run(tauri::generate_context!())
-	        .expect("error while running tauri application");
+        .expect("error while running tauri application");
 }

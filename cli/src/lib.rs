@@ -19,6 +19,7 @@
 mod cli;
 pub mod dfu;
 pub mod firmware;
+pub mod git;
 mod init;
 mod interactive;
 mod shell;
