@@ -34,15 +34,15 @@ pub enum Command {
         #[arg(long)]
         verbose: bool,
     },
-    /// Build the ESP-IDF firmware in the current project (runs `idf.py build`).
+    /// Build the firmware in the current project (auto-detects ESP-IDF or STM32 CubeMX/CubeIDE).
     Build {
-        /// ESP-IDF project path (defaults to auto-detect).
+        /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
         project: Option<PathBuf>,
     },
-    /// Flash the ESP-IDF firmware in the current project (runs `idf.py flash`).
+    /// Flash the firmware in the current project (ESP-IDF serial flash, or STM32 DFU over USB).
     Flash {
-        /// ESP-IDF project path (defaults to auto-detect).
+        /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
         project: Option<PathBuf>,
         /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
@@ -57,6 +57,20 @@ pub enum Command {
         /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
         #[arg(long)]
         port: Option<String>,
+    },
+    /// Flash a firmware image to an STM32 DFU device (standalone).
+    Dfu {
+        /// Firmware file path (raw `.bin` or `.dfu` bytes).
+        file: PathBuf,
+        /// USB vendor ID (defaults to 0x0483).
+        #[arg(long, value_parser = parse_u16_hex, default_value = "0x0483")]
+        vid: u16,
+        /// USB product ID (defaults to 0xDF11).
+        #[arg(long, value_parser = parse_u16_hex, default_value = "0xDF11")]
+        pid: u16,
+        /// Target flash base address (defaults to 0x08000000).
+        #[arg(long, value_parser = parse_u32_hex, default_value = "0x08000000")]
+        address: u32,
     },
     /// Initialize a new firmware project.
     Init {
@@ -96,4 +110,22 @@ pub enum Component {
     Cc1101,
     Rfm69,
     Mfrc522,
+}
+
+fn parse_u16_hex(value: &str) -> Result<u16, String> {
+    let raw = value.trim();
+    if let Some(hex) = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")) {
+        u16::from_str_radix(hex, 16).map_err(|e| e.to_string())
+    } else {
+        raw.parse::<u16>().map_err(|e| e.to_string())
+    }
+}
+
+fn parse_u32_hex(value: &str) -> Result<u32, String> {
+    let raw = value.trim();
+    if let Some(hex) = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")) {
+        u32::from_str_radix(hex, 16).map_err(|e| e.to_string())
+    } else {
+        raw.parse::<u32>().map_err(|e| e.to_string())
+    }
 }

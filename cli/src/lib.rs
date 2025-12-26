@@ -17,6 +17,7 @@
  */
 
 mod cli;
+mod dfu;
 mod firmware;
 mod init;
 mod interactive;
@@ -29,9 +30,15 @@ pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
-        Some(cli::Command::Build { project }) => firmware::esp_idf_build(project),
-        Some(cli::Command::Flash { project, port }) => firmware::esp_idf_flash(project, port),
-        Some(cli::Command::Monitor { project, port }) => firmware::esp_idf_monitor(project, port),
+        Some(cli::Command::Build { project }) => firmware::build(project),
+        Some(cli::Command::Flash { project, port }) => firmware::flash(project, port),
+        Some(cli::Command::Monitor { project, port }) => firmware::monitor(project, port),
+        Some(cli::Command::Dfu {
+            file,
+            vid,
+            pid,
+            address,
+        }) => firmware::dfu_flash_file(file, vid, pid, address),
         Some(cli::Command::Init {
             target,
             components,

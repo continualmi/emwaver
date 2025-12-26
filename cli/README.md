@@ -70,14 +70,22 @@ emwaver init --target esp32s3 --path ./my-firmware --components gpio,cc1101
 # Initialize an STM32F042 CubeIDE/CubeMX project
 emwaver init --target stm32f042 --path ./my-stm32-proj --components gpio,cc1101
 
-# Build the ESP-IDF firmware (auto-detects the project, e.g. `./esp`)
+# Build firmware (auto-detects ESP-IDF or STM32 based on CWD)
 emwaver build
 
-# Flash the ESP-IDF firmware (optionally specifying a serial port)
+# Flash firmware
+# - ESP-IDF: runs `idf.py flash` (optionally specifying a serial port)
 emwaver flash --port /dev/ttyACM0
 
-# Monitor the device
+# - STM32: runs CubeMX codegen, builds with `make`, exports `.bin`, then flashes over USB DFU
+#   (run this from inside a specific STM firmware project folder, e.g. `stm/emwaver-gpio-firmware`)
+emwaver flash
+
+# Monitor (ESP-IDF only)
 emwaver monitor --port /dev/ttyACM0
+
+# Standalone STM32 DFU flashing (raw `.bin` or `.dfu` bytes)
+emwaver dfu ./firmware.bin
 ```
 
 ## Development
@@ -110,3 +118,8 @@ cargo build --release --target x86_64-pc-windows-msvc
 - Linux: `libbluetooth-dev` and `pkg-config` for BLE support
 - macOS: No additional dependencies
 - Windows: No additional dependencies
+
+### STM32 Firmware Requirements
+
+- STM32CubeMX installed (or set `EMWAVER_CUBEMX=/path/to/STM32CubeMX`)
+- ARM toolchain: `arm-none-eabi-gcc` + `arm-none-eabi-objcopy` (STM32CubeIDE's bundled toolchain is auto-detected on macOS)
