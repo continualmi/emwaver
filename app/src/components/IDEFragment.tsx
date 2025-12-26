@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
+import { DiffEditor, Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { FitAddon } from "@xterm/addon-fit";
@@ -37,6 +37,32 @@ type OpenFile = {
   content: string;
   language: string;
   isDirty: boolean;
+};
+
+type GitStatusEntry = {
+  path: string;
+  orig_path?: string | null;
+  index_status: string;
+  worktree_status: string;
+  is_untracked: boolean;
+  is_ignored: boolean;
+};
+
+type GitRepoStatus = {
+  repo_root: string;
+  branch?: string | null;
+  upstream?: string | null;
+  ahead: number;
+  behind: number;
+  staged: GitStatusEntry[];
+  changes: GitStatusEntry[];
+  timestamp_ms: number;
+};
+
+type GitDiffContents = {
+  original: string;
+  modified: string;
+  is_binary: boolean;
 };
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
@@ -270,6 +296,14 @@ function PlusIcon({ className }: { className?: string }) {
   );
 }
 
+function MinusIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
+      <path d="M3.3 8h9.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function TrashIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
@@ -333,6 +367,36 @@ function FolderIcon({ className }: { className?: string }) {
   );
 }
 
+function GitIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      className={className ?? "h-4 w-4"}
+      aria-hidden="true"
+    >
+      <path d="M5.2 4.2a2 2 0 104 0 2 2 0 00-4 0z" />
+      <path d="M6.2 6.1v3.8a2 2 0 101.6 0V6.1" strokeLinecap="round" />
+      <path d="M8 10.9h2.6a2 2 0 101.4-3.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
+      <path
+        d="M13.2 7.1A5.4 5.4 0 103 12.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M12.8 3.4v3.8H9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function formatConsoleArgs(args: unknown[]): string {
   return args
     .map((arg) => {
@@ -392,6 +456,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
+  const [sidebarPanel, setSidebarPanel] = useState<"explorer" | "git">("explorer");
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
@@ -400,6 +465,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth());
   const sidebarLastExpandedWidthRef = useRef<number>(readStoredSidebarWidth());
   const openingFilePathsRef = useRef<Set<string>>(new Set());
+
+  const [gitStatus, setGitStatus] = useState<GitRepoStatus | null>(null);
+  const [gitError, setGitError] = useState<string | null>(null);
+  const [isGitLoading, setIsGitLoading] = useState(false);
+  const [isGitBusy, setIsGitBusy] = useState(false);
+  const [gitCommitMessage, setGitCommitMessage] = useState("");
+  const [gitSelectedDiff, setGitSelectedDiff] = useState<{
+    path: string;
+    view: "staged" | "unstaged";
+    orig_path?: string | null;
+  } | null>(null);
+  const [gitDiffContents, setGitDiffContents] = useState<GitDiffContents | null>(null);
+  const [isGitDiffLoading, setIsGitDiffLoading] = useState(false);
 
   const explorerResizeActiveRef = useRef(false);
   const explorerResizeStartXRef = useRef(0);
@@ -467,6 +545,71 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
     return openFiles.find((file) => file.path === activeFilePath) ?? null;
   }, [activeFilePath, openFiles]);
+
+  const refreshGit = useCallback(async () => {
+    if (!rootDir || !isTauriAvailable()) {
+      setGitStatus(null);
+      setGitError(null);
+      return;
+    }
+    setIsGitLoading(true);
+    setGitError(null);
+    try {
+      const status = await safeInvoke<GitRepoStatus>("git_status", { payload: { path: rootDir } });
+      setGitStatus(status ?? null);
+    } catch (error) {
+      setGitStatus(null);
+      setGitError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsGitLoading(false);
+    }
+  }, [rootDir]);
+
+  useEffect(() => {
+    void refreshGit();
+  }, [refreshGit]);
+
+  useEffect(() => {
+    if (sidebarPanel === "git") {
+      void refreshGit();
+    }
+  }, [refreshGit, sidebarPanel]);
+
+  useEffect(() => {
+    if (!gitSelectedDiff || !rootDir || !isTauriAvailable()) {
+      setGitDiffContents(null);
+      return;
+    }
+
+    let canceled = false;
+    setIsGitDiffLoading(true);
+    setGitError(null);
+    void safeInvoke<GitDiffContents>("git_diff_contents", {
+      payload: {
+        path: rootDir,
+        file_path: gitSelectedDiff.path,
+        view: gitSelectedDiff.view,
+        orig_path: gitSelectedDiff.orig_path ?? undefined,
+      },
+    })
+      .then((contents) => {
+        if (canceled) return;
+        setGitDiffContents(contents ?? null);
+      })
+      .catch((error) => {
+        if (canceled) return;
+        setGitDiffContents(null);
+        setGitError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (canceled) return;
+        setIsGitDiffLoading(false);
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [gitSelectedDiff, rootDir]);
 
   useEffect(() => {
     sessionsRef.current = terminalSessions;
@@ -1297,6 +1440,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
     setSelectedPath(path);
     setActiveFilePath(path);
+    setGitSelectedDiff(null);
     if (openFiles.some((file) => file.path === path)) {
       return;
     }
@@ -1352,10 +1496,72 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     try {
       await safeInvoke<void>("write_file", { payload: { path: activeFile.path, content: activeFile.content } });
       setOpenFiles((prev) => prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false } : file)));
+      void refreshGit();
     } finally {
       setIsSaving(false);
     }
-  }, [activeFile]);
+  }, [activeFile, refreshGit]);
+
+  const runGitAction = useCallback(
+    async (action: () => Promise<unknown>) => {
+      if (!rootDir || !isTauriAvailable()) {
+        return;
+      }
+      setIsGitBusy(true);
+      setGitError(null);
+      try {
+        await action();
+        await refreshGit();
+      } catch (error) {
+        setGitError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setIsGitBusy(false);
+      }
+    },
+    [refreshGit, rootDir],
+  );
+
+  const handleGitStage = useCallback(
+    async (paths: string[]) => {
+      await runGitAction(() => safeInvoke<void>("git_stage", { payload: { path: rootDir!, paths } }));
+    },
+    [rootDir, runGitAction],
+  );
+
+  const handleGitUnstage = useCallback(
+    async (paths: string[]) => {
+      await runGitAction(() => safeInvoke<void>("git_unstage", { payload: { path: rootDir!, paths } }));
+    },
+    [rootDir, runGitAction],
+  );
+
+  const handleGitDiscard = useCallback(
+    async (paths: string[]) => {
+      await runGitAction(() => safeInvoke<void>("git_discard", { payload: { path: rootDir!, paths } }));
+    },
+    [rootDir, runGitAction],
+  );
+
+  const handleGitCommit = useCallback(async () => {
+    const message = gitCommitMessage.trim();
+    if (!message) {
+      return;
+    }
+    await runGitAction(() => safeInvoke<void>("git_commit", { payload: { path: rootDir!, message } }));
+    setGitCommitMessage("");
+  }, [gitCommitMessage, rootDir, runGitAction]);
+
+  const handleGitPush = useCallback(async () => {
+    await runGitAction(() => safeInvoke<void>("git_push", { payload: { path: rootDir! } }));
+  }, [rootDir, runGitAction]);
+
+  const handleGitStageAll = useCallback(async () => {
+    await runGitAction(() => safeInvoke<void>("git_stage_all", { payload: { path: rootDir! } }));
+  }, [rootDir, runGitAction]);
+
+  const handleGitUnstageAll = useCallback(async () => {
+    await runGitAction(() => safeInvoke<void>("git_unstage_all", { payload: { path: rootDir! } }));
+  }, [rootDir, runGitAction]);
 
   useEffect(() => {
     const unlistenTogglePromise = safeListen("menu-toggle-explorer", () => {
@@ -1479,39 +1685,271 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
 	      <div className="flex min-h-0 flex-1 overflow-hidden">
 		        {isSidebarCollapsed ? (
-		          <button
-		            type="button"
-	            onClick={() => {
-	              setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
-	              setIsSidebarCollapsed(false);
-	            }}
-	            className="flex w-9 shrink-0 items-center justify-center border-r border-slate-900 bg-slate-950 text-slate-500 hover:bg-slate-900/30 hover:text-slate-200"
-	            title="Show Explorer (Cmd/Ctrl+B)"
-	          >
-	            <PanelLeftIcon className="h-4 w-4" />
-	          </button>
+              <div className="flex w-9 shrink-0 flex-col border-r border-slate-900 bg-slate-950">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarPanel("explorer");
+                    setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
+                    setIsSidebarCollapsed(false);
+                  }}
+                  className={`flex h-9 items-center justify-center text-slate-500 hover:bg-slate-900/30 hover:text-slate-200 ${
+                    sidebarPanel === "explorer" ? "bg-slate-900/50 text-slate-200" : ""
+                  }`}
+                  title="Show Explorer (Cmd/Ctrl+B)"
+                >
+                  <FolderIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarPanel("git");
+                    setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
+                    setIsSidebarCollapsed(false);
+                  }}
+                  className={`flex h-9 items-center justify-center text-slate-500 hover:bg-slate-900/30 hover:text-slate-200 ${
+                    sidebarPanel === "git" ? "bg-slate-900/50 text-slate-200" : ""
+                  }`}
+                  title="Show Source Control"
+                >
+                  <GitIcon className="h-4 w-4" />
+                </button>
+              </div>
 	        ) : (
 	          <>
 	            <aside className="shrink-0 border-r border-slate-900" style={{ width: sidebarWidth }}>
 	              <div className="border-b border-slate-900 px-4 py-3">
 	                <div className="flex items-start justify-between gap-2">
 	                  <div className="min-w-0 cursor-default">
-	                    <h2 className="truncate text-sm font-semibold text-slate-200" title={rootDir ?? "IDE"}>
-	                      {rootDir ? basename(rootDir) : "IDE"}
+	                    <h2
+                        className="truncate text-sm font-semibold text-slate-200"
+                        title={sidebarPanel === "explorer" ? rootDir ?? "IDE" : "Source Control"}
+                      >
+	                      {sidebarPanel === "explorer" ? (rootDir ? basename(rootDir) : "IDE") : "Source Control"}
 	                    </h2>
+                      {sidebarPanel === "git" && rootDir ? (
+                        <p className="mt-1 truncate text-[11px] text-slate-500" title={rootDir}>
+                          root: {rootDir}
+                        </p>
+                      ) : null}
 	                  </div>
-	                  <button
-	                    type="button"
-	                    onClick={() => setIsSidebarCollapsed(true)}
-                    className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                    title="Hide Explorer (Cmd/Ctrl+B)"
-                  >
-                    <PanelLeftIcon className="h-4 w-4" />
-                  </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSidebarPanel("explorer")}
+                        className={`rounded p-1.5 ${
+                          sidebarPanel === "explorer"
+                            ? "bg-slate-900/60 text-slate-200"
+                            : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                        }`}
+                        title="Explorer"
+                      >
+                        <FolderIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSidebarPanel("git")}
+                        className={`rounded p-1.5 ${
+                          sidebarPanel === "git"
+                            ? "bg-slate-900/60 text-slate-200"
+                            : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                        }`}
+                        title="Source Control"
+                      >
+                        <GitIcon className="h-4 w-4" />
+                      </button>
+	                    <button
+	                      type="button"
+	                      onClick={() => setIsSidebarCollapsed(true)}
+                        className="rounded p-1.5 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                        title="Hide Sidebar (Cmd/Ctrl+B)"
+                      >
+                        <PanelLeftIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                 </div>
               </div>
               <div className="h-full min-h-0 overflow-auto p-2">
-                {explorerRoot ? renderDirectory(explorerRoot, 0) : <p className="px-2 text-xs text-slate-500">No folder open.</p>}
+                {sidebarPanel === "explorer" ? (
+                  explorerRoot ? (
+                    renderDirectory(explorerRoot, 0)
+                  ) : (
+                    <p className="px-2 text-xs text-slate-500">No folder open.</p>
+                  )
+                ) : !rootDir ? (
+                  <p className="px-2 text-xs text-slate-500">Open a folder to use Source Control.</p>
+                ) : (
+                  <div className="space-y-3 px-2 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-xs text-slate-300">
+                          {gitStatus?.branch ? gitStatus.branch : "detached"}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                          <span>↑ {gitStatus?.ahead ?? 0}</span>
+                          <span>↓ {gitStatus?.behind ?? 0}</span>
+                          {gitStatus?.upstream ? <span className="truncate">upstream: {gitStatus.upstream}</span> : <span>no upstream</span>}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void refreshGit()}
+                        disabled={isGitLoading || isGitBusy}
+                        className="rounded border border-slate-800 bg-slate-950 p-1.5 text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        title="Refresh"
+                      >
+                        <RefreshIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleGitStageAll()}
+                        disabled={isGitLoading || isGitBusy}
+                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        title="Stage all"
+                      >
+                        Stage all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleGitUnstageAll()}
+                        disabled={isGitLoading || isGitBusy || (gitStatus?.staged?.length ?? 0) === 0}
+                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        title="Unstage all"
+                      >
+                        Unstage all
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <textarea
+                        rows={3}
+                        value={gitCommitMessage}
+                        onChange={(event) => setGitCommitMessage(event.target.value)}
+                        placeholder="Commit message"
+                        className="w-full resize-none rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-slate-700 focus:outline-none"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if ((gitStatus?.staged?.length ?? 0) > 0) {
+                              void handleGitCommit();
+                            } else if ((gitStatus?.ahead ?? 0) > 0) {
+                              void handleGitPush();
+                            }
+                          }}
+                          disabled={
+                            isGitLoading ||
+                            isGitBusy ||
+                            ((gitStatus?.staged?.length ?? 0) > 0
+                              ? !gitCommitMessage.trim()
+                              : (gitStatus?.ahead ?? 0) === 0)
+                          }
+                          className="flex-1 rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                          title={(gitStatus?.staged?.length ?? 0) > 0 ? "Commit staged changes" : "Push"}
+                        >
+                          {(gitStatus?.staged?.length ?? 0) > 0 ? "Commit" : "Push"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {gitError ? <p className="text-[11px] text-rose-300">{gitError}</p> : null}
+
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold text-slate-300">
+                        Staged ({gitStatus?.staged?.length ?? 0})
+                      </div>
+                      <div className="space-y-1">
+                        {(gitStatus?.staged ?? []).map((entry) => {
+                          const isActive = gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "staged";
+                          return (
+                            <div key={`staged:${entry.path}`} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setGitSelectedDiff({ path: entry.path, view: "staged", orig_path: entry.orig_path ?? null })
+                                }
+                                className={`min-w-0 flex-1 rounded px-2 py-1 text-left text-xs hover:bg-slate-900/60 ${
+                                  isActive ? "bg-slate-900/60" : ""
+                                }`}
+                                title={entry.path}
+                              >
+                                <span className="mr-2 inline-block w-4 text-slate-500">{entry.index_status}</span>
+                                <span className="truncate">{basename(entry.path)}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleGitUnstage([entry.path])}
+                                disabled={isGitLoading || isGitBusy}
+                                className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                                title="Unstage"
+                              >
+                                <MinusIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold text-slate-300">
+                        Changes ({gitStatus?.changes?.length ?? 0})
+                      </div>
+                      <div className="space-y-1">
+                        {(gitStatus?.changes ?? []).map((entry) => {
+                          const isActive =
+                            gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "unstaged";
+                          const canDiscard = !entry.is_untracked && entry.worktree_status.trim() !== "";
+                          return (
+                            <div key={`change:${entry.path}`} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setGitSelectedDiff({
+                                    path: entry.path,
+                                    view: "unstaged",
+                                    orig_path: entry.orig_path ?? null,
+                                  })
+                                }
+                                className={`min-w-0 flex-1 rounded px-2 py-1 text-left text-xs hover:bg-slate-900/60 ${
+                                  isActive ? "bg-slate-900/60" : ""
+                                }`}
+                                title={entry.path}
+                              >
+                                <span className="mr-2 inline-block w-4 text-slate-500">
+                                  {entry.is_untracked ? "?" : entry.worktree_status}
+                                </span>
+                                <span className="truncate">{basename(entry.path)}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleGitStage([entry.path])}
+                                disabled={isGitLoading || isGitBusy}
+                                className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                                title="Stage"
+                              >
+                                <PlusIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleGitDiscard([entry.path])}
+                                disabled={isGitLoading || isGitBusy || !canDiscard}
+                                className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                                title={entry.is_untracked ? "Discard is not available for untracked files" : "Discard"}
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </aside>
 
@@ -1623,7 +2061,43 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-              {activeFile ? (
+              {gitSelectedDiff ? (
+                <div className="flex h-full min-h-0 flex-col">
+                  <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-3 py-2 text-xs">
+                    <div className="min-w-0 truncate text-slate-200" title={gitSelectedDiff.path}>
+                      Diff: {gitSelectedDiff.path}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGitSelectedDiff(null)}
+                      className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                      title="Close diff"
+                    >
+                      <CloseIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 select-text">
+                    {isGitDiffLoading ? (
+                      <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading diff…</div>
+                    ) : gitDiffContents?.is_binary ? (
+                      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                        Binary file diff not supported.
+                      </div>
+                    ) : (
+                      <DiffEditor
+                        theme={theme === "light" ? "vs-light" : "vs-dark"}
+                        original={gitDiffContents?.original ?? ""}
+                        modified={gitDiffContents?.modified ?? ""}
+                        options={{
+                          ...MONACO_EDITOR_OPTIONS,
+                          readOnly: true,
+                          renderSideBySide: true,
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : activeFile ? (
                 <div className="h-full select-text">
                   <MonacoEditor
                     theme={theme === "light" ? "vs-light" : "vs-dark"}
