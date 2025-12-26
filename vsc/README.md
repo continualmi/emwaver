@@ -1,0 +1,27 @@
+# EMWaver VSCode Extension (WIP)
+
+Initial scaffold for a simple **Build & Flash** sidebar.
+
+## Dev run
+
+1. Open `vsc/` in VSCode.
+2. Run `npm i`.
+3. Press `F5` to start the *Extension Development Host* (auto-compiles TypeScript via a pre-launch task).
+4. In the dev-host window, open a folder/workspace (e.g. the repo root) so the extension has a working directory.
+
+## Troubleshooting
+
+- Check `View → Output → EMWaver` for activation logs.
+- Check `View → Output → Log (Extension Host)` for stack traces.
+
+## Commands
+
+- `EMWaver: Build` → runs `emwaver build`
+- `EMWaver: Flash` → runs `emwaver flash`
+
+## Settings
+
+- `emwaver.cliPath`: path to the `emwaver` CLI (default: `emwaver`)
+- `emwaver.workingDirectory`: working dir for commands (default: workspace root)
+- `emwaver.buildArgs`: extra args for `emwaver build`
+- `emwaver.flashArgs`: extra args for `emwaver flash`
