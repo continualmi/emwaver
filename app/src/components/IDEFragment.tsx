@@ -397,6 +397,15 @@ function RefreshIcon({ className }: { className?: string }) {
   );
 }
 
+function ArrowUpIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
+      <path d="M8 12.7V3.7" strokeLinecap="round" />
+      <path d="M4.7 6.9L8 3.6l3.3 3.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function formatConsoleArgs(args: unknown[]): string {
   return args
     .map((arg) => {
@@ -1725,13 +1734,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                         className="truncate text-sm font-semibold text-slate-200"
                         title={sidebarPanel === "explorer" ? rootDir ?? "IDE" : "Source Control"}
                       >
-	                      {sidebarPanel === "explorer" ? (rootDir ? basename(rootDir) : "IDE") : "Source Control"}
+	                      {sidebarPanel === "explorer" ? (rootDir ? basename(rootDir) : "IDE") : "SOURCE CONTROL"}
 	                    </h2>
-                      {sidebarPanel === "git" && rootDir ? (
-                        <p className="mt-1 truncate text-[11px] text-slate-500" title={rootDir}>
-                          root: {rootDir}
-                        </p>
-                      ) : null}
+                      {sidebarPanel === "git" ? <p className="mt-1 text-[11px] text-slate-500">Git</p> : null}
 	                  </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -1776,182 +1781,215 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                   ) : (
                     <p className="px-2 text-xs text-slate-500">No folder open.</p>
                   )
-                ) : !rootDir ? (
-                  <p className="px-2 text-xs text-slate-500">Open a folder to use Source Control.</p>
-                ) : (
-                  <div className="space-y-3 px-2 py-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-xs text-slate-300">
+	                ) : !rootDir ? (
+	                  <p className="px-2 text-xs text-slate-500">Open a folder to use Source Control.</p>
+	                ) : (
+	                  <div className="space-y-3 px-2 py-2">
+                      <div className="px-1 text-[11px] text-slate-500">
+                        <span className="font-semibold text-slate-300">
                           {gitStatus?.branch ? gitStatus.branch : "detached"}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                          <span>↑ {gitStatus?.ahead ?? 0}</span>
-                          <span>↓ {gitStatus?.behind ?? 0}</span>
-                          {gitStatus?.upstream ? <span className="truncate">upstream: {gitStatus.upstream}</span> : <span>no upstream</span>}
-                        </div>
+                        </span>
+                        {gitStatus?.upstream ? <span className="text-slate-600"> → {gitStatus.upstream}</span> : null}
+                        <span className="ml-2">↑ {gitStatus?.ahead ?? 0}</span>
+                        <span className="ml-2">↓ {gitStatus?.behind ?? 0}</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => void refreshGit()}
-                        disabled={isGitLoading || isGitBusy}
-                        className="rounded border border-slate-800 bg-slate-950 p-1.5 text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                        title="Refresh"
-                      >
-                        <RefreshIcon className="h-4 w-4" />
-                      </button>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleGitStageAll()}
-                        disabled={isGitLoading || isGitBusy}
-                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                        title="Stage all"
-                      >
-                        Stage all
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleGitUnstageAll()}
-                        disabled={isGitLoading || isGitBusy || (gitStatus?.staged?.length ?? 0) === 0}
-                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                        title="Unstage all"
-                      >
-                        Unstage all
-                      </button>
-                    </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <div className="text-[11px] font-semibold tracking-wide text-slate-400">CHANGES</div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void refreshGit()}
+                              disabled={isGitLoading || isGitBusy}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                              title="Refresh"
+                            >
+                              <RefreshIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleGitStageAll()}
+                              disabled={isGitLoading || isGitBusy || (gitStatus?.changes?.length ?? 0) === 0}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                              title="Stage all changes"
+                            >
+                              <PlusIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleGitUnstageAll()}
+                              disabled={isGitLoading || isGitBusy || (gitStatus?.staged?.length ?? 0) === 0}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                              title="Unstage all changes"
+                            >
+                              <MinusIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleGitPush()}
+                              disabled={isGitLoading || isGitBusy || (gitStatus?.ahead ?? 0) === 0}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
+                              title="Push"
+                            >
+                              <ArrowUpIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
 
-                    <div className="space-y-2">
-                      <textarea
-                        rows={3}
-                        value={gitCommitMessage}
-                        onChange={(event) => setGitCommitMessage(event.target.value)}
-                        placeholder="Commit message"
-                        className="w-full resize-none rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-slate-700 focus:outline-none"
-                      />
-                      <div className="flex items-center gap-2">
+                        <textarea
+                          rows={2}
+                          value={gitCommitMessage}
+                          onChange={(event) => setGitCommitMessage(event.target.value)}
+                          onKeyDown={(event) => {
+                            const isCommit = (event.ctrlKey || event.metaKey) && event.key === "Enter";
+                            if (!isCommit) {
+                              return;
+                            }
+                            if (isGitLoading || isGitBusy) {
+                              return;
+                            }
+                            if ((gitStatus?.staged?.length ?? 0) === 0) {
+                              return;
+                            }
+                            if (!gitCommitMessage.trim()) {
+                              return;
+                            }
+                            event.preventDefault();
+                            void handleGitCommit();
+                          }}
+                          placeholder="Message"
+                          className="w-full resize-none rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-slate-700 focus:outline-none"
+                        />
+
                         <button
                           type="button"
-                          onClick={() => {
-                            if ((gitStatus?.staged?.length ?? 0) > 0) {
-                              void handleGitCommit();
-                            } else if ((gitStatus?.ahead ?? 0) > 0) {
-                              void handleGitPush();
-                            }
-                          }}
+                          onClick={() => void handleGitCommit()}
                           disabled={
                             isGitLoading ||
                             isGitBusy ||
-                            ((gitStatus?.staged?.length ?? 0) > 0
-                              ? !gitCommitMessage.trim()
-                              : (gitStatus?.ahead ?? 0) === 0)
+                            (gitStatus?.staged?.length ?? 0) === 0 ||
+                            !gitCommitMessage.trim()
                           }
-                          className="flex-1 rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                          title={(gitStatus?.staged?.length ?? 0) > 0 ? "Commit staged changes" : "Push"}
+                          className="w-full rounded bg-sky-600 px-2 py-2 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+                          title="Commit staged changes"
                         >
-                          {(gitStatus?.staged?.length ?? 0) > 0 ? "Commit" : "Push"}
+                          Commit
                         </button>
                       </div>
-                    </div>
 
-                    {gitError ? <p className="text-[11px] text-rose-300">{gitError}</p> : null}
+                      {gitError ? <p className="px-1 text-[11px] text-rose-300">{gitError}</p> : null}
 
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold text-slate-300">
-                        Staged ({gitStatus?.staged?.length ?? 0})
-                      </div>
                       <div className="space-y-1">
-                        {(gitStatus?.staged ?? []).map((entry) => {
-                          const isActive = gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "staged";
-                          return (
-                            <div key={`staged:${entry.path}`} className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setGitSelectedDiff({ path: entry.path, view: "staged", orig_path: entry.orig_path ?? null })
-                                }
-                                className={`min-w-0 flex-1 rounded px-2 py-1 text-left text-xs hover:bg-slate-900/60 ${
-                                  isActive ? "bg-slate-900/60" : ""
+                        <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-slate-300">
+                          <span>Staged Changes</span>
+                          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200">
+                            {gitStatus?.staged?.length ?? 0}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          {(gitStatus?.staged ?? []).map((entry) => {
+                            const isActive = gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "staged";
+                            return (
+                              <div
+                                key={`staged:${entry.path}`}
+                                className={`group flex items-center gap-1 rounded px-1 py-0.5 ${
+                                  isActive ? "bg-slate-900/60" : "hover:bg-slate-900/60"
                                 }`}
-                                title={entry.path}
                               >
-                                <span className="mr-2 inline-block w-4 text-slate-500">{entry.index_status}</span>
-                                <span className="truncate">{basename(entry.path)}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleGitUnstage([entry.path])}
-                                disabled={isGitLoading || isGitBusy}
-                                className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                                title="Unstage"
-                              >
-                                <MinusIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          );
-                        })}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setGitSelectedDiff({
+                                      path: entry.path,
+                                      view: "staged",
+                                      orig_path: entry.orig_path ?? null,
+                                    })
+                                  }
+                                  className="min-w-0 flex-1 truncate px-1 py-1 text-left text-xs text-slate-200"
+                                  title={entry.path}
+                                >
+                                  <span className="mr-2 inline-block w-4 text-slate-500">{entry.index_status}</span>
+                                  {entry.path}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleGitUnstage([entry.path])}
+                                  disabled={isGitLoading || isGitBusy}
+                                  className="rounded p-1 text-slate-500 opacity-0 hover:bg-slate-900/60 hover:text-slate-200 group-hover:opacity-100 disabled:opacity-50"
+                                  title="Unstage"
+                                >
+                                  <MinusIcon className="h-4 w-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold text-slate-300">
-                        Changes ({gitStatus?.changes?.length ?? 0})
-                      </div>
                       <div className="space-y-1">
-                        {(gitStatus?.changes ?? []).map((entry) => {
-                          const isActive =
-                            gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "unstaged";
-                          const canDiscard = !entry.is_untracked && entry.worktree_status.trim() !== "";
-                          return (
-                            <div key={`change:${entry.path}`} className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setGitSelectedDiff({
-                                    path: entry.path,
-                                    view: "unstaged",
-                                    orig_path: entry.orig_path ?? null,
-                                  })
-                                }
-                                className={`min-w-0 flex-1 rounded px-2 py-1 text-left text-xs hover:bg-slate-900/60 ${
-                                  isActive ? "bg-slate-900/60" : ""
+                        <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-slate-300">
+                          <span>Changes</span>
+                          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200">
+                            {gitStatus?.changes?.length ?? 0}
+                          </span>
+                        </div>
+                        <div className="space-y-0.5">
+                          {(gitStatus?.changes ?? []).map((entry) => {
+                            const isActive =
+                              gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "unstaged";
+                            const canDiscard = !entry.is_untracked && entry.worktree_status.trim() !== "";
+                            return (
+                              <div
+                                key={`change:${entry.path}`}
+                                className={`group flex items-center gap-1 rounded px-1 py-0.5 ${
+                                  isActive ? "bg-slate-900/60" : "hover:bg-slate-900/60"
                                 }`}
-                                title={entry.path}
                               >
-                                <span className="mr-2 inline-block w-4 text-slate-500">
-                                  {entry.is_untracked ? "?" : entry.worktree_status}
-                                </span>
-                                <span className="truncate">{basename(entry.path)}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleGitStage([entry.path])}
-                                disabled={isGitLoading || isGitBusy}
-                                className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                                title="Stage"
-                              >
-                                <PlusIcon className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleGitDiscard([entry.path])}
-                                disabled={isGitLoading || isGitBusy || !canDiscard}
-                                className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                                title={entry.is_untracked ? "Discard is not available for untracked files" : "Discard"}
-                              >
-                                <TrashIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          );
-                        })}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setGitSelectedDiff({
+                                      path: entry.path,
+                                      view: "unstaged",
+                                      orig_path: entry.orig_path ?? null,
+                                    })
+                                  }
+                                  className="min-w-0 flex-1 truncate px-1 py-1 text-left text-xs text-slate-200"
+                                  title={entry.path}
+                                >
+                                  <span className="mr-2 inline-block w-4 text-slate-500">
+                                    {entry.is_untracked ? "?" : entry.worktree_status}
+                                  </span>
+                                  {entry.path}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleGitStage([entry.path])}
+                                  disabled={isGitLoading || isGitBusy}
+                                  className="rounded p-1 text-slate-500 opacity-0 hover:bg-slate-900/60 hover:text-slate-200 group-hover:opacity-100 disabled:opacity-50"
+                                  title="Stage"
+                                >
+                                  <PlusIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleGitDiscard([entry.path])}
+                                  disabled={isGitLoading || isGitBusy || !canDiscard}
+                                  className="rounded p-1 text-slate-500 opacity-0 hover:bg-slate-900/60 hover:text-slate-200 group-hover:opacity-100 disabled:opacity-50"
+                                  title={entry.is_untracked ? "Discard is not available for untracked files" : "Discard"}
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            </aside>
+	                )}
+	              </div>
+	            </aside>
 
 	            <div
 	              role="separator"
