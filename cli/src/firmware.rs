@@ -33,6 +33,23 @@ const STM32_CUBEMX_DOWNLOAD_URL: &str = "https://www.st.com/en/development-tools
 const ARM_GNU_TOOLCHAIN_DOWNLOAD_URL: &str =
     "https://developer.arm.com/downloads/-/gnu-rm";
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum HostPlatform {
+    Macos,
+    Linux,
+    Windows,
+    Other,
+}
+
+fn host_platform() -> HostPlatform {
+    match env::consts::OS {
+        "macos" => HostPlatform::Macos,
+        "linux" => HostPlatform::Linux,
+        "windows" => HostPlatform::Windows,
+        _ => HostPlatform::Other,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FirmwareKind {
     EspIdf,
@@ -466,9 +483,10 @@ fn resolve_in_env_path(binary: &str, env: &[(String, String)]) -> Option<PathBuf
         .or_else(|| env::var_os("PATH"))?;
 
     for dir in env::split_paths(&path) {
-        let candidate = dir.join(binary);
-        if candidate.is_file() {
-            return Some(candidate);
+        for candidate in binary_candidates_in_dir(&dir, binary) {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None
@@ -543,12 +561,41 @@ fn try_install_arm_toolchain_interactive() -> Result<bool> {
 Install it now?"
     );
 
-    if !prompt_yes_no("Install ARM GNU toolchain via Homebrew? [Y/n] ", true)? {
+    let prompt = match host_platform() {
+        HostPlatform::Macos => "Install ARM GNU toolchain via Homebrew? [Y/n] ",
+        HostPlatform::Linux => "Install ARM GNU toolchain via your package manager? [Y/n] ",
+        HostPlatform::Windows => "Install ARM GNU toolchain via a Windows package manager? [Y/n] ",
+        HostPlatform::Other => "Install ARM GNU toolchain now? [Y/n] ",
+    };
+
+    if !prompt_yes_no(prompt, true)? {
         return Ok(false);
     }
 
+    match host_platform() {
+        HostPlatform::Macos => try_install_arm_toolchain_macos(),
+        HostPlatform::Linux => try_install_arm_toolchain_linux(),
+        HostPlatform::Windows => try_install_arm_toolchain_windows(),
+        HostPlatform::Other => {
+            eprintln!("Automatic installation is not supported on this platform. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL}");
+            Ok(false)
+        }
+    }
+}
+
+fn run_cmd(program: &str, args: &[&str]) -> Result<std::process::ExitStatus> {
+    Command::new(program)
+        .args(args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| format!("failed to run `{}`", std::iter::once(program).chain(args.iter().copied()).collect::<Vec<_>>().join(" ")))
+}
+
+fn try_install_arm_toolchain_macos() -> Result<bool> {
     if which("brew").is_err() {
-        eprintln!("Homebrew not found. Install manually from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} or install STM32CubeIDE.");
+        eprintln!("Homebrew not found. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE).");
         return Ok(false);
     }
 
@@ -562,13 +609,7 @@ Install it now?"
 
     for (args, label) in attempts {
         eprintln!("Running `{label}`...");
-        let status = Command::new("brew")
-            .args(*args)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
-            .with_context(|| format!("failed to run `{label}`"))?;
+        let status = run_cmd("brew", args)?;
 
         if status.success() {
             return Ok(true);
@@ -576,6 +617,96 @@ Install it now?"
     }
 
     eprintln!("Toolchain install via Homebrew failed. Install manually from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} or install STM32CubeIDE.");
+    Ok(false)
+}
+
+fn try_install_arm_toolchain_linux() -> Result<bool> {
+    let has_sudo = which("sudo").is_ok();
+
+    if which("apt-get").is_ok() {
+        if has_sudo {
+            eprintln!("Running `sudo apt-get update`...");
+            let _ = run_cmd("sudo", &["apt-get", "update"]);
+            eprintln!("Running `sudo apt-get install -y gcc-arm-none-eabi`...");
+            let status = run_cmd("sudo", &["apt-get", "install", "-y", "gcc-arm-none-eabi"])?;
+            return Ok(status.success());
+        }
+        eprintln!("Running `apt-get update`...");
+        let _ = run_cmd("apt-get", &["update"]);
+        eprintln!("Running `apt-get install -y gcc-arm-none-eabi`...");
+        let status = run_cmd("apt-get", &["install", "-y", "gcc-arm-none-eabi"])?;
+        return Ok(status.success());
+    }
+
+    if which("dnf").is_ok() {
+        eprintln!(
+            "dnf detected but package naming varies by distro.\n\
+Install manually (download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL}) or install STM32CubeIDE."
+        );
+        return Ok(false);
+    }
+
+    if which("pacman").is_ok() {
+        if has_sudo {
+            eprintln!("Running `sudo pacman -Sy --noconfirm arm-none-eabi-gcc arm-none-eabi-binutils`...");
+            let status = run_cmd(
+                "sudo",
+                &[
+                    "pacman",
+                    "-Sy",
+                    "--noconfirm",
+                    "arm-none-eabi-gcc",
+                    "arm-none-eabi-binutils",
+                ],
+            )?;
+            return Ok(status.success());
+        }
+        eprintln!("Running `pacman -Sy --noconfirm arm-none-eabi-gcc arm-none-eabi-binutils`...");
+        let status = run_cmd(
+            "pacman",
+            &[
+                "-Sy",
+                "--noconfirm",
+                "arm-none-eabi-gcc",
+                "arm-none-eabi-binutils",
+            ],
+        )?;
+        return Ok(status.success());
+    }
+
+    eprintln!(
+        "No supported Linux package manager detected.\n\
+Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE)."
+    );
+    Ok(false)
+}
+
+fn try_install_arm_toolchain_windows() -> Result<bool> {
+    if which("winget").is_ok() {
+        eprintln!("Running `winget install Arm.GnuArmEmbeddedToolchain`...");
+        let status = run_cmd("winget", &["install", "Arm.GnuArmEmbeddedToolchain"])?;
+        if status.success() {
+            return Ok(true);
+        }
+    }
+
+    if which("choco").is_ok() {
+        eprintln!("Running `choco install gcc-arm-embedded -y`...");
+        let status = run_cmd("choco", &["install", "gcc-arm-embedded", "-y"])?;
+        if status.success() {
+            return Ok(true);
+        }
+    }
+
+    if which("scoop").is_ok() {
+        eprintln!("Running `scoop install gcc-arm-none-eabi`...");
+        let status = run_cmd("scoop", &["install", "gcc-arm-none-eabi"])?;
+        if status.success() {
+            return Ok(true);
+        }
+    }
+
+    eprintln!("No supported Windows package manager found. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE).");
     Ok(false)
 }
 
@@ -728,10 +859,31 @@ fn find_cubemx_optional() -> Result<Option<PathBuf>> {
 fn which(binary: &str) -> Result<PathBuf> {
     let path = env::var_os("PATH").unwrap_or_default();
     for dir in env::split_paths(&path) {
-        let candidate = dir.join(binary);
-        if candidate.is_file() {
-            return Ok(candidate);
+        for candidate in binary_candidates_in_dir(&dir, binary) {
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
         }
     }
     bail!("`{binary}` not found on PATH")
+}
+
+fn binary_candidates_in_dir(dir: &Path, binary: &str) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    out.push(dir.join(binary));
+
+    if host_platform() == HostPlatform::Windows && !binary.contains('.') {
+        if let Some(pathext) = env::var_os("PATHEXT") {
+            let pathext = pathext.to_string_lossy();
+            for ext in pathext.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                out.push(dir.join(format!("{binary}{ext}")));
+            }
+        } else {
+            out.push(dir.join(format!("{binary}.exe")));
+            out.push(dir.join(format!("{binary}.cmd")));
+            out.push(dir.join(format!("{binary}.bat")));
+        }
+    }
+
+    out
 }
