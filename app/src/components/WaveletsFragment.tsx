@@ -5,6 +5,7 @@ import type { editor } from "monaco-editor";
 import { appDataDir } from "@tauri-apps/api/path";
 import { WaveletEngine, type WaveletTree } from "../utils/WaveletEngine";
 import { createBLEServiceWrapper } from "../utils/BLEServiceWrapper";
+import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeJoin } from "../utils/tauri";
 
 const ASSET_SCRIPT_FILES = [
@@ -115,6 +116,8 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
     if (!monaco) {
       return;
     }
+
+    ensureEmwaverMonacoThemes(monaco);
 
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
       jsx: monaco.languages.typescript.JsxEmit.Preserve,
@@ -584,7 +587,7 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
                       language="javascript"
                       onChange={handleEditorChange}
                       options={editorOptions}
-                      theme={theme === "light" ? "vs" : "vs-dark"}
+                      theme={getEmwaverMonacoTheme(theme)}
                       height="100%"
                       loading={
                         <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
