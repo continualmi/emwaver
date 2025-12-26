@@ -17,6 +17,7 @@
  */
 
 use crate::dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice, DfuOpenOptions};
+use crate::cli::CodegenMode;
 use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
 use std::fs;
@@ -33,27 +34,53 @@ enum FirmwareKind {
     Stm32Cube,
 }
 
-pub fn build(project: Option<PathBuf>) -> Result<()> {
+pub fn build(project: Option<PathBuf>, codegen: CodegenMode, verbose: bool) -> Result<()> {
     match resolve_firmware_project(project)? {
-        (FirmwareKind::EspIdf, project) => esp_idf_build(&project),
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            esp_idf_build(&project)
+        }
         (FirmwareKind::Stm32Cube, project) => {
-            stm32_codegen(&project)?;
+            stm32_codegen_if_needed(&project, codegen, verbose)?;
             let _bin = stm32_build_and_export_bin(&project)?;
             Ok(())
         }
     }
 }
 
-pub fn flash(project: Option<PathBuf>, port: Option<String>) -> Result<()> {
+pub fn flash(
+    project: Option<PathBuf>,
+    port: Option<String>,
+    codegen: CodegenMode,
+    dfu_alt: Option<u8>,
+    verbose: bool,
+) -> Result<()> {
     match resolve_firmware_project(project)? {
-        (FirmwareKind::EspIdf, project) => esp_idf_flash(&project, port),
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            if dfu_alt.is_some() {
+                bail!("`--dfu-alt` is only supported for STM32 USB DFU flashing");
+            }
+            esp_idf_flash(&project, port)
+        }
         (FirmwareKind::Stm32Cube, project) => {
             if port.is_some() {
                 bail!("`--port` is only supported for ESP-IDF serial flashing");
             }
-            stm32_codegen(&project)?;
+            stm32_codegen_if_needed(&project, codegen, verbose)?;
             let bin = stm32_build_and_export_bin(&project)?;
-            dfu_flash_file(bin, DEFAULT_USB_VENDOR_ID, DEFAULT_USB_PRODUCT_ID, 0x0800_0000, None, false)
+            dfu_flash_file(
+                bin,
+                DEFAULT_USB_VENDOR_ID,
+                DEFAULT_USB_PRODUCT_ID,
+                0x0800_0000,
+                dfu_alt,
+                verbose,
+            )
         }
     }
 }
@@ -235,8 +262,97 @@ fn find_single_ioc(project: &Path) -> Result<PathBuf> {
     }
 }
 
+fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> Result<()> {
+    match mode {
+        CodegenMode::Never => {
+            if verbose {
+                let needed = stm32_codegen_needed(project)?;
+                if needed {
+                    eprintln!("Skipping STM32CubeMX code generation (`--codegen never`).");
+                } else {
+                    eprintln!("Skipping STM32CubeMX code generation (`--codegen never`, not needed).");
+                }
+            }
+            Ok(())
+        }
+        CodegenMode::Always => {
+            if verbose {
+                eprintln!("Running STM32CubeMX code generation (`--codegen always`).");
+            }
+            stm32_codegen(project)
+        }
+        CodegenMode::Auto => {
+            if stm32_codegen_needed(project)? {
+                match find_cubemx_optional()? {
+                    Some(cubemx) => {
+                        if verbose {
+                            eprintln!(
+                                "Running STM32CubeMX code generation (project `.ioc` appears newer): {}",
+                                cubemx.display()
+                            );
+                        }
+                        stm32_codegen_with(&cubemx, project)
+                    }
+                    None => {
+                        if verbose {
+                            eprintln!(
+                                "STM32CubeMX not found; continuing without regeneration (pass `--codegen always` to require CubeMX)."
+                            );
+                        }
+                        Ok(())
+                    }
+                }
+            } else {
+                if verbose {
+                    eprintln!("Skipping STM32CubeMX code generation (generated sources appear up-to-date).");
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+fn stm32_codegen_needed(project: &Path) -> Result<bool> {
+    let ioc = find_single_ioc(project)?;
+    let ioc_mtime = fs::metadata(&ioc)
+        .with_context(|| format!("failed to stat `{}`", ioc.display()))?
+        .modified()
+        .with_context(|| format!("failed to read mtime for `{}`", ioc.display()))?;
+
+    let sentinels = [
+        project.join("Core").join("Src").join("main.c"),
+        project.join("Core").join("Inc").join("main.h"),
+        project.join("USB_DEVICE").join("App").join("usb_device.c"),
+        project.join("USB_DEVICE").join("Target").join("usbd_conf.c"),
+    ];
+
+    let mut newest_generated: Option<std::time::SystemTime> = None;
+    for sentinel in sentinels {
+        if !sentinel.is_file() {
+            return Ok(true);
+        }
+        let mtime = fs::metadata(&sentinel)
+            .with_context(|| format!("failed to stat `{}`", sentinel.display()))?
+            .modified()
+            .with_context(|| format!("failed to read mtime for `{}`", sentinel.display()))?;
+        newest_generated = Some(match newest_generated {
+            Some(existing) => existing.max(mtime),
+            None => mtime,
+        });
+    }
+
+    Ok(match newest_generated {
+        None => true,
+        Some(generated) => ioc_mtime > generated,
+    })
+}
+
 fn stm32_codegen(project: &Path) -> Result<()> {
     let cubemx = find_cubemx()?;
+    stm32_codegen_with(&cubemx, project)
+}
+
+fn stm32_codegen_with(cubemx: &Path, project: &Path) -> Result<()> {
     let ioc = find_single_ioc(project)?.canonicalize().with_context(|| "failed to resolve `.ioc` path")?;
 
     // CubeMX on macOS is a GUI app; script mode still may open a window. We run it
@@ -323,6 +439,21 @@ fn find_single_elf(release_dir: &Path) -> Result<PathBuf> {
 }
 
 fn stm32_build_env() -> Result<Vec<(String, String)>> {
+    if let Some(bin_dir) = env::var_os("EMWAVER_ARM_TOOLCHAIN_BIN") {
+        let bin_dir = PathBuf::from(bin_dir);
+        if !bin_dir.is_dir() {
+            bail!(
+                "EMWAVER_ARM_TOOLCHAIN_BIN is set but is not a directory: {}",
+                bin_dir.display()
+            );
+        }
+        let current = env::var_os("PATH").unwrap_or_default();
+        let mut new_path = std::ffi::OsString::from(bin_dir);
+        new_path.push(":");
+        new_path.push(current);
+        return Ok(vec![("PATH".to_string(), new_path.to_string_lossy().into_owned())]);
+    }
+
     if toolchain_ok().unwrap_or(false) {
         return Ok(Vec::new());
     }
@@ -348,6 +479,10 @@ fn toolchain_ok() -> Result<bool> {
         .stderr(Stdio::null())
         .status()
         .is_ok();
+    if !gcc_ok {
+        return Ok(false);
+    }
+
     let objcopy_ok = Command::new("arm-none-eabi-objcopy")
         .arg("--version")
         .stdin(Stdio::null())
@@ -355,7 +490,32 @@ fn toolchain_ok() -> Result<bool> {
         .stderr(Stdio::null())
         .status()
         .is_ok();
-    Ok(gcc_ok && objcopy_ok)
+    if !objcopy_ok {
+        return Ok(false);
+    }
+
+    let mut test_c = NamedTempFile::new().context("failed to create toolchain test source")?;
+    test_c
+        .write_all(
+            b"#include <stdint.h>\n#include <stdio.h>\nint main(void) { return 0; }\n",
+        )
+        .context("failed to write toolchain test source")?;
+    let test_o = NamedTempFile::new().context("failed to create toolchain test output")?;
+
+    let status = Command::new("arm-none-eabi-gcc")
+        .arg("-mcpu=cortex-m0")
+        .arg("-mthumb")
+        .arg("-c")
+        .arg(test_c.path())
+        .arg("-o")
+        .arg(test_o.path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("failed to run `arm-none-eabi-gcc` for toolchain validation")?;
+
+    Ok(status.success())
 }
 
 fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
@@ -387,10 +547,21 @@ fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
 }
 
 fn find_cubemx() -> Result<PathBuf> {
+    let cubemx = find_cubemx_optional()?;
+    if let Some(path) = cubemx {
+        return Ok(path);
+    }
+
+    bail!(
+        "STM32CubeMX not found. Install it or set EMWAVER_CUBEMX=/path/to/STM32CubeMX (expected e.g. /Applications/STMicroelectronics/STM32CubeMX.app/Contents/MacOS/STM32CubeMX)"
+    )
+}
+
+fn find_cubemx_optional() -> Result<Option<PathBuf>> {
     if let Some(path) = env::var_os("EMWAVER_CUBEMX") {
         let p = PathBuf::from(path);
         if p.is_file() {
-            return Ok(p);
+            return Ok(Some(p));
         }
         bail!("EMWAVER_CUBEMX is set but is not a file: {}", p.display());
     }
@@ -406,17 +577,15 @@ fn find_cubemx() -> Result<PathBuf> {
 
     for path in candidates {
         if path.is_file() {
-            return Ok(path);
+            return Ok(Some(path));
         }
     }
 
     if let Ok(path) = which("STM32CubeMX") {
-        return Ok(path);
+        return Ok(Some(path));
     }
 
-    bail!(
-        "STM32CubeMX not found. Install it or set EMWAVER_CUBEMX=/path/to/STM32CubeMX (expected e.g. /Applications/STMicroelectronics/STM32CubeMX.app/Contents/MacOS/STM32CubeMX)"
-    )
+    Ok(None)
 }
 
 fn which(binary: &str) -> Result<PathBuf> {
