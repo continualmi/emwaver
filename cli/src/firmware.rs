@@ -44,7 +44,7 @@ pub fn build(project: Option<PathBuf>, codegen: CodegenMode, verbose: bool) -> R
         }
         (FirmwareKind::Stm32Cube, project) => {
             stm32_codegen_if_needed(&project, codegen, verbose)?;
-            let _bin = stm32_build_and_export_bin(&project)?;
+            let _bin = stm32_build_and_export_bin(&project, verbose)?;
             Ok(())
         }
     }
@@ -72,7 +72,7 @@ pub fn flash(
                 bail!("`--port` is only supported for ESP-IDF serial flashing");
             }
             stm32_codegen_if_needed(&project, codegen, verbose)?;
-            let bin = stm32_build_and_export_bin(&project)?;
+            let bin = stm32_build_and_export_bin(&project, verbose)?;
             dfu_flash_file(
                 bin,
                 DEFAULT_USB_VENDOR_ID,
@@ -378,10 +378,28 @@ fn stm32_codegen_with(cubemx: &Path, project: &Path) -> Result<()> {
     Ok(())
 }
 
-fn stm32_build_and_export_bin(project: &Path) -> Result<PathBuf> {
+fn stm32_build_and_export_bin(project: &Path, verbose: bool) -> Result<PathBuf> {
     let env = stm32_build_env()?;
     let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     let release = project.join("Release");
+
+    if verbose {
+        if let Some(gcc) = resolve_in_env_path("arm-none-eabi-gcc", &env) {
+            eprintln!("Using ARM toolchain: {}", gcc.display());
+        }
+        if let Ok(spec_path) = Command::new("arm-none-eabi-gcc")
+            .arg("-print-file-name=nano.specs")
+            .envs(env.clone())
+            .stdin(Stdio::null())
+            .output()
+        {
+            let raw = String::from_utf8_lossy(&spec_path.stdout);
+            let spec = raw.trim();
+            if !spec.is_empty() {
+                eprintln!("nano.specs: {spec}");
+            }
+        }
+    }
 
     let status = Command::new("make")
         .arg("-C")
@@ -420,6 +438,28 @@ fn stm32_build_and_export_bin(project: &Path) -> Result<PathBuf> {
 
     println!("Exported: {}", bin.display());
     Ok(bin)
+}
+
+fn resolve_in_env_path(binary: &str, env: &[(String, String)]) -> Option<PathBuf> {
+    let mut override_path = None;
+    for (k, v) in env {
+        if k == "PATH" {
+            override_path = Some(v.as_str());
+            break;
+        }
+    }
+
+    let path = override_path
+        .map(std::ffi::OsString::from)
+        .or_else(|| env::var_os("PATH"))?;
+
+    for dir in env::split_paths(&path) {
+        let candidate = dir.join(binary);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn find_single_elf(release_dir: &Path) -> Result<PathBuf> {
@@ -494,6 +534,19 @@ fn toolchain_ok() -> Result<bool> {
         return Ok(false);
     }
 
+    let nano_specs = Command::new("arm-none-eabi-gcc")
+        .arg("-print-file-name=nano.specs")
+        .stdin(Stdio::null())
+        .output()
+        .context("failed to query `nano.specs` from `arm-none-eabi-gcc`")?;
+    if !nano_specs.status.success() {
+        return Ok(false);
+    }
+    let nano_specs = String::from_utf8_lossy(&nano_specs.stdout).trim().to_string();
+    if nano_specs.is_empty() || nano_specs == "nano.specs" || !Path::new(&nano_specs).is_file() {
+        return Ok(false);
+    }
+
     let mut test_c = NamedTempFile::new().context("failed to create toolchain test source")?;
     test_c
         .write_all(
@@ -505,6 +558,7 @@ fn toolchain_ok() -> Result<bool> {
     let status = Command::new("arm-none-eabi-gcc")
         .arg("-mcpu=cortex-m0")
         .arg("-mthumb")
+        .arg("--specs=nano.specs")
         .arg("-c")
         .arg(test_c.path())
         .arg("-o")
