@@ -5,6 +5,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
+import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
 
 type ThemeMode = "dark" | "light";
@@ -779,6 +780,8 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     if (!monaco) {
       return;
     }
+
+    ensureEmwaverMonacoThemes(monaco);
 
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
       jsx: monaco.languages.typescript.JsxEmit.Preserve,
@@ -2123,7 +2126,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                       </div>
                     ) : (
                       <DiffEditor
-                        theme={theme === "light" ? "vs-light" : "vs-dark"}
+                        theme={getEmwaverMonacoTheme(theme)}
                         original={gitDiffContents?.original ?? ""}
                         modified={gitDiffContents?.modified ?? ""}
                         options={{
@@ -2138,7 +2141,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
               ) : activeFile ? (
                 <div className="h-full select-text">
                   <MonacoEditor
-                    theme={theme === "light" ? "vs-light" : "vs-dark"}
+                    theme={getEmwaverMonacoTheme(theme)}
                     path={activeFile.path}
                     language={activeFile.language}
                     value={activeFile.content}
