@@ -70,6 +70,10 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         initializedRef.current = true;
       } catch (e) {
         console.error("BLE initialization error", e);
+      } finally {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("emwaver:device-initialized"));
+        }
       }
     };
     initBLE();
