@@ -17,7 +17,7 @@
  */
 
 mod cli;
-mod dfu;
+pub mod dfu;
 pub mod firmware;
 mod init;
 mod interactive;
