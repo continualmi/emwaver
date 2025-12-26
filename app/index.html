@@ -2,13 +2,146 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" href="/emwaver-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EMWaver</title>
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0b0f14;
+        color: rgba(255, 255, 255, 0.86);
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          "Apple Color Emoji", "Segoe UI Emoji";
+      }
+
+      #app-splash .container {
+        width: min(360px, 84vw);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+
+      #app-splash img {
+        width: 112px;
+        height: 112px;
+        object-fit: contain;
+        image-rendering: auto;
+        border-radius: 22px;
+      }
+
+      #app-splash .bar {
+        width: 100%;
+        max-width: 220px;
+        height: 3px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        overflow: hidden;
+      }
+
+      #app-splash .bar > span {
+        display: block;
+        height: 100%;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.72);
+        transform: scaleX(0);
+        transform-origin: left center;
+        transition: transform 220ms ease-out;
+      }
+
+      #app-splash.hide {
+        opacity: 0;
+        transition: opacity 180ms ease-out;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash .bar > span {
+          transition: none;
+        }
+
+        #app-splash.hide {
+          transition: none;
+        }
+      }
+    </style>
   </head>
 
   <body>
+    <div id="app-splash" aria-label="Loading EMWaver" role="status">
+      <div class="container">
+        <img src="/emwaver-logo.png" alt="EMWaver" />
+        <div class="bar" aria-hidden="true"><span></span></div>
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      (() => {
+        const splash = document.getElementById("app-splash");
+        const fill = splash?.querySelector(".bar > span");
+
+        let progress = 0;
+        const setProgress = (next) => {
+          if (!fill) return;
+          const clamped = Math.max(0, Math.min(100, Number(next) || 0));
+          if (clamped <= progress) return;
+          progress = clamped;
+          fill.style.transform = `scaleX(${progress / 100})`;
+        };
+
+        const hide = () => {
+          if (!splash) return;
+          splash.classList.add("hide");
+          const remove = () => splash.remove();
+          splash.addEventListener("transitionend", remove, { once: true });
+          window.setTimeout(remove, 250);
+        };
+
+        let reactMounted = false;
+        let deviceInitialized = false;
+        const maybeComplete = () => {
+          if (!reactMounted || !deviceInitialized) return;
+          setProgress(100);
+          hide();
+        };
+
+        window.__emwaverSplash = {
+          setProgress,
+          hide,
+        };
+
+        setProgress(8);
+        window.addEventListener("DOMContentLoaded", () => setProgress(15), { once: true });
+        window.addEventListener(
+          "emwaver:react-mounted",
+          () => {
+            reactMounted = true;
+            setProgress(70);
+            maybeComplete();
+          },
+          { once: true },
+        );
+        window.addEventListener(
+          "emwaver:device-initialized",
+          () => {
+            deviceInitialized = true;
+            setProgress(90);
+            maybeComplete();
+          },
+          { once: true },
+        );
+
+        window.setTimeout(() => {
+          setProgress(100);
+          hide();
+        }, 6000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

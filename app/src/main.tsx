@@ -24,6 +24,7 @@ import { DeviceProvider } from "./utils/DeviceContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 if (typeof window !== "undefined") {
+  window.__emwaverSplash?.setProgress?.(25);
   const storedTheme = window.localStorage.getItem("emwaver.theme");
   const theme = storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
   document.documentElement.classList.add(`theme-${theme}`);
@@ -38,3 +39,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     </ErrorBoundary>
   </React.StrictMode>,
 );
+
+if (typeof window !== "undefined") {
+  window.requestAnimationFrame(() => {
+    window.__emwaverSplash?.setProgress?.(55);
+    window.dispatchEvent(new Event("emwaver:react-mounted"));
+  });
+}
