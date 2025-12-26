@@ -1,0 +1,99 @@
+{
+  "name": "emwaver",
+  "displayName": "EMWaver",
+  "description": "Build/flash helpers for EMWaver firmware and projects.",
+  "version": "0.0.1",
+  "publisher": "emwaver",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:emwaver.buildFlashView",
+    "onCommand:emwaver.build",
+    "onCommand:emwaver.flash",
+    "onCommand:emwaver.openBuildFlash"
+  ],
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "emwaver.openBuildFlash",
+        "title": "EMWaver: Open Build & Flash"
+      },
+      {
+        "command": "emwaver.build",
+        "title": "EMWaver: Build"
+      },
+      {
+        "command": "emwaver.flash",
+        "title": "EMWaver: Flash"
+      }
+    ],
+    "configuration": {
+      "title": "EMWaver",
+      "properties": {
+        "emwaver.cliPath": {
+          "type": "string",
+          "default": "emwaver",
+          "description": "Path to the emwaver CLI executable (or just 'emwaver' if it is on PATH)."
+        },
+        "emwaver.workingDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory for build/flash commands. Leave empty to use the current workspace folder."
+        },
+        "emwaver.buildArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra args appended to `emwaver build`."
+        },
+        "emwaver.flashArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra args appended to `emwaver flash`."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "emwaver",
+          "title": "EMWaver",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "emwaver": [
+        {
+          "id": "emwaver.buildFlashView",
+          "name": "Build & Flash",
+          "type": "webview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.92.0",
+    "typescript": "^5.5.4"
+  }
+}
