@@ -1,5 +1,4 @@
 mod ble;
-mod dfu;
 mod firmware;
 mod pty;
 mod usb;
@@ -13,10 +12,39 @@ use tauri::{
 };
 use tempfile::Builder;
 use ble::{BLEState, BLEStatus, BLENotification};
-use dfu::{DfuDevice, EmbeddedFirmware};
+use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use firmware::{firmware_build, firmware_flash};
 use usb::{USBState, USBStatus, USBNotification};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EmbeddedFirmware {
+    Ism,
+    Gpio,
+    Ir,
+    Rfid,
+}
+
+impl EmbeddedFirmware {
+    fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "ism" => Some(Self::Ism),
+            "gpio" => Some(Self::Gpio),
+            "ir" => Some(Self::Ir),
+            "rfid" => Some(Self::Rfid),
+            _ => None,
+        }
+    }
+
+    fn bytes(self) -> &'static [u8] {
+        match self {
+            Self::Ism => include_bytes!("../resources/dfu/ism.dfu"),
+            Self::Gpio => include_bytes!("../resources/dfu/gpio.dfu"),
+            Self::Ir => include_bytes!("../resources/dfu/ir.dfu"),
+            Self::Rfid => include_bytes!("../resources/dfu/rfid.dfu"),
+        }
+    }
+}
 
 #[derive(Deserialize)]
 struct CreateProjectPayload {
@@ -739,10 +767,19 @@ async fn usb_get_notification(state: State<'_, Arc<USBState>>) -> Result<Option<
 // DFU Commands
 #[tauri::command]
 async fn dfu_is_connected() -> Result<bool, String> {
-    spawn_blocking(move || match DfuDevice::open() {
-        Ok(_) => Ok(true),
-        Err(err) if err.contains("No STM32 DFU device found") => Ok(false),
-        Err(err) => Err(err),
+    spawn_blocking(move || {
+        match DfuDevice::open_with_options(
+            DEFAULT_USB_VENDOR_ID,
+            DEFAULT_USB_PRODUCT_ID,
+            DfuOpenOptions {
+                alt_setting: None,
+                verbose: false,
+            },
+        ) {
+            Ok((_device, _discovery)) => Ok(true),
+            Err(err) if err.contains("No DFU device found") => Ok(false),
+            Err(err) => Err(err),
+        }
     })
     .await
     .map_err(|e| format!("Task failed: {e}"))?
@@ -770,8 +807,15 @@ async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(
 
     spawn_blocking(move || {
         emit_dfu_progress(&app_handle, "Opening DFU device...");
-        let mut device = DfuDevice::open()?;
-        device.flash(bytes, |msg| emit_dfu_progress(&app_handle, msg))?;
+        let (mut device, _discovery) = DfuDevice::open_with_options(
+            DEFAULT_USB_VENDOR_ID,
+            DEFAULT_USB_PRODUCT_ID,
+            DfuOpenOptions {
+                alt_setting: None,
+                verbose: false,
+            },
+        )?;
+        device.flash(bytes, 0x0800_0000, |msg| emit_dfu_progress(&app_handle, msg))?;
         Ok::<(), String>(())
     })
     .await
@@ -790,8 +834,15 @@ async fn dfu_flash_file(app: tauri::AppHandle, path: String) -> Result<(), Strin
         emit_dfu_progress(&app_handle, format!("Firmware size: {} bytes", bytes.len()));
 
         emit_dfu_progress(&app_handle, "Opening DFU device...");
-        let mut device = DfuDevice::open()?;
-        device.flash(&bytes, |msg| emit_dfu_progress(&app_handle, msg))?;
+        let (mut device, _discovery) = DfuDevice::open_with_options(
+            DEFAULT_USB_VENDOR_ID,
+            DEFAULT_USB_PRODUCT_ID,
+            DfuOpenOptions {
+                alt_setting: None,
+                verbose: false,
+            },
+        )?;
+        device.flash(&bytes, 0x0800_0000, |msg| emit_dfu_progress(&app_handle, msg))?;
         Ok::<(), String>(())
     })
     .await
