@@ -25,13 +25,82 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::env;
 use std::io::Write;
-use std::io::{self, IsTerminal};
+use std::io::{self, BufRead, BufReader, IsTerminal};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
 const STM32_CUBEMX_DOWNLOAD_URL: &str = "https://www.st.com/en/development-tools/stm32cubemx.html";
 const ARM_GNU_TOOLCHAIN_DOWNLOAD_URL: &str =
     "https://developer.arm.com/downloads/-/gnu-rm";
+
+#[derive(Clone, Debug)]
+pub enum FirmwareProgress {
+    Info(String),
+    Stdout(String),
+    Stderr(String),
+}
+
+fn run_command_streaming(
+    cmd: &mut Command,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+    label: Option<String>,
+) -> Result<std::process::ExitStatus> {
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    if let Some(label) = label {
+        on_event(FirmwareProgress::Info(format!("Running `{label}`...")));
+    }
+
+    let mut child = cmd.spawn().context("failed to spawn process")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("failed to capture stdout from process")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("failed to capture stderr from process")?;
+
+    let (tx, rx) = mpsc::channel::<FirmwareProgress>();
+    let tx_out = tx.clone();
+    let tx_err = tx.clone();
+
+    let out_handle = thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().flatten() {
+            let _ = tx_out.send(FirmwareProgress::Stdout(line));
+        }
+    });
+
+    let err_handle = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().flatten() {
+            let _ = tx_err.send(FirmwareProgress::Stderr(line));
+        }
+    });
+
+    drop(tx);
+
+    loop {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(event) => on_event(event),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {}
+        }
+
+        if let Some(status) = child.try_wait().context("failed to poll process")? {
+            let _ = out_handle.join();
+            let _ = err_handle.join();
+            while let Ok(event) = rx.try_recv() {
+                on_event(event);
+            }
+            return Ok(status);
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum HostPlatform {
@@ -72,6 +141,28 @@ pub fn build(project: Option<PathBuf>, codegen: CodegenMode, verbose: bool) -> R
     }
 }
 
+pub fn build_at_streaming(
+    start_dir: PathBuf,
+    project: Option<PathBuf>,
+    codegen: CodegenMode,
+    verbose: bool,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    match resolve_firmware_project_at(&start_dir, project)? {
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            run_idf_streaming(&project, &["build"], on_event)
+        }
+        (FirmwareKind::Stm32Cube, project) => {
+            stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
+            let _bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
+            Ok(())
+        }
+    }
+}
+
 pub fn flash(
     project: Option<PathBuf>,
     port: Option<String>,
@@ -102,6 +193,50 @@ pub fn flash(
                 0x0800_0000,
                 dfu_alt,
                 verbose,
+            )
+        }
+    }
+}
+
+pub fn flash_at_streaming(
+    start_dir: PathBuf,
+    project: Option<PathBuf>,
+    port: Option<String>,
+    codegen: CodegenMode,
+    dfu_alt: Option<u8>,
+    verbose: bool,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    match resolve_firmware_project_at(&start_dir, project)? {
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            if dfu_alt.is_some() {
+                bail!("`--dfu-alt` is only supported for STM32 USB DFU flashing");
+            }
+
+            let args_owned: Vec<String> = match port {
+                Some(port) => vec!["-p".into(), port, "flash".into()],
+                None => vec!["flash".into()],
+            };
+            let args: Vec<&str> = args_owned.iter().map(|s| s.as_str()).collect();
+            run_idf_streaming(&project, args.as_slice(), on_event)
+        }
+        (FirmwareKind::Stm32Cube, project) => {
+            if port.is_some() {
+                bail!("`--port` is only supported for ESP-IDF serial flashing");
+            }
+            stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
+            let bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
+            dfu_flash_file_streaming(
+                bin,
+                DEFAULT_USB_VENDOR_ID,
+                DEFAULT_USB_PRODUCT_ID,
+                0x0800_0000,
+                dfu_alt,
+                verbose,
+                on_event,
             )
         }
     }
@@ -142,10 +277,48 @@ pub fn dfu_flash_file(
     Ok(())
 }
 
+fn dfu_flash_file_streaming(
+    file: PathBuf,
+    vid: u16,
+    pid: u16,
+    address: u32,
+    alt: Option<u8>,
+    verbose: bool,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    let firmware = fs::read(&file)
+        .with_context(|| format!("failed to read firmware file `{}`", file.display()))?;
+    let (mut device, discovery) =
+        DfuDevice::open_with_options(vid, pid, DfuOpenOptions { alt_setting: alt, verbose })
+            .map_err(anyhow::Error::msg)?;
+    if verbose {
+        on_event(FirmwareProgress::Info(format!(
+            "DFU using interface {}{}",
+            discovery.interface_number,
+            discovery
+                .selected_alt_setting
+                .map(|a| format!(", alt {a}"))
+                .unwrap_or_default()
+        )));
+    }
+    device
+        .flash(&firmware, address, |msg| on_event(FirmwareProgress::Info(msg)))
+        .map_err(anyhow::Error::msg)?;
+    Ok(())
+}
+
 fn resolve_firmware_project(project: Option<PathBuf>) -> Result<(FirmwareKind, PathBuf)> {
+    let cwd = env::current_dir().context("failed to read current directory")?;
+    resolve_firmware_project_at(&cwd, project)
+}
+
+fn resolve_firmware_project_at(
+    start_dir: &Path,
+    project: Option<PathBuf>,
+) -> Result<(FirmwareKind, PathBuf)> {
     let project = match project {
         Some(path) => path,
-        None => autodetect_firmware_project()?,
+        None => autodetect_firmware_project_from(start_dir)?,
     };
 
     if is_esp_idf_project_dir(&project) {
@@ -161,18 +334,20 @@ fn resolve_firmware_project(project: Option<PathBuf>) -> Result<(FirmwareKind, P
     )
 }
 
-fn autodetect_firmware_project() -> Result<PathBuf> {
-    let cwd = env::current_dir().context("failed to read current directory")?;
+fn autodetect_firmware_project_from(start_dir: &Path) -> Result<PathBuf> {
+    if !start_dir.exists() {
+        bail!("start directory `{}` does not exist", start_dir.display());
+    }
 
     // Prefer "current tree" projects (ancestor dirs) over subdirs.
-    for dir in cwd.ancestors() {
+    for dir in start_dir.ancestors() {
         if is_esp_idf_project_dir(dir) || is_stm32_cube_project_dir(dir)? {
             return Ok(dir.to_path_buf());
         }
     }
 
     // Fall back to repo-style subdirs: `esp/` and `stm/<project>/`.
-    for dir in cwd.ancestors() {
+    for dir in start_dir.ancestors() {
         let esp_subdir = dir.join("esp");
         if is_esp_idf_project_dir(&esp_subdir) {
             return Ok(esp_subdir);
@@ -246,6 +421,28 @@ fn run_idf(project: &Path, args: &[&str]) -> Result<()> {
     let status = cmd
         .status()
         .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?;
+
+    if !status.success() {
+        bail!("`idf.py {}` exited with {status}", args.join(" "));
+    }
+    Ok(())
+}
+
+fn run_idf_streaming(
+    project: &Path,
+    args: &[&str],
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    let mut cmd = Command::new("bash");
+    cmd.arg("-lc")
+        .arg("source ./setup.sh && idf.py \"$@\"")
+        .arg("bash")
+        .args(args)
+        .current_dir(project)
+        .stdin(Stdio::null());
+
+    let status = run_command_streaming(&mut cmd, on_event, Some(format!("idf.py {}", args.join(" "))))
+    .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?;
 
     if !status.success() {
         bail!("`idf.py {}` exited with {status}", args.join(" "));
@@ -346,6 +543,81 @@ fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> 
     }
 }
 
+fn stm32_codegen_if_needed_streaming(
+    project: &Path,
+    mode: CodegenMode,
+    verbose: bool,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    if verbose {
+        match find_cubemx_optional()? {
+            Some(path) => on_event(FirmwareProgress::Info(format!("STM32CubeMX: {}", path.display()))),
+            None => on_event(FirmwareProgress::Info(format!(
+                "STM32CubeMX: not found (download: {STM32_CUBEMX_DOWNLOAD_URL})"
+            ))),
+        }
+    }
+
+    match mode {
+        CodegenMode::Never => {
+            if verbose {
+                let needed = stm32_codegen_needed(project)?;
+                if needed {
+                    on_event(FirmwareProgress::Info(
+                        "Skipping STM32CubeMX code generation (`--codegen never`).".into(),
+                    ));
+                } else {
+                    on_event(FirmwareProgress::Info(
+                        "Skipping STM32CubeMX code generation (`--codegen never`, not needed).".into(),
+                    ));
+                }
+            }
+            Ok(())
+        }
+        CodegenMode::Always => {
+            if verbose {
+                on_event(FirmwareProgress::Info(
+                    "Running STM32CubeMX code generation (`--codegen always`).".into(),
+                ));
+            }
+            match find_cubemx_optional()? {
+                Some(cubemx) => stm32_codegen_with_streaming(&cubemx, project, on_event),
+                None => bail!(
+                    "STM32CubeMX not found (required by `--codegen always`). Install it from {STM32_CUBEMX_DOWNLOAD_URL} or set EMWAVER_CUBEMX=/path/to/STM32CubeMX"
+                ),
+            }
+        }
+        CodegenMode::Auto => {
+            if stm32_codegen_needed(project)? {
+                match find_cubemx_optional()? {
+                    Some(cubemx) => {
+                        if verbose {
+                            on_event(FirmwareProgress::Info(format!(
+                                "Running STM32CubeMX code generation (project `.ioc` appears newer): {}",
+                                cubemx.display()
+                            )));
+                        }
+                        stm32_codegen_with_streaming(&cubemx, project, on_event)
+                    }
+                    None => {
+                        on_event(FirmwareProgress::Info(format!(
+                            "warning: STM32CubeMX not found; continuing without regeneration (download: {STM32_CUBEMX_DOWNLOAD_URL}, or pass `--codegen always` to require it)."
+                        )));
+                        Ok(())
+                    }
+                }
+            } else {
+                if verbose {
+                    on_event(FirmwareProgress::Info(
+                        "Skipping STM32CubeMX code generation (generated sources appear up-to-date).".into(),
+                    ));
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 fn stm32_codegen_needed(project: &Path) -> Result<bool> {
     let ioc = find_single_ioc(project)?;
     let ioc_mtime = fs::metadata(&ioc)
@@ -401,6 +673,42 @@ fn stm32_codegen_with(cubemx: &Path, project: &Path) -> Result<()> {
         .stderr(Stdio::inherit());
 
     let status = cmd.status().context("failed to run STM32CubeMX")?;
+    if !status.success() {
+        bail!("STM32CubeMX exited with {status}");
+    }
+    Ok(())
+}
+
+fn stm32_codegen_with_streaming(
+    cubemx: &Path,
+    project: &Path,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    let ioc = find_single_ioc(project)?
+        .canonicalize()
+        .with_context(|| "failed to resolve `.ioc` path")?;
+
+    let mut script = NamedTempFile::new().context("failed to create CubeMX script file")?;
+    script
+        .write_all(
+            format!(
+                "config load {ioc}\nproject generate\nexit\n",
+                ioc = ioc.display()
+            )
+            .as_bytes(),
+        )
+        .context("failed to write CubeMX script")?;
+    let _ = script.flush();
+
+    let mut cmd = Command::new(cubemx);
+    cmd.arg("-q")
+        .arg(script.path())
+        .current_dir(project)
+        .stdin(Stdio::null());
+
+    let status =
+        run_command_streaming(&mut cmd, on_event, Some("STM32CubeMX".into()))
+            .context("failed to run STM32CubeMX")?;
     if !status.success() {
         bail!("STM32CubeMX exited with {status}");
     }
@@ -466,6 +774,71 @@ fn stm32_build_and_export_bin(project: &Path, verbose: bool) -> Result<PathBuf> 
     }
 
     println!("Exported: {}", bin.display());
+    Ok(bin)
+}
+
+fn stm32_build_and_export_bin_streaming(
+    project: &Path,
+    verbose: bool,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<PathBuf> {
+    let env = stm32_build_env()?;
+    let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let release = project.join("Release");
+
+    if verbose {
+        if let Some(gcc) = resolve_in_env_path("arm-none-eabi-gcc", &env) {
+            on_event(FirmwareProgress::Info(format!("Using ARM toolchain: {}", gcc.display())));
+        }
+        if let Ok(spec_path) = Command::new("arm-none-eabi-gcc")
+            .arg("-print-file-name=nano.specs")
+            .envs(env.clone())
+            .stdin(Stdio::null())
+            .output()
+        {
+            let raw = String::from_utf8_lossy(&spec_path.stdout);
+            let spec = raw.trim();
+            if !spec.is_empty() {
+                on_event(FirmwareProgress::Info(format!("nano.specs: {spec}")));
+            }
+        }
+    }
+
+    let mut make = Command::new("make");
+    make.arg("-C")
+        .arg(&release)
+        .arg(format!("-j{jobs}"))
+        .arg("all")
+        .envs(env.clone())
+        .stdin(Stdio::null());
+    let status = run_command_streaming(
+        &mut make,
+        on_event,
+        Some(format!("make -C {}", release.display())),
+    )
+    .with_context(|| format!("failed to run `make -C {}`", release.display()))?;
+    if !status.success() {
+        bail!("`make -C {}` exited with {status}", release.display());
+    }
+
+    let elf = find_single_elf(&release)?;
+    let bin = elf.with_extension("bin");
+
+    let mut objcopy = Command::new("arm-none-eabi-objcopy");
+    objcopy
+        .arg("-O")
+        .arg("binary")
+        .arg(&elf)
+        .arg(&bin)
+        .envs(env)
+        .stdin(Stdio::null());
+    let status = run_command_streaming(&mut objcopy, on_event, Some("arm-none-eabi-objcopy".into()))
+        .context("failed to run `arm-none-eabi-objcopy`")?;
+    if !status.success() {
+        bail!("`arm-none-eabi-objcopy` exited with {status}");
+    }
+
+    on_event(FirmwareProgress::Info(format!("Exported: {}", bin.display())));
     Ok(bin)
 }
 
