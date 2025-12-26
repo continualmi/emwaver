@@ -29,6 +29,8 @@ type DirectoryChildEntry = {
   kind: "file" | "directory";
 };
 
+type FirmwareProjectKind = "esp32" | "stm32" | "unknown";
+
 type OpenFile = {
   path: string;
   name: string;
@@ -303,6 +305,14 @@ function CloseIcon({ className }: { className?: string }) {
   );
 }
 
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" className={className ?? "h-4 w-4"} aria-hidden="true">
+      <path d="M5.2 3.6a.8.8 0 011.2-.7l6.2 3.6a.8.8 0 010 1.4l-6.2 3.6a.8.8 0 01-1.2-.7V3.6z" />
+    </svg>
+  );
+}
+
 function PanelLeftIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
@@ -361,6 +371,22 @@ function iconLabelForPath(path: string): { label: string; accentClass: string } 
   return { label: "•", accentClass: "text-slate-400" };
 }
 
+function detectFirmwareProjectKind(entries: DirectoryChildEntry[]): FirmwareProjectKind {
+  const hasFile = (name: string) => entries.some((entry) => entry.kind === "file" && entry.name === name);
+  const hasDir = (name: string) => entries.some((entry) => entry.kind === "directory" && entry.name === name);
+
+  if (hasFile("setup.sh") && hasFile("sdkconfig") && hasFile("CMakeLists.txt")) {
+    return "esp32";
+  }
+
+  const hasIoc = entries.some((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".ioc"));
+  if (hasDir("Release") && hasIoc) {
+    return "stm32";
+  }
+
+  return "unknown";
+}
+
 export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -405,8 +431,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const firmwareScrollRef = useRef<HTMLDivElement | null>(null);
   const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
   const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
-  const [firmwareFlashPort, setFirmwareFlashPort] = useState("");
-  const [firmwareDfuAlt, setFirmwareDfuAlt] = useState("");
 
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
@@ -423,6 +447,16 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const monaco = useMonaco();
 
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
+  const firmwareProjectKind = useMemo((): FirmwareProjectKind => {
+    if (!explorerRoot) {
+      return "unknown";
+    }
+    const entries = dirChildren[explorerRoot] ?? [];
+    if (entries.length === 0) {
+      return "unknown";
+    }
+    return detectFirmwareProjectKind(entries);
+  }, [dirChildren, explorerRoot]);
   const activeTerminalTitle = useMemo(
     () => terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? DEFAULT_TERMINAL_TITLE,
     [activeTerminalSessionId, terminalSessions],
@@ -437,6 +471,12 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   useEffect(() => {
     sessionsRef.current = terminalSessions;
   }, [terminalSessions]);
+
+  useEffect(() => {
+    if (firmwareProjectKind !== "stm32" && firmwareCodegenMode !== "auto") {
+      setFirmwareCodegenMode("auto");
+    }
+  }, [firmwareCodegenMode, firmwareProjectKind]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1089,7 +1129,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         {
           payload: {
             start_dir: rootDir ?? undefined,
-            codegen: firmwareCodegenMode,
+            codegen: firmwareProjectKind === "stm32" ? firmwareCodegenMode : "auto",
             verbose: true,
           },
         },
@@ -1102,18 +1142,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [appendFirmwareLine, firmwareCodegenMode, rootDir]);
+  }, [appendFirmwareLine, firmwareCodegenMode, firmwareProjectKind, rootDir]);
 
   const handleFirmwareFlash = useCallback(async () => {
     if (!isTauriAvailable()) {
       appendFirmwareLine("Tauri not available; cannot flash firmware.");
-      return;
-    }
-
-    const dfuAltRaw = firmwareDfuAlt.trim();
-    const parsedAlt = dfuAltRaw.length > 0 ? Number(dfuAltRaw) : undefined;
-    if (typeof parsedAlt === "number" && Number.isNaN(parsedAlt)) {
-      appendFirmwareLine("Invalid DFU alt setting (expected a number).");
       return;
     }
 
@@ -1128,9 +1161,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         {
           payload: {
             start_dir: rootDir ?? undefined,
-            port: firmwareFlashPort.trim() ? firmwareFlashPort.trim() : undefined,
-            codegen: firmwareCodegenMode,
-            dfu_alt: typeof parsedAlt === "number" ? parsedAlt : undefined,
+            codegen: firmwareProjectKind === "stm32" ? firmwareCodegenMode : "auto",
             verbose: true,
           },
         },
@@ -1143,7 +1174,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [appendFirmwareLine, firmwareCodegenMode, firmwareDfuAlt, firmwareFlashPort, rootDir]);
+  }, [appendFirmwareLine, firmwareCodegenMode, firmwareProjectKind, rootDir]);
 
 		  useEffect(() => {
 		    const handleMove = (event: MouseEvent) => {
@@ -1339,13 +1370,25 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     const unlistenSavePromise = safeListen("menu-ide-save-file", () => {
       void handleSaveFile();
     });
+    const unlistenFirmwareBuildPromise = safeListen("menu-ide-firmware-build", () => {
+      void handleFirmwareBuild();
+    });
+    const unlistenFirmwareFlashPromise = safeListen("menu-ide-firmware-flash", () => {
+      void handleFirmwareFlash();
+    });
+    const unlistenFirmwareBuildFlashPromise = safeListen("menu-ide-firmware-build-flash", () => {
+      void handleFirmwareFlash();
+    });
     return () => {
       void unlistenTogglePromise.then((unlisten) => unlisten());
       void unlistenShowPromise.then((unlisten) => unlisten());
       void unlistenOpenFolderPromise.then((unlisten) => unlisten());
       void unlistenSavePromise.then((unlisten) => unlisten());
+      void unlistenFirmwareBuildPromise.then((unlisten) => unlisten());
+      void unlistenFirmwareFlashPromise.then((unlisten) => unlisten());
+      void unlistenFirmwareBuildFlashPromise.then((unlisten) => unlisten());
     };
-  }, [handlePickFolder, handleSaveFile]);
+  }, [handleFirmwareBuild, handleFirmwareFlash, handlePickFolder, handleSaveFile]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1547,54 +1590,28 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
             <div className="flex shrink-0 items-center justify-end gap-3 px-4 py-2 text-xs text-slate-500">
               <div className="flex items-center gap-2">
-                <select
-                  value={firmwareCodegenMode}
-                  disabled={isFirmwareBusy || !rootDir}
-                  onChange={(event) => setFirmwareCodegenMode(event.target.value as "auto" | "always" | "never")}
-                  className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50"
-                  title="STM32CubeMX code generation mode (STM32 projects only)"
-                >
-                  <option value="auto">codegen:auto</option>
-                  <option value="always">codegen:always</option>
-                  <option value="never">codegen:never</option>
-                </select>
-
-                <input
-                  value={firmwareFlashPort}
-                  disabled={isFirmwareBusy || !rootDir}
-                  onChange={(event) => setFirmwareFlashPort(event.target.value)}
-                  className="w-36 rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
-                  placeholder="port (ESP32)"
-                  title="ESP32 serial port (optional)"
-                />
-
-                <input
-                  value={firmwareDfuAlt}
-                  disabled={isFirmwareBusy || !rootDir}
-                  onChange={(event) => setFirmwareDfuAlt(event.target.value)}
-                  className="w-20 rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
-                  placeholder="dfu alt"
-                  title="STM32 DFU alt setting (optional)"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => void handleFirmwareBuild()}
-                  disabled={isFirmwareBusy || !rootDir}
-                  className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                  title="Build firmware"
-                >
-                  Build
-                </button>
+                {firmwareProjectKind === "stm32" ? (
+                  <select
+                    value={firmwareCodegenMode}
+                    disabled={isFirmwareBusy || !rootDir}
+                    onChange={(event) => setFirmwareCodegenMode(event.target.value as "auto" | "always" | "never")}
+                    className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50"
+                    title="STM32CubeMX code generation mode"
+                  >
+                    <option value="auto">codegen:auto</option>
+                    <option value="always">codegen:always</option>
+                    <option value="never">codegen:never</option>
+                  </select>
+                ) : null}
 
                 <button
                   type="button"
                   onClick={() => void handleFirmwareFlash()}
                   disabled={isFirmwareBusy || !rootDir}
-                  className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                  title="Flash firmware"
+                  className="rounded border border-slate-800 bg-slate-950 p-1.5 text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                  title="Build & Flash firmware"
                 >
-                  Flash
+                  <PlayIcon className="h-4 w-4" />
                 </button>
               </div>
 
