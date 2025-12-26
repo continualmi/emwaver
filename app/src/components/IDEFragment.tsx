@@ -9,7 +9,13 @@ import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
 
 type ThemeMode = "dark" | "light";
 
-type BottomPanelTab = "terminal" | "output";
+type BottomPanelTab = "terminal" | "output" | "firmware";
+
+type FirmwareProgressPayload = {
+  message: string;
+  stream?: "info" | "stdout" | "stderr" | string;
+  timestamp_ms?: number;
+};
 
 type TerminalSession = {
   id: string;
@@ -395,6 +401,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [outputLines, setOutputLines] = useState<string[]>([]);
   const outputScrollRef = useRef<HTMLDivElement | null>(null);
 
+  const [firmwareLines, setFirmwareLines] = useState<string[]>([]);
+  const firmwareScrollRef = useRef<HTMLDivElement | null>(null);
+  const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
+  const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
+  const [firmwareFlashPort, setFirmwareFlashPort] = useState("");
+  const [firmwareDfuAlt, setFirmwareDfuAlt] = useState("");
+
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
   const terminalStartInFlightRef = useRef(false);
@@ -484,6 +497,38 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
     node.scrollTop = node.scrollHeight;
   }, [bottomPanelTab, outputLines.length]);
+
+  useEffect(() => {
+    if (bottomPanelTab !== "firmware") {
+      return;
+    }
+    const node = firmwareScrollRef.current;
+    if (!node) {
+      return;
+    }
+    node.scrollTop = node.scrollHeight;
+  }, [bottomPanelTab, firmwareLines.length]);
+
+  useEffect(() => {
+    const unlistenPromise = safeListen<FirmwareProgressPayload>("firmware-progress", (event) => {
+      const payload = event.payload;
+      if (!payload?.message) {
+        return;
+      }
+      const date = payload.timestamp_ms ? new Date(payload.timestamp_ms) : new Date();
+      const label = payload.stream ? String(payload.stream).toUpperCase() : "INFO";
+      const line = `[${timestampLabel(date)}] ${label} ${payload.message}`;
+
+      setFirmwareLines((prev) => {
+        const next = [...prev, line];
+        return next.length <= 2000 ? next : next.slice(next.length - 2000);
+      });
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     const MAX_LINES = 2000;
@@ -1019,6 +1064,87 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setOpenDirs(new Set());
   }, []);
 
+  const appendFirmwareLine = useCallback((line: string) => {
+    const label = timestampLabel(new Date());
+    setFirmwareLines((prev) => {
+      const next = [...prev, `[${label}] ${line}`];
+      return next.length <= 2000 ? next : next.slice(next.length - 2000);
+    });
+  }, []);
+
+  const handleFirmwareBuild = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      appendFirmwareLine("Tauri not available; cannot build firmware.");
+      return;
+    }
+
+    setFirmwareLines([]);
+    setIsTerminalVisible(true);
+    setBottomPanelTab("firmware");
+    setIsFirmwareBusy(true);
+
+    try {
+      await safeInvoke<void>(
+        "firmware_build",
+        {
+          payload: {
+            start_dir: rootDir ?? undefined,
+            codegen: firmwareCodegenMode,
+            verbose: true,
+          },
+        },
+        { throwOnError: true },
+      );
+      appendFirmwareLine("Build complete.");
+    } catch (error) {
+      console.error(error);
+      appendFirmwareLine(`Build failed: ${String(error)}`);
+    } finally {
+      setIsFirmwareBusy(false);
+    }
+  }, [appendFirmwareLine, firmwareCodegenMode, rootDir]);
+
+  const handleFirmwareFlash = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      appendFirmwareLine("Tauri not available; cannot flash firmware.");
+      return;
+    }
+
+    const dfuAltRaw = firmwareDfuAlt.trim();
+    const parsedAlt = dfuAltRaw.length > 0 ? Number(dfuAltRaw) : undefined;
+    if (typeof parsedAlt === "number" && Number.isNaN(parsedAlt)) {
+      appendFirmwareLine("Invalid DFU alt setting (expected a number).");
+      return;
+    }
+
+    setFirmwareLines([]);
+    setIsTerminalVisible(true);
+    setBottomPanelTab("firmware");
+    setIsFirmwareBusy(true);
+
+    try {
+      await safeInvoke<void>(
+        "firmware_flash",
+        {
+          payload: {
+            start_dir: rootDir ?? undefined,
+            port: firmwareFlashPort.trim() ? firmwareFlashPort.trim() : undefined,
+            codegen: firmwareCodegenMode,
+            dfu_alt: typeof parsedAlt === "number" ? parsedAlt : undefined,
+            verbose: true,
+          },
+        },
+        { throwOnError: true },
+      );
+      appendFirmwareLine("Flash complete.");
+    } catch (error) {
+      console.error(error);
+      appendFirmwareLine(`Flash failed: ${String(error)}`);
+    } finally {
+      setIsFirmwareBusy(false);
+    }
+  }, [appendFirmwareLine, firmwareCodegenMode, firmwareDfuAlt, firmwareFlashPort, rootDir]);
+
 		  useEffect(() => {
 		    const handleMove = (event: MouseEvent) => {
 		      if (!explorerResizeActiveRef.current) {
@@ -1419,7 +1545,60 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-3 px-4 py-2 text-xs text-slate-500">
+            <div className="flex shrink-0 items-center justify-end gap-3 px-4 py-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <select
+                  value={firmwareCodegenMode}
+                  disabled={isFirmwareBusy || !rootDir}
+                  onChange={(event) => setFirmwareCodegenMode(event.target.value as "auto" | "always" | "never")}
+                  className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50"
+                  title="STM32CubeMX code generation mode (STM32 projects only)"
+                >
+                  <option value="auto">codegen:auto</option>
+                  <option value="always">codegen:always</option>
+                  <option value="never">codegen:never</option>
+                </select>
+
+                <input
+                  value={firmwareFlashPort}
+                  disabled={isFirmwareBusy || !rootDir}
+                  onChange={(event) => setFirmwareFlashPort(event.target.value)}
+                  className="w-36 rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
+                  placeholder="port (ESP32)"
+                  title="ESP32 serial port (optional)"
+                />
+
+                <input
+                  value={firmwareDfuAlt}
+                  disabled={isFirmwareBusy || !rootDir}
+                  onChange={(event) => setFirmwareDfuAlt(event.target.value)}
+                  className="w-20 rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 disabled:opacity-50"
+                  placeholder="dfu alt"
+                  title="STM32 DFU alt setting (optional)"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => void handleFirmwareBuild()}
+                  disabled={isFirmwareBusy || !rootDir}
+                  className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                  title="Build firmware"
+                >
+                  Build
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleFirmwareFlash()}
+                  disabled={isFirmwareBusy || !rootDir}
+                  className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                  title="Flash firmware"
+                >
+                  Flash
+                </button>
+              </div>
+
+              {isFirmwareBusy ? <span className="text-sky-200">Running…</span> : null}
               {isLoadingFile ? <span>Loading…</span> : null}
               {activeFile?.isDirty ? <span className="text-amber-300">Unsaved</span> : null}
             </div>
@@ -1518,6 +1697,17 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                           >
                             OUTPUT
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setBottomPanelTab("firmware")}
+                            className={`select-none px-3 py-2 font-semibold tracking-wide ${
+                              bottomPanelTab === "firmware"
+                                ? "border-b-2 border-sky-400 text-slate-100"
+                                : "text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            FIRMWARE
+                          </button>
                         </div>
 
                         <div ref={terminalPickerAnchorRef} className="relative flex items-center gap-1">
@@ -1588,12 +1778,21 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 <TrashIcon />
                               </button>
                             </>
-                          ) : (
+                          ) : bottomPanelTab === "output" ? (
                             <button
                               type="button"
                               onClick={() => setOutputLines([])}
                               className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
                               title="Clear output"
+                            >
+                              Clear
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setFirmwareLines([])}
+                              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                              title="Clear firmware log"
                             >
                               Clear
                             </button>
@@ -1636,7 +1835,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
                               ) : null}
                             </div>
-                          ) : (
+                          ) : bottomPanelTab === "output" ? (
                             <div
                               ref={outputScrollRef}
                               className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30"
@@ -1646,6 +1845,20 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                               ) : (
                                 <pre className="whitespace-pre-wrap">
                                   {outputLines.join("\n")}
+                                  {"\n"}
+                                </pre>
+                              )}
+                            </div>
+                          ) : (
+                            <div
+                              ref={firmwareScrollRef}
+                              className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30"
+                            >
+                              {firmwareLines.length === 0 ? (
+                                <div className="text-slate-500">No firmware activity yet.</div>
+                              ) : (
+                                <pre className="whitespace-pre-wrap">
+                                  {firmwareLines.join("\n")}
                                   {"\n"}
                                 </pre>
                               )}
@@ -1748,9 +1961,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 	                              ) : (
 	                                <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
 	                                  <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">
-	                                    OUTPUT
+	                                    {bottomPanelTab === "output" ? "OUTPUT" : "FIRMWARE"}
 	                                  </div>
-	                                  <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">IDE</div>
+	                                  <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">
+	                                    {bottomPanelTab === "output" ? "IDE" : "Build/Flash"}
+	                                  </div>
 	                                </div>
 	                              )}
 	                            </aside>

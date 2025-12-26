@@ -18,13 +18,15 @@
 
 mod cli;
 mod dfu;
-mod firmware;
+pub mod firmware;
 mod init;
 mod interactive;
 mod shell;
 
 use anyhow::Result;
 use clap::Parser;
+
+pub use cli::CodegenMode;
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
