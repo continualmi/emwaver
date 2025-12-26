@@ -71,6 +71,12 @@ pub enum Command {
         /// Target flash base address (defaults to 0x08000000).
         #[arg(long, value_parser = parse_u32_hex, default_value = "0x08000000")]
         address: u32,
+        /// DFU alt setting to use (overrides auto-selection).
+        #[arg(long)]
+        alt: Option<u8>,
+        /// Print DFU USB discovery details (interface/alt settings).
+        #[arg(long)]
+        verbose: bool,
     },
     /// Initialize a new firmware project.
     Init {

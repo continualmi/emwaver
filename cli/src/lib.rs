@@ -38,7 +38,9 @@ pub fn run() -> Result<()> {
             vid,
             pid,
             address,
-        }) => firmware::dfu_flash_file(file, vid, pid, address),
+            alt,
+            verbose,
+        }) => firmware::dfu_flash_file(file, vid, pid, address, alt, verbose),
         Some(cli::Command::Init {
             target,
             components,

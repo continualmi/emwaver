@@ -10,6 +10,7 @@ const DFU_DNLOAD: u8 = 0x01;
 const DFU_UPLOAD: u8 = 0x02;
 const DFU_GETSTATUS: u8 = 0x03;
 const DFU_CLRSTATUS: u8 = 0x04;
+const DFU_ABORT: u8 = 0x06;
 
 const STATE_DFU_IDLE: u8 = 0x02;
 const STATE_DFU_DNLOAD_SYNC: u8 = 0x03;
@@ -22,32 +23,119 @@ const STATE_DFU_UPLOAD_IDLE: u8 = 0x09;
 const STATE_DFU_ERROR: u8 = 0x0A;
 
 pub const BLOCK_SIZE: usize = 2048;
-const DFU_INTERFACE: u16 = 0;
+
+#[derive(Clone, Debug)]
+pub struct DfuAltSettingInfo {
+    pub setting_number: u8,
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DfuDiscoveryInfo {
+    pub interface_number: u8,
+    pub alt_settings: Vec<DfuAltSettingInfo>,
+    pub selected_alt_setting: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DfuOpenOptions {
+    pub alt_setting: Option<u8>,
+    pub verbose: bool,
+}
 
 pub struct DfuDevice {
     _ctx: Context,
     handle: DeviceHandle<Context>,
+    interface: u16,
 }
 
 impl DfuDevice {
+    #[allow(dead_code)]
     pub fn open(vendor_id: u16, product_id: u16) -> Result<Self, String> {
+        Ok(Self::open_with_options(vendor_id, product_id, DfuOpenOptions::default())?.0)
+    }
+
+    pub fn open_with_options(
+        vendor_id: u16,
+        product_id: u16,
+        options: DfuOpenOptions,
+    ) -> Result<(Self, DfuDiscoveryInfo), String> {
         let ctx = Context::new().map_err(|e| format!("Failed to init USB context: {e}"))?;
         let handle = ctx
             .open_device_with_vid_pid(vendor_id, product_id)
             .ok_or_else(|| format!("No DFU device found (VID 0x{vendor_id:04x}, PID 0x{product_id:04x})"))?;
 
-        let mut device = Self { _ctx: ctx, handle };
+        let mut device = Self {
+            _ctx: ctx,
+            handle,
+            interface: 0,
+        };
 
         let _ = device.handle.set_auto_detach_kernel_driver(true);
-        let _ = device.handle.set_active_configuration(1);
-        let _ = device
-            .handle
-            .set_alternate_setting(DFU_INTERFACE as u8, 0);
 
-        device
-            .handle
-            .claim_interface(DFU_INTERFACE as u8)
-            .map_err(|e| format!("Failed to claim DFU interface {DFU_INTERFACE}: {e}"))?;
+        let mut discovery = discover_dfu_interface(&mut device, options.verbose).unwrap_or_else(|err| {
+            if options.verbose {
+                eprintln!("DFU discovery failed; falling back to interface 0: {err}");
+            }
+            DfuDiscoveryInfo {
+                interface_number: 0,
+                alt_settings: Vec::new(),
+                selected_alt_setting: None,
+            }
+        });
+
+        device.interface = discovery.interface_number as u16;
+
+        // Keep the USB open path aligned with the Android/Desktop implementations:
+        // claim the DFU interface directly, only attempting to set a configuration if needed.
+        match device.handle.claim_interface(discovery.interface_number) {
+            Ok(()) => {}
+            Err(original) => {
+                let _ = device.handle.set_active_configuration(1);
+                device.handle.claim_interface(discovery.interface_number).map_err(|e| {
+                    format!(
+                        "Failed to claim DFU interface {}: {e} (after set_active_configuration; original error: {original})",
+                        discovery.interface_number
+                    )
+                })?;
+            }
+        }
+
+        let selected_alt = if let Some(alt) = options.alt_setting {
+            Some(alt)
+        } else {
+            discovery
+                .alt_settings
+                .iter()
+                .find(|alt| {
+                    alt.description
+                        .as_deref()
+                        .is_some_and(|s| s.to_ascii_lowercase().contains("internal flash"))
+                })
+                .map(|alt| alt.setting_number)
+        };
+
+        if let Some(alt) = selected_alt {
+            match device
+                .handle
+                .set_alternate_setting(discovery.interface_number, alt)
+            {
+                Ok(()) => {
+                    discovery.selected_alt_setting = Some(alt);
+                    if options.verbose {
+                        eprintln!("Using DFU alt setting {alt} on interface {}", discovery.interface_number);
+                    }
+                }
+                Err(err) => {
+                    if options.verbose {
+                        eprintln!(
+                            "Failed to set DFU alt setting {alt} on interface {}: {err}",
+                            discovery.interface_number
+                        );
+                    }
+                }
+            }
+        }
 
         // Some DFU implementations can start in dfuERROR; clear it up-front.
         if let Ok(status) = device.get_status() {
@@ -56,7 +144,7 @@ impl DfuDevice {
             }
         }
 
-        Ok(device)
+        Ok((device, discovery))
     }
 
     fn req_type_out() -> u8 {
@@ -79,7 +167,7 @@ impl DfuDevice {
                 Self::req_type_out(),
                 request,
                 value,
-                DFU_INTERFACE,
+                self.interface,
                 data,
                 Duration::from_millis(timeout_ms),
             )
@@ -99,7 +187,7 @@ impl DfuDevice {
                 Self::req_type_in(),
                 request,
                 value,
-                DFU_INTERFACE,
+                self.interface,
                 data,
                 Duration::from_millis(timeout_ms),
             )
@@ -118,6 +206,11 @@ impl DfuDevice {
 
     pub fn clear_status(&mut self) -> Result<(), String> {
         self.control_out(DFU_CLRSTATUS, 0, &[], 5000)?;
+        Ok(())
+    }
+
+    pub fn abort(&mut self) -> Result<(), String> {
+        let _ = self.control_out(DFU_ABORT, 0, &[], 500);
         Ok(())
     }
 
@@ -164,6 +257,20 @@ impl DfuDevice {
     }
 
     pub fn mass_erase(&mut self) -> Result<(), String> {
+        match self.mass_erase_once() {
+            Ok(()) => Ok(()),
+            Err(err) => {
+                // Best-effort recovery: attempt to abort/clear any stuck operation once, then retry.
+                let _ = self.abort();
+                let _ = self.clear_status();
+                let _ = self.wait_download_idle();
+                self.mass_erase_once()
+                    .map_err(|retry| format!("{err}; retry failed: {retry}"))
+            }
+        }
+    }
+
+    fn mass_erase_once(&mut self) -> Result<(), String> {
         self.wait_download_idle()?;
 
         let command = [0x41u8];
@@ -191,7 +298,11 @@ impl DfuDevice {
                             format_status(status)
                         ));
                     }
-                    thread::sleep(Duration::from_millis(Self::poll_timeout_ms(status).max(10)));
+                    let remaining = timeout
+                        .checked_sub(start.elapsed())
+                        .unwrap_or(Duration::from_millis(0));
+                    let sleep_ms = Self::poll_timeout_ms(status).max(10);
+                    thread::sleep(Duration::from_millis(sleep_ms).min(remaining));
                 }
                 other => {
                     return Err(format!(
@@ -238,7 +349,11 @@ impl DfuDevice {
                             format_status(status)
                         ));
                     }
-                    thread::sleep(Duration::from_millis(Self::poll_timeout_ms(status).max(10)));
+                    let remaining = timeout
+                        .checked_sub(start.elapsed())
+                        .unwrap_or(Duration::from_millis(0));
+                    let sleep_ms = Self::poll_timeout_ms(status).max(10);
+                    thread::sleep(Duration::from_millis(sleep_ms).min(remaining));
                 }
                 other => {
                     return Err(format!(
@@ -276,7 +391,11 @@ impl DfuDevice {
                             format_status(status)
                         ));
                     }
-                    thread::sleep(Duration::from_millis(Self::poll_timeout_ms(status).max(10)));
+                    let remaining = timeout
+                        .checked_sub(start.elapsed())
+                        .unwrap_or(Duration::from_millis(0));
+                    let sleep_ms = Self::poll_timeout_ms(status).max(10);
+                    thread::sleep(Duration::from_millis(sleep_ms).min(remaining));
                 }
                 other => {
                     return Err(format!(
@@ -345,4 +464,83 @@ fn format_status(status: [u8; 6]) -> String {
         poll = poll,
         istring = status[5]
     )
+}
+
+fn discover_dfu_interface(device: &mut DfuDevice, verbose: bool) -> Result<DfuDiscoveryInfo, String> {
+    let dev = device.handle.device();
+    let config = dev
+        .active_config_descriptor()
+        .or_else(|_| dev.config_descriptor(0))
+        .map_err(|e| format!("Failed to read USB config descriptor: {e}"))?;
+
+    for interface in config.interfaces() {
+        let descriptors: Vec<_> = interface.descriptors().collect();
+        let is_dfu_interface = descriptors
+            .iter()
+            .any(|d| d.class_code() == 0xFE && d.sub_class_code() == 0x01);
+        if !is_dfu_interface {
+            continue;
+        }
+
+        let interface_number = descriptors
+            .first()
+            .map(|d| d.interface_number())
+            .unwrap_or(0);
+
+        let mut alt_settings = Vec::new();
+        for desc in descriptors {
+            let description = desc
+                .description_string_index()
+                .and_then(|index| device.handle.read_string_descriptor_ascii(index).ok());
+            alt_settings.push(DfuAltSettingInfo {
+                setting_number: desc.setting_number(),
+                description,
+            });
+        }
+
+        if verbose {
+            eprintln!("DFU interface: {interface_number}");
+            if alt_settings.is_empty() {
+                eprintln!("DFU alt settings: <none>");
+            } else {
+                eprintln!("DFU alt settings:");
+                for alt in &alt_settings {
+                    match alt.description.as_deref() {
+                        Some(d) => eprintln!("  - {}: {d}", alt.setting_number),
+                        None => eprintln!("  - {}", alt.setting_number),
+                    }
+                }
+            }
+        }
+
+        return Ok(DfuDiscoveryInfo {
+            interface_number,
+            alt_settings,
+            selected_alt_setting: None,
+        });
+    }
+
+    Err("No DFU interface found in USB descriptors".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poll_timeout_parses_little_endian() {
+        // DFU_GETSTATUS layout: bStatus, bwPollTimeout[0..2], bState, iString.
+        let status = [0x00, 0x34, 0x12, 0x00, 0x02, 0x00];
+        assert_eq!(DfuDevice::poll_timeout_ms(status), 0x1234);
+    }
+
+    #[test]
+    fn format_status_uses_expected_indices() {
+        let status = [0x00, 0x01, 0x00, 0x00, 0x05, 0xaa];
+        let s = format_status(status);
+        assert!(s.contains("bStatus=0x00"));
+        assert!(s.contains("bState=0x05"));
+        assert!(s.contains("bwPollTimeout=1"));
+        assert!(s.contains("iString=170"));
+    }
 }

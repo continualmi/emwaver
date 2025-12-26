@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use crate::dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice};
+use crate::dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice, DfuOpenOptions};
 use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
 use std::fs;
@@ -53,7 +53,7 @@ pub fn flash(project: Option<PathBuf>, port: Option<String>) -> Result<()> {
             }
             stm32_codegen(&project)?;
             let bin = stm32_build_and_export_bin(&project)?;
-            dfu_flash_file(bin, DEFAULT_USB_VENDOR_ID, DEFAULT_USB_PRODUCT_ID, 0x0800_0000)
+            dfu_flash_file(bin, DEFAULT_USB_VENDOR_ID, DEFAULT_USB_PRODUCT_ID, 0x0800_0000, None, false)
         }
     }
 }
@@ -66,9 +66,27 @@ pub fn monitor(project: Option<PathBuf>, port: Option<String>) -> Result<()> {
     }
 }
 
-pub fn dfu_flash_file(file: PathBuf, vid: u16, pid: u16, address: u32) -> Result<()> {
+pub fn dfu_flash_file(
+    file: PathBuf,
+    vid: u16,
+    pid: u16,
+    address: u32,
+    alt: Option<u8>,
+    verbose: bool,
+) -> Result<()> {
     let firmware = fs::read(&file).with_context(|| format!("failed to read firmware file `{}`", file.display()))?;
-    let mut device = DfuDevice::open(vid, pid).map_err(anyhow::Error::msg)?;
+    let (mut device, discovery) = DfuDevice::open_with_options(vid, pid, DfuOpenOptions { alt_setting: alt, verbose })
+        .map_err(anyhow::Error::msg)?;
+    if verbose {
+        eprintln!(
+            "DFU using interface {}{}",
+            discovery.interface_number,
+            discovery
+                .selected_alt_setting
+                .map(|a| format!(", alt {a}"))
+                .unwrap_or_default()
+        );
+    }
     device
         .flash(&firmware, address, |msg| println!("{msg}"))
         .map_err(anyhow::Error::msg)?;
