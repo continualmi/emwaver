@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -45,9 +45,17 @@ pub enum Command {
         verbose: bool,
     },
     /// Flash ESP32 firmware over BLE OTA.
+    #[command(group(
+        ArgGroup::new("source")
+            .required(true)
+            .args(["file", "stock"]),
+    ))]
     Ota {
         /// Firmware image path (raw `.bin` bytes).
-        file: PathBuf,
+        file: Option<PathBuf>,
+        /// Flash the bundled stock ESP32 firmware from this repo.
+        #[arg(long)]
+        stock: bool,
         /// BLE device name to scan for (defaults to EMWaver).
         #[arg(long, default_value = "EMWaver")]
         device_name: String,

@@ -31,6 +31,8 @@ use tokio::time::{sleep, timeout};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
+const STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
+
 const OTA_SERVICE_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14192");
 const OTA_CTRL_CHAR_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14193");
 const OTA_DATA_CHAR_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14194");
@@ -70,22 +72,27 @@ fn parse_ota_status(bytes: &[u8]) -> Option<OtaStatus> {
 
 pub fn flash(file: PathBuf, device_name: String, chunk_size: usize, verbose: bool) -> Result<()> {
     let runtime = Runtime::new().context("failed to create async runtime")?;
-    runtime.block_on(async { flash_async(file, &device_name, chunk_size, verbose).await })
+    let bytes = std::fs::read(&file)
+        .with_context(|| format!("failed to read firmware file: {}", file.display()))?;
+    runtime.block_on(async { flash_bytes_async(&bytes, &file.display().to_string(), &device_name, chunk_size, verbose).await })
 }
 
-async fn flash_async(file: PathBuf, device_name: &str, chunk_size: usize, verbose: bool) -> Result<()> {
+pub fn flash_stock(device_name: String, chunk_size: usize, verbose: bool) -> Result<()> {
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async { flash_bytes_async(STOCK_FIRMWARE_BIN, "stock firmware", &device_name, chunk_size, verbose).await })
+}
+
+async fn flash_bytes_async(bytes: &[u8], label: &str, device_name: &str, chunk_size: usize, verbose: bool) -> Result<()> {
     if chunk_size == 0 || chunk_size > 512 {
         bail!("chunk size must be in 1..=512");
     }
 
-    let bytes = std::fs::read(&file)
-        .with_context(|| format!("failed to read firmware file: {}", file.display()))?;
     if bytes.is_empty() {
         bail!("firmware file is empty");
     }
 
     let total = bytes.len() as u32;
-    println!("Firmware: {} ({} bytes)", file.display(), total);
+    println!("Firmware: {label} ({total} bytes)");
 
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
