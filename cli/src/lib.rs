@@ -36,10 +36,18 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
         Some(cli::Command::Ota {
             file,
+            stock,
             device_name,
             chunk_size,
             verbose,
-        }) => ble_ota::flash(file, device_name, chunk_size, verbose),
+        }) => {
+            if stock {
+                ble_ota::flash_stock(device_name, chunk_size, verbose)
+            } else {
+                let file = file.expect("clap should enforce file when --stock is not present");
+                ble_ota::flash(file, device_name, chunk_size, verbose)
+            }
+        }
         Some(cli::Command::Build {
             project,
             codegen,

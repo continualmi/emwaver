@@ -22,6 +22,8 @@ use git::{
 use usb::{USBState, USBStatus, USBNotification};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 
+const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EmbeddedFirmware {
     Ism,
@@ -846,31 +848,27 @@ fn parse_ota_status(notification: &[u8]) -> Option<(u8, u32, u32, u8)> {
     Some((status, received, total, err))
 }
 
-#[tauri::command]
-async fn ble_ota_flash_file(
-    app: tauri::AppHandle,
-    state: State<'_, Arc<BLEState>>,
-    path: String,
+async fn ble_ota_flash_bytes(
+    app: &tauri::AppHandle,
+    state: &BLEState,
+    bytes: &[u8],
+    label: &str,
 ) -> Result<(), String> {
     let status = state.get_status().await;
     if !status.connected {
         return Err("Not connected to a BLE device".to_string());
     }
 
-    let firmware_path = expand_path(&path);
-    let bytes = std::fs::read(&firmware_path)
-        .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
-
     if bytes.is_empty() {
-        return Err("Firmware file is empty".to_string());
+        return Err("Firmware is empty".to_string());
     }
 
     let total_bytes = bytes.len() as u64;
-    emit_ota_progress(&app, format!("Firmware size: {} bytes", total_bytes), 0, total_bytes);
+    emit_ota_progress(app, format!("{label} size: {} bytes", total_bytes), 0, total_bytes);
 
     use sha2::{Digest as _, Sha256};
     let mut hasher = Sha256::new();
-    hasher.update(&bytes);
+    hasher.update(bytes);
     let sha = hasher.finalize();
 
     let mut start = Vec::with_capacity(1 + 4 + 32);
@@ -878,7 +876,7 @@ async fn ble_ota_flash_file(
     start.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
     start.extend_from_slice(&sha[..]);
 
-    emit_ota_progress(&app, "Starting OTA session...", 0, total_bytes);
+    emit_ota_progress(app, "Starting OTA session...", 0, total_bytes);
     state.ota_write_control(&start).await?;
 
     let chunk_size = 200usize;
@@ -891,13 +889,13 @@ async fn ble_ota_flash_file(
 
         if sent - last_progress_emit >= 16 * 1024 || sent == bytes.len() {
             last_progress_emit = sent;
-            emit_ota_progress(&app, "Uploading...", sent as u64, total_bytes);
+            emit_ota_progress(app, "Uploading...", sent as u64, total_bytes);
         }
 
         tokio::time::sleep(tokio::time::Duration::from_millis(3)).await;
     }
 
-    emit_ota_progress(&app, "Finalizing...", total_bytes, total_bytes);
+    emit_ota_progress(app, "Finalizing...", total_bytes, total_bytes);
     state.ota_write_control(&[0x03]).await?;
 
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(30);
@@ -909,8 +907,10 @@ async fn ble_ota_flash_file(
 
         if let Some(notification) = state.recv_notification(deadline - now).await {
             if let Some((code, received, total, err)) = parse_ota_status(&notification.data) {
-                let msg = format!("Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}");
-                emit_ota_progress(&app, msg, total_bytes, total_bytes);
+                let msg = format!(
+                    "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
+                );
+                emit_ota_progress(app, msg, total_bytes, total_bytes);
                 match code {
                     0x13 => return Ok(()), // SUCCESS
                     0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
@@ -919,6 +919,26 @@ async fn ble_ota_flash_file(
             }
         }
     }
+}
+
+#[tauri::command]
+async fn ble_ota_flash_file(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<BLEState>>,
+    path: String,
+) -> Result<(), String> {
+    let firmware_path = expand_path(&path);
+    let bytes = std::fs::read(&firmware_path)
+        .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
+    ble_ota_flash_bytes(&app, &state, &bytes, "Firmware").await
+}
+
+#[tauri::command]
+async fn ble_ota_flash_stock(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<BLEState>>,
+) -> Result<(), String> {
+    ble_ota_flash_bytes(&app, &state, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
 }
 #[tauri::command]
 async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
@@ -1265,6 +1285,7 @@ pub fn run() {
             ble_get_notification,
             ble_transmit_buffer,
             ble_ota_flash_file,
+            ble_ota_flash_stock,
             usb_list_ports,
             usb_connect,
             usb_disconnect,

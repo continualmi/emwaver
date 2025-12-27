@@ -235,6 +235,28 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
     }
   }, [appendProgress, bleConnected, otaFilePath, refreshBleStatus]);
 
+  const handleOtaFlashStock = useCallback(async () => {
+    if (!bleConnected) {
+      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
+      return;
+    }
+
+    setIsFlashing(true);
+    setProgressLines([]);
+
+    try {
+      appendProgress("Starting ESP32 stock BLE OTA flash...");
+      await safeInvoke("ble_ota_flash_stock", {}, { throwOnError: true });
+      appendProgress("OTA completed successfully!");
+    } catch (error) {
+      console.error(error);
+      appendProgress(`OTA failed: ${String(error)}`);
+    } finally {
+      setIsFlashing(false);
+      void refreshBleStatus();
+    }
+  }, [appendProgress, bleConnected, refreshBleStatus]);
+
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4 flex-shrink-0">
@@ -374,14 +396,24 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
               <p className="text-xs text-slate-400">
                 Requires an active BLE connection (use the BLE page to connect, then come back here).
               </p>
-              <button
-                type="button"
-                disabled={isFlashing || !bleConnected || !otaFilePath}
-                onClick={() => void handleOtaFlash()}
-                className="mt-auto rounded bg-sky-600 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-sky-500 disabled:opacity-60"
-              >
-                {isFlashing ? "Flashing…" : "Flash OTA"}
-              </button>
+              <div className="mt-auto grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  disabled={isFlashing || !bleConnected}
+                  onClick={() => void handleOtaFlashStock()}
+                  className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {isFlashing ? "Flashing…" : "Flash Stock OTA"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isFlashing || !bleConnected || !otaFilePath}
+                  onClick={() => void handleOtaFlash()}
+                  className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-sky-500 disabled:opacity-60"
+                >
+                  {isFlashing ? "Flashing…" : "Flash Selected OTA"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
