@@ -23,6 +23,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   const [serialMonitor, setSerialMonitor] = useState<string[]>([]);
   const [showHex, setShowHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
+  const [deviceIconKey, setDeviceIconKey] = useState<"emwaver" | "ism" | "rfid" | "infrared" | "gpio">("emwaver");
   
   // Transport selection state
   const [selectedTransport, setSelectedTransport] = useState<TransportType>('USB');
@@ -281,13 +282,31 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   useEffect(() => {
     if (status.connected && serialMonitor.length > 0) {
       const lastMessage = serialMonitor[serialMonitor.length - 1];
-      // Look for version pattern like "1.0.0 - Welcome to EMWaver!"
-      const versionMatch = lastMessage.match(/(\d+\.\d+\.\d+)/);
+      const stripped = lastMessage
+        .replace(/<[^>]*>/g, "")
+        .replace(/^\[[^\]]*\]\s*/, "")
+        .trim();
+
+      const isBareSemver = /^\d+\.\d+\.\d+$/.test(stripped);
+      if (stripped.includes("Welcome to")) {
+        const iconKey =
+          stripped.includes("Welcome to ISM Waver firmware") ? "ism" :
+          stripped.includes("Welcome to RFID Waver firmware") ? "rfid" :
+          stripped.includes("Welcome to IR Waver firmware") ? "infrared" :
+          stripped.includes("Welcome to GPIO Waver firmware") ? "gpio" :
+          "emwaver";
+        setDeviceIconKey(iconKey);
+      } else if (isBareSemver) {
+        setDeviceIconKey("emwaver");
+      }
+
+      const versionMatch = stripped.match(/(\d+\.\d+\.\d+)/);
       if (versionMatch) {
         setFirmwareVersion(versionMatch[1]);
       }
     } else if (!status.connected) {
       setFirmwareVersion("Unknown");
+      setDeviceIconKey("emwaver");
     }
   }, [serialMonitor, status.connected]);
 
@@ -407,15 +426,23 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
           {/* Firmware Version */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
             <div className="flex items-center justify-between h-full">
-              <div className="flex flex-col justify-center">
-                <span className="text-sm font-semibold text-slate-400">Firmware</span>
-                <span
-                  className={`text-sm ${
-                    firmwareVersion !== "Unknown" ? "text-blue-400" : "text-slate-500"
-                  }`}
-                >
-                  {firmwareVersion}
-                </span>
+              <div className="flex items-center gap-3">
+                <img
+                  src={`/device-icons/${deviceIconKey}-icon.png`}
+                  alt={`${deviceIconKey} icon`}
+                  className="h-14 w-14 rounded-xl bg-slate-950/30 p-1"
+                  draggable={false}
+                />
+                <div className="flex flex-col justify-center">
+                  <span className="text-sm font-semibold text-slate-400">Firmware</span>
+                  <span
+                    className={`text-sm ${
+                      firmwareVersion !== "Unknown" ? "text-blue-400" : "text-slate-500"
+                    }`}
+                  >
+                    {firmwareVersion}
+                  </span>
+                </div>
               </div>
               <button
                 onClick={handleCheckVersion}

@@ -1,0 +1,3 @@
+  - List AVDs: ~/Library/Android/sdk/emulator/emulator -list-avds
+  - Start one: ~/Library/Android/sdk/emulator/emulator -avd Pixel_Tablet_Edited_API_30
+
