@@ -34,6 +34,7 @@ import SettingsFragment from "./components/SettingsFragment";
 import HomePage from "./components/HomePage";
 import FlashFragment from "./components/FlashFragment";
 import IDEFragment from "./components/IDEFragment";
+import TemplateFragment from "./components/TemplateFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -84,6 +85,7 @@ export type FragmentType =
   | "rfid"
   | "packetMode"
   | "flash"
+  | "template"
   | "settings"
   | "ide";
 
@@ -924,6 +926,7 @@ function App() {
   const isRfidActive = activePane === "rfid";
   const isPacketModeActive = activePane === "packetMode";
   const isFlashActive = activePane === "flash";
+  const isTemplateActive = activePane === "template";
   const isSettingsActive = activePane === "settings";
   const isIDEActive = activePane === "ide";
 
@@ -945,6 +948,7 @@ function App() {
         <Pane active={isRfidActive}><RfidFragment /></Pane>
         <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
         <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
+        <Pane active={isTemplateActive}><TemplateFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
         <Pane active={isIDEActive}><IDEFragment theme={theme} /></Pane>
       </div>
@@ -1158,6 +1162,12 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<FlashIcon />}
       />
       <ActivityButton
+        label="Template"
+        isActive={activePane === "template"}
+        onClick={() => onFragmentClick("template")}
+        icon={<TemplateIcon />}
+      />
+      <ActivityButton
         label="IDE"
         isActive={activePane === "ide"}
         onClick={() => onFragmentClick("ide")}
@@ -1180,6 +1190,14 @@ function FlashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full" aria-hidden="true">
       <path d="M12.7071 2.29289C12.3166 1.90237 11.6834 1.90237 11.2929 2.29289L6.29289 7.29289C5.90237 7.68342 5.90237 8.31658 6.29289 8.70711C6.68342 9.09763 7.31658 9.09763 7.70711 8.70711L11 5.41421V18C11 18.5523 11.4477 19 12 19C12.5523 19 13 18.5523 13 18V5.41421L16.2929 8.70711C16.6834 9.09763 17.3166 9.09763 17.7071 8.70711C18.0976 8.31658 18.0976 7.68342 17.7071 7.29289L12.7071 2.29289ZM5.25 20.5C4.83579 20.5 4.5 20.8358 4.5 21.25C4.5 21.6642 4.83579 22 5.25 22H18.75C19.1642 22 19.5 21.6642 19.5 21.25C19.5 20.8358 19.1642 20.5 18.75 20.5H5.25Z" />
+    </svg>
+  );
+}
+
+function TemplateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full" aria-hidden="true">
+      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0L15.13 5.12l3.75 3.75 1.83-1.83z" />
     </svg>
   );
 }
