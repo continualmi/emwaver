@@ -68,9 +68,21 @@ impl USBState {
                         true
                     }
                 });
+
+                // Drop common non-device pseudo-ports that confuse selection on macOS.
+                names.retain(|n| !n.contains("Bluetooth-Incoming-Port"));
             }
 
-            names.sort();
+            names.sort_by_key(|n| {
+                // Prefer real USB CDC devices first.
+                if n.contains("usbmodem") {
+                    (0, n.clone())
+                } else if n.contains("usbserial") {
+                    (1, n.clone())
+                } else {
+                    (2, n.clone())
+                }
+            });
             Ok(names)
         })
         .await
