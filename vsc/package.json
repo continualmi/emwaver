@@ -4,6 +4,7 @@
   "description": "Build/flash helpers for EMWaver firmware and projects.",
   "version": "0.0.1",
   "publisher": "emwaver",
+  "icon": "media/emwaver-logo.png",
   "engines": {
     "vscode": "^1.92.0"
   },
@@ -73,7 +74,7 @@
         {
           "id": "emwaver",
           "title": "EMWaver",
-          "icon": "media/icon.svg"
+          "icon": "media/emwaver-activity.svg"
         }
       ]
     },
