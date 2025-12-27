@@ -517,7 +517,7 @@ int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t l
         return BLE_HS_ENOMEM;
     }
 
-    rc = ble_gattc_notify_custom(notify_conn_handle, attr_handle, om);
+    rc = ble_gatts_notify_custom(notify_conn_handle, attr_handle, om);
     if (rc != 0) {
         ESP_LOGE(TAG, "Failed to send notification: %d", rc);
     }

@@ -19,7 +19,7 @@
 #ifndef H_BLE_SERVER_
 #define H_BLE_SERVER_
 
-#include "nimble/ble.h"
+#include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 

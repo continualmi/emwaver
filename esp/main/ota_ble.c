@@ -87,7 +87,7 @@ static void ota_ble_reset_session(void)
 static void ota_ble_restart_task(void *arg)
 {
     (void)arg;
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(2000));
     esp_restart();
 }
 
