@@ -37,4 +37,5 @@ futures = "0.3"
 serialport = "4.2"
 rusb = "0.9"
 portable-pty = "0.9"
+sha2 = "0.10"
 emw = { path = "../../cli" }

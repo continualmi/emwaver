@@ -806,6 +806,120 @@ fn emit_dfu_progress(app: &tauri::AppHandle, message: impl Into<String>) {
     );
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+struct OtaProgressEvent {
+    message: String,
+    sent_bytes: u64,
+    total_bytes: u64,
+    timestamp_ms: u64,
+}
+
+fn emit_ota_progress(app: &tauri::AppHandle, message: impl Into<String>, sent_bytes: u64, total_bytes: u64) {
+    let _ = app.emit(
+        "ota-progress",
+        OtaProgressEvent {
+            message: message.into(),
+            sent_bytes,
+            total_bytes,
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+        },
+    );
+}
+
+fn parse_ota_status(notification: &[u8]) -> Option<(u8, u32, u32, u8)> {
+    if notification.len() != 14 {
+        return None;
+    }
+    if &notification[0..3] != b"OTA" {
+        return None;
+    }
+    if notification[3] != 1 {
+        return None;
+    }
+    let status = notification[4];
+    let received = u32::from_le_bytes([notification[5], notification[6], notification[7], notification[8]]);
+    let total = u32::from_le_bytes([notification[9], notification[10], notification[11], notification[12]]);
+    let err = notification[13];
+    Some((status, received, total, err))
+}
+
+#[tauri::command]
+async fn ble_ota_flash_file(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<BLEState>>,
+    path: String,
+) -> Result<(), String> {
+    let status = state.get_status().await;
+    if !status.connected {
+        return Err("Not connected to a BLE device".to_string());
+    }
+
+    let firmware_path = expand_path(&path);
+    let bytes = std::fs::read(&firmware_path)
+        .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
+
+    if bytes.is_empty() {
+        return Err("Firmware file is empty".to_string());
+    }
+
+    let total_bytes = bytes.len() as u64;
+    emit_ota_progress(&app, format!("Firmware size: {} bytes", total_bytes), 0, total_bytes);
+
+    use sha2::{Digest as _, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    let sha = hasher.finalize();
+
+    let mut start = Vec::with_capacity(1 + 4 + 32);
+    start.push(0x01);
+    start.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    start.extend_from_slice(&sha[..]);
+
+    emit_ota_progress(&app, "Starting OTA session...", 0, total_bytes);
+    state.ota_write_control(&start).await?;
+
+    let chunk_size = 200usize;
+    let mut sent = 0usize;
+    let mut last_progress_emit = 0usize;
+
+    for chunk in bytes.chunks(chunk_size) {
+        state.ota_write_data(chunk).await?;
+        sent += chunk.len();
+
+        if sent - last_progress_emit >= 16 * 1024 || sent == bytes.len() {
+            last_progress_emit = sent;
+            emit_ota_progress(&app, "Uploading...", sent as u64, total_bytes);
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(3)).await;
+    }
+
+    emit_ota_progress(&app, "Finalizing...", total_bytes, total_bytes);
+    state.ota_write_control(&[0x03]).await?;
+
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(30);
+    loop {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            return Err("Timed out waiting for OTA completion status".to_string());
+        }
+
+        if let Some(notification) = state.recv_notification(deadline - now).await {
+            if let Some((code, received, total, err)) = parse_ota_status(&notification.data) {
+                let msg = format!("Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}");
+                emit_ota_progress(&app, msg, total_bytes, total_bytes);
+                match code {
+                    0x13 => return Ok(()), // SUCCESS
+                    0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
+                    _ => {} // keep waiting for terminal state
+                }
+            }
+        }
+    }
+}
 #[tauri::command]
 async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
     let selection = EmbeddedFirmware::from_str(&firmware)
@@ -1150,6 +1264,7 @@ pub fn run() {
             ble_get_status,
             ble_get_notification,
             ble_transmit_buffer,
+            ble_ota_flash_file,
             usb_list_ports,
             usb_connect,
             usb_disconnect,

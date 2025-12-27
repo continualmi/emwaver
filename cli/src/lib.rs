@@ -17,6 +17,7 @@
  */
 
 mod cli;
+pub mod ble_ota;
 pub mod dfu;
 pub mod firmware;
 pub mod git;
@@ -33,6 +34,12 @@ pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
+        Some(cli::Command::Ota {
+            file,
+            device_name,
+            chunk_size,
+            verbose,
+        }) => ble_ota::flash(file, device_name, chunk_size, verbose),
         Some(cli::Command::Build {
             project,
             codegen,

@@ -10,6 +10,12 @@ use uuid::Uuid;
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
 const CMD_CHAR_UUID: &str = "46c7158e-0c3b-4e90-a847-452a15b14191";
 const NOTIF_CHAR_UUID: &str = "47c7158e-0c3b-4e90-a847-452a15b14191";
+
+// EMWaver BLE OTA Service and Characteristics (desktop-only for now)
+const OTA_SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14192";
+const OTA_CTRL_CHAR_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14193";
+const OTA_DATA_CHAR_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14194";
+const OTA_STATUS_CHAR_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14195";
 const DEVICE_NAME: &str = "EMWaver";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,39 +152,51 @@ impl BLEState {
                                                 let services = peripheral.services();
                                                 let service_uuid = Uuid::parse_str(SERVICE_UUID).unwrap();
                                                 let notif_char_uuid = Uuid::parse_str(NOTIF_CHAR_UUID).unwrap();
-                                                
+                                                let ota_service_uuid = Uuid::parse_str(OTA_SERVICE_UUID).unwrap();
+                                                let ota_status_uuid = Uuid::parse_str(OTA_STATUS_CHAR_UUID).unwrap();
+
+                                                let mut notify_characteristics = Vec::new();
                                                 for service in services {
-                                                    if service.uuid == service_uuid {
-                                                        for characteristic in service.characteristics.iter() {
-                                                            if characteristic.uuid == notif_char_uuid {
-                                                                if characteristic.properties.contains(btleplug::api::CharPropFlags::NOTIFY) {
-                                                                    let peripheral_for_notifications = peripheral.clone();
-                                                                    if peripheral.subscribe(characteristic).await.is_ok() {
-                                                                        // Set up notification handler
-                                                                        let tx_guard = notification_tx_clone.lock().await;
-                                                                        if let Some(tx) = tx_guard.as_ref() {
-                                                                            let tx_clone = tx.clone();
-                                                                            drop(tx_guard);
-                                                                            
-                                                                            if let Ok(mut notification_stream) = peripheral_for_notifications.notifications().await {
-                                                                                tokio::spawn(async move {
-                                                                                    while let Some(data) = notification_stream.next().await {
-                                                                                        let notification = BLENotification {
-                                                                                            data: data.value,
-                                                                                            timestamp: std::time::SystemTime::now()
-                                                                                                .duration_since(std::time::UNIX_EPOCH)
-                                                                                                .unwrap()
-                                                                                                .as_millis() as u64,
-                                                                                        };
-                                                                                        let _ = tx_clone.send(notification).await;
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
+                                                    if service.uuid != service_uuid && service.uuid != ota_service_uuid {
+                                                        continue;
+                                                    }
+
+                                                    for characteristic in service.characteristics.iter() {
+                                                        let is_target_notify = characteristic.uuid == notif_char_uuid
+                                                            || characteristic.uuid == ota_status_uuid;
+                                                        if !is_target_notify {
+                                                            continue;
                                                         }
+                                                        if !characteristic.properties.contains(btleplug::api::CharPropFlags::NOTIFY) {
+                                                            continue;
+                                                        }
+                                                        notify_characteristics.push(characteristic.clone());
+                                                    }
+                                                }
+
+                                                for characteristic in &notify_characteristics {
+                                                    let _ = peripheral.subscribe(characteristic).await;
+                                                }
+
+                                                let tx_guard = notification_tx_clone.lock().await;
+                                                if let Some(tx) = tx_guard.as_ref() {
+                                                    let tx_clone = tx.clone();
+                                                    drop(tx_guard);
+
+                                                    let peripheral_for_notifications = peripheral.clone();
+                                                    if let Ok(mut notification_stream) = peripheral_for_notifications.notifications().await {
+                                                        tokio::spawn(async move {
+                                                            while let Some(data) = notification_stream.next().await {
+                                                                let notification = BLENotification {
+                                                                    data: data.value,
+                                                                    timestamp: std::time::SystemTime::now()
+                                                                        .duration_since(std::time::UNIX_EPOCH)
+                                                                        .unwrap()
+                                                                        .as_millis() as u64,
+                                                                };
+                                                                let _ = tx_clone.send(notification).await;
+                                                            }
+                                                        });
                                                     }
                                                 }
                                                 
@@ -290,6 +308,62 @@ impl BLEState {
         } else {
             None
         }
+    }
+
+    pub async fn recv_notification(&self, timeout: tokio::time::Duration) -> Option<BLENotification> {
+        let mut rx_guard = self.notification_rx.lock().await;
+        let rx = rx_guard.as_mut()?;
+        tokio::time::timeout(timeout, rx.recv()).await.ok().flatten()
+    }
+
+    async fn find_char(
+        &self,
+        service_uuid: &str,
+        char_uuid: &str,
+    ) -> Result<btleplug::api::Characteristic, String> {
+        let peripheral_guard = self.peripheral.lock().await;
+        let peripheral = peripheral_guard.as_ref().ok_or("Not connected to device")?;
+        let services = peripheral.services();
+
+        let service_uuid = Uuid::parse_str(service_uuid).map_err(|e| e.to_string())?;
+        let char_uuid = Uuid::parse_str(char_uuid).map_err(|e| e.to_string())?;
+
+        services
+            .iter()
+            .find(|s| s.uuid == service_uuid)
+            .and_then(|s| s.characteristics.iter().find(|c| c.uuid == char_uuid))
+            .cloned()
+            .ok_or_else(|| "Characteristic not found".to_string())
+    }
+
+    pub async fn ota_write_control(&self, data: &[u8]) -> Result<(), String> {
+        if data.is_empty() {
+            return Err("Control payload is empty".to_string());
+        }
+        let characteristic = self.find_char(OTA_SERVICE_UUID, OTA_CTRL_CHAR_UUID).await?;
+
+        let peripheral_guard = self.peripheral.lock().await;
+        let peripheral = peripheral_guard.as_ref().ok_or("Not connected to device")?;
+        peripheral
+            .write(&characteristic, data, btleplug::api::WriteType::WithResponse)
+            .await
+            .map_err(|e| format!("Failed to write OTA control: {}", e))?;
+        Ok(())
+    }
+
+    pub async fn ota_write_data(&self, data: &[u8]) -> Result<(), String> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        let characteristic = self.find_char(OTA_SERVICE_UUID, OTA_DATA_CHAR_UUID).await?;
+
+        let peripheral_guard = self.peripheral.lock().await;
+        let peripheral = peripheral_guard.as_ref().ok_or("Not connected to device")?;
+        peripheral
+            .write(&characteristic, data, btleplug::api::WriteType::WithoutResponse)
+            .await
+            .map_err(|e| format!("Failed to write OTA data: {}", e))?;
+        Ok(())
     }
 
     pub async fn transmit_buffer(&self, data: Vec<u8>) -> Result<(), String> {
