@@ -5,13 +5,12 @@ mod pty;
 mod usb;
 
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io, io::Write, path::{Path, PathBuf}, process::Command, sync::Arc};
+use std::{env, fs, io, path::{Path, PathBuf}, process::Command, sync::Arc};
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
     Emitter, State,
 };
-use tempfile::Builder;
 use ble::{BLEState, BLEStatus, BLENotification};
 use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use firmware::{firmware_build, firmware_flash};
@@ -57,6 +56,9 @@ impl EmbeddedFirmware {
 struct CreateProjectPayload {
     name: String,
     location: String,
+    target: String,
+    components: Vec<String>,
+    stm32_firmware: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -167,12 +169,14 @@ struct DfuProgressEvent {
 
 #[tauri::command]
 async fn create_project(payload: CreateProjectPayload) -> Result<CreateProjectResponse, String> {
-    let token = resolve_token();
-
     let project_name = payload.name.trim();
     if project_name.is_empty() {
         return Err("Project name is required".into());
     }
+
+    let target = parse_init_target(&payload.target)?;
+    let components = parse_init_components(&payload.components)?;
+    let stm32_firmware = parse_init_stm32_firmware(payload.stm32_firmware.as_deref())?;
 
     let base_path = expand_path(&payload.location);
     if !base_path.exists() {
@@ -192,25 +196,64 @@ async fn create_project(payload: CreateProjectPayload) -> Result<CreateProjectRe
             .map_err(|error| format!("Unable to clear existing empty directory: {error}"))?;
     }
 
-    let target = project_path.clone();
-    let target_string = target
-        .to_str()
-        .ok_or_else(|| "Target path contains unsupported characters".to_string())?
-        .to_owned();
-
-    spawn_blocking(move || clone_repository(token, &target_string))
-        .await
-        .map_err(|error| format!("Failed to run clone task: {error}"))??;
-
-    remove_git_metadata(&target)?;
+    let destination = project_path.clone();
+    spawn_blocking(move || {
+        emw::init::run_init(target, components, stm32_firmware, destination)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Failed to run init task: {error}"))??;
 
     Ok(CreateProjectResponse {
-        path: target
+        path: project_path
             .canonicalize()
             .unwrap_or(project_path)
             .to_string_lossy()
-            .to_string(),
+            .to_string()
     })
+}
+
+fn parse_init_target(raw: &str) -> Result<emw::Target, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "esp32s3" | "esp32-s3" | "esp32_s3" => Ok(emw::Target::Esp32s3),
+        "stm32f042" | "stm32-f042" | "stm32_f042" => Ok(emw::Target::Stm32f042),
+        _ => Err("Unknown target (expected esp32s3 or stm32f042)".into()),
+    }
+}
+
+fn parse_init_components(raw: &[String]) -> Result<Vec<emw::Component>, String> {
+    let mut out = Vec::with_capacity(raw.len());
+    for item in raw {
+        let component = match item.trim().to_ascii_lowercase().as_str() {
+            "gpio" => emw::Component::Gpio,
+            "sampler" => emw::Component::Sampler,
+            "cc1101" => emw::Component::Cc1101,
+            "rfm69" => emw::Component::Rfm69,
+            "mfrc522" => emw::Component::Mfrc522,
+            _ => return Err(format!("Unknown component: {item}")),
+        };
+        if !out.contains(&component) {
+            out.push(component);
+        }
+    }
+    Ok(out)
+}
+
+fn parse_init_stm32_firmware(raw: Option<&str>) -> Result<Option<emw::Stm32Firmware>, String> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let value = raw.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    match value.to_ascii_lowercase().as_str() {
+        "gpio" => Ok(Some(emw::Stm32Firmware::Gpio)),
+        "ir" => Ok(Some(emw::Stm32Firmware::Ir)),
+        "ism" => Ok(Some(emw::Stm32Firmware::Ism)),
+        "rfid" => Ok(Some(emw::Stm32Firmware::Rfid)),
+        _ => Err("Unknown STM32 firmware (expected gpio/ir/ism/rfid)".into()),
+    }
 }
 
 #[tauri::command]
@@ -469,110 +512,6 @@ async fn pty_stop(state: State<'_, Arc<PtyManager>>, payload: PtyStopPayload) ->
 
 // ESP-IDF helper functions removed
 
-fn clone_repository(token: Option<String>, target: &str) -> Result<(), String> {
-    match run_git_clone(None, target) {
-        Ok(()) => Ok(()),
-        Err(initial_error) => {
-            if let Some(token) = token {
-                run_git_clone(Some(token), target)
-            } else {
-                Err(initial_error)
-            }
-        }
-    }
-}
-
-fn run_git_clone(token: Option<String>, target: &str) -> Result<(), String> {
-    let helper = if let Some(ref value) = token {
-        let safe_token = escape_single_quotes(value);
-        let mut script = Builder::new()
-            .prefix("emwaver-askpass")
-            .tempfile()
-            .map_err(|error| format!("Failed to create credentials helper: {error}"))?;
-
-        let helper = format!(
-            "#!/bin/sh\ncase \"$1\" in\n*Username*)\n  printf '%s\\n' 'x-access-token'\n  ;;\n*)\n  printf '%s\\n' '{}'\n  ;;\nesac\n",
-            safe_token
-        );
-
-        script
-            .write_all(helper.as_bytes())
-            .map_err(|error| format!("Failed to write credentials helper: {error}"))?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut permissions = script
-                .as_file()
-                .metadata()
-                .map_err(|error| format!("Failed to read helper metadata: {error}"))?
-                .permissions();
-            permissions.set_mode(0o700);
-            script
-                .as_file()
-                .set_permissions(permissions)
-                .map_err(|error| format!("Failed to set helper permissions: {error}"))?;
-        }
-
-        Some(script.into_temp_path())
-    } else {
-        None
-    };
-
-    let mut command = Command::new("git");
-    command.args([
-        "clone",
-        "--depth",
-        "1",
-        "https://github.com/luispl77/emwaver-fw.git",
-        target,
-    ]);
-    command.env("GIT_TERMINAL_PROMPT", "0");
-
-    if let Some(ref askpass) = helper {
-        command.env("GIT_ASKPASS", askpass);
-    }
-
-    let output = command
-        .output()
-        .map_err(|error| format!("Failed to execute git: {error}"))?;
-
-    if let Some(path) = helper {
-        if let Err(error) = path.close() {
-            return Err(format!("Failed to clean credentials helper: {error}"));
-        }
-    }
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let detail = if !stderr.trim().is_empty() {
-        stderr.trim().to_string()
-    } else {
-        stdout.trim().to_string()
-    };
-
-    if detail.is_empty() {
-        Err("Failed to clone emwaver firmware repository.".to_string())
-    } else {
-        Err(format!(
-            "Failed to clone emwaver firmware repository. {detail}"
-        ))
-    }
-}
-
-fn remove_git_metadata(target: &Path) -> Result<(), String> {
-    let git_dir = target.join(".git");
-    if git_dir.exists() {
-        fs::remove_dir_all(&git_dir)
-            .map_err(|error| format!("Failed to remove git metadata: {error}"))?;
-    }
-    Ok(())
-}
-
 fn list_directory(current: &Path, root: &Path) -> Result<Vec<DirectoryEntry>, String> {
     let mut entries = fs::read_dir(current)
         .map_err(|error| format!("Failed to read directory entries: {error}"))?
@@ -683,23 +622,6 @@ fn expand_path(path: &str) -> PathBuf {
     }
 
     PathBuf::from(path)
-}
-
-fn escape_single_quotes(value: &str) -> String {
-    value.replace('\'', "'\"'\"'")
-}
-
-fn resolve_token() -> Option<String> {
-    for key in ["GHCR_PAT", "GITHUB_TOKEN", "GH_TOKEN"] {
-        if let Ok(value) = env::var(key) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-
-    None
 }
 
 // BLE Commands
@@ -1011,6 +933,20 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+O"),
             )?;
+            let file_new_item = MenuItem::with_id(
+                app,
+                "menu-file-new-project",
+                "New Project…",
+                true,
+                Some("CmdOrCtrl+Shift+N"),
+            )?;
+            let file_open_item = MenuItem::with_id(
+                app,
+                "menu-file-open-project",
+                "Open Project…",
+                true,
+                Some("CmdOrCtrl+O"),
+            )?;
             let close_item = MenuItem::with_id(
                 app,
                 "menu-close-folder",
@@ -1133,6 +1069,8 @@ pub fn run() {
                     if let MenuItemKind::Submenu(submenu) = item {
                         if let Ok(label) = submenu.text() {
                             if label == "File" {
+                                submenu.append(&file_new_item)?;
+                                submenu.append(&file_open_item)?;
                                 submenu.append(&ide_open_folder_item)?;
                                 submenu.append(&ide_save_file_item)?;
                                 submenu.append(&close_item)?;
@@ -1157,6 +1095,8 @@ pub fn run() {
 
             if !close_item_added {
                 let file_menu = Submenu::new(app, "File", true)?;
+                file_menu.append(&file_new_item)?;
+                file_menu.append(&file_open_item)?;
                 file_menu.append(&ide_open_folder_item)?;
                 file_menu.append(&ide_save_file_item)?;
                 file_menu.append(&close_item)?;
@@ -1202,6 +1142,12 @@ pub fn run() {
                     let _ = app.emit(MENU_NEW_PROJECT_EVENT, ());
                 }
                 "menu-open-project" => {
+                    let _ = app.emit(MENU_OPEN_PROJECT_EVENT, ());
+                }
+                "menu-file-new-project" => {
+                    let _ = app.emit(MENU_NEW_PROJECT_EVENT, ());
+                }
+                "menu-file-open-project" => {
                     let _ = app.emit(MENU_OPEN_PROJECT_EVENT, ());
                 }
                 "menu-toggle-explorer" => {

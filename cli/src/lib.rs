@@ -21,7 +21,7 @@ pub mod ble_ota;
 pub mod dfu;
 pub mod firmware;
 pub mod git;
-mod init;
+pub mod init;
 mod interactive;
 mod shell;
 
@@ -29,6 +29,7 @@ use anyhow::Result;
 use clap::Parser;
 
 pub use cli::CodegenMode;
+pub use cli::{Component, Stm32Firmware, Target};
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
