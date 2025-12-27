@@ -44,6 +44,20 @@ pub enum Command {
         #[arg(long)]
         verbose: bool,
     },
+    /// Flash ESP32 firmware over BLE OTA.
+    Ota {
+        /// Firmware image path (raw `.bin` bytes).
+        file: PathBuf,
+        /// BLE device name to scan for (defaults to EMWaver).
+        #[arg(long, default_value = "EMWaver")]
+        device_name: String,
+        /// Chunk size in bytes (defaults to 200).
+        #[arg(long, default_value_t = 200)]
+        chunk_size: usize,
+        /// Print extra status notifications.
+        #[arg(long)]
+        verbose: bool,
+    },
     /// Build the firmware in the current project (auto-detects ESP-IDF or STM32 CubeMX/CubeIDE).
     Build {
         /// Firmware project path (defaults to auto-detect).

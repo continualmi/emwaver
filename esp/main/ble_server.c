@@ -27,6 +27,7 @@
 #include "host/ble_att.h"
 #include "ble_server.h"
 #include "command_registry.h"
+#include "ota_ble.h"
 
 static const char *TAG = "BLE_SERVER";
 static const char *DEVICE_NAME = "EMWaver";
@@ -46,7 +47,28 @@ static const ble_uuid128_t gatt_notif_chr_uuid =
     BLE_UUID128_INIT(0x91, 0x41, 0xb1, 0x15, 0x2a, 0x45, 0x47, 0xa8,
                      0x90, 0x4e, 0x3b, 0x0c, 0x8e, 0x15, 0xc7, 0x47);
 
+// OTA service UUID
+static const ble_uuid128_t gatt_ota_svc_uuid =
+    BLE_UUID128_INIT(0x92, 0x41, 0xb1, 0x15, 0x2a, 0x45, 0x47, 0xa8,
+                     0x90, 0x4e, 0x3b, 0x0c, 0x8e, 0x15, 0xc7, 0x45);
+
+// OTA control characteristic UUID (write)
+static const ble_uuid128_t gatt_ota_ctrl_chr_uuid =
+    BLE_UUID128_INIT(0x93, 0x41, 0xb1, 0x15, 0x2a, 0x45, 0x47, 0xa8,
+                     0x90, 0x4e, 0x3b, 0x0c, 0x8e, 0x15, 0xc7, 0x45);
+
+// OTA data characteristic UUID (write no response)
+static const ble_uuid128_t gatt_ota_data_chr_uuid =
+    BLE_UUID128_INIT(0x94, 0x41, 0xb1, 0x15, 0x2a, 0x45, 0x47, 0xa8,
+                     0x90, 0x4e, 0x3b, 0x0c, 0x8e, 0x15, 0xc7, 0x45);
+
+// OTA status characteristic UUID (notify)
+static const ble_uuid128_t gatt_ota_status_chr_uuid =
+    BLE_UUID128_INIT(0x95, 0x41, 0xb1, 0x15, 0x2a, 0x45, 0x47, 0xa8,
+                     0x90, 0x4e, 0x3b, 0x0c, 0x8e, 0x15, 0xc7, 0x45);
+
 static uint16_t notification_handle;
+static uint16_t ota_status_handle;
 static uint16_t notify_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 static uint8_t ble_addr_type;
 static QueueHandle_t cmd_queue_handle = NULL;
@@ -199,6 +221,58 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
         }
     }
 
+    if (ble_uuid_cmp(uuid, &gatt_ota_ctrl_chr_uuid.u) == 0) {
+        switch (ctxt->op) {
+        case BLE_GATT_ACCESS_OP_WRITE_CHR: {
+            uint8_t data[64];
+            uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
+
+            if (len > sizeof(data)) {
+                len = sizeof(data);
+            }
+
+            rc = ble_hs_mbuf_to_flat(ctxt->om, data, sizeof(data), &len);
+            if (rc != 0) {
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
+            if (ota_ble_handle_control_write(data, len) != 0) {
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
+            return 0;
+        }
+        default:
+            return BLE_ATT_ERR_UNLIKELY;
+        }
+    }
+
+    if (ble_uuid_cmp(uuid, &gatt_ota_data_chr_uuid.u) == 0) {
+        switch (ctxt->op) {
+        case BLE_GATT_ACCESS_OP_WRITE_CHR: {
+            uint8_t data[256];
+            uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
+
+            if (len > sizeof(data)) {
+                len = sizeof(data);
+            }
+
+            rc = ble_hs_mbuf_to_flat(ctxt->om, data, sizeof(data), &len);
+            if (rc != 0) {
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
+            if (ota_ble_handle_data_write(data, len) != 0) {
+                return BLE_ATT_ERR_UNLIKELY;
+            }
+
+            return 0;
+        }
+        default:
+            return BLE_ATT_ERR_UNLIKELY;
+        }
+    }
+
     return BLE_ATT_ERR_UNLIKELY;
 }
 
@@ -225,6 +299,35 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
             {
                 0, // End of characteristics
             }
+        },
+    },
+    {
+        // OTA Service
+        .type = BLE_GATT_SVC_TYPE_PRIMARY,
+        .uuid = &gatt_ota_svc_uuid.u,
+        .characteristics = (struct ble_gatt_chr_def[]) {
+            {
+                // OTA control characteristic (write)
+                .uuid = &gatt_ota_ctrl_chr_uuid.u,
+                .access_cb = gatt_svr_chr_access,
+                .flags = BLE_GATT_CHR_F_WRITE,
+            },
+            {
+                // OTA data characteristic (write)
+                .uuid = &gatt_ota_data_chr_uuid.u,
+                .access_cb = gatt_svr_chr_access,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP,
+            },
+            {
+                // OTA status characteristic (notify)
+                .uuid = &gatt_ota_status_chr_uuid.u,
+                .access_cb = gatt_svr_chr_access,
+                .flags = BLE_GATT_CHR_F_NOTIFY,
+                .val_handle = &ota_status_handle,
+            },
+            {
+                0,
+            },
         },
     },
     {
@@ -327,6 +430,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "Disconnected");
         // Reset connection handle
         notify_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        ota_ble_on_disconnect();
         // Restart advertising
         ble_server_advertise();
         break;
@@ -392,26 +496,32 @@ static void on_reset(int reason)
 // Send notification to connected client
 int ble_server_notify(const uint8_t* data, uint16_t len)
 {
+    return ble_server_notify_attr(notification_handle, data, len);
+}
+
+int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t len)
+{
     struct os_mbuf *om;
     int rc;
-    
-    // Check if we have a connected client
+
     if (notify_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
         return BLE_HS_ENOTCONN;
     }
-    
-    // Allocate notification buffer
+
+    if (attr_handle == 0) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
     om = ble_hs_mbuf_from_flat(data, len);
     if (om == NULL) {
         return BLE_HS_ENOMEM;
     }
-    
-    // Send notification
-    rc = ble_gattc_notify_custom(notify_conn_handle, notification_handle, om);
+
+    rc = ble_gattc_notify_custom(notify_conn_handle, attr_handle, om);
     if (rc != 0) {
         ESP_LOGE(TAG, "Failed to send notification: %d", rc);
     }
-    
+
     return rc;
 }
 
@@ -464,6 +574,9 @@ void ble_server_init(QueueHandle_t cmd_queue)
         ESP_LOGE(TAG, "Failed to init GATT server: %d", ret);
         return;
     }
+
+    ota_ble_init();
+    ota_ble_set_status_attr_handle(ota_status_handle);
     
     // Set device name
     ret = ble_svc_gap_device_name_set(DEVICE_NAME);
