@@ -71,7 +71,7 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Image(systemName: "arrow.up.circle")
+                    Image("TabEMWaver").renderingMode(.template)
                     Text("Flash")
                 }
                 .tag("Flash")
