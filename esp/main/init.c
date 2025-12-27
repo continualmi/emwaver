@@ -40,6 +40,7 @@
 #include <string.h>
 
 #define FIRMWARE_VERSION "1.0.0"
+#define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver firmware"
 #define CMD_QUEUE_LEN 10
 #define STARTUP_LED GPIO_NUM_1
 #define IR_TX_PIN_SHIELD GPIO_NUM_37
@@ -170,8 +171,8 @@ static void register_core_commands(void)
 
 static void version_command(void)
 {
-    // Send version as plain ASCII string
-    ble_server_notify((const uint8_t *)FIRMWARE_VERSION, strlen(FIRMWARE_VERSION));
+    static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " FIRMWARE_VERSION;
+    ble_server_notify((const uint8_t *)msg, (uint16_t)(sizeof(msg) - 1u));
 }
 
 static void ble_status_command(void)
