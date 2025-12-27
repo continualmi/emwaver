@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "EMWaver",
-        "width": 800,
-        "height": 600,
-        "maximized": true
+        "width": 1000,
+        "height": 700,
+        "visible": false
       }
     ],
     "security": {

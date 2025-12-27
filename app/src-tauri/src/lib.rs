@@ -915,8 +915,13 @@ async fn dfu_flash_file(app: tauri::AppHandle, path: String) -> Result<(), Strin
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::Manager;
+    use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
+
+    let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
+
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle();
 
             let new_item = MenuItem::with_id(
@@ -1131,6 +1136,37 @@ pub fn run() {
 
             app.set_menu(menu)?;
 
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.restore_state(window_state_flags);
+
+                let app_handle = app.handle().clone();
+                let save_seq_for_events =
+                    std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                let save_flags = window_state_flags;
+
+                main_window.on_window_event(move |event| match event {
+                    tauri::WindowEvent::CloseRequested { .. } => {
+                        let _ = app_handle.save_window_state(save_flags);
+                    }
+                    tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                        let seq = save_seq_for_events
+                            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                            + 1;
+                        let app_handle = app_handle.clone();
+                        let save_seq = save_seq_for_events.clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(750)).await;
+                            if save_seq.load(std::sync::atomic::Ordering::SeqCst) == seq {
+                                let _ = app_handle.save_window_state(save_flags);
+                            }
+                        });
+                    }
+                    _ => {}
+                });
+
+                let _ = main_window.show();
+            }
+
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -1201,7 +1237,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .skip_initial_state("main")
+                .with_state_flags(window_state_flags)
+                .build(),
+        )
         .manage(Arc::new(BLEState::new()))
         .manage(Arc::new(PtyManager::new()))
         .manage(Arc::new(USBState::new()))
