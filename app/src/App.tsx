@@ -953,7 +953,7 @@ function App() {
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
         <Pane active={isRfidActive}><RfidFragment /></Pane>
         <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
-        <Pane active={isFlashActive}><FlashFragment /></Pane>
+        <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
         <Pane active={isIDEActive}><IDEFragment theme={theme} /></Pane>
       </div>

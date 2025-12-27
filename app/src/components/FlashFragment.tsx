@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+type ThemeMode = "dark" | "light";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isTauriAvailable, safeInvoke } from "../utils/tauri";
 
@@ -19,7 +21,7 @@ const FIRMWARE_OPTIONS: FirmwareOption[] = [
   { id: "rfid", label: "RFID" },
 ];
 
-export default function FlashFragment() {
+export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const firmwareOptions = useMemo(() => FIRMWARE_OPTIONS, []);
   const [selectedFirmware, setSelectedFirmware] = useState<FirmwareOption["id"]>("ism");
   const [externalFilePath, setExternalFilePath] = useState<string | null>(null);
@@ -162,7 +164,7 @@ export default function FlashFragment() {
             </div>
             <div className="flex justify-center md:justify-end">
               <img
-                src="/flash-mode.png"
+                src={theme === "light" ? "/flash-mode-light.png" : "/flash-mode.png"}
                 alt="BOOT0 switch positions for Flash (DFU) vs Run mode"
                 className="max-h-[220px] w-auto select-none opacity-95"
                 draggable={false}
