@@ -202,11 +202,24 @@ impl USBState {
         let mut port_guard = self.port.lock().await;
         if let Some(port) = port_guard.as_mut() {
             port.write_all(&data).map_err(|e| format!("Failed to write: {}", e))?;
+            if Self::looks_like_ascii_command(&data) && !matches!(data.last(), Some(b'\n') | Some(b'\r')) {
+                port.write_all(b"\n").map_err(|e| format!("Failed to write newline: {}", e))?;
+            }
             port.flush().map_err(|e| format!("Failed to flush: {}", e))?;
             Ok(())
         } else {
             Err("Not connected".to_string())
         }
+    }
+
+    fn looks_like_ascii_command(data: &[u8]) -> bool {
+        if data.is_empty() {
+            return false;
+        }
+        if data.iter().any(|b| *b == 0u8) {
+            return false;
+        }
+        data.iter().all(|b| matches!(b, b'\n' | b'\r' | b'\t' | 0x20..=0x7e))
     }
 
     pub async fn get_status(&self) -> USBStatus {

@@ -22,6 +22,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.CheckBox;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
@@ -57,6 +58,7 @@ public class EMWaverFragment extends Fragment {
     private Button connectButton;
     private TextView firmwareVersionText;
     private ImageButton checkVersionButton;
+    private ImageView deviceIconView;
     
     private DeviceConnectionManager connectionManager;
     private DeviceConnectionService activeService;
@@ -97,6 +99,7 @@ public class EMWaverFragment extends Fragment {
         connectButton = root.findViewById(R.id.connect_button);
         firmwareVersionText = root.findViewById(R.id.firmware_version_text);
         checkVersionButton = root.findViewById(R.id.check_version_button);
+        deviceIconView = root.findViewById(R.id.device_icon);
 
 
         setupSendCommandButton();
@@ -188,6 +191,7 @@ public class EMWaverFragment extends Fragment {
                     firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
                             android.R.color.holo_blue_dark));
                 }
+                new Handler(Looper.getMainLooper()).postDelayed(this::requestFirmwareVersion, 500);
             }
         }
     }
@@ -505,6 +509,7 @@ public class EMWaverFragment extends Fragment {
                 firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
                         android.R.color.darker_gray));
             }
+            updateDeviceIcon(null);
         }
     }
 
@@ -555,6 +560,7 @@ public class EMWaverFragment extends Fragment {
                     // Parse the version from the welcome message (ASCII bytes)
                     String fullMessage = new String(response, StandardCharsets.US_ASCII);
                     String version = extractVersion(fullMessage);
+                    updateDeviceIcon(fullMessage);
                     
                     // Store the version in BLE service if connected via BLE (for persistence)
                     BLEService bleService = connectionManager.getBleService();
@@ -571,17 +577,40 @@ public class EMWaverFragment extends Fragment {
                     firmwareVersionText.setText("Unknown");
                     firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
                             android.R.color.darker_gray));
+                    updateDeviceIcon(null);
                 }
             } else {
                 firmwareVersionText.setText("Unknown");
                 firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
                         android.R.color.darker_gray));
+                updateDeviceIcon(null);
             }
         } else {
             firmwareVersionText.setText("Unknown");
             firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
                     android.R.color.darker_gray));
+            updateDeviceIcon(null);
         }
+    }
+
+    private void updateDeviceIcon(String versionResponse) {
+        if (deviceIconView == null) return;
+
+        int resId = R.drawable.emwaver_icon;
+        if (versionResponse != null) {
+            String trimmed = versionResponse.replace("\u0000", "").trim();
+            if (trimmed.contains("Welcome to ISM Waver firmware")) {
+                resId = R.drawable.ism_icon;
+            } else if (trimmed.contains("Welcome to RFID Waver firmware")) {
+                resId = R.drawable.rfid_icon;
+            } else if (trimmed.contains("Welcome to IR Waver firmware")) {
+                resId = R.drawable.infrared_icon;
+            } else if (trimmed.contains("Welcome to GPIO Waver firmware")) {
+                resId = R.drawable.gpio_icon;
+            }
+        }
+
+        deviceIconView.setImageResource(resId);
     }
     
     // Extract version from the welcome message
