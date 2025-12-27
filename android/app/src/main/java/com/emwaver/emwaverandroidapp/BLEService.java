@@ -44,6 +44,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class BLEService extends Service implements DeviceConnectionService {
 
@@ -69,6 +75,16 @@ public class BLEService extends Service implements DeviceConnectionService {
         UUID.fromString("47c7158e-0c3b-4e90-a847-452a15b14191");
     private static final UUID FILE_CHAR_UUID = 
         UUID.fromString("48c7158e-0c3b-4e90-a847-452a15b14191");
+
+    // ESP32 OTA BLE Service and Characteristic UUIDs
+    private static final UUID OTA_SERVICE_UUID =
+        UUID.fromString("45c7158e-0c3b-4e90-a847-452a15b14192");
+    private static final UUID OTA_CONTROL_CHAR_UUID =
+        UUID.fromString("45c7158e-0c3b-4e90-a847-452a15b14193");
+    private static final UUID OTA_DATA_CHAR_UUID =
+        UUID.fromString("45c7158e-0c3b-4e90-a847-452a15b14194");
+    private static final UUID OTA_STATUS_CHAR_UUID =
+        UUID.fromString("45c7158e-0c3b-4e90-a847-452a15b14195");
     
     // GATT Client configuration descriptor UUID
     private static final UUID CLIENT_CONFIG_DESCRIPTOR_UUID = 
@@ -82,6 +98,9 @@ public class BLEService extends Service implements DeviceConnectionService {
     private BluetoothGattCharacteristic cmdCharacteristic;
     private BluetoothGattCharacteristic notifCharacteristic;
     private BluetoothGattCharacteristic fileCharacteristic;
+    private BluetoothGattCharacteristic otaControlCharacteristic;
+    private BluetoothGattCharacteristic otaDataCharacteristic;
+    private BluetoothGattCharacteristic otaStatusCharacteristic;
     
     // Connection state variables
     private boolean isConnected = false;
@@ -94,6 +113,20 @@ public class BLEService extends Service implements DeviceConnectionService {
     
     private final IBinder binder = new LocalBinder();
     private Handler handler = new Handler(Looper.getMainLooper());
+    private volatile int currentMtu = 23;
+
+    private volatile boolean otaInProgress = false;
+    private final BlockingQueue<byte[]> otaStatusQueue = new ArrayBlockingQueue<>(64);
+    private volatile byte[] lastOtaStatus = null;
+
+    private volatile CountDownLatch pendingWriteLatch = null;
+    private volatile UUID pendingWriteUuid = null;
+    private volatile int pendingWriteStatus = BluetoothGatt.GATT_SUCCESS;
+
+    public interface OtaProgressCallback {
+        void onProgress(String message, int sentBytes, int totalBytes);
+        void onComplete(boolean success, String message);
+    }
 
     // Variables for speed calculation
     private long totalBytesReceived = 0;
@@ -519,6 +552,7 @@ public class BLEService extends Service implements DeviceConnectionService {
         public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.i(TAG, "MTU changed to: " + mtu + " bytes");
+                currentMtu = mtu;
                 
                 // Adjust packet size for transmitBuffer method based on new MTU
                 if (mtu > 23) {  // Only adjust if we got a larger MTU than default
@@ -562,11 +596,26 @@ public class BLEService extends Service implements DeviceConnectionService {
                     cmdCharacteristic = service.getCharacteristic(CMD_CHAR_UUID);
                     notifCharacteristic = service.getCharacteristic(NOTIF_CHAR_UUID);
                     fileCharacteristic = service.getCharacteristic(FILE_CHAR_UUID);
+
+                    BluetoothGattService otaService = gatt.getService(OTA_SERVICE_UUID);
+                    if (otaService != null) {
+                        otaControlCharacteristic = otaService.getCharacteristic(OTA_CONTROL_CHAR_UUID);
+                        otaDataCharacteristic = otaService.getCharacteristic(OTA_DATA_CHAR_UUID);
+                        otaStatusCharacteristic = otaService.getCharacteristic(OTA_STATUS_CHAR_UUID);
+                    } else {
+                        otaControlCharacteristic = null;
+                        otaDataCharacteristic = null;
+                        otaStatusCharacteristic = null;
+                    }
                     
                     Log.d(TAG, "Found EMWaver service and characteristics");
                     Log.d(TAG, "CMD Char: " + (cmdCharacteristic != null));
                     Log.d(TAG, "NOTIF Char: " + (notifCharacteristic != null));
                     Log.d(TAG, "FILE Char: " + (fileCharacteristic != null));
+                    Log.d(TAG, "OTA Service: " + (otaService != null));
+                    Log.d(TAG, "OTA Control Char: " + (otaControlCharacteristic != null));
+                    Log.d(TAG, "OTA Data Char: " + (otaDataCharacteristic != null));
+                    Log.d(TAG, "OTA Status Char: " + (otaStatusCharacteristic != null));
                     
                     // Enable notifications for both characteristics
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -607,6 +656,21 @@ public class BLEService extends Service implements DeviceConnectionService {
                                 Log.d(TAG, "File transfer descriptor write initiated");
                             }
                         }, 500);
+                    }
+
+                    // Enable notifications for OTA status
+                    if (otaStatusCharacteristic != null) {
+                        handler.postDelayed(() -> {
+                            boolean success = gatt.setCharacteristicNotification(otaStatusCharacteristic, true);
+                            Log.d(TAG, "Set OTA status notification: " + success);
+
+                            BluetoothGattDescriptor descriptor = otaStatusCharacteristic.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID);
+                            if (descriptor != null) {
+                                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                                gatt.writeDescriptor(descriptor);
+                                Log.d(TAG, "OTA status descriptor write initiated");
+                            }
+                        }, 1000);
                     }
                 } else {
                     Log.w(TAG, "EMWaver service not found!");
@@ -675,6 +739,8 @@ public class BLEService extends Service implements DeviceConnectionService {
                     processReceivedData(data);
                 } else if (characteristic.getUuid().equals(FILE_CHAR_UUID)) {
                     processFileTransferData(data);
+                } else if (characteristic.getUuid().equals(OTA_STATUS_CHAR_UUID)) {
+                    processOtaStatus(data);
                 }
             }
         }
@@ -685,6 +751,13 @@ public class BLEService extends Service implements DeviceConnectionService {
                 //Log.d(TAG, "Write successful");
             } else {
                 Log.e(TAG, "Write failed with status: " + status);
+            }
+
+            CountDownLatch latch = pendingWriteLatch;
+            UUID uuid = pendingWriteUuid;
+            if (latch != null && uuid != null && uuid.equals(characteristic.getUuid())) {
+                pendingWriteStatus = status;
+                latch.countDown();
             }
         }
         
@@ -743,6 +816,11 @@ public class BLEService extends Service implements DeviceConnectionService {
         });
         
         syncManager.handleFilePacket(data);
+    }
+
+    private void processOtaStatus(byte[] data) {
+        lastOtaStatus = Arrays.copyOf(data, data.length);
+        otaStatusQueue.offer(lastOtaStatus);
     }
     
     // Send response back via file transfer characteristic
@@ -845,6 +923,199 @@ public class BLEService extends Service implements DeviceConnectionService {
             showToast("Error starting BLE scan: " + e.getMessage());
             updateNotification("Error starting scan: " + e.getMessage());
             isScanningInProgress = false;
+        }
+    }
+
+    public void otaFlash(byte[] firmware, OtaProgressCallback callback) {
+        if (callback == null) {
+            return;
+        }
+
+        new Thread(() -> {
+            if (firmware == null || firmware.length == 0) {
+                callback.onComplete(false, "No firmware bytes provided");
+                return;
+            }
+
+            if (!checkConnection() || bluetoothGatt == null) {
+                callback.onComplete(false, "Not connected over BLE");
+                return;
+            }
+
+            if (otaControlCharacteristic == null || otaDataCharacteristic == null || otaStatusCharacteristic == null) {
+                callback.onComplete(false, "OTA service not available on device firmware");
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (ActivityCompat.checkSelfPermission(BLEService.this, Manifest.permission.BLUETOOTH_CONNECT)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    callback.onComplete(false, "Missing BLUETOOTH_CONNECT permission");
+                    return;
+                }
+            }
+
+            if (otaInProgress) {
+                callback.onComplete(false, "OTA already in progress");
+                return;
+            }
+
+            otaInProgress = true;
+            otaStatusQueue.clear();
+            lastOtaStatus = null;
+
+            int totalBytes = firmware.length;
+            callback.onProgress("Starting OTA session...", 0, totalBytes);
+
+            byte[] sha256;
+            try {
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                sha256 = digest.digest(firmware);
+            } catch (NoSuchAlgorithmException e) {
+                otaInProgress = false;
+                callback.onComplete(false, "SHA-256 not available");
+                return;
+            }
+
+            byte[] start = new byte[1 + 4 + 32];
+            start[0] = 0x01;
+            start[1] = (byte) (totalBytes & 0xFF);
+            start[2] = (byte) ((totalBytes >> 8) & 0xFF);
+            start[3] = (byte) ((totalBytes >> 16) & 0xFF);
+            start[4] = (byte) ((totalBytes >> 24) & 0xFF);
+            System.arraycopy(sha256, 0, start, 5, 32);
+
+            if (!writeCharacteristicBlocking(otaControlCharacteristic, start, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT, 8000)) {
+                otaInProgress = false;
+                callback.onComplete(false, "Failed to start OTA session");
+                return;
+            }
+
+            int offset = 0;
+            long lastProgressMs = 0;
+            int chunkSize = Math.max(20, currentMtu - 3);
+            chunkSize = Math.min(chunkSize, 240);
+
+            callback.onProgress("Uploading...", 0, totalBytes);
+
+            while (offset < totalBytes) {
+                int n = Math.min(chunkSize, totalBytes - offset);
+                byte[] chunk = Arrays.copyOfRange(firmware, offset, offset + n);
+
+                if (!writeCharacteristicBlocking(otaDataCharacteristic, chunk, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT, 8000)) {
+                    otaAbortInternal();
+                    otaInProgress = false;
+                    callback.onComplete(false, "OTA write failed at " + offset + " bytes");
+                    return;
+                }
+
+                offset += n;
+
+                long now = System.currentTimeMillis();
+                if (now - lastProgressMs > 250 || offset == totalBytes) {
+                    lastProgressMs = now;
+                    callback.onProgress("Uploading...", offset, totalBytes);
+                }
+            }
+
+            callback.onProgress("Finalizing...", totalBytes, totalBytes);
+            byte[] end = new byte[]{0x03};
+            if (!writeCharacteristicBlocking(otaControlCharacteristic, end, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT, 8000)) {
+                otaInProgress = false;
+                callback.onComplete(false, "Failed to send OTA end command");
+                return;
+            }
+
+            boolean success = waitForOtaTerminalStatus(callback, totalBytes, 25000);
+            otaInProgress = false;
+            if (success) {
+                callback.onComplete(true, "OTA completed successfully");
+            } else {
+                if (!checkConnection()) {
+                    callback.onComplete(true, "OTA completed (device rebooted)");
+                } else {
+                    callback.onComplete(false, "OTA failed or timed out");
+                }
+            }
+        }).start();
+    }
+
+    private boolean waitForOtaTerminalStatus(OtaProgressCallback callback, int totalBytes, long timeoutMs) {
+        long startMs = System.currentTimeMillis();
+        while (System.currentTimeMillis() - startMs < timeoutMs) {
+            try {
+                byte[] pkt = otaStatusQueue.poll(500, TimeUnit.MILLISECONDS);
+                if (pkt == null) {
+                    continue;
+                }
+                if (pkt.length < 3 || pkt[0] != 'O' || pkt[1] != 'T' || pkt[2] != 'A') {
+                    continue;
+                }
+                if (pkt.length < 14) {
+                    continue;
+                }
+                int statusCode = pkt[4] & 0xFF;
+                int received = (pkt[5] & 0xFF) | ((pkt[6] & 0xFF) << 8) | ((pkt[7] & 0xFF) << 16) | ((pkt[8] & 0xFF) << 24);
+                int total = (pkt[9] & 0xFF) | ((pkt[10] & 0xFF) << 8) | ((pkt[11] & 0xFF) << 16) | ((pkt[12] & 0xFF) << 24);
+
+                if (callback != null && totalBytes > 0) {
+                    callback.onProgress("Device received " + received + "/" + total, Math.min(received, totalBytes), totalBytes);
+                }
+
+                if (statusCode == 0x13) { // SUCCESS
+                    return true;
+                }
+                if (statusCode == 0x14 || statusCode == 0x15) { // ERROR / ABORTED
+                    return false;
+                }
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private void otaAbortInternal() {
+        try {
+            if (otaControlCharacteristic != null) {
+                writeCharacteristicBlocking(otaControlCharacteristic, new byte[]{0x02}, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT, 2000);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private boolean writeCharacteristicBlocking(BluetoothGattCharacteristic characteristic, byte[] value, int writeType, long timeoutMs) {
+        if (bluetoothGatt == null || characteristic == null) {
+            return false;
+        }
+
+        pendingWriteStatus = BluetoothGatt.GATT_FAILURE;
+        pendingWriteUuid = characteristic.getUuid();
+        pendingWriteLatch = new CountDownLatch(1);
+
+        characteristic.setWriteType(writeType);
+        characteristic.setValue(value);
+        boolean initiated = bluetoothGatt.writeCharacteristic(characteristic);
+        if (!initiated) {
+            pendingWriteLatch = null;
+            pendingWriteUuid = null;
+            return false;
+        }
+
+        try {
+            boolean ok = pendingWriteLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+            pendingWriteLatch = null;
+            pendingWriteUuid = null;
+            if (!ok) {
+                return false;
+            }
+            return pendingWriteStatus == BluetoothGatt.GATT_SUCCESS;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            pendingWriteLatch = null;
+            pendingWriteUuid = null;
+            return false;
         }
     }
 
