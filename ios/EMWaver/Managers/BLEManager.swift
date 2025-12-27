@@ -2,12 +2,18 @@ import Foundation
 import CoreBluetooth
 import SwiftUI
 import Combine
+import CryptoKit
 
 class BLEManager: NSObject, ObservableObject {
     // MARK: - Published Properties
     @Published var isConnected = false
     @Published var isScanning = false
     @Published var bufferVersion: Int = 0
+
+    @Published var otaIsFlashing: Bool = false
+    @Published var otaProgress: Double = 0
+    @Published var otaStatusText: String = ""
+    @Published var otaErrorText: String? = nil
     
     // MARK: - Utility Methods
     static func dataToHexString(_ data: Data) -> String {
@@ -116,12 +122,26 @@ class BLEManager: NSObject, ObservableObject {
     private let serviceUUID = CBUUID(string: "45c7158e-0c3b-4e90-a847-452a15b14191")
     private let cmdCharUUID = CBUUID(string: "46c7158e-0c3b-4e90-a847-452a15b14191") 
     private let notifCharUUID = CBUUID(string: "47c7158e-0c3b-4e90-a847-452a15b14191")
+
+    // OTA BLE Service and Characteristic UUIDs - matching ESP32 firmware
+    private let otaServiceUUID = CBUUID(string: "45c7158e-0c3b-4e90-a847-452a15b14192")
+    private let otaCtrlCharUUID = CBUUID(string: "45c7158e-0c3b-4e90-a847-452a15b14193")
+    private let otaDataCharUUID = CBUUID(string: "45c7158e-0c3b-4e90-a847-452a15b14194")
+    private let otaStatusCharUUID = CBUUID(string: "45c7158e-0c3b-4e90-a847-452a15b14195")
     
     // MARK: - Private Properties
     private var centralManager: CBCentralManager!
     private var peripheralDevice: CBPeripheral?
     private var cmdCharacteristic: CBCharacteristic?
     private var notifCharacteristic: CBCharacteristic?
+
+    private var otaCtrlCharacteristic: CBCharacteristic?
+    private var otaDataCharacteristic: CBCharacteristic?
+    private var otaStatusCharacteristic: CBCharacteristic?
+
+    private var pendingWriteContinuations: [CBUUID: CheckedContinuation<Void, Error>] = [:]
+    private var canSendWithoutResponseContinuation: CheckedContinuation<Void, Never>?
+    private var otaCompletionContinuation: CheckedContinuation<Void, Error>?
     
     private var buffer = Data()
     private var isNewCommandAvailable = false
@@ -193,6 +213,168 @@ class BLEManager: NSObject, ObservableObject {
         
         centralManager.cancelPeripheralConnection(peripheral)
         print("Disconnecting from EMWaver device")
+    }
+
+    enum OtaError: LocalizedError {
+        case notConnected
+        case otaCharacteristicsNotReady
+        case invalidFirmware
+        case statusTimeout
+        case flashFailed(code: UInt8, err: UInt8)
+        case invalidStatusPacket
+
+        var errorDescription: String? {
+            switch self {
+            case .notConnected:
+                return "Not connected to EMWaver"
+            case .otaCharacteristicsNotReady:
+                return "OTA characteristics not ready"
+            case .invalidFirmware:
+                return "Invalid firmware file"
+            case .statusTimeout:
+                return "Timed out waiting for device status"
+            case .flashFailed(let code, let err):
+                return String(format: "OTA failed (code=0x%02X err=0x%02X)", code, err)
+            case .invalidStatusPacket:
+                return "Invalid OTA status packet"
+            }
+        }
+    }
+
+    struct OtaStatus {
+        let code: UInt8
+        let received: UInt32
+        let total: UInt32
+        let err: UInt8
+    }
+
+    private func parseOtaStatus(_ data: Data) -> OtaStatus? {
+        if data.count != 14 { return nil }
+        let bytes = [UInt8](data)
+        if bytes[0] != 0x4F || bytes[1] != 0x54 || bytes[2] != 0x41 { return nil } // "OTA"
+        if bytes[3] != 1 { return nil }
+
+        let code = bytes[4]
+        let received = UInt32(bytes[5])
+            | (UInt32(bytes[6]) << 8)
+            | (UInt32(bytes[7]) << 16)
+            | (UInt32(bytes[8]) << 24)
+        let total = UInt32(bytes[9])
+            | (UInt32(bytes[10]) << 8)
+            | (UInt32(bytes[11]) << 16)
+            | (UInt32(bytes[12]) << 24)
+        let err = bytes[13]
+
+        return OtaStatus(code: code, received: received, total: total, err: err)
+    }
+
+    private func sha256(_ data: Data) -> Data {
+        let digest = SHA256.hash(data: data)
+        return Data(digest)
+    }
+
+    private func setOtaUi(
+        isFlashing: Bool? = nil,
+        progress: Double? = nil,
+        status: String? = nil,
+        error: String? = nil
+    ) {
+        DispatchQueue.main.async {
+            if let isFlashing { self.otaIsFlashing = isFlashing }
+            if let progress { self.otaProgress = progress }
+            if let status { self.otaStatusText = status }
+            self.otaErrorText = error
+        }
+    }
+
+    private func waitUntil(_ predicate: @escaping () -> Bool, timeoutSeconds: Double) async -> Bool {
+        let start = Date()
+        while Date().timeIntervalSince(start) < timeoutSeconds {
+            if predicate() { return true }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return predicate()
+    }
+
+    private func waitCanSendWriteWithoutResponse() async {
+        guard let peripheral = peripheralDevice else { return }
+        if peripheral.canSendWriteWithoutResponse { return }
+        await withCheckedContinuation { cont in
+            canSendWithoutResponseContinuation = cont
+        }
+    }
+
+    private func writeWithResponse(_ data: Data, to characteristic: CBCharacteristic) async throws {
+        guard let peripheral = peripheralDevice else { throw OtaError.notConnected }
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            pendingWriteContinuations[characteristic.uuid] = cont
+            peripheral.writeValue(data, for: characteristic, type: .withResponse)
+        }
+    }
+
+    func otaFlashFirmware(_ firmware: Data) async throws {
+        guard !firmware.isEmpty else { throw OtaError.invalidFirmware }
+        guard isConnected else { throw OtaError.notConnected }
+
+        let ready = await waitUntil({
+            self.otaCtrlCharacteristic != nil && self.otaDataCharacteristic != nil && self.otaStatusCharacteristic != nil
+        }, timeoutSeconds: 10.0)
+        if !ready { throw OtaError.otaCharacteristicsNotReady }
+
+        guard let ctrl = otaCtrlCharacteristic, let dataChar = otaDataCharacteristic else {
+            throw OtaError.otaCharacteristicsNotReady
+        }
+
+        setOtaUi(isFlashing: true, progress: 0, status: "Preparing OTA…", error: nil)
+        defer {
+            setOtaUi(isFlashing: false)
+        }
+
+        let total = UInt32(firmware.count)
+        let sha = sha256(firmware)
+
+        var startPkt = Data()
+        startPkt.append(0x01)
+        startPkt.append(contentsOf: [
+            UInt8(total & 0xFF),
+            UInt8((total >> 8) & 0xFF),
+            UInt8((total >> 16) & 0xFF),
+            UInt8((total >> 24) & 0xFF),
+        ])
+        startPkt.append(sha)
+
+        setOtaUi(status: "Starting OTA…")
+        try await writeWithResponse(startPkt, to: ctrl)
+
+        setOtaUi(status: "Uploading…")
+
+        let maxLen = peripheralDevice?.maximumWriteValueLength(for: .withoutResponse) ?? 244
+        let chunkSize = min(512, max(1, maxLen))
+        var sent = 0
+
+        for chunk in firmware.chunked(into: chunkSize) {
+            await waitCanSendWriteWithoutResponse()
+            peripheralDevice?.writeValue(chunk, for: dataChar, type: .withoutResponse)
+            sent += chunk.count
+            setOtaUi(progress: min(1.0, Double(sent) / Double(firmware.count)))
+            try? await Task.sleep(nanoseconds: 3_000_000)
+        }
+
+        setOtaUi(status: "Finalizing…")
+        try await writeWithResponse(Data([0x03]), to: ctrl)
+
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            otaCompletionContinuation = cont
+            Task {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                if self.otaCompletionContinuation != nil {
+                    self.otaCompletionContinuation = nil
+                    cont.resume(throwing: OtaError.statusTimeout)
+                }
+            }
+        }
+
+        setOtaUi(progress: 1.0, status: "Done")
     }
     
     @objc func sendPacket(_ data: Data) {
@@ -617,7 +799,7 @@ extension BLEManager: CBCentralManagerDelegate {
         
         // Set delegate and discover services
         peripheral.delegate = self
-        peripheral.discoverServices([serviceUUID])
+        peripheral.discoverServices([serviceUUID, otaServiceUUID])
     }
     
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -654,6 +836,12 @@ extension BLEManager: CBCentralManagerDelegate {
         // --- End Logging ---
 
         print("Disconnected from EMWaver device: \(error?.localizedDescription ?? "No error")")
+
+        pendingWriteContinuations.values.forEach { $0.resume(throwing: OtaError.notConnected) }
+        pendingWriteContinuations.removeAll()
+        otaCompletionContinuation?.resume(throwing: OtaError.notConnected)
+        otaCompletionContinuation = nil
+        setOtaUi(isFlashing: false, status: "Disconnected", error: error?.localizedDescription)
         
         // Try to reconnect if disconnected unexpectedly
         if connectionRetryCount < Self.maxRetryCount && !isReconnecting && error != nil {
@@ -692,6 +880,10 @@ extension BLEManager: CBPeripheralDelegate {
             if service.uuid == serviceUUID {
                 peripheral.discoverCharacteristics([cmdCharUUID, notifCharUUID], for: service)
             }
+
+            if service.uuid == otaServiceUUID {
+                peripheral.discoverCharacteristics([otaCtrlCharUUID, otaDataCharUUID, otaStatusCharUUID], for: service)
+            }
         }
     }
     
@@ -720,6 +912,16 @@ extension BLEManager: CBPeripheralDelegate {
                 
                 // Enable notifications for notification characteristic
                 peripheral.setNotifyValue(true, for: characteristic)
+            } else if characteristic.uuid == otaCtrlCharUUID {
+                otaCtrlCharacteristic = characteristic
+                print("Found OTA control characteristic")
+            } else if characteristic.uuid == otaDataCharUUID {
+                otaDataCharacteristic = characteristic
+                print("Found OTA data characteristic")
+            } else if characteristic.uuid == otaStatusCharUUID {
+                otaStatusCharacteristic = characteristic
+                print("Found OTA status characteristic")
+                peripheral.setNotifyValue(true, for: characteristic)
             }
         }
         
@@ -746,14 +948,39 @@ extension BLEManager: CBPeripheralDelegate {
             
             // Store data in buffer
             storeBulkPkt(data)
+        } else if characteristic.uuid == otaStatusCharUUID {
+            guard let status = parseOtaStatus(data) else {
+                setOtaUi(error: OtaError.invalidStatusPacket.localizedDescription)
+                return
+            }
+
+            let progress = status.total > 0 ? min(1.0, Double(status.received) / Double(status.total)) : 0
+            setOtaUi(
+                progress: progress,
+                status: String(format: "Status 0x%02X (%u/%u)", status.code, status.received, status.total)
+            )
+
+            if status.code == 0x13 {
+                if let cont = otaCompletionContinuation {
+                    otaCompletionContinuation = nil
+                    cont.resume(returning: ())
+                }
+            } else if status.code == 0x14 || status.code == 0x15 {
+                if let cont = otaCompletionContinuation {
+                    otaCompletionContinuation = nil
+                    cont.resume(throwing: OtaError.flashFailed(code: status.code, err: status.err))
+                }
+            }
         }
     }
     
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        if let error = error {
-            print("Write failed: \(error.localizedDescription)")
-        } else {
-            print("Write successful")
+        if let cont = pendingWriteContinuations.removeValue(forKey: characteristic.uuid) {
+            if let error {
+                cont.resume(throwing: error)
+            } else {
+                cont.resume(returning: ())
+            }
         }
     }
     
@@ -764,5 +991,29 @@ extension BLEManager: CBPeripheralDelegate {
             let state = characteristic.isNotifying ? "enabled" : "disabled"
             print("Notifications \(state)")
         }
+    }
+
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
+        if let cont = canSendWithoutResponseContinuation {
+            canSendWithoutResponseContinuation = nil
+            cont.resume(returning: ())
+        }
+    }
+}
+
+private extension Data {
+    func chunked(into size: Int) -> [Data] {
+        guard size > 0 else { return [] }
+        var chunks: [Data] = []
+        chunks.reserveCapacity((count + size - 1) / size)
+
+        var index = startIndex
+        while index < endIndex {
+            let end = self.index(index, offsetBy: size, limitedBy: endIndex) ?? endIndex
+            chunks.append(self[index..<end])
+            index = end
+        }
+
+        return chunks
     }
 }
