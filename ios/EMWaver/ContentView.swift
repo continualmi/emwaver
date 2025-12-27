@@ -71,10 +71,20 @@ struct ContentView: View {
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    FlashTabIcon()
+                    Image("TabFlash").renderingMode(.template)
                     Text("Flash")
                 }
                 .tag("Flash")
+
+                NavigationView {
+                    TemplateView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Image("TabTemplate").renderingMode(.template)
+                    Text("Template")
+                }
+                .tag("Template")
 
                 NavigationView {
                     PacketModeView()
