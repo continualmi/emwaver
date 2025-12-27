@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DiffEditor, Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -64,6 +64,18 @@ type GitDiffContents = {
   original: string;
   modified: string;
   is_binary: boolean;
+};
+
+type NewProjectPayload = {
+  name: string;
+  location: string;
+  target: "esp32s3" | "stm32f042";
+  components: Array<"gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
+  stm32_firmware?: "gpio" | "ir" | "ism" | "rfid" | null;
+};
+
+type CreateProjectResponse = {
+  path: string;
 };
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
@@ -463,6 +475,8 @@ function detectFirmwareProjectKind(entries: DirectoryChildEntry[]): FirmwareProj
 
 export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
@@ -1240,6 +1254,20 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     void ensureRootLoaded();
   }, [ensureRootLoaded]);
 
+  const openRoot = useCallback((nextRoot: string | null) => {
+    setRootDir(nextRoot);
+    setSelectedPath(null);
+    setOpenFiles([]);
+    setActiveFilePath(null);
+    setDirChildren({});
+    setOpenDirs(new Set());
+    setSidebarPanel("explorer");
+    setGitStatus(null);
+    setGitError(null);
+    setGitSelectedDiff(null);
+    setGitDiffContents(null);
+  }, []);
+
   const handlePickFolder = useCallback(async () => {
     const selected = await openDialog({
       directory: true,
@@ -1251,13 +1279,51 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       return;
     }
 
-    setRootDir(selected);
-    setSelectedPath(null);
-    setOpenFiles([]);
-    setActiveFilePath(null);
-    setDirChildren({});
-    setOpenDirs(new Set());
-  }, []);
+    openRoot(selected);
+  }, [openRoot]);
+
+  const handleCloseFolder = useCallback(() => {
+    openRoot(null);
+  }, [openRoot]);
+
+  const handleCreateProject = useCallback(
+    async ({ name, location, target, components, stm32_firmware }: NewProjectPayload) => {
+      const trimmedName = name.trim();
+      const trimmedLocation = location.trim();
+      if (!trimmedName || !trimmedLocation) {
+        return;
+      }
+
+      if (!isTauriAvailable()) {
+        window.alert("Tauri not available - cannot create project");
+        return;
+      }
+
+      setIsCreatingProject(true);
+      try {
+        const response = await safeInvoke<CreateProjectResponse>("create_project", {
+          payload: {
+            name: trimmedName,
+            location: trimmedLocation,
+            target,
+            components,
+            stm32_firmware: stm32_firmware ?? null,
+          },
+        });
+        if (!response) {
+          throw new Error("Tauri not available - cannot create project");
+        }
+        setIsNewProjectModalOpen(false);
+        openRoot(response.path);
+      } catch (error) {
+        console.error(error);
+        window.alert(String(error));
+      } finally {
+        setIsCreatingProject(false);
+      }
+    },
+    [openRoot],
+  );
 
   const appendFirmwareLine = useCallback((line: string) => {
     const label = timestampLabel(new Date());
@@ -1582,6 +1648,15 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     const unlistenShowPromise = safeListen("menu-show-explorer", () => {
       setIsSidebarCollapsed(false);
     });
+    const unlistenCloseFolderPromise = safeListen("menu-close-folder", () => {
+      handleCloseFolder();
+    });
+    const unlistenNewProjectPromise = safeListen("menu-new-project", () => {
+      setIsNewProjectModalOpen(true);
+    });
+    const unlistenOpenProjectPromise = safeListen("menu-open-project", () => {
+      void handlePickFolder();
+    });
     const unlistenOpenFolderPromise = safeListen("menu-ide-open-folder", () => {
       void handlePickFolder();
     });
@@ -1600,13 +1675,16 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     return () => {
       void unlistenTogglePromise.then((unlisten) => unlisten());
       void unlistenShowPromise.then((unlisten) => unlisten());
+      void unlistenCloseFolderPromise.then((unlisten) => unlisten());
+      void unlistenNewProjectPromise.then((unlisten) => unlisten());
+      void unlistenOpenProjectPromise.then((unlisten) => unlisten());
       void unlistenOpenFolderPromise.then((unlisten) => unlisten());
       void unlistenSavePromise.then((unlisten) => unlisten());
       void unlistenFirmwareBuildPromise.then((unlisten) => unlisten());
       void unlistenFirmwareFlashPromise.then((unlisten) => unlisten());
       void unlistenFirmwareBuildFlashPromise.then((unlisten) => unlisten());
     };
-  }, [handleFirmwareBuild, handleFirmwareFlash, handlePickFolder, handleSaveFile]);
+  }, [handleCloseFolder, handleFirmwareBuild, handleFirmwareFlash, handlePickFolder, handleSaveFile]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1693,7 +1771,42 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   );
 
   return (
-	    <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
+    <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
+      {!rootDir ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+          <div className="mx-auto mb-6 h-24 w-24 overflow-hidden rounded-full bg-slate-900/60 shadow-2xl shadow-sky-500/20 ring-2 ring-sky-500/40">
+            <img src="/emwaver-logo.png" alt="EMWaver" className="h-full w-full object-contain p-4" />
+          </div>
+          <h2 className="text-2xl font-semibold text-slate-100">Open or create a project</h2>
+          <p className="mt-2 max-w-lg text-sm text-slate-400">
+            The IDE needs a firmware folder to browse, edit, build, and flash.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsNewProjectModalOpen(true)}
+              className="min-w-[160px] rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
+            >
+              New Project…
+            </button>
+            <button
+              type="button"
+              onClick={() => void handlePickFolder()}
+              className="min-w-[160px] rounded-md border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-900 hover:text-sky-200 cursor-pointer"
+            >
+              Open Folder…
+            </button>
+          </div>
+
+          {isNewProjectModalOpen ? (
+            <NewProjectModal
+              onClose={() => setIsNewProjectModalOpen(false)}
+              onCreate={handleCreateProject}
+              isSubmitting={isCreatingProject}
+            />
+          ) : null}
+        </div>
+      ) : (
 
 	      <div className="flex min-h-0 flex-1 overflow-hidden">
 		        {isSidebarCollapsed ? (
@@ -2509,6 +2622,306 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
             </div>
           </div>
         </main>
+	      </div>
+      )}
+    </div>
+  );
+}
+
+function NewProjectModal({
+  onClose,
+  onCreate,
+  isSubmitting,
+}: {
+  onClose: () => void;
+  onCreate: (payload: NewProjectPayload) => Promise<void> | void;
+  isSubmitting: boolean;
+}) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [target, setTarget] = useState<NewProjectPayload["target"]>("esp32s3");
+
+  const [components, setComponents] = useState<Set<NewProjectPayload["components"][number]>>(() => new Set(["gpio"]));
+  const [stm32Firmware, setStm32Firmware] = useState<
+    Exclude<NewProjectPayload["stm32_firmware"], undefined | null>
+  >(() => "gpio");
+
+  const [name, setName] = useState("emwaver-firmware");
+  const [location, setLocation] = useState("");
+
+  const resetForTarget = useCallback((nextTarget: NewProjectPayload["target"]) => {
+    if (nextTarget === "esp32s3") {
+      setComponents(new Set(["gpio"]));
+    } else {
+      setStm32Firmware("gpio");
+      setComponents(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
+    resetForTarget(target);
+  }, [resetForTarget, target]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || !location.trim()) {
+      return;
+    }
+    const componentList = Array.from(components.values());
+    await onCreate({
+      name: name.trim(),
+      location: location.trim(),
+      target,
+      components: target === "esp32s3" ? componentList : [],
+      stm32_firmware: target === "stm32f042" ? stm32Firmware : null,
+    });
+  };
+
+  const handleBrowse = async () => {
+    if (!isTauriAvailable()) {
+      alert("Tauri not available - file dialogs require Tauri environment");
+      return;
+    }
+    try {
+      const directory = await openDialog({ directory: true });
+      if (typeof directory === "string") {
+        setLocation(directory);
+      }
+    } catch (error) {
+      console.error(error);
+      window.alert(String(error));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+      <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
+          <p className="text-sm text-slate-400">Step {step} of 3</p>
+        </div>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          {step === 1 ? (
+            <div className="space-y-3">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Target</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setTarget("esp32s3")}
+                    className={[
+                      "rounded-md border px-4 py-3 text-left transition-colors",
+                      target === "esp32s3"
+                        ? "border-sky-500/80 bg-sky-500/10 text-slate-100"
+                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-sky-500/60",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold">ESP32-S3</div>
+                    <div className="mt-1 text-xs text-slate-400">BLE-first device; OTA updates.</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTarget("stm32f042")}
+                    className={[
+                      "rounded-md border px-4 py-3 text-left transition-colors",
+                      target === "stm32f042"
+                        ? "border-sky-500/80 bg-sky-500/10 text-slate-100"
+                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-sky-500/60",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold">STM32F042</div>
+                    <div className="mt-1 text-xs text-slate-400">USB-first device; DFU updates.</div>
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="space-y-3">
+              {target === "esp32s3" ? (
+                <div>
+                  <div className="mb-2">
+                    <div className="text-sm font-semibold text-slate-100">Components</div>
+                    <div className="text-xs text-slate-400">Default is GPIO only; add what you need.</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { id: "gpio", label: "GPIO" },
+                        { id: "sampler", label: "Sampler" },
+                        { id: "cc1101", label: "CC1101" },
+                        { id: "rfm69", label: "RFM69" },
+                        { id: "mfrc522", label: "MFRC522" },
+                      ] as const
+                    ).map((item) => {
+                      const checked = components.has(item.id);
+                      return (
+                        <label
+                          key={item.id}
+                          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:border-sky-500/60"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              const nextChecked = event.target.checked;
+                              setComponents((prev) => {
+                                const next = new Set(prev);
+                                if (nextChecked) {
+                                  next.add(item.id);
+                                } else {
+                                  next.delete(item.id);
+                                }
+                                if (next.size === 0) {
+                                  next.add("gpio");
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-2">
+                    <div className="text-sm font-semibold text-slate-100">Base firmware</div>
+                    <div className="text-xs text-slate-400">Default is GPIO.</div>
+                  </div>
+                  <select
+                    value={stm32Firmware}
+                    onChange={(event) =>
+                      setStm32Firmware(event.target.value as Exclude<NewProjectPayload["stm32_firmware"], undefined | null>)
+                    }
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                  >
+                    <option value="gpio">GPIO</option>
+                    <option value="ir">IR</option>
+                    <option value="ism">ISM</option>
+                    <option value="rfid">RFID</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                >
+                  Back
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Project name
+                </label>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                  placeholder="emwaver-firmware"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Location
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={location}
+                    onChange={(event) => setLocation(event.target.value)}
+                    className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                    placeholder="/Users/me/Projects"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBrowse}
+                    className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-400">
+                {target === "esp32s3" ? (
+                  <span>
+                    Target: ESP32-S3 • Components: {Array.from(components.values()).join(", ")}
+                  </span>
+                ) : (
+                  <span>Target: STM32F042 • Base firmware: {stm32Firmware}</span>
+                )}
+              </div>
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                >
+                  Back
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !name.trim() || !location.trim()}
+                    className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? "Creating..." : "Create"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+        </form>
       </div>
     </div>
   );

@@ -847,20 +847,6 @@ function App() {
 
     const register = async () => {
       try {
-        // menu-close-folder is handled by WaveletsFragment now
-
-        disposers.push(
-          await safeListen("menu-new-project", () => {
-            setIsModalOpen(true);
-          }),
-        );
-
-        disposers.push(
-          await safeListen("menu-open-project", () => {
-            void handleOpenProject();
-          }),
-        );
-
         disposers.push(
           await safeListen("menu-show-wavelets", () => {
             handleFragmentClick("wavelets");
@@ -924,7 +910,12 @@ function App() {
         }
       });
     };
-  }, [decreaseLayoutSize, handleOpenProject, handleFragmentClick, increaseLayoutSize, resetLayoutSizes]);
+  }, [
+    decreaseLayoutSize,
+    handleFragmentClick,
+    increaseLayoutSize,
+    resetLayoutSizes,
+  ]);
 
   const isWaveletsActive = activePane === "wavelets";
   const isISMActive = activePane === "ism";
@@ -1471,7 +1462,7 @@ function NewProjectModal({
   onCreate: (payload: NewProjectPayload) => Promise<void> | void;
   isSubmitting: boolean;
 }) {
-  const [name, setName] = useState("New Wavelet");
+  const [name, setName] = useState("emwaver-firmware");
   const [location, setLocation] = useState("");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1507,7 +1498,7 @@ function NewProjectModal({
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
           <p className="text-sm text-slate-400">
-            Configure a local workspace; flashing and syncing hooks will be added later.
+            Creates an ESP32-S3 firmware template (with all built-in components enabled).
           </p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
