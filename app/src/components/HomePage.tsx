@@ -430,7 +430,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
                 <img
                   src={`/device-icons/${deviceIconKey}-icon.png`}
                   alt={`${deviceIconKey} icon`}
-                  className="h-14 w-14 rounded-xl bg-slate-950/30 p-1"
+                  className="h-20 w-20 rounded-2xl bg-slate-950/30 p-1"
                   draggable={false}
                 />
                 <div className="flex flex-col justify-center">
