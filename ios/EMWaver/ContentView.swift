@@ -67,6 +67,16 @@ struct ContentView: View {
                 .tag("Git")
 
                 NavigationView {
+                    FlashView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Image(systemName: "arrow.up.circle")
+                    Text("Flash")
+                }
+                .tag("Flash")
+
+                NavigationView {
                     PacketModeView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
