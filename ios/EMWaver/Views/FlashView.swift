@@ -35,6 +35,12 @@ struct FlashView: View {
                         }
 
                         HStack {
+                            Image("TabEMWaver")
+                                .renderingMode(.template)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                                .foregroundStyle(bleManager.isConnected ? Color.green : Color.gray)
                             Circle()
                                 .fill(bleManager.isConnected ? Color.green : Color.gray)
                                 .frame(width: 12, height: 12)
@@ -176,4 +182,3 @@ struct FlashView: View {
             .environmentObject(BLEManager())
     }
 }
-
