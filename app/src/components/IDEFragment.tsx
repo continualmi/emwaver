@@ -435,10 +435,10 @@ function iconLabelForPath(path: string): { label: string; accentClass: string } 
   if (ext === "ts" || ext === "tsx") return { label: "TS", accentClass: "text-sky-400" };
   if (ext === "js" || ext === "jsx") return { label: "JS", accentClass: "text-amber-300" };
   if (ext === "json") return { label: "{}", accentClass: "text-yellow-200" };
-  if (ext === "md") return { label: "MD", accentClass: "text-slate-300" };
+  if (ext === "md") return { label: "M", accentClass: "text-slate-300" };
   if (ext === "rs") return { label: "RS", accentClass: "text-orange-300" };
   if (ext === "c") return { label: "C", accentClass: "text-sky-300" };
-  if (ext === "h") return { label: "H", accentClass: "text-sky-300" };
+  if (ext === "h") return { label: "H", accentClass: "text-pink-300" };
   if (ext === "toml") return { label: "T", accentClass: "text-slate-300" };
   if (ext === "yml" || ext === "yaml") return { label: "Y", accentClass: "text-emerald-300" };
   if (ext === "sh") return { label: "$", accentClass: "text-emerald-300" };
