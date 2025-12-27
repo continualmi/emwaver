@@ -152,6 +152,26 @@ export default function FlashFragment() {
 
       <div className="flex flex-1 min-h-0 flex-col gap-6 overflow-y-auto px-6 py-6">
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">DFU Mode</h3>
+              <p className="mt-2 text-sm text-slate-200">
+                Set <span className="font-semibold">BOOT0</span> to <span className="font-semibold">FLASH (DFU)</span>, then reconnect USB.
+              </p>
+              <p className="mt-1 text-xs text-slate-400">Use this diagram to confirm the switch position before flashing.</p>
+            </div>
+            <div className="flex justify-center md:justify-end">
+              <img
+                src="/flash-mode.png"
+                alt="BOOT0 switch positions for Flash (DFU) vs Run mode"
+                className="max-h-[220px] w-auto select-none opacity-95"
+                draggable={false}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Firmware</h3>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-2">
