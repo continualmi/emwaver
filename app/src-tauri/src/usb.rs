@@ -1,10 +1,11 @@
-use serialport::{SerialPort, SerialPortInfo, SerialPortType};
+use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortInfo, SerialPortType, StopBits};
 use std::sync::Arc;
 use std::time::Duration;
 use std::io::{Read, Write};
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -53,19 +54,39 @@ impl USBState {
                 usb.append(&mut other);
             }
 
-            usb.sort_by(|a, b| a.port_name.cmp(&b.port_name));
-            Ok(usb.into_iter().map(|p| p.port_name).collect())
+            let mut names: Vec<String> = usb.into_iter().map(|p| p.port_name).collect();
+
+            // macOS has both /dev/tty.* and /dev/cu.* entries for the same device. The tty device
+            // can behave like a "call-in" device and appear unresponsive for outbound use. Prefer cu.
+            #[cfg(target_os = "macos")]
+            {
+                let set: HashSet<String> = names.iter().cloned().collect();
+                names.retain(|n| {
+                    if let Some(rest) = n.strip_prefix("/dev/tty.") {
+                        !set.contains(&format!("/dev/cu.{}", rest))
+                    } else {
+                        true
+                    }
+                });
+            }
+
+            names.sort();
+            Ok(names)
         })
         .await
         .map_err(|e| format!("Task failed: {}", e))?
     }
 
     pub async fn connect(&self, port_name: String) -> Result<(), String> {
-        let port_name_clone = port_name.clone();
+        let port_name_for_open = Self::normalize_port_name_for_platform(&port_name);
         
         // Open port in blocking task
         let port = spawn_blocking(move || {
-            serialport::new(port_name_clone, 115200)
+            let mut port = serialport::new(port_name_for_open, 115200)
+                .data_bits(DataBits::Eight)
+                .parity(Parity::None)
+                .stop_bits(StopBits::One)
+                .flow_control(FlowControl::None)
                 .timeout(Duration::from_millis(100))
                 .open()
                 .map_err(|e| {
@@ -83,7 +104,12 @@ impl USBState {
                     } else {
                         format!("Failed to open port: {}", message)
                     }
-                })
+                })?;
+
+            // Many CDC devices expect DTR/RTS asserted by the host.
+            let _ = port.write_data_terminal_ready(true);
+            let _ = port.write_request_to_send(true);
+            Ok::<Box<dyn SerialPort + Send>, String>(port)
         })
         .await
         .map_err(|e| format!("Task failed: {}", e))??;
@@ -210,6 +236,16 @@ impl USBState {
         } else {
             Err("Not connected".to_string())
         }
+    }
+
+    fn normalize_port_name_for_platform(port_name: &str) -> String {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(rest) = port_name.strip_prefix("/dev/tty.") {
+                return format!("/dev/cu.{rest}");
+            }
+        }
+        port_name.to_string()
     }
 
     fn looks_like_ascii_command(data: &[u8]) -> bool {
