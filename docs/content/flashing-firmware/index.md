@@ -42,3 +42,15 @@ Pick the guide that matches your device family:
 
 - [STM32 (STM32F042)](stm32.md)
 - [ESP32 (ESP32-S3)](esp32.md)
+
+## Web Flasher (ESP32 Stock Firmware)
+
+Flash the **ESP32-S3 stock firmware** directly from your browser (WebSerial). Works best in Chrome or Edge on desktop and requires a USB connection.
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+<esp-web-install-button manifest="../assets/firmware/esp32s3/manifest.json"></esp-web-install-button>
+
+Manual download:
+
+- [emwaveresp-merged.bin](../assets/firmware/esp32s3/emwaveresp-merged.bin)

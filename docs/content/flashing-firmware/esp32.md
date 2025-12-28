@@ -25,6 +25,18 @@ All ESP32 devices use the same **ESP32-S3** MCU, so the flashing workflow is the
 [![EMWavers YouTube Channel](../assets/emwavers-youtube-channel.jpg){ .emw-icon width="28" }](https://www.youtube.com/@EMWavers)
 [EMWavers YouTube Channel](https://www.youtube.com/@EMWavers){ .md-button .md-button--primary }
 
+## Web Flasher (WebSerial)
+
+Flash the **stock ESP32-S3 firmware** directly from your browser (WebSerial). Works best in Chrome or Edge on desktop and requires a USB connection.
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+<esp-web-install-button manifest="../../assets/firmware/esp32s3/manifest.json"></esp-web-install-button>
+
+## Stock Firmware Download
+
+- [emwaveresp-merged.bin](../assets/firmware/esp32s3/emwaveresp-merged.bin)
+
 ## Linux
 
 ### 1) Install ESP-IDF
