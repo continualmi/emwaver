@@ -402,11 +402,25 @@ function SamplerFragment() {
     const resolveSignalsDir = async () => {
       const root = await appDataDir();
       const dir = await safeJoin(root, SIGNALS_DIR_NAME);
-      await safeInvoke<void>('ensure_dir', { payload: { path: dir } });
+      await safeInvoke<void>('ensure_dir', { payload: { path: dir } }, { throwOnError: true });
       setSignalsDir(dir);
     };
     void resolveSignalsDir();
   }, []);
+
+  const ensureSignalsDir = useCallback(async (): Promise<string | null> => {
+    if (!isTauriAvailable()) {
+      return null;
+    }
+    if (signalsDir) {
+      return signalsDir;
+    }
+    const root = await appDataDir();
+    const dir = await safeJoin(root, SIGNALS_DIR_NAME);
+    await safeInvoke<void>('ensure_dir', { payload: { path: dir } }, { throwOnError: true });
+    setSignalsDir(dir);
+    return dir;
+  }, [signalsDir]);
 
   // Define refreshChart callback first (before useEffects that depend on it)
   const refreshChart = useCallback(
@@ -652,9 +666,11 @@ function SamplerFragment() {
         return;
       }
 
-      const data = await safeInvoke<number[]>('read_binary_file', {
-        payload: { path: entry.path },
-      });
+      const data = await safeInvoke<number[]>(
+        'read_binary_file',
+        { payload: { path: entry.path } },
+        { throwOnError: true },
+      );
       if (!data || data.length === 0) {
         alert('Signal file is empty');
         return;
@@ -680,7 +696,8 @@ function SamplerFragment() {
       return;
     }
 
-    if (!signalsDir) {
+    const dir = await ensureSignalsDir();
+    if (!dir) {
       alert('Signals storage is not available');
       return;
     }
@@ -693,10 +710,12 @@ function SamplerFragment() {
     const fileName = normalizeSignalName(entered || defaultName, defaultName);
 
     try {
-      const targetPath = await safeJoin(signalsDir, fileName);
-      await safeInvoke<void>('write_binary_file', {
-        payload: { path: targetPath, data: Array.from(buffer) },
-      });
+      const targetPath = await safeJoin(dir, fileName);
+      await safeInvoke<void>(
+        'write_binary_file',
+        { payload: { path: targetPath, data: Array.from(buffer) } },
+        { throwOnError: true },
+      );
       setCurrentSignalName(fileName);
       setHasUnsavedChanges(false);
       localStorage.setItem(LAST_SIGNAL_KEY, fileName);
@@ -707,6 +726,48 @@ function SamplerFragment() {
       alert('Failed to save signal');
     }
   };
+
+  const revealSignalsFolder = useCallback(async () => {
+    const dir = await ensureSignalsDir();
+    if (!dir) {
+      alert('Signals storage is not available');
+      return;
+    }
+    try {
+      await safeInvoke<void>(
+        'reveal_in_finder',
+        { payload: { path: dir } },
+        { throwOnError: true },
+      );
+    } catch (error) {
+      console.error('Failed to reveal signals folder:', error);
+      alert('Failed to open signals folder');
+    }
+  }, [ensureSignalsDir]);
+
+  const revealCurrentSignal = useCallback(async () => {
+    const dir = await ensureSignalsDir();
+    if (!dir) {
+      alert('Signals storage is not available');
+      return;
+    }
+    if (!currentSignalName) {
+      alert('No signal selected');
+      return;
+    }
+    try {
+      const entry = signalEntries.find((item) => item.name === currentSignalName);
+      const path = entry?.path ?? (await safeJoin(dir, currentSignalName));
+      await safeInvoke<void>(
+        'reveal_in_finder',
+        { payload: { path } },
+        { throwOnError: true },
+      );
+    } catch (error) {
+      console.error('Failed to reveal signal file:', error);
+      alert('Failed to open signal file');
+    }
+  }, [currentSignalName, ensureSignalsDir, signalEntries]);
 
   const importSignal = async () => {
     try {
@@ -726,14 +787,17 @@ function SamplerFragment() {
             return;
           }
 
-          const defaultName = selectedFile.name || generateNewSignalName();
-          const fileName = normalizeSignalName(defaultName, generateNewSignalName());
-          if (signalsDir) {
-            const targetPath = await safeJoin(signalsDir, fileName);
-            await safeInvoke<void>('write_binary_file', {
-              payload: { path: targetPath, data: Array.from(buffer) },
-            });
-          }
+	          const defaultName = selectedFile.name || generateNewSignalName();
+	          const fileName = normalizeSignalName(defaultName, generateNewSignalName());
+	          const dir = await ensureSignalsDir();
+	          if (dir) {
+	            const targetPath = await safeJoin(dir, fileName);
+	            await safeInvoke<void>(
+	              'write_binary_file',
+	              { payload: { path: targetPath, data: Array.from(buffer) } },
+	              { throwOnError: true },
+	            );
+	          }
 
           bufferRef.current.loadBuffer(buffer);
           lastBufferSizeRef.current = bufferRef.current.getBufferLength();
@@ -771,9 +835,11 @@ function SamplerFragment() {
       }
 
       const loadSignals = async () => {
-        const entries = await safeInvoke<DirectoryEntry[]>('read_directory', {
-          payload: { path: signalsDir },
-        });
+        const entries = await safeInvoke<DirectoryEntry[]>(
+          'read_directory',
+          { payload: { path: signalsDir } },
+          { throwOnError: true },
+        );
         const files = (entries || []).filter(
           (entry) => entry.kind === 'file' && entry.name.toLowerCase().endsWith('.raw')
         );
@@ -853,15 +919,17 @@ function SamplerFragment() {
       alert('Signal file not found');
       return;
     }
-    const targetPath = await safeJoin(signalsDir, normalized);
-    try {
-      await safeInvoke<void>('rename_path', {
-        payload: { from: entry.path, to: targetPath },
-      });
-      setCurrentSignalName(normalized);
-      setHasUnsavedChanges(false);
-      localStorage.setItem(LAST_SIGNAL_KEY, normalized);
-      refreshSignalList();
+	    const targetPath = await safeJoin(signalsDir, normalized);
+	    try {
+	      await safeInvoke<void>(
+	        'rename_path',
+	        { payload: { from: entry.path, to: targetPath } },
+	        { throwOnError: true },
+	      );
+	      setCurrentSignalName(normalized);
+	      setHasUnsavedChanges(false);
+	      localStorage.setItem(LAST_SIGNAL_KEY, normalized);
+	      refreshSignalList();
       alert('Signal renamed');
     } catch (error) {
       console.error('Failed to rename signal:', error);
@@ -883,13 +951,17 @@ function SamplerFragment() {
     if (!confirmed) {
       return;
     }
-    const currentIndex = signalEntries.findIndex((item) => item.name === currentSignalName);
-    try {
-      await safeInvoke<void>('remove_path', { payload: { path: entry.path } });
-      let nextSignal: string | null = null;
-      if (signalEntries.length > 1 && currentIndex >= 0) {
-        if (currentIndex < signalEntries.length - 1) {
-          nextSignal = signalEntries[currentIndex + 1].name;
+	    const currentIndex = signalEntries.findIndex((item) => item.name === currentSignalName);
+	    try {
+	      await safeInvoke<void>(
+	        'remove_path',
+	        { payload: { path: entry.path } },
+	        { throwOnError: true },
+	      );
+	      let nextSignal: string | null = null;
+	      if (signalEntries.length > 1 && currentIndex >= 0) {
+	        if (currentIndex < signalEntries.length - 1) {
+	          nextSignal = signalEntries[currentIndex + 1].name;
         } else {
           nextSignal = signalEntries[0].name;
         }
@@ -1043,6 +1115,19 @@ function SamplerFragment() {
             className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
           >
             Save
+          </button>
+          <button
+            onClick={revealCurrentSignal}
+            disabled={!currentSignalName}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Show File
+          </button>
+          <button
+            onClick={revealSignalsFolder}
+            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+          >
+            Show Folder
           </button>
           <button
             onClick={renameSignal}
