@@ -128,6 +128,10 @@ public class BLEService extends Service implements DeviceConnectionService {
         void onComplete(boolean success, String message);
     }
 
+    public interface SimpleCallback {
+        void onComplete(boolean success, String message);
+    }
+
     // Variables for speed calculation
     private long totalBytesReceived = 0;
     private long firstPacketTimeMillis = 0;
@@ -1040,7 +1044,7 @@ public class BLEService extends Service implements DeviceConnectionService {
         }).start();
     }
 
-    private boolean waitForOtaTerminalStatus(OtaProgressCallback callback, int totalBytes, long timeoutMs) {
+    public boolean waitForOtaTerminalStatus(OtaProgressCallback callback, int totalBytes, long timeoutMs) {
         long startMs = System.currentTimeMillis();
         while (System.currentTimeMillis() - startMs < timeoutMs) {
             try {
@@ -1074,6 +1078,71 @@ public class BLEService extends Service implements DeviceConnectionService {
             }
         }
         return false;
+    }
+
+    public void otaWifiStart(SimpleCallback callback) {
+        if (callback == null) {
+            return;
+        }
+
+        new Thread(() -> {
+            if (!checkConnection() || bluetoothGatt == null) {
+                callback.onComplete(false, "Not connected over BLE");
+                return;
+            }
+
+            if (otaControlCharacteristic == null) {
+                callback.onComplete(false, "OTA control characteristic not available");
+                return;
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (ActivityCompat.checkSelfPermission(BLEService.this, Manifest.permission.BLUETOOTH_CONNECT)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    callback.onComplete(false, "Missing BLUETOOTH_CONNECT permission");
+                    return;
+                }
+            }
+
+            boolean ok = writeCharacteristicBlocking(
+                otaControlCharacteristic,
+                new byte[]{0x10},
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+                8000
+            );
+            callback.onComplete(ok, ok ? "WiFi OTA mode started" : "Failed to start WiFi OTA mode");
+        }).start();
+    }
+
+    public void otaWifiStop(SimpleCallback callback) {
+        if (callback == null) {
+            return;
+        }
+
+        new Thread(() -> {
+            if (!checkConnection() || bluetoothGatt == null) {
+                callback.onComplete(false, "Not connected over BLE");
+                return;
+            }
+
+            if (otaControlCharacteristic == null) {
+                callback.onComplete(false, "OTA control characteristic not available");
+                return;
+            }
+
+            boolean ok = writeCharacteristicBlocking(
+                otaControlCharacteristic,
+                new byte[]{0x11},
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+                8000
+            );
+            callback.onComplete(ok, ok ? "WiFi OTA mode stopped" : "Failed to stop WiFi OTA mode");
+        }).start();
+    }
+
+    public void otaClearStatusQueue() {
+        otaStatusQueue.clear();
+        lastOtaStatus = null;
     }
 
     private void otaAbortInternal() {

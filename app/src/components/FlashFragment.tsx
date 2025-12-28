@@ -40,6 +40,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
   const [selectedFirmware, setSelectedFirmware] = useState<FirmwareOption["id"]>("ism");
   const [externalFilePath, setExternalFilePath] = useState<string | null>(null);
   const [otaFilePath, setOtaFilePath] = useState<string | null>(null);
+  const [otaTransport, setOtaTransport] = useState<"ble" | "wifi">("ble");
   const [dfuConnected, setDfuConnected] = useState<boolean>(false);
   const [bleConnected, setBleConnected] = useState<boolean>(false);
   const [bleDeviceLabel, setBleDeviceLabel] = useState<string | null>(null);
@@ -223,8 +224,13 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
     setProgressLines([]);
 
     try {
-      appendProgress("Starting ESP32 BLE OTA flash...");
-      await safeInvoke("ble_ota_flash_file", { path: otaFilePath }, { throwOnError: true });
+      if (otaTransport === "ble") {
+        appendProgress("Starting ESP32 BLE OTA flash...");
+        await safeInvoke("ble_ota_flash_file", { path: otaFilePath }, { throwOnError: true });
+      } else {
+        appendProgress("Starting ESP32 WiFi OTA flash...");
+        await safeInvoke("ota_wifi_flash_file", { path: otaFilePath }, { throwOnError: true });
+      }
       appendProgress("OTA completed successfully!");
     } catch (error) {
       console.error(error);
@@ -233,7 +239,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
       setIsFlashing(false);
       void refreshBleStatus();
     }
-  }, [appendProgress, bleConnected, otaFilePath, refreshBleStatus]);
+  }, [appendProgress, bleConnected, otaFilePath, otaTransport, refreshBleStatus]);
 
   const handleOtaFlashStock = useCallback(async () => {
     if (!bleConnected) {
@@ -245,8 +251,13 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
     setProgressLines([]);
 
     try {
-      appendProgress("Starting ESP32 stock BLE OTA flash...");
-      await safeInvoke("ble_ota_flash_stock", {}, { throwOnError: true });
+      if (otaTransport === "ble") {
+        appendProgress("Starting ESP32 stock BLE OTA flash...");
+        await safeInvoke("ble_ota_flash_stock", {}, { throwOnError: true });
+      } else {
+        appendProgress("Starting ESP32 stock WiFi OTA flash...");
+        await safeInvoke("ota_wifi_flash_stock", {}, { throwOnError: true });
+      }
       appendProgress("OTA completed successfully!");
     } catch (error) {
       console.error(error);
@@ -255,7 +266,37 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
       setIsFlashing(false);
       void refreshBleStatus();
     }
-  }, [appendProgress, bleConnected, refreshBleStatus]);
+  }, [appendProgress, bleConnected, otaTransport, refreshBleStatus]);
+
+  const handleOtaWifiStart = useCallback(async () => {
+    if (!bleConnected) {
+      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
+      return;
+    }
+    try {
+      appendProgress("Starting WiFi OTA mode (SoftAP)...");
+      await safeInvoke("ota_wifi_start", {}, { throwOnError: true });
+      appendProgress("WiFi OTA mode started. Connect this computer to Wi‑Fi 'EMWaver-OTA' then flash.");
+    } catch (error) {
+      console.error(error);
+      appendProgress(`Failed to start WiFi OTA mode: ${String(error)}`);
+    }
+  }, [appendProgress, bleConnected]);
+
+  const handleOtaWifiStop = useCallback(async () => {
+    if (!bleConnected) {
+      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
+      return;
+    }
+    try {
+      appendProgress("Stopping WiFi OTA mode...");
+      await safeInvoke("ota_wifi_stop", {}, { throwOnError: true });
+      appendProgress("WiFi OTA mode stopped.");
+    } catch (error) {
+      console.error(error);
+      appendProgress(`Failed to stop WiFi OTA mode: ${String(error)}`);
+    }
+  }, [appendProgress, bleConnected]);
 
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
@@ -373,10 +414,43 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
         </div>
 
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">ESP32 OTA (BLE)</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">ESP32 OTA</h3>
           <p className="mt-2 text-sm text-slate-200">
-            Uploads an ESP32 firmware <span className="font-semibold">.bin</span> over BLE OTA (desktop only for now).
+            Uploads an ESP32 firmware <span className="font-semibold">.bin</span> over BLE (slow) or Wi‑Fi SoftAP (fast).
           </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <label className="text-sm font-medium text-slate-100">Transport</label>
+            <select
+              value={otaTransport}
+              disabled={isFlashing}
+              onChange={(event) => setOtaTransport(event.target.value as "ble" | "wifi")}
+              className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
+            >
+              <option value="ble">BLE OTA</option>
+              <option value="wifi">Wi‑Fi OTA (SoftAP)</option>
+            </select>
+            {otaTransport === "wifi" ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isFlashing || !bleConnected}
+                  onClick={() => void handleOtaWifiStart()}
+                  className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Start Wi‑Fi OTA Mode
+                </button>
+                <button
+                  type="button"
+                  disabled={isFlashing || !bleConnected}
+                  onClick={() => void handleOtaWifiStop()}
+                  className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Stop
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-2">
@@ -394,7 +468,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-slate-100">Device</p>
               <p className="text-xs text-slate-400">
-                Requires an active BLE connection (use the BLE page to connect, then come back here).
+                Requires an active BLE connection. For Wi‑Fi mode, connect BLE first, start SoftAP, then join Wi‑Fi.
               </p>
               <div className="mt-auto grid grid-cols-1 gap-2">
                 <button

@@ -36,6 +36,14 @@ pub enum CodegenMode {
     Never,
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum OtaTransport {
+    /// OTA over BLE (works anywhere, slower).
+    Ble,
+    /// OTA over Wi‑Fi SoftAP (faster; requires connecting to EMWaver-OTA Wi‑Fi).
+    Wifi,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Open an interactive shell to a nearby EMWaver device.
@@ -59,6 +67,9 @@ pub enum Command {
         /// BLE device name to scan for (defaults to EMWaver).
         #[arg(long, default_value = "EMWaver")]
         device_name: String,
+        /// OTA transport to use (defaults to BLE).
+        #[arg(long, value_enum, default_value_t = OtaTransport::Ble)]
+        transport: OtaTransport,
         /// Chunk size in bytes (defaults to 200).
         #[arg(long, default_value_t = 200)]
         chunk_size: usize,
