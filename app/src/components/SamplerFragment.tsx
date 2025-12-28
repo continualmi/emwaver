@@ -242,6 +242,7 @@ function SamplerFragment() {
     timeValues: [],
     dataValues: [],
   });
+  const [samplerBackend, setSamplerBackend] = useState<'rust' | 'js'>('js');
   const [chartError] = useState<string | null>(null);
   
   // Settings state
@@ -466,6 +467,24 @@ function SamplerFragment() {
           }
           lastChartViewportKeyRef.current = viewportKey;
 
+          // If Rust returned no samples but JS buffer has data, fall back so the chart is never blank.
+          if ((result.time_values?.length ?? 0) === 0 && bufferRef.current.getBufferLength() > 0) {
+            setSamplerBackend('js');
+            const jsBufferBytes = bufferRef.current.getBufferLength();
+            const jsChartMaxX = jsBufferBytes * 8;
+            const { visibleRangeStart: jsStart, visibleRangeEnd: jsEnd } = computeVisibleRangeBits(chart, jsChartMaxX);
+            const compressed = bufferRef.current.compressDataBits(jsStart, jsEnd, requestedBins);
+            setChartData(compressed);
+            if (chart.options?.scales?.x) {
+              chart.options.scales.x.max = jsChartMaxX || 10000;
+              if (chart.options.plugins?.zoom?.limits?.x) {
+                chart.options.plugins.zoom.limits.x.max = jsChartMaxX || 10000;
+              }
+            }
+            return;
+          }
+
+          setSamplerBackend('rust');
           setChartData({ timeValues: result.time_values, dataValues: result.data_values });
 
           const chartMaxX = bufferBytes * 8;
@@ -478,6 +497,14 @@ function SamplerFragment() {
         })
         .catch((error) => {
           console.error('Failed to refresh chart (rust sampler):', error);
+          // Hard fallback to JS path if Rust invoke fails.
+          setSamplerBackend('js');
+          const jsBufferBytes = bufferRef.current.getBufferLength();
+          const jsChartMaxX = jsBufferBytes * 8;
+          const { visibleRangeStart: jsStart, visibleRangeEnd: jsEnd } = computeVisibleRangeBits(chart, jsChartMaxX);
+          const bins = getEffectiveBins(chartResolution);
+          const compressed = bufferRef.current.compressDataBits(jsStart, jsEnd, bins);
+          setChartData(compressed);
         })
         .finally(() => {
           chartRefreshInFlightRef.current = false;
@@ -570,16 +597,16 @@ function SamplerFragment() {
     const notificationListener = (data: Uint8Array, timestamp: number) => {
       // Append all notification data to buffer
       if (data.length > 0) {
+        // Always keep JS buffer updated so the chart can render even if the Rust path fails.
+        bufferRef.current.append(data);
         if (useRustSampler) {
           pendingAppendChunksRef.current.push(new Uint8Array(data));
-	        } else {
-	          bufferRef.current.append(data);
 	        }
 	        if (isRecording) {
 	          setHasUnsavedChanges(true);
 	        }
-	      }
-	    };
+      }
+    };
 
     addNotificationListener(notificationListener);
     return () => {
@@ -1362,6 +1389,12 @@ function SamplerFragment() {
       <div className="flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto px-6 py-6">
         {/* Chart */}
         <div className="flex-shrink-0 bg-slate-900 rounded-lg p-4">
+          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+            <div>Backend: {useRustSampler ? samplerBackend : 'js'}</div>
+            <div>JS bytes: {bufferRef.current.getBufferLength()}</div>
+            {useRustSampler ? <div>Rust bytes: {rustBufferSizeRef.current}</div> : null}
+            <div>Queued chunks: {pendingAppendChunksRef.current.length}</div>
+          </div>
           <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
             {chartError ? (
               <div className="flex h-full items-center justify-center text-slate-400">
