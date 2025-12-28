@@ -1,0 +1,12 @@
+{
+  "name": "EMWaver (ESP32-S3) Stock Firmware",
+  "version": "stock",
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "emwaveresp-merged.bin", "offset": 0 }
+      ]
+    }
+  ]
+}
