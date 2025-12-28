@@ -63,6 +63,9 @@ const SETTINGS_EVENT = 'emwaver-settings-change';
 const DEFAULT_PWM_FREQ_HZ = 38000;
 const DEFAULT_PWM_DUTY_PERCENT = 50;
 const SIGNALS_DIR_NAME = 'signals';
+const MAX_CHART_BINS = 5000;
+const MIN_CHART_BINS = 100;
+const MIN_CHART_RENDER_INTERVAL_MS = 120;
 
 const ESP32_PINS = [
   'IO1 DIO0[S]/GDO0[F]',
@@ -251,6 +254,9 @@ function SamplerFragment() {
   const chartRef = useRef<any>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const lastBufferSizeRef = useRef(0);
+  const lastChartRenderAtRef = useRef(0);
+  const lastChartViewportKeyRef = useRef<string>('');
+  const pendingChartRefreshRef = useRef<number | null>(null);
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
   const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
@@ -312,6 +318,65 @@ function SamplerFragment() {
     localStorage.setItem(SETTINGS_MAX_SAMPLES_KEY, `${maxSamples}`);
   }, [maxSamples]);
 
+  const getEffectiveBins = useCallback((requested: number) => {
+    const value = Math.trunc(Number(requested) || 0);
+    if (!Number.isFinite(value) || value <= 0) {
+      return MIN_CHART_BINS;
+    }
+    return Math.max(MIN_CHART_BINS, Math.min(MAX_CHART_BINS, value));
+  }, []);
+
+  const computeVisibleRangeBits = useCallback((chart: any, chartMaxX: number) => {
+    let visibleRangeStart = 0;
+    let visibleRangeEnd = chartMaxX;
+
+    try {
+      const xScale = chart?.scales?.x;
+      if (xScale) {
+        visibleRangeStart = Math.max(0, Math.floor(xScale.min));
+        visibleRangeEnd = Math.min(chartMaxX, Math.floor(xScale.max));
+      }
+    } catch {
+      visibleRangeStart = 0;
+      visibleRangeEnd = chartMaxX;
+    }
+
+    if (visibleRangeEnd < visibleRangeStart) {
+      return { visibleRangeStart: 0, visibleRangeEnd: chartMaxX };
+    }
+
+    return { visibleRangeStart, visibleRangeEnd };
+  }, []);
+
+  const performChartRefresh = useCallback((chartInstance?: any) => {
+    const chart = chartInstance || chartRef.current;
+    if (!chart) return;
+
+    const bufferBytes = bufferRef.current.getBufferLength();
+    const chartMaxX = bufferBytes * 8;
+    const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
+    const bins = getEffectiveBins(chartResolution);
+
+    const viewportKey = `${bufferBytes}:${visibleRangeStart}:${visibleRangeEnd}:${bins}`;
+    if (viewportKey === lastChartViewportKeyRef.current) {
+      return;
+    }
+    lastChartViewportKeyRef.current = viewportKey;
+
+    const compressed = bufferRef.current.compressDataBits(visibleRangeStart, visibleRangeEnd, bins);
+    setChartData(compressed);
+  }, [chartResolution, computeVisibleRangeBits, getEffectiveBins]);
+
+  const scheduleChartRefresh = useCallback((chartInstance?: any) => {
+    if (pendingChartRefreshRef.current != null) {
+      window.clearTimeout(pendingChartRefreshRef.current);
+    }
+    pendingChartRefreshRef.current = window.setTimeout(() => {
+      pendingChartRefreshRef.current = null;
+      performChartRefresh(chartInstance);
+    }, 50);
+  }, [performChartRefresh]);
+
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ scope?: string }>).detail;
@@ -344,37 +409,12 @@ function SamplerFragment() {
   }, []);
 
   // Define refreshChart callback first (before useEffects that depend on it)
-  const refreshChart = useCallback((chartInstance?: any) => {
-    const chart = chartInstance || chartRef.current;
-    if (!chart) return;
-
-    const currentBufferSize = bufferRef.current.getBufferLength();
-    const chartMaxX = currentBufferSize * 8;
-    
-    // Get visible range from chart if available
-    let visibleRangeStart = 0;
-    let visibleRangeEnd = chartMaxX;
-    
-    try {
-      const xScale = chart.scales?.x;
-      if (xScale) {
-        visibleRangeStart = Math.max(0, Math.floor(xScale.min));
-        visibleRangeEnd = Math.min(chartMaxX, Math.floor(xScale.max));
-      }
-    } catch (e) {
-      // Chart not fully initialized
-      visibleRangeStart = 0;
-      visibleRangeEnd = chartMaxX;
-    }
-
-    const compressed = bufferRef.current.compressDataBits(
-      visibleRangeStart,
-      visibleRangeEnd,
-      chartResolution
-    );
-
-    setChartData(compressed);
-  }, [chartResolution]);
+  const refreshChart = useCallback(
+    (chartInstance?: any) => {
+      scheduleChartRefresh(chartInstance);
+    },
+    [scheduleChartRefresh],
+  );
 
   // Listen for BLE notifications via context and accumulate buffer
   useEffect(() => {
@@ -407,6 +447,11 @@ function SamplerFragment() {
     }
 
     const refreshChartLoop = () => {
+      const now = Date.now();
+      if (now - lastChartRenderAtRef.current < MIN_CHART_RENDER_INTERVAL_MS) {
+        return;
+      }
+
       const currentBufferSize = bufferRef.current.getBufferLength();
       
       // Check buffer size limit
@@ -426,30 +471,25 @@ function SamplerFragment() {
       const chart = chartRef.current;
       if (!chart) return;
 
+      lastChartRenderAtRef.current = now;
+
       // Update chart max X (matches Android: chartMaxX = currentBufferSize * 8)
       const chartMaxX = currentBufferSize * 8;
       
-      // Get visible range from chart (matches Android: chart.getLowestVisibleX/HighestVisibleX)
-      let visibleRangeStart = 0;
-      let visibleRangeEnd = chartMaxX;
-      
-      try {
-        const xScale = chart.scales?.x;
-        if (xScale) {
-          visibleRangeStart = Math.max(0, Math.floor(xScale.min));
-          visibleRangeEnd = Math.min(chartMaxX, Math.floor(xScale.max));
-        }
-      } catch (e) {
-        // Chart not fully initialized yet
-        visibleRangeStart = 0;
-        visibleRangeEnd = chartMaxX;
+      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
+      const bins = getEffectiveBins(chartResolution);
+
+      const viewportKey = `${currentBufferSize}:${visibleRangeStart}:${visibleRangeEnd}:${bins}`;
+      if (viewportKey === lastChartViewportKeyRef.current && !isRecording) {
+        return;
       }
+      lastChartViewportKeyRef.current = viewportKey;
 
       // Compress data (matches C++ compressDataBits exactly)
       const compressed = bufferRef.current.compressDataBits(
         visibleRangeStart,
         visibleRangeEnd,
-        chartResolution
+        bins
       );
 
       // Update chart data - always set even if empty to trigger re-render
@@ -474,7 +514,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-  }, [isConnected, isRecording, chartResolution, maxSamples, refreshRate]);
+  }, [computeVisibleRangeBits, getEffectiveBins, isConnected, isRecording, chartResolution, maxSamples, refreshRate]);
 
   const startRecording = async () => {
     if (!isConnected) {
