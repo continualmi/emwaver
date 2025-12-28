@@ -562,7 +562,10 @@ public class FlashFragment extends Fragment {
         if (progressDialog != null && progressDialog.isShowing()) {
             getActivity().runOnUiThread(() -> {
                 progressTextView.setText(message);
-                if (message.contains("completed") || message.contains("Error")) {
+                if (message.contains("completed") ||
+                        message.contains("Error") ||
+                        message.startsWith("OK:") ||
+                        message.contains("Connect to Wi‑Fi")) {
                     progressBar.setVisibility(View.GONE);
                     okButton.setVisibility(View.VISIBLE);
                 } else {
@@ -643,6 +646,7 @@ public class FlashFragment extends Fragment {
     }
 
     private void openWifiSettings() {
+        dismissProgressDialog();
         try {
             startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
         } catch (Exception e) {
