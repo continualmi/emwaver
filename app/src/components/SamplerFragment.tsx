@@ -285,7 +285,6 @@ function SamplerFragment() {
   const lastChartViewportKeyRef = useRef<string>('');
   const pendingChartRefreshRef = useRef<number | null>(null);
   const pendingAppendChunksRef = useRef<Uint8Array[]>([]);
-  const pendingAppendTimerRef = useRef<number | null>(null);
   const chartRefreshInFlightRef = useRef(false);
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
@@ -372,11 +371,24 @@ function SamplerFragment() {
     try {
       const xScale = chart?.scales?.x;
       if (xScale) {
-        visibleRangeStart = Math.max(0, Math.floor(xScale.min));
-        visibleRangeEnd = Math.min(chartMaxX, Math.floor(xScale.max));
+        const rawMin = Number(xScale.min);
+        const rawMax = Number(xScale.max);
+        if (Number.isFinite(rawMin)) {
+          visibleRangeStart = Math.max(0, Math.floor(rawMin));
+        }
+        if (Number.isFinite(rawMax)) {
+          visibleRangeEnd = Math.min(chartMaxX, Math.floor(rawMax));
+        }
       }
     } catch {
       visibleRangeStart = 0;
+      visibleRangeEnd = chartMaxX;
+    }
+
+    if (!Number.isFinite(visibleRangeStart) || visibleRangeStart < 0) {
+      visibleRangeStart = 0;
+    }
+    if (!Number.isFinite(visibleRangeEnd) || visibleRangeEnd > chartMaxX) {
       visibleRangeEnd = chartMaxX;
     }
 
@@ -407,11 +419,41 @@ function SamplerFragment() {
       );
       const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxXForRequest);
 
-      void safeInvoke<SamplerCompressViewportResponse>(
-        'sampler_buffer_compress_viewport',
-        { range_start: visibleRangeStart, range_end: visibleRangeEnd, number_bins: requestedBins },
-        { throwOnError: true },
-      )
+      const chunks = pendingAppendChunksRef.current;
+      pendingAppendChunksRef.current = [];
+      const flushPromise = chunks.length
+        ? (() => {
+            let total = 0;
+            for (const chunk of chunks) total += chunk.length;
+            if (total <= 0) return Promise.resolve();
+
+            const merged = new Uint8Array(total);
+            let offset = 0;
+            for (const chunk of chunks) {
+              merged.set(chunk, offset);
+              offset += chunk.length;
+            }
+
+            return safeInvoke<SamplerAppendResponse>(
+              'sampler_buffer_append',
+              { data: Array.from(merged) },
+              { throwOnError: true },
+            ).then((appendResult) => {
+              if (appendResult) {
+                rustBufferSizeRef.current = appendResult.buffer_len_bytes;
+              }
+            });
+          })()
+        : Promise.resolve();
+
+      void flushPromise
+        .then(() =>
+          safeInvoke<SamplerCompressViewportResponse>(
+            'sampler_buffer_compress_viewport',
+            { range_start: visibleRangeStart, range_end: visibleRangeEnd, number_bins: requestedBins },
+            { throwOnError: true },
+          ),
+        )
         .then((result) => {
           if (!result) return;
 
@@ -530,38 +572,6 @@ function SamplerFragment() {
       if (data.length > 0) {
         if (useRustSampler) {
           pendingAppendChunksRef.current.push(new Uint8Array(data));
-          if (pendingAppendTimerRef.current == null) {
-            pendingAppendTimerRef.current = window.setTimeout(() => {
-              pendingAppendTimerRef.current = null;
-              const chunks = pendingAppendChunksRef.current;
-              pendingAppendChunksRef.current = [];
-	              if (!chunks.length) return;
-
-	              let total = 0;
-	              for (const chunk of chunks) total += chunk.length;
-	              if (total <= 0) return;
-
-	              const merged = new Uint8Array(total);
-	              let offset = 0;
-	              for (const chunk of chunks) {
-	                merged.set(chunk, offset);
-	                offset += chunk.length;
-	              }
-
-	              void safeInvoke<SamplerAppendResponse>(
-	                'sampler_buffer_append',
-	                { data: Array.from(merged) },
-	                { throwOnError: true },
-	              )
-	                .then((result) => {
-	                  if (!result) return;
-	                  rustBufferSizeRef.current = result.buffer_len_bytes;
-                })
-	                .catch((error) => {
-	                  console.error('Failed to append sampler data (rust sampler):', error);
-	                });
-	            }, 15);
-	          }
 	        } else {
 	          bufferRef.current.append(data);
 	        }
@@ -613,7 +623,7 @@ function SamplerFragment() {
 	      if (!chart) return;
 
 	      lastChartRenderAtRef.current = now;
-	      refreshChart(chart);
+	      performChartRefresh(chart);
 	    };
 
     refreshIntervalRef.current = window.setInterval(() => {
@@ -625,7 +635,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-	  }, [isConnected, isRecording, maxSamples, refreshChart, refreshRate, useRustSampler]);
+	  }, [isConnected, isRecording, maxSamples, performChartRefresh, refreshRate, useRustSampler]);
 
   const startRecording = async () => {
     if (!isConnected) {
