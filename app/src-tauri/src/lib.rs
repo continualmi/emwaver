@@ -624,37 +624,35 @@ async fn sampler_buffer_append(
     data: Vec<u8>,
 ) -> Result<SamplerAppendResponse, String> {
     let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        if data.is_empty() {
-            return Ok::<SamplerAppendResponse, String>(SamplerAppendResponse {
-                buffer_len_bytes: guard.buffer.len(),
-                truncated: false,
-            });
-        }
+    let mut guard = state
+        .lock()
+        .map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+    if data.is_empty() {
+        return Ok(SamplerAppendResponse {
+            buffer_len_bytes: guard.buffer.len(),
+            truncated: false,
+        });
+    }
 
-        let mut truncated = false;
-        if guard.max_size > 0 {
-            let remaining = guard.max_size.saturating_sub(guard.buffer.len());
-            if remaining == 0 {
-                truncated = true;
-            } else if data.len() > remaining {
-                guard.buffer.extend_from_slice(&data[..remaining]);
-                truncated = true;
-            } else {
-                guard.buffer.extend_from_slice(&data);
-            }
+    let mut truncated = false;
+    if guard.max_size > 0 {
+        let remaining = guard.max_size.saturating_sub(guard.buffer.len());
+        if remaining == 0 {
+            truncated = true;
+        } else if data.len() > remaining {
+            guard.buffer.extend_from_slice(&data[..remaining]);
+            truncated = true;
         } else {
             guard.buffer.extend_from_slice(&data);
         }
+    } else {
+        guard.buffer.extend_from_slice(&data);
+    }
 
-        Ok::<SamplerAppendResponse, String>(SamplerAppendResponse {
-            buffer_len_bytes: guard.buffer.len(),
-            truncated,
-        })
+    Ok(SamplerAppendResponse {
+        buffer_len_bytes: guard.buffer.len(),
+        truncated,
     })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -666,13 +664,37 @@ async fn sampler_buffer_compress_viewport(
 ) -> Result<SamplerCompressResponse, String> {
     let state = state.inner().clone();
     spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        let total_bits = guard.buffer.len().saturating_mul(8);
-        let end = range_end.min(total_bits);
-        let start = range_start.min(end);
-        let (time_values, data_values) = sampler_compress_bits(&guard.buffer, start, end, number_bins);
+        let (slice, buffer_len_bytes, base_bit_index, start, end) = {
+            let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+            let total_bits = guard.buffer.len().saturating_mul(8);
+            let end = range_end.min(total_bits);
+            let start = range_start.min(end);
+            if guard.buffer.is_empty() || start >= end || number_bins == 0 {
+                return Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
+                    buffer_len_bytes: guard.buffer.len(),
+                    time_values: Vec::new(),
+                    data_values: Vec::new(),
+                });
+            }
+
+            let byte_start = start >> 3;
+            let byte_end = ((end + 7) >> 3).min(guard.buffer.len());
+            let base_bit_index = byte_start.saturating_mul(8);
+            let slice = guard.buffer[byte_start..byte_end].to_vec();
+            let start = start.saturating_sub(base_bit_index);
+            let end = end.saturating_sub(base_bit_index);
+            (slice, guard.buffer.len(), base_bit_index, start, end)
+        };
+
+        let (mut time_values, data_values) = sampler_compress_bits(&slice, start, end, number_bins);
+        if base_bit_index != 0 {
+            let offset = base_bit_index as f32;
+            for value in &mut time_values {
+                *value += offset;
+            }
+        }
         Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
-            buffer_len_bytes: guard.buffer.len(),
+            buffer_len_bytes,
             time_values,
             data_values,
         })
