@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 struct FlashView: View {
     @EnvironmentObject var bleManager: BLEManager
@@ -8,6 +9,7 @@ struct FlashView: View {
     @State private var firmwareName: String? = nil
     @State private var firmwareSize: Int? = nil
     @State private var firmwareData: Data? = nil
+    @State private var showWifiHelp = false
 
     private var binType: UTType { UTType(filenameExtension: "bin") ?? .data }
 
@@ -79,6 +81,46 @@ struct FlashView: View {
 
                 GroupBox(label: Label("OTA Flash", systemImage: "arrow.up.circle").font(.headline)) {
                     VStack(spacing: 12) {
+                        Picker("Transport", selection: $bleManager.otaTransport) {
+                            ForEach(BLEManager.OtaTransport.allCases) { transport in
+                                Text(transport.rawValue).tag(transport)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        if bleManager.otaTransport == .wifi {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Wi‑Fi SoftAP OTA (faster)")
+                                    .font(.subheadline)
+                                Text("1) Connect over BLE\n2) Tap Start Wi‑Fi OTA Mode\n3) Join Wi‑Fi 'EMWaver-OTA'\n4) Flash")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                HStack(spacing: 10) {
+                                    Button("Start Wi‑Fi OTA Mode") {
+                                        Task {
+                                            do {
+                                                try await bleManager.otaWifiStartMode()
+                                            } catch {
+                                                await MainActor.run {
+                                                    bleManager.otaErrorText = error.localizedDescription
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(!bleManager.isConnected || bleManager.otaIsFlashing)
+
+                                    Button("Wi‑Fi Settings") {
+                                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                                            UIApplication.shared.open(url)
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
                         if bleManager.otaIsFlashing {
                             ProgressView(value: bleManager.otaProgress)
                                 .progressViewStyle(.linear)
@@ -165,7 +207,11 @@ struct FlashView: View {
         bleManager.otaErrorText = nil
         Task {
             do {
-                try await bleManager.otaFlashFirmware(firmwareData)
+                if bleManager.otaTransport == .ble {
+                    try await bleManager.otaFlashFirmware(firmwareData)
+                } else {
+                    try await bleManager.otaFlashFirmwareWifi(firmwareData)
+                }
             } catch {
                 await MainActor.run {
                     bleManager.otaIsFlashing = false

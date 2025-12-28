@@ -14,6 +14,8 @@ class BLEManager: NSObject, ObservableObject {
     @Published var otaProgress: Double = 0
     @Published var otaStatusText: String = ""
     @Published var otaErrorText: String? = nil
+
+    @Published var otaTransport: OtaTransport = .ble
     
     // MARK: - Utility Methods
     static func dataToHexString(_ data: Data) -> String {
@@ -222,6 +224,7 @@ class BLEManager: NSObject, ObservableObject {
         case statusTimeout
         case flashFailed(code: UInt8, err: UInt8)
         case invalidStatusPacket
+        case transportError(String)
 
         var errorDescription: String? {
             switch self {
@@ -237,6 +240,8 @@ class BLEManager: NSObject, ObservableObject {
                 return String(format: "OTA failed (code=0x%02X err=0x%02X)", code, err)
             case .invalidStatusPacket:
                 return "Invalid OTA status packet"
+            case .transportError(let message):
+                return message
             }
         }
     }
@@ -246,6 +251,13 @@ class BLEManager: NSObject, ObservableObject {
         let received: UInt32
         let total: UInt32
         let err: UInt8
+    }
+
+    enum OtaTransport: String, CaseIterable, Identifiable {
+        case ble = "BLE"
+        case wifi = "Wi‑Fi SoftAP"
+
+        var id: String { rawValue }
     }
 
     private func parseOtaStatus(_ data: Data) -> OtaStatus? {
@@ -271,6 +283,17 @@ class BLEManager: NSObject, ObservableObject {
     private func sha256(_ data: Data) -> Data {
         let digest = SHA256.hash(data: data)
         return Data(digest)
+    }
+
+    private func bytesToHexLower(_ data: Data) -> String {
+        let hex = Array("0123456789abcdef")
+        var out = String()
+        out.reserveCapacity(data.count * 2)
+        for b in data {
+            out.append(hex[Int(b >> 4)])
+            out.append(hex[Int(b & 0x0f)])
+        }
+        return out
     }
 
     private func setOtaUi(
@@ -374,6 +397,72 @@ class BLEManager: NSObject, ObservableObject {
             }
         }
 
+        setOtaUi(progress: 1.0, status: "Done")
+    }
+
+    func otaWifiStartMode() async throws {
+        guard isConnected else { throw OtaError.notConnected }
+
+        let ready = await waitUntil({
+            self.otaCtrlCharacteristic != nil
+        }, timeoutSeconds: 10.0)
+        if !ready { throw OtaError.otaCharacteristicsNotReady }
+        guard let ctrl = otaCtrlCharacteristic else { throw OtaError.otaCharacteristicsNotReady }
+
+        setOtaUi(status: "Starting Wi‑Fi OTA mode…", error: nil)
+        try await writeWithResponse(Data([0x10]), to: ctrl)
+        setOtaUi(status: "Wi‑Fi OTA mode ready. Connect to Wi‑Fi 'EMWaver-OTA'.")
+    }
+
+    func otaWifiStopMode() async throws {
+        guard isConnected else { throw OtaError.notConnected }
+
+        let ready = await waitUntil({
+            self.otaCtrlCharacteristic != nil
+        }, timeoutSeconds: 10.0)
+        if !ready { throw OtaError.otaCharacteristicsNotReady }
+        guard let ctrl = otaCtrlCharacteristic else { throw OtaError.otaCharacteristicsNotReady }
+
+        setOtaUi(status: "Stopping Wi‑Fi OTA mode…", error: nil)
+        try await writeWithResponse(Data([0x11]), to: ctrl)
+        setOtaUi(status: "Wi‑Fi OTA mode stopped.")
+    }
+
+    func otaFlashFirmwareWifi(_ firmware: Data) async throws {
+        guard !firmware.isEmpty else { throw OtaError.invalidFirmware }
+        guard isConnected else { throw OtaError.notConnected }
+
+        setOtaUi(isFlashing: true, progress: 0, status: "Preparing Wi‑Fi OTA…", error: nil)
+        defer { setOtaUi(isFlashing: false) }
+
+        let sha = sha256(firmware)
+        let shaHex = bytesToHexLower(sha)
+
+        setOtaUi(status: "Uploading over Wi‑Fi… (connect to EMWaver-OTA)")
+        let url = URL(string: "http://192.168.4.1/ota")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue(shaHex, forHTTPHeaderField: "X-Emwaver-Sha256")
+        request.httpBody = firmware
+        request.timeoutInterval = 30
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw OtaError.transportError("HTTP \(http.statusCode)")
+        }
+
+        setOtaUi(progress: 1.0, status: "Waiting for device to finalize…")
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            otaCompletionContinuation = cont
+            Task {
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                if self.otaCompletionContinuation != nil {
+                    self.otaCompletionContinuation = nil
+                    cont.resume(throwing: OtaError.statusTimeout)
+                }
+            }
+        }
         setOtaUi(progress: 1.0, status: "Done")
     }
     
