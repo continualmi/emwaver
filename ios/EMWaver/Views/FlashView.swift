@@ -219,7 +219,10 @@ struct FlashView: View {
     }
 
     private func loadStockFirmware() {
-        guard let url = Bundle.main.url(forResource: "emwaveresp", withExtension: "bin", subdirectory: "ota") else {
+        let url =
+            Bundle.main.url(forResource: "emwaveresp", withExtension: "bin", subdirectory: "ota")
+            ?? Bundle.main.url(forResource: "emwaveresp", withExtension: "bin")
+        guard let url else {
             firmwareData = nil
             firmwareName = nil
             firmwareSize = nil
