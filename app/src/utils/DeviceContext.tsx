@@ -56,6 +56,8 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     reject: (reason: any) => void;
     isMatch: (responseStr: string) => boolean;
   } | null>(null);
+  const transportOffsetRef = useRef<number>(0);
+  const pendingTextBufferRef = useRef<string>('');
 
   // Polling intervals
   const statusIntervalRef = useRef<number | null>(null);
@@ -142,34 +144,56 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Poll Notifications
   useEffect(() => {
+    const looksLikeAscii = (data: Uint8Array): boolean => {
+      if (!data.length) return false;
+      for (const b of data) {
+        if (b === 0) return false;
+        const isPrintable = b === 0x0a || b === 0x0d || b === 0x09 || (b >= 0x20 && b <= 0x7e);
+        if (!isPrintable) return false;
+      }
+      return true;
+    };
+
     const processNotification = async () => {
       if (!status.connected || !status.transport) return;
 
       try {
-        for (let i = 0; i < 5; i++) {
-            let notif: Notification | null = null;
-            
-            if (status.transport === 'BLE') {
-                notif = await safeInvoke<Notification | null>('ble_get_notification');
-            } else if (status.transport === 'USB') {
-                notif = await safeInvoke<Notification | null>('usb_get_notification');
+        for (let i = 0; i < 10; i++) {
+          const resp = await safeInvoke<{ data: number[]; next_offset: number; buffer_len_bytes: number; version: number }>(
+            'transport_buffer_read_since',
+            { offset: transportOffsetRef.current, maxBytes: 4096 },
+            { throwOnError: true },
+          );
+          if (!resp) break;
+
+          const chunk = new Uint8Array(resp?.data || []);
+          if (!chunk.length) break;
+
+          transportOffsetRef.current = resp.next_offset || transportOffsetRef.current + chunk.length;
+
+          // 1) Handle pending response by scanning ASCII lines in the incoming stream.
+          if (pendingResponseRef.current && looksLikeAscii(chunk)) {
+            const text = new TextDecoder().decode(chunk);
+            pendingTextBufferRef.current += text;
+
+            const parts = pendingTextBufferRef.current.split(/\r?\n/);
+            pendingTextBufferRef.current = parts.pop() ?? '';
+
+            for (const line of parts) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
+              if (pendingResponseRef.current?.isMatch(trimmed)) {
+                pendingResponseRef.current.resolve(new TextEncoder().encode(trimmed));
+                pendingResponseRef.current = null;
+                pendingTextBufferRef.current = '';
+                break;
+              }
             }
+          }
 
-            if (!notif) break; // Queue empty
-
-            const data = new Uint8Array(notif.data);
-            const text = new TextDecoder().decode(data).trim();
-
-            // 1. Handle Pending Response (Command-Response pattern)
-            if (pendingResponseRef.current) {
-                if (pendingResponseRef.current.isMatch(text)) {
-                    pendingResponseRef.current.resolve(data);
-                    pendingResponseRef.current = null;
-                }
-            }
-
-            // 2. Broadcast to all listeners
-            listenersRef.current.forEach(listener => listener(data, notif.timestamp));
+          // 2) Broadcast raw bytes (binary-safe) to all listeners.
+          const timestamp = Date.now();
+          listenersRef.current.forEach((listener) => listener(chunk, timestamp));
         }
       } catch (e) {
         console.error("Notification poll error", e);
@@ -181,6 +205,14 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (notificationIntervalRef.current) clearInterval(notificationIntervalRef.current);
     };
   }, [status.connected, status.transport]);
+
+  useEffect(() => {
+    if (!status.connected) {
+      transportOffsetRef.current = 0;
+      pendingTextBufferRef.current = '';
+      pendingResponseRef.current = null;
+    }
+  }, [status.connected]);
 
 
   // --- Public API ---

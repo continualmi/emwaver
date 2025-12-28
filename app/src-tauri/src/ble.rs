@@ -2,10 +2,11 @@ use btleplug::api::{Central, CentralEvent, Manager as _, Peripheral as _, ScanFi
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::{mpsc, Mutex as AsyncMutex};
+use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
+
+use crate::transport_buffer::TransportBufferState;
 
 // EMWaver BLE Service and Characteristic UUIDs (matching Android/iOS)
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
@@ -27,24 +28,15 @@ pub struct BLEStatus {
     pub device_address: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BLENotification {
-    pub data: Vec<u8>,
-    pub timestamp: u64,
-}
-
 pub struct BLEState {
     pub adapter: Arc<AsyncMutex<Option<Adapter>>>,
     pub peripheral: Arc<AsyncMutex<Option<Peripheral>>>,
     pub status: Arc<AsyncMutex<BLEStatus>>,
-    pub notification_tx: Arc<AsyncMutex<Option<mpsc::Sender<BLENotification>>>>,
-    pub notification_rx: Arc<AsyncMutex<Option<mpsc::Receiver<BLENotification>>>>,
-    pub sampler_capture_mode: Arc<AtomicBool>,
-    pub sampler_tx: Arc<AsyncMutex<Option<mpsc::Sender<Vec<u8>>>>>,
+    pub transport_buffer: Arc<Mutex<TransportBufferState>>,
 }
 
 impl BLEState {
-    pub fn new() -> Self {
+    pub fn new(transport_buffer: Arc<Mutex<TransportBufferState>>) -> Self {
         Self {
             adapter: Arc::new(AsyncMutex::new(None)),
             peripheral: Arc::new(AsyncMutex::new(None)),
@@ -54,20 +46,8 @@ impl BLEState {
                 device_name: None,
                 device_address: None,
             })),
-            notification_tx: Arc::new(AsyncMutex::new(None)),
-            notification_rx: Arc::new(AsyncMutex::new(None)),
-            sampler_capture_mode: Arc::new(AtomicBool::new(false)),
-            sampler_tx: Arc::new(AsyncMutex::new(None)),
+            transport_buffer,
         }
-    }
-
-    pub fn set_sampler_capture_mode(&self, enabled: bool) {
-        self.sampler_capture_mode.store(enabled, Ordering::Relaxed);
-    }
-
-    pub async fn set_sampler_tx(&self, tx: Option<mpsc::Sender<Vec<u8>>>) {
-        let mut guard = self.sampler_tx.lock().await;
-        *guard = tx;
     }
 
     pub async fn initialize(&self) -> Result<(), String> {
@@ -99,23 +79,10 @@ impl BLEState {
             .await
             .map_err(|e| format!("Failed to start scan: {}", e))?;
 
-        // Set up notification channel if not already set
-        {
-            let mut tx_guard = self.notification_tx.lock().await;
-            let mut rx_guard = self.notification_rx.lock().await;
-            if tx_guard.is_none() {
-                let (tx, rx) = mpsc::channel(100);
-                *tx_guard = Some(tx);
-                *rx_guard = Some(rx);
-            }
-        }
-
         // Spawn task to handle events
         let status_clone = Arc::clone(&self.status);
         let peripheral_clone = Arc::clone(&self.peripheral);
-        let notification_tx_clone = Arc::clone(&self.notification_tx);
-        let sampler_capture_mode_clone = Arc::clone(&self.sampler_capture_mode);
-        let sampler_tx_clone = Arc::clone(&self.sampler_tx);
+        let transport_buffer_clone = Arc::clone(&self.transport_buffer);
         let adapter_for_timeout = adapter_clone.clone();
         let status_for_timeout = Arc::clone(&self.status);
         
@@ -194,33 +161,13 @@ impl BLEState {
                                                     let _ = peripheral.subscribe(characteristic).await;
                                                 }
 
-                                                let tx_guard = notification_tx_clone.lock().await;
-                                                let tx_clone = tx_guard.as_ref().cloned();
-                                                drop(tx_guard);
-
                                                 let peripheral_for_notifications = peripheral.clone();
                                                 if let Ok(mut notification_stream) = peripheral_for_notifications.notifications().await {
-                                                    let sampler_capture_mode_clone = Arc::clone(&sampler_capture_mode_clone);
-                                                    let sampler_tx_clone = Arc::clone(&sampler_tx_clone);
+                                                    let transport_buffer_clone = Arc::clone(&transport_buffer_clone);
                                                     tokio::spawn(async move {
                                                         while let Some(data) = notification_stream.next().await {
-                                                            if sampler_capture_mode_clone.load(Ordering::Relaxed) {
-                                                                let sampler_guard = sampler_tx_clone.lock().await;
-                                                                if let Some(sampler_tx) = sampler_guard.as_ref() {
-                                                                    let _ = sampler_tx.send(data.value).await;
-                                                                }
-                                                                continue;
-                                                            }
-
-                                                            if let Some(tx) = tx_clone.as_ref() {
-                                                                let notification = BLENotification {
-                                                                    data: data.value,
-                                                                    timestamp: std::time::SystemTime::now()
-                                                                        .duration_since(std::time::UNIX_EPOCH)
-                                                                        .unwrap()
-                                                                        .as_millis() as u64,
-                                                                };
-                                                                let _ = tx.send(notification).await;
+                                                            if let Ok(mut guard) = transport_buffer_clone.lock() {
+                                                                guard.append(&data.value);
                                                             }
                                                         }
                                                     });
@@ -325,21 +272,6 @@ impl BLEState {
 
     pub async fn get_status(&self) -> BLEStatus {
         self.status.lock().await.clone()
-    }
-
-    pub async fn get_notification(&self) -> Option<BLENotification> {
-        let mut rx_guard = self.notification_rx.lock().await;
-        if let Some(rx) = rx_guard.as_mut() {
-            rx.try_recv().ok()
-        } else {
-            None
-        }
-    }
-
-    pub async fn recv_notification(&self, timeout: tokio::time::Duration) -> Option<BLENotification> {
-        let mut rx_guard = self.notification_rx.lock().await;
-        let rx = rx_guard.as_mut()?;
-        tokio::time::timeout(timeout, rx.recv()).await.ok().flatten()
     }
 
     async fn find_char(

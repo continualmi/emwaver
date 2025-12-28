@@ -1,12 +1,13 @@
 use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortInfo, SerialPortType, StopBits};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::io::{Read, Write};
-use tokio::sync::{mpsc, Mutex as AsyncMutex};
+use tokio::sync::Mutex as AsyncMutex;
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
 use std::collections::HashSet;
+
+use crate::transport_buffer::TransportBufferState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -14,48 +15,27 @@ pub struct USBStatus {
     pub device_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct USBNotification {
-    pub data: Vec<u8>,
-    pub timestamp: u64,
-}
-
 pub struct USBState {
     pub port: Arc<AsyncMutex<Option<Box<dyn SerialPort + Send>>>>,
     pub status: Arc<AsyncMutex<USBStatus>>,
-    pub notification_tx: Arc<AsyncMutex<Option<mpsc::Sender<USBNotification>>>>,
-    pub notification_rx: Arc<AsyncMutex<Option<mpsc::Receiver<USBNotification>>>>,
     pub running: Arc<AsyncMutex<bool>>,
-    pub sampler_capture_mode: Arc<AtomicBool>,
-    pub sampler_tx: Arc<AsyncMutex<Option<mpsc::Sender<Vec<u8>>>>>,
+    pub transport_buffer: Arc<Mutex<TransportBufferState>>,
 }
 
 unsafe impl Send for USBState {}
 unsafe impl Sync for USBState {}
 
 impl USBState {
-    pub fn new() -> Self {
+    pub fn new(transport_buffer: Arc<Mutex<TransportBufferState>>) -> Self {
         Self {
             port: Arc::new(AsyncMutex::new(None)),
             status: Arc::new(AsyncMutex::new(USBStatus {
                 connected: false,
                 device_path: None,
             })),
-            notification_tx: Arc::new(AsyncMutex::new(None)),
-            notification_rx: Arc::new(AsyncMutex::new(None)),
             running: Arc::new(AsyncMutex::new(false)),
-            sampler_capture_mode: Arc::new(AtomicBool::new(false)),
-            sampler_tx: Arc::new(AsyncMutex::new(None)),
+            transport_buffer,
         }
-    }
-
-    pub fn set_sampler_capture_mode(&self, enabled: bool) {
-        self.sampler_capture_mode.store(enabled, Ordering::Relaxed);
-    }
-
-    pub async fn set_sampler_tx(&self, tx: Option<mpsc::Sender<Vec<u8>>>) {
-        let mut guard = self.sampler_tx.lock().await;
-        *guard = tx;
     }
 
     pub async fn list_ports() -> Result<Vec<String>, String> {
@@ -152,23 +132,9 @@ impl USBState {
             *running = true;
         }
 
-        // Setup notification channel
-        {
-            let mut tx_guard = self.notification_tx.lock().await;
-            let mut rx_guard = self.notification_rx.lock().await;
-            if tx_guard.is_none() {
-                let (tx, rx) = mpsc::channel(100);
-                *tx_guard = Some(tx);
-                *rx_guard = Some(rx);
-            }
-        }
-
         // Start reading thread
-        let port_clone = Arc::clone(&self.port);
-        let notification_tx_clone = Arc::clone(&self.notification_tx);
         let running_clone = Arc::clone(&self.running);
-        let sampler_capture_mode_clone = Arc::clone(&self.sampler_capture_mode);
-        let sampler_tx_clone = Arc::clone(&self.sampler_tx);
+        let transport_buffer_clone = Arc::clone(&self.transport_buffer);
 
         // We need a way to read from the port without locking it forever.
         // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
@@ -204,25 +170,8 @@ impl USBState {
                     Ok(bytes_read) => {
                         if bytes_read > 0 {
                             let data = buffer[0..bytes_read].to_vec();
-                            if sampler_capture_mode_clone.load(Ordering::Relaxed) {
-                                let sampler_guard = sampler_tx_clone.blocking_lock();
-                                if let Some(tx) = sampler_guard.as_ref() {
-                                    let _ = tx.blocking_send(data);
-                                }
-                                continue;
-                            }
-
-                            let notification = USBNotification {
-                                data,
-                                timestamp: std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_millis() as u64,
-                            };
-
-                            let tx_guard = notification_tx_clone.blocking_lock();
-                            if let Some(tx) = tx_guard.as_ref() {
-                                let _ = tx.blocking_send(notification);
+                            if let Ok(mut guard) = transport_buffer_clone.lock() {
+                                guard.append(&data);
                             }
                         }
                     }
@@ -295,14 +244,5 @@ impl USBState {
 
     pub async fn get_status(&self) -> USBStatus {
         self.status.lock().await.clone()
-    }
-
-    pub async fn get_notification(&self) -> Option<USBNotification> {
-        let mut rx_guard = self.notification_rx.lock().await;
-        if let Some(rx) = rx_guard.as_mut() {
-            rx.try_recv().ok()
-        } else {
-            None
-        }
     }
 }
