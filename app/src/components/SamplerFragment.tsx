@@ -48,6 +48,13 @@ type DirectoryEntry = {
   children?: DirectoryEntry[];
 };
 
+type TextInputDialogState = {
+  open: boolean;
+  title: string;
+  value: string;
+  okLabel: string;
+};
+
 const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
 const PIN_IO_ESP32_KEY = 'sampler.pinIo.esp32';
@@ -249,6 +256,13 @@ function SamplerFragment() {
     return Number.isNaN(stored) ? DEFAULT_PWM_DUTY_PERCENT : stored;
   });
   const [signalsDir, setSignalsDir] = useState<string | null>(null);
+  const [textDialog, setTextDialog] = useState<TextInputDialogState>({
+    open: false,
+    title: '',
+    value: '',
+    okLabel: 'OK',
+  });
+  const [textDialogMode, setTextDialogMode] = useState<'save' | 'rename' | null>(null);
 
   const bufferRef = useRef(new SamplerBuffer());
   const chartRef = useRef<any>(null);
@@ -689,7 +703,7 @@ function SamplerFragment() {
     }
   };
 
-  const saveSignal = async () => {
+  const saveSignalToStorage = async (enteredName: string) => {
     const buffer = bufferRef.current.getBuffer();
     if (buffer.length === 0) {
       alert('Buffer is empty');
@@ -703,11 +717,7 @@ function SamplerFragment() {
     }
 
     const defaultName = currentSignalName || generateNewSignalName();
-    const entered = window.prompt('Save Signal', defaultName);
-    if (entered === null) {
-      return;
-    }
-    const fileName = normalizeSignalName(entered || defaultName, defaultName);
+    const fileName = normalizeSignalName(enteredName || defaultName, defaultName);
 
     try {
       const targetPath = await safeJoin(dir, fileName);
@@ -724,6 +734,36 @@ function SamplerFragment() {
     } catch (error) {
       console.error('Failed to save signal:', error);
       alert('Failed to save signal');
+    }
+  };
+
+  const openSaveDialog = () => {
+    const buffer = bufferRef.current.getBuffer();
+    if (buffer.length === 0) {
+      alert('Buffer is empty');
+      return;
+    }
+
+    const defaultName = currentSignalName || generateNewSignalName();
+    setTextDialogMode('save');
+    setTextDialog({ open: true, title: 'Save Signal', value: defaultName, okLabel: 'Save' });
+  };
+
+  const closeTextDialog = () => {
+    setTextDialogMode(null);
+    setTextDialog((prev) => ({ ...prev, open: false }));
+  };
+
+  const confirmTextDialog = async () => {
+    const value = textDialog.value.trim();
+    const mode = textDialogMode;
+    closeTextDialog();
+    if (mode === 'save') {
+      await saveSignalToStorage(value);
+      return;
+    }
+    if (mode === 'rename') {
+      await renameSignalToStorage(value);
     }
   };
 
@@ -895,17 +935,12 @@ function SamplerFragment() {
     return candidate;
   };
 
-  const renameSignal = async () => {
+  const renameSignalToStorage = async (enteredName: string) => {
     if (!currentSignalName || !signalsDir) {
       alert('No signal loaded');
       return;
     }
-    const existing = currentSignalName.replace(/\.raw$/i, '');
-    const entered = window.prompt('Rename Signal', existing);
-    if (entered === null) {
-      return;
-    }
-    const normalized = normalizeSignalName(entered, currentSignalName);
+    const normalized = normalizeSignalName(enteredName, currentSignalName);
     if (normalized === currentSignalName) {
       alert('Name unchanged');
       return;
@@ -919,22 +954,36 @@ function SamplerFragment() {
       alert('Signal file not found');
       return;
     }
-	    const targetPath = await safeJoin(signalsDir, normalized);
-	    try {
-	      await safeInvoke<void>(
-	        'rename_path',
-	        { payload: { from: entry.path, to: targetPath } },
-	        { throwOnError: true },
-	      );
-	      setCurrentSignalName(normalized);
-	      setHasUnsavedChanges(false);
-	      localStorage.setItem(LAST_SIGNAL_KEY, normalized);
-	      refreshSignalList();
+    const targetPath = await safeJoin(signalsDir, normalized);
+    try {
+      await safeInvoke<void>(
+        'rename_path',
+        { payload: { from: entry.path, to: targetPath } },
+        { throwOnError: true },
+      );
+      setCurrentSignalName(normalized);
+      setHasUnsavedChanges(false);
+      localStorage.setItem(LAST_SIGNAL_KEY, normalized);
+      refreshSignalList();
       alert('Signal renamed');
     } catch (error) {
       console.error('Failed to rename signal:', error);
       alert('Failed to rename signal');
     }
+  };
+
+  const openRenameDialog = () => {
+    if (!currentSignalName) {
+      alert('No signal loaded');
+      return;
+    }
+    const existing = currentSignalName.replace(/\.raw$/i, '');
+    setTextDialogMode('rename');
+    setTextDialog({ open: true, title: 'Rename Signal', value: existing, okLabel: 'Rename' });
+  };
+
+  const renameSignal = async () => {
+    openRenameDialog();
   };
 
   const deleteSignal = async () => {
@@ -1111,7 +1160,7 @@ function SamplerFragment() {
             New
           </button>
           <button
-            onClick={saveSignal}
+            onClick={openSaveDialog}
             className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
           >
             Save
@@ -1300,13 +1349,49 @@ function SamplerFragment() {
               </option>
             ))}
           </select>
-        </div>
-      </div>
+	        </div>
+	      </div>
 
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-96 rounded-lg bg-slate-900 p-6 shadow-xl border border-slate-700">
+	      {textDialog.open && (
+	        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+	          <div className="bg-slate-900 p-6 rounded-lg w-96 border border-slate-700 shadow-xl">
+	            <h3 className="text-lg font-medium text-slate-100 mb-4">{textDialog.title}</h3>
+	            <input
+	              className="w-full bg-slate-950 border border-slate-700 text-slate-100 rounded p-2 mb-4 font-mono"
+	              value={textDialog.value}
+	              autoFocus
+	              onChange={(e) => setTextDialog((prev) => ({ ...prev, value: e.target.value }))}
+	              onKeyDown={(e) => {
+	                if (e.key === 'Escape') {
+	                  closeTextDialog();
+	                }
+	                if (e.key === 'Enter') {
+	                  void confirmTextDialog();
+	                }
+	              }}
+	            />
+	            <div className="flex justify-end gap-2">
+	              <button
+	                onClick={closeTextDialog}
+	                className="px-4 py-2 text-slate-300 hover:text-white"
+	              >
+	                Cancel
+	              </button>
+	              <button
+	                onClick={() => void confirmTextDialog()}
+	                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+	              >
+	                {textDialog.okLabel}
+	              </button>
+	            </div>
+	          </div>
+	        </div>
+	      )}
+
+	      {/* Settings Modal */}
+	      {showSettings && (
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+	          <div className="w-96 rounded-lg bg-slate-900 p-6 shadow-xl border border-slate-700">
             <h3 className="mb-4 text-lg font-semibold text-slate-100">Settings</h3>
             
             <div className="mb-4 space-y-2">
