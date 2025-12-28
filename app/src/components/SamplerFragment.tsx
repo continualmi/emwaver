@@ -120,11 +120,24 @@ const LEGACY_ESP32_PINS = [
   'GPIO14 (IO14)',
 ];
 
+// STM32 pins (USB sampler)
+// Encoded pin format matches STM32 firmware gpio aliases:
+// - PA0..PA15 => 0..15
+// - PB0..PB15 => 16..31
+// Keep labels aligned with Android (`android/.../SamplerFragment.java`).
 const STM32_PINS = [
-  'IR RX (PA1)',
   'PA0 (TIM2 CH1)',
-  'PA2 (TIM2 CH3)',
+  'PA1 (IR_RX)',
+  'PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)',
   'PA3 (TIM2 CH4)',
+  'PA4',
+  'PA5',
+  'PA6',
+  'PA7',
+  'PA13',
+  'PA14',
+  'PB6',
+  'PB7',
 ];
 
 function getEsp32PinNumber(pinString: string): number {
@@ -145,11 +158,12 @@ function findEsp32PinIndexByNumber(ioPin: number): number {
 }
 
 function getStm32PinNumber(pinString: string): number {
-  if (pinString.includes('PA0')) return 0;
-  if (pinString.includes('PA1')) return 1;
-  if (pinString.includes('PA2')) return 2;
-  if (pinString.includes('PA3')) return 3;
-  return -1;
+  const match = pinString.match(/\bP([AB])(\d{1,2})\b/);
+  if (!match) return -1;
+  const bank = match[1];
+  const pin = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(pin) || pin < 0 || pin > 15) return -1;
+  return bank === 'A' ? pin : 16 + pin;
 }
 
 function normalizeSignalName(rawName: string, fallback: string): string {
@@ -1042,6 +1056,41 @@ function SamplerFragment() {
           </div>
         </div>
 
+        {/* Primary actions */}
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2">
+            <button
+              onClick={startRecording}
+              disabled={!isConnected || isRecording}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Record
+            </button>
+            <button
+              onClick={stopRecording}
+              disabled={!isConnected || !isRecording}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Stop
+            </button>
+          </div>
+
+          <button
+            onClick={retransmitSignal}
+            disabled={!isConnected}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Retransmit
+          </button>
+
+          <button
+            onClick={getTimings}
+            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+          >
+            Get Timings
+          </button>
+        </div>
+
         {/* Controls */}
         <div className="flex flex-col gap-4">
           <div className="text-xs text-slate-400">
@@ -1105,38 +1154,6 @@ function SamplerFragment() {
 	              </div>
 	            ) : null}
 	          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={startRecording}
-              disabled={!isConnected || isRecording}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Record
-            </button>
-            <button
-              onClick={stopRecording}
-              disabled={!isConnected || !isRecording}
-              className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Stop
-            </button>
-          </div>
-
-          <button
-            onClick={retransmitSignal}
-            disabled={!isConnected}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Retransmit
-          </button>
-
-          <button
-            onClick={getTimings}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-          >
-            Get Timings
-          </button>
 
           <select
             value={selectedSignalIndex}
