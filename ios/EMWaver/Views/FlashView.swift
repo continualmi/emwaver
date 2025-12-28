@@ -70,8 +70,13 @@ struct FlashView: View {
                                 }
                             }
                             Spacer()
-                            Button("Select .bin") {
-                                isPickingFirmware = true
+                            HStack(spacing: 10) {
+                                Button("Use Stock") {
+                                    loadStockFirmware()
+                                }
+                                Button("Select .bin") {
+                                    isPickingFirmware = true
+                                }
                             }
                         }
                     }
@@ -203,6 +208,29 @@ struct FlashView: View {
             let data = try Data(contentsOf: url)
             firmwareData = data
             firmwareName = url.lastPathComponent
+            firmwareSize = data.count
+            bleManager.otaErrorText = nil
+        } catch {
+            firmwareData = nil
+            firmwareName = nil
+            firmwareSize = nil
+            bleManager.otaErrorText = error.localizedDescription
+        }
+    }
+
+    private func loadStockFirmware() {
+        guard let url = Bundle.main.url(forResource: "emwaveresp", withExtension: "bin", subdirectory: "ota") else {
+            firmwareData = nil
+            firmwareName = nil
+            firmwareSize = nil
+            bleManager.otaErrorText = "Stock firmware is not bundled in this build."
+            return
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            firmwareData = data
+            firmwareName = "Stock firmware (emwaveresp.bin)"
             firmwareSize = data.count
             bleManager.otaErrorText = nil
         } catch {
