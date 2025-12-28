@@ -400,7 +400,12 @@ function SamplerFragment() {
       const requestedBins = getEffectiveBins(chartResolution);
       const fallbackBufferBytes = rustBufferSizeRef.current;
       const fallbackChartMaxX = fallbackBufferBytes * 8;
-      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, fallbackChartMaxX);
+      const chartMaxXForRequest = Math.max(
+        10000,
+        fallbackChartMaxX,
+        Math.trunc(Number(chart?.options?.scales?.x?.max ?? 10000)) || 10000,
+      );
+      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxXForRequest);
 
       void safeInvoke<SamplerCompressViewportResponse>(
         'sampler_buffer_compress_viewport',
@@ -413,9 +418,7 @@ function SamplerFragment() {
           const bufferBytes = result.buffer_len_bytes;
           rustBufferSizeRef.current = bufferBytes;
 
-          const chartMaxX = bufferBytes * 8;
-          const { visibleRangeStart: rangeStart, visibleRangeEnd: rangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
-          const viewportKey = `${bufferBytes}:${rangeStart}:${rangeEnd}:${requestedBins}`;
+          const viewportKey = `${bufferBytes}:${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
           if (viewportKey === lastChartViewportKeyRef.current) {
             return;
           }
@@ -423,6 +426,7 @@ function SamplerFragment() {
 
           setChartData({ timeValues: result.time_values, dataValues: result.data_values });
 
+          const chartMaxX = bufferBytes * 8;
           if (chart.options?.scales?.x) {
             chart.options.scales.x.max = chartMaxX || 10000;
             if (chart.options.plugins?.zoom?.limits?.x) {
@@ -518,19 +522,19 @@ function SamplerFragment() {
   );
 
   // Listen for BLE notifications via context and accumulate buffer
-	  useEffect(() => {
-	    if (!isConnected) return;
+  useEffect(() => {
+    if (!isConnected) return;
 
-	    const notificationListener = (data: Uint8Array, timestamp: number) => {
-	      // Append all notification data to buffer
-	      if (data.length > 0) {
-	        if (useRustSampler) {
-	          pendingAppendChunksRef.current.push(data);
-	          if (pendingAppendTimerRef.current == null) {
-	            pendingAppendTimerRef.current = window.setTimeout(() => {
-	              pendingAppendTimerRef.current = null;
-	              const chunks = pendingAppendChunksRef.current;
-	              pendingAppendChunksRef.current = [];
+    const notificationListener = (data: Uint8Array, timestamp: number) => {
+      // Append all notification data to buffer
+      if (data.length > 0) {
+        if (useRustSampler) {
+          pendingAppendChunksRef.current.push(new Uint8Array(data));
+          if (pendingAppendTimerRef.current == null) {
+            pendingAppendTimerRef.current = window.setTimeout(() => {
+              pendingAppendTimerRef.current = null;
+              const chunks = pendingAppendChunksRef.current;
+              pendingAppendChunksRef.current = [];
 	              if (!chunks.length) return;
 
 	              let total = 0;
