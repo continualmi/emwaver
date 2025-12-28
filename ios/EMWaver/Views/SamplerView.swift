@@ -93,7 +93,17 @@ struct LineChartViewController: UIViewControllerRepresentable {
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-            gestureRecognizer is UIPanGestureRecognizer && otherGestureRecognizer is UIPanGestureRecognizer
+            // Prevent the enclosing SwiftUI `ScrollView` from scrolling while the chart is being panned/zoomed.
+            // DGCharts installs its own pan recognizer; if we allow simultaneous recognition with the ScrollView's
+            // pan recognizer, the entire view scrolls while the user tries to drag/zoom the chart.
+            if otherGestureRecognizer.view is UIScrollView || gestureRecognizer.view is UIScrollView {
+                return false
+            }
+            guard let chartView else { return false }
+            if let otherView = otherGestureRecognizer.view, otherView.isDescendant(of: chartView) {
+                return gestureRecognizer is UIPanGestureRecognizer && otherGestureRecognizer is UIPanGestureRecognizer
+            }
+            return false
         }
 
         func chartScaled(_ chartView: ChartViewBase, scaleX: CGFloat, scaleY: CGFloat) {
