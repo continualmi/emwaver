@@ -152,6 +152,12 @@ struct FlashView: View {
                             .cornerRadius(10)
                         }
                         .disabled(!canFlash)
+                        if bleManager.otaTransport == .wifi && !bleManager.isConnected {
+                            Text("Tip: keep BLE connected to receive final success status.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                     .padding(.vertical, 8)
                 }
@@ -177,7 +183,12 @@ struct FlashView: View {
     }
 
     private var canFlash: Bool {
-        bleManager.isConnected && firmwareData != nil && !bleManager.otaIsFlashing
+        let hasFirmware = firmwareData != nil
+        let isBusy = bleManager.otaIsFlashing
+        if bleManager.otaTransport == .ble {
+            return bleManager.isConnected && hasFirmware && !isBusy
+        }
+        return hasFirmware && !isBusy
     }
 
     private func readFirmware(from url: URL) {
