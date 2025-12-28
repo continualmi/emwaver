@@ -111,6 +111,9 @@ export class WaveletEngine {
         'print',
         'require',
         'BLEService',
+        'DeviceConnection',
+        'Utils',
+        'createByteArray',
         script
       );
       
@@ -128,7 +131,10 @@ export class WaveletEngine {
         ctx.UI,
         ctx.print,
         ctx.require,
-        ctx.BLEService
+        ctx.BLEService,
+        ctx.DeviceConnection,
+        ctx.Utils,
+        ctx.createByteArray
       );
       
       console.log('[WaveletEngine.execute] Function executed successfully');
@@ -151,7 +157,14 @@ export class WaveletEngine {
     }
 
     try {
-      callback(...arguments_);
+      const result = callback(...arguments_);
+      if (result && typeof (result as any).then === "function") {
+        (result as Promise<unknown>).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.printCallback?.(`Wavelet callback error: ${message}`);
+          console.error("Wavelet callback error:", error);
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.printCallback?.(`Wavelet callback error: ${message}`);

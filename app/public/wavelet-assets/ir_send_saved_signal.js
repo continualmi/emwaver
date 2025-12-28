@@ -1,5 +1,5 @@
 const DEFAULT_FREQ_HZ = 38000;
-const DEFAULT_DUTY_PERCENT = 50;
+const DEFAULT_DUTY_PERCENT = 100;
 
 let selectedSignal = "";
 let repetitionsText = "1";
