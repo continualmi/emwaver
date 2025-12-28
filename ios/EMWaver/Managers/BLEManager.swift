@@ -430,7 +430,6 @@ class BLEManager: NSObject, ObservableObject {
 
     func otaFlashFirmwareWifi(_ firmware: Data) async throws {
         guard !firmware.isEmpty else { throw OtaError.invalidFirmware }
-        guard isConnected else { throw OtaError.notConnected }
 
         setOtaUi(isFlashing: true, progress: 0, status: "Preparing Wi‑Fi OTA…", error: nil)
         defer { setOtaUi(isFlashing: false) }
@@ -452,16 +451,20 @@ class BLEManager: NSObject, ObservableObject {
             throw OtaError.transportError("HTTP \(http.statusCode)")
         }
 
-        setOtaUi(progress: 1.0, status: "Waiting for device to finalize…")
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            otaCompletionContinuation = cont
-            Task {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-                if self.otaCompletionContinuation != nil {
-                    self.otaCompletionContinuation = nil
-                    cont.resume(throwing: OtaError.statusTimeout)
+        if isConnected {
+            setOtaUi(progress: 1.0, status: "Waiting for device to finalize…")
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                otaCompletionContinuation = cont
+                Task {
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
+                    if self.otaCompletionContinuation != nil {
+                        self.otaCompletionContinuation = nil
+                        cont.resume(throwing: OtaError.statusTimeout)
+                    }
                 }
             }
+        } else {
+            setOtaUi(progress: 1.0, status: "Upload complete. Reconnect over BLE to confirm version.")
         }
         setOtaUi(progress: 1.0, status: "Done")
     }
