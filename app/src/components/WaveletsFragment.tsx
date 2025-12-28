@@ -103,21 +103,66 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
   const waveletEngineRef = useRef<WaveletEngine | null>(null);
   const monaco = useMonaco();
   const deviceRef = useRef(device);
+  const commandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     deviceRef.current = device;
   }, [device]);
 
+  const awaitAnyNotification = useCallback((timeoutMs: number) => {
+    return new Promise<Uint8Array | null>((resolve) => {
+      let settled = false;
+      const timeoutId = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        deviceRef.current.removeNotificationListener(listener as any);
+        resolve(null);
+      }, timeoutMs);
+
+      const listener = (data: Uint8Array) => {
+        if (settled || !data || data.length === 0) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timeoutId);
+        deviceRef.current.removeNotificationListener(listener as any);
+        resolve(data);
+      };
+
+      deviceRef.current.addNotificationListener(listener as any);
+    });
+  }, []);
+
   const deviceConnection = useMemo(
     () => ({
-      sendCommandString: (command: string) => {
-        const { status, sendCommand } = deviceRef.current;
-        if (!status.connected) {
-          return null;
-        }
-        const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
-        void sendCommand(payload);
-        return null;
+      sendCommandString: (command: string, timeoutMs: number = 1500) => {
+        // The Android/iOS wavelet scripts expect `sendCommandString()` to behave synchronously
+        // (commands execute in-order). Desktop scripts often don't `await`, so we enforce ordering
+        // via an internal queue.
+        const queued = commandQueueRef.current
+          .then(async () => {
+            const { status, sendCommand } = deviceRef.current;
+            if (!status.connected) {
+              return null;
+            }
+            const responsePromise = awaitAnyNotification(timeoutMs);
+            const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
+            await sendCommand(payload);
+            // Give firmware a tiny breather between commands.
+            const response = await responsePromise;
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
+            return response;
+          })
+          .catch(async () => {
+            // Keep the queue alive even if a command fails.
+            return null;
+          });
+
+        commandQueueRef.current = queued.then(
+          () => undefined,
+          () => undefined,
+        );
+        return queued as Promise<Uint8Array | null>;
       },
       write: (data: Uint8Array) => {
         const { status, sendCommand } = deviceRef.current;
@@ -134,14 +179,19 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
         return `${status.transport ?? "unknown"} connected`;
       },
     }),
-    [],
+    [awaitAnyNotification],
   );
 
   const utilsBinding = useMemo(
     () => ({
       delay: (ms: number) => {
-        // Non-blocking delay; wavelets should use `await Utils.delay(ms)`.
-        return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+        // Match Android semantics: scripts call `Utils.delay(ms)` without `await`.
+        // Use a blocking sleep so wavelet scripts behave consistently across platforms.
+        const durationMs = Math.max(0, Number(ms) || 0);
+        const start = Date.now();
+        while (Date.now() - start < durationMs) {
+          // busy-wait
+        }
       },
     }),
     [],
