@@ -264,6 +264,10 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
 
     uint32_t period = TIM2->ARR;
     uint32_t new_ccr = (period * (uint32_t)percentage) / 100u;
+    if (percentage >= 100) {
+        // Ensure the output stays high for the full period.
+        new_ccr = period + 1u;
+    }
 
     switch (channel) {
         case TIM_CHANNEL_1:
@@ -281,6 +285,30 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
         default:
             break;
     }
+}
+
+static bool setFrequency_TIM2(uint32_t freq_hz)
+{
+    if (freq_hz < 1u) {
+        return false;
+    }
+
+    uint32_t timer_clk_hz = HAL_RCC_GetHCLKFreq();
+    if (timer_clk_hz == 0u) {
+        return false;
+    }
+
+    uint32_t ticks = timer_clk_hz / freq_hz;
+    if (ticks < 1u) {
+        return false;
+    }
+
+    // PWM frequency = timer_clk / (PSC+1) / (ARR+1). Keep PSC=0 and set ARR.
+    uint32_t period = ticks - 1u;
+    TIM2->PSC = 0u;
+    TIM2->ARR = period;
+    TIM2->EGR = TIM_EGR_UG;
+    return true;
 }
 
 static void stop_sampling(void)
@@ -1286,6 +1314,30 @@ int main(void)
                   continue;
               }
 
+              int freq_hz = 38000;
+              const char *freq_str = cli_get_arg_view(&cmd, "freq");
+              if (freq_str != NULL) {
+                  int parsed = 0;
+                  if (!cli_parse_int(freq_str, &parsed) || parsed < 1) {
+                      command_send_err(NULL);
+                      free_bulk_packet();
+                      continue;
+                  }
+                  freq_hz = parsed;
+              }
+
+              int duty_percent = 100;
+              const char *duty_str = cli_get_arg_view(&cmd, "duty");
+              if (duty_str != NULL) {
+                  int parsed = 0;
+                  if (!cli_parse_int(duty_str, &parsed) || parsed < 1 || parsed > 100) {
+                      command_send_err(NULL);
+                      free_bulk_packet();
+                      continue;
+                  }
+                  duty_percent = parsed;
+              }
+
               uint32_t tim_channel = 0;
               uint16_t gpio_pin = 0;
               switch (pin_enc) {
@@ -1301,7 +1353,12 @@ int main(void)
               // - enable TIM3 ISR which drains RX buffer into PWM gating
               // - block until RX buffer drains to 0
               configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
-              setDutyCycle_TIM2(tim_channel, 50);
+              if (!setFrequency_TIM2((uint32_t)freq_hz)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              setDutyCycle_TIM2(tim_channel, (uint8_t)duty_percent);
               selectedChannel = tim_channel;
               (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
 
