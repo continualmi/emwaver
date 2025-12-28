@@ -2,6 +2,7 @@ mod ble;
 mod firmware;
 mod git;
 mod pty;
+mod transport_buffer;
 mod usb;
 
 use serde::{Deserialize, Serialize};
@@ -13,21 +14,21 @@ use std::{
     process::Command,
     sync::{Arc, Mutex},
 };
-use tokio::sync::mpsc;
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
     Emitter, State,
 };
-use ble::{BLEState, BLEStatus, BLENotification};
+use ble::{BLEState, BLEStatus};
 use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use firmware::{firmware_build, firmware_flash};
 use git::{
     git_commit, git_diff_contents, git_discard, git_push, git_stage, git_stage_all, git_status,
     git_unstage, git_unstage_all,
 };
-use usb::{USBState, USBStatus, USBNotification};
+use usb::{USBState, USBStatus};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
+use transport_buffer::{TransportBufferReadResponse, TransportBufferState};
 
 const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
 
@@ -172,11 +173,6 @@ struct SamplerCompressResponse {
 struct SamplerAppendResponse {
     buffer_len_bytes: usize,
     truncated: bool,
-}
-
-#[derive(Clone)]
-struct SamplerIngestTx {
-    tx: mpsc::Sender<Vec<u8>>,
 }
 
 #[derive(Deserialize)]
@@ -597,6 +593,154 @@ fn sampler_buffer_append_bytes(guard: &mut SamplerBufferState, data: &[u8]) -> b
 }
 
 #[tauri::command]
+async fn transport_buffer_clear(state: State<'_, Arc<Mutex<TransportBufferState>>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        guard.clear();
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_set_max_size(
+    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+    max_size: usize,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        guard.max_size = max_size;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_get(state: State<'_, Arc<Mutex<TransportBufferState>>>) -> Result<Vec<u8>, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        Ok::<Vec<u8>, String>(guard.snapshot())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_set(
+    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+    data: Vec<u8>,
+) -> Result<usize, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        guard.set(data);
+        Ok::<usize, String>(guard.len())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_read_since(
+    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+    offset: u64,
+    max_bytes: usize,
+) -> Result<TransportBufferReadResponse, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        Ok::<TransportBufferReadResponse, String>(guard.read_since(offset, max_bytes))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_compress_viewport(
+    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+    range_start: usize,
+    range_end: usize,
+    number_bins: usize,
+) -> Result<SamplerCompressResponse, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let (slice, buffer_len_bytes, base_bit_index, start, end) = {
+            let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+            let buffer = guard.snapshot();
+            let total_bits = buffer.len().saturating_mul(8);
+            let end = range_end.min(total_bits);
+            let start = range_start.min(end);
+            if buffer.is_empty() || start >= end || number_bins == 0 {
+                return Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
+                    buffer_len_bytes: buffer.len(),
+                    time_values: Vec::new(),
+                    data_values: Vec::new(),
+                });
+            }
+
+            let byte_start = start >> 3;
+            let byte_end = ((end + 7) >> 3).min(buffer.len());
+            let base_bit_index = byte_start.saturating_mul(8);
+            let slice = buffer[byte_start..byte_end].to_vec();
+            let start = start.saturating_sub(base_bit_index);
+            let end = end.saturating_sub(base_bit_index);
+            (slice, buffer.len(), base_bit_index, start, end)
+        };
+
+        let (mut time_values, data_values) = sampler_compress_bits(&slice, start, end, number_bins);
+        if base_bit_index != 0 {
+            let offset = base_bit_index as f32;
+            for value in &mut time_values {
+                *value += offset;
+            }
+        }
+        Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
+            buffer_len_bytes,
+            time_values,
+            data_values,
+        })
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_write_file(
+    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+    path: String,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    let path = expand_path(&path);
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        let bytes = guard.snapshot();
+        fs::write(&path, bytes).map_err(|error| format!("Failed to write file {}: {error}", path.display()))?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn transport_buffer_build_signed_raw_timings(
+    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+) -> Result<String, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        let bytes = guard.snapshot();
+        Ok::<String, String>(sampler_build_signed_raw_timings(&bytes))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
 async fn sampler_buffer_clear(state: State<'_, Arc<Mutex<SamplerBufferState>>>) -> Result<(), String> {
     let state = state.inner().clone();
     spawn_blocking(move || {
@@ -661,30 +805,6 @@ async fn sampler_buffer_append(
         buffer_len_bytes: guard.buffer.len(),
         truncated,
     })
-}
-
-#[tauri::command]
-async fn sampler_capture_set_mode(
-    ble: State<'_, Arc<BLEState>>,
-    usb: State<'_, Arc<USBState>>,
-    ingest: State<'_, Arc<SamplerIngestTx>>,
-    enabled: bool,
-) -> Result<(), String> {
-    let tx = ingest.tx.clone();
-
-    if enabled {
-        ble.set_sampler_capture_mode(true);
-        ble.set_sampler_tx(Some(tx.clone())).await;
-        usb.set_sampler_capture_mode(true);
-        usb.set_sampler_tx(Some(tx)).await;
-        return Ok(());
-    }
-
-    ble.set_sampler_capture_mode(false);
-    ble.set_sampler_tx(None).await;
-    usb.set_sampler_capture_mode(false);
-    usb.set_sampler_tx(None).await;
-    Ok(())
 }
 
 #[tauri::command]
@@ -1029,11 +1149,6 @@ async fn ble_get_status(state: State<'_, Arc<BLEState>>) -> Result<BLEStatus, St
 }
 
 #[tauri::command]
-async fn ble_get_notification(state: State<'_, Arc<BLEState>>) -> Result<Option<BLENotification>, String> {
-    Ok(state.get_notification().await)
-}
-
-#[tauri::command]
 async fn ble_transmit_buffer(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
     state.transmit_buffer(data).await
 }
@@ -1062,11 +1177,6 @@ async fn usb_send_packet(state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Resu
 #[tauri::command]
 async fn usb_get_status(state: State<'_, Arc<USBState>>) -> Result<USBStatus, String> {
     Ok(state.get_status().await)
-}
-
-#[tauri::command]
-async fn usb_get_notification(state: State<'_, Arc<USBState>>) -> Result<Option<USBNotification>, String> {
-    Ok(state.get_notification().await)
 }
 
 // DFU Commands
@@ -1155,19 +1265,49 @@ fn bytes_to_hex_lower(bytes: &[u8]) -> String {
 
 async fn wait_for_ota_success(
     app: &tauri::AppHandle,
-    state: &BLEState,
+    transport_buffer: &Arc<Mutex<TransportBufferState>>,
     total_bytes: u64,
     timeout_seconds: u64,
 ) -> Result<(), String> {
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_seconds);
+    let mut offset = {
+        let guard = transport_buffer
+            .lock()
+            .map_err(|_| "Transport buffer lock poisoned".to_string())?;
+        guard.end_offset()
+    };
+    let mut window: Vec<u8> = Vec::with_capacity(256);
     loop {
         let now = tokio::time::Instant::now();
         if now >= deadline {
             return Err("Timed out waiting for OTA completion status".to_string());
         }
 
-        if let Some(notification) = state.recv_notification(deadline - now).await {
-            if let Some((code, received, total, err)) = parse_ota_status(&notification.data) {
+        let chunk = {
+            let guard = transport_buffer
+                .lock()
+                .map_err(|_| "Transport buffer lock poisoned".to_string())?;
+            let response = guard.read_since(offset, 4096);
+            offset = response.next_offset;
+            response.data
+        };
+
+        if chunk.is_empty() {
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            continue;
+        }
+
+        window.extend_from_slice(&chunk);
+        if window.len() > 256 {
+            window.drain(0..(window.len() - 256));
+        }
+
+        if window.len() < 14 {
+            continue;
+        }
+
+        for i in 0..=(window.len() - 14) {
+            if let Some((code, received, total, err)) = parse_ota_status(&window[i..i + 14]) {
                 let msg = format!(
                     "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
                 );
@@ -1287,7 +1427,7 @@ async fn ble_ota_flash_bytes(
     emit_ota_progress(app, "Finalizing...", total_bytes, total_bytes);
     state.ota_write_control(&[0x03]).await?;
 
-    wait_for_ota_success(app, state, total_bytes, 30).await
+    wait_for_ota_success(app, &state.transport_buffer, total_bytes, 30).await
 }
 
 #[tauri::command]
@@ -1362,7 +1502,7 @@ async fn wifi_ota_flash_bytes(
     wifi_http_post_firmware(app, bytes, &sha_hex, total_bytes).await?;
 
     emit_ota_progress(app, "Waiting for device to finalize...", total_bytes, total_bytes);
-    wait_for_ota_success(app, state, total_bytes, 30).await
+    wait_for_ota_success(app, &state.transport_buffer, total_bytes, 30).await
 }
 
 #[tauri::command]
@@ -1442,44 +1582,12 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
-    let sampler_buffer_state: Arc<Mutex<SamplerBufferState>> = Arc::new(Mutex::new(SamplerBufferState::default()));
-    let sampler_buffer_state_for_setup = Arc::clone(&sampler_buffer_state);
-    let (sampler_ingest_tx, sampler_ingest_rx) = mpsc::channel::<Vec<u8>>(4096);
-    let mut sampler_ingest_rx = Some(sampler_ingest_rx);
+    let transport_buffer_state: Arc<Mutex<TransportBufferState>> = Arc::new(Mutex::new(TransportBufferState::default()));
+    let transport_buffer_state_for_setup = Arc::clone(&transport_buffer_state);
 
     tauri::Builder::default()
         .setup(move |app| {
             let handle = app.handle();
-            if let Some(mut sampler_ingest_rx) = sampler_ingest_rx.take() {
-                let sampler_buffer_state_for_ingest = Arc::clone(&sampler_buffer_state_for_setup);
-                tauri::async_runtime::spawn(async move {
-                    const MAX_BATCH_BYTES: usize = 128 * 1024;
-                    while let Some(first) = sampler_ingest_rx.recv().await {
-                        let mut batch = Vec::with_capacity(first.len().min(MAX_BATCH_BYTES));
-                        batch.extend_from_slice(&first);
-
-                        while batch.len() < MAX_BATCH_BYTES {
-                            match sampler_ingest_rx.try_recv() {
-                                Ok(next) => {
-                                    if batch.len() + next.len() > MAX_BATCH_BYTES {
-                                        break;
-                                    }
-                                    batch.extend_from_slice(&next);
-                                }
-                                Err(_) => break,
-                            }
-                        }
-
-                        if batch.is_empty() {
-                            continue;
-                        }
-
-                        if let Ok(mut guard) = sampler_buffer_state_for_ingest.lock() {
-                            let _ = sampler_buffer_append_bytes(&mut guard, &batch);
-                        }
-                    }
-                });
-            }
 
             let new_item = MenuItem::with_id(
                 app,
@@ -1800,11 +1908,11 @@ pub fn run() {
                 .with_state_flags(window_state_flags)
                 .build(),
         )
-        .manage(Arc::new(BLEState::new()))
+        .manage(Arc::new(BLEState::new(Arc::clone(&transport_buffer_state_for_setup))))
         .manage(Arc::new(PtyManager::new()))
-        .manage(Arc::new(USBState::new()))
-        .manage(Arc::new(SamplerIngestTx { tx: sampler_ingest_tx }))
-        .manage(Arc::clone(&sampler_buffer_state))
+        .manage(Arc::new(USBState::new(Arc::clone(&transport_buffer_state_for_setup))))
+        .manage(Arc::clone(&transport_buffer_state_for_setup))
+        .manage(Arc::new(Mutex::new(SamplerBufferState::default())))
 		        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
@@ -1814,6 +1922,14 @@ pub fn run() {
             write_file,
             write_binary_file,
             ensure_dir,
+            transport_buffer_clear,
+            transport_buffer_set_max_size,
+            transport_buffer_get,
+            transport_buffer_set,
+            transport_buffer_read_since,
+            transport_buffer_compress_viewport,
+            transport_buffer_write_file,
+            transport_buffer_build_signed_raw_timings,
             sampler_buffer_clear,
             sampler_buffer_set_max_size,
             sampler_buffer_set,
@@ -1822,7 +1938,6 @@ pub fn run() {
             sampler_buffer_write_file,
             sampler_buffer_get,
             sampler_buffer_build_signed_raw_timings,
-            sampler_capture_set_mode,
             remove_path,
             rename_path,
             reveal_in_finder,
@@ -1837,7 +1952,6 @@ pub fn run() {
             ble_disconnect,
             ble_send_packet,
             ble_get_status,
-            ble_get_notification,
             ble_transmit_buffer,
             ble_ota_flash_file,
             ble_ota_flash_stock,
@@ -1848,10 +1962,9 @@ pub fn run() {
             usb_list_ports,
             usb_connect,
             usb_disconnect,
-	            usb_send_packet,
-	            usb_get_status,
-	            usb_get_notification,
-	            dfu_is_connected,
+		            usb_send_packet,
+		            usb_get_status,
+		            dfu_is_connected,
 	            dfu_flash_embedded,
 	            dfu_flash_file,
                 firmware_build,

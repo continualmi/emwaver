@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useDevice } from "../utils/DeviceContext";
 
 interface BLEStatus {
   connected: boolean;
@@ -9,6 +10,7 @@ interface BLEStatus {
 }
 
 export default function EMWaverFragment() {
+  const { addNotificationListener, removeNotificationListener } = useDevice();
   const [status, setStatus] = useState<BLEStatus>({
     connected: false,
     scanning: false,
@@ -64,36 +66,22 @@ export default function EMWaverFragment() {
   useEffect(() => {
     if (!status.connected) return;
 
-    const checkNotifications = async () => {
-      try {
-        const notification = await invoke<{ data: number[]; timestamp: number } | null>(
-          "ble_get_notification"
-        );
-        if (notification) {
-          const timestamp = new Date(notification.timestamp).toLocaleTimeString("en-US", {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            fractionalSecondDigits: 3,
-          });
-          const data = new Uint8Array(notification.data);
-          appendToMonitor(data, timestamp, false);
-        }
-      } catch (error) {
-        // Ignore errors for now
-      }
+    const listener = (data: Uint8Array, timestampMs: number) => {
+      const timestamp = new Date(timestampMs).toLocaleTimeString("en-US", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3,
+      });
+      appendToMonitor(data, timestamp, false);
     };
 
-    checkNotifications();
-    notificationIntervalRef.current = window.setInterval(checkNotifications, 100);
-
+    addNotificationListener(listener);
     return () => {
-      if (notificationIntervalRef.current !== null) {
-        clearInterval(notificationIntervalRef.current);
-      }
+      removeNotificationListener(listener);
     };
-  }, [status.connected]);
+  }, [status.connected, addNotificationListener, removeNotificationListener]);
 
   // Auto-scroll monitor
   useEffect(() => {
