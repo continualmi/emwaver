@@ -1,5 +1,6 @@
 use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortInfo, SerialPortType, StopBits};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::io::{Read, Write};
 use tokio::sync::{mpsc, Mutex as AsyncMutex};
@@ -25,6 +26,8 @@ pub struct USBState {
     pub notification_tx: Arc<AsyncMutex<Option<mpsc::Sender<USBNotification>>>>,
     pub notification_rx: Arc<AsyncMutex<Option<mpsc::Receiver<USBNotification>>>>,
     pub running: Arc<AsyncMutex<bool>>,
+    pub sampler_capture_mode: Arc<AtomicBool>,
+    pub sampler_tx: Arc<AsyncMutex<Option<mpsc::Sender<Vec<u8>>>>>,
 }
 
 unsafe impl Send for USBState {}
@@ -41,7 +44,18 @@ impl USBState {
             notification_tx: Arc::new(AsyncMutex::new(None)),
             notification_rx: Arc::new(AsyncMutex::new(None)),
             running: Arc::new(AsyncMutex::new(false)),
+            sampler_capture_mode: Arc::new(AtomicBool::new(false)),
+            sampler_tx: Arc::new(AsyncMutex::new(None)),
         }
+    }
+
+    pub fn set_sampler_capture_mode(&self, enabled: bool) {
+        self.sampler_capture_mode.store(enabled, Ordering::Relaxed);
+    }
+
+    pub async fn set_sampler_tx(&self, tx: Option<mpsc::Sender<Vec<u8>>>) {
+        let mut guard = self.sampler_tx.lock().await;
+        *guard = tx;
     }
 
     pub async fn list_ports() -> Result<Vec<String>, String> {
@@ -153,6 +167,8 @@ impl USBState {
         let port_clone = Arc::clone(&self.port);
         let notification_tx_clone = Arc::clone(&self.notification_tx);
         let running_clone = Arc::clone(&self.running);
+        let sampler_capture_mode_clone = Arc::clone(&self.sampler_capture_mode);
+        let sampler_tx_clone = Arc::clone(&self.sampler_tx);
 
         // We need a way to read from the port without locking it forever.
         // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
@@ -188,6 +204,14 @@ impl USBState {
                     Ok(bytes_read) => {
                         if bytes_read > 0 {
                             let data = buffer[0..bytes_read].to_vec();
+                            if sampler_capture_mode_clone.load(Ordering::Relaxed) {
+                                let sampler_guard = sampler_tx_clone.blocking_lock();
+                                if let Some(tx) = sampler_guard.as_ref() {
+                                    let _ = tx.blocking_send(data);
+                                }
+                                continue;
+                            }
+
                             let notification = USBNotification {
                                 data,
                                 timestamp: std::time::SystemTime::now()
@@ -195,8 +219,7 @@ impl USBState {
                                     .unwrap()
                                     .as_millis() as u64,
                             };
-                            
-                            // Send to channel
+
                             let tx_guard = notification_tx_clone.blocking_lock();
                             if let Some(tx) = tx_guard.as_ref() {
                                 let _ = tx.blocking_send(notification);

@@ -285,7 +285,6 @@ function SamplerFragment() {
   const lastChartRenderAtRef = useRef(0);
   const lastChartViewportKeyRef = useRef<string>('');
   const pendingChartRefreshRef = useRef<number | null>(null);
-  const pendingAppendChunksRef = useRef<Uint8Array[]>([]);
   const chartRefreshInFlightRef = useRef(false);
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
@@ -400,116 +399,61 @@ function SamplerFragment() {
     return { visibleRangeStart, visibleRangeEnd };
   }, []);
 
-  const performChartRefresh = useCallback((chartInstance?: any) => {
-    const chart = chartInstance || chartRef.current;
-    if (!chart) return;
+	  const performChartRefresh = useCallback((chartInstance?: any) => {
+	    const chart = chartInstance || chartRef.current;
+	    if (!chart) return;
 
-    if (useRustSampler) {
-      if (chartRefreshInFlightRef.current) {
-        return;
-      }
-      chartRefreshInFlightRef.current = true;
+	    if (useRustSampler) {
+	      if (chartRefreshInFlightRef.current) {
+	        return;
+	      }
+	      chartRefreshInFlightRef.current = true;
 
-      const requestedBins = getEffectiveBins(chartResolution);
-      const fallbackBufferBytes = rustBufferSizeRef.current;
-      const fallbackChartMaxX = fallbackBufferBytes * 8;
-      const chartMaxXForRequest = Math.max(
-        10000,
-        fallbackChartMaxX,
-        Math.trunc(Number(chart?.options?.scales?.x?.max ?? 10000)) || 10000,
-      );
-      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxXForRequest);
+	      const requestedBins = getEffectiveBins(chartResolution);
+	      const fallbackBufferBytes = rustBufferSizeRef.current;
+	      const fallbackChartMaxX = fallbackBufferBytes * 8;
+	      const chartMaxXForRequest = Math.max(
+	        10000,
+	        fallbackChartMaxX,
+	        Math.trunc(Number(chart?.options?.scales?.x?.max ?? 10000)) || 10000,
+	      );
+	      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxXForRequest);
 
-      const chunks = pendingAppendChunksRef.current;
-      pendingAppendChunksRef.current = [];
-      const flushPromise = chunks.length
-        ? (() => {
-            let total = 0;
-            for (const chunk of chunks) total += chunk.length;
-            if (total <= 0) return Promise.resolve();
+	      void safeInvoke<SamplerCompressViewportResponse>(
+	        'sampler_buffer_compress_viewport',
+	        { range_start: visibleRangeStart, range_end: visibleRangeEnd, number_bins: requestedBins },
+	        { throwOnError: true },
+	      )
+	        .then((result) => {
+	          if (!result) return;
 
-            const merged = new Uint8Array(total);
-            let offset = 0;
-            for (const chunk of chunks) {
-              merged.set(chunk, offset);
-              offset += chunk.length;
-            }
+	          const bufferBytes = result.buffer_len_bytes;
+	          rustBufferSizeRef.current = bufferBytes;
 
-            return safeInvoke<SamplerAppendResponse>(
-              'sampler_buffer_append',
-              { data: Array.from(merged) },
-              { throwOnError: true },
-            ).then((appendResult) => {
-              if (appendResult) {
-                rustBufferSizeRef.current = appendResult.buffer_len_bytes;
-              }
-            });
-          })()
-        : Promise.resolve();
+	          const viewportKey = `${bufferBytes}:${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
+	          if (viewportKey === lastChartViewportKeyRef.current) {
+	            return;
+	          }
+	          lastChartViewportKeyRef.current = viewportKey;
 
-      void flushPromise
-        .then(() =>
-          safeInvoke<SamplerCompressViewportResponse>(
-            'sampler_buffer_compress_viewport',
-            { range_start: visibleRangeStart, range_end: visibleRangeEnd, number_bins: requestedBins },
-            { throwOnError: true },
-          ),
-        )
-        .then((result) => {
-          if (!result) return;
+	          setSamplerBackend('rust');
+	          setChartData({ timeValues: result.time_values, dataValues: result.data_values });
 
-          const bufferBytes = result.buffer_len_bytes;
-          rustBufferSizeRef.current = bufferBytes;
-
-          const viewportKey = `${bufferBytes}:${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
-          if (viewportKey === lastChartViewportKeyRef.current) {
-            return;
-          }
-          lastChartViewportKeyRef.current = viewportKey;
-
-          // If Rust returned no samples but JS buffer has data, fall back so the chart is never blank.
-          if ((result.time_values?.length ?? 0) === 0 && bufferRef.current.getBufferLength() > 0) {
-            setSamplerBackend('js');
-            const jsBufferBytes = bufferRef.current.getBufferLength();
-            const jsChartMaxX = jsBufferBytes * 8;
-            const { visibleRangeStart: jsStart, visibleRangeEnd: jsEnd } = computeVisibleRangeBits(chart, jsChartMaxX);
-            const compressed = bufferRef.current.compressDataBits(jsStart, jsEnd, requestedBins);
-            setChartData(compressed);
-            if (chart.options?.scales?.x) {
-              chart.options.scales.x.max = jsChartMaxX || 10000;
-              if (chart.options.plugins?.zoom?.limits?.x) {
-                chart.options.plugins.zoom.limits.x.max = jsChartMaxX || 10000;
-              }
-            }
-            return;
-          }
-
-          setSamplerBackend('rust');
-          setChartData({ timeValues: result.time_values, dataValues: result.data_values });
-
-          const chartMaxX = bufferBytes * 8;
-          if (chart.options?.scales?.x) {
-            chart.options.scales.x.max = chartMaxX || 10000;
-            if (chart.options.plugins?.zoom?.limits?.x) {
-              chart.options.plugins.zoom.limits.x.max = chartMaxX || 10000;
-            }
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to refresh chart (rust sampler):', error);
-          // Hard fallback to JS path if Rust invoke fails.
-          setSamplerBackend('js');
-          const jsBufferBytes = bufferRef.current.getBufferLength();
-          const jsChartMaxX = jsBufferBytes * 8;
-          const { visibleRangeStart: jsStart, visibleRangeEnd: jsEnd } = computeVisibleRangeBits(chart, jsChartMaxX);
-          const bins = getEffectiveBins(chartResolution);
-          const compressed = bufferRef.current.compressDataBits(jsStart, jsEnd, bins);
-          setChartData(compressed);
-        })
-        .finally(() => {
-          chartRefreshInFlightRef.current = false;
-        });
-      return;
+	          const chartMaxX = Math.max(10000, bufferBytes * 8);
+	          if (chart.options?.scales?.x) {
+	            chart.options.scales.x.max = chartMaxX || 10000;
+	            if (chart.options.plugins?.zoom?.limits?.x) {
+	              chart.options.plugins.zoom.limits.x.max = chartMaxX || 10000;
+	            }
+	          }
+	        })
+	        .catch((error) => {
+	          console.error('Failed to refresh chart (rust sampler):', error);
+	        })
+	        .finally(() => {
+	          chartRefreshInFlightRef.current = false;
+	        });
+	      return;
     }
 
     const bufferBytes = bufferRef.current.getBufferLength();
@@ -592,16 +536,12 @@ function SamplerFragment() {
 
   // Listen for BLE notifications via context and accumulate buffer
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected || useRustSampler) return;
 
     const notificationListener = (data: Uint8Array, timestamp: number) => {
       // Append all notification data to buffer
       if (data.length > 0) {
-        // Always keep JS buffer updated so the chart can render even if the Rust path fails.
         bufferRef.current.append(data);
-        if (useRustSampler) {
-          pendingAppendChunksRef.current.push(new Uint8Array(data));
-	        }
 	        if (isRecording) {
 	          setHasUnsavedChanges(true);
 	        }
@@ -679,6 +619,22 @@ function SamplerFragment() {
       return;
     }
 
+    if (useRustSampler) {
+      await safeInvoke<void>('sampler_buffer_clear', undefined, { throwOnError: true });
+      rustBufferSizeRef.current = 0;
+      lastBufferSizeRef.current = 0;
+      lastChartViewportKeyRef.current = '';
+      setChartData({ timeValues: [], dataValues: [] });
+      resetChartZoom();
+      await safeInvoke<void>('sampler_capture_set_mode', { enabled: true }, { throwOnError: true });
+    } else {
+      bufferRef.current.clearBuffer();
+      lastBufferSizeRef.current = 0;
+      lastChartViewportKeyRef.current = '';
+      setChartData({ timeValues: [], dataValues: [] });
+      resetChartZoom();
+    }
+
     // Send "sample start --pin=<pin>" command (matching Android/iOS)
     const commandStr = `sample start --pin=${pinNumber}\n`;
     const command = new TextEncoder().encode(commandStr);
@@ -691,6 +647,10 @@ function SamplerFragment() {
   const stopRecording = async () => {
     if (!isConnected) return;
 
+    if (useRustSampler) {
+      await safeInvoke<void>('sampler_capture_set_mode', { enabled: false }, { throwOnError: true });
+    }
+
     // Send "sample stop" command (matching Android/iOS)
     const command = new TextEncoder().encode('sample stop\n');
     await sendCommand(command);
@@ -702,6 +662,10 @@ function SamplerFragment() {
 	    if (!isConnected) {
 	      alert('Not connected to device');
 	      return;
+	    }
+
+	    if (useRustSampler) {
+	      await safeInvoke<void>('sampler_capture_set_mode', { enabled: false }, { throwOnError: true });
 	    }
 
 	    const buffer = useRustSampler
@@ -1388,15 +1352,13 @@ function SamplerFragment() {
 
       <div className="flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto px-6 py-6">
         {/* Chart */}
-        <div className="flex-shrink-0 bg-slate-900 rounded-lg p-4">
-          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-            <div>Backend: {useRustSampler ? samplerBackend : 'js'}</div>
-            <div>JS bytes: {bufferRef.current.getBufferLength()}</div>
-            {useRustSampler ? <div>Rust bytes: {rustBufferSizeRef.current}</div> : null}
-            <div>Queued chunks: {pendingAppendChunksRef.current.length}</div>
-          </div>
-          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
-            {chartError ? (
+	        <div className="flex-shrink-0 bg-slate-900 rounded-lg p-4">
+	          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+	            <div>Backend: {useRustSampler ? 'rust' : 'js'}</div>
+	            {useRustSampler ? <div>Rust bytes: {rustBufferSizeRef.current}</div> : <div>JS bytes: {bufferRef.current.getBufferLength()}</div>}
+	          </div>
+	          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
+	            {chartError ? (
               <div className="flex h-full items-center justify-center text-slate-400">
                 <p>Chart error: {chartError}</p>
               </div>

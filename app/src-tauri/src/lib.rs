@@ -13,6 +13,7 @@ use std::{
     process::Command,
     sync::{Arc, Mutex},
 };
+use tokio::sync::mpsc;
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
@@ -171,6 +172,11 @@ struct SamplerCompressResponse {
 struct SamplerAppendResponse {
     buffer_len_bytes: usize,
     truncated: bool,
+}
+
+#[derive(Clone)]
+struct SamplerIngestTx {
+    tx: mpsc::Sender<Vec<u8>>,
 }
 
 #[derive(Deserialize)]
@@ -568,6 +574,28 @@ fn sampler_build_signed_raw_timings(buffer: &[u8]) -> String {
     timings.join(" ")
 }
 
+fn sampler_buffer_append_bytes(guard: &mut SamplerBufferState, data: &[u8]) -> bool {
+    if data.is_empty() {
+        return false;
+    }
+
+    if guard.max_size > 0 {
+        let remaining = guard.max_size.saturating_sub(guard.buffer.len());
+        if remaining == 0 {
+            return true;
+        }
+        if data.len() > remaining {
+            guard.buffer.extend_from_slice(&data[..remaining]);
+            return true;
+        }
+        guard.buffer.extend_from_slice(data);
+        return false;
+    }
+
+    guard.buffer.extend_from_slice(data);
+    false
+}
+
 #[tauri::command]
 async fn sampler_buffer_clear(state: State<'_, Arc<Mutex<SamplerBufferState>>>) -> Result<(), String> {
     let state = state.inner().clone();
@@ -627,32 +655,36 @@ async fn sampler_buffer_append(
     let mut guard = state
         .lock()
         .map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-    if data.is_empty() {
-        return Ok(SamplerAppendResponse {
-            buffer_len_bytes: guard.buffer.len(),
-            truncated: false,
-        });
-    }
-
-    let mut truncated = false;
-    if guard.max_size > 0 {
-        let remaining = guard.max_size.saturating_sub(guard.buffer.len());
-        if remaining == 0 {
-            truncated = true;
-        } else if data.len() > remaining {
-            guard.buffer.extend_from_slice(&data[..remaining]);
-            truncated = true;
-        } else {
-            guard.buffer.extend_from_slice(&data);
-        }
-    } else {
-        guard.buffer.extend_from_slice(&data);
-    }
+    let truncated = sampler_buffer_append_bytes(&mut guard, &data);
 
     Ok(SamplerAppendResponse {
         buffer_len_bytes: guard.buffer.len(),
         truncated,
     })
+}
+
+#[tauri::command]
+async fn sampler_capture_set_mode(
+    ble: State<'_, Arc<BLEState>>,
+    usb: State<'_, Arc<USBState>>,
+    ingest: State<'_, Arc<SamplerIngestTx>>,
+    enabled: bool,
+) -> Result<(), String> {
+    let tx = ingest.tx.clone();
+
+    if enabled {
+        ble.set_sampler_capture_mode(true);
+        ble.set_sampler_tx(Some(tx.clone())).await;
+        usb.set_sampler_capture_mode(true);
+        usb.set_sampler_tx(Some(tx)).await;
+        return Ok(());
+    }
+
+    ble.set_sampler_capture_mode(false);
+    ble.set_sampler_tx(None).await;
+    usb.set_sampler_capture_mode(false);
+    usb.set_sampler_tx(None).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1410,9 +1442,44 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
+    let sampler_buffer_state: Arc<Mutex<SamplerBufferState>> = Arc::new(Mutex::new(SamplerBufferState::default()));
+    let sampler_buffer_state_for_setup = Arc::clone(&sampler_buffer_state);
+    let (sampler_ingest_tx, sampler_ingest_rx) = mpsc::channel::<Vec<u8>>(4096);
+    let mut sampler_ingest_rx = Some(sampler_ingest_rx);
+
     tauri::Builder::default()
         .setup(move |app| {
             let handle = app.handle();
+            if let Some(mut sampler_ingest_rx) = sampler_ingest_rx.take() {
+                let sampler_buffer_state_for_ingest = Arc::clone(&sampler_buffer_state_for_setup);
+                tauri::async_runtime::spawn(async move {
+                    const MAX_BATCH_BYTES: usize = 128 * 1024;
+                    while let Some(first) = sampler_ingest_rx.recv().await {
+                        let mut batch = Vec::with_capacity(first.len().min(MAX_BATCH_BYTES));
+                        batch.extend_from_slice(&first);
+
+                        while batch.len() < MAX_BATCH_BYTES {
+                            match sampler_ingest_rx.try_recv() {
+                                Ok(next) => {
+                                    if batch.len() + next.len() > MAX_BATCH_BYTES {
+                                        break;
+                                    }
+                                    batch.extend_from_slice(&next);
+                                }
+                                Err(_) => break,
+                            }
+                        }
+
+                        if batch.is_empty() {
+                            continue;
+                        }
+
+                        if let Ok(mut guard) = sampler_buffer_state_for_ingest.lock() {
+                            let _ = sampler_buffer_append_bytes(&mut guard, &batch);
+                        }
+                    }
+                });
+            }
 
             let new_item = MenuItem::with_id(
                 app,
@@ -1736,7 +1803,8 @@ pub fn run() {
         .manage(Arc::new(BLEState::new()))
         .manage(Arc::new(PtyManager::new()))
         .manage(Arc::new(USBState::new()))
-        .manage(Arc::new(Mutex::new(SamplerBufferState::default())))
+        .manage(Arc::new(SamplerIngestTx { tx: sampler_ingest_tx }))
+        .manage(Arc::clone(&sampler_buffer_state))
 		        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
@@ -1754,6 +1822,7 @@ pub fn run() {
             sampler_buffer_write_file,
             sampler_buffer_get,
             sampler_buffer_build_signed_raw_timings,
+            sampler_capture_set_mode,
             remove_path,
             rename_path,
             reveal_in_finder,
