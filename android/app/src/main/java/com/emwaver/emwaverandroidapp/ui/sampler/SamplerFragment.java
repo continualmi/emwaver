@@ -256,14 +256,38 @@ public class SamplerFragment extends Fragment {
         chart = binding.chart;
 
         SharedPreferences pwmPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        boolean pwmEnabled = pwmPrefs.getBoolean(PREF_TX_PWM_ENABLED, true);
         int pwmFreqHz = pwmPrefs.getInt(PREF_TX_PWM_FREQ_HZ, DEFAULT_TX_PWM_FREQ_HZ);
         int pwmDutyPercent = pwmPrefs.getInt(PREF_TX_PWM_DUTY_PERCENT, DEFAULT_TX_PWM_DUTY_PERCENT);
         // PWM is always enabled for retransmit; keep the (now hidden) switch pinned on for legacy prefs.
         binding.pwmSwitch.setChecked(true);
         binding.pwmSwitch.setEnabled(false);
         binding.pwmFreqEdit.setText(String.valueOf(pwmFreqHz));
-        binding.pwmDutyEdit.setText(String.valueOf(pwmDutyPercent));
+
+        // Duty is restricted to {100, 50}. Default is 100 (effectively non-carrier).
+        final List<Integer> dutyOptions = java.util.Arrays.asList(100, 50);
+        ArrayAdapter<String> dutyAdapter = new ArrayAdapter<>(
+                requireContext(),
+                android.R.layout.simple_spinner_item,
+                java.util.Arrays.asList("100%", "50%")
+        );
+        dutyAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        binding.pwmDutySpinner.setAdapter(dutyAdapter);
+        int dutySelectionIndex = (pwmDutyPercent == 50) ? 1 : 0;
+        binding.pwmDutySpinner.setSelection(dutySelectionIndex, false);
+        binding.pwmDutySpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                int selectedDuty = (position >= 0 && position < dutyOptions.size()) ? dutyOptions.get(position) : 100;
+                pwmPrefs.edit().putInt(PREF_TX_PWM_DUTY_PERCENT, selectedDuty).apply();
+                updatePwmUiState();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // no-op
+            }
+        });
+
         updatePwmUiState();
         binding.pwmSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             pwmPrefs.edit().putBoolean(PREF_TX_PWM_ENABLED, isChecked).apply();
@@ -1042,7 +1066,7 @@ public class SamplerFragment extends Fragment {
             
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
             int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
-            int dutyPercent = parsePwmIntOrDefault(binding.pwmDutyEdit.getText().toString(), DEFAULT_TX_PWM_DUTY_PERCENT);
+            int dutyPercent = getSelectedDutyPercent();
             if (freqHz < 1) {
                 Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
                 return;
@@ -1096,7 +1120,7 @@ public class SamplerFragment extends Fragment {
 
             // Always use PWM mode; default duty=100% makes it effectively non-carrier.
             int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
-            int dutyPercent = parsePwmIntOrDefault(binding.pwmDutyEdit.getText().toString(), DEFAULT_TX_PWM_DUTY_PERCENT);
+            int dutyPercent = getSelectedDutyPercent();
             if (freqHz < 1) {
                 Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
                 return;
@@ -1573,8 +1597,23 @@ public class SamplerFragment extends Fragment {
         }
 
         binding.pwmOptionsGroup.setVisibility(View.VISIBLE);
-        binding.pwmFreqEdit.setEnabled(true);
-        binding.pwmDutyEdit.setEnabled(true);
+        int dutyPercent = getSelectedDutyPercent();
+        boolean freqEnabled = dutyPercent != 100;
+        binding.pwmFreqEdit.setEnabled(freqEnabled);
+        binding.pwmFreqEdit.setAlpha(freqEnabled ? 1.0f : 0.5f);
+        binding.pwmFreqLabel.setAlpha(freqEnabled ? 1.0f : 0.5f);
+        binding.pwmDutySpinner.setEnabled(true);
+    }
+
+    private int getSelectedDutyPercent() {
+        if (binding == null) {
+            return DEFAULT_TX_PWM_DUTY_PERCENT;
+        }
+        int position = binding.pwmDutySpinner.getSelectedItemPosition();
+        if (position == 1) {
+            return 50;
+        }
+        return 100;
     }
 
     private void resetChartZoom() {
