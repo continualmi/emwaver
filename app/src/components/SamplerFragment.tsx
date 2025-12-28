@@ -55,6 +55,17 @@ type TextInputDialogState = {
   okLabel: string;
 };
 
+type SamplerCompressViewportResponse = {
+  buffer_len_bytes: number;
+  time_values: number[];
+  data_values: number[];
+};
+
+type SamplerAppendResponse = {
+  buffer_len_bytes: number;
+  truncated: boolean;
+};
+
 const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
 const PIN_IO_ESP32_KEY = 'sampler.pinIo.esp32';
@@ -200,6 +211,7 @@ function SamplerFragment() {
   const { status, addNotificationListener, removeNotificationListener, sendCommand, transmitBuffer } = useDevice();
   const isConnected = status.connected;
   const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
+  const useRustSampler = isTauriAvailable();
   
   const [isRecording, setIsRecording] = useState(false);
   const [selectedPinIndexEsp32, setSelectedPinIndexEsp32] = useState(() => {
@@ -268,9 +280,13 @@ function SamplerFragment() {
   const chartRef = useRef<any>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const lastBufferSizeRef = useRef(0);
+  const rustBufferSizeRef = useRef(0);
   const lastChartRenderAtRef = useRef(0);
   const lastChartViewportKeyRef = useRef<string>('');
   const pendingChartRefreshRef = useRef<number | null>(null);
+  const pendingAppendChunksRef = useRef<Uint8Array[]>([]);
+  const pendingAppendTimerRef = useRef<number | null>(null);
+  const chartRefreshInFlightRef = useRef(false);
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
   const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
@@ -278,6 +294,15 @@ function SamplerFragment() {
   // Update buffer max size when setting changes
   useEffect(() => {
     bufferRef.current.setMaxSize(maxSamples);
+    if (useRustSampler) {
+      void safeInvoke<void>(
+        'sampler_buffer_set_max_size',
+        { max_size: maxSamples },
+        { throwOnError: true },
+      ).catch((error) => {
+        console.error('Failed to set sampler buffer max size:', error);
+      });
+    }
   }, [maxSamples]);
 
   useEffect(() => {
@@ -366,6 +391,54 @@ function SamplerFragment() {
     const chart = chartInstance || chartRef.current;
     if (!chart) return;
 
+    if (useRustSampler) {
+      if (chartRefreshInFlightRef.current) {
+        return;
+      }
+      chartRefreshInFlightRef.current = true;
+
+      const requestedBins = getEffectiveBins(chartResolution);
+      const fallbackBufferBytes = rustBufferSizeRef.current;
+      const fallbackChartMaxX = fallbackBufferBytes * 8;
+      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, fallbackChartMaxX);
+
+      void safeInvoke<SamplerCompressViewportResponse>(
+        'sampler_buffer_compress_viewport',
+        { range_start: visibleRangeStart, range_end: visibleRangeEnd, number_bins: requestedBins },
+        { throwOnError: true },
+      )
+        .then((result) => {
+          if (!result) return;
+
+          const bufferBytes = result.buffer_len_bytes;
+          rustBufferSizeRef.current = bufferBytes;
+
+          const chartMaxX = bufferBytes * 8;
+          const { visibleRangeStart: rangeStart, visibleRangeEnd: rangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
+          const viewportKey = `${bufferBytes}:${rangeStart}:${rangeEnd}:${requestedBins}`;
+          if (viewportKey === lastChartViewportKeyRef.current) {
+            return;
+          }
+          lastChartViewportKeyRef.current = viewportKey;
+
+          setChartData({ timeValues: result.time_values, dataValues: result.data_values });
+
+          if (chart.options?.scales?.x) {
+            chart.options.scales.x.max = chartMaxX || 10000;
+            if (chart.options.plugins?.zoom?.limits?.x) {
+              chart.options.plugins.zoom.limits.x.max = chartMaxX || 10000;
+            }
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to refresh chart (rust sampler):', error);
+        })
+        .finally(() => {
+          chartRefreshInFlightRef.current = false;
+        });
+      return;
+    }
+
     const bufferBytes = bufferRef.current.getBufferLength();
     const chartMaxX = bufferBytes * 8;
     const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
@@ -379,7 +452,7 @@ function SamplerFragment() {
 
     const compressed = bufferRef.current.compressDataBits(visibleRangeStart, visibleRangeEnd, bins);
     setChartData(compressed);
-  }, [chartResolution, computeVisibleRangeBits, getEffectiveBins]);
+  }, [chartResolution, computeVisibleRangeBits, getEffectiveBins, useRustSampler]);
 
   const scheduleChartRefresh = useCallback((chartInstance?: any) => {
     if (pendingChartRefreshRef.current != null) {
@@ -445,24 +518,60 @@ function SamplerFragment() {
   );
 
   // Listen for BLE notifications via context and accumulate buffer
-  useEffect(() => {
-    if (!isConnected) return;
+	  useEffect(() => {
+	    if (!isConnected) return;
 
-    const notificationListener = (data: Uint8Array, timestamp: number) => {
-      // Append all notification data to buffer
-      if (data.length > 0) {
-        bufferRef.current.append(data);
-        if (isRecording) {
-          setHasUnsavedChanges(true);
-        }
-      }
-    };
+	    const notificationListener = (data: Uint8Array, timestamp: number) => {
+	      // Append all notification data to buffer
+	      if (data.length > 0) {
+	        if (useRustSampler) {
+	          pendingAppendChunksRef.current.push(data);
+	          if (pendingAppendTimerRef.current == null) {
+	            pendingAppendTimerRef.current = window.setTimeout(() => {
+	              pendingAppendTimerRef.current = null;
+	              const chunks = pendingAppendChunksRef.current;
+	              pendingAppendChunksRef.current = [];
+	              if (!chunks.length) return;
+
+	              let total = 0;
+	              for (const chunk of chunks) total += chunk.length;
+	              if (total <= 0) return;
+
+	              const merged = new Uint8Array(total);
+	              let offset = 0;
+	              for (const chunk of chunks) {
+	                merged.set(chunk, offset);
+	                offset += chunk.length;
+	              }
+
+	              void safeInvoke<SamplerAppendResponse>(
+	                'sampler_buffer_append',
+	                { data: Array.from(merged) },
+	                { throwOnError: true },
+	              )
+	                .then((result) => {
+	                  if (!result) return;
+	                  rustBufferSizeRef.current = result.buffer_len_bytes;
+                })
+	                .catch((error) => {
+	                  console.error('Failed to append sampler data (rust sampler):', error);
+	                });
+	            }, 15);
+	          }
+	        } else {
+	          bufferRef.current.append(data);
+	        }
+	        if (isRecording) {
+	          setHasUnsavedChanges(true);
+	        }
+	      }
+	    };
 
     addNotificationListener(notificationListener);
     return () => {
       removeNotificationListener(notificationListener);
     };
-  }, [isConnected, isRecording, addNotificationListener, removeNotificationListener]);
+	  }, [isConnected, isRecording, addNotificationListener, removeNotificationListener, useRustSampler]);
 
   // Refresh chart periodically
   useEffect(() => {
@@ -474,64 +583,34 @@ function SamplerFragment() {
       return;
     }
 
-    const refreshChartLoop = () => {
-      const now = Date.now();
-      if (now - lastChartRenderAtRef.current < MIN_CHART_RENDER_INTERVAL_MS) {
-        return;
-      }
+	    const refreshChartLoop = () => {
+	      const now = Date.now();
+	      if (now - lastChartRenderAtRef.current < MIN_CHART_RENDER_INTERVAL_MS) {
+	        return;
+	      }
 
-      const currentBufferSize = bufferRef.current.getBufferLength();
-      
-      // Check buffer size limit
-      if (isRecording && currentBufferSize >= maxSamples) {
-        stopRecording();
-        alert('Recording stopped: Buffer size limit reached.');
-        return;
-      }
+	      const currentBufferSize = useRustSampler ? rustBufferSizeRef.current : bufferRef.current.getBufferLength();
+	      
+	      // Check buffer size limit
+	      if (isRecording && currentBufferSize >= maxSamples) {
+	        stopRecording();
+	        alert('Recording stopped: Buffer size limit reached.');
+	        return;
+	      }
 
-      // Only update if buffer changed or recording
-      if (currentBufferSize === lastBufferSizeRef.current && !isRecording) {
-        return;
-      }
+	      // Only update if buffer changed or recording
+	      if (currentBufferSize === lastBufferSizeRef.current && !isRecording) {
+	        return;
+	      }
 
-      lastBufferSizeRef.current = currentBufferSize;
+	      lastBufferSizeRef.current = currentBufferSize;
 
-      const chart = chartRef.current;
-      if (!chart) return;
+	      const chart = chartRef.current;
+	      if (!chart) return;
 
-      lastChartRenderAtRef.current = now;
-
-      // Update chart max X (matches Android: chartMaxX = currentBufferSize * 8)
-      const chartMaxX = currentBufferSize * 8;
-      
-      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
-      const bins = getEffectiveBins(chartResolution);
-
-      const viewportKey = `${currentBufferSize}:${visibleRangeStart}:${visibleRangeEnd}:${bins}`;
-      if (viewportKey === lastChartViewportKeyRef.current && !isRecording) {
-        return;
-      }
-      lastChartViewportKeyRef.current = viewportKey;
-
-      // Compress data (matches C++ compressDataBits exactly)
-      const compressed = bufferRef.current.compressDataBits(
-        visibleRangeStart,
-        visibleRangeEnd,
-        bins
-      );
-
-      // Update chart data - always set even if empty to trigger re-render
-      setChartData(compressed);
-      
-      // Update chart X-axis max to expand as buffer grows (matches Android)
-      if (chart.options?.scales?.x) {
-        chart.options.scales.x.max = chartMaxX;
-        // Also update zoom limits
-        if (chart.options.plugins?.zoom?.limits?.x) {
-          chart.options.plugins.zoom.limits.x.max = chartMaxX;
-        }
-      }
-    };
+	      lastChartRenderAtRef.current = now;
+	      refreshChart(chart);
+	    };
 
     refreshIntervalRef.current = window.setInterval(() => {
       refreshChartLoop();
@@ -542,7 +621,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-  }, [computeVisibleRangeBits, getEffectiveBins, isConnected, isRecording, chartResolution, maxSamples, refreshRate]);
+	  }, [isConnected, isRecording, maxSamples, refreshChart, refreshRate, useRustSampler]);
 
   const startRecording = async () => {
     if (!isConnected) {
@@ -578,17 +657,19 @@ function SamplerFragment() {
     setIsRecording(false);
   };
 
-  const retransmitSignal = async () => {
-    if (!isConnected) {
-      alert('Not connected to device');
-      return;
-    }
+	  const retransmitSignal = async () => {
+	    if (!isConnected) {
+	      alert('Not connected to device');
+	      return;
+	    }
 
-    const buffer = bufferRef.current.getBuffer();
-    if (buffer.length === 0) {
-      alert('Buffer is empty');
-      return;
-    }
+	    const buffer = useRustSampler
+	      ? new Uint8Array((await safeInvoke<number[]>('sampler_buffer_get', undefined, { throwOnError: true })) || [])
+	      : bufferRef.current.getBuffer();
+	    if (buffer.length === 0) {
+	      alert('Buffer is empty');
+	      return;
+	    }
 
     const selectedPin = pinOptions[selectedPinIndex];
     const pinNumber = deviceType === 'stm32'
@@ -630,27 +711,50 @@ function SamplerFragment() {
       console.error('Failed to retransmit signal:', error);
       alert('Failed to retransmit signal');
     }
-  };
+	  };
 
-  const getTimings = () => {
-    const timings = bufferRef.current.buildSignedRawTimings();
-    if (!timings) {
-      alert('Buffer is empty');
-      return;
-    }
+	  const getTimings = () => {
+	    if (useRustSampler) {
+	      void safeInvoke<string>('sampler_buffer_build_signed_raw_timings', undefined, { throwOnError: true })
+	        .then((timings) => {
+	          if (!timings) {
+	            alert('Buffer is empty');
+	            return;
+	          }
+	          navigator.clipboard.writeText(timings);
+	          alert('Timings copied to clipboard');
+	        })
+	        .catch((error) => {
+	          console.error('Failed to build timings:', error);
+	          alert('Failed to build timings');
+	        });
+	      return;
+	    }
 
-    // Copy to clipboard
-    navigator.clipboard.writeText(timings);
-    alert('Timings copied to clipboard');
-  };
+	    const timings = bufferRef.current.buildSignedRawTimings();
+	    if (!timings) {
+	      alert('Buffer is empty');
+	      return;
+	    }
 
-  const clearBuffer = () => {
-    bufferRef.current.clearBuffer();
-    lastBufferSizeRef.current = 0;
-    setChartData({ timeValues: [], dataValues: [] });
-    setHasUnsavedChanges(false);
-    resetChartZoom();
-  };
+	    navigator.clipboard.writeText(timings);
+	    alert('Timings copied to clipboard');
+	  };
+
+	  const clearBuffer = () => {
+	    if (useRustSampler) {
+	      void safeInvoke<void>('sampler_buffer_clear', undefined, { throwOnError: true }).catch((error) => {
+	        console.error('Failed to clear sampler buffer:', error);
+	      });
+		    } else {
+		      bufferRef.current.clearBuffer();
+		    }
+		    rustBufferSizeRef.current = 0;
+		    lastBufferSizeRef.current = 0;
+		    setChartData({ timeValues: [], dataValues: [] });
+		    setHasUnsavedChanges(false);
+		    resetChartZoom();
+		  };
 
   const resetChartZoom = () => {
     const chart = chartRef.current;
@@ -690,22 +794,33 @@ function SamplerFragment() {
         return;
       }
 
-      bufferRef.current.loadBuffer(new Uint8Array(data));
-      lastBufferSizeRef.current = bufferRef.current.getBufferLength();
-      setCurrentSignalName(signalName);
-      setHasUnsavedChanges(false);
-      localStorage.setItem(LAST_SIGNAL_KEY, signalName);
-      resetChartZoom();
-      refreshChart();
-    } catch (error) {
-      console.error('Failed to load signal:', error);
-      alert('Failed to load signal');
-    }
+	      const loaded = new Uint8Array(data);
+	      if (useRustSampler) {
+	        await safeInvoke<void>(
+	          'sampler_buffer_set',
+	          { data: Array.from(loaded) },
+	          { throwOnError: true },
+	        );
+	        rustBufferSizeRef.current = loaded.length;
+	        lastBufferSizeRef.current = 0;
+	      } else {
+	        bufferRef.current.loadBuffer(loaded);
+	        lastBufferSizeRef.current = bufferRef.current.getBufferLength();
+	      }
+	      setCurrentSignalName(signalName);
+	      setHasUnsavedChanges(false);
+	      localStorage.setItem(LAST_SIGNAL_KEY, signalName);
+	      resetChartZoom();
+	      refreshChart();
+	    } catch (error) {
+	      console.error('Failed to load signal:', error);
+	      alert('Failed to load signal');
+	    }
   };
 
   const saveSignalToStorage = async (enteredName: string) => {
-    const buffer = bufferRef.current.getBuffer();
-    if (buffer.length === 0) {
+    const bufferSize = useRustSampler ? rustBufferSizeRef.current : bufferRef.current.getBufferLength();
+    if (bufferSize === 0) {
       alert('Buffer is empty');
       return;
     }
@@ -721,11 +836,20 @@ function SamplerFragment() {
 
     try {
       const targetPath = await safeJoin(dir, fileName);
-      await safeInvoke<void>(
-        'write_binary_file',
-        { payload: { path: targetPath, data: Array.from(buffer) } },
-        { throwOnError: true },
-      );
+      if (useRustSampler) {
+        await safeInvoke<void>(
+          'sampler_buffer_write_file',
+          { path: targetPath },
+          { throwOnError: true },
+        );
+      } else {
+        const buffer = bufferRef.current.getBuffer();
+        await safeInvoke<void>(
+          'write_binary_file',
+          { payload: { path: targetPath, data: Array.from(buffer) } },
+          { throwOnError: true },
+        );
+      }
       setCurrentSignalName(fileName);
       setHasUnsavedChanges(false);
       localStorage.setItem(LAST_SIGNAL_KEY, fileName);
@@ -738,8 +862,8 @@ function SamplerFragment() {
   };
 
   const openSaveDialog = () => {
-    const buffer = bufferRef.current.getBuffer();
-    if (buffer.length === 0) {
+    const bufferSize = useRustSampler ? rustBufferSizeRef.current : bufferRef.current.getBufferLength();
+    if (bufferSize === 0) {
       alert('Buffer is empty');
       return;
     }
@@ -822,10 +946,10 @@ function SamplerFragment() {
         try {
           const arrayBuffer = await selectedFile.arrayBuffer();
           const buffer = new Uint8Array(arrayBuffer);
-          if (buffer.length === 0) {
-            alert('Selected file is empty');
-            return;
-          }
+	          if (buffer.length === 0) {
+	            alert('Selected file is empty');
+	            return;
+	          }
 
 	          const defaultName = selectedFile.name || generateNewSignalName();
 	          const fileName = normalizeSignalName(defaultName, generateNewSignalName());
@@ -839,19 +963,29 @@ function SamplerFragment() {
 	            );
 	          }
 
-          bufferRef.current.loadBuffer(buffer);
-          lastBufferSizeRef.current = bufferRef.current.getBufferLength();
-          
-          setCurrentSignalName(fileName);
-          setHasUnsavedChanges(false);
-          localStorage.setItem(LAST_SIGNAL_KEY, fileName);
-          resetChartZoom();
-          refreshChart();
-          refreshSignalList();
-        } catch (error) {
-          console.error('Failed to read file:', error);
-          alert('Failed to import signal');
-        }
+	          if (useRustSampler) {
+	            await safeInvoke<void>(
+	              'sampler_buffer_set',
+	              { data: Array.from(buffer) },
+	              { throwOnError: true },
+	            );
+	            rustBufferSizeRef.current = buffer.length;
+	            lastBufferSizeRef.current = 0;
+	          } else {
+	            bufferRef.current.loadBuffer(buffer);
+	            lastBufferSizeRef.current = bufferRef.current.getBufferLength();
+	          }
+
+	          setCurrentSignalName(fileName);
+	          setHasUnsavedChanges(false);
+	          localStorage.setItem(LAST_SIGNAL_KEY, fileName);
+	          resetChartZoom();
+	          refreshChart();
+	          refreshSignalList();
+	        } catch (error) {
+	          console.error('Failed to read file:', error);
+	          alert('Failed to import signal');
+	        }
       };
       input.click();
     } catch (error) {
@@ -1072,7 +1206,7 @@ function SamplerFragment() {
         limits: {
           x: {
             min: 0,
-            max: bufferRef.current.getBufferLength() * 8 || 10000,
+            max: 10000,
           },
         },
       },
@@ -1092,7 +1226,7 @@ function SamplerFragment() {
           color: '#334155',
         },
         min: 0,
-        max: bufferRef.current.getBufferLength() * 8 || 10000,
+        max: 10000,
       },
       y: {
         type: 'linear' as const,

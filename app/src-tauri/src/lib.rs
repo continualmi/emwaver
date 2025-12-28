@@ -5,7 +5,14 @@ mod pty;
 mod usb;
 
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io, path::{Path, PathBuf}, process::Command, sync::Arc};
+use std::{
+    env,
+    fs,
+    io,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::{Arc, Mutex},
+};
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
@@ -145,6 +152,25 @@ struct WriteBinaryFilePayload {
 #[derive(Deserialize)]
 struct EnsureDirPayload {
     path: String,
+}
+
+#[derive(Default)]
+struct SamplerBufferState {
+    buffer: Vec<u8>,
+    max_size: usize,
+}
+
+#[derive(Clone, Serialize)]
+struct SamplerCompressResponse {
+    buffer_len_bytes: usize,
+    time_values: Vec<f32>,
+    data_values: Vec<f32>,
+}
+
+#[derive(Clone, Serialize)]
+struct SamplerAppendResponse {
+    buffer_len_bytes: usize,
+    truncated: bool,
 }
 
 #[derive(Deserialize)]
@@ -403,6 +429,299 @@ async fn ensure_dir(payload: EnsureDirPayload) -> Result<(), String> {
         .map_err(|error| format!("Failed to create directory: {error}"))?
         .map_err(|error| format!("Failed to create directory: {error}"))?;
     Ok(())
+}
+
+fn sampler_compress_bits(
+    buffer: &[u8],
+    range_start: usize,
+    range_end: usize,
+    number_bins: usize,
+) -> (Vec<f32>, Vec<f32>) {
+    let time_per_sample: f32 = 1.0;
+    let total_bits = buffer.len().saturating_mul(8);
+    if buffer.is_empty() || range_start >= range_end || range_start >= total_bits || number_bins == 0 {
+        return (Vec::new(), Vec::new());
+    }
+
+    let end = range_end.min(total_bits);
+    let start = range_start.min(end);
+    let total_points_in_range = ((end - start) as f32) / time_per_sample;
+
+    let mut time_values: Vec<f32> = Vec::new();
+    let mut data_values: Vec<f32> = Vec::new();
+
+    if total_points_in_range <= (number_bins.saturating_mul(2) as f32) {
+        time_values.reserve(end - start);
+        data_values.reserve(end - start);
+        for i in start..end {
+            let byte_index = i >> 3;
+            if byte_index >= buffer.len() {
+                break;
+            }
+            let bit_index = (i & 7) as u8;
+            let bit = (buffer[byte_index] >> bit_index) & 1;
+            time_values.push((i as f32) * time_per_sample);
+            data_values.push(if bit == 1 { 255.0 } else { 0.0 });
+        }
+        return (time_values, data_values);
+    }
+
+    let bin_width = total_points_in_range / (number_bins as f32);
+    for bin in 0..number_bins {
+        let bin_start = (start as f32 + (bin as f32) * bin_width).floor() as usize;
+        let mut bin_end = (bin_start as f32 + bin_width).floor() as usize;
+        if bin_end > end {
+            bin_end = end;
+        }
+        if bin_end <= bin_start {
+            continue;
+        }
+
+        let mut has_low = false;
+        let mut has_high = false;
+
+        let mut i = bin_start;
+        while i < bin_end {
+            let byte_index = i >> 3;
+            if byte_index >= buffer.len() {
+                break;
+            }
+
+            if (i & 7) == 0 && i + 8 <= bin_end {
+                let byte_val = buffer[byte_index];
+                if byte_val == 0 {
+                    has_low = true;
+                } else if byte_val == 255 {
+                    has_high = true;
+                } else {
+                    has_low = true;
+                    has_high = true;
+                }
+                i += 8;
+            } else {
+                let bit_index = (i & 7) as u8;
+                let bit = (buffer[byte_index] >> bit_index) & 1;
+                if bit == 1 {
+                    has_high = true;
+                } else {
+                    has_low = true;
+                }
+                i += 1;
+            }
+
+            if has_low && has_high {
+                break;
+            }
+        }
+
+        if has_low || has_high {
+            time_values.push((bin_start as f32) * time_per_sample);
+            data_values.push(if has_low { 0.0 } else { 255.0 });
+            time_values.push(((bin_end - 1) as f32) * time_per_sample);
+            data_values.push(if has_high { 255.0 } else { 0.0 });
+        }
+    }
+
+    (time_values, data_values)
+}
+
+fn sampler_build_signed_raw_timings(buffer: &[u8]) -> String {
+    if buffer.is_empty() {
+        return String::new();
+    }
+
+    let total_bits = buffer.len() * 8;
+    let mut timings: Vec<String> = Vec::new();
+    let mut current_state = (buffer[0] & 0x01) != 0;
+    let mut count: usize = 0;
+
+    for i in 0..total_bits {
+        let byte_index = i >> 3;
+        let bit_index = (i & 7) as u8;
+        let bit = ((buffer[byte_index] >> bit_index) & 1) != 0;
+
+        if bit == current_state {
+            count += 1;
+        } else {
+            if count > 0 {
+                let microseconds = count * 10;
+                if !current_state {
+                    timings.push(format!("-{microseconds}"));
+                } else {
+                    timings.push(format!("{microseconds}"));
+                }
+            }
+            current_state = bit;
+            count = 1;
+        }
+    }
+
+    if count > 0 {
+        let microseconds = count * 10;
+        if !current_state {
+            timings.push(format!("-{microseconds}"));
+        } else {
+            timings.push(format!("{microseconds}"));
+        }
+    }
+
+    timings.join(" ")
+}
+
+#[tauri::command]
+async fn sampler_buffer_clear(state: State<'_, Arc<Mutex<SamplerBufferState>>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        guard.buffer.clear();
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_set_max_size(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+    max_size: usize,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        guard.max_size = max_size;
+        if guard.max_size > 0 && guard.buffer.len() > guard.max_size {
+            let limit = guard.max_size;
+            guard.buffer.truncate(limit);
+        }
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_set(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+    data: Vec<u8>,
+) -> Result<usize, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        guard.buffer = data;
+        if guard.max_size > 0 && guard.buffer.len() > guard.max_size {
+            let limit = guard.max_size;
+            guard.buffer.truncate(limit);
+        }
+        Ok::<usize, String>(guard.buffer.len())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_append(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+    data: Vec<u8>,
+) -> Result<SamplerAppendResponse, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        if data.is_empty() {
+            return Ok::<SamplerAppendResponse, String>(SamplerAppendResponse {
+                buffer_len_bytes: guard.buffer.len(),
+                truncated: false,
+            });
+        }
+
+        let mut truncated = false;
+        if guard.max_size > 0 {
+            let remaining = guard.max_size.saturating_sub(guard.buffer.len());
+            if remaining == 0 {
+                truncated = true;
+            } else if data.len() > remaining {
+                guard.buffer.extend_from_slice(&data[..remaining]);
+                truncated = true;
+            } else {
+                guard.buffer.extend_from_slice(&data);
+            }
+        } else {
+            guard.buffer.extend_from_slice(&data);
+        }
+
+        Ok::<SamplerAppendResponse, String>(SamplerAppendResponse {
+            buffer_len_bytes: guard.buffer.len(),
+            truncated,
+        })
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_compress_viewport(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+    range_start: usize,
+    range_end: usize,
+    number_bins: usize,
+) -> Result<SamplerCompressResponse, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        let total_bits = guard.buffer.len().saturating_mul(8);
+        let end = range_end.min(total_bits);
+        let start = range_start.min(end);
+        let (time_values, data_values) = sampler_compress_bits(&guard.buffer, start, end, number_bins);
+        Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
+            buffer_len_bytes: guard.buffer.len(),
+            time_values,
+            data_values,
+        })
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_write_file(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+    path: String,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    let path = expand_path(&path);
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        fs::write(&path, &guard.buffer)
+            .map_err(|error| format!("Failed to write file {}: {error}", path.display()))?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_get(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+) -> Result<Vec<u8>, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        Ok::<Vec<u8>, String>(guard.buffer.clone())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn sampler_buffer_build_signed_raw_timings(
+    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
+) -> Result<String, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
+        Ok::<String, String>(sampler_build_signed_raw_timings(&guard.buffer))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -1395,7 +1714,8 @@ pub fn run() {
         .manage(Arc::new(BLEState::new()))
         .manage(Arc::new(PtyManager::new()))
         .manage(Arc::new(USBState::new()))
-	        .invoke_handler(tauri::generate_handler![
+        .manage(Arc::new(Mutex::new(SamplerBufferState::default())))
+		        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
             read_directory_children,
@@ -1404,6 +1724,14 @@ pub fn run() {
             write_file,
             write_binary_file,
             ensure_dir,
+            sampler_buffer_clear,
+            sampler_buffer_set_max_size,
+            sampler_buffer_set,
+            sampler_buffer_append,
+            sampler_buffer_compress_viewport,
+            sampler_buffer_write_file,
+            sampler_buffer_get,
+            sampler_buffer_build_signed_raw_timings,
             remove_path,
             rename_path,
             reveal_in_finder,
