@@ -30,6 +30,7 @@ use clap::Parser;
 
 pub use cli::CodegenMode;
 pub use cli::{Component, Stm32Firmware, Target};
+pub use cli::OtaTransport;
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
@@ -39,14 +40,27 @@ pub fn run() -> Result<()> {
             file,
             stock,
             device_name,
+            transport,
             chunk_size,
             verbose,
         }) => {
-            if stock {
-                ble_ota::flash_stock(device_name, chunk_size, verbose)
-            } else {
-                let file = file.expect("clap should enforce file when --stock is not present");
-                ble_ota::flash(file, device_name, chunk_size, verbose)
+            match transport {
+                cli::OtaTransport::Ble => {
+                    if stock {
+                        ble_ota::flash_stock(device_name, chunk_size, verbose)
+                    } else {
+                        let file = file.expect("clap should enforce file when --stock is not present");
+                        ble_ota::flash(file, device_name, chunk_size, verbose)
+                    }
+                }
+                cli::OtaTransport::Wifi => {
+                    if stock {
+                        ble_ota::flash_stock_wifi(device_name, verbose)
+                    } else {
+                        let file = file.expect("clap should enforce file when --stock is not present");
+                        ble_ota::flash_wifi(file, device_name, verbose)
+                    }
+                }
             }
         }
         Some(cli::Command::Build {

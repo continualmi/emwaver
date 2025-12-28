@@ -28,6 +28,7 @@
 #include "ble_server.h"
 #include "command_registry.h"
 #include "ota_ble.h"
+#include "ota_status.h"
 
 static const char *TAG = "BLE_SERVER";
 static const char *DEVICE_NAME = "EMWaver";
@@ -576,7 +577,7 @@ void ble_server_init(QueueHandle_t cmd_queue)
     }
 
     ota_ble_init();
-    ota_ble_set_status_attr_handle(ota_status_handle);
+    ota_status_set_attr_handle(ota_status_handle);
     
     // Set device name
     ret = ble_svc_gap_device_name_set(DEVICE_NAME);

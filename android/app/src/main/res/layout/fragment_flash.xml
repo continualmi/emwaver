@@ -101,9 +101,52 @@
             android:id="@+id/textViewOtaLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ESP32 OTA (BLE)"
+            android:text="ESP32 OTA"
             android:gravity="center"
             android:layout_marginTop="4dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"/>
+
+        <RadioGroup
+            android:id="@+id/radioGroupOtaTransport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/radioOtaBle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="BLE" />
+
+            <RadioButton
+                android:id="@+id/radioOtaWifi"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="Wi‑Fi SoftAP" />
+
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/buttonOtaWifiStart"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start Wi‑Fi OTA Mode"
+            android:layout_marginTop="8dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"/>
+
+        <Button
+            android:id="@+id/buttonOtaWifiSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open Wi‑Fi Settings"
+            android:layout_marginTop="8dp"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"/>
 

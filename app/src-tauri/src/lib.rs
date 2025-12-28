@@ -770,6 +770,100 @@ fn parse_ota_status(notification: &[u8]) -> Option<(u8, u32, u32, u8)> {
     Some((status, received, total, err))
 }
 
+fn bytes_to_hex_lower(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+async fn wait_for_ota_success(
+    app: &tauri::AppHandle,
+    state: &BLEState,
+    total_bytes: u64,
+    timeout_seconds: u64,
+) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_seconds);
+    loop {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            return Err("Timed out waiting for OTA completion status".to_string());
+        }
+
+        if let Some(notification) = state.recv_notification(deadline - now).await {
+            if let Some((code, received, total, err)) = parse_ota_status(&notification.data) {
+                let msg = format!(
+                    "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
+                );
+                emit_ota_progress(app, msg, total_bytes, total_bytes);
+                match code {
+                    0x13 => return Ok(()), // SUCCESS
+                    0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+async fn wifi_http_post_firmware(
+    app: &tauri::AppHandle,
+    bytes: &[u8],
+    sha256_hex: &str,
+    total_bytes: u64,
+) -> Result<(), String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    let addr = "192.168.4.1:80";
+    let mut stream = tokio::time::timeout(tokio::time::Duration::from_secs(10), TcpStream::connect(addr))
+        .await
+        .map_err(|_| "Timed out connecting to 192.168.4.1 (are you connected to EMWaver-OTA?)".to_string())?
+        .map_err(|e| format!("Failed to connect to {addr}: {e}"))?;
+
+    let request = format!(
+        "POST /ota HTTP/1.1\r\nHost: 192.168.4.1\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nX-Emwaver-Sha256: {}\r\nConnection: close\r\n\r\n",
+        bytes.len(),
+        sha256_hex
+    );
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .map_err(|e| format!("Failed to write HTTP request headers: {e}"))?;
+
+    let mut sent = 0usize;
+    let mut last_progress_emit = 0usize;
+    for chunk in bytes.chunks(16 * 1024) {
+        stream
+            .write_all(chunk)
+            .await
+            .map_err(|e| format!("Failed to write firmware body: {e}"))?;
+        sent += chunk.len();
+        if sent - last_progress_emit >= 64 * 1024 || sent == bytes.len() {
+            last_progress_emit = sent;
+            emit_ota_progress(app, "Uploading over WiFi...", sent as u64, total_bytes);
+        }
+    }
+
+    stream.shutdown().await.ok();
+
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .await
+        .map_err(|e| format!("Failed to read OTA HTTP response: {e}"))?;
+
+    let response_str = String::from_utf8_lossy(&response);
+    let status_line = response_str.lines().next().unwrap_or_default();
+    if !(status_line.starts_with("HTTP/1.1 200") || status_line.starts_with("HTTP/1.0 200")) {
+        return Err(format!("OTA HTTP upload failed: {status_line}"));
+    }
+    Ok(())
+}
+
 async fn ble_ota_flash_bytes(
     app: &tauri::AppHandle,
     state: &BLEState,
@@ -820,27 +914,7 @@ async fn ble_ota_flash_bytes(
     emit_ota_progress(app, "Finalizing...", total_bytes, total_bytes);
     state.ota_write_control(&[0x03]).await?;
 
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(30);
-    loop {
-        let now = tokio::time::Instant::now();
-        if now >= deadline {
-            return Err("Timed out waiting for OTA completion status".to_string());
-        }
-
-        if let Some(notification) = state.recv_notification(deadline - now).await {
-            if let Some((code, received, total, err)) = parse_ota_status(&notification.data) {
-                let msg = format!(
-                    "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
-                );
-                emit_ota_progress(app, msg, total_bytes, total_bytes);
-                match code {
-                    0x13 => return Ok(()), // SUCCESS
-                    0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
-                    _ => {} // keep waiting for terminal state
-                }
-            }
-        }
-    }
+    wait_for_ota_success(app, state, total_bytes, 30).await
 }
 
 #[tauri::command]
@@ -861,6 +935,81 @@ async fn ble_ota_flash_stock(
     state: State<'_, Arc<BLEState>>,
 ) -> Result<(), String> {
     ble_ota_flash_bytes(&app, &state, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
+}
+
+#[tauri::command]
+async fn ota_wifi_start(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    let status = state.get_status().await;
+    if !status.connected {
+        return Err("Not connected to a BLE device".to_string());
+    }
+    state.ota_write_control(&[0x10]).await
+}
+
+#[tauri::command]
+async fn ota_wifi_stop(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    let status = state.get_status().await;
+    if !status.connected {
+        return Err("Not connected to a BLE device".to_string());
+    }
+    state.ota_write_control(&[0x11]).await
+}
+
+async fn wifi_ota_flash_bytes(
+    app: &tauri::AppHandle,
+    state: &BLEState,
+    bytes: &[u8],
+    label: &str,
+) -> Result<(), String> {
+    let status = state.get_status().await;
+    if !status.connected {
+        return Err("Not connected to a BLE device".to_string());
+    }
+
+    if bytes.is_empty() {
+        return Err("Firmware is empty".to_string());
+    }
+
+    let total_bytes = bytes.len() as u64;
+    emit_ota_progress(app, format!("{label} size: {} bytes", total_bytes), 0, total_bytes);
+    emit_ota_progress(
+        app,
+        "WiFi OTA: connect to Wi-Fi 'EMWaver-OTA' then upload to http://192.168.4.1/ota",
+        0,
+        total_bytes,
+    );
+
+    use sha2::{Digest as _, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let sha = hasher.finalize();
+    let sha_hex = bytes_to_hex_lower(&sha[..]);
+
+    emit_ota_progress(app, "Uploading over WiFi...", 0, total_bytes);
+    wifi_http_post_firmware(app, bytes, &sha_hex, total_bytes).await?;
+
+    emit_ota_progress(app, "Waiting for device to finalize...", total_bytes, total_bytes);
+    wait_for_ota_success(app, state, total_bytes, 30).await
+}
+
+#[tauri::command]
+async fn ota_wifi_flash_file(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<BLEState>>,
+    path: String,
+) -> Result<(), String> {
+    let firmware_path = expand_path(&path);
+    let bytes = std::fs::read(&firmware_path)
+        .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
+    wifi_ota_flash_bytes(&app, &state, &bytes, "Firmware").await
+}
+
+#[tauri::command]
+async fn ota_wifi_flash_stock(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<BLEState>>,
+) -> Result<(), String> {
+    wifi_ota_flash_bytes(&app, &state, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
 }
 #[tauri::command]
 async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
@@ -1273,6 +1422,10 @@ pub fn run() {
             ble_transmit_buffer,
             ble_ota_flash_file,
             ble_ota_flash_stock,
+            ota_wifi_start,
+            ota_wifi_stop,
+            ota_wifi_flash_file,
+            ota_wifi_flash_stock,
             usb_list_ports,
             usb_connect,
             usb_disconnect,
