@@ -110,31 +110,69 @@
                 android:checked="true"
                 android:visibility="gone" />
 
+            <TextView
+                android:id="@+id/pwmLabel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Carrier"
+                android:textColor="@color/textSecondary"
+                android:textSize="12sp" />
+
             <LinearLayout
                 android:id="@+id/pwmOptionsGroup"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:orientation="horizontal"
                 android:visibility="visible">
 
-                <EditText
-                    android:id="@+id/pwmFreqEdit"
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="8dp"
                     android:layout_weight="1"
-                    android:hint="Freq (Hz)"
-                    android:inputType="number" />
+                    android:orientation="vertical">
 
-                <EditText
-                    android:id="@+id/pwmDutyEdit"
+                    <TextView
+                        android:id="@+id/pwmFreqLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Freq (Hz)"
+                        android:textColor="@color/textSecondary"
+                        android:textSize="12sp" />
+
+                    <EditText
+                        android:id="@+id/pwmFreqEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="38000"
+                        android:inputType="number" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:hint="Duty (%)"
-                    android:inputType="number" />
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/pwmDutyLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:text="Duty (%)"
+                        android:textColor="@color/textSecondary"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/pwmDutySpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:spinnerMode="dropdown" />
+                </LinearLayout>
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
