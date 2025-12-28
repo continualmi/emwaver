@@ -21,7 +21,8 @@ impl TransportBufferState {
     pub fn clear(&mut self) {
         self.buffer.clear();
         self.head = 0;
-        self.total_bytes = 0;
+        // Keep `total_bytes` monotonic so readers holding an `offset` can continue
+        // reading after a clear (they will clamp to the new base offset).
         self.version = self.version.saturating_add(1);
     }
 
@@ -44,7 +45,9 @@ impl TransportBufferState {
     pub fn set(&mut self, data: Vec<u8>) {
         self.buffer = data;
         self.head = 0;
-        self.total_bytes = self.buffer.len() as u64;
+        // Treat `set()` as a new segment in the same monotonic stream so existing
+        // readers can continue from their prior offsets.
+        self.total_bytes = self.total_bytes.saturating_add(self.buffer.len() as u64);
         self.version = self.version.saturating_add(1);
         self.enforce_max_size();
     }
