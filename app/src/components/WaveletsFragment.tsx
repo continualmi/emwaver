@@ -5,6 +5,7 @@ import type { editor } from "monaco-editor";
 import { appDataDir } from "@tauri-apps/api/path";
 import { WaveletEngine, type WaveletTree } from "../utils/WaveletEngine";
 import { createBLEServiceWrapper } from "../utils/BLEServiceWrapper";
+import { useDevice } from "../utils/DeviceContext";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeJoin } from "../utils/tauri";
 
@@ -86,6 +87,7 @@ async function readAssetScript(filename: string): Promise<string | null> {
 type ThemeMode = "dark" | "light";
 
 export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode }) {
+  const device = useDevice();
   const [waveletsDir, setWaveletsDir] = useState<string | null>(null);
   const [customScripts, setCustomScripts] = useState<ScriptEntry[]>([]);
   const [activeScript, setActiveScript] = useState<ScriptEntry | null>(null);
@@ -100,6 +102,52 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
   const activeScriptRef = useRef<ScriptEntry | null>(null);
   const waveletEngineRef = useRef<WaveletEngine | null>(null);
   const monaco = useMonaco();
+  const deviceRef = useRef(device);
+
+  useEffect(() => {
+    deviceRef.current = device;
+  }, [device]);
+
+  const deviceConnection = useMemo(
+    () => ({
+      sendCommandString: (command: string) => {
+        const { status, sendCommand } = deviceRef.current;
+        if (!status.connected) {
+          return null;
+        }
+        const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
+        void sendCommand(payload);
+        return null;
+      },
+      write: (data: Uint8Array) => {
+        const { status, sendCommand } = deviceRef.current;
+        if (!status.connected) {
+          return;
+        }
+        void sendCommand(data);
+      },
+      connectionStatus: () => {
+        const { status } = deviceRef.current;
+        if (!status.connected) {
+          return "disconnected";
+        }
+        return `${status.transport ?? "unknown"} connected`;
+      },
+    }),
+    [],
+  );
+
+  const utilsBinding = useMemo(
+    () => ({
+      delay: (ms: number) => {
+        // Non-blocking delay; wavelets should use `await Utils.delay(ms)`.
+        return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+      },
+    }),
+    [],
+  );
+
+  const createByteArray = useMemo(() => (bytes: number[]) => new Uint8Array(bytes), []);
 
   const assetScripts = useMemo<ScriptEntry[]>(
     () =>
@@ -241,6 +289,9 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
 
     engine.setup(printCallback, renderCallback, dialogCallback, {
       BLEService: bleService,
+      DeviceConnection: deviceConnection,
+      Utils: utilsBinding,
+      createByteArray,
     });
 
     waveletEngineRef.current = engine;
