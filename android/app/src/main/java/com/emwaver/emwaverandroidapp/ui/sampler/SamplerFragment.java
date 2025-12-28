@@ -173,7 +173,7 @@ public class SamplerFragment extends Fragment {
     private static final String PREF_TX_PWM_DUTY_PERCENT = "sampler_tx_pwm_duty_percent";
     private static final String PREF_INVERT_RECORDING = "sampler_invert_recording";
     private static final int DEFAULT_TX_PWM_FREQ_HZ = 38000;
-    private static final int DEFAULT_TX_PWM_DUTY_PERCENT = 50;
+    private static final int DEFAULT_TX_PWM_DUTY_PERCENT = 100;
     private static final String SIGNALS_DIR = "signals";
 
     private File signalsDir;
@@ -256,10 +256,12 @@ public class SamplerFragment extends Fragment {
         chart = binding.chart;
 
         SharedPreferences pwmPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        boolean pwmEnabled = pwmPrefs.getBoolean(PREF_TX_PWM_ENABLED, false);
+        boolean pwmEnabled = pwmPrefs.getBoolean(PREF_TX_PWM_ENABLED, true);
         int pwmFreqHz = pwmPrefs.getInt(PREF_TX_PWM_FREQ_HZ, DEFAULT_TX_PWM_FREQ_HZ);
         int pwmDutyPercent = pwmPrefs.getInt(PREF_TX_PWM_DUTY_PERCENT, DEFAULT_TX_PWM_DUTY_PERCENT);
-        binding.pwmSwitch.setChecked(pwmEnabled);
+        // PWM is always enabled for retransmit; keep the (now hidden) switch pinned on for legacy prefs.
+        binding.pwmSwitch.setChecked(true);
+        binding.pwmSwitch.setEnabled(false);
         binding.pwmFreqEdit.setText(String.valueOf(pwmFreqHz));
         binding.pwmDutyEdit.setText(String.valueOf(pwmDutyPercent));
         updatePwmUiState();
@@ -1038,8 +1040,24 @@ public class SamplerFragment extends Fragment {
                 return;
             }
             
-            // Format command: "transmit start --pin=<pin>"
-            String commandStr = "transmit start --pin=" + encodedPin;
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
+            int dutyPercent = parsePwmIntOrDefault(binding.pwmDutyEdit.getText().toString(), DEFAULT_TX_PWM_DUTY_PERCENT);
+            if (freqHz < 1) {
+                Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (dutyPercent < 1 || dutyPercent > 100) {
+                Toast.makeText(getContext(), "Invalid PWM duty (1-100)", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            prefs.edit()
+                    .putBoolean(PREF_TX_PWM_ENABLED, true)
+                    .putInt(PREF_TX_PWM_FREQ_HZ, freqHz)
+                    .putInt(PREF_TX_PWM_DUTY_PERCENT, dutyPercent)
+                    .apply();
+
+            String commandStr = "transmit start --pin=" + encodedPin + " --freq=" + freqHz + " --duty=" + dutyPercent;
             byte[] commandBytes = commandStr.getBytes();
             USBService.write(commandBytes);
 
@@ -1075,23 +1093,24 @@ public class SamplerFragment extends Fragment {
             // Format command for ESP32: "transmit start --pin=<pin>"
             String commandStr = "transmit start --pin=" + pinNumber;
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            if (binding.pwmSwitch.isChecked()) {
-                int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
-                int dutyPercent = parsePwmIntOrDefault(binding.pwmDutyEdit.getText().toString(), DEFAULT_TX_PWM_DUTY_PERCENT);
-                if (freqHz < 1) {
-                    Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                if (dutyPercent < 1 || dutyPercent > 100) {
-                    Toast.makeText(getContext(), "Invalid PWM duty (1-100)", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                prefs.edit()
-                        .putInt(PREF_TX_PWM_FREQ_HZ, freqHz)
-                        .putInt(PREF_TX_PWM_DUTY_PERCENT, dutyPercent)
-                        .apply();
-                commandStr += " --pwm --freq=" + freqHz + " --duty=" + dutyPercent;
+
+            // Always use PWM mode; default duty=100% makes it effectively non-carrier.
+            int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
+            int dutyPercent = parsePwmIntOrDefault(binding.pwmDutyEdit.getText().toString(), DEFAULT_TX_PWM_DUTY_PERCENT);
+            if (freqHz < 1) {
+                Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
+                return;
             }
+            if (dutyPercent < 1 || dutyPercent > 100) {
+                Toast.makeText(getContext(), "Invalid PWM duty (1-100)", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            prefs.edit()
+                    .putBoolean(PREF_TX_PWM_ENABLED, true)
+                    .putInt(PREF_TX_PWM_FREQ_HZ, freqHz)
+                    .putInt(PREF_TX_PWM_DUTY_PERCENT, dutyPercent)
+                    .apply();
+            commandStr += " --pwm --freq=" + freqHz + " --duty=" + dutyPercent;
             byte[] commandBytes = commandStr.getBytes();
             BLEService.write(commandBytes);
 
@@ -1424,8 +1443,8 @@ public class SamplerFragment extends Fragment {
             return;
         }
 
-        boolean supportsPwmRetransmit = currentDeviceType != DEVICE_STM32;
-        binding.pwmSwitch.setEnabled(supportsPwmRetransmit);
+        binding.pwmSwitch.setChecked(true);
+        binding.pwmSwitch.setEnabled(false);
         updatePwmUiState();
 
         String[] pins = (currentDeviceType == DEVICE_STM32) ? STM32_PINS : ESP32_PINS;
@@ -1553,11 +1572,9 @@ public class SamplerFragment extends Fragment {
             return;
         }
 
-        boolean supportsPwmRetransmit = currentDeviceType != DEVICE_STM32;
-        boolean pwmEnabled = supportsPwmRetransmit && binding.pwmSwitch.isChecked();
-        binding.pwmOptionsGroup.setVisibility(pwmEnabled ? View.VISIBLE : View.GONE);
-        binding.pwmFreqEdit.setEnabled(pwmEnabled);
-        binding.pwmDutyEdit.setEnabled(pwmEnabled);
+        binding.pwmOptionsGroup.setVisibility(View.VISIBLE);
+        binding.pwmFreqEdit.setEnabled(true);
+        binding.pwmDutyEdit.setEnabled(true);
     }
 
     private void resetChartZoom() {

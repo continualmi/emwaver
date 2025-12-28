@@ -107,7 +107,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="Use PWM carrier (IR)"
-                android:checked="false" />
+                android:checked="true"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/pwmOptionsGroup"
@@ -115,7 +116,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:orientation="horizontal"
-                android:visibility="gone">
+                android:visibility="visible">
 
                 <EditText
                     android:id="@+id/pwmFreqEdit"
