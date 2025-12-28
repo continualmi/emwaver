@@ -6,9 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		46C17DC72DBB801B00BA6857 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = 46C17DC62DBB801B00BA6857 /* DGCharts */; };
-/* End PBXBuildFile section */
+	/* Begin PBXBuildFile section */
+			46C17DC72DBB801B00BA6857 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = 46C17DC62DBB801B00BA6857 /* DGCharts */; };
+			A0E0A1B22F6B4D7C8E9F0001 /* ota in Resources */ = {isa = PBXBuildFile; fileRef = A0E0A1B22F6B4D7C8E9F0002 /* ota */; };
+	/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		46DC3FE82DA99FBD00423E8A /* PBXContainerItemProxy */ = {
@@ -40,12 +41,13 @@
 		};
 /* End PBXCopyFilesBuildPhase section */
 
-/* Begin PBXFileReference section */
-		46C17DC12DBB7EFB00BA6857 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
-		46DC3FDA2DA99FB800423E8A /* EMWaver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMWaver.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		46DC3FE72DA99FBD00423E8A /* EMWaverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		46DC3FF12DA99FBD00423E8A /* EMWaverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
+	/* Begin PBXFileReference section */
+			46C17DC12DBB7EFB00BA6857 /* Charts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Charts.framework; path = System/Library/Frameworks/Charts.framework; sourceTree = SDKROOT; };
+			A0E0A1B22F6B4D7C8E9F0002 /* ota */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ota; path = EMWaver/ota; sourceTree = "<group>"; };
+			46DC3FDA2DA99FB800423E8A /* EMWaver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMWaver.app; sourceTree = BUILT_PRODUCTS_DIR; };
+			46DC3FE72DA99FBD00423E8A /* EMWaverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+			46DC3FF12DA99FBD00423E8A /* EMWaverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+	/* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		46A582572DB92CE9003AEF2A /* Exceptions for "EMWaver" folder in "EMWaver" target */ = {
@@ -253,14 +255,15 @@
 		};
 /* End PBXProject section */
 
-/* Begin PBXResourcesBuildPhase section */
-		46DC3FD82DA99FB800423E8A /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+	/* Begin PBXResourcesBuildPhase section */
+			46DC3FD82DA99FB800423E8A /* Resources */ = {
+				isa = PBXResourcesBuildPhase;
+				buildActionMask = 2147483647;
+				files = (
+					A0E0A1B22F6B4D7C8E9F0001 /* ota in Resources */,
+				);
+				runOnlyForDeploymentPostprocessing = 0;
+			};
 		46DC3FE52DA99FBD00423E8A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
