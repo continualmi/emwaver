@@ -1,4 +1,3 @@
 # Transport Protocol
 
-This page moved to `documentation/transport-buffering.md`.
-
+This page moved to `documentation/buffer.md`.
