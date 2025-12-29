@@ -452,7 +452,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
                   return (
                     <div key={index} className="mb-1">
                       <span className="text-slate-500">{`[${timeStr}] `}</span>
-                      <span className={entry.isTx ? "text-amber-300" : "text-emerald-400"}>{content}</span>
+                      <span className={entry.isTx ? "text-slate-100" : "text-sky-400"}>{content}</span>
                     </div>
                   );
                 })}
