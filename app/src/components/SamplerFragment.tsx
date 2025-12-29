@@ -201,6 +201,34 @@ function parsePwmIntOrDefault(raw: string, fallback: number): number {
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fallback for environments where clipboard permission is denied.
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.width = '1px';
+      textarea.style.height = '1px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
 function SamplerFragment() {
   // Use Device context instead of polling directly
   const { status, send, sendNoWait, transmitBuffer } = useDevice();
@@ -362,6 +390,27 @@ function SamplerFragment() {
     return Math.max(MIN_CHART_BINS, Math.min(MAX_CHART_BINS, value));
   }, []);
 
+  const getAdaptiveBins = useCallback(
+    (chart: any, requested: number) => {
+      const base = getEffectiveBins(requested);
+      const width = Math.trunc(Number(chart?.width ?? 0)) || 0;
+      if (width <= 0) {
+        return base;
+      }
+      // Similar intent to Android's fixed `visiblePoints=300`: keep redraw cost bounded.
+      const pixelCap = Math.max(MIN_CHART_BINS, Math.min(MAX_CHART_BINS, Math.floor(width / 2)));
+      return Math.min(base, pixelCap);
+    },
+    [getEffectiveBins],
+  );
+
+  const minRenderIntervalMs = useMemo(() => {
+    // While recording the buffer grows fast; throttling redraw helps keep UI responsive.
+    // Keep interaction-driven refresh separate (handled by zoom/pan callbacks).
+    const base = Math.max(MIN_CHART_RENDER_INTERVAL_MS, Math.trunc(refreshRate * 3));
+    return isRecording ? Math.max(base, 200) : base;
+  }, [isRecording, refreshRate]);
+
   const computeVisibleRangeBits = useCallback((chart: any, chartMaxX: number) => {
     let visibleRangeStart = 0;
     let visibleRangeEnd = chartMaxX;
@@ -410,7 +459,7 @@ function SamplerFragment() {
 			    }
 			    chartRefreshInFlightRef.current = true;
 
-			    const requestedBins = getEffectiveBins(chartResolution);
+			    const requestedBins = getAdaptiveBins(chart, chartResolution);
 			    const fallbackBufferBytes = bufferLenBytesRef.current;
 			    const fallbackChartMaxX = fallbackBufferBytes * 8;
 			    const chartMaxXForRequest = Math.max(
@@ -476,7 +525,7 @@ function SamplerFragment() {
 			      .finally(() => {
 			        chartRefreshInFlightRef.current = false;
 			      });
-		  }, [chartResolution, computeVisibleRangeBits, getChartInstance, getEffectiveBins]);
+		  }, [chartResolution, computeVisibleRangeBits, getAdaptiveBins, getChartInstance]);
 
   const scheduleChartRefresh = useCallback((chartInstance?: any) => {
     if (pendingChartRefreshRef.current != null) {
@@ -589,11 +638,11 @@ function SamplerFragment() {
       return;
     }
 
-		    const refreshChartLoop = async () => {
-		      const now = Date.now();
-		      if (now - lastChartRenderAtRef.current < MIN_CHART_RENDER_INTERVAL_MS) {
-		        return;
-		      }
+			    const refreshChartLoop = async () => {
+			      const now = Date.now();
+			      if (now - lastChartRenderAtRef.current < minRenderIntervalMs) {
+			        return;
+			      }
 
 		      const currentBufferSize = (await safeInvoke<number>('buffer_get_len_bytes')) ?? 0;
 		      bufferLenBytesRef.current = currentBufferSize;
@@ -620,16 +669,16 @@ function SamplerFragment() {
 		      performChartRefresh(chart);
 		    };
 
-	    refreshIntervalRef.current = window.setInterval(() => {
-	      void refreshChartLoop();
-	    }, refreshRate);
+		    refreshIntervalRef.current = window.setInterval(() => {
+		      void refreshChartLoop();
+		    }, refreshRate);
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
     };
-		  }, [getChartInstance, isConnected, isRecording, maxSamples, performChartRefresh, refreshRate]);
+			  }, [getChartInstance, isConnected, isRecording, maxSamples, minRenderIntervalMs, performChartRefresh, refreshRate]);
 
 		  const startRecording = async () => {
 		    if (!isConnected) {
@@ -738,14 +787,39 @@ function SamplerFragment() {
 			          alert('Buffer is empty');
 			          return;
 			        }
-			        navigator.clipboard.writeText(timings);
-			        alert('Timings copied to clipboard');
+              void copyTextToClipboard(timings).then((ok) => {
+                if (ok) {
+                  alert('Timings copied to clipboard');
+                } else {
+                  alert('Clipboard copy failed');
+                }
+              });
 			      })
 			      .catch((error) => {
 			        console.error('Failed to build timings:', error);
 			        alert('Failed to build timings');
 			      });
 		  };
+
+      const copyDebug = () => {
+        const lines = [
+          `transport=${status.transport}`,
+          `connected=${status.connected}`,
+          `bytes=${bufferLenBytesRef.current}`,
+          `points=${chartData.timeValues.length}`,
+          `view=${debugViewport.visibleStart}..${debugViewport.visibleEnd}`,
+          `bins=${debugViewport.requestedBins}`,
+          `scale=${debugViewport.scaleMin ?? '—'}..${debugViewport.scaleMax ?? '—'}`,
+          `refreshRateMs=${refreshRate}`,
+          `chartResolution=${chartResolution}`,
+        ];
+        const payload = lines.join('\n');
+        void copyTextToClipboard(payload).then((ok) => {
+          if (!ok) {
+            alert('Clipboard copy failed');
+          }
+        });
+      };
 
 				  const clearBuffer = () => {
 				    void safeInvoke<void>('buffer_clear', undefined, { throwOnError: true }).catch((error) => {
@@ -760,7 +834,7 @@ function SamplerFragment() {
 				  };
 
   const resetChartZoom = () => {
-    const chart = chartRef.current;
+    const chart = getChartInstance(chartRef.current);
     if (chart) {
       try {
         chart.resetZoom();
@@ -1351,6 +1425,13 @@ function SamplerFragment() {
                   <div>
                     Scale: {debugViewport.scaleMin ?? '—'}..{debugViewport.scaleMax ?? '—'}
                   </div>
+                  <button
+                    type="button"
+                    onClick={copyDebug}
+                    className="ml-auto rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200 hover:bg-slate-700"
+                  >
+                    Copy debug
+                  </button>
 			          </div>
 	          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
 	            {chartError ? (
