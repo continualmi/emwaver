@@ -329,8 +329,19 @@ export default function ISMFragment() {
     [awaitNotification, sendCommand, status.connected],
   );
 
-  const isOkAck = (response: Uint8Array | null) => !!response && response.length === 1 && response[0] === 0x00;
-  const isErr = (response: Uint8Array | null) => !!response && response.length === 1 && response[0] === 0xff;
+  const isPaddedPacket = (response: Uint8Array | null, first: number) => {
+    if (!response || response.length !== 64) return false;
+    if (response[0] !== first) return false;
+    for (let i = 1; i < response.length; i++) {
+      if (response[i] !== 0) return false;
+    }
+    return true;
+  };
+
+  const isOkAck = (response: Uint8Array | null) =>
+    (!!response && response.length === 1 && response[0] === 0x00) || isPaddedPacket(response, 0x00);
+  const isErr = (response: Uint8Array | null) =>
+    (!!response && response.length === 1 && response[0] === 0xff) || isPaddedPacket(response, 0xff);
 
   const parseRawPayload = (response: Uint8Array | null) => {
     if (!response || response.length === 0) return new Uint8Array(0);
@@ -341,7 +352,9 @@ export default function ISMFragment() {
   const parseRawString = (response: Uint8Array | null) => {
     if (!response || response.length === 0) return "";
     if (isOkAck(response) || isErr(response)) return "";
-    return new TextDecoder().decode(response).trim();
+    const firstZero = response.indexOf(0);
+    const end = firstZero >= 0 ? firstZero : response.length;
+    return new TextDecoder().decode(response.slice(0, end)).trim();
   };
 
   const getConfigRegisters = useMemo(() => {
@@ -394,7 +407,8 @@ export default function ISMFragment() {
         (data) => data.length >= len,
       );
       if (isErr(response)) return new Uint8Array(0);
-      return parseRawPayload(response);
+      const payload = parseRawPayload(response);
+      return payload.slice(0, len);
     },
     [parseRawPayload, selectedChip, sendCommandString],
   );
