@@ -187,7 +187,8 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
             const start = p * 64;
             const end = start + 64;
             const pkt = new Uint8Array(txResp.data.slice(start, end));
-            appendToMonitor(pkt, txResp.ts_ms[p] ?? Date.now(), true);
+            const ts = txResp.ts_ms[p];
+            appendToMonitor(pkt, ts && ts > 0 ? ts : Date.now(), true);
           }
           txIndexRef.current = txResp.next_packet_index ?? txIndexRef.current + count;
           break;
@@ -211,7 +212,8 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
             const start = p * 64;
             const end = start + 64;
             const pkt = new Uint8Array(rxResp.data.slice(start, end));
-            appendToMonitor(pkt, rxResp.ts_ms[p] ?? Date.now(), false);
+            const ts = rxResp.ts_ms[p];
+            appendToMonitor(pkt, ts && ts > 0 ? ts : Date.now(), false);
           }
           rxIndexRef.current = rxResp.next_packet_index ?? rxIndexRef.current + count;
           break;

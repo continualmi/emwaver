@@ -24,6 +24,19 @@ pub fn clear(buffer: &mut Buffer) {
     buffer.2.clear();
 }
 
+pub fn rx_len_bytes(buffer: &Buffer) -> usize {
+    buffer.0.len()
+}
+
+pub fn rx_snapshot(buffer: &Buffer) -> Vec<u8> {
+    buffer.0.clone()
+}
+
+pub fn rx_set_bytes(buffer: &mut Buffer, data: Vec<u8>) {
+    buffer.0 = data;
+    buffer.1 = 0;
+}
+
 pub fn rx_packet_count(buffer: &Buffer) -> u64 {
     (buffer.0.len() / PACKET_SIZE) as u64
 }

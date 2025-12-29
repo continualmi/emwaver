@@ -3,7 +3,6 @@ mod buffer;
 mod firmware;
 mod git;
 mod pty;
-mod transport_buffer;
 mod usb;
 
 use serde::{Deserialize, Serialize};
@@ -30,7 +29,6 @@ use git::{
 use usb::{USBState, USBStatus};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 use buffer::Buffer;
-use transport_buffer::{TransportBufferReadResponse, TransportBufferState};
 
 const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
 
@@ -158,23 +156,11 @@ struct EnsureDirPayload {
     path: String,
 }
 
-#[derive(Default)]
-struct SamplerBufferState {
-    buffer: Vec<u8>,
-    max_size: usize,
-}
-
 #[derive(Clone, Serialize)]
 struct SamplerCompressResponse {
     buffer_len_bytes: usize,
     time_values: Vec<f32>,
     data_values: Vec<f32>,
-}
-
-#[derive(Clone, Serialize)]
-struct SamplerAppendResponse {
-    buffer_len_bytes: usize,
-    truncated: bool,
 }
 
 #[derive(Deserialize)]
@@ -572,96 +558,6 @@ fn sampler_build_signed_raw_timings(buffer: &[u8]) -> String {
     timings.join(" ")
 }
 
-fn sampler_buffer_append_bytes(guard: &mut SamplerBufferState, data: &[u8]) -> bool {
-    if data.is_empty() {
-        return false;
-    }
-
-    if guard.max_size > 0 {
-        let remaining = guard.max_size.saturating_sub(guard.buffer.len());
-        if remaining == 0 {
-            return true;
-        }
-        if data.len() > remaining {
-            guard.buffer.extend_from_slice(&data[..remaining]);
-            return true;
-        }
-        guard.buffer.extend_from_slice(data);
-        return false;
-    }
-
-    guard.buffer.extend_from_slice(data);
-    false
-}
-
-#[tauri::command]
-async fn transport_buffer_clear(state: State<'_, Arc<Mutex<TransportBufferState>>>) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        guard.clear();
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn transport_buffer_set_max_size(
-    state: State<'_, Arc<Mutex<TransportBufferState>>>,
-    max_size: usize,
-) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        guard.max_size = max_size;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn transport_buffer_get(state: State<'_, Arc<Mutex<TransportBufferState>>>) -> Result<Vec<u8>, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        Ok::<Vec<u8>, String>(guard.snapshot())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn transport_buffer_set(
-    state: State<'_, Arc<Mutex<TransportBufferState>>>,
-    data: Vec<u8>,
-) -> Result<usize, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        guard.set(data);
-        Ok::<usize, String>(guard.len())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn transport_buffer_read_since(
-    state: State<'_, Arc<Mutex<TransportBufferState>>>,
-    offset: u64,
-    max_bytes: usize,
-) -> Result<TransportBufferReadResponse, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        Ok::<TransportBufferReadResponse, String>(guard.read_since(offset, max_bytes))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
 #[tauri::command]
 async fn buffer_clear(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<(), String> {
     let state = state.inner().clone();
@@ -697,16 +593,27 @@ async fn buffer_set_counter(state: State<'_, Arc<Mutex<Buffer>>>, value: u64) ->
     .map_err(|error| format!("Task failed: {error}"))?
 }
 
-#[tauri::command]
-async fn buffer_get_packet_count(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<u64, String>(crate::buffer::rx_packet_count(&*guard))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
+	#[tauri::command]
+	async fn buffer_get_packet_count(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64, String> {
+	    let state = state.inner().clone();
+	    spawn_blocking(move || {
+	        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+	        Ok::<u64, String>(crate::buffer::rx_packet_count(&*guard))
+	    })
+	    .await
+	    .map_err(|error| format!("Task failed: {error}"))?
+	}
+
+	#[tauri::command]
+	async fn buffer_get_len_bytes(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<usize, String> {
+	    let state = state.inner().clone();
+	    spawn_blocking(move || {
+	        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+	        Ok::<usize, String>(crate::buffer::rx_len_bytes(&*guard))
+	    })
+	    .await
+	    .map_err(|error| format!("Task failed: {error}"))?
+	}
 
 #[tauri::command]
 async fn buffer_read_packets_since(
@@ -750,8 +657,31 @@ async fn buffer_read_tx_since(
 }
 
 #[tauri::command]
-async fn transport_buffer_compress_viewport(
-    state: State<'_, Arc<Mutex<TransportBufferState>>>,
+async fn buffer_get_bytes(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<Vec<u8>, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        Ok::<Vec<u8>, String>(crate::buffer::rx_snapshot(&*guard))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_set_bytes(state: State<'_, Arc<Mutex<Buffer>>>, data: Vec<u8>) -> Result<usize, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        crate::buffer::rx_set_bytes(&mut *guard, data);
+        Ok::<usize, String>(crate::buffer::rx_len_bytes(&*guard))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_compress_viewport(
+    state: State<'_, Arc<Mutex<Buffer>>>,
     range_start: usize,
     range_end: usize,
     number_bins: usize,
@@ -759,8 +689,8 @@ async fn transport_buffer_compress_viewport(
     let state = state.inner().clone();
     spawn_blocking(move || {
         let (slice, buffer_len_bytes, base_bit_index, start, end) = {
-            let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-            let buffer = guard.snapshot();
+            let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+            let buffer = crate::buffer::rx_snapshot(&*guard);
             let total_bits = buffer.len().saturating_mul(8);
             let end = range_end.min(total_bits);
             let start = range_start.min(end);
@@ -799,15 +729,12 @@ async fn transport_buffer_compress_viewport(
 }
 
 #[tauri::command]
-async fn transport_buffer_write_file(
-    state: State<'_, Arc<Mutex<TransportBufferState>>>,
-    path: String,
-) -> Result<(), String> {
+async fn buffer_write_file(state: State<'_, Arc<Mutex<Buffer>>>, path: String) -> Result<(), String> {
     let state = state.inner().clone();
     let path = expand_path(&path);
     spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        let bytes = guard.snapshot();
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        let bytes = crate::buffer::rx_snapshot(&*guard);
         fs::write(&path, bytes).map_err(|error| format!("Failed to write file {}: {error}", path.display()))?;
         Ok::<(), String>(())
     })
@@ -816,172 +743,12 @@ async fn transport_buffer_write_file(
 }
 
 #[tauri::command]
-async fn transport_buffer_build_signed_raw_timings(
-    state: State<'_, Arc<Mutex<TransportBufferState>>>,
-) -> Result<String, String> {
+async fn buffer_build_signed_raw_timings(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<String, String> {
     let state = state.inner().clone();
     spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        let bytes = guard.snapshot();
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        let bytes = crate::buffer::rx_snapshot(&*guard);
         Ok::<String, String>(sampler_build_signed_raw_timings(&bytes))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_clear(state: State<'_, Arc<Mutex<SamplerBufferState>>>) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        guard.buffer.clear();
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_set_max_size(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-    max_size: usize,
-) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        guard.max_size = max_size;
-        if guard.max_size > 0 && guard.buffer.len() > guard.max_size {
-            let limit = guard.max_size;
-            guard.buffer.truncate(limit);
-        }
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_set(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-    data: Vec<u8>,
-) -> Result<usize, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        guard.buffer = data;
-        if guard.max_size > 0 && guard.buffer.len() > guard.max_size {
-            let limit = guard.max_size;
-            guard.buffer.truncate(limit);
-        }
-        Ok::<usize, String>(guard.buffer.len())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_append(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-    data: Vec<u8>,
-) -> Result<SamplerAppendResponse, String> {
-    let state = state.inner().clone();
-    let mut guard = state
-        .lock()
-        .map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-    let truncated = sampler_buffer_append_bytes(&mut guard, &data);
-
-    Ok(SamplerAppendResponse {
-        buffer_len_bytes: guard.buffer.len(),
-        truncated,
-    })
-}
-
-#[tauri::command]
-async fn sampler_buffer_compress_viewport(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-    range_start: usize,
-    range_end: usize,
-    number_bins: usize,
-) -> Result<SamplerCompressResponse, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let (slice, buffer_len_bytes, base_bit_index, start, end) = {
-            let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-            let total_bits = guard.buffer.len().saturating_mul(8);
-            let end = range_end.min(total_bits);
-            let start = range_start.min(end);
-            if guard.buffer.is_empty() || start >= end || number_bins == 0 {
-                return Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
-                    buffer_len_bytes: guard.buffer.len(),
-                    time_values: Vec::new(),
-                    data_values: Vec::new(),
-                });
-            }
-
-            let byte_start = start >> 3;
-            let byte_end = ((end + 7) >> 3).min(guard.buffer.len());
-            let base_bit_index = byte_start.saturating_mul(8);
-            let slice = guard.buffer[byte_start..byte_end].to_vec();
-            let start = start.saturating_sub(base_bit_index);
-            let end = end.saturating_sub(base_bit_index);
-            (slice, guard.buffer.len(), base_bit_index, start, end)
-        };
-
-        let (mut time_values, data_values) = sampler_compress_bits(&slice, start, end, number_bins);
-        if base_bit_index != 0 {
-            let offset = base_bit_index as f32;
-            for value in &mut time_values {
-                *value += offset;
-            }
-        }
-        Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
-            buffer_len_bytes,
-            time_values,
-            data_values,
-        })
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_write_file(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-    path: String,
-) -> Result<(), String> {
-    let state = state.inner().clone();
-    let path = expand_path(&path);
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        fs::write(&path, &guard.buffer)
-            .map_err(|error| format!("Failed to write file {}: {error}", path.display()))?;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_get(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-) -> Result<Vec<u8>, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        Ok::<Vec<u8>, String>(guard.buffer.clone())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
-}
-
-#[tauri::command]
-async fn sampler_buffer_build_signed_raw_timings(
-    state: State<'_, Arc<Mutex<SamplerBufferState>>>,
-) -> Result<String, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Sampler buffer lock poisoned".to_string())?;
-        Ok::<String, String>(sampler_build_signed_raw_timings(&guard.buffer))
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -1687,9 +1454,6 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
-    let transport_buffer_state: Arc<Mutex<TransportBufferState>> = Arc::new(Mutex::new(TransportBufferState::default()));
-    let transport_buffer_state_for_setup = Arc::clone(&transport_buffer_state);
-
     let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new((Vec::new(), 0, Vec::new())));
     let rx_buffer_for_setup = Arc::clone(&rx_buffer);
     let rx_notify = Arc::new(tokio::sync::Notify::new());
@@ -2027,10 +1791,8 @@ pub fn run() {
             Arc::clone(&rx_buffer_for_setup),
             Arc::clone(&rx_notify_for_setup),
         )))
-        .manage(Arc::clone(&transport_buffer_state_for_setup))
         .manage(Arc::clone(&rx_buffer_for_setup))
-        .manage(Arc::new(Mutex::new(SamplerBufferState::default())))
-		        .invoke_handler(tauri::generate_handler![
+			        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
             read_directory_children,
@@ -2039,29 +1801,19 @@ pub fn run() {
             write_file,
             write_binary_file,
             ensure_dir,
-            transport_buffer_clear,
-            transport_buffer_set_max_size,
-            transport_buffer_get,
-            transport_buffer_set,
-            transport_buffer_read_since,
             buffer_clear,
             buffer_get_counter,
             buffer_set_counter,
             buffer_get_packet_count,
+            buffer_get_len_bytes,
             buffer_read_packets_since,
             buffer_next_packet,
             buffer_read_tx_since,
-            transport_buffer_compress_viewport,
-            transport_buffer_write_file,
-            transport_buffer_build_signed_raw_timings,
-            sampler_buffer_clear,
-            sampler_buffer_set_max_size,
-            sampler_buffer_set,
-            sampler_buffer_append,
-            sampler_buffer_compress_viewport,
-            sampler_buffer_write_file,
-            sampler_buffer_get,
-            sampler_buffer_build_signed_raw_timings,
+            buffer_get_bytes,
+            buffer_set_bytes,
+            buffer_compress_viewport,
+            buffer_write_file,
+            buffer_build_signed_raw_timings,
             remove_path,
             rename_path,
             reveal_in_finder,
