@@ -330,31 +330,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
       <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-y-auto px-6 py-4">
-        <div className="flex-shrink-0">
-          <div className="grid grid-cols-2 gap-3">
-            {fragments.map((fragment) => (
-              <button
-                key={fragment.id}
-                onClick={() => onNavigateToFragment(fragment.id)}
-                className={`group rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-left transition-all ${fragment.borderClass} hover:bg-slate-900 hover:shadow-lg`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 ${fragment.iconClass} transition-colors group-hover:bg-slate-800`}>
-                    <span className="h-5 w-5">{fragment.icon}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-slate-100 truncate">{fragment.name}</h4>
-                    <p className="mt-1 text-xs text-slate-400 line-clamp-2">{fragment.description}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Divider/Spacing */}
-        <div className="border-t border-slate-800 my-2 flex-shrink-0"></div>
-
         {/* Connection Status and Firmware Version - Side by Side */}
         <div className="grid grid-cols-2 gap-3 flex-shrink-0">
           {/* Connection Status */}
@@ -544,6 +519,32 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
                 ))}
               </>
             )}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="border-t border-slate-800 my-2 flex-shrink-0"></div>
+        <div className="flex-shrink-0">
+          <div className="grid grid-cols-2 gap-3">
+            {fragments.map((fragment) => (
+              <button
+                key={fragment.id}
+                onClick={() => onNavigateToFragment(fragment.id)}
+                className={`group rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-left transition-all ${fragment.borderClass} hover:bg-slate-900 hover:shadow-lg`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 ${fragment.iconClass} transition-colors group-hover:bg-slate-800`}
+                  >
+                    <span className="h-5 w-5">{fragment.icon}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-semibold text-slate-100 truncate">{fragment.name}</h4>
+                    <p className="mt-1 text-xs text-slate-400 line-clamp-2">{fragment.description}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
