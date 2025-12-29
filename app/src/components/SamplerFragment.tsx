@@ -83,6 +83,7 @@ const SIGNALS_DIR_NAME = 'signals';
 const MAX_CHART_BINS = 5000;
 const MIN_CHART_BINS = 100;
 const MIN_CHART_RENDER_INTERVAL_MS = 120;
+const INTERACTION_REFRESH_THROTTLE_MS = 80;
 
 const ESP32_PINS = [
   'IO1 DIO0[S]/GDO0[F]',
@@ -283,6 +284,10 @@ function SamplerFragment() {
   const lastChartViewportKeyRef = useRef<string>('');
   const pendingChartRefreshRef = useRef<number | null>(null);
   const chartRefreshInFlightRef = useRef(false);
+  const prevVisibleRangeStartRef = useRef(0);
+  const prevVisibleRangeEndRef = useRef(0);
+  const prevVisibleSpanRef = useRef(0);
+  const lastInteractionRefreshAtRef = useRef(0);
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
   const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
@@ -356,10 +361,8 @@ function SamplerFragment() {
       if (xScale) {
         const rawMin = Number(xScale.min);
         const rawMax = Number(xScale.max);
-        if (Number.isFinite(rawMin)) {
+        if (Number.isFinite(rawMin) && Number.isFinite(rawMax) && rawMax > rawMin) {
           visibleRangeStart = Math.max(0, Math.floor(rawMin));
-        }
-        if (Number.isFinite(rawMax)) {
           visibleRangeEnd = Math.min(chartMaxX, Math.floor(rawMax));
         }
       }
@@ -375,7 +378,7 @@ function SamplerFragment() {
       visibleRangeEnd = chartMaxX;
     }
 
-    if (visibleRangeEnd < visibleRangeStart) {
+    if (visibleRangeEnd <= visibleRangeStart) {
       return { visibleRangeStart: 0, visibleRangeEnd: chartMaxX };
     }
 
@@ -419,6 +422,12 @@ function SamplerFragment() {
 			        lastChartViewportKeyRef.current = viewportKey;
 
 			        setChartData({ timeValues: result.time_values, dataValues: result.data_values });
+              if (result.time_values.length !== result.data_values.length) {
+                console.warn('Sampler viewport length mismatch', {
+                  time: result.time_values.length,
+                  data: result.data_values.length,
+                });
+              }
 
 			        const chartMaxX = Math.max(10000, bufferBytes * 8);
 			        if (chart.options?.scales?.x) {
@@ -497,6 +506,44 @@ function SamplerFragment() {
       scheduleChartRefresh(chartInstance);
     },
     [scheduleChartRefresh],
+  );
+
+  const maybeRefreshOnInteraction = useCallback(
+    (chartInstance?: any) => {
+      const chart = chartInstance || chartRef.current;
+      if (!chart) return;
+
+      const now = Date.now();
+      if (now - lastInteractionRefreshAtRef.current < INTERACTION_REFRESH_THROTTLE_MS) {
+        return;
+      }
+
+      const bufferBytes = bufferLenBytesRef.current;
+      const chartMaxX = Math.max(10000, bufferBytes * 8);
+      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
+      const span = Math.max(1, visibleRangeEnd - visibleRangeStart);
+
+      const prevStart = prevVisibleRangeStartRef.current;
+      const prevEnd = prevVisibleRangeEndRef.current;
+      const prevSpan = Math.max(1, prevVisibleSpanRef.current);
+
+      const translationThreshold = Math.floor(span / 100);
+      const zoomThreshold = Math.floor(prevSpan / 10);
+
+      const movedEnough =
+        Math.abs(visibleRangeStart - prevStart) > translationThreshold ||
+        Math.abs(visibleRangeEnd - prevEnd) > translationThreshold;
+      const zoomedEnough = Math.abs(span - prevSpan) >= zoomThreshold;
+
+      if (movedEnough || zoomedEnough) {
+        prevVisibleRangeStartRef.current = visibleRangeStart;
+        prevVisibleRangeEndRef.current = visibleRangeEnd;
+        prevVisibleSpanRef.current = span;
+        lastInteractionRefreshAtRef.current = now;
+        refreshChart(chart);
+      }
+    },
+    [computeVisibleRangeBits, refreshChart],
   );
 
 	  // Refresh chart periodically
@@ -1099,6 +1146,9 @@ function SamplerFragment() {
             enabled: true,
           },
           mode: 'x' as const,
+          onZoom: ({ chart }: { chart: any }) => {
+            maybeRefreshOnInteraction(chart);
+          },
           onZoomComplete: ({ chart }: { chart: any }) => {
             refreshChart(chart);
           },
@@ -1106,6 +1156,9 @@ function SamplerFragment() {
         pan: {
           enabled: true,
           mode: 'x' as const,
+          onPan: ({ chart }: { chart: any }) => {
+            maybeRefreshOnInteraction(chart);
+          },
           onPanComplete: ({ chart }: { chart: any }) => {
             refreshChart(chart);
           },
@@ -1152,7 +1205,7 @@ function SamplerFragment() {
         max: 384,
       },
     },
-  }), [refreshChart]);
+  }), [maybeRefreshOnInteraction, refreshChart]);
 
   // Update chart when data changes (matches Android: chart.setData() + chart.invalidate())
   useEffect(() => {
@@ -1256,8 +1309,9 @@ function SamplerFragment() {
         {/* Chart */}
 		        <div className="flex-shrink-0 bg-slate-900 rounded-lg p-4">
 			          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-			            <div>Backend: js</div>
+			            <div>Backend: rust</div>
 			            <div>Bytes: {bufferLenBytes}</div>
+                  <div>Points: {chartData.timeValues.length}</div>
 			          </div>
 	          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
 	            {chartError ? (

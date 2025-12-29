@@ -690,25 +690,25 @@ async fn buffer_compress_viewport(
     spawn_blocking(move || {
         let (slice, buffer_len_bytes, base_bit_index, start, end) = {
             let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-            let buffer = crate::buffer::rx_snapshot(&*guard);
-            let total_bits = buffer.len().saturating_mul(8);
+            let buffer_len_bytes = crate::buffer::rx_len_bytes(&*guard);
+            let total_bits = buffer_len_bytes.saturating_mul(8);
             let end = range_end.min(total_bits);
             let start = range_start.min(end);
-            if buffer.is_empty() || start >= end || number_bins == 0 {
+            if buffer_len_bytes == 0 || start >= end || number_bins == 0 {
                 return Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
-                    buffer_len_bytes: buffer.len(),
+                    buffer_len_bytes,
                     time_values: Vec::new(),
                     data_values: Vec::new(),
                 });
             }
 
             let byte_start = start >> 3;
-            let byte_end = ((end + 7) >> 3).min(buffer.len());
+            let byte_end = ((end + 7) >> 3).min(buffer_len_bytes);
             let base_bit_index = byte_start.saturating_mul(8);
-            let slice = buffer[byte_start..byte_end].to_vec();
+            let slice = crate::buffer::rx_copy_byte_range(&*guard, byte_start, byte_end);
             let start = start.saturating_sub(base_bit_index);
             let end = end.saturating_sub(base_bit_index);
-            (slice, buffer.len(), base_bit_index, start, end)
+            (slice, buffer_len_bytes, base_bit_index, start, end)
         };
 
         let (mut time_values, data_values) = sampler_compress_bits(&slice, start, end, number_bins);
