@@ -60,11 +60,6 @@ type SamplerCompressViewportResponse = {
   data_values: number[];
 };
 
-type SamplerAppendResponse = {
-  buffer_len_bytes: number;
-  truncated: boolean;
-};
-
 const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
 const PIN_IO_ESP32_KEY = 'sampler.pinIo.esp32';
@@ -241,7 +236,22 @@ function SamplerFragment() {
     timeValues: [],
     dataValues: [],
   });
-  const [chartError] = useState<string | null>(null);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [debugViewport, setDebugViewport] = useState<{
+    chartReady: boolean;
+    scaleMin: number | null;
+    scaleMax: number | null;
+    visibleStart: number;
+    visibleEnd: number;
+    requestedBins: number;
+  }>({
+    chartReady: false,
+    scaleMin: null,
+    scaleMax: null,
+    visibleStart: 0,
+    visibleEnd: 0,
+    requestedBins: 0,
+  });
   
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
@@ -385,8 +395,14 @@ function SamplerFragment() {
     return { visibleRangeStart, visibleRangeEnd };
   }, []);
 
+  const getChartInstance = useCallback((maybeChart: any): any | null => {
+    if (!maybeChart) return null;
+    // react-chartjs-2 can expose either the Chart.js instance directly or a wrapper with `.chart`.
+    return (maybeChart as any).chart ?? maybeChart;
+  }, []);
+
 			  const performChartRefresh = useCallback((chartInstance?: any) => {
-			    const chart = chartInstance || chartRef.current;
+			    const chart = getChartInstance(chartInstance || chartRef.current);
 			    if (!chart) return;
 
 			    if (chartRefreshInFlightRef.current) {
@@ -403,13 +419,29 @@ function SamplerFragment() {
 			      Math.trunc(Number(chart?.options?.scales?.x?.max ?? 10000)) || 10000,
 			    );
 			    const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxXForRequest);
+          const xScale = chart?.scales?.x;
+          const scaleMin = xScale ? Number(xScale.min) : Number.NaN;
+          const scaleMax = xScale ? Number(xScale.max) : Number.NaN;
+          setDebugViewport({
+            chartReady: true,
+            scaleMin: Number.isFinite(scaleMin) ? scaleMin : null,
+            scaleMax: Number.isFinite(scaleMax) ? scaleMax : null,
+            visibleStart: visibleRangeStart,
+            visibleEnd: visibleRangeEnd,
+            requestedBins,
+          });
 
 			    void safeInvoke<SamplerCompressViewportResponse>(
 			      'buffer_compress_viewport',
-			      { range_start: visibleRangeStart, range_end: visibleRangeEnd, number_bins: requestedBins },
+			      { rangeStart: visibleRangeStart, rangeEnd: visibleRangeEnd, numberBins: requestedBins },
+            { throwOnError: true },
 			    )
 			      .then((result) => {
-			        if (!result) return;
+			        if (!result) {
+                setChartError('buffer_compress_viewport returned null');
+                return;
+              }
+              setChartError(null);
 
 			        const bufferBytes = result.buffer_len_bytes;
 			        bufferLenBytesRef.current = bufferBytes;
@@ -439,11 +471,12 @@ function SamplerFragment() {
 			      })
 			      .catch((error) => {
 			        console.error('Failed to refresh chart (buffer compress):', error);
+              setChartError(String(error));
 			      })
 			      .finally(() => {
 			        chartRefreshInFlightRef.current = false;
 			      });
-		  }, [chartResolution, computeVisibleRangeBits, getEffectiveBins]);
+		  }, [chartResolution, computeVisibleRangeBits, getChartInstance, getEffectiveBins]);
 
   const scheduleChartRefresh = useCallback((chartInstance?: any) => {
     if (pendingChartRefreshRef.current != null) {
@@ -580,7 +613,7 @@ function SamplerFragment() {
 
 	      lastBufferSizeRef.current = currentBufferSize;
 
-	      const chart = chartRef.current;
+	      const chart = getChartInstance(chartRef.current);
 	      if (!chart) return;
 
 		      lastChartRenderAtRef.current = now;
@@ -596,7 +629,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-		  }, [isConnected, isRecording, maxSamples, performChartRefresh, refreshRate]);
+		  }, [getChartInstance, isConnected, isRecording, maxSamples, performChartRefresh, refreshRate]);
 
 		  const startRecording = async () => {
 		    if (!isConnected) {
@@ -1312,6 +1345,12 @@ function SamplerFragment() {
 			            <div>Backend: rust</div>
 			            <div>Bytes: {bufferLenBytes}</div>
                   <div>Points: {chartData.timeValues.length}</div>
+                  <div>
+                    View: {debugViewport.visibleStart}..{debugViewport.visibleEnd} bins {debugViewport.requestedBins}
+                  </div>
+                  <div>
+                    Scale: {debugViewport.scaleMin ?? '—'}..{debugViewport.scaleMax ?? '—'}
+                  </div>
 			          </div>
 	          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
 	            {chartError ? (
