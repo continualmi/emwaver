@@ -2,6 +2,8 @@ site_name: EMWaver
 site_dir: docs
 site_url: https://luispl77.github.io/emwaver/
 docs_dir: content
+repo_url: https://github.com/luispl77/emwaver
+edit_uri: edit/main/docs/content/
 theme:
   name: material
   features:
@@ -44,21 +46,8 @@ nav:
       - STM32 (STM32F042): flashing-firmware/stm32.md
       - ESP32 (ESP32-S3): flashing-firmware/esp32.md
   - Documentation:
-      - Overview: documentation/index.md
-      - Repository Layout: documentation/repository-layout.md
-      - Development Setup: documentation/development-setup.md
-      - Contributing: documentation/contributing.md
-      - Hardware Reference: hardware.md
-      - Firmware:
-          - ESP32-S3 (ESP-IDF): documentation/firmware-esp32.md
-          - STM32F042 (CubeIDE): documentation/firmware-stm32.md
       - Protocol:
-          - Transport & Command Format: documentation/protocol.md
-          - Transport Buffering (Draft): documentation/transport-buffering.md
-      - CLI: documentation/cli.md
-      - Apps:
-          - Overview: documentation/apps.md
-          - App UI (Fragments): documentation.md
+          - Buffer: documentation/buffer.md
       - Wavelets:
           - Overview: wavelets.md
           - EMWaver DSL: emwaver-dsl.md
@@ -66,6 +55,10 @@ nav:
 extra_css:
   - styles/theme.css
   - styles/hide-toc.css
+extra_javascript:
+  - javascripts/copy-page-markdown.js
+hooks:
+  - hooks/embed_page_markdown.py
 markdown_extensions:
   - attr_list
   - md_in_html
