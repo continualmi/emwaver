@@ -44,3 +44,39 @@
 [data-md-color-scheme="slate"] .md-nav__title {
   color: rgba(226, 232, 240, 0.72);
 }
+
+.emwaver-copy-page {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.25rem 0 0.75rem 0;
+}
+
+.emwaver-copy-page__button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0.25rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.emwaver-copy-page__button:hover {
+  opacity: 0.95;
+  background: var(--md-default-fg-color--lightest);
+}
+
+.emwaver-copy-page__button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.emwaver-copy-page__button svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.emwaver-copy-page__button[data-emwaver-copy-state="copied"] {
+  opacity: 0.9;
+}
