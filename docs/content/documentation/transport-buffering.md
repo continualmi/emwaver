@@ -14,7 +14,7 @@ The microcontroller should only implement bounded buffers:
 - A single, fixed-size **command buffer** holds the latest command packet received from the host.
 - The firmware command handler consumes that buffer, executes the command, and emits exactly one response.
 - The system is conceptually synchronous from the host perspective: **one command → one response**.
-- On BLE today, responses are emitted as **fixed-size 64-byte notifications** (payload is padded with `0x00` as needed).
+- On BLE today, command responses are emitted as **fixed-size 64-byte notifications** (payload is padded with `0x00` as needed).
 
 ### 2) Stream mode buffers (bounded)
 
@@ -28,7 +28,7 @@ These are still bounded and exist only because the microcontroller has limited R
 **Current sampler implementation note (ESP32):**
 
 - Internally, the sampler uses ping/pong buffers of `256` bytes (`SAMPLER_BUFFER_SIZE`) to decouple the ISR (producer) from the BLE sender task (consumer).
-- Even if the sampler attempts to notify more than 64 bytes at a time, the BLE notify path currently **pads/truncates notifications to 64 bytes** on the wire. Clients should treat sampler stream data as arriving in 64-byte chunks.
+- For streaming payloads larger than 64 bytes (e.g. sampler), the BLE notify path sends the full payload **without truncation**, chunked to the negotiated MTU as needed.
 
 ## Client side (effectively unbounded)
 

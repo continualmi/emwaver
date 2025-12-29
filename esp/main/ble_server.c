@@ -504,8 +504,6 @@ int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t l
 {
     struct os_mbuf *om;
     int rc;
-    uint8_t padded[64];
-    uint16_t send_len = 0;
 
     if (notify_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
         return BLE_HS_ENOTCONN;
@@ -515,30 +513,56 @@ int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t l
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    // EMWaver transport framing: notifications are always fixed-size 64-byte packets
-    // (zero-padded as needed) so clients can parse responses deterministically.
-    memset(padded, 0, sizeof(padded));
-    if (data != NULL && len > 0) {
-        if (len > sizeof(padded)) {
-            ESP_LOGW(TAG, "Notification truncated from %u to %u bytes (attr_handle=%u)",
-                     (unsigned)len, (unsigned)sizeof(padded), (unsigned)attr_handle);
-            len = sizeof(padded);
-        }
+    if (data == NULL || len == 0) {
+        return 0;
+    }
+
+    // Compatibility: command responses and small status notifies are framed as a
+    // fixed 64B packet (zero-padded) so clients can parse deterministically.
+    // For larger payloads (e.g. sampler streaming), send the full payload
+    // unpadded and without truncation (chunked by MTU if needed).
+    if (len <= 64) {
+        uint8_t padded[64];
+        memset(padded, 0, sizeof(padded));
         memcpy(padded, data, len);
-    }
-    send_len = (uint16_t)sizeof(padded);
 
-    om = ble_hs_mbuf_from_flat(padded, send_len);
-    if (om == NULL) {
-        return BLE_HS_ENOMEM;
+        om = ble_hs_mbuf_from_flat(padded, (uint16_t)sizeof(padded));
+        if (om == NULL) {
+            return BLE_HS_ENOMEM;
+        }
+
+        rc = ble_gatts_notify_custom(notify_conn_handle, attr_handle, om);
+        if (rc != 0) {
+            ESP_LOGE(TAG, "Failed to send notification: %d", rc);
+        }
+        return rc;
     }
 
-    rc = ble_gatts_notify_custom(notify_conn_handle, attr_handle, om);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "Failed to send notification: %d", rc);
+    const uint16_t mtu = ble_att_mtu(notify_conn_handle);
+    const uint16_t max_chunk = (mtu > 3) ? (uint16_t)(mtu - 3) : 20;
+    uint16_t offset = 0;
+
+    while (offset < len) {
+        uint16_t chunk_len = (uint16_t)(len - offset);
+        if (chunk_len > max_chunk) {
+            chunk_len = max_chunk;
+        }
+
+        om = ble_hs_mbuf_from_flat(data + offset, chunk_len);
+        if (om == NULL) {
+            return BLE_HS_ENOMEM;
+        }
+
+        rc = ble_gatts_notify_custom(notify_conn_handle, attr_handle, om);
+        if (rc != 0) {
+            ESP_LOGE(TAG, "Failed to send notification: %d", rc);
+            return rc;
+        }
+
+        offset = (uint16_t)(offset + chunk_len);
     }
 
-    return rc;
+    return 0;
 }
 
 // Set transmission mode
