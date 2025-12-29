@@ -213,9 +213,11 @@ static void transmit_start_command(int pin, bool pwm, int freq_hz, int duty_perc
 {
     const char *err = NULL;
     if (transmit_start_impl(pin, pwm, freq_hz, duty_percent, &err)) {
-        command_send_ok(NULL, 0);
+        // Fire-and-forget: do not emit ok/err responses. During retransmission the
+        // client expects the notification channel to be reserved for BS flow-control
+        // packets (and for sampler streaming), not command-response framing.
     } else {
-        command_send_err(err ? err : "transmit start");
+        ESP_LOGW(TAG, "transmit start failed: %s", err ? err : "unknown");
     }
 }
 
@@ -223,9 +225,9 @@ static void transmit_stop_command(void)
 {
     const char *err = NULL;
     if (transmit_stop_impl(&err)) {
-        command_send_ok(NULL, 0);
+        // Fire-and-forget (see transmit_start_command).
     } else {
-        command_send_err(err ? err : "transmit stop");
+        ESP_LOGW(TAG, "transmit stop failed: %s", err ? err : "unknown");
     }
 }
 

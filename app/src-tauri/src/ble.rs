@@ -410,6 +410,8 @@ impl BLEState {
     }
 
     pub async fn transmit_buffer(&self, data: Vec<u8>) -> Result<(), String> {
+        let _in_flight = self.in_flight.lock().await;
+
         let peripheral_guard = self.peripheral.lock().await;
         let peripheral = peripheral_guard.as_ref().ok_or("Not connected to device")?;
         
@@ -429,22 +431,58 @@ impl BLEState {
             return Err("Buffer is empty".to_string());
         }
 
-        // Flow control parameters (matching Android/iOS)
+        // Swap out the shared RX buffer while transmitting so BS flow-control packets
+        // don't contaminate sampler data stored in the same buffer.
+        let (saved_rx, saved_counter) = {
+            let mut guard = self
+                .buffer
+                .lock()
+                .map_err(|_| "Failed to lock buffer".to_string())?;
+            let saved_rx = std::mem::take(&mut guard.0);
+            let saved_counter = guard.1;
+            guard.1 = 0;
+            (saved_rx, saved_counter)
+        };
+
+        let result = async {
+            // Flow control parameters (matching Android/iOS)
         let max_packet_size = 200;
         let min_packet_size = 128;
         let initial_packet_size = 188;
         let mut current_packet_size = max_packet_size;
         let fixed_delay_ms = 15u64;
-        
-        let target_buffer_level = 2048;
-        let buffer_high_threshold = 3000;
-        let buffer_low_threshold = 1000;
+
+        let target_buffer_level: i32 = 2048;
+        let buffer_high_threshold: i32 = 3000;
+        let buffer_low_threshold: i32 = 1000;
         let initial_fill_bytes = 2048;
 
         let total_bytes = data.len();
         let mut bytes_sent = 0;
+        let mut last_status: Option<u16> = None;
+
+        let mut drain_bs_status = || -> Option<u16> {
+            let mut latest: Option<u16> = None;
+            loop {
+                let pkt = (|| {
+                    let mut guard = self.buffer.lock().ok()?;
+                    buffer::next_rx_packet(&mut *guard)
+                })();
+
+                let Some(pkt) = pkt else { break };
+                if pkt.data.len() >= 4 && pkt.data[0] == b'B' && pkt.data[1] == b'S' {
+                    latest = Some(u16::from_be_bytes([pkt.data[2], pkt.data[3]]));
+                }
+            }
+            latest
+        };
 
         while bytes_sent < total_bytes {
+            if let Some(status) = drain_bs_status() {
+                last_status = Some(status);
+            }
+            let effective_buffer_status = last_status.map(|v| v as i32).unwrap_or(target_buffer_level);
+
             // Calculate packet size
             let remaining = total_bytes - bytes_sent;
             let packet_size = std::cmp::min(current_packet_size, remaining);
@@ -462,13 +500,18 @@ impl BLEState {
 
             // Flow control logic (matching Android/iOS)
             if bytes_sent >= initial_fill_bytes {
-                // In a real implementation, we'd check buffer status here
-                // For now, use simple adaptive sizing
-                // TODO: Add buffer status checking if firmware provides it
-                if current_packet_size > initial_packet_size {
-                    current_packet_size = std::cmp::max(min_packet_size, current_packet_size - 32);
-                } else if current_packet_size < initial_packet_size {
-                    current_packet_size = std::cmp::min(max_packet_size, current_packet_size + 32);
+                if effective_buffer_status > buffer_high_threshold {
+                    current_packet_size = std::cmp::max(min_packet_size, current_packet_size.saturating_sub(32));
+                } else if effective_buffer_status < buffer_low_threshold {
+                    current_packet_size = std::cmp::min(max_packet_size, current_packet_size.saturating_add(32));
+                } else if current_packet_size != initial_packet_size
+                    && (effective_buffer_status - target_buffer_level).abs() < 100
+                {
+                    if current_packet_size < initial_packet_size {
+                        current_packet_size = std::cmp::min(initial_packet_size, current_packet_size.saturating_add(16));
+                    } else {
+                        current_packet_size = std::cmp::max(initial_packet_size, current_packet_size.saturating_sub(16));
+                    }
                 }
             } else {
                 current_packet_size = max_packet_size;
@@ -481,5 +524,15 @@ impl BLEState {
         }
 
         Ok(())
+        }
+        .await;
+
+        // Restore sampler RX buffer (discarding BS packets accumulated during transmit).
+        if let Ok(mut guard) = self.buffer.lock() {
+            guard.0 = saved_rx;
+            guard.1 = saved_counter;
+        }
+
+        result
     }
 }

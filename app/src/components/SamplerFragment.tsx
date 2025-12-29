@@ -923,7 +923,11 @@ function SamplerFragment() {
       }
 
       // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-      await send(commandStr, 2000, 1);
+      if (deviceType === 'esp32') {
+        await sendNoWait(commandStr);
+      } else {
+        await send(commandStr, 2000, 1);
+      }
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);
