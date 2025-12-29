@@ -32,6 +32,13 @@ interface DeviceContextType {
 
 const DeviceContext = createContext<DeviceContextType | null>(null);
 
+const isSameStatus = (a: DeviceStatus, b: DeviceStatus) =>
+  a.connected === b.connected &&
+  a.transport === b.transport &&
+  a.scanning === b.scanning &&
+  a.device_name === b.device_name &&
+  a.device_address === b.device_address;
+
 export const useDevice = () => {
   const context = useContext(DeviceContext);
   if (!context) {
@@ -86,14 +93,15 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }>('ble_get_status');
 
         if (bleStatus && (bleStatus.connected || bleStatus.scanning)) {
-            setStatus({
-                connected: bleStatus.connected,
-                transport: 'BLE',
-                scanning: bleStatus.scanning,
-                device_name: bleStatus.device_name,
-                device_address: bleStatus.device_address,
-            });
-            return;
+          const next: DeviceStatus = {
+            connected: bleStatus.connected,
+            transport: 'BLE',
+            scanning: bleStatus.scanning,
+            device_name: bleStatus.device_name,
+            device_address: bleStatus.device_address,
+          };
+          setStatus((prev) => (isSameStatus(prev, next) ? prev : next));
+          return;
         }
 
         // Check USB status
@@ -103,24 +111,26 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }>('usb_get_status');
 
         if (usbStatus && usbStatus.connected) {
-             setStatus({
-                connected: true,
-                transport: 'USB',
-                scanning: false,
-                device_name: 'USB Device',
-                device_address: usbStatus.device_path,
-            });
-            return;
+          const next: DeviceStatus = {
+            connected: true,
+            transport: 'USB',
+            scanning: false,
+            device_name: 'USB Device',
+            device_address: usbStatus.device_path,
+          };
+          setStatus((prev) => (isSameStatus(prev, next) ? prev : next));
+          return;
         }
 
         // Nothing connected
-        setStatus({
-            connected: false,
-            transport: null,
-            scanning: false,
-            device_name: null,
-            device_address: null,
-        });
+        const next: DeviceStatus = {
+          connected: false,
+          transport: null,
+          scanning: false,
+          device_name: null,
+          device_address: null,
+        };
+        setStatus((prev) => (isSameStatus(prev, next) ? prev : next));
 
       } catch (e) {
         console.error("Status poll error", e);
