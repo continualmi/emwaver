@@ -25,10 +25,12 @@ interface DeviceContextType {
   listUSBPorts: () => Promise<string[]>;
   sendCommand: (data: Uint8Array) => Promise<void>;
   transmitBuffer: (data: Uint8Array) => Promise<void>;
-  sendAndAwaitResponse: (commandString: string, timeoutMs?: number) => Promise<Uint8Array | null>;
+  sendAndAwaitResponse: (commandString: string, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   // Event listeners
   addNotificationListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
   removeNotificationListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
+  addTxListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
+  removeTxListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
 }
 
 const DeviceContext = createContext<DeviceContextType | null>(null);
@@ -51,10 +53,14 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   const listenersRef = useRef<Set<(data: Uint8Array, timestamp: number) => void>>(new Set());
+  const txListenersRef = useRef<Set<(data: Uint8Array, timestamp: number) => void>>(new Set());
   const pendingResponseRef = useRef<{ 
     resolve: (data: Uint8Array) => void;
     reject: (reason: any) => void;
+    wantPackets: number;
+    gotPackets: Uint8Array[];
   } | null>(null);
+  const txPacketIndexRef = useRef<number>(0);
 
   // Polling intervals
   const statusIntervalRef = useRef<number | null>(null);
@@ -145,23 +151,57 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!status.connected || !status.transport) return;
 
       try {
+        // 0) TX log (for visualization)
         for (let i = 0; i < 10; i++) {
-          const packet = await safeInvoke<number[] | null>(
+          const txResp = await safeInvoke<{
+            data: number[];
+            ts_ms: number[];
+            next_packet_index: number;
+            available_packets: number;
+          }>(
+            'buffer_read_tx_since',
+            { packetIndex: txPacketIndexRef.current, maxPackets: 32 },
+            { throwOnError: true },
+          );
+          if (!txResp || !txResp.data?.length || !txResp.ts_ms?.length) break;
+          const packetCount = txResp.ts_ms.length;
+          for (let p = 0; p < packetCount; p++) {
+            const start = p * 64;
+            const end = start + 64;
+            const packet = new Uint8Array(txResp.data.slice(start, end));
+            txListenersRef.current.forEach((listener) => listener(packet, txResp.ts_ms[p] ?? Date.now()));
+          }
+          txPacketIndexRef.current = txResp.next_packet_index ?? txPacketIndexRef.current + packetCount;
+          break;
+        }
+
+        for (let i = 0; i < 10; i++) {
+          const packet = await safeInvoke<{ data: number[]; ts_ms: number } | null>(
             'buffer_next_packet',
             undefined,
             { throwOnError: true },
           );
-          if (!packet?.length) break;
-          const chunk = new Uint8Array(packet);
+          if (!packet?.data?.length) break;
+          const chunk = new Uint8Array(packet.data);
+          const timestamp = packet.ts_ms ?? Date.now();
 
           // 1) Resolve a pending request with the next 64-byte packet (synchronous model).
           if (pendingResponseRef.current) {
-            pendingResponseRef.current.resolve(chunk);
-            pendingResponseRef.current = null;
+            pendingResponseRef.current.gotPackets.push(chunk);
+            if (pendingResponseRef.current.gotPackets.length >= pendingResponseRef.current.wantPackets) {
+              const totalLen = pendingResponseRef.current.gotPackets.reduce((sum, p) => sum + p.length, 0);
+              const out = new Uint8Array(totalLen);
+              let offset = 0;
+              for (const pkt of pendingResponseRef.current.gotPackets) {
+                out.set(pkt, offset);
+                offset += pkt.length;
+              }
+              pendingResponseRef.current.resolve(out);
+              pendingResponseRef.current = null;
+            }
           }
 
           // 2) Broadcast raw bytes (binary-safe) to all listeners.
-          const timestamp = Date.now();
           listenersRef.current.forEach((listener) => listener(chunk, timestamp));
         }
       } catch (e) {
@@ -179,6 +219,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!status.connected) {
       pendingResponseRef.current = null;
       void safeInvoke<void>('buffer_set_counter', { value: 0 }).catch(() => {});
+      txPacketIndexRef.current = 0;
     }
   }, [status.connected]);
 
@@ -238,34 +279,34 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [status.transport]);
 
-  const sendAndAwaitResponse = useCallback(async (commandString: string, timeoutMs: number = 2000): Promise<Uint8Array | null> => {
+  const sendAndAwaitResponseWithPackets = useCallback(async (commandString: string, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
     if (!status.connected) return null;
 
-    // Send
     const encoded = new TextEncoder().encode(commandString + "\n");
     await sendCommand(encoded);
 
-    // Create Promise
     return new Promise<Uint8Array | null>((resolve) => {
-        const timeoutId = setTimeout(() => {
-            if (pendingResponseRef.current) {
-                pendingResponseRef.current = null;
-                console.warn(`Command timed out: ${commandString}`);
-                resolve(null);
-            }
-        }, timeoutMs);
+      const timeoutId = setTimeout(() => {
+        if (pendingResponseRef.current) {
+          pendingResponseRef.current = null;
+          console.warn(`Command timed out: ${commandString}`);
+          resolve(null);
+        }
+      }, timeoutMs);
 
-        pendingResponseRef.current = {
-            resolve: (data) => {
-                clearTimeout(timeoutId);
-                resolve(data);
-            },
-            reject: (err) => {
-                clearTimeout(timeoutId);
-                console.error(err);
-                resolve(null);
-            }
-        };
+      pendingResponseRef.current = {
+        resolve: (data) => {
+          clearTimeout(timeoutId);
+          resolve(data);
+        },
+        reject: (err) => {
+          clearTimeout(timeoutId);
+          console.error(err);
+          resolve(null);
+        },
+        wantPackets: Math.max(1, Math.floor(packets || 1)),
+        gotPackets: [],
+      };
     });
   }, [status.connected, sendCommand]);
 
@@ -277,6 +318,14 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     listenersRef.current.delete(listener);
   }, []);
 
+  const addTxListener = useCallback((listener: (data: Uint8Array, timestamp: number) => void) => {
+    txListenersRef.current.add(listener);
+  }, []);
+
+  const removeTxListener = useCallback((listener: (data: Uint8Array, timestamp: number) => void) => {
+    txListenersRef.current.delete(listener);
+  }, []);
+
   return (
     <DeviceContext.Provider value={{
       status,
@@ -286,9 +335,11 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       listUSBPorts,
       sendCommand,
       transmitBuffer,
-      sendAndAwaitResponse,
+      sendAndAwaitResponse: sendAndAwaitResponseWithPackets,
       addNotificationListener,
-      removeNotificationListener
+      removeNotificationListener,
+      addTxListener,
+      removeTxListener,
     }}>
       {children}
     </DeviceContext.Provider>

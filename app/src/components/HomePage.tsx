@@ -16,7 +16,9 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     listUSBPorts, 
     sendCommand, 
     addNotificationListener, 
-    removeNotificationListener 
+    removeNotificationListener,
+    addTxListener,
+    removeTxListener,
   } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
@@ -170,6 +172,17 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     };
   }, [addNotificationListener, removeNotificationListener, appendToMonitor]);
 
+  // Register TX listener (yellow)
+  useEffect(() => {
+    const listener = (data: Uint8Array, timestamp: number) => {
+      appendToMonitor(data, timestamp, true);
+    };
+    addTxListener(listener);
+    return () => {
+      removeTxListener(listener);
+    };
+  }, [addTxListener, removeTxListener, appendToMonitor]);
+
 
   const parseCommand = (input: string): Uint8Array | null => {
     const bytes: number[] = [];
@@ -247,9 +260,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     }
 
     try {
-      // Log TX data locally
-      appendToMonitor(commandBytes, Date.now(), true);
-
       // Send packet via Context
       await sendCommand(commandBytes);
 
@@ -269,7 +279,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     try {
       const versionBytes = new TextEncoder().encode("version");
-      appendToMonitor(versionBytes, Date.now(), true);
       await sendCommand(versionBytes);
     } catch (error) {
       console.error("Failed to check version:", error);

@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
-use crate::buffer::{self, Buffer};
+use crate::buffer::{self, Buffer, PACKET_SIZE};
 
 // EMWaver BLE Service and Characteristic UUIDs (matching Android/iOS)
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
@@ -33,6 +33,36 @@ pub struct BLEState {
     pub peripheral: Arc<AsyncMutex<Option<Peripheral>>>,
     pub status: Arc<AsyncMutex<BLEStatus>>,
     pub buffer: Arc<Mutex<Buffer>>,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn looks_like_ascii_command(data: &[u8]) -> bool {
+    if data.is_empty() {
+        return false;
+    }
+    if data.iter().any(|b| *b == 0u8) {
+        return false;
+    }
+    data.iter()
+        .all(|b| matches!(b, b'\n' | b'\r' | b'\t' | 0x20..=0x7e))
+}
+
+fn to_packet64(mut data: Vec<u8>) -> Result<[u8; PACKET_SIZE], String> {
+    if looks_like_ascii_command(&data) && !matches!(data.last(), Some(b'\n') | Some(b'\r')) {
+        data.push(b'\n');
+    }
+    if data.len() > PACKET_SIZE {
+        return Err(format!("Command too large: {} bytes (max {})", data.len(), PACKET_SIZE));
+    }
+    let mut packet = [0u8; PACKET_SIZE];
+    packet[..data.len()].copy_from_slice(&data);
+    Ok(packet)
 }
 
 impl BLEState {
@@ -166,8 +196,13 @@ impl BLEState {
                                                     let buffer_clone = Arc::clone(&buffer_clone);
                                                     tokio::spawn(async move {
                                                         while let Some(data) = notification_stream.next().await {
+                                                            if data.value.len() != PACKET_SIZE {
+                                                                continue;
+                                                            }
+                                                            let mut packet = [0u8; PACKET_SIZE];
+                                                            packet.copy_from_slice(&data.value);
                                                             if let Ok(mut guard) = buffer_clone.lock() {
-                                                                buffer::append(&mut *guard, &data.value);
+                                                                buffer::append_rx_packet(&mut *guard, &packet, now_ms());
                                                             }
                                                         }
                                                     });
@@ -257,10 +292,18 @@ impl BLEState {
             if service.uuid == service_uuid {
                 for characteristic in service.characteristics {
                     if characteristic.uuid == cmd_char_uuid {
+                        let packet = to_packet64(data)?;
                         peripheral
-                            .write(&characteristic, &data, btleplug::api::WriteType::WithResponse)
+                            .write(
+                                &characteristic,
+                                &packet,
+                                btleplug::api::WriteType::WithResponse,
+                            )
                             .await
                             .map_err(|e| format!("Failed to write: {}", e))?;
+                        if let Ok(mut guard) = self.buffer.lock() {
+                            buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+                        }
                         return Ok(());
                     }
                 }
