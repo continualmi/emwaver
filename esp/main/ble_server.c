@@ -81,6 +81,29 @@ static volatile uint16_t ble_rxBufferHeadPos = 0;
 static volatile uint16_t ble_rxBufferTailPos = 0;
 static uint8_t ble_transmitter_mode = 0;
 
+static bool ble_matches_ascii_command_prefix(const uint8_t *data, uint16_t len, const char *prefix)
+{
+    if (!data || !prefix) {
+        return false;
+    }
+
+    const size_t prefix_len = strlen(prefix);
+    if (len < prefix_len) {
+        return false;
+    }
+
+    if (memcmp(data, prefix, prefix_len) != 0) {
+        return false;
+    }
+
+    if (len == prefix_len) {
+        return true;
+    }
+
+    const uint8_t next = data[prefix_len];
+    return next == 0 || next == '\n' || next == '\r' || next == ' ' || next == '\t';
+}
+
 // Include this declaration after the existing declarations, before ble_gap_event
 static const struct ble_gap_upd_params CI_15_MS = {
     .itvl_min = 12,          // 12 × 1.25 ms = 15 ms
@@ -188,6 +211,19 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                     
                     // If in transmitter mode, add data to circular buffer instead of command queue
                     if (ble_transmitter_mode) {
+                        // Allow an emergency stop command even while in transmitter mode.
+                        // Transmit payloads are streamed in larger-than-64B chunks, while
+                        // commands are fixed 64B ASCII packets (zero padded).
+                        if (len == 64 && ble_matches_ascii_command_prefix(data, len, "transmit stop")) {
+                            command_t cmd;
+                            cmd.length = len;
+                            memcpy(cmd.data, data, len);
+                            if (xQueueSendToBack(cmd_queue_handle, &cmd, 10) != pdTRUE) {
+                                ESP_LOGE(TAG, "Failed to enqueue BLE command (tx-mode stop)");
+                            }
+                            return 0;
+                        }
+
                         // Add data to circular buffer
                         uint16_t tempHeadPos = ble_rxBufferHeadPos;
                         for (uint16_t i = 0; i < len; i++) {
