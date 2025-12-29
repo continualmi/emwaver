@@ -324,9 +324,12 @@ void command_registry_handle(const command_t *cmd)
 
 void command_send_ok(const uint8_t *data, size_t len)
 {
-    // Raw response protocol:
-    // - Success with payload: send payload bytes as-is.
-    // - Success with no payload: send a single 0x00 byte as ACK.
+    // EMWaver transport framing: BLE notifications are always 64 bytes,
+    // padded with 0x00 by `ble_server_notify_attr()`.
+    //
+    // Protocol here is simple: send the payload bytes (if any). If there's no
+    // payload, send an empty notification, which becomes a 64-byte all-zero
+    // packet on the wire.
     if (data && len > 0) {
         ble_server_notify(data, (uint16_t)len);
         return;
@@ -338,8 +341,7 @@ void command_send_ok(const uint8_t *data, size_t len)
 void command_send_err(const char *msg)
 {
     ESP_LOGW(TAG, "ERR: %s (cmd='%s')", msg ? msg : "(null)", last_cmd_text);
-    // Raw response protocol:
-    // - Error: send a single 0xFF byte.
+    // Keep a distinct error marker byte (0xFF). BLE layer pads to 64 bytes.
     const uint8_t err = 0xFF;
     ble_server_notify(&err, 1);
 }

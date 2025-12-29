@@ -309,20 +309,17 @@ export default function ISMFragment() {
     return true;
   };
 
-  const isOkAck = (response: Uint8Array | null) =>
-    (!!response && response.length === 1 && response[0] === 0x00) || isPaddedPacket(response, 0x00);
-  const isErr = (response: Uint8Array | null) =>
-    (!!response && response.length === 1 && response[0] === 0xff) || isPaddedPacket(response, 0xff);
+  const isOkAck = (response: Uint8Array | null) => isPaddedPacket(response, 0x00);
 
   const parseRawPayload = (response: Uint8Array | null) => {
     if (!response || response.length === 0) return new Uint8Array(0);
-    if (isOkAck(response) || isErr(response)) return new Uint8Array(0);
+    if (isOkAck(response)) return new Uint8Array(0);
     return response;
   };
 
   const parseRawString = (response: Uint8Array | null) => {
     if (!response || response.length === 0) return "";
-    if (isOkAck(response) || isErr(response)) return "";
+    if (isOkAck(response)) return "";
     const firstZero = response.indexOf(0);
     const end = firstZero >= 0 ? firstZero : response.length;
     return new TextDecoder().decode(response.slice(0, end)).trim();
@@ -354,7 +351,6 @@ export default function ISMFragment() {
     async (addr: number) => {
       const verb = selectedChip === "CC1101" ? "cc1101" : "rfm69";
       const response = await sendCommandString(`${verb} read --reg=${addr}`, 1000);
-      if (isErr(response)) return 0;
       const payload = parseRawPayload(response);
       return payload.length > 0 ? payload[0] : 0;
     },
@@ -378,7 +374,6 @@ export default function ISMFragment() {
         1500,
         packets,
       );
-      if (isErr(response)) return new Uint8Array(0);
       const payload = parseRawPayload(response);
       return payload.slice(0, len);
     },
@@ -408,10 +403,6 @@ export default function ISMFragment() {
     const command = `rfm69 init --cs=${cs} --cs_active_high=${csActiveHigh ? 1 : 0}`;
     const response = await sendCommandString(command, 2000);
     if (isOkAck(response)) return true;
-    if (isErr(response)) {
-      setStatusMessage("RFM69 init failed: device returned error.");
-      return false;
-    }
     if (!response || response.length === 0) {
       setStatusMessage("RFM69 init failed: no response.");
       return false;
@@ -422,17 +413,13 @@ export default function ISMFragment() {
 
   const ensureCc1101Init = useCallback(async () => {
     const probe = await sendCommandString("cc1101 read --reg=49", 1000);
-    if (probe && probe.length > 0 && !isErr(probe)) {
+    if (probe && probe.length > 0) {
       return true;
     }
     // Keep commands <=64 bytes for the desktop BLE transport. Firmware defaults cover pinout.
     const command = `cc1101 init --cs=${DEFAULT_CC1101_CS} --cs_active_high=${DEFAULT_CC1101_CS_ACTIVE_HIGH ? 1 : 0}`;
     const response = await sendCommandString(command, 1500);
     if (isOkAck(response)) return true;
-    if (isErr(response)) {
-      setStatusMessage("CC1101 init failed: device returned error.");
-      return false;
-    }
     if (!response || response.length === 0) {
       setStatusMessage("CC1101 init failed: no response.");
       return false;
