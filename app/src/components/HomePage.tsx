@@ -8,6 +8,18 @@ type HomePageProps = {
   isActive: boolean;
 };
 
+const MAX_MONITOR_ENTRIES = 1500;
+
+type BufferEntry = {
+  data: Uint8Array;
+  timestamp: number;
+  timeStr: string;
+  isTx: boolean;
+  seq: number;
+  ascii: string;
+  hex: string;
+};
+
 export default function HomePage({ onNavigateToFragment, isActive }: HomePageProps) {
   const { 
     status, 
@@ -19,7 +31,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
-  const [bufferEntries, setBufferEntries] = useState<Array<{ data: number[]; timestamp: number; isTx: boolean; seq: number }>>([]);
+  const [bufferEntries, setBufferEntries] = useState<BufferEntry[]>([]);
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
@@ -139,16 +151,34 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
   }, [bufferEntries]);
 
-  const appendToMonitor = useCallback((data: Uint8Array, timestamp: number, isTx: boolean) => {
-    const seq = entrySeqRef.current++;
+  const appendBatchToMonitor = useCallback((batch: Array<{ data: Uint8Array; timestamp: number; isTx: boolean }>) => {
+    if (batch.length === 0) return;
+
+    const built: BufferEntry[] = batch.map(({ data, timestamp, isTx }) => {
+      const seq = entrySeqRef.current++;
+      const timeStr = new Date(timestamp).toLocaleTimeString("en-US", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3,
+      });
+      const bytes = Array.from(data);
+      const hex = bytes.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+      const ascii = bytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : ".")).join("");
+      return { data, timestamp, timeStr, isTx, seq, ascii, hex };
+    });
+
     setBufferEntries((prev) => {
-      const next = [...prev, { data: Array.from(data), timestamp, isTx, seq }];
+      const next = [...prev, ...built];
       next.sort((a, b) => {
         if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-        // Prefer TX before RX when timestamps tie (command then response).
         if (a.isTx !== b.isTx) return a.isTx ? -1 : 1;
         return a.seq - b.seq;
       });
+      if (next.length > MAX_MONITOR_ENTRIES) {
+        return next.slice(next.length - MAX_MONITOR_ENTRIES);
+      }
       return next;
     });
   }, []);
@@ -169,6 +199,8 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       if (cancelled || !status.connected) return;
 
       try {
+        const batch: Array<{ data: Uint8Array; timestamp: number; isTx: boolean }> = [];
+
         // TX
         for (let i = 0; i < 10; i++) {
           const txResp = await safeInvoke<{
@@ -188,7 +220,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             const end = start + 64;
             const pkt = new Uint8Array(txResp.data.slice(start, end));
             const ts = txResp.ts_ms[p];
-            appendToMonitor(pkt, ts && ts > 0 ? ts : Date.now(), true);
+            batch.push({ data: pkt, timestamp: ts && ts > 0 ? ts : Date.now(), isTx: true });
           }
           txIndexRef.current = txResp.next_packet_index ?? txIndexRef.current + count;
           break;
@@ -213,11 +245,13 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             const end = start + 64;
             const pkt = new Uint8Array(rxResp.data.slice(start, end));
             const ts = rxResp.ts_ms[p];
-            appendToMonitor(pkt, ts && ts > 0 ? ts : Date.now(), false);
+            batch.push({ data: pkt, timestamp: ts && ts > 0 ? ts : Date.now(), isTx: false });
           }
           rxIndexRef.current = rxResp.next_packet_index ?? rxIndexRef.current + count;
           break;
         }
+
+        appendBatchToMonitor(batch);
       } catch (e) {
         // No alert spam during polling; just log.
         console.error("Buffer Monitor poll failed", e);
@@ -241,7 +275,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       if (interval) window.clearInterval(interval);
     };
-  }, [appendToMonitor, isActive, status.connected]);
+  }, [appendBatchToMonitor, isActive, status.connected]);
 
   const handleConnect = async () => {
       try {
@@ -527,22 +561,11 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             ) : (
               <>
                 {bufferEntries.map((entry, index) => {
-                  const timeStr = new Date(entry.timestamp).toLocaleTimeString("en-US", {
-                    hour12: false,
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    fractionalSecondDigits: 3,
-                  });
-
-                  const bytes = entry.data;
-                  const hexStr = bytes.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
-                  const asciiStr = bytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : ".")).join("");
-                  const content = entry.isTx ? (showTxHex ? hexStr : asciiStr) : (showRxHex ? hexStr : asciiStr);
+                  const content = entry.isTx ? (showTxHex ? entry.hex : entry.ascii) : (showRxHex ? entry.hex : entry.ascii);
 
                   return (
-                    <div key={index} className="mb-1">
-                      <span className="text-slate-500">{`[${timeStr}] `}</span>
+                    <div key={entry.seq} className="mb-1">
+                      <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
                       <span className={entry.isTx ? "text-slate-100" : "text-sky-400"}>{content}</span>
                     </div>
                   );
