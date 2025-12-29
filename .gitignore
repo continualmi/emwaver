@@ -31,3 +31,6 @@ esp/build/
 
 # Notes
 notes.md
+
+# MkDocs build output (generated; deployed via GitHub Actions)
+docs/docs/
