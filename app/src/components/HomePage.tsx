@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import type { FragmentType } from "../App";
 import { useDevice, TransportType } from "../utils/DeviceContext";
+import { safeInvoke } from "../utils/tauri";
 
 type HomePageProps = {
   onNavigateToFragment: (fragment: FragmentType) => void;
@@ -32,6 +33,8 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
   const monitorContainerRef = useRef<HTMLDivElement>(null);
   const entrySeqRef = useRef(0);
+  const rxIndexRef = useRef(0);
+  const txIndexRef = useRef(0);
   
   const fragments = [
     {
@@ -150,6 +153,90 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     });
   }, []);
 
+  // Load global buffer logs (TX + RX) from backend.
+  useEffect(() => {
+    let cancelled = false;
+    let interval: number | null = null;
+
+    const resetLocal = () => {
+      setBufferEntries([]);
+      entrySeqRef.current = 0;
+      rxIndexRef.current = 0;
+      txIndexRef.current = 0;
+    };
+
+    const poll = async () => {
+      if (cancelled || !status.connected) return;
+
+      try {
+        // TX
+        for (let i = 0; i < 10; i++) {
+          const txResp = await safeInvoke<{
+            data: number[];
+            ts_ms: number[];
+            next_packet_index: number;
+            available_packets: number;
+          }>(
+            "buffer_read_tx_since",
+            { packetIndex: txIndexRef.current, maxPackets: 64 },
+            { throwOnError: true },
+          );
+          if (!txResp?.ts_ms?.length || !txResp?.data?.length) break;
+          const count = txResp.ts_ms.length;
+          for (let p = 0; p < count; p++) {
+            const start = p * 64;
+            const end = start + 64;
+            const pkt = new Uint8Array(txResp.data.slice(start, end));
+            appendToMonitor(pkt, txResp.ts_ms[p] ?? Date.now(), true);
+          }
+          txIndexRef.current = txResp.next_packet_index ?? txIndexRef.current + count;
+          break;
+        }
+
+        // RX (read-only; does not change buffer_counter)
+        for (let i = 0; i < 10; i++) {
+          const rxResp = await safeInvoke<{
+            data: number[];
+            ts_ms: number[];
+            next_packet_index: number;
+            available_packets: number;
+          }>(
+            "buffer_read_packets_since",
+            { packetIndex: rxIndexRef.current, maxPackets: 64 },
+            { throwOnError: true },
+          );
+          if (!rxResp?.ts_ms?.length || !rxResp?.data?.length) break;
+          const count = rxResp.ts_ms.length;
+          for (let p = 0; p < count; p++) {
+            const start = p * 64;
+            const end = start + 64;
+            const pkt = new Uint8Array(rxResp.data.slice(start, end));
+            appendToMonitor(pkt, rxResp.ts_ms[p] ?? Date.now(), false);
+          }
+          rxIndexRef.current = rxResp.next_packet_index ?? rxIndexRef.current + count;
+          break;
+        }
+      } catch (e) {
+        // No alert spam during polling; just log.
+        console.error("Buffer Monitor poll failed", e);
+      }
+    };
+
+    if (!status.connected) {
+      resetLocal();
+      return;
+    }
+
+    resetLocal();
+    void poll();
+    interval = window.setInterval(poll, 150);
+
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+    };
+  }, [appendToMonitor, status.connected]);
+
   const handleConnect = async () => {
       try {
         if (selectedTransport === 'BLE') {
@@ -179,19 +266,11 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     try {
       const trimmed = commandInput.trim();
-      const commandBytes = new TextEncoder().encode(trimmed);
-      const start = Date.now();
       const response = await send(trimmed, 2000, 1);
       if (!response) {
         setCommandInput("");
         return;
       }
-      // Only show TX/RX when we got a response.
-      const txPacket = new Uint8Array(64);
-      const asciiPayload = new TextEncoder().encode(trimmed.endsWith("\n") ? trimmed : `${trimmed}\n`);
-      txPacket.set(asciiPayload.slice(0, 64), 0);
-      appendToMonitor(txPacket, start, true);
-      appendToMonitor(response, Date.now(), false);
 
       // Clear input
       setCommandInput("");
@@ -208,24 +287,26 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     }
 
     try {
-      const start = Date.now();
       const response = await send("version", 2500, 1);
       if (!response) {
         return;
       }
-      const txPacket = new Uint8Array(64);
-      const asciiPayload = new TextEncoder().encode("version\n");
-      txPacket.set(asciiPayload, 0);
-      appendToMonitor(txPacket, start, true);
-      appendToMonitor(response, Date.now(), false);
     } catch (error) {
       console.error("Failed to check version:", error);
     }
   };
 
-  const clearMonitor = () => {
-    setBufferEntries([]);
-    entrySeqRef.current = 0;
+  const clearMonitor = async () => {
+    try {
+      await safeInvoke("buffer_clear", undefined, { throwOnError: true });
+    } catch (e) {
+      console.error("Failed to clear buffer", e);
+    } finally {
+      setBufferEntries([]);
+      entrySeqRef.current = 0;
+      rxIndexRef.current = 0;
+      txIndexRef.current = 0;
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
