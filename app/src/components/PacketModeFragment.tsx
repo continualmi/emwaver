@@ -86,11 +86,19 @@ function convertHexStringToByteArray(hexString: string): Uint8Array | null {
 }
 
 function isAckOk(response: Uint8Array | null): boolean {
-  return !!response && response.length === 1 && response[0] === 0x00;
+  if (!response || response.length === 0) return false;
+  if (response.length === 1) return response[0] === 0x00;
+  if (response.length === 64 && response[0] === 0x00) {
+    for (let i = 1; i < response.length; i++) {
+      if (response[i] !== 0) return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 export default function PacketModeFragment() {
-  const { status, sendCommand, addNotificationListener, removeNotificationListener } = useDevice();
+  const { status, send } = useDevice();
   const [statusText, setStatusText] = useState("");
   const [manchesterEnabled, setManchesterEnabled] = useState(false);
   const [modulation, setModulation] = useState<(typeof MODULATION_OPTIONS)[number]>("ASK");
@@ -104,43 +112,14 @@ export default function PacketModeFragment() {
 
   const isConnected = status.connected;
 
-  const awaitNotification = useCallback(
-    (matcher: (data: Uint8Array) => boolean, timeoutMs: number) =>
-      new Promise<Uint8Array | null>((resolve) => {
-        let settled = false;
-        const timeoutId = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          removeNotificationListener(listener);
-          resolve(null);
-        }, timeoutMs);
-
-        const listener = (data: Uint8Array) => {
-          if (settled || !matcher(data)) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timeoutId);
-          removeNotificationListener(listener);
-          resolve(data);
-        };
-
-        addNotificationListener(listener);
-      }),
-    [addNotificationListener, removeNotificationListener],
-  );
-
   const sendCommandString = useCallback(
-    async (command: string, timeoutMs = 1000, matcher?: (data: Uint8Array) => boolean) => {
+    async (command: string, timeoutMs = 1000, packets = 1) => {
       if (!status.connected) {
         return null;
       }
-      const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
-      const responsePromise = awaitNotification(matcher ?? ((data) => data.length > 0), timeoutMs);
-      await sendCommand(payload);
-      return await responsePromise;
+      return await send(command, timeoutMs, packets);
     },
-    [awaitNotification, sendCommand, status.connected],
+    [send, status.connected],
   );
 
   const spiStrobe = useCallback(
@@ -167,7 +146,7 @@ export default function PacketModeFragment() {
       const response = await sendCommandString(
         `cc1101 read --reg=0x${addr.toString(16).padStart(2, "0")}`,
         1000,
-        (data) => data.length > 0,
+        1,
       );
       if (!response || response.length < 1) {
         return 0;
@@ -195,10 +174,11 @@ export default function PacketModeFragment() {
       if (len <= 0) {
         return new Uint8Array(0);
       }
+      const packets = Math.max(1, Math.ceil(len / 64));
       const response = await sendCommandString(
         `cc1101 read_burst --reg=0x${addr.toString(16).padStart(2, "0")} --len=${len}`,
         1000,
-        (data) => data.length >= len,
+        packets,
       );
       if (!response || response.length < len) {
         return null;

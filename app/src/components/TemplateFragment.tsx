@@ -14,7 +14,7 @@ function bytesToAscii(data: Uint8Array) {
 }
 
 export default function TemplateFragment() {
-  const { status, sendAndAwaitResponse, addNotificationListener, removeNotificationListener } = useDevice();
+  const { status, send, addNotificationListener, removeNotificationListener } = useDevice();
   const [resultText, setResultText] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
   const [showHex, setShowHex] = useState(false);
@@ -59,7 +59,7 @@ export default function TemplateFragment() {
     setIsBusy(true);
     setResultText("");
     try {
-      const response = await sendAndAwaitResponse("version", 2500);
+      const response = await send("version", 2500, 1);
       if (!response) {
         setResultText("Timed out waiting for response.");
         return;
@@ -70,7 +70,7 @@ export default function TemplateFragment() {
     } finally {
       setIsBusy(false);
     }
-  }, [sendAndAwaitResponse, showHex, status.connected]);
+  }, [send, showHex, status.connected]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-950 text-slate-100">

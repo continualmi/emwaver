@@ -231,7 +231,7 @@ function getInitialChip(): RadioChip {
 }
 
 export default function ISMFragment() {
-  const { status, sendCommand, addNotificationListener, removeNotificationListener } = useDevice();
+  const { status, send } = useDevice();
 
   const [selectedChip, setSelectedChip] = useState<RadioChip>(() => getInitialChip());
   const [isLoading, setIsLoading] = useState(false);
@@ -289,44 +289,15 @@ export default function ISMFragment() {
 
   const isConnected = status.connected;
 
-  const awaitNotification = useCallback(
-    (matcher: (data: Uint8Array) => boolean, timeoutMs: number) =>
-      new Promise<Uint8Array | null>((resolve) => {
-        let settled = false;
-        const timeoutId = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          removeNotificationListener(listener);
-          resolve(null);
-        }, timeoutMs);
-
-        const listener = (data: Uint8Array) => {
-          if (settled || !matcher(data)) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timeoutId);
-          removeNotificationListener(listener);
-          resolve(data);
-        };
-
-        addNotificationListener(listener);
-      }),
-    [addNotificationListener, removeNotificationListener],
-  );
-
   const sendCommandString = useCallback(
-    async (command: string, timeoutMs = 1000, matcher?: (data: Uint8Array) => boolean) => {
+    async (command: string, timeoutMs = 1000, packets = 1) => {
       if (!status.connected) {
         return null;
       }
       setCurrentCommand(command);
-      const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
-      const responsePromise = awaitNotification(matcher ?? ((data) => data.length > 0), timeoutMs);
-      await sendCommand(payload);
-      return await responsePromise;
+      return await send(command, timeoutMs, packets);
     },
-    [awaitNotification, sendCommand, status.connected],
+    [send, status.connected],
   );
 
   const isPaddedPacket = (response: Uint8Array | null, first: number) => {
@@ -401,10 +372,11 @@ export default function ISMFragment() {
   const cc1101ReadBurstReg = useCallback(
     async (addr: number, len: number) => {
       if (selectedChip !== "CC1101") return new Uint8Array(0);
+      const packets = Math.max(1, Math.ceil(len / 64));
       const response = await sendCommandString(
         `cc1101 read_burst --reg=${addr} --len=${len}`,
         1500,
-        (data) => data.length >= len,
+        packets,
       );
       if (isErr(response)) return new Uint8Array(0);
       const payload = parseRawPayload(response);
