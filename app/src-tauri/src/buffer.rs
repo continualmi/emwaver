@@ -37,6 +37,14 @@ pub fn rx_set_bytes(buffer: &mut Buffer, data: Vec<u8>) {
     buffer.1 = 0;
 }
 
+pub fn rx_copy_byte_range(buffer: &Buffer, byte_start: usize, byte_end: usize) -> Vec<u8> {
+    if byte_start >= byte_end || byte_start >= buffer.0.len() {
+        return Vec::new();
+    }
+    let end = byte_end.min(buffer.0.len());
+    buffer.0.get(byte_start..end).unwrap_or_default().to_vec()
+}
+
 pub fn rx_packet_count(buffer: &Buffer) -> u64 {
     (buffer.0.len() / PACKET_SIZE) as u64
 }
