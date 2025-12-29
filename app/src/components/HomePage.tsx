@@ -22,7 +22,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
-  const [bufferEntries, setBufferEntries] = useState<Array<{ data: number[]; timestamp: number; isTx: boolean }>>([]);
+  const [bufferEntries, setBufferEntries] = useState<Array<{ data: number[]; timestamp: number; isTx: boolean; seq: number }>>([]);
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
@@ -35,6 +35,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   const [isRefreshingPorts, setIsRefreshingPorts] = useState(false);
 
   const monitorContainerRef = useRef<HTMLDivElement>(null);
+  const entrySeqRef = useRef(0);
   
   const fragments = [
     {
@@ -140,7 +141,17 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   }, [bufferEntries]);
 
   const appendToMonitor = useCallback((data: Uint8Array, timestamp: number, isTx: boolean) => {
-    setBufferEntries((prev) => [...prev, { data: Array.from(data), timestamp, isTx }]);
+    const seq = entrySeqRef.current++;
+    setBufferEntries((prev) => {
+      const next = [...prev, { data: Array.from(data), timestamp, isTx, seq }];
+      next.sort((a, b) => {
+        if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+        // Prefer TX before RX when timestamps tie (command then response).
+        if (a.isTx !== b.isTx) return a.isTx ? -1 : 1;
+        return a.seq - b.seq;
+      });
+      return next;
+    });
   }, []);
 
   // Register Notification Listener
@@ -222,6 +233,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
   const clearMonitor = () => {
     setBufferEntries([]);
+    entrySeqRef.current = 0;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
