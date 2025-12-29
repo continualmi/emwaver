@@ -236,6 +236,10 @@ function SamplerFragment() {
   const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
   
   const [isRecording, setIsRecording] = useState(false);
+  const isRecordingRef = useRef(false);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
   const [selectedPinIndexEsp32, setSelectedPinIndexEsp32] = useState(() => {
     const storedIo = Number.parseInt(localStorage.getItem(PIN_IO_ESP32_KEY) || '', 10);
     if (!Number.isNaN(storedIo) && storedIo >= 0) {
@@ -272,6 +276,8 @@ function SamplerFragment() {
     visibleStart: number;
     visibleEnd: number;
     requestedBins: number;
+    chartWidth: number | null;
+    minRenderIntervalMs: number;
   }>({
     chartReady: false,
     scaleMin: null,
@@ -279,6 +285,8 @@ function SamplerFragment() {
     visibleStart: 0,
     visibleEnd: 0,
     requestedBins: 0,
+    chartWidth: null,
+    minRenderIntervalMs: MIN_CHART_RENDER_INTERVAL_MS,
   });
   
   // Settings state
@@ -314,6 +322,7 @@ function SamplerFragment() {
   const [textDialogMode, setTextDialogMode] = useState<'save' | 'rename' | null>(null);
 
   const chartRef = useRef<any>(null);
+  const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const bufferLenBytesRef = useRef(0);
   const [bufferLenBytes, setBufferLenBytes] = useState(0);
@@ -407,8 +416,8 @@ function SamplerFragment() {
   const minRenderIntervalMs = useMemo(() => {
     // While recording the buffer grows fast; throttling redraw helps keep UI responsive.
     // Keep interaction-driven refresh separate (handled by zoom/pan callbacks).
-    const base = Math.max(MIN_CHART_RENDER_INTERVAL_MS, Math.trunc(refreshRate * 3));
-    return isRecording ? Math.max(base, 200) : base;
+    const base = Math.max(MIN_CHART_RENDER_INTERVAL_MS, Math.trunc(refreshRate * 4));
+    return isRecording ? Math.max(base, 250) : base;
   }, [isRecording, refreshRate]);
 
   const computeVisibleRangeBits = useCallback((chart: any, chartMaxX: number) => {
@@ -450,9 +459,30 @@ function SamplerFragment() {
     return (maybeChart as any).chart ?? maybeChart;
   }, []);
 
-			  const performChartRefresh = useCallback((chartInstance?: any) => {
-			    const chart = getChartInstance(chartInstance || chartRef.current);
-			    if (!chart) return;
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+
+    const onWheel = (event: WheelEvent) => {
+      // Prevent the page from scrolling when the pointer is over the chart so wheel/pinch zoom feels natural.
+      event.preventDefault();
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      event.preventDefault();
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchmove', onTouchMove);
+    };
+  }, []);
+
+				  const performChartRefresh = useCallback((chartInstance?: any) => {
+				    const chart = getChartInstance(chartInstance || chartRef.current);
+				    if (!chart) return;
 
 			    if (chartRefreshInFlightRef.current) {
 			      return;
@@ -471,6 +501,7 @@ function SamplerFragment() {
           const xScale = chart?.scales?.x;
           const scaleMin = xScale ? Number(xScale.min) : Number.NaN;
           const scaleMax = xScale ? Number(xScale.max) : Number.NaN;
+          const chartWidth = Number.isFinite(Number(chart?.width)) ? Math.trunc(Number(chart.width)) : null;
           setDebugViewport({
             chartReady: true,
             scaleMin: Number.isFinite(scaleMin) ? scaleMin : null,
@@ -478,6 +509,8 @@ function SamplerFragment() {
             visibleStart: visibleRangeStart,
             visibleEnd: visibleRangeEnd,
             requestedBins,
+            chartWidth,
+            minRenderIntervalMs,
           });
 
 			    void safeInvoke<SamplerCompressViewportResponse>(
@@ -495,6 +528,11 @@ function SamplerFragment() {
 			        const bufferBytes = result.buffer_len_bytes;
 			        bufferLenBytesRef.current = bufferBytes;
 			        setBufferLenBytes(bufferBytes);
+              if (isRecordingRef.current && bufferBytes >= maxSamples) {
+                stopRecording();
+                alert('Recording stopped: Buffer size limit reached.');
+                return;
+              }
 
 			        const viewportKey = `${bufferBytes}:${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
 			        if (viewportKey === lastChartViewportKeyRef.current) {
@@ -525,7 +563,7 @@ function SamplerFragment() {
 			      .finally(() => {
 			        chartRefreshInFlightRef.current = false;
 			      });
-		  }, [chartResolution, computeVisibleRangeBits, getAdaptiveBins, getChartInstance]);
+		  }, [chartResolution, computeVisibleRangeBits, getAdaptiveBins, getChartInstance, maxSamples, minRenderIntervalMs]);
 
   const scheduleChartRefresh = useCallback((chartInstance?: any) => {
     if (pendingChartRefreshRef.current != null) {
@@ -638,29 +676,11 @@ function SamplerFragment() {
       return;
     }
 
-			    const refreshChartLoop = async () => {
-			      const now = Date.now();
-			      if (now - lastChartRenderAtRef.current < minRenderIntervalMs) {
-			        return;
-			      }
-
-		      const currentBufferSize = (await safeInvoke<number>('buffer_get_len_bytes')) ?? 0;
-		      bufferLenBytesRef.current = currentBufferSize;
-		      setBufferLenBytes(currentBufferSize);
-		      
-		      // Check buffer size limit
-		      if (isRecording && currentBufferSize >= maxSamples) {
-		        stopRecording();
-	        alert('Recording stopped: Buffer size limit reached.');
-	        return;
-	      }
-
-	      // Only update if buffer changed or recording
-		      if (currentBufferSize === lastBufferSizeRef.current && !isRecording) {
+		    const refreshChartLoop = async () => {
+		      const now = Date.now();
+		      if (now - lastChartRenderAtRef.current < minRenderIntervalMs) {
 		        return;
 		      }
-
-	      lastBufferSizeRef.current = currentBufferSize;
 
 	      const chart = getChartInstance(chartRef.current);
 	      if (!chart) return;
@@ -678,7 +698,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-			  }, [getChartInstance, isConnected, isRecording, maxSamples, minRenderIntervalMs, performChartRefresh, refreshRate]);
+		  }, [getChartInstance, isConnected, minRenderIntervalMs, performChartRefresh, refreshRate]);
 
 		  const startRecording = async () => {
 		    if (!isConnected) {
@@ -809,6 +829,8 @@ function SamplerFragment() {
           `points=${chartData.timeValues.length}`,
           `view=${debugViewport.visibleStart}..${debugViewport.visibleEnd}`,
           `bins=${debugViewport.requestedBins}`,
+          `chartWidth=${debugViewport.chartWidth ?? '—'}`,
+          `minRenderIntervalMs=${debugViewport.minRenderIntervalMs}`,
           `scale=${debugViewport.scaleMin ?? '—'}..${debugViewport.scaleMax ?? '—'}`,
           `refreshRateMs=${refreshRate}`,
           `chartResolution=${chartResolution}`,
@@ -1439,12 +1461,14 @@ function SamplerFragment() {
                 <p>Chart error: {chartError}</p>
               </div>
             ) : (
-              <Line 
-                ref={chartRef} 
-                data={data} 
-                options={chartOptions}
-                redraw={false}
-              />
+              <div ref={chartContainerRef} className="h-full w-full" style={{ touchAction: 'none' }}>
+                <Line 
+                  ref={chartRef} 
+                  data={data} 
+                  options={chartOptions}
+                  redraw={false}
+                />
+              </div>
             )}
           </div>
         </div>
