@@ -862,7 +862,7 @@ function SamplerFragment() {
 	    if (deviceType === 'esp32') {
 	      await sendNoWait(`sample start --pin=${pinNumber}`);
 	    } else {
-	      await send(`sample start --pin=${pinNumber}`, 2000, 1);
+	      await sendNoWait(`sample start --pin=${pinNumber}`);
 	    }
 
 	    setIsRecording(true);
@@ -876,7 +876,7 @@ function SamplerFragment() {
 		    if (deviceType === 'esp32') {
 		      await sendNoWait("sample stop");
 		    } else {
-		      await send("sample stop", 2000, 1);
+		      await sendNoWait("sample stop");
 		    }
 
 	    setIsRecording(false);

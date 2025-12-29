@@ -8,6 +8,8 @@ ELF="$SCRIPT_DIR/Release/emwaver-firmware.elf"
 BIN="$SCRIPT_DIR/Release/emwaver-firmware.bin"
 ANDROID_ASSET_DIR="$REPO_ROOT/android/app/src/main/assets/dfu"
 ANDROID_ASSET="$ANDROID_ASSET_DIR/ism.dfu"
+DESKTOP_ASSET_DIR="$REPO_ROOT/app/src-tauri/resources/dfu"
+DESKTOP_ASSET="$DESKTOP_ASSET_DIR/ism.dfu"
 
 verbose() {
   [[ "${EMWAVER_VERBOSE:-0}" == "1" ]]
@@ -110,7 +112,15 @@ mkdir -p "$ANDROID_ASSET_DIR"
 echo "Updating Android asset: $ANDROID_ASSET"
 cp -f "$BIN" "$ANDROID_ASSET"
 
+if [[ -d "$DESKTOP_ASSET_DIR" ]]; then
+  echo "Updating desktop asset: $DESKTOP_ASSET"
+  cp -f "$BIN" "$DESKTOP_ASSET"
+fi
+
 echo "Done."
 echo "  ELF: $ELF"
 echo "  BIN: $BIN"
 echo "  Android asset: $ANDROID_ASSET"
+if [[ -d "$DESKTOP_ASSET_DIR" ]]; then
+  echo "  Desktop asset: $DESKTOP_ASSET"
+fi
