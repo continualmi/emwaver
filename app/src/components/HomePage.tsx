@@ -5,10 +5,10 @@ import { safeInvoke } from "../utils/tauri";
 
 type HomePageProps = {
   onNavigateToFragment: (fragment: FragmentType) => void;
-  // isActive is no longer needed since polling is handled by context
+  isActive: boolean;
 };
 
-export default function HomePage({ onNavigateToFragment }: HomePageProps) {
+export default function HomePage({ onNavigateToFragment, isActive }: HomePageProps) {
   const { 
     status, 
     connectUSB, 
@@ -229,15 +229,19 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       return;
     }
 
+    if (!isActive) {
+      return;
+    }
+
     resetLocal();
     void poll();
-    interval = window.setInterval(poll, 150);
+    interval = window.setInterval(poll, 500);
 
     return () => {
       cancelled = true;
       if (interval) window.clearInterval(interval);
     };
-  }, [appendToMonitor, status.connected]);
+  }, [appendToMonitor, isActive, status.connected]);
 
   const handleConnect = async () => {
       try {
