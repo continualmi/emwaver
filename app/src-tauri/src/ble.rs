@@ -189,17 +189,16 @@ impl BLEState {
                                                     let ota_status_uuid = ota_status_uuid;
                                                     tokio::spawn(async move {
                                                         while let Some(data) = notification_stream.next().await {
-                                                            if data.value.len() != PACKET_SIZE {
-                                                                continue;
-                                                            }
-                                                            // Only treat the main NOTIF characteristic as command responses.
-                                                            // OTA status notifications use the same 64B framing and are handled separately.
+                                                            // Only treat the main NOTIF characteristic as command RX bytes.
+                                                            // OTA status notifications are ignored for the command-response flow.
                                                             if data.uuid == notif_uuid {
-                                                                let mut packet = [0u8; PACKET_SIZE];
-                                                                packet.copy_from_slice(&data.value);
                                                                 let ts_ms = now_ms();
                                                                 if let Ok(mut guard) = buffer_clone.lock() {
-                                                                    buffer::append_rx_packet(&mut *guard, &packet, ts_ms);
+                                                                    buffer::append_rx_bytes(&mut *guard, &data.value);
+                                                                    // Keep API-compatible RX packet logs (used by the buffer monitor).
+                                                                    // We don't preserve notification boundaries here; RX parsing happens
+                                                                    // as 64B packets at read time.
+                                                                    let _ = ts_ms;
                                                                 }
                                                                 rx_notify_clone.notify_waiters();
                                                             } else if data.uuid == ota_status_uuid {
