@@ -22,8 +22,9 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
-  const [serialMonitor, setSerialMonitor] = useState<string[]>([]);
-  const [showHex, setShowHex] = useState(false);
+  const [bufferEntries, setBufferEntries] = useState<Array<{ data: number[]; timestamp: number; isTx: boolean }>>([]);
+  const [showTxHex, setShowTxHex] = useState(false);
+  const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
   const [deviceIconKey, setDeviceIconKey] = useState<"emwaver" | "ism" | "rfid" | "infrared" | "gpio">("emwaver");
   
@@ -136,30 +137,11 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     if (monitorContainerRef.current) {
       monitorContainerRef.current.scrollTop = monitorContainerRef.current.scrollHeight;
     }
-  }, [serialMonitor]);
+  }, [bufferEntries]);
 
   const appendToMonitor = useCallback((data: Uint8Array, timestamp: number, isTx: boolean) => {
-    const timeStr = new Date(timestamp).toLocaleTimeString("en-US", {
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-    });
-    
-    const hexStr = Array.from(data)
-      .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
-      .join(" ");
-    const asciiStr = Array.from(data)
-      .map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : "."))
-      .join("");
-
-    const content = showHex ? hexStr : asciiStr;
-    const color = isTx ? "#FFD700" : "#00AA00";
-    const line = `[${timeStr}] <span style="color: ${color}">${content}</span>`;
-
-    setSerialMonitor((prev) => [...prev, line]);
-  }, [showHex]);
+    setBufferEntries((prev) => [...prev, { data: Array.from(data), timestamp, isTx }]);
+  }, []);
 
   // Register Notification Listener
   useEffect(() => {
@@ -184,48 +166,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   }, [addTxListener, removeTxListener, appendToMonitor]);
 
 
-  const parseCommand = (input: string): Uint8Array | null => {
-    const bytes: number[] = [];
-
-    try {
-      // Check if input contains bracketed values
-      if (input.includes("[") && input.includes("]")) {
-        const parts = input.split(/[\[\]]/);
-        for (const part of parts) {
-          const trimmed = part.trim();
-          if (!trimmed) continue;
-
-          if (trimmed.startsWith("0x") || trimmed.startsWith("0X")) {
-            // Hexadecimal value
-            bytes.push(parseInt(trimmed.substring(2), 16));
-          } else if (/^\d+$/.test(trimmed)) {
-            // Decimal value
-            const val = parseInt(trimmed, 10);
-            if (val < 0 || val > 255) {
-              throw new Error(`Decimal value out of byte range: ${val}`);
-            }
-            bytes.push(val);
-          } else {
-            // Treat as ASCII
-            for (const char of trimmed) {
-              bytes.push(char.charCodeAt(0));
-            }
-          }
-        }
-      } else {
-        // No brackets, treat entire input as ASCII
-        for (const char of input) {
-          bytes.push(char.charCodeAt(0));
-        }
-      }
-
-      return new Uint8Array(bytes);
-    } catch (error) {
-      console.error("Error parsing command:", error);
-      return null;
-    }
-  };
-
   const handleConnect = async () => {
       try {
         if (selectedTransport === 'BLE') {
@@ -248,18 +188,13 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       return;
     }
 
-    const commandBytes = parseCommand(commandInput.trim());
-    if (!commandBytes) {
-      alert("Invalid packet format.");
-      return;
-    }
-
     if (!status.connected) {
       alert("Device not connected");
       return;
     }
 
     try {
+      const commandBytes = new TextEncoder().encode(commandInput.trim());
       // Send packet via Context
       await sendCommand(commandBytes);
 
@@ -286,7 +221,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
   };
 
   const clearMonitor = () => {
-    setSerialMonitor([]);
+    setBufferEntries([]);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -297,12 +232,15 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
   // Extract version from notification when connected
   useEffect(() => {
-    if (status.connected && serialMonitor.length > 0) {
-      const lastMessage = serialMonitor[serialMonitor.length - 1];
-      const stripped = lastMessage
-        .replace(/<[^>]*>/g, "")
-        .replace(/^\[[^\]]*\]\s*/, "")
-        .trim();
+    if (status.connected && bufferEntries.length > 0) {
+      const last = bufferEntries[bufferEntries.length - 1];
+      if (last.isTx) {
+        return;
+      }
+      const bytes = new Uint8Array(last.data);
+      const firstZero = bytes.indexOf(0);
+      const end = firstZero >= 0 ? firstZero : bytes.length;
+      const stripped = new TextDecoder().decode(bytes.slice(0, end)).trim();
 
       const isBareSemver = /^\d+\.\d+\.\d+$/.test(stripped);
       if (stripped.includes("Welcome to")) {
@@ -325,7 +263,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
       setFirmwareVersion("Unknown");
       setDeviceIconKey("emwaver");
     }
-  }, [serialMonitor, status.connected]);
+  }, [bufferEntries, status.connected]);
 
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
@@ -461,64 +399,89 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
           </div>
         </div>
 
-        {/* Command Input */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 flex-shrink-0">
-          <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={commandInput}
-              onChange={(e) => setCommandInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="e.g., version[0x00][255][0xFF]"
-              className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-600"
-            />
-            <button
-              onClick={handleSendCommand}
-              disabled={!status.connected || !commandInput.trim()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-            >
-              Send Packet
-            </button>
-          </div>
-          <div className="flex items-center gap-2 mt-3">
-            <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showHex}
-                onChange={(e) => setShowHex(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
-              />
-              <span>HEX</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Serial Monitor */}
+        {/* Buffer Monitor */}
         <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <div className="text-sm font-semibold text-slate-400">Serial Monitor</div>
-            <button
-              onClick={clearMonitor}
-              className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
-            >
-              Clear
-            </button>
+            <div className="text-sm font-semibold text-slate-400">Buffer Monitor</div>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showTxHex}
+                  onChange={(e) => setShowTxHex(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                />
+                <span>TX HEX</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showRxHex}
+                  onChange={(e) => setShowRxHex(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                />
+                <span>RX HEX</span>
+              </label>
+              <button
+                onClick={clearMonitor}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
           </div>
           <div ref={monitorContainerRef} className="overflow-y-auto font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
-            {serialMonitor.length === 0 ? (
+            {bufferEntries.length === 0 ? (
               <div className="text-slate-500">No data received yet...</div>
             ) : (
               <>
-                {serialMonitor.map((line, index) => (
-                  <div
-                    key={index}
-                    dangerouslySetInnerHTML={{ __html: line }}
-                    className="mb-1"
-                  />
-                ))}
+                {bufferEntries.map((entry, index) => {
+                  const timeStr = new Date(entry.timestamp).toLocaleTimeString("en-US", {
+                    hour12: false,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    fractionalSecondDigits: 3,
+                  });
+
+                  const bytes = entry.data;
+                  const hexStr = bytes.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+                  const asciiStr = bytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : ".")).join("");
+                  const content = entry.isTx ? (showTxHex ? hexStr : asciiStr) : (showRxHex ? hexStr : asciiStr);
+
+                  return (
+                    <div key={index} className="mb-1">
+                      <span className="text-slate-500">{`[${timeStr}] `}</span>
+                      <span className={entry.isTx ? "text-amber-300" : "text-emerald-400"}>{content}</span>
+                    </div>
+                  );
+                })}
               </>
             )}
+          </div>
+          <div className="mt-3 flex-shrink-0">
+            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={commandInput}
+                onChange={(e) => setCommandInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSendCommand();
+                  }
+                }}
+                placeholder="e.g., version"
+                className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-600"
+              />
+              <button
+                onClick={handleSendCommand}
+                disabled={!status.connected || !commandInput.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              >
+                Send
+              </button>
+            </div>
           </div>
         </div>
 
