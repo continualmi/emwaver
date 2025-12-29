@@ -42,21 +42,7 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn looks_like_ascii_command(data: &[u8]) -> bool {
-    if data.is_empty() {
-        return false;
-    }
-    if data.iter().any(|b| *b == 0u8) {
-        return false;
-    }
-    data.iter()
-        .all(|b| matches!(b, b'\n' | b'\r' | b'\t' | 0x20..=0x7e))
-}
-
-fn to_packet64(mut data: Vec<u8>) -> Result<[u8; PACKET_SIZE], String> {
-    if looks_like_ascii_command(&data) && !matches!(data.last(), Some(b'\n') | Some(b'\r')) {
-        data.push(b'\n');
-    }
+fn to_packet64(data: Vec<u8>) -> Result<[u8; PACKET_SIZE], String> {
     if data.len() > PACKET_SIZE {
         return Err(format!("Command too large: {} bytes (max {})", data.len(), PACKET_SIZE));
     }

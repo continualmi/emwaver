@@ -224,15 +224,11 @@ impl USBState {
     pub async fn send_packet(&self, data: Vec<u8>) -> Result<(), String> {
         let mut port_guard = self.port.lock().await;
         if let Some(port) = port_guard.as_mut() {
-            let mut payload = data;
-            if Self::looks_like_ascii_command(&payload) && !matches!(payload.last(), Some(b'\n') | Some(b'\r')) {
-                payload.push(b'\n');
-            }
-            if payload.len() > PACKET_SIZE {
-                return Err(format!("Command too large: {} bytes (max {})", payload.len(), PACKET_SIZE));
+            if data.len() > PACKET_SIZE {
+                return Err(format!("Command too large: {} bytes (max {})", data.len(), PACKET_SIZE));
             }
             let mut packet = [0u8; PACKET_SIZE];
-            packet[..payload.len()].copy_from_slice(&payload);
+            packet[..data.len()].copy_from_slice(&data);
 
             port.write_all(&packet).map_err(|e| format!("Failed to write: {}", e))?;
             port.flush().map_err(|e| format!("Failed to flush: {}", e))?;
@@ -253,16 +249,6 @@ impl USBState {
             }
         }
         port_name.to_string()
-    }
-
-    fn looks_like_ascii_command(data: &[u8]) -> bool {
-        if data.is_empty() {
-            return false;
-        }
-        if data.iter().any(|b| *b == 0u8) {
-            return false;
-        }
-        data.iter().all(|b| matches!(b, b'\n' | b'\r' | b'\t' | 0x20..=0x7e))
     }
 
     pub async fn get_status(&self) -> USBStatus {
