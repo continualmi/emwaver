@@ -54,6 +54,7 @@ nav:
           - STM32F042 (CubeIDE): documentation/firmware-stm32.md
       - Protocol:
           - Transport & Command Format: documentation/protocol.md
+          - Transport Buffering (Draft): documentation/transport-buffering.md
       - CLI: documentation/cli.md
       - Apps:
           - Overview: documentation/apps.md
