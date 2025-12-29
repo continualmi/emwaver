@@ -14,11 +14,7 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     connectBLE, 
     disconnect, 
     listUSBPorts, 
-    sendCommand, 
-    addNotificationListener, 
-    removeNotificationListener,
-    addTxListener,
-    removeTxListener,
+    send,
   } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
@@ -154,29 +150,6 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     });
   }, []);
 
-  // Register Notification Listener
-  useEffect(() => {
-    const listener = (data: Uint8Array, timestamp: number) => {
-        appendToMonitor(data, timestamp, false);
-    };
-    addNotificationListener(listener);
-    return () => {
-        removeNotificationListener(listener);
-    };
-  }, [addNotificationListener, removeNotificationListener, appendToMonitor]);
-
-  // Register TX listener (yellow)
-  useEffect(() => {
-    const listener = (data: Uint8Array, timestamp: number) => {
-      appendToMonitor(data, timestamp, true);
-    };
-    addTxListener(listener);
-    return () => {
-      removeTxListener(listener);
-    };
-  }, [addTxListener, removeTxListener, appendToMonitor]);
-
-
   const handleConnect = async () => {
       try {
         if (selectedTransport === 'BLE') {
@@ -206,8 +179,15 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     try {
       const commandBytes = new TextEncoder().encode(commandInput.trim());
-      // Send packet via Context
-      await sendCommand(commandBytes);
+      const start = Date.now();
+      const response = await send(commandInput.trim(), 2000, 1);
+      if (!response) {
+        setCommandInput("");
+        return;
+      }
+      // Only show TX/RX when we got a response.
+      appendToMonitor(commandBytes, start, true);
+      appendToMonitor(response, Date.now(), false);
 
       // Clear input
       setCommandInput("");
@@ -225,7 +205,13 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
 
     try {
       const versionBytes = new TextEncoder().encode("version");
-      await sendCommand(versionBytes);
+      const start = Date.now();
+      const response = await send("version", 2500, 1);
+      if (!response) {
+        return;
+      }
+      appendToMonitor(versionBytes, start, true);
+      appendToMonitor(response, Date.now(), false);
     } catch (error) {
       console.error("Failed to check version:", error);
     }

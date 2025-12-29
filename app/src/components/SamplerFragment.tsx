@@ -208,7 +208,7 @@ function parsePwmIntOrDefault(raw: string, fallback: number): number {
 
 function SamplerFragment() {
   // Use Device context instead of polling directly
-  const { status, addNotificationListener, removeNotificationListener, sendCommand, transmitBuffer } = useDevice();
+  const { status, addNotificationListener, removeNotificationListener, send, transmitBuffer } = useDevice();
   const isConnected = status.connected;
   const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
   const useRustSampler = isTauriAvailable();
@@ -635,9 +635,7 @@ function SamplerFragment() {
 	    }
 
     // Send "sample start --pin=<pin>" command (matching Android/iOS)
-    const commandStr = `sample start --pin=${pinNumber}\n`;
-    const command = new TextEncoder().encode(commandStr);
-    await sendCommand(command);
+    await send(`sample start --pin=${pinNumber}`, 2000, 1);
 
     setIsRecording(true);
     setHasUnsavedChanges(true);
@@ -647,8 +645,7 @@ function SamplerFragment() {
 	    if (!isConnected) return;
 
 	    // Send "sample stop" command (matching Android/iOS)
-	    const command = new TextEncoder().encode('sample stop\n');
-	    await sendCommand(command);
+	    await send("sample stop", 2000, 1);
 
     setIsRecording(false);
   };
@@ -695,9 +692,7 @@ function SamplerFragment() {
       }
 
       // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-      commandStr += '\n';
-      const command = new TextEncoder().encode(commandStr);
-      await sendCommand(command);
+      await send(commandStr, 2000, 1);
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);

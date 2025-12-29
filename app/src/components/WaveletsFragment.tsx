@@ -109,30 +109,6 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
     deviceRef.current = device;
   }, [device]);
 
-  const awaitAnyNotification = useCallback((timeoutMs: number) => {
-    return new Promise<Uint8Array | null>((resolve) => {
-      let settled = false;
-      const timeoutId = window.setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        deviceRef.current.removeNotificationListener(listener as any);
-        resolve(null);
-      }, timeoutMs);
-
-      const listener = (data: Uint8Array) => {
-        if (settled || !data || data.length === 0) {
-          return;
-        }
-        settled = true;
-        window.clearTimeout(timeoutId);
-        deviceRef.current.removeNotificationListener(listener as any);
-        resolve(data);
-      };
-
-      deviceRef.current.addNotificationListener(listener as any);
-    });
-  }, []);
-
   const deviceConnection = useMemo(
     () => ({
       sendCommandString: (command: string, timeoutMs: number = 1500) => {
@@ -141,15 +117,11 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
         // via an internal queue.
         const queued = commandQueueRef.current
           .then(async () => {
-            const { status, sendCommand } = deviceRef.current;
+            const { status, send } = deviceRef.current;
             if (!status.connected) {
               return null;
             }
-            const responsePromise = awaitAnyNotification(timeoutMs);
-            const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
-            await sendCommand(payload);
-            // Give firmware a tiny breather between commands.
-            const response = await responsePromise;
+            const response = await send(command, timeoutMs, 1);
             await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
             return response;
           })
@@ -165,11 +137,22 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
         return queued as Promise<Uint8Array | null>;
       },
       write: (data: Uint8Array) => {
-        const { status, sendCommand } = deviceRef.current;
+        const { status, sendPacket } = deviceRef.current;
         if (!status.connected) {
           return;
         }
-        void sendCommand(data);
+        const queued = commandQueueRef.current
+          .then(async () => {
+            await sendPacket(data, 1500, 1);
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
+          })
+          .catch(async () => {
+            // keep queue alive
+          });
+        commandQueueRef.current = queued.then(
+          () => undefined,
+          () => undefined,
+        );
       },
       connectionStatus: () => {
         const { status } = deviceRef.current;
@@ -179,7 +162,7 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
         return `${status.transport ?? "unknown"} connected`;
       },
     }),
-    [awaitAnyNotification],
+    [],
   );
 
   const utilsBinding = useMemo(

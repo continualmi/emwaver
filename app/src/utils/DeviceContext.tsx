@@ -23,9 +23,9 @@ interface DeviceContextType {
   connectBLE: () => Promise<void>;
   disconnect: () => Promise<void>;
   listUSBPorts: () => Promise<string[]>;
-  sendCommand: (data: Uint8Array) => Promise<void>;
+  sendPacket: (data: Uint8Array, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
+  send: (commandString: string, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   transmitBuffer: (data: Uint8Array) => Promise<void>;
-  sendAndAwaitResponse: (commandString: string, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   // Event listeners
   addNotificationListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
   removeNotificationListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
@@ -268,6 +268,46 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [status.transport]);
 
+  const sendPacket = useCallback(async (data: Uint8Array, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
+    if (!status.connected) return null;
+    if (pendingResponseRef.current) {
+      console.warn("sendPacket called while another command is pending");
+      return null;
+    }
+
+    const wantPackets = Math.max(1, Math.floor(packets || 1));
+
+    const responsePromise = new Promise<Uint8Array | null>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        if (pendingResponseRef.current) {
+          pendingResponseRef.current = null;
+          resolve(null);
+        }
+      }, timeoutMs);
+
+      pendingResponseRef.current = {
+        resolve: (payload) => {
+          clearTimeout(timeoutId);
+          resolve(payload);
+        },
+        reject: (_err) => {
+          clearTimeout(timeoutId);
+          resolve(null);
+        },
+        wantPackets,
+        gotPackets: [],
+      };
+    });
+
+    await sendCommand(data);
+    return await responsePromise;
+  }, [sendCommand, status.connected]);
+
+  const send = useCallback(async (commandString: string, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
+    const encoded = new TextEncoder().encode(commandString.endsWith("\n") ? commandString : `${commandString}\n`);
+    return await sendPacket(encoded, timeoutMs, packets);
+  }, [sendPacket]);
+
   const transmitBuffer = useCallback(async (data: Uint8Array) => {
     if (status.transport === 'BLE') {
         await safeInvoke('ble_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
@@ -278,37 +318,6 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         await safeInvoke('usb_send_packet', { data: Array.from(data) }, { throwOnError: true });
     }
   }, [status.transport]);
-
-  const sendAndAwaitResponseWithPackets = useCallback(async (commandString: string, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
-    if (!status.connected) return null;
-
-    const encoded = new TextEncoder().encode(commandString + "\n");
-    await sendCommand(encoded);
-
-    return new Promise<Uint8Array | null>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        if (pendingResponseRef.current) {
-          pendingResponseRef.current = null;
-          console.warn(`Command timed out: ${commandString}`);
-          resolve(null);
-        }
-      }, timeoutMs);
-
-      pendingResponseRef.current = {
-        resolve: (data) => {
-          clearTimeout(timeoutId);
-          resolve(data);
-        },
-        reject: (err) => {
-          clearTimeout(timeoutId);
-          console.error(err);
-          resolve(null);
-        },
-        wantPackets: Math.max(1, Math.floor(packets || 1)),
-        gotPackets: [],
-      };
-    });
-  }, [status.connected, sendCommand]);
 
   const addNotificationListener = useCallback((listener: (data: Uint8Array, timestamp: number) => void) => {
     listenersRef.current.add(listener);
@@ -333,9 +342,9 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       connectBLE,
       disconnect,
       listUSBPorts,
-      sendCommand,
+      sendPacket,
+      send,
       transmitBuffer,
-      sendAndAwaitResponse: sendAndAwaitResponseWithPackets,
       addNotificationListener,
       removeNotificationListener,
       addTxListener,

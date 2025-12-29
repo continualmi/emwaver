@@ -97,7 +97,7 @@ function getTagType(b1: number, b2: number): string {
 }
 
 export default function RfidFragment() {
-  const { status, sendCommand, addNotificationListener, removeNotificationListener } = useDevice();
+  const { status, send } = useDevice();
   const [blockAddress, setBlockAddress] = useState("00");
   const [keys, setKeys] = useState<string[]>(DEFAULT_KEYS);
   const [combinedData, setCombinedData] = useState(DEFAULT_DATA);
@@ -112,43 +112,14 @@ export default function RfidFragment() {
   const isConnected = status.connected;
   const authValue = useMemo(() => AUTH_MODES[authModeIndex]?.value ?? 0x60, [authModeIndex]);
 
-  const awaitNotification = useCallback(
-    (matcher: (data: Uint8Array) => boolean, timeoutMs: number) =>
-      new Promise<Uint8Array | null>((resolve) => {
-        let settled = false;
-        const timeoutId = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          removeNotificationListener(listener);
-          resolve(null);
-        }, timeoutMs);
-
-        const listener = (data: Uint8Array) => {
-          if (settled || !matcher(data)) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timeoutId);
-          removeNotificationListener(listener);
-          resolve(data);
-        };
-
-        addNotificationListener(listener);
-      }),
-    [addNotificationListener, removeNotificationListener],
-  );
-
   const sendAsciiCommand = useCallback(
     async (command: string, timeoutMs: number) => {
       if (!status.connected) {
         return null;
       }
-      const payload = new TextEncoder().encode(command.endsWith("\n") ? command : `${command}\n`);
-      const responsePromise = awaitNotification((data) => data.length > 0, timeoutMs);
-      await sendCommand(payload);
-      return await responsePromise;
+      return await send(command, timeoutMs, 1);
     },
-    [awaitNotification, sendCommand, status.connected],
+    [send, status.connected],
   );
 
   const isKeyComplete = useCallback(
