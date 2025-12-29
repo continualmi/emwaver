@@ -36,75 +36,48 @@ The goal is a simple mental model:
 ## Architecture (client + microcontroller)
 
 ```text
-                          (single client-side "buffer")
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ CLIENT                                                                       │
-│                                                                              │
-│  tx: Vec<u8>                     rx: Vec<u8>                                 │
-│  ┌───────────┐                  ┌───────────┐                                │
-│  │ append()  │                  │ append()  │                                │
-│  └─────┬─────┘                  └─────┬─────┘                                │
-│        │                               │                                      │
-│        │ bytes written                 │ bytes received                       │
-│        ▼                               ▼                                      │
-│  ┌───────────────┐              ┌─────────────────────────┐                  │
-│  │ transport TX  │              │ transport RX             │                  │
-│  │ (BLE write /  │◀─────────────│ (BLE notify / USB CDC)   │                  │
-│  │  USB CDC)     │              └─────────────────────────┘                  │
-│  └──────┬────────┘                                                           │
-│         │                                                                     │
-│         │ parsing uses fixed frame size (currently 64 bytes)                  │
-│         ▼                                                                     │
-│  rx_frame_counter: u64                                                        │
-│  - counts how many 64-byte response frames have been consumed from `rx`       │
-│  - next frame starts at: rx_frame_counter * 64                                │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-                      (bounded, synchronous firmware model)
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ MICROCONTROLLER                                                              │
-│                                                                              │
-│  command mailbox (fixed-size)              response slot (fixed-size)         │
-│  ┌───────────────────────────┐           ┌───────────────────────────┐       │
-│  │ latest command bytes       │           │ next response frame (64B) │       │
-│  │ (overwrite on write)       │           │ padded if needed          │       │
-│  └─────────────┬─────────────┘           └─────────────┬─────────────┘       │
-│                │                                       │                      │
-│                ▼                                       ▼                      │
-│         parse + execute                         emit exactly one response     │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────┬───────────────────────────────┐
+│ CLIENT (effectively unbounded)       │ MICROCONTROLLER (bounded)     │
+│                                      │                               │
+│ buffer                               │ command buffer                │
+│ ┌──────────────────────────────────┐ │ (small, fixed-size)           │
+│ │ append-only bytes received        │ │ ┌───────────────┐             │
+│ │ full visibility / wire dump       │ │ │ latest command │             │
+│ │                                  │ │ └───────────────┘             │
+│ │                                  │ │                               │
+│ └──────────────────────────────────┘ │                               │
+│                                      │                               │
+│ buffer counter                        │ circular buffer              │
+│ - how many fixed-size response      │ (retransmit)                 │
+│   frames have been consumed         │ ┌───────────────┐             │
+│                                     │ │ ring buffer    │             │
+│                                     │ └───────────────┘             │
+│                                      │                               │
+│                                      │ dual buffer (ping/pong)       │
+│                                      │ (record / capture)            │
+│                                      │ ┌───────┐  ┌───────┐          │
+│                                      │ │ buf A │  │ buf B │          │
+│                                      │ └───────┘  └───────┘          │
+└──────────────────────────────────────┴───────────────────────────────┘
 ```
 
 ## Client-side buffer model
 
-### `tx` (what we sent)
+This architecture emphasizes the client buffer as the canonical “wire capture”: raw bytes first, decoding on top.
 
-- Append every outbound payload to `tx` for debugging and UI visibility.
-- Optionally annotate offsets with “command boundaries” in the UI (but the underlying data stays raw bytes).
+### Buffer (what we received)
 
-### `rx` (what we received)
+- Append every inbound payload to the buffer in arrival order.
+- Treat the buffer as the canonical “wire capture” for debugging (raw bytes first; decoding happens on top).
 
-- Append every inbound payload to `rx` in arrival order.
-- Treat `rx` as the canonical “wire capture” for debugging (raw bytes first; decoding happens on top).
-
-### `rx_frame_counter` (how we consume responses)
+### Buffer counter (how we consume responses)
 
 Clients parse responses as fixed-size frames of **64 bytes**.
 
-Definitions:
-
-- `FRAME_SIZE = 64`
-- `rx_frame_counter` = number of complete frames already consumed from `rx`
-- `next_frame_offset = rx_frame_counter * FRAME_SIZE`
-
-Availability rule:
-
-- A frame `rx_frame_counter` is available when `len(rx) >= (rx_frame_counter + 1) * FRAME_SIZE`.
-
-Consumption rule:
-
-- When a frame is available, slice `[next_frame_offset : next_frame_offset + 64]`,
-  decode it to a response (ASCII or binary depending on transport rules), then increment `rx_frame_counter`.
+- The buffer counter is “how many complete 64-byte responses have been consumed”.
+- The next response starts at byte offset: (buffer counter × 64).
+- A new response is available when the buffer contains at least ((buffer counter + 1) × 64) bytes.
+- When available: read the next 64 bytes, decode to a response, then increment the buffer counter.
 
 This gives deterministic “get me the next response” behavior without ever mutating the underlying `rx` capture.
 

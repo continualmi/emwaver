@@ -2,6 +2,8 @@ site_name: EMWaver
 site_dir: docs
 site_url: https://luispl77.github.io/emwaver/
 docs_dir: content
+repo_url: https://github.com/luispl77/emwaver
+edit_uri: edit/main/docs/content/
 theme:
   name: material
   features:
@@ -53,6 +55,10 @@ nav:
 extra_css:
   - styles/theme.css
   - styles/hide-toc.css
+extra_javascript:
+  - javascripts/copy-page-markdown.js
+hooks:
+  - hooks/embed_page_markdown.py
 markdown_extensions:
   - attr_list
   - md_in_html
