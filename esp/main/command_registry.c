@@ -324,12 +324,12 @@ void command_registry_handle(const command_t *cmd)
 
 void command_send_ok(const uint8_t *data, size_t len)
 {
-    // EMWaver transport framing: BLE notifications are always 64 bytes,
-    // padded with 0x00 by `ble_server_notify_attr()`.
-    //
     // Protocol here is simple: send the payload bytes (if any). If there's no
-    // payload, send an empty notification, which becomes a 64-byte all-zero
-    // packet on the wire.
+    // payload, send a single 0x00 byte as an "ok" marker.
+    //
+    // BLE notification framing note: the BLE layer pads payloads <= 64 bytes to a
+    // fixed 64B notification for deterministic parsing. Larger payloads are sent
+    // unpadded and may be split across multiple notifications (MTU-sized chunks).
     if (data && len > 0) {
         ble_server_notify(data, (uint16_t)len);
         return;
@@ -341,7 +341,7 @@ void command_send_ok(const uint8_t *data, size_t len)
 void command_send_err(const char *msg)
 {
     ESP_LOGW(TAG, "ERR: %s (cmd='%s')", msg ? msg : "(null)", last_cmd_text);
-    // Keep a distinct error marker byte (0xFF). BLE layer pads to 64 bytes.
+    // Keep a distinct error marker byte (0xFF).
     const uint8_t err = 0xFF;
     ble_server_notify(&err, 1);
 }
