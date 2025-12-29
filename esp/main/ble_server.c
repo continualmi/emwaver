@@ -504,6 +504,8 @@ int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t l
 {
     struct os_mbuf *om;
     int rc;
+    uint8_t padded[64];
+    uint16_t send_len = 0;
 
     if (notify_conn_handle == BLE_HS_CONN_HANDLE_NONE) {
         return BLE_HS_ENOTCONN;
@@ -513,7 +515,20 @@ int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t l
         return BLE_ATT_ERR_UNLIKELY;
     }
 
-    om = ble_hs_mbuf_from_flat(data, len);
+    // EMWaver transport framing: notifications are always fixed-size 64-byte packets
+    // (zero-padded as needed) so clients can parse responses deterministically.
+    memset(padded, 0, sizeof(padded));
+    if (data != NULL && len > 0) {
+        if (len > sizeof(padded)) {
+            ESP_LOGW(TAG, "Notification truncated from %u to %u bytes (attr_handle=%u)",
+                     (unsigned)len, (unsigned)sizeof(padded), (unsigned)attr_handle);
+            len = sizeof(padded);
+        }
+        memcpy(padded, data, len);
+    }
+    send_len = (uint16_t)sizeof(padded);
+
+    om = ble_hs_mbuf_from_flat(padded, send_len);
     if (om == NULL) {
         return BLE_HS_ENOMEM;
     }

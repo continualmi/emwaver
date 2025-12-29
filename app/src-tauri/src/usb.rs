@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
 use std::collections::HashSet;
 
-use crate::transport_buffer::TransportBufferState;
+use crate::buffer::{self, Buffer};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -19,14 +19,14 @@ pub struct USBState {
     pub port: Arc<AsyncMutex<Option<Box<dyn SerialPort + Send>>>>,
     pub status: Arc<AsyncMutex<USBStatus>>,
     pub running: Arc<AsyncMutex<bool>>,
-    pub transport_buffer: Arc<Mutex<TransportBufferState>>,
+    pub buffer: Arc<Mutex<Buffer>>,
 }
 
 unsafe impl Send for USBState {}
 unsafe impl Sync for USBState {}
 
 impl USBState {
-    pub fn new(transport_buffer: Arc<Mutex<TransportBufferState>>) -> Self {
+    pub fn new(buffer: Arc<Mutex<Buffer>>) -> Self {
         Self {
             port: Arc::new(AsyncMutex::new(None)),
             status: Arc::new(AsyncMutex::new(USBStatus {
@@ -34,7 +34,7 @@ impl USBState {
                 device_path: None,
             })),
             running: Arc::new(AsyncMutex::new(false)),
-            transport_buffer,
+            buffer,
         }
     }
 
@@ -134,7 +134,7 @@ impl USBState {
 
         // Start reading thread
         let running_clone = Arc::clone(&self.running);
-        let transport_buffer_clone = Arc::clone(&self.transport_buffer);
+        let buffer_clone = Arc::clone(&self.buffer);
 
         // We need a way to read from the port without locking it forever.
         // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
@@ -168,13 +168,13 @@ impl USBState {
 
                 match read_port.read(&mut buffer) {
                     Ok(bytes_read) => {
-                        if bytes_read > 0 {
-                            let data = buffer[0..bytes_read].to_vec();
-                            if let Ok(mut guard) = transport_buffer_clone.lock() {
-                                guard.append(&data);
+                            if bytes_read > 0 {
+                                let data = buffer[0..bytes_read].to_vec();
+                                if let Ok(mut guard) = buffer_clone.lock() {
+                                    buffer::append(&mut *guard, &data);
+                                }
                             }
                         }
-                    }
                     Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
                         // Timeout is fine, just continue
                     }

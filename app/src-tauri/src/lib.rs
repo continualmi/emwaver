@@ -1,4 +1,5 @@
 mod ble;
+mod buffer;
 mod firmware;
 mod git;
 mod pty;
@@ -28,6 +29,7 @@ use git::{
 };
 use usb::{USBState, USBStatus};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
+use buffer::Buffer;
 use transport_buffer::{TransportBufferReadResponse, TransportBufferState};
 
 const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
@@ -661,6 +663,78 @@ async fn transport_buffer_read_since(
 }
 
 #[tauri::command]
+async fn buffer_clear(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        crate::buffer::clear(&mut *guard);
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_get_counter(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        Ok::<u64, String>(guard.1)
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_set_counter(state: State<'_, Arc<Mutex<Buffer>>>, value: u64) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        guard.1 = value;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_get_packet_count(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        Ok::<u64, String>(crate::buffer::packet_count(&*guard))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_read_packets_since(
+    state: State<'_, Arc<Mutex<Buffer>>>,
+    packet_index: u64,
+    max_packets: usize,
+) -> Result<crate::buffer::ReadPackets, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        Ok::<crate::buffer::ReadPackets, String>(crate::buffer::read_since(&*guard, packet_index, max_packets))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_next_packet(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<Option<Vec<u8>>, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        Ok::<Option<Vec<u8>>, String>(crate::buffer::next_packet(&mut *guard).map(|p| p.to_vec()))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
 async fn transport_buffer_compress_viewport(
     state: State<'_, Arc<Mutex<TransportBufferState>>>,
     range_start: usize,
@@ -1265,16 +1339,14 @@ fn bytes_to_hex_lower(bytes: &[u8]) -> String {
 
 async fn wait_for_ota_success(
     app: &tauri::AppHandle,
-    transport_buffer: &Arc<Mutex<TransportBufferState>>,
+    buffer: &Arc<Mutex<Buffer>>,
     total_bytes: u64,
     timeout_seconds: u64,
 ) -> Result<(), String> {
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_seconds);
-    let mut offset = {
-        let guard = transport_buffer
-            .lock()
-            .map_err(|_| "Transport buffer lock poisoned".to_string())?;
-        guard.end_offset()
+    let mut packet_index = {
+        let guard = buffer.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        crate::buffer::packet_count(&*guard)
     };
     let mut window: Vec<u8> = Vec::with_capacity(256);
     loop {
@@ -1284,11 +1356,9 @@ async fn wait_for_ota_success(
         }
 
         let chunk = {
-            let guard = transport_buffer
-                .lock()
-                .map_err(|_| "Transport buffer lock poisoned".to_string())?;
-            let response = guard.read_since(offset, 4096);
-            offset = response.next_offset;
+            let guard = buffer.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+            let response = crate::buffer::read_since(&*guard, packet_index, 64);
+            packet_index = response.next_packet_index;
             response.data
         };
 
@@ -1427,7 +1497,7 @@ async fn ble_ota_flash_bytes(
     emit_ota_progress(app, "Finalizing...", total_bytes, total_bytes);
     state.ota_write_control(&[0x03]).await?;
 
-    wait_for_ota_success(app, &state.transport_buffer, total_bytes, 30).await
+    wait_for_ota_success(app, &state.buffer, total_bytes, 30).await
 }
 
 #[tauri::command]
@@ -1502,7 +1572,7 @@ async fn wifi_ota_flash_bytes(
     wifi_http_post_firmware(app, bytes, &sha_hex, total_bytes).await?;
 
     emit_ota_progress(app, "Waiting for device to finalize...", total_bytes, total_bytes);
-    wait_for_ota_success(app, &state.transport_buffer, total_bytes, 30).await
+    wait_for_ota_success(app, &state.buffer, total_bytes, 30).await
 }
 
 #[tauri::command]
@@ -1584,6 +1654,9 @@ pub fn run() {
 
     let transport_buffer_state: Arc<Mutex<TransportBufferState>> = Arc::new(Mutex::new(TransportBufferState::default()));
     let transport_buffer_state_for_setup = Arc::clone(&transport_buffer_state);
+
+    let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new((Vec::new(), 0)));
+    let rx_buffer_for_setup = Arc::clone(&rx_buffer);
 
     tauri::Builder::default()
         .setup(move |app| {
@@ -1908,10 +1981,11 @@ pub fn run() {
                 .with_state_flags(window_state_flags)
                 .build(),
         )
-        .manage(Arc::new(BLEState::new(Arc::clone(&transport_buffer_state_for_setup))))
+        .manage(Arc::new(BLEState::new(Arc::clone(&rx_buffer_for_setup))))
         .manage(Arc::new(PtyManager::new()))
-        .manage(Arc::new(USBState::new(Arc::clone(&transport_buffer_state_for_setup))))
+        .manage(Arc::new(USBState::new(Arc::clone(&rx_buffer_for_setup))))
         .manage(Arc::clone(&transport_buffer_state_for_setup))
+        .manage(Arc::clone(&rx_buffer_for_setup))
         .manage(Arc::new(Mutex::new(SamplerBufferState::default())))
 		        .invoke_handler(tauri::generate_handler![
             create_project,
@@ -1927,6 +2001,12 @@ pub fn run() {
             transport_buffer_get,
             transport_buffer_set,
             transport_buffer_read_since,
+            buffer_clear,
+            buffer_get_counter,
+            buffer_set_counter,
+            buffer_get_packet_count,
+            buffer_read_packets_since,
+            buffer_next_packet,
             transport_buffer_compress_viewport,
             transport_buffer_write_file,
             transport_buffer_build_signed_raw_timings,
