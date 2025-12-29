@@ -296,6 +296,8 @@ function SamplerFragment() {
   const refreshIntervalRef = useRef<number | null>(null);
   const bufferLenBytesRef = useRef(0);
   const [bufferLenBytes, setBufferLenBytes] = useState(0);
+  const autoFitXRef = useRef(true);
+  const lastRenderedAvailableBitsRef = useRef(0);
   const lastBufferSizeRef = useRef(0);
   const lastChartRenderAtRef = useRef(0);
   const lastChartViewportKeyRef = useRef<string>('');
@@ -310,6 +312,23 @@ function SamplerFragment() {
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
   const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
+
+  const pollBufferLenBytes = useCallback(async (): Promise<number | null> => {
+    try {
+      const lenBytes = await safeInvoke<number>('buffer_get_len_bytes');
+      const value = Number(lenBytes);
+      if (!Number.isFinite(value) || value < 0) {
+        return null;
+      }
+      if (value !== bufferLenBytesRef.current) {
+        bufferLenBytesRef.current = value;
+        setBufferLenBytes(value);
+      }
+      return value;
+    } catch {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(PIN_INDEX_ESP32_KEY, `${selectedPinIndexEsp32}`);
@@ -439,10 +458,19 @@ function SamplerFragment() {
 			    if (chartRefreshInFlightRef.current) {
 			      return;
 			    }
-			    chartRefreshInFlightRef.current = true;
-
 			    const requestedBins = getAdaptiveBins(chartResolution);
-			    const { visibleRangeStart, visibleRangeEnd, maxX } = getViewportBits();
+			    const { visibleRangeStart, visibleRangeEnd } = getViewportBits();
+          const viewportKey = `${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
+          const availableBits = bufferLenBytesRef.current * 8;
+          if (
+            viewportKey === lastChartViewportKeyRef.current &&
+            visibleRangeEnd <= lastRenderedAvailableBitsRef.current &&
+            visibleRangeEnd <= availableBits
+          ) {
+            return;
+          }
+
+			    chartRefreshInFlightRef.current = true;
           const scaleMin = Number(plot.scales?.x?.min);
           const scaleMax = Number(plot.scales?.x?.max);
           const chartWidth = plotRootRef.current?.clientWidth ?? null;
@@ -478,11 +506,11 @@ function SamplerFragment() {
                 return;
               }
 
-			        const viewportKey = `${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
-			        if (viewportKey === lastChartViewportKeyRef.current) {
+			        const nextViewportKey = `${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
+			        if (nextViewportKey === lastChartViewportKeyRef.current) {
 			          return;
 			        }
-			        lastChartViewportKeyRef.current = viewportKey;
+			        lastChartViewportKeyRef.current = nextViewportKey;
 
               if (result.time_values.length !== result.data_values.length) {
                 console.warn('Sampler viewport length mismatch', {
@@ -495,12 +523,7 @@ function SamplerFragment() {
               const y = new Float32Array(result.data_values);
               setChartPointCount(x.length);
               plot.setData([x, y]);
-
-              const nextMaxX = Math.max(10000, bufferBytes * 8);
-              const isInteracting = isChartInteractingRef.current;
-              if (!isInteracting && Number.isFinite(maxX) && nextMaxX !== maxX) {
-                plot.setScale('x', { min: 0, max: nextMaxX });
-              }
+              lastRenderedAvailableBitsRef.current = bufferBytes * 8;
 			      })
 			      .catch((error) => {
 			        console.error('Failed to refresh chart (buffer compress):', error);
@@ -643,6 +666,7 @@ function SamplerFragment() {
 
       event.preventDefault();
       markChartInteracting();
+      autoFitXRef.current = false;
 
       const totalMax = Math.max(10000, bufferLenBytesRef.current * 8);
       const rect = el.getBoundingClientRect();
@@ -690,6 +714,7 @@ function SamplerFragment() {
       if (!plot) return;
 
       event.preventDefault();
+      autoFitXRef.current = false;
       const totalMax = Math.max(10000, bufferLenBytesRef.current * 8);
       const span = Math.max(1, dragStartMax - dragStartMin);
       const plotWidth = Math.max(1, plot.bbox?.width ?? el.clientWidth ?? 1);
@@ -725,36 +750,85 @@ function SamplerFragment() {
     };
   }, [markChartInteracting, maybeRefreshOnInteraction]);
 
-	  // Refresh chart periodically
+	  // While recording, poll buffer length and refresh the chart only when needed.
 	  useEffect(() => {
-	    if (!isConnected) {
+	    if (!isConnected || !isRecording) {
 	      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
+          clearInterval(refreshIntervalRef.current);
+          refreshIntervalRef.current = null;
+        }
+        return;
       }
-      return;
-    }
 
-		    const refreshChartLoop = async () => {
-		      const now = Date.now();
-		      if (now - lastChartRenderAtRef.current < minRenderIntervalMs) {
-		        return;
-		      }
+      const refreshChartLoop = async () => {
+        const now = Date.now();
+        if (now - lastChartRenderAtRef.current < minRenderIntervalMs) {
+          await pollBufferLenBytes();
+          return;
+        }
 
-	      lastChartRenderAtRef.current = now;
-	      performChartRefresh();
-		    };
+        await pollBufferLenBytes();
 
-		    refreshIntervalRef.current = window.setInterval(() => {
-		      void refreshChartLoop();
-		    }, refreshRate);
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
-    };
-		  }, [isConnected, minRenderIntervalMs, performChartRefresh, refreshRate]);
+        const plot = uplotRef.current;
+        const bufferBytes = bufferLenBytesRef.current;
+        const availableBits = bufferBytes * 8;
+        const maxX = Math.max(10000, availableBits);
+
+        if (plot && autoFitXRef.current && !isChartInteractingRef.current) {
+          const rawMin = Number(plot.scales?.x?.min);
+          const rawMax = Number(plot.scales?.x?.max);
+          const shouldRescale =
+            !Number.isFinite(rawMin) ||
+            !Number.isFinite(rawMax) ||
+            rawMin !== 0 ||
+            Math.abs(rawMax - maxX) > 1;
+          if (shouldRescale) {
+            try {
+              plot.setScale('x', { min: 0, max: maxX });
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        const requestedBins = getAdaptiveBins(chartResolution);
+        const { visibleRangeStart, visibleRangeEnd } = getViewportBits();
+        const viewportKey = `${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
+
+        const viewportAlreadyRendered =
+          viewportKey === lastChartViewportKeyRef.current &&
+          visibleRangeEnd <= lastRenderedAvailableBitsRef.current &&
+          visibleRangeEnd <= availableBits;
+
+        if (viewportAlreadyRendered) {
+          return;
+        }
+
+        lastChartRenderAtRef.current = now;
+        performChartRefresh();
+      };
+
+      refreshIntervalRef.current = window.setInterval(() => {
+        void refreshChartLoop();
+      }, refreshRate);
+
+      return () => {
+        if (refreshIntervalRef.current) {
+          clearInterval(refreshIntervalRef.current);
+          refreshIntervalRef.current = null;
+        }
+      };
+	  }, [
+      chartResolution,
+      getAdaptiveBins,
+      getViewportBits,
+      isConnected,
+      isRecording,
+      minRenderIntervalMs,
+      performChartRefresh,
+      pollBufferLenBytes,
+      refreshRate,
+    ]);
 
 		  const startRecording = async () => {
 		    if (!isConnected) {
@@ -776,11 +850,13 @@ function SamplerFragment() {
 			    setBufferLenBytes(0);
 			    lastBufferSizeRef.current = 0;
 			    lastChartViewportKeyRef.current = '';
+          lastRenderedAvailableBitsRef.current = 0;
 			    setChartPointCount(0);
           if (uplotRef.current) {
             uplotRef.current.setData([new Float64Array(), new Float32Array()]);
           }
 			    resetChartZoom();
+          autoFitXRef.current = true;
 
 	    // Send "sample start --pin=<pin>" command (matching Android/iOS)
 	    if (deviceType === 'esp32') {
@@ -909,12 +985,14 @@ function SamplerFragment() {
 				    bufferLenBytesRef.current = 0;
 				    setBufferLenBytes(0);
 				    lastBufferSizeRef.current = 0;
+            lastRenderedAvailableBitsRef.current = 0;
 				    setChartPointCount(0);
             if (uplotRef.current) {
               uplotRef.current.setData([new Float64Array(), new Float32Array()]);
             }
 				    setHasUnsavedChanges(false);
 				    resetChartZoom();
+            autoFitXRef.current = true;
 				  };
 
   const resetChartZoom = () => {
@@ -926,6 +1004,7 @@ function SamplerFragment() {
       prevVisibleRangeStartRef.current = 0;
       prevVisibleRangeEndRef.current = maxX;
       prevVisibleSpanRef.current = maxX;
+      autoFitXRef.current = true;
     } catch (e) {
       console.warn('Could not reset zoom:', e);
     }
