@@ -191,9 +191,11 @@ static void sampler_start_command(int pin)
 {
     const char *err = NULL;
     if (sampler_start_impl(pin, &err)) {
-        command_send_ok(NULL, 0);
+        // Sampler streaming is started in fire-and-forget mode; do not emit a command
+        // response packet to avoid contaminating the capture stream on the client.
+        // Errors are logged; clients should infer failure by lack of stream data.
     } else {
-        command_send_err(err ? err : "sample start");
+        ESP_LOGW(TAG, "sample start failed: %s", err ? err : "unknown");
     }
 }
 
@@ -201,9 +203,9 @@ static void sampler_stop_command(void)
 {
     const char *err = NULL;
     if (sampler_stop_impl(&err)) {
-        command_send_ok(NULL, 0);
+        // Fire-and-forget (see sampler_start_command).
     } else {
-        command_send_err(err ? err : "sample stop");
+        ESP_LOGW(TAG, "sample stop failed: %s", err ? err : "unknown");
     }
 }
 

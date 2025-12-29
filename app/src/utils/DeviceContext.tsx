@@ -20,6 +20,8 @@ interface DeviceContextType {
   listUSBPorts: () => Promise<string[]>;
   sendPacket: (data: Uint8Array, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   send: (commandString: string, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
+  sendPacketNoWait: (data: Uint8Array) => Promise<void>;
+  sendNoWait: (commandString: string) => Promise<void>;
   transmitBuffer: (data: Uint8Array) => Promise<void>;
   // Event listeners
   addNotificationListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
@@ -195,6 +197,24 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return await sendPacket(encoded, timeoutMs, packets);
   }, [sendPacket]);
 
+  const sendPacketNoWait = useCallback(async (data: Uint8Array) => {
+    if (!status.connected || !status.transport) return;
+    const args = { data: Array.from(data) };
+
+    if (status.transport === 'BLE') {
+      await safeInvoke('ble_send_packet', args, { throwOnError: true });
+      return;
+    }
+    if (status.transport === 'USB') {
+      await safeInvoke('usb_send_packet', args, { throwOnError: true });
+    }
+  }, [status.connected, status.transport]);
+
+  const sendNoWait = useCallback(async (commandString: string) => {
+    const encoded = new TextEncoder().encode(commandString);
+    await sendPacketNoWait(encoded);
+  }, [sendPacketNoWait]);
+
   const transmitBuffer = useCallback(async (data: Uint8Array) => {
     if (status.transport === 'BLE') {
         await safeInvoke('ble_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
@@ -231,6 +251,8 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       listUSBPorts,
       sendPacket,
       send,
+      sendPacketNoWait,
+      sendNoWait,
       transmitBuffer,
       addNotificationListener,
       removeNotificationListener,
