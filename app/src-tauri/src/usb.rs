@@ -185,11 +185,10 @@ impl USBState {
                                 pending.extend_from_slice(&buffer[0..bytes_read]);
                                 while pending.len() >= PACKET_SIZE {
                                     let chunk = pending.drain(0..PACKET_SIZE).collect::<Vec<u8>>();
-                                    let mut packet = [0u8; PACKET_SIZE];
-                                    packet.copy_from_slice(&chunk);
                                     let ts_ms = now_ms();
                                     if let Ok(mut guard) = buffer_clone.lock() {
-                                        buffer::append_rx_packet(&mut *guard, &packet, ts_ms);
+                                        buffer::append_rx_bytes(&mut *guard, &chunk);
+                                        let _ = ts_ms;
                                     }
                                     rx_notify_clone.notify_waiters();
                                 }
