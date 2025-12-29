@@ -940,7 +940,7 @@ function App() {
       />
       <div className="relative flex flex-1 min-h-0">
         <Pane active={isEMWaverActive}>
-          <HomePage onNavigateToFragment={handleFragmentClick} />
+          <HomePage onNavigateToFragment={handleFragmentClick} isActive={isEMWaverActive} />
         </Pane>
         <Pane active={isWaveletsActive}><WaveletsFragment theme={theme} /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
