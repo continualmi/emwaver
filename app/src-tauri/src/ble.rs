@@ -283,7 +283,9 @@ impl BLEState {
                             .write(
                                 &characteristic,
                                 &packet,
-                                btleplug::api::WriteType::WithResponse,
+                                // Commands are request/response at the protocol level (device replies via notify).
+                                // Avoid waiting for an ATT write response to reduce per-command latency.
+                                btleplug::api::WriteType::WithoutResponse,
                             )
                             .await
                             .map_err(|e| format!("Failed to write: {}", e))?;

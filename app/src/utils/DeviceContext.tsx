@@ -209,7 +209,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    notificationIntervalRef.current = window.setInterval(processNotification, 50);
+    notificationIntervalRef.current = window.setInterval(processNotification, 5);
     return () => {
       if (notificationIntervalRef.current) clearInterval(notificationIntervalRef.current);
     };
