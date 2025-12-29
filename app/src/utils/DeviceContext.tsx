@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { safeInvoke, safeListen } from './tauri';
+import { safeInvoke } from './tauri';
 
 // Types
 export type TransportType = 'BLE' | 'USB';
@@ -10,12 +10,6 @@ interface DeviceStatus {
   scanning: boolean; // For BLE
   device_name: string | null;
   device_address: string | null; // BLE address or USB port path
-}
-
-interface TransportPacketEvent {
-  transport: TransportType;
-  data: number[];
-  ts_ms: number;
 }
 
 interface DeviceContextType {
@@ -137,36 +131,6 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
     };
   }, []);
-
-  // Poll Notifications
-  useEffect(() => {
-    let unlistenRx: (() => void) | null = null;
-    let unlistenTx: (() => void) | null = null;
-
-    const start = async () => {
-      unlistenRx = await safeListen<TransportPacketEvent>('transport-rx-packet', (event) => {
-        const payload = event.payload;
-        if (!payload) return;
-        if (!status.connected || !status.transport) return;
-        if (payload.transport !== status.transport) return;
-        listenersRef.current.forEach((listener) => listener(new Uint8Array(payload.data), payload.ts_ms ?? Date.now()));
-      });
-
-      unlistenTx = await safeListen<TransportPacketEvent>('transport-tx-packet', (event) => {
-        const payload = event.payload;
-        if (!payload) return;
-        if (!status.connected || !status.transport) return;
-        if (payload.transport !== status.transport) return;
-        txListenersRef.current.forEach((listener) => listener(new Uint8Array(payload.data), payload.ts_ms ?? Date.now()));
-      });
-    };
-
-    void start();
-    return () => {
-      if (unlistenRx) unlistenRx();
-      if (unlistenTx) unlistenTx();
-    };
-  }, [status.connected, status.transport]);
 
   useEffect(() => {
     if (!status.connected) {

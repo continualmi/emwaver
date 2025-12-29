@@ -3,13 +3,10 @@ use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use uuid::Uuid;
 
 use crate::buffer::{self, Buffer, PACKET_SIZE};
-use crate::TransportPacketEvent;
-
 // EMWaver BLE Service and Characteristic UUIDs (matching Android/iOS)
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
 const CMD_CHAR_UUID: &str = "46c7158e-0c3b-4e90-a847-452a15b14191";
@@ -85,7 +82,7 @@ impl BLEState {
         Ok(())
     }
 
-    pub async fn start_scan(&self, app: AppHandle) -> Result<(), String> {
+    pub async fn start_scan(&self) -> Result<(), String> {
         let adapter_guard = self.adapter.lock().await;
         let adapter = adapter_guard.as_ref().ok_or("BLE not initialized")?;
         let adapter_clone = adapter.clone();
@@ -108,7 +105,6 @@ impl BLEState {
         let rx_notify_clone = Arc::clone(&self.rx_notify);
         let adapter_for_timeout = adapter_clone.clone();
         let status_for_timeout = Arc::clone(&self.status);
-        let app_for_events = app.clone();
         
         // Spawn timeout task to stop scan after 10 seconds if no device found
         tokio::spawn(async move {
@@ -189,7 +185,6 @@ impl BLEState {
                                                 if let Ok(mut notification_stream) = peripheral_for_notifications.notifications().await {
                                                     let buffer_clone = Arc::clone(&buffer_clone);
                                                     let rx_notify_clone = Arc::clone(&rx_notify_clone);
-                                                    let app_for_events = app_for_events.clone();
                                                     let notif_uuid = notif_char_uuid;
                                                     let ota_status_uuid = ota_status_uuid;
                                                     tokio::spawn(async move {
@@ -207,14 +202,6 @@ impl BLEState {
                                                                     buffer::append_rx_packet(&mut *guard, &packet, ts_ms);
                                                                 }
                                                                 rx_notify_clone.notify_waiters();
-                                                                let _ = app_for_events.emit(
-                                                                    "transport-rx-packet",
-                                                                    TransportPacketEvent {
-                                                                        transport: "BLE".to_string(),
-                                                                        data: data.value,
-                                                                        ts_ms,
-                                                                    },
-                                                                );
                                                             } else if data.uuid == ota_status_uuid {
                                                                 // Ignore for command-response flow (kept subscribed for OTA UI).
                                                                 continue;

@@ -2,14 +2,12 @@ use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortInfo, Seri
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::io::{Read, Write};
-use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
 use std::collections::HashSet;
 
 use crate::buffer::{self, Buffer, PACKET_SIZE};
-use crate::TransportPacketEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -96,7 +94,7 @@ impl USBState {
         .map_err(|e| format!("Task failed: {}", e))?
     }
 
-    pub async fn connect(&self, app: AppHandle, port_name: String) -> Result<(), String> {
+    pub async fn connect(&self, port_name: String) -> Result<(), String> {
         let port_name_for_open = Self::normalize_port_name_for_platform(&port_name);
         
         // Open port in blocking task
@@ -149,7 +147,6 @@ impl USBState {
         let running_clone = Arc::clone(&self.running);
         let buffer_clone = Arc::clone(&self.buffer);
         let rx_notify_clone = Arc::clone(&self.rx_notify);
-        let app_for_events = app.clone();
 
         // We need a way to read from the port without locking it forever.
         // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
@@ -195,14 +192,6 @@ impl USBState {
                                         buffer::append_rx_packet(&mut *guard, &packet, ts_ms);
                                     }
                                     rx_notify_clone.notify_waiters();
-                                    let _ = app_for_events.emit(
-                                        "transport-rx-packet",
-                                        TransportPacketEvent {
-                                            transport: "USB".to_string(),
-                                            data: chunk,
-                                            ts_ms,
-                                        },
-                                    );
                                 }
                             }
                         }

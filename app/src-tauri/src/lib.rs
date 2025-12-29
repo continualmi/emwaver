@@ -34,20 +34,6 @@ use transport_buffer::{TransportBufferReadResponse, TransportBufferState};
 
 const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct TransportPacketEvent {
-    pub transport: String,
-    pub data: Vec<u8>,
-    pub ts_ms: u64,
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EmbeddedFirmware {
     Ism,
@@ -1227,8 +1213,8 @@ async fn ble_initialize(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn ble_start_scan(app: tauri::AppHandle, state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    state.start_scan(app).await
+async fn ble_start_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
+    state.start_scan().await
 }
 
 #[tauri::command]
@@ -1242,45 +1228,18 @@ async fn ble_disconnect(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn ble_send_packet(app: tauri::AppHandle, state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
-    let packet = ble::make_packet64(&data)?;
-    let ts_ms = now_ms();
-    let result = state.send_packet(data).await;
-    if result.is_ok() {
-        let _ = app.emit(
-            "transport-tx-packet",
-            TransportPacketEvent {
-                transport: "BLE".to_string(),
-                data: packet.to_vec(),
-                ts_ms,
-            },
-        );
-    }
-    result
+async fn ble_send_packet(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
+    state.send_packet(data).await
 }
 
 #[tauri::command]
 async fn ble_send_command(
-    app: tauri::AppHandle,
     state: State<'_, Arc<BLEState>>,
     data: Vec<u8>,
     timeout_ms: u64,
     packets: u32,
 ) -> Result<Vec<u8>, String> {
-    let packet = ble::make_packet64(&data)?;
-    let ts_ms = now_ms();
-    let result = state.send_command(data, timeout_ms, packets).await;
-    if result.is_ok() {
-        let _ = app.emit(
-            "transport-tx-packet",
-            TransportPacketEvent {
-                transport: "BLE".to_string(),
-                data: packet.to_vec(),
-                ts_ms,
-            },
-        );
-    }
-    result
+    state.send_command(data, timeout_ms, packets).await
 }
 
 #[tauri::command]
@@ -1300,8 +1259,8 @@ async fn usb_list_ports() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn usb_connect(app: tauri::AppHandle, state: State<'_, Arc<USBState>>, port_name: String) -> Result<(), String> {
-    state.connect(app, port_name).await
+async fn usb_connect(state: State<'_, Arc<USBState>>, port_name: String) -> Result<(), String> {
+    state.connect(port_name).await
 }
 
 #[tauri::command]
@@ -1310,53 +1269,18 @@ async fn usb_disconnect(state: State<'_, Arc<USBState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn usb_send_packet(app: tauri::AppHandle, state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Result<(), String> {
-    if data.len() > buffer::PACKET_SIZE {
-        return Err(format!("Command too large: {} bytes (max {})", data.len(), buffer::PACKET_SIZE));
-    }
-    let mut packet = [0u8; buffer::PACKET_SIZE];
-    packet[..data.len()].copy_from_slice(&data);
-    let ts_ms = now_ms();
-    let result = state.send_packet(data).await;
-    if result.is_ok() {
-        let _ = app.emit(
-            "transport-tx-packet",
-            TransportPacketEvent {
-                transport: "USB".to_string(),
-                data: packet.to_vec(),
-                ts_ms,
-            },
-        );
-    }
-    result
+async fn usb_send_packet(state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Result<(), String> {
+    state.send_packet(data).await
 }
 
 #[tauri::command]
 async fn usb_send_command(
-    app: tauri::AppHandle,
     state: State<'_, Arc<USBState>>,
     data: Vec<u8>,
     timeout_ms: u64,
     packets: u32,
 ) -> Result<Vec<u8>, String> {
-    if data.len() > buffer::PACKET_SIZE {
-        return Err(format!("Command too large: {} bytes (max {})", data.len(), buffer::PACKET_SIZE));
-    }
-    let mut packet = [0u8; buffer::PACKET_SIZE];
-    packet[..data.len()].copy_from_slice(&data);
-    let ts_ms = now_ms();
-    let result = state.send_command(data, timeout_ms, packets).await;
-    if result.is_ok() {
-        let _ = app.emit(
-            "transport-tx-packet",
-            TransportPacketEvent {
-                transport: "USB".to_string(),
-                data: packet.to_vec(),
-                ts_ms,
-            },
-        );
-    }
-    result
+    state.send_command(data, timeout_ms, packets).await
 }
 
 #[tauri::command]
