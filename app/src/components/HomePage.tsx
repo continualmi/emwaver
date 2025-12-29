@@ -178,15 +178,19 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     }
 
     try {
-      const commandBytes = new TextEncoder().encode(commandInput.trim());
+      const trimmed = commandInput.trim();
+      const commandBytes = new TextEncoder().encode(trimmed);
       const start = Date.now();
-      const response = await send(commandInput.trim(), 2000, 1);
+      const response = await send(trimmed, 2000, 1);
       if (!response) {
         setCommandInput("");
         return;
       }
       // Only show TX/RX when we got a response.
-      appendToMonitor(commandBytes, start, true);
+      const txPacket = new Uint8Array(64);
+      const asciiPayload = new TextEncoder().encode(trimmed.endsWith("\n") ? trimmed : `${trimmed}\n`);
+      txPacket.set(asciiPayload.slice(0, 64), 0);
+      appendToMonitor(txPacket, start, true);
       appendToMonitor(response, Date.now(), false);
 
       // Clear input
@@ -204,13 +208,15 @@ export default function HomePage({ onNavigateToFragment }: HomePageProps) {
     }
 
     try {
-      const versionBytes = new TextEncoder().encode("version");
       const start = Date.now();
       const response = await send("version", 2500, 1);
       if (!response) {
         return;
       }
-      appendToMonitor(versionBytes, start, true);
+      const txPacket = new Uint8Array(64);
+      const asciiPayload = new TextEncoder().encode("version\n");
+      txPacket.set(asciiPayload, 0);
+      appendToMonitor(txPacket, start, true);
       appendToMonitor(response, Date.now(), false);
     } catch (error) {
       console.error("Failed to check version:", error);
