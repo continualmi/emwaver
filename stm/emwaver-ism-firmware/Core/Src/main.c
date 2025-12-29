@@ -105,20 +105,32 @@ static void free_bulk_packet(void)
 
 static void command_send_ok(const uint8_t *data, size_t len)
 {
-    if (data && len > 0) {
-        (void)CDC_SendResponsePkt_FS((uint8_t *)data, (uint16_t)len, CDC_TIMEOUT);
+    if (!data || len == 0) {
+        uint8_t packet[64] = {0};
+        packet[0] = 0x00;
+        (void)CDC_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
         return;
     }
-    const uint8_t ok = 0x00;
-    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, CDC_TIMEOUT);
+
+    size_t offset = 0;
+    while (offset < len) {
+        uint8_t packet[64] = {0};
+        size_t chunk = len - offset;
+        if (chunk > sizeof(packet)) {
+            chunk = sizeof(packet);
+        }
+        memcpy(packet, data + offset, chunk);
+        (void)CDC_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+        offset += chunk;
+    }
 }
 
 static void command_send_err(const char *msg)
 {
     (void)msg;
     // Match the registry firmware behavior: errors are best-effort no-ops.
-    const uint8_t ok = 0x00;
-    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, CDC_TIMEOUT);
+    const uint8_t packet[64] = {0};
+    (void)CDC_SendResponsePkt_FS((uint8_t *)packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
 }
 
 static void ISR_Sampler_raw(void)
@@ -883,7 +895,6 @@ int main(void)
               // `sample stop`
               if (bulk_packet_len >= 11 && memcmp((const void *)bulk_packet, "sample stop", 11) == 0) {
                   stop_sampling();
-                  command_send_ok(NULL, 0);
               }
               free_bulk_packet();
           }
@@ -929,7 +940,7 @@ int main(void)
 
       if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
           static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION;
-          (void)CDC_SendResponsePkt_FS((uint8_t *)msg, (uint16_t)(sizeof(msg) - 1u), CDC_TIMEOUT);
+          command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
           free_bulk_packet();
           continue;
       }
@@ -1064,7 +1075,6 @@ int main(void)
               int pin_enc = -1;
               const char *pin_str = cli_get_arg_view(&cmd, "pin");
               if (!cli_parse_int(pin_str, &pin_enc)) {
-                  command_send_err(NULL);
                   free_bulk_packet();
                   continue;
               }
@@ -1072,7 +1082,6 @@ int main(void)
               GPIO_TypeDef *port = NULL;
               uint16_t pin_mask = 0;
               if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
-                  command_send_err(NULL);
                   free_bulk_packet();
                   continue;
               }
@@ -1085,7 +1094,6 @@ int main(void)
               bufferA = (uint8_t *)malloc(64);
               bufferB = (uint8_t *)malloc(64);
               if (bufferA == NULL || bufferB == NULL) {
-                  command_send_err(NULL);
                   free((void *)bufferA);
                   free((void *)bufferB);
                   bufferA = NULL;
@@ -1101,11 +1109,8 @@ int main(void)
               CDC_SetBufferType_FS(CDC_BUFFER_DOUBLE);
               ism_mode = ISM_MODE_RAW_SAMPLING;
               HAL_TIM_Base_Start_IT(&htim3);
-              command_send_ok(NULL, 0);
           } else if (strcmp(sub, "stop") == 0) {
-              command_send_ok(NULL, 0);
           } else {
-              command_send_err(NULL);
           }
 
           free_bulk_packet();

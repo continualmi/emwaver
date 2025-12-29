@@ -286,13 +286,18 @@ impl USBState {
     }
 
     fn normalize_port_name_for_platform(port_name: &str) -> String {
+        let trimmed = port_name.trim();
         #[cfg(target_os = "macos")]
         {
-            if let Some(rest) = port_name.strip_prefix("/dev/tty.") {
-                return format!("/dev/cu.{rest}");
+            if let Some(rest) = trimmed.strip_prefix("/dev/tty.") {
+                let candidate = format!("/dev/cu.{rest}");
+                if std::path::Path::new(&candidate).exists() {
+                    return candidate;
+                }
+                return trimmed.to_string();
             }
         }
-        port_name.to_string()
+        trimmed.to_string()
     }
 
     pub async fn get_status(&self) -> USBStatus {
