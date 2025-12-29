@@ -403,7 +403,9 @@ export default function ISMFragment() {
       setStatusMessage("Invalid RFM69 CS pin.");
       return false;
     }
-    const command = `rfm69 init --miso=${DEFAULT_RFM69_MISO} --mosi=${DEFAULT_RFM69_MOSI} --sck=${DEFAULT_RFM69_SCK} --cs=${cs} --cs_active_high=${csActiveHigh ? 1 : 0}`;
+    // Keep commands <=64 bytes for the desktop BLE transport. Firmware already has sane defaults
+    // for MISO/MOSI/SCK; only override CS polarity/pin here.
+    const command = `rfm69 init --cs=${cs} --cs_active_high=${csActiveHigh ? 1 : 0}`;
     const response = await sendCommandString(command, 2000);
     if (isOkAck(response)) return true;
     if (isErr(response)) {
@@ -423,7 +425,8 @@ export default function ISMFragment() {
     if (probe && probe.length > 0 && !isErr(probe)) {
       return true;
     }
-    const command = `cc1101 init --miso=${DEFAULT_CC1101_MISO} --mosi=${DEFAULT_CC1101_MOSI} --sck=${DEFAULT_CC1101_SCK} --cs=${DEFAULT_CC1101_CS} --cs_active_high=${DEFAULT_CC1101_CS_ACTIVE_HIGH ? 1 : 0}`;
+    // Keep commands <=64 bytes for the desktop BLE transport. Firmware defaults cover pinout.
+    const command = `cc1101 init --cs=${DEFAULT_CC1101_CS} --cs_active_high=${DEFAULT_CC1101_CS_ACTIVE_HIGH ? 1 : 0}`;
     const response = await sendCommandString(command, 1500);
     if (isOkAck(response)) return true;
     if (isErr(response)) {
