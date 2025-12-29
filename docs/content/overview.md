@@ -79,7 +79,7 @@ The installer automatically detects your platform (macOS, Linux, or Windows) and
 
     Full project documentation: repo layout, firmware, CLI, apps, protocol.
 
-    [:octicons-arrow-right-24: Open Documentation](documentation/protocol.md)
+    [:octicons-arrow-right-24: Open Documentation](documentation/buffer.md)
 
 </div>
 
