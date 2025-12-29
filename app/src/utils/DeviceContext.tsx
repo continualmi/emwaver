@@ -304,7 +304,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [sendCommand, status.connected]);
 
   const send = useCallback(async (commandString: string, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
-    const encoded = new TextEncoder().encode(commandString.endsWith("\n") ? commandString : `${commandString}\n`);
+    const encoded = new TextEncoder().encode(commandString);
     return await sendPacket(encoded, timeoutMs, packets);
   }, [sendPacket]);
 
