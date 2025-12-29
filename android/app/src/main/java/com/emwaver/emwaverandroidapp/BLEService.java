@@ -53,10 +53,6 @@ import java.security.NoSuchAlgorithmException;
 
 public class BLEService extends Service implements DeviceConnectionService {
 
-    static {
-        System.loadLibrary("native-lib");
-    }
-
     private static final String TAG = "BLEService";
 
     // Notification constants
@@ -147,19 +143,54 @@ public class BLEService extends Service implements DeviceConnectionService {
     private volatile boolean notificationsSuppressed = false;
     private volatile boolean isForeground = false;
 
-    // Native method declarations
-    public native void storeBulkPkt(byte[] data);
-    public native byte[] getCommand();
-    public native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
-    public native int getStatusNumber();
-    public native void clearCommandBuffer();
-    public native void setCaptureMode(boolean enabled);
-    public native void clearBuffer();
-    public native int getBufferLength();
-    public native void loadBuffer(byte[] data);
-    public native byte[] getBuffer();
-    public native void invertBuffer();
-    public native void setCaptureInvert(boolean enabled);
+    // Buffer bridge methods
+    public void storeBulkPkt(byte[] data) {
+        NativeBuffer.storeBulkPkt(data);
+    }
+
+    public byte[] getCommand() {
+        return NativeBuffer.getCommand();
+    }
+
+    public Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
+        return NativeBuffer.compressDataBits(rangeStart, rangeEnd, numberBins);
+    }
+
+    public int getStatusNumber() {
+        return NativeBuffer.getStatusNumber();
+    }
+
+    public void clearCommandBuffer() {
+        NativeBuffer.clearCommandBuffer();
+    }
+
+    public void setCaptureMode(boolean enabled) {
+        NativeBuffer.setCaptureMode(enabled);
+    }
+
+    public void clearBuffer() {
+        NativeBuffer.clearBuffer();
+    }
+
+    public int getBufferLength() {
+        return NativeBuffer.getBufferLength();
+    }
+
+    public void loadBuffer(byte[] data) {
+        NativeBuffer.loadBuffer(data);
+    }
+
+    public byte[] getBuffer() {
+        return NativeBuffer.getBuffer();
+    }
+
+    public void invertBuffer() {
+        NativeBuffer.invertBuffer();
+    }
+
+    public void setCaptureInvert(boolean enabled) {
+        NativeBuffer.setCaptureInvert(enabled);
+    }
 
     public class LocalBinder extends Binder {
         public BLEService getService() {
