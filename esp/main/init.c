@@ -133,11 +133,36 @@ static void command_task(void *pv_parameters)
             if (cmd.length == 0) {
                 continue;
             }
-            if (!command_registry_is_ascii(&cmd)) {
+
+            // Desktop/clients may send fixed 64-byte packets padded with 0x00.
+            // Treat 0x00 as end-of-command, and trim trailing whitespace so the
+            // command parser sees only the ASCII command text.
+            command_t trimmed = cmd;
+            uint16_t len = trimmed.length;
+            for (uint16_t i = 0; i < len; ++i) {
+                if (trimmed.data[i] == 0) {
+                    len = i;
+                    break;
+                }
+            }
+            while (len > 0) {
+                uint8_t ch = trimmed.data[len - 1];
+                if (ch == '\r' || ch == '\n' || ch == '\t' || ch == ' ') {
+                    --len;
+                    continue;
+                }
+                break;
+            }
+            trimmed.length = len;
+            if (trimmed.length == 0) {
+                continue;
+            }
+
+            if (!command_registry_is_ascii(&trimmed)) {
                 command_send_err("binary unsupported");
                 continue;
             }
-            command_registry_handle(&cmd);
+            command_registry_handle(&trimmed);
         }
     }
 }

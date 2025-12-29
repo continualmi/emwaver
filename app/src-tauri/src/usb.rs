@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
 use std::collections::HashSet;
 
-use crate::buffer::{self, Buffer};
+use crate::buffer::{self, Buffer, PACKET_SIZE};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -24,6 +24,13 @@ pub struct USBState {
 
 unsafe impl Send for USBState {}
 unsafe impl Sync for USBState {}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 impl USBState {
     pub fn new(buffer: Arc<Mutex<Buffer>>) -> Self {
@@ -155,6 +162,7 @@ impl USBState {
 
         std::thread::spawn(move || {
             let mut buffer = [0u8; 1024];
+            let mut pending: Vec<u8> = Vec::new();
             loop {
                 // Check if we should stop
                 {
@@ -169,9 +177,14 @@ impl USBState {
                 match read_port.read(&mut buffer) {
                     Ok(bytes_read) => {
                             if bytes_read > 0 {
-                                let data = buffer[0..bytes_read].to_vec();
-                                if let Ok(mut guard) = buffer_clone.lock() {
-                                    buffer::append(&mut *guard, &data);
+                                pending.extend_from_slice(&buffer[0..bytes_read]);
+                                while pending.len() >= PACKET_SIZE {
+                                    let chunk = pending.drain(0..PACKET_SIZE).collect::<Vec<u8>>();
+                                    let mut packet = [0u8; PACKET_SIZE];
+                                    packet.copy_from_slice(&chunk);
+                                    if let Ok(mut guard) = buffer_clone.lock() {
+                                        buffer::append_rx_packet(&mut *guard, &packet, now_ms());
+                                    }
                                 }
                             }
                         }
@@ -211,11 +224,21 @@ impl USBState {
     pub async fn send_packet(&self, data: Vec<u8>) -> Result<(), String> {
         let mut port_guard = self.port.lock().await;
         if let Some(port) = port_guard.as_mut() {
-            port.write_all(&data).map_err(|e| format!("Failed to write: {}", e))?;
-            if Self::looks_like_ascii_command(&data) && !matches!(data.last(), Some(b'\n') | Some(b'\r')) {
-                port.write_all(b"\n").map_err(|e| format!("Failed to write newline: {}", e))?;
+            let mut payload = data;
+            if Self::looks_like_ascii_command(&payload) && !matches!(payload.last(), Some(b'\n') | Some(b'\r')) {
+                payload.push(b'\n');
             }
+            if payload.len() > PACKET_SIZE {
+                return Err(format!("Command too large: {} bytes (max {})", payload.len(), PACKET_SIZE));
+            }
+            let mut packet = [0u8; PACKET_SIZE];
+            packet[..payload.len()].copy_from_slice(&payload);
+
+            port.write_all(&packet).map_err(|e| format!("Failed to write: {}", e))?;
             port.flush().map_err(|e| format!("Failed to flush: {}", e))?;
+            if let Ok(mut guard) = self.buffer.lock() {
+                buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+            }
             Ok(())
         } else {
             Err("Not connected".to_string())

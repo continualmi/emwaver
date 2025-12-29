@@ -702,7 +702,7 @@ async fn buffer_get_packet_count(state: State<'_, Arc<Mutex<Buffer>>>) -> Result
     let state = state.inner().clone();
     spawn_blocking(move || {
         let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<u64, String>(crate::buffer::packet_count(&*guard))
+        Ok::<u64, String>(crate::buffer::rx_packet_count(&*guard))
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -717,18 +717,33 @@ async fn buffer_read_packets_since(
     let state = state.inner().clone();
     spawn_blocking(move || {
         let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<crate::buffer::ReadPackets, String>(crate::buffer::read_since(&*guard, packet_index, max_packets))
+        Ok::<crate::buffer::ReadPackets, String>(crate::buffer::read_rx_since(&*guard, packet_index, max_packets))
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
 }
 
 #[tauri::command]
-async fn buffer_next_packet(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<Option<Vec<u8>>, String> {
+async fn buffer_next_packet(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<Option<crate::buffer::Packet>, String> {
     let state = state.inner().clone();
     spawn_blocking(move || {
         let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<Option<Vec<u8>>, String>(crate::buffer::next_packet(&mut *guard).map(|p| p.to_vec()))
+        Ok::<Option<crate::buffer::Packet>, String>(crate::buffer::next_rx_packet(&mut *guard))
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn buffer_read_tx_since(
+    state: State<'_, Arc<Mutex<Buffer>>>,
+    packet_index: u64,
+    max_packets: usize,
+) -> Result<crate::buffer::ReadPackets, String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        Ok::<crate::buffer::ReadPackets, String>(crate::buffer::read_tx_since(&*guard, packet_index, max_packets))
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -1346,7 +1361,7 @@ async fn wait_for_ota_success(
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_seconds);
     let mut packet_index = {
         let guard = buffer.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        crate::buffer::packet_count(&*guard)
+        crate::buffer::rx_packet_count(&*guard)
     };
     let mut window: Vec<u8> = Vec::with_capacity(256);
     loop {
@@ -1357,7 +1372,7 @@ async fn wait_for_ota_success(
 
         let chunk = {
             let guard = buffer.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-            let response = crate::buffer::read_since(&*guard, packet_index, 64);
+            let response = crate::buffer::read_rx_since(&*guard, packet_index, 64);
             packet_index = response.next_packet_index;
             response.data
         };
@@ -1655,7 +1670,7 @@ pub fn run() {
     let transport_buffer_state: Arc<Mutex<TransportBufferState>> = Arc::new(Mutex::new(TransportBufferState::default()));
     let transport_buffer_state_for_setup = Arc::clone(&transport_buffer_state);
 
-    let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new((Vec::new(), 0)));
+    let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new((Vec::new(), 0, Vec::new())));
     let rx_buffer_for_setup = Arc::clone(&rx_buffer);
 
     tauri::Builder::default()
@@ -2007,6 +2022,7 @@ pub fn run() {
             buffer_get_packet_count,
             buffer_read_packets_since,
             buffer_next_packet,
+            buffer_read_tx_since,
             transport_buffer_compress_viewport,
             transport_buffer_write_file,
             transport_buffer_build_signed_raw_timings,
