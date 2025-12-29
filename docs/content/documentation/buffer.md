@@ -1,4 +1,4 @@
-# Transport Buffering (Draft)
+# Buffer
 
 This document defines the **minimal** buffering model used across EMWaver transports. It intentionally focuses on just two sides:
 
