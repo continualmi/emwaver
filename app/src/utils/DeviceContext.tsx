@@ -54,10 +54,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const pendingResponseRef = useRef<{ 
     resolve: (data: Uint8Array) => void;
     reject: (reason: any) => void;
-    isMatch: (responseStr: string) => boolean;
   } | null>(null);
-  const transportOffsetRef = useRef<number>(0);
-  const pendingTextBufferRef = useRef<string>('');
 
   // Polling intervals
   const statusIntervalRef = useRef<number | null>(null);
@@ -144,51 +141,23 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Poll Notifications
   useEffect(() => {
-    const looksLikeAscii = (data: Uint8Array): boolean => {
-      if (!data.length) return false;
-      for (const b of data) {
-        if (b === 0) return false;
-        const isPrintable = b === 0x0a || b === 0x0d || b === 0x09 || (b >= 0x20 && b <= 0x7e);
-        if (!isPrintable) return false;
-      }
-      return true;
-    };
-
     const processNotification = async () => {
       if (!status.connected || !status.transport) return;
 
       try {
         for (let i = 0; i < 10; i++) {
-          const resp = await safeInvoke<{ data: number[]; next_offset: number; buffer_len_bytes: number; version: number }>(
-            'transport_buffer_read_since',
-            { offset: transportOffsetRef.current, maxBytes: 4096 },
+          const packet = await safeInvoke<number[] | null>(
+            'buffer_next_packet',
+            undefined,
             { throwOnError: true },
           );
-          if (!resp) break;
+          if (!packet?.length) break;
+          const chunk = new Uint8Array(packet);
 
-          const chunk = new Uint8Array(resp?.data || []);
-          if (!chunk.length) break;
-
-          transportOffsetRef.current = resp.next_offset || transportOffsetRef.current + chunk.length;
-
-          // 1) Handle pending response by scanning ASCII lines in the incoming stream.
-          if (pendingResponseRef.current && looksLikeAscii(chunk)) {
-            const text = new TextDecoder().decode(chunk);
-            pendingTextBufferRef.current += text;
-
-            const parts = pendingTextBufferRef.current.split(/\r?\n/);
-            pendingTextBufferRef.current = parts.pop() ?? '';
-
-            for (const line of parts) {
-              const trimmed = line.trim();
-              if (!trimmed) continue;
-              if (pendingResponseRef.current?.isMatch(trimmed)) {
-                pendingResponseRef.current.resolve(new TextEncoder().encode(trimmed));
-                pendingResponseRef.current = null;
-                pendingTextBufferRef.current = '';
-                break;
-              }
-            }
+          // 1) Resolve a pending request with the next 64-byte packet (synchronous model).
+          if (pendingResponseRef.current) {
+            pendingResponseRef.current.resolve(chunk);
+            pendingResponseRef.current = null;
           }
 
           // 2) Broadcast raw bytes (binary-safe) to all listeners.
@@ -208,9 +177,8 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     if (!status.connected) {
-      transportOffsetRef.current = 0;
-      pendingTextBufferRef.current = '';
       pendingResponseRef.current = null;
+      void safeInvoke<void>('buffer_set_counter', { value: 0 }).catch(() => {});
     }
   }, [status.connected]);
 
@@ -222,6 +190,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await safeInvoke('ble_initialize');
       initializedRef.current = true;
     }
+    await safeInvoke('buffer_clear').catch(() => {});
     await safeInvoke('ble_start_scan');
     
     setTimeout(async () => {
@@ -233,6 +202,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const connectUSB = useCallback(async (port: string) => {
+    await safeInvoke('buffer_clear').catch(() => {});
     await safeInvoke('usb_connect', { portName: port }, { throwOnError: true });
   }, []);
 
@@ -294,8 +264,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 clearTimeout(timeoutId);
                 console.error(err);
                 resolve(null);
-            },
-            isMatch: (text) => text.startsWith("ok") || text.startsWith("err")
+            }
         };
     });
   }, [status.connected, sendCommand]);

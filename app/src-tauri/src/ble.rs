@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
-use crate::transport_buffer::TransportBufferState;
+use crate::buffer::{self, Buffer};
 
 // EMWaver BLE Service and Characteristic UUIDs (matching Android/iOS)
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
@@ -32,11 +32,11 @@ pub struct BLEState {
     pub adapter: Arc<AsyncMutex<Option<Adapter>>>,
     pub peripheral: Arc<AsyncMutex<Option<Peripheral>>>,
     pub status: Arc<AsyncMutex<BLEStatus>>,
-    pub transport_buffer: Arc<Mutex<TransportBufferState>>,
+    pub buffer: Arc<Mutex<Buffer>>,
 }
 
 impl BLEState {
-    pub fn new(transport_buffer: Arc<Mutex<TransportBufferState>>) -> Self {
+    pub fn new(buffer: Arc<Mutex<Buffer>>) -> Self {
         Self {
             adapter: Arc::new(AsyncMutex::new(None)),
             peripheral: Arc::new(AsyncMutex::new(None)),
@@ -46,7 +46,7 @@ impl BLEState {
                 device_name: None,
                 device_address: None,
             })),
-            transport_buffer,
+            buffer,
         }
     }
 
@@ -82,7 +82,7 @@ impl BLEState {
         // Spawn task to handle events
         let status_clone = Arc::clone(&self.status);
         let peripheral_clone = Arc::clone(&self.peripheral);
-        let transport_buffer_clone = Arc::clone(&self.transport_buffer);
+        let buffer_clone = Arc::clone(&self.buffer);
         let adapter_for_timeout = adapter_clone.clone();
         let status_for_timeout = Arc::clone(&self.status);
         
@@ -163,11 +163,11 @@ impl BLEState {
 
                                                 let peripheral_for_notifications = peripheral.clone();
                                                 if let Ok(mut notification_stream) = peripheral_for_notifications.notifications().await {
-                                                    let transport_buffer_clone = Arc::clone(&transport_buffer_clone);
+                                                    let buffer_clone = Arc::clone(&buffer_clone);
                                                     tokio::spawn(async move {
                                                         while let Some(data) = notification_stream.next().await {
-                                                            if let Ok(mut guard) = transport_buffer_clone.lock() {
-                                                                guard.append(&data.value);
+                                                            if let Ok(mut guard) = buffer_clone.lock() {
+                                                                buffer::append(&mut *guard, &data.value);
                                                             }
                                                         }
                                                     });
