@@ -2,12 +2,14 @@ use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortInfo, Seri
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::io::{Read, Write};
-use tokio::sync::Mutex as AsyncMutex;
+use tauri::{AppHandle, Emitter};
+use tokio::sync::{Mutex as AsyncMutex, Notify};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
 use std::collections::HashSet;
 
 use crate::buffer::{self, Buffer, PACKET_SIZE};
+use crate::TransportPacketEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -20,6 +22,8 @@ pub struct USBState {
     pub status: Arc<AsyncMutex<USBStatus>>,
     pub running: Arc<AsyncMutex<bool>>,
     pub buffer: Arc<Mutex<Buffer>>,
+    pub rx_notify: Arc<Notify>,
+    pub in_flight: Arc<AsyncMutex<()>>,
 }
 
 unsafe impl Send for USBState {}
@@ -33,7 +37,7 @@ fn now_ms() -> u64 {
 }
 
 impl USBState {
-    pub fn new(buffer: Arc<Mutex<Buffer>>) -> Self {
+    pub fn new(buffer: Arc<Mutex<Buffer>>, rx_notify: Arc<Notify>) -> Self {
         Self {
             port: Arc::new(AsyncMutex::new(None)),
             status: Arc::new(AsyncMutex::new(USBStatus {
@@ -42,6 +46,8 @@ impl USBState {
             })),
             running: Arc::new(AsyncMutex::new(false)),
             buffer,
+            rx_notify,
+            in_flight: Arc::new(AsyncMutex::new(())),
         }
     }
 
@@ -90,7 +96,7 @@ impl USBState {
         .map_err(|e| format!("Task failed: {}", e))?
     }
 
-    pub async fn connect(&self, port_name: String) -> Result<(), String> {
+    pub async fn connect(&self, app: AppHandle, port_name: String) -> Result<(), String> {
         let port_name_for_open = Self::normalize_port_name_for_platform(&port_name);
         
         // Open port in blocking task
@@ -142,6 +148,8 @@ impl USBState {
         // Start reading thread
         let running_clone = Arc::clone(&self.running);
         let buffer_clone = Arc::clone(&self.buffer);
+        let rx_notify_clone = Arc::clone(&self.rx_notify);
+        let app_for_events = app.clone();
 
         // We need a way to read from the port without locking it forever.
         // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
@@ -182,9 +190,19 @@ impl USBState {
                                     let chunk = pending.drain(0..PACKET_SIZE).collect::<Vec<u8>>();
                                     let mut packet = [0u8; PACKET_SIZE];
                                     packet.copy_from_slice(&chunk);
+                                    let ts_ms = now_ms();
                                     if let Ok(mut guard) = buffer_clone.lock() {
-                                        buffer::append_rx_packet(&mut *guard, &packet, now_ms());
+                                        buffer::append_rx_packet(&mut *guard, &packet, ts_ms);
                                     }
+                                    rx_notify_clone.notify_waiters();
+                                    let _ = app_for_events.emit(
+                                        "transport-rx-packet",
+                                        TransportPacketEvent {
+                                            transport: "USB".to_string(),
+                                            data: chunk,
+                                            ts_ms,
+                                        },
+                                    );
                                 }
                             }
                         }
@@ -239,6 +257,44 @@ impl USBState {
         } else {
             Err("Not connected".to_string())
         }
+    }
+
+    pub async fn send_command(&self, data: Vec<u8>, timeout_ms: u64, packets: u32) -> Result<Vec<u8>, String> {
+        let _in_flight = self.in_flight.lock().await;
+
+        if let Ok(mut guard) = self.buffer.lock() {
+            let count = buffer::rx_packet_count(&*guard);
+            guard.1 = count;
+        }
+
+        self.send_packet(data).await?;
+
+        let want_packets = std::cmp::max(1, packets) as usize;
+        let want_bytes = want_packets.saturating_mul(PACKET_SIZE);
+        let mut out: Vec<u8> = Vec::with_capacity(want_bytes);
+
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms.max(1));
+        while out.len() < want_bytes {
+            if let Some(pkt) = (|| {
+                let mut guard = self.buffer.lock().ok()?;
+                crate::buffer::next_rx_packet(&mut *guard)
+            })() {
+                out.extend_from_slice(&pkt.data);
+                continue;
+            }
+
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return Err("Timed out waiting for response".to_string());
+            }
+
+            let remaining = deadline - now;
+            tokio::time::timeout(remaining, self.rx_notify.notified())
+                .await
+                .map_err(|_| "Timed out waiting for response".to_string())?;
+        }
+
+        Ok(out)
     }
 
     fn normalize_port_name_for_platform(port_name: &str) -> String {

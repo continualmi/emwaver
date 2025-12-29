@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { safeInvoke } from './tauri';
+import { safeInvoke, safeListen } from './tauri';
 
 // Types
 export type TransportType = 'BLE' | 'USB';
@@ -12,9 +12,10 @@ interface DeviceStatus {
   device_address: string | null; // BLE address or USB port path
 }
 
-interface Notification {
+interface TransportPacketEvent {
+  transport: TransportType;
   data: number[];
-  timestamp: number;
+  ts_ms: number;
 }
 
 interface DeviceContextType {
@@ -54,17 +55,9 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const listenersRef = useRef<Set<(data: Uint8Array, timestamp: number) => void>>(new Set());
   const txListenersRef = useRef<Set<(data: Uint8Array, timestamp: number) => void>>(new Set());
-  const pendingResponseRef = useRef<{ 
-    resolve: (data: Uint8Array) => void;
-    reject: (reason: any) => void;
-    wantPackets: number;
-    gotPackets: Uint8Array[];
-  } | null>(null);
-  const txPacketIndexRef = useRef<number>(0);
 
   // Polling intervals
   const statusIntervalRef = useRef<number | null>(null);
-  const notificationIntervalRef = useRef<number | null>(null);
   const initializedRef = useRef<boolean>(false);
 
   // Initialize BLE on mount
@@ -147,79 +140,37 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Poll Notifications
   useEffect(() => {
-    const processNotification = async () => {
-      if (!status.connected || !status.transport) return;
+    let unlistenRx: (() => void) | null = null;
+    let unlistenTx: (() => void) | null = null;
 
-      try {
-        // 0) TX log (for visualization)
-        for (let i = 0; i < 10; i++) {
-          const txResp = await safeInvoke<{
-            data: number[];
-            ts_ms: number[];
-            next_packet_index: number;
-            available_packets: number;
-          }>(
-            'buffer_read_tx_since',
-            { packetIndex: txPacketIndexRef.current, maxPackets: 32 },
-            { throwOnError: true },
-          );
-          if (!txResp || !txResp.data?.length || !txResp.ts_ms?.length) break;
-          const packetCount = txResp.ts_ms.length;
-          for (let p = 0; p < packetCount; p++) {
-            const start = p * 64;
-            const end = start + 64;
-            const packet = new Uint8Array(txResp.data.slice(start, end));
-            txListenersRef.current.forEach((listener) => listener(packet, txResp.ts_ms[p] ?? Date.now()));
-          }
-          txPacketIndexRef.current = txResp.next_packet_index ?? txPacketIndexRef.current + packetCount;
-          break;
-        }
+    const start = async () => {
+      unlistenRx = await safeListen<TransportPacketEvent>('transport-rx-packet', (event) => {
+        const payload = event.payload;
+        if (!payload) return;
+        if (!status.connected || !status.transport) return;
+        if (payload.transport !== status.transport) return;
+        listenersRef.current.forEach((listener) => listener(new Uint8Array(payload.data), payload.ts_ms ?? Date.now()));
+      });
 
-        for (let i = 0; i < 10; i++) {
-          const packet = await safeInvoke<{ data: number[]; ts_ms: number } | null>(
-            'buffer_next_packet',
-            undefined,
-            { throwOnError: true },
-          );
-          if (!packet?.data?.length) break;
-          const chunk = new Uint8Array(packet.data);
-          const timestamp = packet.ts_ms ?? Date.now();
-
-          // 1) Resolve a pending request with the next 64-byte packet (synchronous model).
-          if (pendingResponseRef.current) {
-            pendingResponseRef.current.gotPackets.push(chunk);
-            if (pendingResponseRef.current.gotPackets.length >= pendingResponseRef.current.wantPackets) {
-              const totalLen = pendingResponseRef.current.gotPackets.reduce((sum, p) => sum + p.length, 0);
-              const out = new Uint8Array(totalLen);
-              let offset = 0;
-              for (const pkt of pendingResponseRef.current.gotPackets) {
-                out.set(pkt, offset);
-                offset += pkt.length;
-              }
-              pendingResponseRef.current.resolve(out);
-              pendingResponseRef.current = null;
-            }
-          }
-
-          // 2) Broadcast raw bytes (binary-safe) to all listeners.
-          listenersRef.current.forEach((listener) => listener(chunk, timestamp));
-        }
-      } catch (e) {
-        console.error("Notification poll error", e);
-      }
+      unlistenTx = await safeListen<TransportPacketEvent>('transport-tx-packet', (event) => {
+        const payload = event.payload;
+        if (!payload) return;
+        if (!status.connected || !status.transport) return;
+        if (payload.transport !== status.transport) return;
+        txListenersRef.current.forEach((listener) => listener(new Uint8Array(payload.data), payload.ts_ms ?? Date.now()));
+      });
     };
 
-    notificationIntervalRef.current = window.setInterval(processNotification, 5);
+    void start();
     return () => {
-      if (notificationIntervalRef.current) clearInterval(notificationIntervalRef.current);
+      if (unlistenRx) unlistenRx();
+      if (unlistenTx) unlistenTx();
     };
   }, [status.connected, status.transport]);
 
   useEffect(() => {
     if (!status.connected) {
-      pendingResponseRef.current = null;
       void safeInvoke<void>('buffer_set_counter', { value: 0 }).catch(() => {});
-      txPacketIndexRef.current = 0;
     }
   }, [status.connected]);
 
@@ -260,48 +211,20 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return ports || [];
   }, []);
 
-  const sendCommand = useCallback(async (data: Uint8Array) => {
-    if (status.transport === 'BLE') {
-        await safeInvoke('ble_send_packet', { data: Array.from(data) }, { throwOnError: true });
-    } else if (status.transport === 'USB') {
-        await safeInvoke('usb_send_packet', { data: Array.from(data) }, { throwOnError: true });
-    }
-  }, [status.transport]);
-
   const sendPacket = useCallback(async (data: Uint8Array, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
-    if (!status.connected) return null;
-    if (pendingResponseRef.current) {
-      console.warn("sendPacket called while another command is pending");
-      return null;
+    if (!status.connected || !status.transport) return null;
+    const args = { data: Array.from(data), timeoutMs, packets };
+
+    if (status.transport === 'BLE') {
+      const resp = await safeInvoke<number[]>('ble_send_command', args, { throwOnError: true });
+      return resp ? new Uint8Array(resp) : null;
     }
-
-    const wantPackets = Math.max(1, Math.floor(packets || 1));
-
-    const responsePromise = new Promise<Uint8Array | null>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        if (pendingResponseRef.current) {
-          pendingResponseRef.current = null;
-          resolve(null);
-        }
-      }, timeoutMs);
-
-      pendingResponseRef.current = {
-        resolve: (payload) => {
-          clearTimeout(timeoutId);
-          resolve(payload);
-        },
-        reject: (_err) => {
-          clearTimeout(timeoutId);
-          resolve(null);
-        },
-        wantPackets,
-        gotPackets: [],
-      };
-    });
-
-    await sendCommand(data);
-    return await responsePromise;
-  }, [sendCommand, status.connected]);
+    if (status.transport === 'USB') {
+      const resp = await safeInvoke<number[]>('usb_send_command', args, { throwOnError: true });
+      return resp ? new Uint8Array(resp) : null;
+    }
+    return null;
+  }, [status.connected, status.transport]);
 
   const send = useCallback(async (commandString: string, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
     const encoded = new TextEncoder().encode(commandString);

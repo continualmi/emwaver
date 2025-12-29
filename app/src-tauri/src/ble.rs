@@ -3,10 +3,12 @@ use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tokio::sync::Mutex as AsyncMutex;
+use tauri::{AppHandle, Emitter};
+use tokio::sync::{Mutex as AsyncMutex, Notify};
 use uuid::Uuid;
 
 use crate::buffer::{self, Buffer, PACKET_SIZE};
+use crate::TransportPacketEvent;
 
 // EMWaver BLE Service and Characteristic UUIDs (matching Android/iOS)
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
@@ -33,6 +35,8 @@ pub struct BLEState {
     pub peripheral: Arc<AsyncMutex<Option<Peripheral>>>,
     pub status: Arc<AsyncMutex<BLEStatus>>,
     pub buffer: Arc<Mutex<Buffer>>,
+    pub rx_notify: Arc<Notify>,
+    pub in_flight: Arc<AsyncMutex<()>>,
 }
 
 fn now_ms() -> u64 {
@@ -42,7 +46,7 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn to_packet64(data: Vec<u8>) -> Result<[u8; PACKET_SIZE], String> {
+pub(crate) fn make_packet64(data: &[u8]) -> Result<[u8; PACKET_SIZE], String> {
     if data.len() > PACKET_SIZE {
         return Err(format!("Command too large: {} bytes (max {})", data.len(), PACKET_SIZE));
     }
@@ -52,7 +56,7 @@ fn to_packet64(data: Vec<u8>) -> Result<[u8; PACKET_SIZE], String> {
 }
 
 impl BLEState {
-    pub fn new(buffer: Arc<Mutex<Buffer>>) -> Self {
+    pub fn new(buffer: Arc<Mutex<Buffer>>, rx_notify: Arc<Notify>) -> Self {
         Self {
             adapter: Arc::new(AsyncMutex::new(None)),
             peripheral: Arc::new(AsyncMutex::new(None)),
@@ -63,6 +67,8 @@ impl BLEState {
                 device_address: None,
             })),
             buffer,
+            rx_notify,
+            in_flight: Arc::new(AsyncMutex::new(())),
         }
     }
 
@@ -79,7 +85,7 @@ impl BLEState {
         Ok(())
     }
 
-    pub async fn start_scan(&self) -> Result<(), String> {
+    pub async fn start_scan(&self, app: AppHandle) -> Result<(), String> {
         let adapter_guard = self.adapter.lock().await;
         let adapter = adapter_guard.as_ref().ok_or("BLE not initialized")?;
         let adapter_clone = adapter.clone();
@@ -99,8 +105,10 @@ impl BLEState {
         let status_clone = Arc::clone(&self.status);
         let peripheral_clone = Arc::clone(&self.peripheral);
         let buffer_clone = Arc::clone(&self.buffer);
+        let rx_notify_clone = Arc::clone(&self.rx_notify);
         let adapter_for_timeout = adapter_clone.clone();
         let status_for_timeout = Arc::clone(&self.status);
+        let app_for_events = app.clone();
         
         // Spawn timeout task to stop scan after 10 seconds if no device found
         tokio::spawn(async move {
@@ -180,15 +188,36 @@ impl BLEState {
                                                 let peripheral_for_notifications = peripheral.clone();
                                                 if let Ok(mut notification_stream) = peripheral_for_notifications.notifications().await {
                                                     let buffer_clone = Arc::clone(&buffer_clone);
+                                                    let rx_notify_clone = Arc::clone(&rx_notify_clone);
+                                                    let app_for_events = app_for_events.clone();
+                                                    let notif_uuid = notif_char_uuid;
+                                                    let ota_status_uuid = ota_status_uuid;
                                                     tokio::spawn(async move {
                                                         while let Some(data) = notification_stream.next().await {
                                                             if data.value.len() != PACKET_SIZE {
                                                                 continue;
                                                             }
-                                                            let mut packet = [0u8; PACKET_SIZE];
-                                                            packet.copy_from_slice(&data.value);
-                                                            if let Ok(mut guard) = buffer_clone.lock() {
-                                                                buffer::append_rx_packet(&mut *guard, &packet, now_ms());
+                                                            // Only treat the main NOTIF characteristic as command responses.
+                                                            // OTA status notifications use the same 64B framing and are handled separately.
+                                                            if data.uuid == notif_uuid {
+                                                                let mut packet = [0u8; PACKET_SIZE];
+                                                                packet.copy_from_slice(&data.value);
+                                                                let ts_ms = now_ms();
+                                                                if let Ok(mut guard) = buffer_clone.lock() {
+                                                                    buffer::append_rx_packet(&mut *guard, &packet, ts_ms);
+                                                                }
+                                                                rx_notify_clone.notify_waiters();
+                                                                let _ = app_for_events.emit(
+                                                                    "transport-rx-packet",
+                                                                    TransportPacketEvent {
+                                                                        transport: "BLE".to_string(),
+                                                                        data: data.value,
+                                                                        ts_ms,
+                                                                    },
+                                                                );
+                                                            } else if data.uuid == ota_status_uuid {
+                                                                // Ignore for command-response flow (kept subscribed for OTA UI).
+                                                                continue;
                                                             }
                                                         }
                                                     });
@@ -278,7 +307,7 @@ impl BLEState {
             if service.uuid == service_uuid {
                 for characteristic in service.characteristics {
                     if characteristic.uuid == cmd_char_uuid {
-                        let packet = to_packet64(data)?;
+                        let packet = make_packet64(&data)?;
                         peripheral
                             .write(
                                 &characteristic,
@@ -299,6 +328,45 @@ impl BLEState {
         }
         
         Err("Command characteristic not found".to_string())
+    }
+
+    pub async fn send_command(&self, data: Vec<u8>, timeout_ms: u64, packets: u32) -> Result<Vec<u8>, String> {
+        let _in_flight = self.in_flight.lock().await;
+
+        // Drop any stale RX packets before sending so the "next packet" is the response to this command.
+        if let Ok(mut guard) = self.buffer.lock() {
+            let count = buffer::rx_packet_count(&*guard);
+            guard.1 = count;
+        }
+
+        self.send_packet(data).await?;
+
+        let want_packets = std::cmp::max(1, packets) as usize;
+        let want_bytes = want_packets.saturating_mul(PACKET_SIZE);
+        let mut out: Vec<u8> = Vec::with_capacity(want_bytes);
+
+        let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms.max(1));
+        while out.len() < want_bytes {
+            if let Some(pkt) = (|| {
+                let mut guard = self.buffer.lock().ok()?;
+                crate::buffer::next_rx_packet(&mut *guard)
+            })() {
+                out.extend_from_slice(&pkt.data);
+                continue;
+            }
+
+            let now = tokio::time::Instant::now();
+            if now >= deadline {
+                return Err("Timed out waiting for response".to_string());
+            }
+
+            let remaining = deadline - now;
+            tokio::time::timeout(remaining, self.rx_notify.notified())
+                .await
+                .map_err(|_| "Timed out waiting for response".to_string())?;
+        }
+
+        Ok(out)
     }
 
     pub async fn get_status(&self) -> BLEStatus {
