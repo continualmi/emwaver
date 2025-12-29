@@ -1,37 +1,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
-import zoomPlugin from 'chartjs-plugin-zoom';
+import uPlot from 'uplot';
+import 'uplot/dist/uPlot.min.css';
 import { appDataDir } from '@tauri-apps/api/path';
 import { isTauriAvailable, safeInvoke, safeJoin } from '../utils/tauri';
 import { useDevice } from '../utils/DeviceContext';
-
-// Register Chart.js components - do this once at module load
-try {
-  ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler,
-    zoomPlugin
-  );
-} catch (error) {
-  console.error('Failed to register Chart.js components:', error);
-}
 
 type SamplerDeviceType = 'esp32' | 'stm32';
 
@@ -264,10 +236,7 @@ function SamplerFragment() {
   const [selectedSignalIndex, setSelectedSignalIndex] = useState(0); // 0 = "New signal..."
   const [currentSignalName, setCurrentSignalName] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [chartData, setChartData] = useState<{ timeValues: number[]; dataValues: number[] }>({
-    timeValues: [],
-    dataValues: [],
-  });
+  const [chartPointCount, setChartPointCount] = useState(0);
   const [chartError, setChartError] = useState<string | null>(null);
   const [debugViewport, setDebugViewport] = useState<{
     chartReady: boolean;
@@ -321,7 +290,8 @@ function SamplerFragment() {
   });
   const [textDialogMode, setTextDialogMode] = useState<'save' | 'rename' | null>(null);
 
-  const chartRef = useRef<any>(null);
+  const uplotRef = useRef<uPlot | null>(null);
+  const plotRootRef = useRef<HTMLDivElement | null>(null);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const refreshIntervalRef = useRef<number | null>(null);
   const bufferLenBytesRef = useRef(0);
@@ -402,10 +372,10 @@ function SamplerFragment() {
   }, []);
 
   const getAdaptiveBins = useCallback(
-    (chart: any, requested: number) => {
+    (requested: number) => {
       const base = getEffectiveBins(requested);
-      const width = Math.trunc(Number(chart?.width ?? 0)) || 0;
-      if (width <= 0) {
+      const width = plotRootRef.current?.clientWidth ?? 0;
+      if (!width) {
         return base;
       }
       // Similar intent to Android's fixed `visiblePoints=300`: keep redraw cost bounded.
@@ -422,43 +392,24 @@ function SamplerFragment() {
     return isRecording ? Math.max(base, 250) : base;
   }, [isRecording, refreshRate]);
 
-  const computeVisibleRangeBits = useCallback((chart: any, chartMaxX: number) => {
-    let visibleRangeStart = 0;
-    let visibleRangeEnd = chartMaxX;
-
-    try {
-      const xScale = chart?.scales?.x;
-      if (xScale) {
-        const rawMin = Number(xScale.min);
-        const rawMax = Number(xScale.max);
-        if (Number.isFinite(rawMin) && Number.isFinite(rawMax) && rawMax > rawMin) {
-          visibleRangeStart = Math.max(0, Math.floor(rawMin));
-          visibleRangeEnd = Math.min(chartMaxX, Math.floor(rawMax));
-        }
-      }
-    } catch {
-      visibleRangeStart = 0;
-      visibleRangeEnd = chartMaxX;
+  const getViewportBits = useCallback(() => {
+    const bufferBytes = bufferLenBytesRef.current;
+    const maxX = Math.max(10000, bufferBytes * 8);
+    const plot = uplotRef.current;
+    if (!plot || !plot.scales?.x) {
+      return { visibleRangeStart: 0, visibleRangeEnd: maxX, maxX };
     }
-
-    if (!Number.isFinite(visibleRangeStart) || visibleRangeStart < 0) {
-      visibleRangeStart = 0;
+    const rawMin = Number(plot.scales.x.min);
+    const rawMax = Number(plot.scales.x.max);
+    if (!Number.isFinite(rawMin) || !Number.isFinite(rawMax) || rawMax <= rawMin) {
+      return { visibleRangeStart: 0, visibleRangeEnd: maxX, maxX };
     }
-    if (!Number.isFinite(visibleRangeEnd) || visibleRangeEnd > chartMaxX) {
-      visibleRangeEnd = chartMaxX;
-    }
-
+    const visibleRangeStart = Math.max(0, Math.floor(rawMin));
+    const visibleRangeEnd = Math.min(maxX, Math.floor(rawMax));
     if (visibleRangeEnd <= visibleRangeStart) {
-      return { visibleRangeStart: 0, visibleRangeEnd: chartMaxX };
+      return { visibleRangeStart: 0, visibleRangeEnd: maxX, maxX };
     }
-
-    return { visibleRangeStart, visibleRangeEnd };
-  }, []);
-
-  const getChartInstance = useCallback((maybeChart: any): any | null => {
-    if (!maybeChart) return null;
-    // react-chartjs-2 can expose either the Chart.js instance directly or a wrapper with `.chart`.
-    return (maybeChart as any).chart ?? maybeChart;
+    return { visibleRangeStart, visibleRangeEnd, maxX };
   }, []);
 
   const markChartInteracting = useCallback(() => {
@@ -481,49 +432,20 @@ function SamplerFragment() {
     };
   }, []);
 
-  useEffect(() => {
-    const el = chartContainerRef.current;
-    if (!el) return;
-
-    const onWheel = (event: WheelEvent) => {
-      // Prevent the page from scrolling when the pointer is over the chart so wheel/pinch zoom feels natural.
-      event.preventDefault();
-    };
-
-    const onTouchMove = (event: TouchEvent) => {
-      event.preventDefault();
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchmove', onTouchMove);
-    };
-  }, []);
-
-				  const performChartRefresh = useCallback((chartInstance?: any) => {
-				    const chart = getChartInstance(chartInstance || chartRef.current);
-				    if (!chart) return;
+				  const performChartRefresh = useCallback(() => {
+				    const plot = uplotRef.current;
+				    if (!plot) return;
 
 			    if (chartRefreshInFlightRef.current) {
 			      return;
 			    }
 			    chartRefreshInFlightRef.current = true;
 
-			    const requestedBins = getAdaptiveBins(chart, chartResolution);
-			    const fallbackBufferBytes = bufferLenBytesRef.current;
-			    const fallbackChartMaxX = fallbackBufferBytes * 8;
-			    const chartMaxXForRequest = Math.max(
-			      10000,
-			      fallbackChartMaxX,
-			      Math.trunc(Number(chart?.options?.scales?.x?.max ?? 10000)) || 10000,
-			    );
-			    const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxXForRequest);
-          const xScale = chart?.scales?.x;
-          const scaleMin = xScale ? Number(xScale.min) : Number.NaN;
-          const scaleMax = xScale ? Number(xScale.max) : Number.NaN;
-          const chartWidth = Number.isFinite(Number(chart?.width)) ? Math.trunc(Number(chart.width)) : null;
+			    const requestedBins = getAdaptiveBins(chartResolution);
+			    const { visibleRangeStart, visibleRangeEnd, maxX } = getViewportBits();
+          const scaleMin = Number(plot.scales?.x?.min);
+          const scaleMax = Number(plot.scales?.x?.max);
+          const chartWidth = plotRootRef.current?.clientWidth ?? null;
           setDebugViewport({
             chartReady: true,
             scaleMin: Number.isFinite(scaleMin) ? scaleMin : null,
@@ -562,7 +484,6 @@ function SamplerFragment() {
 			        }
 			        lastChartViewportKeyRef.current = viewportKey;
 
-			        setChartData({ timeValues: result.time_values, dataValues: result.data_values });
               if (result.time_values.length !== result.data_values.length) {
                 console.warn('Sampler viewport length mismatch', {
                   time: result.time_values.length,
@@ -570,16 +491,16 @@ function SamplerFragment() {
                 });
               }
 
-			        const chartMaxX = Math.max(10000, bufferBytes * 8);
-              const isZoomedOrPanned =
-                (typeof chart.isZoomedOrPanned === 'function' && chart.isZoomedOrPanned()) ||
-                isChartInteractingRef.current;
-              if (!isZoomedOrPanned && chart.options?.scales?.x) {
-			          chart.options.scales.x.max = chartMaxX || 10000;
-			          if (chart.options.plugins?.zoom?.limits?.x) {
-			            chart.options.plugins.zoom.limits.x.max = chartMaxX || 10000;
-			          }
-			        }
+              const x = new Float64Array(result.time_values);
+              const y = new Float32Array(result.data_values);
+              setChartPointCount(x.length);
+              plot.setData([x, y]);
+
+              const nextMaxX = Math.max(10000, bufferBytes * 8);
+              const isInteracting = isChartInteractingRef.current;
+              if (!isInteracting && Number.isFinite(maxX) && nextMaxX !== maxX) {
+                plot.setScale('x', { min: 0, max: nextMaxX });
+              }
 			      })
 			      .catch((error) => {
 			        console.error('Failed to refresh chart (buffer compress):', error);
@@ -588,15 +509,15 @@ function SamplerFragment() {
 			      .finally(() => {
 			        chartRefreshInFlightRef.current = false;
 			      });
-		  }, [chartResolution, computeVisibleRangeBits, getAdaptiveBins, getChartInstance, maxSamples, minRenderIntervalMs]);
+		  }, [chartResolution, getAdaptiveBins, getViewportBits, maxSamples, minRenderIntervalMs]);
 
-  const scheduleChartRefresh = useCallback((chartInstance?: any) => {
+  const scheduleChartRefresh = useCallback(() => {
     if (pendingChartRefreshRef.current != null) {
       window.clearTimeout(pendingChartRefreshRef.current);
     }
     pendingChartRefreshRef.current = window.setTimeout(() => {
       pendingChartRefreshRef.current = null;
-      performChartRefresh(chartInstance);
+      performChartRefresh();
     }, 50);
   }, [performChartRefresh]);
 
@@ -646,26 +567,20 @@ function SamplerFragment() {
   }, [signalsDir]);
 
   // Define refreshChart callback first (before useEffects that depend on it)
-  const refreshChart = useCallback(
-    (chartInstance?: any) => {
-      scheduleChartRefresh(chartInstance);
-    },
-    [scheduleChartRefresh],
-  );
+  const refreshChart = useCallback(() => {
+    scheduleChartRefresh();
+  }, [scheduleChartRefresh]);
 
   const maybeRefreshOnInteraction = useCallback(
-    (chartInstance?: any) => {
-      const chart = chartInstance || chartRef.current;
-      if (!chart) return;
+    () => {
+      if (!uplotRef.current) return;
 
       const now = Date.now();
       if (now - lastInteractionRefreshAtRef.current < INTERACTION_REFRESH_THROTTLE_MS) {
         return;
       }
 
-      const bufferBytes = bufferLenBytesRef.current;
-      const chartMaxX = Math.max(10000, bufferBytes * 8);
-      const { visibleRangeStart, visibleRangeEnd } = computeVisibleRangeBits(chart, chartMaxX);
+      const { visibleRangeStart, visibleRangeEnd } = getViewportBits();
       const span = Math.max(1, visibleRangeEnd - visibleRangeStart);
 
       const prevStart = prevVisibleRangeStartRef.current;
@@ -685,11 +600,130 @@ function SamplerFragment() {
         prevVisibleRangeEndRef.current = visibleRangeEnd;
         prevVisibleSpanRef.current = span;
         lastInteractionRefreshAtRef.current = now;
-        refreshChart(chart);
+        refreshChart();
       }
     },
-    [computeVisibleRangeBits, refreshChart],
+    [getViewportBits, refreshChart],
   );
+
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartMin = 0;
+    let dragStartMax = 0;
+
+    const clampX = (min: number, max: number, totalMax: number) => {
+      const span = Math.max(1, max - min);
+      let nextMin = min;
+      let nextMax = max;
+      if (!Number.isFinite(nextMin) || !Number.isFinite(nextMax) || nextMax <= nextMin) {
+        return { min: 0, max: Math.max(10000, totalMax) };
+      }
+      if (nextMin < 0) {
+        nextMin = 0;
+        nextMax = span;
+      }
+      if (nextMax > totalMax) {
+        nextMax = totalMax;
+        nextMin = totalMax - span;
+        if (nextMin < 0) nextMin = 0;
+      }
+      if (nextMax <= nextMin) {
+        nextMax = nextMin + 1;
+      }
+      return { min: nextMin, max: nextMax };
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      const plot = uplotRef.current;
+      if (!plot) return;
+
+      event.preventDefault();
+      markChartInteracting();
+
+      const totalMax = Math.max(10000, bufferLenBytesRef.current * 8);
+      const rect = el.getBoundingClientRect();
+      const plotLeft = rect.left + (plot.bbox?.left ?? 0);
+      const xPos = event.clientX - plotLeft;
+      const xVal = plot.posToVal(xPos, 'x');
+
+      const currentMin = Number(plot.scales?.x?.min);
+      const currentMax = Number(plot.scales?.x?.max);
+      if (!Number.isFinite(currentMin) || !Number.isFinite(currentMax) || currentMax <= currentMin) {
+        plot.setScale('x', { min: 0, max: totalMax });
+        maybeRefreshOnInteraction();
+        return;
+      }
+
+      // deltaY > 0 => zoom out; deltaY < 0 => zoom in
+      const factor = Math.exp(event.deltaY * 0.001);
+      const nextMinRaw = xVal - (xVal - currentMin) * factor;
+      const nextMaxRaw = xVal + (currentMax - xVal) * factor;
+      const { min: nextMin, max: nextMax } = clampX(nextMinRaw, nextMaxRaw, totalMax);
+
+      plot.setScale('x', { min: nextMin, max: nextMax });
+      maybeRefreshOnInteraction();
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const plot = uplotRef.current;
+      if (!plot) return;
+      dragging = true;
+      dragStartX = event.clientX;
+      dragStartMin = Number(plot.scales?.x?.min) || 0;
+      dragStartMax = Number(plot.scales?.x?.max) || 10000;
+      try {
+        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      } catch {
+        // ignore
+      }
+      markChartInteracting();
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragging) return;
+      const plot = uplotRef.current;
+      if (!plot) return;
+
+      event.preventDefault();
+      const totalMax = Math.max(10000, bufferLenBytesRef.current * 8);
+      const span = Math.max(1, dragStartMax - dragStartMin);
+      const plotWidth = Math.max(1, plot.bbox?.width ?? el.clientWidth ?? 1);
+      const dx = event.clientX - dragStartX;
+      const shift = -(dx / plotWidth) * span;
+      const { min: nextMin, max: nextMax } = clampX(dragStartMin + shift, dragStartMax + shift, totalMax);
+
+      plot.setScale('x', { min: nextMin, max: nextMax });
+      maybeRefreshOnInteraction();
+    };
+
+    const onPointerUp = () => {
+      dragging = false;
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      event.preventDefault();
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('pointerdown', onPointerDown, { passive: true });
+    el.addEventListener('pointermove', onPointerMove, { passive: false });
+    el.addEventListener('pointerup', onPointerUp, { passive: true });
+    el.addEventListener('pointercancel', onPointerUp, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointermove', onPointerMove);
+      el.removeEventListener('pointerup', onPointerUp);
+      el.removeEventListener('pointercancel', onPointerUp);
+      el.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [markChartInteracting, maybeRefreshOnInteraction]);
 
 	  // Refresh chart periodically
 	  useEffect(() => {
@@ -707,11 +741,8 @@ function SamplerFragment() {
 		        return;
 		      }
 
-	      const chart = getChartInstance(chartRef.current);
-	      if (!chart) return;
-
-		      lastChartRenderAtRef.current = now;
-		      performChartRefresh(chart);
+	      lastChartRenderAtRef.current = now;
+	      performChartRefresh();
 		    };
 
 		    refreshIntervalRef.current = window.setInterval(() => {
@@ -723,7 +754,7 @@ function SamplerFragment() {
         refreshIntervalRef.current = null;
       }
     };
-		  }, [getChartInstance, isConnected, minRenderIntervalMs, performChartRefresh, refreshRate]);
+		  }, [isConnected, minRenderIntervalMs, performChartRefresh, refreshRate]);
 
 		  const startRecording = async () => {
 		    if (!isConnected) {
@@ -741,12 +772,15 @@ function SamplerFragment() {
 		    }
 
 		    await safeInvoke<void>('buffer_clear').catch(() => {});
-		    bufferLenBytesRef.current = 0;
-		    setBufferLenBytes(0);
-		    lastBufferSizeRef.current = 0;
-		    lastChartViewportKeyRef.current = '';
-		    setChartData({ timeValues: [], dataValues: [] });
-		    resetChartZoom();
+			    bufferLenBytesRef.current = 0;
+			    setBufferLenBytes(0);
+			    lastBufferSizeRef.current = 0;
+			    lastChartViewportKeyRef.current = '';
+			    setChartPointCount(0);
+          if (uplotRef.current) {
+            uplotRef.current.setData([new Float64Array(), new Float32Array()]);
+          }
+			    resetChartZoom();
 
 	    // Send "sample start --pin=<pin>" command (matching Android/iOS)
 	    if (deviceType === 'esp32') {
@@ -851,7 +885,7 @@ function SamplerFragment() {
           `transport=${status.transport}`,
           `connected=${status.connected}`,
           `bytes=${bufferLenBytesRef.current}`,
-          `points=${chartData.timeValues.length}`,
+          `points=${chartPointCount}`,
           `view=${debugViewport.visibleStart}..${debugViewport.visibleEnd}`,
           `bins=${debugViewport.requestedBins}`,
           `chartWidth=${debugViewport.chartWidth ?? '—'}`,
@@ -875,21 +909,25 @@ function SamplerFragment() {
 				    bufferLenBytesRef.current = 0;
 				    setBufferLenBytes(0);
 				    lastBufferSizeRef.current = 0;
-				    setChartData({ timeValues: [], dataValues: [] });
+				    setChartPointCount(0);
+            if (uplotRef.current) {
+              uplotRef.current.setData([new Float64Array(), new Float32Array()]);
+            }
 				    setHasUnsavedChanges(false);
 				    resetChartZoom();
 				  };
 
   const resetChartZoom = () => {
-    const chart = getChartInstance(chartRef.current);
-    if (chart) {
-      try {
-        chart.resetZoom();
-        chart.update('none');
-      } catch (e) {
-        // Chart might not be fully initialized
-        console.warn('Could not reset zoom:', e);
-      }
+    const plot = uplotRef.current;
+    if (!plot) return;
+    const maxX = Math.max(10000, bufferLenBytesRef.current * 8);
+    try {
+      plot.setScale('x', { min: 0, max: maxX });
+      prevVisibleRangeStartRef.current = 0;
+      prevVisibleRangeEndRef.current = maxX;
+      prevVisibleSpanRef.current = maxX;
+    } catch (e) {
+      console.warn('Could not reset zoom:', e);
     }
   };
 
@@ -1272,126 +1310,78 @@ function SamplerFragment() {
     }
   };
 
-  const chartOptions = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false as const,
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        enabled: true,
-      },
-      zoom: {
-        zoom: {
-          wheel: {
-            enabled: true,
-            speed: 0.05,
-          },
-          drag: {
-            enabled: false,
-          },
-          pinch: {
-            enabled: true,
-          },
-          mode: 'x' as const,
-          onZoom: ({ chart }: { chart: any }) => {
-            markChartInteracting();
-            maybeRefreshOnInteraction(chart);
-          },
-          onZoomComplete: ({ chart }: { chart: any }) => {
-            refreshChart(chart);
-          },
-        },
-        pan: {
-          enabled: true,
-          mode: 'x' as const,
-          onPan: ({ chart }: { chart: any }) => {
-            markChartInteracting();
-            maybeRefreshOnInteraction(chart);
-          },
-          onPanComplete: ({ chart }: { chart: any }) => {
-            refreshChart(chart);
-          },
-        },
-        limits: {
-          x: {
-            min: 0,
-            max: 10000,
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        type: 'linear' as const,
-        title: {
-          display: true,
-          text: 'Time (bits)',
-          color: '#cbd5e1',
-        },
-        ticks: {
-          color: '#cbd5e1',
-        },
-        grid: {
-          color: '#334155',
-        },
-        min: 0,
-        max: 10000,
-      },
-      y: {
-        type: 'linear' as const,
-        title: {
-          display: true,
-          text: 'Value',
-          color: '#cbd5e1',
-        },
-        ticks: {
-          color: '#cbd5e1',
-        },
-        grid: {
-          color: '#334155',
-        },
-        min: -128,
-        max: 384,
-      },
-    },
-  }), [markChartInteracting, maybeRefreshOnInteraction, refreshChart]);
-
-  // Update chart when data changes (matches Android: chart.setData() + chart.invalidate())
   useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-    
-    // Force chart update when data changes
-    chart.update('none');
-  }, [chartData]);
+    const root = plotRootRef.current;
+    if (!root) return;
 
-  const data = useMemo(() => ({
-    datasets: [
-      {
-        label: 'Signal',
-        data: chartData.timeValues.length > 0 
-          ? chartData.timeValues.map((time, index) => ({
-              x: time,
-              y: chartData.dataValues[index] ?? 0,
-            }))
-          : [],
-        borderColor: '#01579B',
-        backgroundColor: 'rgba(1, 87, 155, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: false,
-        tension: 0,
-        normalized: true,
+    const width = root.clientWidth || 800;
+    const height = root.clientHeight || 400;
+
+    const opts: uPlot.Options = {
+      width,
+      height,
+      legend: { show: false },
+      cursor: { focus: { prox: 16 } },
+      axes: [
+        {
+          stroke: '#cbd5e1',
+          grid: { stroke: '#334155' },
+        },
+        {
+          stroke: '#cbd5e1',
+          grid: { stroke: '#334155' },
+        },
+      ],
+      scales: {
+        x: { time: false },
+        y: {
+          time: false,
+          range: () => [-128, 384],
+        },
       },
-    ],
-  }), [chartData]);
+      series: [
+        {},
+        {
+          label: 'Signal',
+          stroke: '#01579B',
+          width: 2,
+        },
+      ],
+    };
+
+    const plot = new uPlot(opts, [new Float64Array(), new Float32Array()], root);
+    uplotRef.current = plot;
+
+    try {
+      plot.setScale('x', { min: 0, max: 10000 });
+    } catch {
+      // ignore
+    }
+
+    const ro = new ResizeObserver(() => {
+      if (!plotRootRef.current) return;
+      const nextWidth = plotRootRef.current.clientWidth || 800;
+      const nextHeight = plotRootRef.current.clientHeight || 400;
+      try {
+        plot.setSize({ width: nextWidth, height: nextHeight });
+      } catch {
+        // ignore
+      }
+    });
+    ro.observe(root);
+
+    return () => {
+      ro.disconnect();
+      try {
+        plot.destroy();
+      } catch {
+        // ignore
+      }
+      if (uplotRef.current === plot) {
+        uplotRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
@@ -1467,7 +1457,7 @@ function SamplerFragment() {
 			          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
 			            <div>Backend: rust</div>
 			            <div>Bytes: {bufferLenBytes}</div>
-                  <div>Points: {chartData.timeValues.length}</div>
+                  <div>Points: {chartPointCount}</div>
                   <div>
                     View: {debugViewport.visibleStart}..{debugViewport.visibleEnd} bins {debugViewport.requestedBins}
                   </div>
@@ -1483,20 +1473,18 @@ function SamplerFragment() {
                   </button>
 			          </div>
 	          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
-	            {chartError ? (
-              <div className="flex h-full items-center justify-center text-slate-400">
-                <p>Chart error: {chartError}</p>
+              <div
+                ref={chartContainerRef}
+                className="relative h-full w-full"
+                style={{ touchAction: 'none' }}
+              >
+                <div ref={plotRootRef} className="h-full w-full" />
+                {chartError ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 text-slate-200">
+                    <p>Chart error: {chartError}</p>
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <div ref={chartContainerRef} className="h-full w-full" style={{ touchAction: 'none' }}>
-                <Line 
-                  ref={chartRef} 
-                  data={data} 
-                  options={chartOptions}
-                  redraw={false}
-                />
-              </div>
-            )}
           </div>
         </div>
 
