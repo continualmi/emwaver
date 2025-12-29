@@ -331,6 +331,8 @@ function SamplerFragment() {
   const lastChartViewportKeyRef = useRef<string>('');
   const pendingChartRefreshRef = useRef<number | null>(null);
   const chartRefreshInFlightRef = useRef(false);
+  const isChartInteractingRef = useRef(false);
+  const interactionResetTimeoutRef = useRef<number | null>(null);
   const prevVisibleRangeStartRef = useRef(0);
   const prevVisibleRangeEndRef = useRef(0);
   const prevVisibleSpanRef = useRef(0);
@@ -459,6 +461,26 @@ function SamplerFragment() {
     return (maybeChart as any).chart ?? maybeChart;
   }, []);
 
+  const markChartInteracting = useCallback(() => {
+    isChartInteractingRef.current = true;
+    if (interactionResetTimeoutRef.current != null) {
+      window.clearTimeout(interactionResetTimeoutRef.current);
+    }
+    interactionResetTimeoutRef.current = window.setTimeout(() => {
+      interactionResetTimeoutRef.current = null;
+      isChartInteractingRef.current = false;
+    }, 150);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (interactionResetTimeoutRef.current != null) {
+        window.clearTimeout(interactionResetTimeoutRef.current);
+        interactionResetTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const el = chartContainerRef.current;
     if (!el) return;
@@ -534,7 +556,7 @@ function SamplerFragment() {
                 return;
               }
 
-			        const viewportKey = `${bufferBytes}:${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
+			        const viewportKey = `${visibleRangeStart}:${visibleRangeEnd}:${requestedBins}`;
 			        if (viewportKey === lastChartViewportKeyRef.current) {
 			          return;
 			        }
@@ -549,7 +571,10 @@ function SamplerFragment() {
               }
 
 			        const chartMaxX = Math.max(10000, bufferBytes * 8);
-			        if (chart.options?.scales?.x) {
+              const isZoomedOrPanned =
+                (typeof chart.isZoomedOrPanned === 'function' && chart.isZoomedOrPanned()) ||
+                isChartInteractingRef.current;
+              if (!isZoomedOrPanned && chart.options?.scales?.x) {
 			          chart.options.scales.x.max = chartMaxX || 10000;
 			          if (chart.options.plugins?.zoom?.limits?.x) {
 			            chart.options.plugins.zoom.limits.x.max = chartMaxX || 10000;
@@ -1276,6 +1301,7 @@ function SamplerFragment() {
           },
           mode: 'x' as const,
           onZoom: ({ chart }: { chart: any }) => {
+            markChartInteracting();
             maybeRefreshOnInteraction(chart);
           },
           onZoomComplete: ({ chart }: { chart: any }) => {
@@ -1286,6 +1312,7 @@ function SamplerFragment() {
           enabled: true,
           mode: 'x' as const,
           onPan: ({ chart }: { chart: any }) => {
+            markChartInteracting();
             maybeRefreshOnInteraction(chart);
           },
           onPanComplete: ({ chart }: { chart: any }) => {
@@ -1334,7 +1361,7 @@ function SamplerFragment() {
         max: 384,
       },
     },
-  }), [maybeRefreshOnInteraction, refreshChart]);
+  }), [markChartInteracting, maybeRefreshOnInteraction, refreshChart]);
 
   // Update chart when data changes (matches Android: chart.setData() + chart.invalidate())
   useEffect(() => {
