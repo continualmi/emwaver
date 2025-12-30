@@ -1126,10 +1126,10 @@ public class SamplerFragment extends Fragment {
 
             String commandStr = "transmit start --pin=" + encodedPin + " --freq=" + freqHz + " --duty=" + dutyPercent;
             byte[] commandBytes = commandStr.getBytes();
-            USBService.write(commandBytes);
-
-            // Now call the transmitBuffer method
-            USBService.transmitBuffer();
+            new Thread(() -> {
+                USBService.write(commandBytes);
+                USBService.transmitBuffer();
+            }).start();
             
             Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples", Toast.LENGTH_SHORT).show();
 
@@ -1183,15 +1183,20 @@ public class SamplerFragment extends Fragment {
                 prefs.edit().putBoolean(PREF_TX_PWM_ENABLED, false).apply();
             }
             byte[] commandBytes = commandStr.getBytes();
-            BLEService.write(commandBytes);
+            new Thread(() -> {
+                // Ensure the `transmit start` write completes before streaming data chunks.
+                boolean ok = BLEService.writeCommandBlocking(commandBytes, 2000);
+                if (!ok) {
+                    Log.e("SamplerFragment", "Retransmit failed: transmit start write did not complete");
+                    return;
+                }
+                BLEService.transmitBuffer();
 
-            // Now call the transmitBuffer method
-            BLEService.transmitBuffer();
-            
-            // Log buffer state after transmission
-            int postTransmitLength = BLEService.getBufferLength();
-            Log.d("SamplerFragment", "AFTER_RETRANSMIT: Buffer contains " + postTransmitLength + 
-                  " bytes = " + (postTransmitLength * 8) + " bits");
+                // Log buffer state after transmission completes (the RX snapshot is restored).
+                int postTransmitLength = BLEService.getBufferLength();
+                Log.d("SamplerFragment", "AFTER_RETRANSMIT: Buffer contains " + postTransmitLength +
+                        " bytes = " + (postTransmitLength * 8) + " bits");
+            }).start();
 
             Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples on " + selectedPinString, Toast.LENGTH_SHORT).show();
         }
