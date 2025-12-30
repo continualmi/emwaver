@@ -80,3 +80,8 @@
 .emwaver-copy-page__button[data-emwaver-copy-state="copied"] {
   opacity: 0.9;
 }
+
+/* MkDocs/Material renders an empty page title on the Get Started/EMWaver page. */
+.md-typeset h1:empty {
+  display: none;
+}

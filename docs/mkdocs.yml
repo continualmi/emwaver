@@ -12,6 +12,7 @@ theme:
     - navigation.indexes
     - navigation.sections
     - navigation.expand
+    - navigation.footer
   logo: logo.png
   favicon: logo.png
   toc:
