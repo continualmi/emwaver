@@ -44,15 +44,6 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
-pub(crate) fn make_packet64(data: &[u8]) -> Result<[u8; PACKET_SIZE], String> {
-    if data.len() > PACKET_SIZE {
-        return Err(format!("Command too large: {} bytes (max {})", data.len(), PACKET_SIZE));
-    }
-    let mut packet = [0u8; PACKET_SIZE];
-    packet[..data.len()].copy_from_slice(&data);
-    Ok(packet)
-}
-
 impl BLEState {
     pub fn new(buffer: Arc<Mutex<Buffer>>, rx_notify: Arc<Notify>) -> Self {
         Self {
@@ -290,7 +281,7 @@ impl BLEState {
             if service.uuid == service_uuid {
                 for characteristic in service.characteristics {
                     if characteristic.uuid == cmd_char_uuid {
-                        let packet = make_packet64(&data)?;
+                        let packet = buffer::make_packet64(&data)?;
                         peripheral
                             .write(
                                 &characteristic,
@@ -471,8 +462,8 @@ impl BLEState {
                 })();
 
                 let Some(pkt) = pkt else { break };
-                if pkt.data.len() >= 4 && pkt.data[0] == b'B' && pkt.data[1] == b'S' {
-                    latest = Some(u16::from_be_bytes([pkt.data[2], pkt.data[3]]));
+                if let Some(status) = emwaver_buffer_core::status::parse_bs(&pkt.data) {
+                    latest = Some(status);
                 }
             }
             latest

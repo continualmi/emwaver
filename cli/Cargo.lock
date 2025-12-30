@@ -399,6 +399,7 @@ dependencies = [
  "btleplug",
  "clap",
  "dialoguer",
+ "emwaver-buffer-core",
  "include_dir",
  "rusb",
  "sha2",
@@ -408,6 +409,10 @@ dependencies = [
  "uuid",
  "walkdir",
 ]
+
+[[package]]
+name = "emwaver-buffer-core"
+version = "0.1.0"
 
 [[package]]
 name = "encode_unicode"

@@ -1118,6 +1118,7 @@ dependencies = [
  "btleplug",
  "clap",
  "dialoguer",
+ "emwaver-buffer-core",
  "include_dir",
  "rusb",
  "sha2",
@@ -1134,6 +1135,7 @@ version = "0.1.0"
 dependencies = [
  "btleplug",
  "emw",
+ "emwaver-buffer-core",
  "futures",
  "portable-pty",
  "rusb",
@@ -1150,6 +1152,13 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "emwaver-buffer-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

@@ -334,8 +334,8 @@ impl USBState {
                     loop {
                         let pkt = crate::buffer::next_rx_packet(&mut *guard);
                         let Some(pkt) = pkt else { break };
-                        if pkt.data.len() >= 4 && pkt.data[0] == b'B' && pkt.data[1] == b'S' {
-                            last_status = u16::from_be_bytes([pkt.data[2], pkt.data[3]]);
+                        if let Some(status) = emwaver_buffer_core::status::parse_bs(&pkt.data) {
+                            last_status = status;
                         }
                     }
                 }

@@ -21,6 +21,7 @@ tokio-stream = "0.1"
 uuid = { version = "1", features = ["macro-diagnostics"] }
 walkdir = "2"
 sha2 = "0.10"
+emwaver-buffer-core = { path = "crates/emwaver-buffer-core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rusb = { version = "0.9", features = ["vendored"] }
