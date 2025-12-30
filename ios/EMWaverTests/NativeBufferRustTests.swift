@@ -1,7 +1,5 @@
 import XCTest
 
-#if EMWAVER_RUST_BUFFER_CORE
-
 final class NativeBufferRustTests: XCTestCase {
     func testMakePacket64RejectsOversize() {
         let data = Data(repeating: 0x41, count: 65)
@@ -31,6 +29,3 @@ final class NativeBufferRustTests: XCTestCase {
         XCTAssertTrue(v.allSatisfy { $0 == 255.0 })
     }
 }
-
-#endif
-

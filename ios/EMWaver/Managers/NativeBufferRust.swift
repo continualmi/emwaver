@@ -1,7 +1,5 @@
 import Foundation
 
-#if EMWAVER_RUST_BUFFER_CORE
-
 final class NativeBufferRust {
     static let packetSizeBytes: Int = 64
 
@@ -346,6 +344,3 @@ final class NativeBufferRust {
         }
     }
 }
-
-#endif
-
