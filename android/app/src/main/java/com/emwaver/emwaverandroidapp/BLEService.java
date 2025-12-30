@@ -1551,104 +1551,112 @@ public class BLEService extends Service implements DeviceConnectionService {
             return;
         }
 
-        // Clear the buffer after storing it in javaBuffer
+        long[] savedRxTsMs = NativeBuffer.getRxTimestampsMs();
+        long savedRxCounter = NativeBuffer.getRxCounter();
+
+        // Clear RX so BS packets can be received/parsed during transmit.
         clearBuffer();
 
-        int nativeBufferSize = javaBuffer.length;
-        final int maxPacketSize = 200;  // Maximum packet size (allowed to go this high)
-        final int minPacketSize = 128;  // Minimum packet size we'll use
-        final int initialPacketSize = 188; // Starting point (matching ~100kbps)
-        int currentPacketSize = maxPacketSize; // Start with max for fill phase
+        try {
+            if (!isConnected || cmdCharacteristic == null || bluetoothGatt == null) {
+                Log.e(TAG, "Cannot transmit: BLE not connected");
+                return;
+            }
 
-        // Use a constant delay of 15ms (BLE connection interval)
-        final int fixedDelayMs = 15;
-        final long delayNanos = fixedDelayMs * 1_000_000L;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    showToast("Missing BLUETOOTH_CONNECT permission");
+                    return;
+                }
+            }
 
-        // Simple buffer thresholds - target is 2048
-        final int targetBufferLevel = 2048;  // Ideal buffer level
-        final int bufferHighThreshold = 3000; // If above this, we reduce packet size
-        final int bufferLowThreshold = 1000;  // If below this, we increase packet size
-        final int initialFillBytes = 2048;    // Bytes to send before enabling flow control
+            int nativeBufferSize = javaBuffer.length;
+            final int maxPacketSize = 200;  // Maximum packet size (allowed to go this high)
+            final int minPacketSize = 128;  // Minimum packet size we'll use
+            final int initialPacketSize = 188; // Starting point (matching ~100kbps)
+            int currentPacketSize = maxPacketSize; // Start with max for fill phase
 
-        Log.i(TAG, "Starting buffer transmission: " + nativeBufferSize + " bytes, Fixed Delay: " + fixedDelayMs + "ms");
-        Log.i(TAG, "Flow control: Decrease if buffer > " + bufferHighThreshold + ", Increase if buffer < " + bufferLowThreshold);
+            // Use a constant delay of 15ms (BLE connection interval)
+            final int fixedDelayMs = 15;
 
-        for (int i = 0; i < nativeBufferSize;) {
-            // Get ESP32 buffer status BEFORE sending next packet
-            int bufferStatus = getStatusNumber();
+            // Simple buffer thresholds - target is 2048
+            final int targetBufferLevel = 2048;  // Ideal buffer level
+            final int bufferHighThreshold = 3000; // If above this, we reduce packet size
+            final int bufferLowThreshold = 1000;  // If below this, we increase packet size
+            final int initialFillBytes = 2048;    // Bytes to send before enabling flow control
 
-            Log.d(TAG, "Buffer Status: " + bufferStatus + " | Pkt Size: " + currentPacketSize);
-            
-            // Calculate end based on current packet size
-            int end = Math.min(i + currentPacketSize, nativeBufferSize);
-            byte[] packet = getBufferRange(javaBuffer, i, end);
-            
-            // Send the packet
-            write(packet);
-            
-            // Apply flow control after every packet once we've sent the initial fill
-            if (i >= initialFillBytes) {
-                // Simple flow control - check buffer level and adjust packet size
-                if (bufferStatus > bufferHighThreshold) {
-                    // Buffer too full, slow down
-                    int newSize = Math.max(minPacketSize, currentPacketSize - 32);
-                    if (newSize != currentPacketSize) {
-                        currentPacketSize = newSize;
-                    }
-                } else if (bufferStatus < bufferLowThreshold) {
-                    // Buffer too empty, speed up
-                    int newSize = Math.min(maxPacketSize, currentPacketSize + 32);
-                    if (newSize != currentPacketSize) {
-                        currentPacketSize = newSize;
-                    }
-                } else {
-                    // In the target range, stay at current size
-                    if (currentPacketSize != initialPacketSize && Math.abs(bufferStatus - targetBufferLevel) < 100) {
-                        // If we're very close to target and not at initial size, nudge toward it
+            Log.i(TAG, "Starting buffer transmission: " + nativeBufferSize + " bytes, Fixed Delay: " + fixedDelayMs + "ms");
+            Log.i(TAG, "Flow control: Decrease if buffer > " + bufferHighThreshold + ", Increase if buffer < " + bufferLowThreshold);
+
+            int lastStatus = targetBufferLevel;
+
+            for (int i = 0; i < nativeBufferSize;) {
+                // Get ESP32 buffer status BEFORE sending next packet (if present).
+                int bufferStatus = getStatusNumber();
+                if (bufferStatus >= 0) {
+                    lastStatus = bufferStatus;
+                }
+
+                Log.d(TAG, "Buffer Status: " + lastStatus + " | Pkt Size: " + currentPacketSize);
+
+                // Calculate end based on current packet size
+                int end = Math.min(i + currentPacketSize, nativeBufferSize);
+                byte[] packet = getBufferRange(javaBuffer, i, end);
+                if (packet.length == 0) {
+                    break;
+                }
+
+                // Send raw payload chunk (not 64B padded); firmware is in transmitter mode.
+                boolean ok = writeCharacteristicBlocking(
+                        cmdCharacteristic,
+                        packet,
+                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+                        2000
+                );
+                if (!ok) {
+                    Log.e(TAG, "Failed to write transmit chunk (len=" + packet.length + ")");
+                    break;
+                }
+
+                // Log TX as padded 64B packets for the buffer monitor.
+                NativeBuffer.appendTxBytes(packet, System.currentTimeMillis());
+
+                // Apply flow control after every packet once we've sent the initial fill
+                if (i >= initialFillBytes) {
+                    if (lastStatus > bufferHighThreshold) {
+                        currentPacketSize = Math.max(minPacketSize, currentPacketSize - 32);
+                    } else if (lastStatus < bufferLowThreshold) {
+                        currentPacketSize = Math.min(maxPacketSize, currentPacketSize + 32);
+                    } else if (currentPacketSize != initialPacketSize && Math.abs(lastStatus - targetBufferLevel) < 100) {
                         if (currentPacketSize < initialPacketSize) {
                             currentPacketSize = Math.min(initialPacketSize, currentPacketSize + 16);
                         } else if (currentPacketSize > initialPacketSize) {
                             currentPacketSize = Math.max(initialPacketSize, currentPacketSize - 16);
                         }
                     }
+                } else {
+                    currentPacketSize = maxPacketSize;
                 }
-            } else {
-                // During initial fill, keep max packet size
-                currentPacketSize = maxPacketSize;
+
+                try {
+                    Thread.sleep(fixedDelayMs);
+                } catch (InterruptedException ignored) {
+                }
+
+                i = end;
             }
-            
-            // Fixed delay between packets using precise busy-wait
-            long startDelay = System.nanoTime();
-            while (System.nanoTime() - startDelay < delayNanos) {
-                Thread.yield();
+
+            Log.i(TAG, "Buffer transmission complete: " + nativeBufferSize + " bytes attempted");
+        } finally {
+            // Allow any in-flight notifications to be processed, then restore original RX snapshot
+            // (discarding BS packets accumulated during transmit).
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ignored) {
             }
-            
-            // Move to next packet
-            i = end;
+            NativeBuffer.setRxState(javaBuffer, savedRxTsMs, savedRxCounter);
         }
-        
-        Log.d(TAG, "BEFORE_RELOAD: Total bytes sent: " + totalBytesReceived + 
-              " (" + (totalBytesReceived * 8) + " bits)");
-        
-        // Add a delay to allow any in-flight notifications to be processed
-        try {
-            Log.d(TAG, "Adding 100ms delay to allow pending notifications to arrive");
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            Log.e(TAG, "Delay interrupted", e);
-        }
-        
-        // Clear the buffer again to remove any status packets that were received during transmission
-        clearBuffer();
-        Log.d(TAG, "SECOND_CLEAR: Buffer cleared again before reload to remove status packets");
-        
-        // Reload the buffer with javaBuffer after transmission
-        loadBuffer(javaBuffer);
-        
-        Log.d(TAG, "AFTER_RELOAD: Buffer now contains " + getBufferLength() + " bytes (" + 
-              (getBufferLength() * 8) + " bits)");
-        
-        Log.i(TAG, "Buffer transmission complete: " + nativeBufferSize + " bytes sent");
     }
 
     // Helper method for buffer range
