@@ -7,6 +7,8 @@ use std::time::Instant;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use uuid::Uuid;
 
+use emwaver_buffer_core::tx;
+
 use crate::buffer::{self, Buffer, PACKET_SIZE};
 // EMWaver BLE Service and Characteristic UUIDs (matching Android/iOS)
 const SERVICE_UUID: &str = "45c7158e-0c3b-4e90-a847-452a15b14191";
@@ -42,15 +44,6 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
-}
-
-pub(crate) fn make_packet64(data: &[u8]) -> Result<[u8; PACKET_SIZE], String> {
-    if data.len() > PACKET_SIZE {
-        return Err(format!("Command too large: {} bytes (max {})", data.len(), PACKET_SIZE));
-    }
-    let mut packet = [0u8; PACKET_SIZE];
-    packet[..data.len()].copy_from_slice(&data);
-    Ok(packet)
 }
 
 impl BLEState {
@@ -290,7 +283,7 @@ impl BLEState {
             if service.uuid == service_uuid {
                 for characteristic in service.characteristics {
                     if characteristic.uuid == cmd_char_uuid {
-                        let packet = make_packet64(&data)?;
+                        let packet = buffer::make_packet64(&data)?;
                         peripheral
                             .write(
                                 &characteristic,
@@ -443,17 +436,8 @@ impl BLEState {
         };
 
         let result = async {
-            // Flow control parameters (matching Android/iOS)
-        let max_packet_size = 240;
-        let min_packet_size = 128;
-        let initial_packet_size = 188;
-        let mut current_packet_size = max_packet_size;
-        let fixed_delay_ms = 15u64;
-
-        let target_buffer_level: i32 = 2048;
-        let buffer_high_threshold: i32 = 3000;
-        let buffer_low_threshold: i32 = 1000;
-        let initial_fill_bytes = 2048;
+        let profile = tx::BleTxProfile::default();
+        let mut current_packet_size = profile.max_packet_size;
 
         let total_bytes = data.len();
         let mut bytes_sent = 0;
@@ -471,8 +455,8 @@ impl BLEState {
                 })();
 
                 let Some(pkt) = pkt else { break };
-                if pkt.data.len() >= 4 && pkt.data[0] == b'B' && pkt.data[1] == b'S' {
-                    latest = Some(u16::from_be_bytes([pkt.data[2], pkt.data[3]]));
+                if let Some(status) = emwaver_buffer_core::status::parse_bs(&pkt.data) {
+                    latest = Some(status);
                 }
             }
             latest
@@ -482,7 +466,9 @@ impl BLEState {
             if let Some(status) = drain_bs_status() {
                 last_status = Some(status);
             }
-            let effective_buffer_status = last_status.map(|v| v as i32).unwrap_or(target_buffer_level);
+            let effective_buffer_status = last_status
+                .map(|v| v as i32)
+                .unwrap_or(profile.target_buffer_level);
 
             // Calculate packet size
             let remaining = total_bytes - bytes_sent;
@@ -501,28 +487,18 @@ impl BLEState {
             drop(peripheral_guard);
             let write_ms = write_start.elapsed().as_millis() as u64;
 
-            // Flow control logic (matching Android/iOS)
-            if bytes_sent >= initial_fill_bytes {
-                if effective_buffer_status > buffer_high_threshold {
-                    current_packet_size = std::cmp::max(min_packet_size, current_packet_size.saturating_sub(32));
-                } else if effective_buffer_status < buffer_low_threshold {
-                    current_packet_size = std::cmp::min(max_packet_size, current_packet_size.saturating_add(32));
-                } else if current_packet_size != initial_packet_size
-                    && (effective_buffer_status - target_buffer_level).abs() < 100
-                {
-                    if current_packet_size < initial_packet_size {
-                        current_packet_size = std::cmp::min(initial_packet_size, current_packet_size.saturating_add(16));
-                    } else {
-                        current_packet_size = std::cmp::max(initial_packet_size, current_packet_size.saturating_sub(16));
-                    }
-                }
-            } else {
-                current_packet_size = max_packet_size;
-            }
+            current_packet_size = tx::ble_next_packet_size(
+                profile,
+                bytes_sent,
+                effective_buffer_status,
+                current_packet_size,
+            )
+            .clamp(profile.min_packet_size, profile.max_packet_size);
 
             // Fixed delay between packets
             let sleep_start = Instant::now();
-            tokio::time::sleep(tokio::time::Duration::from_millis(fixed_delay_ms)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(profile.fixed_delay_ms as u64))
+                .await;
             let sleep_ms = sleep_start.elapsed().as_millis() as u64;
 
             bytes_sent += packet_size;

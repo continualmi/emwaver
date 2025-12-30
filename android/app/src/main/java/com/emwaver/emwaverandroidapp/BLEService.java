@@ -156,14 +156,6 @@ public class BLEService extends Service implements DeviceConnectionService {
         return NativeBuffer.compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
-    public int getStatusNumber() {
-        return NativeBuffer.getStatusNumber();
-    }
-
-    public void setCaptureMode(boolean enabled) {
-        NativeBuffer.setCaptureMode(enabled);
-    }
-
     public void clearBuffer() {
         NativeBuffer.clearBuffer();
     }
@@ -180,26 +172,18 @@ public class BLEService extends Service implements DeviceConnectionService {
         return NativeBuffer.getBuffer();
     }
 
-    public void invertBuffer() {
-        NativeBuffer.invertBuffer();
-    }
-
-    public void setCaptureInvert(boolean enabled) {
-        NativeBuffer.setCaptureInvert(enabled);
-    }
-
     private void logTx(byte[] data) {
         if (data == null || data.length == 0) return;
         NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
-    private static byte[] padCommand64(byte[] data) {
+    private static byte[] makePacket64(byte[] data) {
         if (data == null) return null;
-        if (data.length > 64) return null;
-        if (data.length == 64) return data;
-        byte[] out = new byte[64];
-        System.arraycopy(data, 0, out, 0, data.length);
-        return out;
+        try {
+            return NativeBuffer.makePacket64(data);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public class LocalBinder extends Binder {
@@ -1249,7 +1233,7 @@ public class BLEService extends Service implements DeviceConnectionService {
             }
         }
 
-        byte[] packet = padCommand64(bytes);
+        byte[] packet = makePacket64(bytes);
         if (packet == null) {
             Log.e(TAG, "Blocking command too large: " + bytes.length + " bytes (max 64)");
             return false;
@@ -1361,7 +1345,7 @@ public class BLEService extends Service implements DeviceConnectionService {
                     }
                 }
 
-                byte[] packet = padCommand64(bytes);
+                byte[] packet = makePacket64(bytes);
                 if (packet == null) {
                     Log.e(TAG, "Write too large: " + bytes.length + " bytes (max 64)");
                     return;
@@ -1436,7 +1420,7 @@ public class BLEService extends Service implements DeviceConnectionService {
                 }
             }
             
-            byte[] packet = padCommand64(command);
+            byte[] packet = makePacket64(command);
             if (packet == null) {
                 Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
                 return null;
@@ -1523,7 +1507,7 @@ public class BLEService extends Service implements DeviceConnectionService {
                     }
                 }
                 
-                byte[] packet = padCommand64(data);
+                byte[] packet = makePacket64(data);
                 if (packet == null) {
                     Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
                     return;
@@ -1583,17 +1567,24 @@ public class BLEService extends Service implements DeviceConnectionService {
 
     // Transmit buffer method
     public void transmitBuffer() {
-        byte[] javaBuffer = getBuffer();
-        if (javaBuffer == null || javaBuffer.length == 0) {
+        byte[] samplerBytes = getBuffer();
+        if (samplerBytes == null || samplerBytes.length == 0) {
             Log.e(TAG, "Empty buffer, nothing to transmit");
             return;
         }
 
-        long[] savedRxTsMs = NativeBuffer.getRxTimestampsMs();
-        long savedRxCounter = NativeBuffer.getRxCounter();
+        // Swap out sampler RX while transmitting so BS flow-control packets
+        // don't contaminate sampler data stored in the same buffer.
+        Object[] saved = NativeBuffer.takeRxState();
+        byte[] savedRxBytes = saved != null && saved.length > 0 && saved[0] instanceof byte[] ? (byte[]) saved[0] : new byte[0];
+        long[] savedRxTsMs = saved != null && saved.length > 1 && saved[1] instanceof long[] ? (long[]) saved[1] : new long[0];
+        long savedRxCounter = 0;
+        if (saved != null && saved.length > 2 && saved[2] instanceof Long) {
+            savedRxCounter = (Long) saved[2];
+        }
 
-        // Clear RX so BS packets can be received/parsed during transmit.
-        clearBuffer();
+        NativeBuffer.loadBuffer(new byte[0]);
+        NativeBuffer.setRxCounter(0);
 
         try {
             if (!isConnected || cmdCharacteristic == null || bluetoothGatt == null) {
@@ -1609,20 +1600,18 @@ public class BLEService extends Service implements DeviceConnectionService {
                 }
             }
 
-            int nativeBufferSize = javaBuffer.length;
-            final int maxPacketSize = 200;  // Maximum packet size (allowed to go this high)
-            final int minPacketSize = 128;  // Minimum packet size we'll use
-            final int initialPacketSize = 188; // Starting point (matching ~100kbps)
+            int nativeBufferSize = samplerBytes.length;
+            int[] txProfile = NativeBuffer.txBleProfile();
+            final int maxPacketSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : 240;
+            final int minPacketSize = txProfile != null && txProfile.length > 1 ? txProfile[1] : 128;
+            final int initialPacketSize = txProfile != null && txProfile.length > 2 ? txProfile[2] : 188;
+            final int fixedDelayMs = txProfile != null && txProfile.length > 3 ? txProfile[3] : 15;
+            final int targetBufferLevel = txProfile != null && txProfile.length > 4 ? txProfile[4] : 2048;
+            final int bufferHighThreshold = txProfile != null && txProfile.length > 5 ? txProfile[5] : 3000;
+            final int bufferLowThreshold = txProfile != null && txProfile.length > 6 ? txProfile[6] : 1000;
+            final int initialFillBytes = txProfile != null && txProfile.length > 7 ? txProfile[7] : 2048;
+
             int currentPacketSize = maxPacketSize; // Start with max for fill phase
-
-            // Use a constant delay of 15ms (BLE connection interval)
-            final int fixedDelayMs = 15;
-
-            // Simple buffer thresholds - target is 2048
-            final int targetBufferLevel = 2048;  // Ideal buffer level
-            final int bufferHighThreshold = 3000; // If above this, we reduce packet size
-            final int bufferLowThreshold = 1000;  // If below this, we increase packet size
-            final int initialFillBytes = 2048;    // Bytes to send before enabling flow control
 
             Log.i(TAG, "Starting buffer transmission: " + nativeBufferSize + " bytes, Fixed Delay: " + fixedDelayMs + "ms");
             Log.i(TAG, "Flow control: Decrease if buffer > " + bufferHighThreshold + ", Increase if buffer < " + bufferLowThreshold);
@@ -1630,17 +1619,23 @@ public class BLEService extends Service implements DeviceConnectionService {
             int lastStatus = targetBufferLevel;
 
             for (int i = 0; i < nativeBufferSize;) {
-                // Get ESP32 buffer status BEFORE sending next packet (if present).
-                int bufferStatus = getStatusNumber();
-                if (bufferStatus >= 0) {
-                    lastStatus = bufferStatus;
+                // Drain any received BS packets to update flow-control state.
+                while (true) {
+                    Object[] next = NativeBuffer.nextRxPacket();
+                    if (next == null || next.length < 1 || !(next[0] instanceof byte[])) {
+                        break;
+                    }
+                    int status = NativeBuffer.parseBsStatus((byte[]) next[0]);
+                    if (status >= 0) {
+                        lastStatus = status;
+                    }
                 }
 
                 Log.d(TAG, "Buffer Status: " + lastStatus + " | Pkt Size: " + currentPacketSize);
 
                 // Calculate end based on current packet size
                 int end = Math.min(i + currentPacketSize, nativeBufferSize);
-                byte[] packet = getBufferRange(javaBuffer, i, end);
+                byte[] packet = getBufferRange(samplerBytes, i, end);
                 if (packet.length == 0) {
                     break;
                 }
@@ -1660,22 +1655,8 @@ public class BLEService extends Service implements DeviceConnectionService {
                 // Log TX as padded 64B packets for the buffer monitor.
                 NativeBuffer.appendTxBytes(packet, System.currentTimeMillis());
 
-                // Apply flow control after every packet once we've sent the initial fill
-                if (i >= initialFillBytes) {
-                    if (lastStatus > bufferHighThreshold) {
-                        currentPacketSize = Math.max(minPacketSize, currentPacketSize - 32);
-                    } else if (lastStatus < bufferLowThreshold) {
-                        currentPacketSize = Math.min(maxPacketSize, currentPacketSize + 32);
-                    } else if (currentPacketSize != initialPacketSize && Math.abs(lastStatus - targetBufferLevel) < 100) {
-                        if (currentPacketSize < initialPacketSize) {
-                            currentPacketSize = Math.min(initialPacketSize, currentPacketSize + 16);
-                        } else if (currentPacketSize > initialPacketSize) {
-                            currentPacketSize = Math.max(initialPacketSize, currentPacketSize - 16);
-                        }
-                    }
-                } else {
-                    currentPacketSize = maxPacketSize;
-                }
+                currentPacketSize = NativeBuffer.txBleNextPacketSize(i, lastStatus, currentPacketSize);
+                currentPacketSize = Math.max(minPacketSize, Math.min(maxPacketSize, currentPacketSize));
 
                 try {
                     Thread.sleep(fixedDelayMs);
@@ -1693,7 +1674,7 @@ public class BLEService extends Service implements DeviceConnectionService {
                 Thread.sleep(100);
             } catch (InterruptedException ignored) {
             }
-            NativeBuffer.setRxState(javaBuffer, savedRxTsMs, savedRxCounter);
+            NativeBuffer.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
         }
     }
 
@@ -1703,13 +1684,6 @@ public class BLEService extends Service implements DeviceConnectionService {
             return new byte[0];
         }
         return Arrays.copyOfRange(buffer, start, end);
-    }
-
-    // Get log status
-    public int getLogStatus() {
-        int bufferStatus = getStatusNumber();
-        int currentBufferLength = getBufferLength();
-        return bufferStatus;
     }
 
     // Helper method to send a string command directly

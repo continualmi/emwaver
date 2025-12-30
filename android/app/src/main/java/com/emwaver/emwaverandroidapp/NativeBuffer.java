@@ -2,41 +2,61 @@ package com.emwaver.emwaverandroidapp;
 
 public final class NativeBuffer {
     static {
-        System.loadLibrary("native-lib");
+        System.loadLibrary("emwaver_buffer_android");
     }
 
     private NativeBuffer() {}
 
-    public static native void storeBulkPkt(byte[] data, long tsMs);
-    public static native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
-    public static native int getStatusNumber();
-    public static native void setCaptureMode(boolean enabled);
-    public static native void clearBuffer();
-    // Clears RX+TX logs and counters (desktop `buffer_clear` parity).
+    // Desktop-parity: RX/TX buffer + counter + timestamps, using the Rust core.
     public static native void clearAll();
     public static native int getBufferLength();
     public static native void loadBuffer(byte[] data);
     public static native byte[] getBuffer();
-    public static native void invertBuffer();
-    public static native void setCaptureInvert(boolean enabled);
 
-    // Desktop-parity buffer monitor APIs (64B packets + per-packet timestamps).
+    // Append raw incoming bytes; timestamps are assigned per completed 64B packet.
+    public static native void storeBulkPkt(byte[] data, long tsMs);
+
+    // Append outbound bytes to the TX log as padded 64B packets (one tsMs per 64B packet).
+    public static native void appendTxBytes(byte[] data, long tsMs);
+
+    // Buffer monitor APIs (64B packets + per-packet timestamps).
     // Returns Object[] { byte[] data, long[] tsMs, long nextPacketIndex, long availablePackets }.
     public static native Object[] readRxSince(long packetIndex, int maxPackets);
     public static native Object[] readTxSince(long packetIndex, int maxPackets);
 
-    // Desktop-parity command-response cursor APIs (rx_counter consumption).
+    // Command-response cursor APIs (rx_counter consumption).
     public static native long getRxPacketCount();
     public static native long getRxCounter();
     public static native void setRxCounter(long value);
     // Returns Object[] { byte[] packet64, long tsMs } or null if no packet available.
     public static native Object[] nextRxPacket();
 
-    // RX state accessors for Java-side swap/restore flows (e.g., retransmit).
-    public static native long[] getRxTimestampsMs();
-    // Restores RX bytes + per-64B timestamps + rx_counter in one call (timestamps are clamped).
-    public static native void setRxState(byte[] rxBytes, long[] rxTimestampsMs, long rxCounter);
+    // Sampler compression helper: returns Object[] { float[] timeValues, float[] dataValues }.
+    public static native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
 
-    // Append outbound bytes to the TX log as padded 64B packets (one tsMs per 64B packet).
-    public static native void appendTxBytes(byte[] data, long tsMs);
+    // Protocol helpers.
+    public static native byte[] makePacket64(byte[] data);
+    // Returns -1 when not a BS frame.
+    public static native int parseBsStatus(byte[] packet64);
+
+    // Transmit helpers (desktop parity logic lives in Rust core; platform does I/O).
+    // Returns int[] { maxPacketSize, minPacketSize, initialPacketSize, fixedDelayMs,
+    //                 targetBufferLevel, bufferHighThreshold, bufferLowThreshold,
+    //                 initialFillBytes, nudgeBand, stepLarge, stepSmall }.
+    public static native int[] txBleProfile();
+    public static native int txBleNextPacketSize(int bytesSent, int lastStatus, int currentPacketSize);
+
+    // Returns int[] { packetSize, periodNs, flowTimeDeltaNs, bufferHighThreshold, bufferLowThreshold }.
+    public static native int[] txUsbProfile();
+    public static native long txUsbAdjustDeadlineNs(long deadlineNs, int lastStatus);
+
+    // Internal RX swap used during transmit to avoid contaminating sampler capture with BS packets.
+    // Returns Object[] { byte[] rxBytes, long[] rxTsMs, long rxCounter }.
+    static native Object[] takeRxState();
+    static native void restoreRxState(byte[] rxBytes, long[] rxTsMs, long rxCounter);
+
+    // Compatibility helper (previous Android call sites used clearBuffer).
+    public static void clearBuffer() {
+        clearAll();
+    }
 }

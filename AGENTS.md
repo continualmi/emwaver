@@ -41,6 +41,40 @@ This repo previously included local tmux helpers, but they have been removed; fo
 ## Project Structure & Module Organization
 ESP32 firmware lives in `esp/` (ESP-IDF project) and is split into modules in `esp/main/` (e.g., `ble_server.c`, `cc1101.c`, `mfrc522.c`, `badusb.c`) with matching headers. ESP-IDF managed components live under `esp/managed_components/`; regenerate them with `idf.py reconfigure` rather than editing by hand. STM32 firmware lives in `stm/` as multiple focused projects; treat CubeMX-generated output as generated code (regenerate rather than hand-editing the generated layers). Companion apps sit under `android/`, `ios/`, and `app/` (desktop), while `docs/` with `mkdocs.yml` drives the user-facing site. The Rust CLI tool lives in `cli/`. Treat `build/` folders and generated `.elf`/`.bin`/`.dfu` artifacts as temporary.
 
+## Buffer Protocol Shared Core (Migration Plan)
+
+EMWaver uses a simple **64-byte framing + append-only RX capture + cursor parsing** model described in `docs/content/documentation/buffer.md`.
+Today, core buffer logic is duplicated across platforms (Desktop Rust, Android JNI/C++, iOS Swift) and has started to drift.
+
+### Goal
+- Establish a single canonical implementation of the buffer/packet algorithms in **Rust** (so Desktop works immediately).
+- Keep transport I/O (BLE scanning, GATT plumbing, USB APIs) platform-specific; only unify the deterministic byte-level logic.
+
+### Canonical Core Scope (Rust)
+The shared core must contain only pure logic (no platform I/O):
+- **Packet framing**: fixed `PACKET_SIZE = 64`, padding rules, slicing helpers.
+- **Log buffer model**: append-only RX byte capture, per-completed-packet timestamps, TX packet logging, RX cursor (`rx_counter`) consumption.
+- **Status parsing**: consistent handling of `BS` flow-control status packets (ESP32/STM32 retransmit) with a specified API.
+- **Sampler viewport compression**: bit min/max downsampling used for chart rendering (match Android/iOS behavior).
+- **Retransmit pacing policy**: optional pure state machine to tune chunk size/delay based on `BS` status (policy-only; transport sends bytes).
+
+### Out of Scope (per-platform)
+- BLE/USB discovery, permissions, MTU negotiation, threading/queues, notification subscription, serial drivers.
+- UI rendering and JS bridge glue.
+
+### Implementation Path
+1. Create `cli/src/transport_core/` (or similar) in the `emw` crate to host the shared core types and functions.
+2. Move Desktop/Tauri code to consume the shared core (replace `app/src-tauri/src/buffer.rs` logic with calls into `emw`).
+3. Add **parity tests** in Rust (golden vectors) for buffer operations, `BS` parsing, and compression.
+4. Integrate the Rust core into mobile apps via **FFI now**:
+   - **iOS**: ship the core as a static library/XCFramework and expose a stable API to Swift (prefer UniFFI-generated Swift bindings or a minimal C ABI wrapper).
+   - **Android**: ship the core as `jniLibs` `.so` binaries with generated Kotlin bindings (prefer UniFFI Kotlin bindings; otherwise JNI wrappers).
+   - Keep the FFI boundary small (bytes in/out, counters, timestamps) and keep all transport I/O (CoreBluetooth/Android BLE/USB) native.
+
+### Guardrails
+- Any behavior change to parsing/framing must be reflected in `docs/content/documentation/buffer.md` and golden tests.
+- Prefer compatibility over redesign; do not change on-wire semantics during the migration.
+
 ## Wavelet Feature
 Wavelets are the user-authored extension bundles (manifest + JavaScript) that plug into the Wavelet Engine sandbox to broaden EMWaver beyond the built-in fragments. They combine UI declarations with scripted logic that talks to firmware through the EMWaver Script SDK. Refer to `TODO.md` for the evolving roadmap, packaging details, and open questions.
 
@@ -112,6 +146,11 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 
 ### Android (`/android`)
 - Gradle project; run `./gradlew installDebug` for device builds. Keep `local.properties` pointing at the SDK (typically `~/Library/Android/sdk` or `~/Android/Sdk`).
+- **Rust buffer core (JNI)**: Android builds and packages a Rust `cdylib` (no C++/CMake) during Gradle `preBuild`.
+  - Build task: `:app:rustAndroidBuild` (runs `cargo-ndk` and copies outputs into `android/app/src/main/jniLibs/`).
+  - Prereqs: `rustup` toolchain + Android targets (at least `aarch64-linux-android`) + Android NDK + `cargo-ndk` (auto-installed by the task if missing).
+  - PATH note: if you have a system `cargo` (e.g. `/usr/local/bin/cargo`) *and* rustup, the Gradle task forces `~/.cargo/bin` to avoid “missing std/core for android target” failures.
+  - ABI note: defaults to building **arm64-v8a only** for fastest iteration; set `EMWAVER_ANDROID_ALL_ABIS=1` to build `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`.
 - **Git fragment**: UI section for GitHub repo operations (clone, pull, push) using GitHub REST API with token-based auth.
 - Wavelet console/sampler loads `.js` and `.raw` assets from local storage (synced via Git fragment).
 - Mirror iOS feature parity for wavelets, IR tooling, and hardware interaction.

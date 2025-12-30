@@ -8,6 +8,7 @@ use tauri::async_runtime::spawn_blocking;
 use std::collections::HashSet;
 
 use crate::buffer::{self, Buffer, PACKET_SIZE};
+use emwaver_buffer_core::tx;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
@@ -314,28 +315,28 @@ impl USBState {
             }
         };
 
-        let buffer_clone = Arc::clone(&self.buffer);
-        let write_result = spawn_blocking(move || {
-            // STM32 transmit mode uses a small (512B) circular RX buffer and emits `BS` status
-            // packets as flow-control. If we flood the link, the device returns USBD_FAIL and
-            // stops accepting OUT packets, which makes retransmit stop mid-way.
-            let packet_size: usize = 50; // match Android pacing (<= 64B endpoint packet)
-            let base_period = Duration::from_millis(4);
-            let flow_delta = Duration::from_millis(1);
+	        let buffer_clone = Arc::clone(&self.buffer);
+	        let write_result = spawn_blocking(move || {
+	            // STM32 transmit mode uses a small (512B) circular RX buffer and emits `BS` status
+	            // packets as flow-control. If we flood the link, the device returns USBD_FAIL and
+	            // stops accepting OUT packets, which makes retransmit stop mid-way.
+	            let profile = tx::UsbTxProfile::default();
+	            let packet_size: usize = profile.packet_size; // <= 64B endpoint packet
 
-            std::thread::sleep(Duration::from_millis(20));
+	            std::thread::sleep(Duration::from_millis(20));
 
-            let mut last_status: u16 = 0;
-            let mut next_send_at = std::time::Instant::now();
+	            let mut last_status: u16 = 0;
+	            let start = std::time::Instant::now();
+	            let mut next_send_at_ns: i64 = 0;
 
-            for chunk in data.chunks(packet_size) {
-                // Drain buffer-status packets (if any) to update flow-control state.
-                if let Ok(mut guard) = buffer_clone.lock() {
+	            for chunk in data.chunks(packet_size) {
+	                // Drain buffer-status packets (if any) to update flow-control state.
+	                if let Ok(mut guard) = buffer_clone.lock() {
                     loop {
                         let pkt = crate::buffer::next_rx_packet(&mut *guard);
                         let Some(pkt) = pkt else { break };
-                        if pkt.data.len() >= 4 && pkt.data[0] == b'B' && pkt.data[1] == b'S' {
-                            last_status = u16::from_be_bytes([pkt.data[2], pkt.data[3]]);
+                        if let Some(status) = emwaver_buffer_core::status::parse_bs(&pkt.data) {
+                            last_status = status;
                         }
                     }
                 }
@@ -348,28 +349,23 @@ impl USBState {
                 if let Ok(mut guard) = buffer_clone.lock() {
                     let mut packet = [0u8; PACKET_SIZE];
                     packet[..chunk.len()].copy_from_slice(chunk);
-                    buffer::append_tx_packet(&mut *guard, &packet, now_ms());
-                }
+	                    buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+	                }
 
-                // Pacing rules (roughly matching Android thresholds for a 512B circular buffer).
-                next_send_at += base_period;
-                if last_status > 300 {
-                    next_send_at += flow_delta;
-                } else if last_status < 200 {
-                    if next_send_at.duration_since(std::time::Instant::now()) > flow_delta {
-                        next_send_at -= flow_delta;
-                    }
-                }
+	                next_send_at_ns = next_send_at_ns.saturating_add(profile.period_ns);
+	                next_send_at_ns =
+	                    tx::usb_adjust_deadline_ns(profile, next_send_at_ns, last_status as i32);
 
-                let now = std::time::Instant::now();
-                if next_send_at > now {
-                    std::thread::sleep(next_send_at - now);
-                }
-            }
+	                let now_ns = start.elapsed().as_nanos() as i64;
+	                let sleep_ns = next_send_at_ns.saturating_sub(now_ns);
+	                if sleep_ns > 0 {
+	                    std::thread::sleep(Duration::from_nanos(sleep_ns as u64));
+	                }
+	            }
 
-            write_port.flush().map_err(|e| format!("Failed to flush: {e}"))?;
-            Ok::<(), String>(())
-        })
+	            write_port.flush().map_err(|e| format!("Failed to flush: {e}"))?;
+	            Ok::<(), String>(())
+	        })
         .await
         .map_err(|e| format!("Task failed: {e}"))?;
 

@@ -9,5 +9,8 @@ xcuserdata/
 # SwiftPM
 .build/
 
+# Rust XCFramework outputs
+*.xcframework/
+
 # macOS
 .DS_Store

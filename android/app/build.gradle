@@ -29,14 +29,6 @@ android {
         }
     }
 
-
-    externalNativeBuild {
-        cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.22.1'
-        }
-    }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -47,6 +39,63 @@ android {
         buildConfig true
     }
 }
+
+def rustAndroidLibName = "emwaver_buffer_android"
+def rustAndroidManifestPath = "${rootProject.projectDir}/../cli/crates/emwaver-buffer-android-jni/Cargo.toml"
+def rustAndroidJniLibsDir = "${projectDir}/src/main/jniLibs"
+
+tasks.register("rustAndroidBuild", Exec) {
+    group = "emwaver"
+    description = "Builds the Rust Android JNI library into src/main/jniLibs (requires Rust + cargo-ndk + Android NDK)."
+
+    doFirst {
+        file(rustAndroidJniLibsDir).mkdirs()
+    }
+
+    commandLine "bash", "-lc", """
+        set -euo pipefail
+
+        # Force rustup-managed toolchain (avoid /usr/local/bin cargo/rustc shadowing).
+        export PATH="\${HOME}/.cargo/bin:\${PATH}"
+        cargo="\${HOME}/.cargo/bin/cargo"
+        rustup="\${HOME}/.cargo/bin/rustup"
+        test -x "\${cargo}" || (echo "cargo not found at \${cargo}; install Rust via rustup" && exit 1)
+        test -x "\${rustup}" || (echo "rustup not found at \${rustup}; install Rust via rustup" && exit 1)
+        command -v cargo-ndk >/dev/null 2>&1 || ("\${cargo}" install cargo-ndk)
+
+        crate_dir="\$(dirname "${rustAndroidManifestPath}")"
+        cd "\${crate_dir}"
+
+        # Default to arm64-v8a only (fastest path to a working installDebug).
+        # Set EMWAVER_ANDROID_ALL_ABIS=1 to build all common ABIs.
+        if [ "\${EMWAVER_ANDROID_ALL_ABIS:-}" = "1" ]; then
+          "\${rustup}" target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          cargo_targets=(
+            -t armeabi-v7a
+            -t arm64-v8a
+            -t x86
+            -t x86_64
+          )
+        else
+          "\${rustup}" target add aarch64-linux-android
+          cargo_targets=(
+            -t arm64-v8a
+          )
+        fi
+
+        "\${cargo}" ndk \\
+          "\${cargo_targets[@]}" \\
+          -o "${rustAndroidJniLibsDir}" \\
+          -- \\
+          build --release
+
+        test -f "${rustAndroidJniLibsDir}/arm64-v8a/lib${rustAndroidLibName}.so" || (echo "Rust .so output missing" && exit 1)
+    """
+}
+
+// Ensure Rust native library exists before Java compilation packages jniLibs.
+// This will fail fast with a clear message if Rust/NDK tooling isn't installed.
+preBuild.dependsOn("rustAndroidBuild")
 
 dependencies {
 
