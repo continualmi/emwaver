@@ -30,6 +30,7 @@ struct LineChartViewController: UIViewControllerRepresentable {
     var onChartScale: ((Float, Float) -> Void)?
     var onChartTranslate: ((Float, Float) -> Void)?
     var onChartCreated: ((LineChartView) -> Void)?
+    var onInteractionChanged: ((Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -65,9 +66,12 @@ struct LineChartViewController: UIViewControllerRepresentable {
             chartView.bottomAnchor.constraint(equalTo: controller.view.bottomAnchor)
         ])
 
-        if let panGesture = chartView.gestureRecognizers?.first(where: { $0 is UIPanGestureRecognizer }) {
-            panGesture.delegate = context.coordinator
-        }
+        chartView.gestureRecognizers?
+            .filter { $0 is UIPanGestureRecognizer || $0 is UIPinchGestureRecognizer }
+            .forEach { gesture in
+                gesture.delegate = context.coordinator
+                gesture.addTarget(context.coordinator, action: #selector(Coordinator.gestureStateChanged(_:)))
+            }
 
         context.coordinator.chartView = chartView
         onChartCreated?(chartView)
@@ -87,9 +91,27 @@ struct LineChartViewController: UIViewControllerRepresentable {
         private var currentZoomLevel: Float = 1.0
         private var previousRangeStart: Float = 0
         private var previousRangeEnd: Float = 0
+        private var lastInteracting: Bool = false
 
         init(_ parent: LineChartViewController) {
             self.parent = parent
+        }
+
+        @objc func gestureStateChanged(_ gesture: UIGestureRecognizer) {
+            switch gesture.state {
+            case .began, .changed:
+                setInteracting(true)
+            case .ended, .cancelled, .failed:
+                setInteracting(false)
+            default:
+                break
+            }
+        }
+
+        private func setInteracting(_ interacting: Bool) {
+            guard lastInteracting != interacting else { return }
+            lastInteracting = interacting
+            parent.onInteractionChanged?(interacting)
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -168,6 +190,7 @@ struct SamplerView: View {
     @State private var chartView: LineChartView?
     @State private var chartMinX: Double = 0
     @State private var chartMaxX: Double = 10000
+    @State private var isChartInteracting = false
     @State private var lastBufferSize: Int = -1
     @State private var refreshTimer: Timer?
     @State private var isSchedulerRunning = false
@@ -215,16 +238,12 @@ struct SamplerView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    if !bleManager.isConnected {
-                        connectionBanner
-                    }
-
                     chartSection
                     signalPickerSection
-                    controlsSection
                 }
                 .padding(.vertical, 16)
             }
+            .scrollDisabled(isChartInteracting)
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Sampler")
             .navigationBarTitleDisplayMode(.inline)
@@ -314,21 +333,6 @@ struct SamplerView: View {
         }
     }
 
-    private var connectionBanner: some View {
-        HStack {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 10, height: 10)
-            Text("Not Connected")
-                .font(.subheadline)
-            Spacer()
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
-        .padding(.horizontal)
-    }
-
     private var chartSection: some View {
         VStack(spacing: 12) {
             LineChartViewController(
@@ -340,10 +344,13 @@ struct SamplerView: View {
                     view.xAxis.axisMinimum = chartMinX
                     view.xAxis.axisMaximum = chartMaxX
                     refreshChart(force: true)
+                },
+                onInteractionChanged: { interacting in
+                    isChartInteracting = interacting
                 }
             )
-            .frame(height: 300)
-            .padding(.horizontal)
+            .frame(height: 360)
+            .padding(.horizontal, 0)
 
             HStack(spacing: 12) {
                 Button {
@@ -371,17 +378,31 @@ struct SamplerView: View {
                 .tint(.green)
                 .disabled(bleManager.getBuffer().isEmpty)
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 8)
+
+            Button(action: getTimings) {
+                Label("Timings", systemImage: "waveform")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .disabled(bleManager.getBuffer().isEmpty)
+            .padding(.horizontal, 8)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("GPIO Pin")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
-                Picker("", selection: $selectedPinIndex) {
+                Picker(selection: $selectedPinIndex) {
                     ForEach(Array(pins.enumerated()), id: \.offset) { index, title in
                         Text(title).tag(index)
                     }
+                } label: {
+                    Text(pins[safe: selectedPinIndex] ?? "")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -418,7 +439,7 @@ struct SamplerView: View {
         }
         .padding(.vertical, 12)
         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
+        .padding(.horizontal, 8)
     }
 
     private var signalPickerSection: some View {
@@ -426,11 +447,16 @@ struct SamplerView: View {
             Text("Signal")
                 .font(.headline)
             
-            Picker("", selection: $selectedSignalIndex) {
+            Picker(selection: $selectedSignalIndex) {
                 Text("New signal...").tag(0)
                 ForEach(Array(viewModel.signalNames.enumerated()), id: \.offset) { index, name in
                     Text(name).tag(index + 1)
                 }
+            } label: {
+                Text(signalPickerLabel)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .pickerStyle(.menu)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -447,43 +473,6 @@ struct SamplerView: View {
                     }
                 }
             }
-        }
-        .padding()
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-    }
-    
-    private var controlsSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                Button(action: startRecording) {
-                    Label("Record", systemImage: "record.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isRecording || !bleManager.isConnected)
-                
-                Button(action: stopRecording) {
-                    Label("Stop", systemImage: "stop.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!isRecording)
-                
-                Button(action: retransmitSignal) {
-                    Label("Retransmit", systemImage: "arrow.clockwise")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(bleManager.getBuffer().isEmpty || !bleManager.isConnected)
-            }
-            
-            Button(action: getTimings) {
-                Label("Get Timings", systemImage: "waveform")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .disabled(bleManager.getBuffer().isEmpty)
         }
         .padding()
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
@@ -512,6 +501,17 @@ struct SamplerView: View {
                 Image(systemName: "ellipsis.circle")
             }
         }
+    }
+
+    private var signalPickerLabel: String {
+        if selectedSignalIndex == 0 {
+            return "New signal..."
+        }
+        let index = selectedSignalIndex - 1
+        if index >= 0, index < viewModel.signalNames.count {
+            return viewModel.signalNames[index]
+        }
+        return "Select signal..."
     }
 
     private func handleAppear() {
@@ -892,6 +892,13 @@ struct SamplerView: View {
             alert.dismiss(animated: true)
         }
         #endif
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        guard index >= 0, index < count else { return nil }
+        return self[index]
     }
 }
 

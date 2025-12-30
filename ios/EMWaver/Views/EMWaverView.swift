@@ -1,201 +1,45 @@
 import SwiftUI
-import Combine // Added for Timer
 
 struct EMWaverView: View {
-    @EnvironmentObject var bleManager: BLEManager // Use shared BLEManager from environment
+    @EnvironmentObject var bleManager: BLEManager
+    @Binding var selection: String
+
     @State private var commandInput = ""
-    @State private var showHex = false // Default to false to match Android
-    @State private var serialMonitorText = "" // Local state for serial monitor
-    @State private var jsEngine: JavaScriptEngine? // Add reference to JavaScriptEngine
-    @State private var firmwareVersion = "Unknown" // Add firmware version state
     @FocusState private var isCommandFieldFocused: Bool
-    
-    // Add auto-connect state variables
-    @State private var autoConnectEnabled = true
-    @State private var isPerformingAutoConnect = false
+
+    @State private var firmwareVersion = "Unknown"
+
+    @State private var showTxHex = false
+    @State private var showRxHex = false
     @State private var showingSettingsSheet = false
 
-    // Use a timer publisher without autoconnect
-    private let timerPublisher = Timer.publish(every: 0.1, on: .main, in: .common)
-    // Store the subscription to cancel it later
-    @State private var timerSubscription: AnyCancellable? = nil
-    
+    private static let maxMonitorEntries = 1500
+
+    private static let monitorBackground = Color(red: 2/255, green: 6/255, blue: 23/255) // slate-950
+    private static let monitorBorder = Color.white.opacity(0.10)
+    private static let monitorTextPrimary = Color.white
+    private static let monitorTextSecondary = Color.white.opacity(0.70)
+    private static let txColor = Color.white
+    private static let rxColor = Color(red: 59/255, green: 130/255, blue: 246/255) // blue-500
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Connection Section
-                GroupBox(label: Label("Connection", systemImage: "antenna.radiowaves.left.and.right").font(.headline)) {
-                    VStack(spacing: 10) {
-                        HStack {
-                            Button(action: {
-                                if bleManager.isConnected {
-                                    bleManager.disconnect()
-                                } else {
-                                    isPerformingAutoConnect = false // Disable auto-connect when manual connect is used
-                                    bleManager.startScan()
-                                }
-                            }) {
-                                HStack {
-                                    Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
-                                    Text(bleManager.isConnected ? "Disconnect" : "Connect to EMWaver")
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(bleManager.isConnected ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                        }
-                        
-                        HStack {
-                            HStack {
-                                Circle()
-                                    .fill(getConnectionStatusColor())
-                                    .frame(width: 12, height: 12)
-                                Text(getConnectionStatusText())
-                                    .font(.subheadline)
-                                    .foregroundColor(getConnectionStatusColor())
-                            }
-                            
-                            Spacer()
-                            
-                            // Add firmware version display
-                            HStack {
-                                Text("Firmware: ")
-                                    .font(.subheadline)
-                                Text(firmwareVersion)
-                                    .font(.subheadline)
-                                    .foregroundColor(firmwareVersion == "Unknown" ? .gray : .blue)
-                                
-                                Button(action: {
-                                    requestFirmwareVersion()
-                                }) {
-                                    Image(systemName: "arrow.clockwise")
-                                        .foregroundColor(.blue)
-                                }
-                                .disabled(!bleManager.isConnected)
-                            }
-                        }
-                        
-                        // Add auto-connect toggle
-                        Toggle("Auto Connect", isOn: $autoConnectEnabled)
-                            .toggleStyle(SwitchToggleStyle(tint: .blue))
-                            .padding(.top, 4)
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
-                
-                // Command Input Section
-                GroupBox(label: Label("Command Input", systemImage: "terminal").font(.headline)) {
-                    VStack(spacing: 12) {
-                        HStack {
-                            TextField("e.g., version[0x00][255][0xFF]", text: $commandInput)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .padding(.trailing, 8)
-                                .focused($isCommandFieldFocused)
-                                .submitLabel(.send)
-                                .onSubmit {
-                                    if bleManager.isConnected {
-                                        sendPacket()
-                                    }
-                                    isCommandFieldFocused = false
-                                }
-                            
-                            Button(action: {
-                                sendPacket()
-                                isCommandFieldFocused = false
-                            }) {
-                                HStack {
-                                    Image(systemName: "paperplane.fill")
-                                    Text("Send")
-                                }
-                                .padding(10)
-                                .background(Color.blue.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                            .disabled(!bleManager.isConnected)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") {
-                            isCommandFieldFocused = false
-                        }
-                    }
-                }
-                
-                // Serial Monitor Section
-                GroupBox(label: Label("Serial Monitor", systemImage: "doc.text").font(.headline)) {
-                    VStack {
-                        ScrollViewReader { scrollViewProxy in // Added ScrollViewReader for auto-scroll
-                            ScrollView {
-                                // Use the local serialMonitorText state
-                                if serialMonitorText.isEmpty {
-                                    Text("Serial monitor output will appear here.")
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundColor(Color.green.opacity(0.7))
-                                        .padding(8)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                } else {
-                                    // Display the text with different colors for TX/RX entries
-                                    MonitorTextView(text: serialMonitorText)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.bottom, 1) // Ensure last line is visible
-                                        .id("bottom") // ID for scrolling
-                                }
-                            }
-                            .background(Color.black)
-                            .cornerRadius(8)
-                            .frame(minHeight: 200, maxHeight: 200)
-                            .onChange(of: serialMonitorText) { _ in // Auto-scroll on change
-                                withAnimation {
-                                    scrollViewProxy.scrollTo("bottom", anchor: .bottom)
-                                }
-                            }
-                        }
-
-                        HStack {
-                            // Single checkbox for HEX display to match Android
-                            Toggle("HEX", isOn: $showHex)
-                                .toggleStyle(SwitchToggleStyle(tint: .blue))
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                clearSerialMonitor()
-                            }) {
-                                HStack {
-                                    Image(systemName: "trash")
-                                    Text("Clear")
-                                }
-                                .padding(10)
-                                .background(Color.red.opacity(0.7))
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                            }
-                        }
-                        .padding(.top, 8)
-                    }
-                    .padding(.vertical, 8)
-                }
-                .padding(.horizontal)
+            VStack(spacing: 16) {
+                connectionRow
+                commandRow
+                bufferMonitor
+                fragmentsGrid
             }
-            .padding(.vertical)
+            .padding(.vertical, 16)
         }
+        .background(Color.white)
         .navigationTitle("EMWaver")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
-                    Button("Settings") {
-                        showingSettingsSheet = true
-                    }
+                    Button("Settings") { showingSettingsSheet = true }
+                    Button("Clear Buffer", role: .destructive) { clearMonitorAndBuffer() }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -204,295 +48,384 @@ struct EMWaverView: View {
         .sheet(isPresented: $showingSettingsSheet) {
             SettingsSheet()
         }
-        .onAppear {
-            // Start the timer when view appears
-            timerSubscription = timerPublisher
-                .autoconnect()
-                .sink { _ in
-                    self.fetchAndDisplayBufferedData()
-                }
-                
-            // Initialize the JavaScript engine when the view appears
-            if bleManager.isConnected && jsEngine == nil {
-                setupJSEngine()
-            }
-
-            // Add this code for opaque navigation bar
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().compactAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
-            // End of added code
-            
-            // Auto-connect functionality
-            startAutoConnect()
-            
-            // Check firmware version after a short delay when view appears
-            if bleManager.isConnected {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    requestFirmwareVersion()
-                }
-            }
-        }
         .onChange(of: bleManager.isConnected) { connected in
-            if connected && jsEngine == nil {
-                setupJSEngine()
-            }
-            
-            // Check firmware version after connection
-            if connected {
-                print("EMWaverView detected new connection")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    requestFirmwareVersion()
-                }
-                isPerformingAutoConnect = false // Reset auto-connect flag once connected
-            } else {
-                // Reset firmware version when disconnected
+            if !connected {
                 firmwareVersion = "Unknown"
-                
-                // If disconnected and auto-connect is enabled, try to reconnect
-                if autoConnectEnabled && !isPerformingAutoConnect {
-                    startAutoConnect()
-                }
-            }
-        }
-        .onDisappear {
-            // Cancel the timer when view disappears
-            print("EMWaverView disappearing, canceling timer")
-            timerSubscription?.cancel()
-            timerSubscription = nil
-            
-            // --- Add Logging Here ---
-            print("!!! BLEView disappearing.")
-            // Check state immediately
-            if let peripheral = bleManager.connectedPeripheral { // Use the public accessor
-                print("!!! BLEView onDisappear: Peripheral state is \(peripheral.state.rawValue)") // Raw value for more detail maybe
             } else {
-                print("!!! BLEView onDisappear: Peripheral device is nil.")
+                requestFirmwareVersionSoon()
+            }
+        }
+        .onChange(of: bleManager.bufferVersion) { _ in
+            updateFirmwareVersionFromBufferIfNeeded()
+        }
+    }
+
+    private var connectionRow: some View {
+        HStack(spacing: 12) {
+            Panel {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Circle()
+                            .fill(connectionStatusColor)
+                            .frame(width: 10, height: 10)
+                        Text(connectionStatusText)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+
+                    Button {
+                        if bleManager.isConnected {
+                            bleManager.disconnect()
+                        } else {
+                            bleManager.startScan()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
+                            Text(bleManager.isConnected ? "Disconnect" : "Connect")
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(bleManager.isConnected ? .red : .blue)
+                }
             }
 
-            // Check state after a small delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let peripheral = bleManager.connectedPeripheral {
-                     print("!!! BLEView 0.1s after disappear: Peripheral state is \(peripheral.state.rawValue)")
-                     // If disconnected here without delegate call, it's confirmation
-                     if peripheral.state == .disconnected || peripheral.state == .disconnecting {
-                         print("!!! Peripheral disconnected shortly after view disappear, but didDisconnect delegate likely wasn't called.")
-                         // Potentially trigger a manual reconnect attempt here if needed
-                         // bleManager.attemptReconnect() // You'd need to implement this
-                     }
+            Panel {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Firmware")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 8) {
+                        Text(firmwareVersion)
+                            .font(.headline)
+                            .foregroundColor(firmwareVersion == "Unknown" ? .secondary : .blue)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+
+                        Spacer()
+
+                        Button {
+                            requestFirmwareVersion()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .foregroundColor(.blue)
+                        .disabled(!bleManager.isConnected)
+                    }
                 }
             }
         }
+        .padding(.horizontal)
     }
-    
-    // Add function to handle auto-connect
-    private func startAutoConnect() {
-        // Only start auto-connect if enabled and not already connecting/connected
-        guard autoConnectEnabled && 
-              !bleManager.isConnected && 
-              !bleManager.isScanning && 
-              !isPerformingAutoConnect else {
-            return
+
+    private var fragmentsGrid: some View {
+        let columns = [
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12),
+        ]
+
+        return LazyVGrid(columns: columns, spacing: 12) {
+            FragmentCard(
+                title: "Wavelets",
+                subtitle: "Manage and run wavelets",
+                systemImage: "puzzlepiece.extension",
+                tint: .cyan
+            ) { selection = "Wavelets" }
+
+            FragmentCard(
+                title: "IDE",
+                subtitle: "Not available on iOS",
+                systemImage: "terminal",
+                tint: .gray,
+                isEnabled: false
+            ) {}
+
+            FragmentCard(
+                title: "ISM (RFM69)",
+                subtitle: "Sub‑GHz radio control",
+                systemImage: "dot.radiowaves.left.and.right",
+                tint: .green
+            ) { selection = "ISM" }
+
+            FragmentCard(
+                title: "Sampler",
+                subtitle: "Signal sampling and analysis",
+                systemImage: "waveform.path.ecg",
+                tint: .purple
+            ) { selection = "Sampler" }
+
+            FragmentCard(
+                title: "RFID",
+                subtitle: "Read/write tags",
+                systemImage: "radiowaves.right",
+                tint: .orange
+            ) { selection = "RFID" }
+
+            FragmentCard(
+                title: "Packet Mode",
+                subtitle: "CC1101 fixed packets",
+                systemImage: "shippingbox",
+                tint: .indigo
+            ) { selection = "PacketMode" }
+
+            FragmentCard(
+                title: "Flash",
+                subtitle: "DFU firmware flashing",
+                systemImage: "arrow.up.circle",
+                tint: .blue
+            ) { selection = "Flash" }
+
+            FragmentCard(
+                title: "Template",
+                subtitle: "Developer playground",
+                systemImage: "square.and.pencil",
+                tint: .gray
+            ) { selection = "Template" }
+
+            FragmentCard(
+                title: "Settings",
+                subtitle: "Sampler and RF defaults",
+                systemImage: "gearshape",
+                tint: .secondary
+            ) { selection = "Settings" }
         }
-        
-        print("Starting auto-connect process...")
-        isPerformingAutoConnect = true
-        
-        // Start scanning for devices
-        bleManager.startScan()
-        
-        // Add timeout for auto-connect attempt
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
-            if isPerformingAutoConnect && !bleManager.isConnected {
-                print("Auto-connect timeout - resetting state")
-                isPerformingAutoConnect = false
-                
-                // If still scanning, stop the scan
-                if bleManager.isScanning {
-                    bleManager.stopScan()
+        .padding(.horizontal)
+    }
+
+    private var commandRow: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Command")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 8) {
+                    TextField("e.g. version", text: $commandInput)
+                        .textFieldStyle(.roundedBorder)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .focused($isCommandFieldFocused)
+                        .onSubmit { sendCommandFromInput() }
+
+                    Button("Send") { sendCommandFromInput() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!bleManager.isConnected || commandInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
-    }
-    
-    // Helper functions
-    private func getConnectionStatusText() -> String {
-        if bleManager.isScanning {
-            return "Scanning..."
-        } else if bleManager.isConnected {
-            return "Connected"
-        } else {
-            return "Not connected"
-        }
-    }
-    
-    private func getConnectionStatusColor() -> Color {
-        if bleManager.isScanning {
-            return .orange
-        } else if bleManager.isConnected {
-            return .green
-        } else {
-            return .red
-        }
-    }
-    
-    private func sendPacket() {
-        guard !commandInput.isEmpty else { return }
-
-        if let data = BLEManager.parseCommand(commandInput) {
-            // Log the packet being sent to the local serial monitor with gold color
-            logToSerialMonitor(data: data, direction: .transmit)
-            bleManager.sendPacket(data)
-            commandInput = "" // Clear input after sending
-        } else {
-            // Add error feedback to the local serial monitor
-            let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-            let errorMessage = "[\(timestamp)] Error: Invalid packet format for input: \(commandInput)"
-
-            DispatchQueue.main.async {
-                self.serialMonitorText += errorMessage + "\n"
-            }
-        }
-    }
-    
-    private func clearSerialMonitor() {
-        DispatchQueue.main.async {
-            // Clear the local state
-            self.serialMonitorText = ""
-        }
+        .padding(.horizontal)
     }
 
-    // New function to fetch data from BLEManager buffer and update local state
-    private func fetchAndDisplayBufferedData() {
-        guard bleManager.isConnected else { return } // Only fetch if connected
-        
-        if let data = bleManager.getCommand(), !data.isEmpty {
-            logToSerialMonitor(data: data, direction: .receive)
-            
-            // Check if this might be a response to the version command
-            checkForVersionResponse(data)
-        }
-    }
-    
-    // Check incoming data for possible version response
-    private func checkForVersionResponse(_ data: Data) {
-        // If current firmware version is Unknown, check if this might be the version response
-        if firmwareVersion == "Unknown" {
-            let asciiString = BLEManager.dataToAsciiString(data)
-            if asciiString.contains("-") && asciiString.contains("Welcome") {
-                let version = extractVersion(from: asciiString)
-                DispatchQueue.main.async {
-                    self.firmwareVersion = version
+    private var bufferMonitor: some View {
+        let _ = bleManager.bufferVersion
+        let entries = bleManager.bufferMonitorEntries(limit: Self.maxMonitorEntries)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Buffer Monitor")
+                        .font(.headline)
+                        .foregroundColor(Self.monitorTextPrimary)
+                    Spacer()
+                    Button("Clear") { clearMonitorAndBuffer() }
+                        .foregroundColor(.red)
                 }
+
+                HStack(spacing: 12) {
+                    Toggle("TX HEX", isOn: $showTxHex)
+                    Toggle("RX HEX", isOn: $showRxHex)
+                }
+                .font(.subheadline)
+                .foregroundColor(Self.monitorTextSecondary)
+                .tint(.blue)
+
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        if entries.isEmpty {
+                            Text("No buffer entries yet.")
+                                .foregroundColor(Self.monitorTextSecondary)
+                                .font(.subheadline)
+                                .padding(.vertical, 8)
+                        } else {
+                            ForEach(entries) { entry in
+                                let timeStr = Self.formatTimestampMs(entry.ts_ms)
+                                let content = entry.isTx
+                                    ? (showTxHex ? Self.hexString(entry.data) : Self.asciiString(entry.data))
+                                    : (showRxHex ? Self.hexString(entry.data) : Self.asciiString(entry.data))
+                                Text("[\(timeStr)] \(entry.isTx ? "TX" : "RX"): \(content)")
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(entry.isTx ? Self.txColor : Self.rxColor)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+                .frame(minHeight: 240, maxHeight: 360)
+                .background(Self.monitorBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Self.monitorBorder.opacity(0.8), lineWidth: 1)
+                )
             }
+        }
+        .padding(12)
+        .background(Self.monitorBackground, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Self.monitorBorder, lineWidth: 1)
+        )
+        .padding(.horizontal)
+    }
+
+    private var connectionStatusText: String {
+        if bleManager.isScanning { return "Scanning…" }
+        if bleManager.isConnected { return "Connected" }
+        return "Not connected"
+    }
+
+    private var connectionStatusColor: Color {
+        if bleManager.isScanning { return .orange }
+        if bleManager.isConnected { return .green }
+        return .red
+    }
+
+    private func requestFirmwareVersionSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            requestFirmwareVersion()
         }
     }
 
-    // Helper to format and log data to the local serial monitor state
-    private func logToSerialMonitor(data: Data, direction: BLEManager.DataDirection) {
-        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        let dirSymbol = direction == .transmit ? "TX" : "RX"
-        var logEntry = "[\(timestamp)] \(dirSymbol): "
-        
-        // Changed from HTML formatting to plain text
-        // The original code used HTML-like color tags which don't work with Text(LocalizedStringKey)
-        if showHex {
-            logEntry += "\(BLEManager.dataToHexString(data))"
-        } else {
-            // If showHex is false, show ASCII
-            logEntry += "\"\(BLEManager.dataToAsciiString(data))\""
-        }
-
-        DispatchQueue.main.async {
-            self.serialMonitorText += logEntry + "\n"
-        }
-    }
-    
-    // Setup JavaScript engine for this view
-    private func setupJSEngine() {
-        jsEngine = JavaScriptEngine(bleManager: bleManager)
-        jsEngine?.setupContext(printCallback: { message in
-            DispatchQueue.main.async {
-                self.serialMonitorText += "JS: \(message)\n"
-            }
-        })
-    }
-    
-    // Request firmware version method to match Android implementation
     private func requestFirmwareVersion() {
         guard bleManager.isConnected else { return }
-        
-        // Create version command as byte array (exactly as in Android)
-        let versionCommand = "version".data(using: .ascii)!
-        
-        // Log the command to serial monitor as transmitted
-        logToSerialMonitor(data: versionCommand, direction: .transmit)
-        
-        // Send the command
-        bleManager.sendPacket(versionCommand)
-        
-        // Response will be handled by the fetchAndDisplayBufferedData function 
-        // which checks all incoming data
+        bleManager.sendPacket(BLEManager.frameAsciiCommand("version"))
     }
-    
-    // Extract version from the welcome message to match Android implementation
-    private func extractVersion(from message: String) -> String {
-        guard !message.isEmpty else { return "Unknown" }
-        
-        // The version is at the beginning up to the first dash
-        if let dashIndex = message.firstIndex(of: "-") {
-            let versionPart = message[..<dashIndex].trimmingCharacters(in: .whitespacesAndNewlines)
-            return String(versionPart)
+
+    private func sendCommandFromInput() {
+        let trimmed = commandInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard bleManager.isConnected else { return }
+
+        bleManager.sendPacket(BLEManager.frameAsciiCommand(trimmed))
+        commandInput = ""
+    }
+
+    private func clearMonitorAndBuffer() {
+        bleManager.bufferClear()
+    }
+
+    private static func formatTimestampMs(_ tsMs: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: Double(tsMs) / 1000.0)
+        return timestampFormatter.string(from: date)
+    }
+
+    private func updateFirmwareVersionFromBufferIfNeeded() {
+        guard firmwareVersion == "Unknown" else { return }
+        let entries = bleManager.bufferMonitorEntries(limit: 64)
+        for entry in entries.reversed() where !entry.isTx {
+            if let v = Self.extractFirmwareVersion(from: entry.data) {
+                firmwareVersion = v
+                return
+            }
         }
-        
-        // If parsing fails (no dash found), just return the original message
-        return message
+    }
+
+    private static func extractFirmwareVersion(from bytes: [UInt8]) -> String? {
+        guard !bytes.isEmpty else { return nil }
+        let trimmed = bytes.prefix { $0 != 0 }
+        let text = String(decoding: trimmed, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        if let match = text.range(of: #"\b\d+\.\d+\.\d+\b"#, options: .regularExpression) {
+            return String(text[match])
+        }
+        if text.contains("Welcome to"), let dash = text.firstIndex(of: "-") {
+            let versionPart = text[..<dash].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !versionPart.isEmpty {
+                return String(versionPart)
+            }
+        }
+        return nil
+    }
+
+    private static func hexString(_ bytes: [UInt8]) -> String {
+        bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
+    }
+
+    private static func asciiString(_ bytes: [UInt8]) -> String {
+        bytes.map { byte in
+            (32...126).contains(Int(byte)) ? String(UnicodeScalar(byte)) : "."
+        }.joined()
+    }
+
+    private static let timestampFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = .current
+        df.dateFormat = "HH:mm:ss.SSS"
+        return df
+    }()
+}
+
+private struct Panel<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .padding(12)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+            )
     }
 }
 
-// Enum for direction - needed locally now
-enum DataDirection {
-    case transmit
-    case receive
+private struct FragmentCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let tint: Color
+    var isEnabled: Bool = true
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: systemImage)
+                        .foregroundColor(tint)
+                    Spacer()
+                }
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(isEnabled ? .primary : .secondary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
+            .padding(12)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(isEnabled ? tint.opacity(0.18) : Color.gray.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1.0 : 0.55)
+    }
 }
 
 #Preview {
-    EMWaverView()
-        .environmentObject(BLEManager())
-}
-
-// Add BLEManager extension for DataDirection if it's not defined elsewhere
-// If DataDirection is intended to be shared, define it outside both classes.
-extension BLEManager { // Added extension for DataDirection
-    enum DataDirection {
-        case transmit
-        case receive
+    NavigationView {
+        EMWaverView(selection: .constant("EMWaver"))
+            .environmentObject(BLEManager())
     }
 }
-
-// Custom view to display monitor text with colored lines
-struct MonitorTextView: View {
-    let text: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(text.split(separator: "\n", omittingEmptySubsequences: false), id: \.self) { line in
-                Text(String(line))
-                    .font(.system(.body, design: .monospaced))
-                    .foregroundColor(getColorForLine(String(line)))
-            }
-        }
-    }
-    
-    private func getColorForLine(_ line: String) -> Color {
-        if line.contains("] TX:") {
-            return Color.yellow // Gold color for TX
-        } else if line.contains("] RX:") {
-            return Color.green // Green color for RX
-        } else {
-            return Color.green.opacity(0.7) // Default color
-        }
-    }
-} 
