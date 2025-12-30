@@ -144,8 +144,12 @@ public class BLEService extends Service implements DeviceConnectionService {
     private volatile boolean isForeground = false;
 
     // Buffer bridge methods
+    public void storeBulkPkt(byte[] data, long tsMs) {
+        NativeBuffer.storeBulkPkt(data, tsMs);
+    }
+
     public void storeBulkPkt(byte[] data) {
-        NativeBuffer.storeBulkPkt(data);
+        NativeBuffer.storeBulkPkt(data, System.currentTimeMillis());
     }
 
     public byte[] getCommand() {
@@ -190,6 +194,11 @@ public class BLEService extends Service implements DeviceConnectionService {
 
     public void setCaptureInvert(boolean enabled) {
         NativeBuffer.setCaptureInvert(enabled);
+    }
+
+    private void logTx(byte[] data) {
+        if (data == null || data.length == 0) return;
+        NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
     public class LocalBinder extends Binder {
@@ -828,7 +837,7 @@ public class BLEService extends Service implements DeviceConnectionService {
         }
 
         totalBytesReceived += data.length;
-        storeBulkPkt(data);
+        storeBulkPkt(data, currentTime);
 
         if (currentTime - lastLogTimeMillis > 1000) {
             double speedBps = getReceptionSpeedBps();
@@ -1312,6 +1321,8 @@ public class BLEService extends Service implements DeviceConnectionService {
                         return;
                     }
                 }
+
+                logTx(bytes);
                 
                 cmdCharacteristic.setValue(bytes);
                 // Use write without response to avoid acknowledgment delay
@@ -1402,6 +1413,8 @@ public class BLEService extends Service implements DeviceConnectionService {
                 Log.e(TAG, "Failed to initiate write characteristic after " + maxRetries + " attempts");
                 return null;
             }
+
+            logTx(command);
             
             // Wait for response
             byte[] response = null;
@@ -1475,6 +1488,8 @@ public class BLEService extends Service implements DeviceConnectionService {
                 
                 if (!success) {
                     Log.e(TAG, "Failed to write packet after " + maxRetries + " attempts");
+                } else {
+                    logTx(data);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error writing packet", e);

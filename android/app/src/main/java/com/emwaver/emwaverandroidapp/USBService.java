@@ -40,8 +40,12 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     private UsbDeviceConnection finalConnection;
 
     // Buffer bridge methods
+    public void storeBulkPkt(byte[] data, long tsMs) {
+        NativeBuffer.storeBulkPkt(data, tsMs);
+    }
+
     public void storeBulkPkt(byte[] data) {
-        NativeBuffer.storeBulkPkt(data);
+        NativeBuffer.storeBulkPkt(data, System.currentTimeMillis());
     }
 
     public byte[] getCommand() {
@@ -86,6 +90,11 @@ public class USBService extends Service implements DeviceConnectionService, Seri
 
     public void setCaptureInvert(boolean enabled) {
         NativeBuffer.setCaptureInvert(enabled);
+    }
+
+    private void logTx(byte[] data) {
+        if (data == null || data.length == 0) return;
+        NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
     private long lastPacketReceivedTime = 0;
@@ -142,6 +151,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public void write(byte[] bytes) {
         if (bytes != null && finalPort != null) {
             try {
+                logTx(bytes);
                 finalPort.write(bytes, 2000);
             } catch (IOException e) {
                 Log.e(TAG, "Error writing to port: ", e);
@@ -207,7 +217,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     @Override
     public void onNewData(byte[] data) {
         lastPacketReceivedTime = System.currentTimeMillis();
-        storeBulkPkt(data);
+        storeBulkPkt(data, lastPacketReceivedTime);
         Log.i("bulkPacket", "Received " + data.length + " bytes, total buffer length: " + getBufferLength());
     }
 
@@ -402,6 +412,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
             try {
                 clearCommandBuffer(); // Clear any existing command/status data
                 finalPort.write(command, timeout);
+                logTx(command);
 
                 // Wait for response; USB CDC/serial reads may deliver a single response in multiple chunks.
                 // Collect chunks until the response "settles" (no new data for a short window) or we time out.
@@ -438,6 +449,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public void sendPacket(byte[] data) {
         if (data != null && finalPort != null) {
             try {
+                logTx(data);
                 finalPort.write(data, 2000);
             } catch (IOException e) {
                 Log.e(TAG, "Error writing packet: ", e);
