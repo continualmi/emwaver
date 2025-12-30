@@ -1229,6 +1229,44 @@ public class BLEService extends Service implements DeviceConnectionService {
         }
     }
 
+    /**
+     * Write a standard 64B-padded command and wait for the GATT write to complete.
+     * This is used for "mode switching" commands like `transmit start` so that
+     * the subsequent high-throughput streaming writes don't collide with an
+     * in-flight command write (Android rejects concurrent GATT operations).
+     */
+    public boolean writeCommandBlocking(byte[] bytes, long timeoutMs) {
+        if (bytes == null || !isConnected || cmdCharacteristic == null || bluetoothGatt == null) {
+            return false;
+        }
+
+        // Check permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED) {
+                showToast("Missing BLUETOOTH_CONNECT permission");
+                return false;
+            }
+        }
+
+        byte[] packet = padCommand64(bytes);
+        if (packet == null) {
+            Log.e(TAG, "Blocking command too large: " + bytes.length + " bytes (max 64)");
+            return false;
+        }
+
+        boolean ok = writeCharacteristicBlocking(
+                cmdCharacteristic,
+                packet,
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+                timeoutMs
+        );
+        if (ok) {
+            logTx(packet);
+        }
+        return ok;
+    }
+
     // Stop BLE scanning
     public void stopScan() {
         if (bluetoothLeScanner != null && isScanningInProgress) {
