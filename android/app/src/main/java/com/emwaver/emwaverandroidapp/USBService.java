@@ -52,14 +52,6 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         return NativeBuffer.compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
-    public int getStatusNumber() {
-        return NativeBuffer.getStatusNumber();
-    }
-
-    public void setCaptureMode(boolean enabled) {
-        NativeBuffer.setCaptureMode(enabled);
-    }
-
     public void clearBuffer() {
         NativeBuffer.clearBuffer();
     }
@@ -76,26 +68,18 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         return NativeBuffer.getBuffer();
     }
 
-    public void invertBuffer() {
-        NativeBuffer.invertBuffer();
-    }
-
-    public void setCaptureInvert(boolean enabled) {
-        NativeBuffer.setCaptureInvert(enabled);
-    }
-
     private void logTx(byte[] data) {
         if (data == null || data.length == 0) return;
         NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
-    private static byte[] padCommand64(byte[] data) {
+    private static byte[] makePacket64(byte[] data) {
         if (data == null) return null;
-        if (data.length > 64) return null;
-        if (data.length == 64) return data;
-        byte[] out = new byte[64];
-        System.arraycopy(data, 0, out, 0, data.length);
-        return out;
+        try {
+            return NativeBuffer.makePacket64(data);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private long lastPacketReceivedTime = 0;
@@ -163,41 +147,57 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     public void transmitBuffer() {
-        byte[] javaBuffer = getBuffer();
-        if (javaBuffer == null || javaBuffer.length == 0) {
+        byte[] samplerBytes = getBuffer();
+        if (samplerBytes == null || samplerBytes.length == 0) {
             return;
         }
-        long[] savedRxTsMs = NativeBuffer.getRxTimestampsMs();
-        long savedRxCounter = NativeBuffer.getRxCounter();
+        // Swap out sampler RX while transmitting so BS flow-control packets
+        // don't contaminate sampler data stored in the same buffer.
+        Object[] saved = NativeBuffer.takeRxState();
+        byte[] savedRxBytes = saved != null && saved.length > 0 && saved[0] instanceof byte[] ? (byte[]) saved[0] : new byte[0];
+        long[] savedRxTsMs = saved != null && saved.length > 1 && saved[1] instanceof long[] ? (long[]) saved[1] : new long[0];
+        long savedRxCounter = 0;
+        if (saved != null && saved.length > 2 && saved[2] instanceof Long) {
+            savedRxCounter = (Long) saved[2];
+        }
 
-        // Clear RX so BS packets can be received/parsed during transmit.
-        clearBuffer();
+        NativeBuffer.loadBuffer(new byte[0]);
+        NativeBuffer.setRxCounter(0);
 
-        int nativeBufferSize = javaBuffer.length;
-        int packetSize = 50; // 12.5 bytes per frame, 10us sampling period
+        int nativeBufferSize = samplerBytes.length;
+        int packetSize = 50; // match desktop pacing (<= 64B endpoint packet)
         long startTime = System.nanoTime();
         final long period = 4000 * 1000;
         final long flow_time_delta = 1000 * 1000;
 
         for (int i = 0; i < nativeBufferSize; i += packetSize) {
             int end = Math.min(i + packetSize, nativeBufferSize);
-            byte[] packet = getBufferRange(javaBuffer, i, end);
+            byte[] packet = getBufferRange(samplerBytes, i, end);
 
             startTime += period;
-            int bufferStatus = getLogStatus();
-            if (bufferStatus > 200 && bufferStatus < 300) {
-                write(packet);
-                Log.i("TransmitBuffer", "Wrote packet: normal speed, status: " + bufferStatus);
-            } else if (bufferStatus > 300) {
-                write(packet);
-                startTime += flow_time_delta;
-                Log.i("TransmitBuffer", "Wrote packet: slower speed, status: " + bufferStatus);
-            } else if (bufferStatus < 300) {
-                write(packet);
-                startTime -= flow_time_delta;
-                Log.i("TransmitBuffer", String.format("Wrote packet: faster speed, status: %d, nanoTime: %d", 
-                    bufferStatus, System.nanoTime()));
+            int lastStatus = 0;
+            while (true) {
+                Object[] next = NativeBuffer.nextRxPacket();
+                if (next == null || next.length < 1 || !(next[0] instanceof byte[])) {
+                    break;
+                }
+                int status = NativeBuffer.parseBsStatus((byte[]) next[0]);
+                if (status >= 0) {
+                    lastStatus = status;
+                }
             }
+
+            write(packet);
+
+            // Log TX as padded 64B packets for the home monitor.
+            NativeBuffer.appendTxBytes(packet, System.currentTimeMillis());
+
+            if (lastStatus > 300) {
+                startTime += flow_time_delta;
+            } else if (lastStatus < 200) {
+                startTime -= flow_time_delta;
+            }
+
             while (System.nanoTime() < startTime) {
                 // Busy wait
             }
@@ -209,18 +209,8 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         } catch (InterruptedException ignored) {
         }
 
-        // Restore original RX snapshot (discarding BS packets accumulated during transmit).
-        NativeBuffer.setRxState(javaBuffer, savedRxTsMs, savedRxCounter);
-    }
-
-    public int getLogStatus() {
-        int bufferStatus = getStatusNumber();
-        int currentBufferLength = getBufferLength();
-        Log.i("bufstatus_debug", String.format("Status: %d, Buffer length: %d, Last packet received: %d ms ago", 
-            bufferStatus, 
-            currentBufferLength,
-            lastPacketReceivedTime != 0 ? System.currentTimeMillis() - lastPacketReceivedTime : -1));
-        return bufferStatus;
+        // Restore sampler RX snapshot (discarding packets accumulated during transmit).
+        NativeBuffer.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
     }
 
     private byte[] getBufferRange(byte[] buffer, int start, int end) {
@@ -430,7 +420,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
                 // consumed via rx_counter belongs to this command's response.
                 NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
 
-                byte[] packet = padCommand64(command);
+                byte[] packet = makePacket64(command);
                 if (packet == null) {
                     Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
                     return null;
@@ -465,7 +455,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public void sendPacket(byte[] data) {
         if (data != null && finalPort != null) {
             try {
-                byte[] packet = padCommand64(data);
+                byte[] packet = makePacket64(data);
                 if (packet == null) {
                     Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
                     return;

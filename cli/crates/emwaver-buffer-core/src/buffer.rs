@@ -177,3 +177,24 @@ pub fn next_rx_packet(buffer: &mut Buffer) -> Option<Packet> {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn append_rx_bytes_adds_ts_per_completed_packet() {
+        let mut buf = Buffer::default();
+
+        append_rx_bytes(&mut buf, &[0u8; 10], 111);
+        assert_eq!(rx_packet_count(&buf), 0);
+        assert_eq!(buf.rx_ts_ms.len(), 0);
+
+        append_rx_bytes(&mut buf, &[0u8; 54], 222);
+        assert_eq!(rx_packet_count(&buf), 1);
+        assert_eq!(buf.rx_ts_ms, vec![222]);
+
+        append_rx_bytes(&mut buf, &[0u8; 64], 333);
+        assert_eq!(rx_packet_count(&buf), 2);
+        assert_eq!(buf.rx_ts_ms, vec![222, 333]);
+    }
+}

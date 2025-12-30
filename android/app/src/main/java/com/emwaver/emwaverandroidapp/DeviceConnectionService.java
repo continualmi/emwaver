@@ -71,11 +71,6 @@ public interface DeviceConnectionService {
     byte[] getBuffer();
     
     /**
-     * Invert the buffer contents
-     */
-    void invertBuffer();
-    
-    /**
      * Compress data bits for sampler visualization
      * @param rangeStart Start index
      * @param rangeEnd End index

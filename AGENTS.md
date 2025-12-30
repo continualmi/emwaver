@@ -146,6 +146,11 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
 
 ### Android (`/android`)
 - Gradle project; run `./gradlew installDebug` for device builds. Keep `local.properties` pointing at the SDK (typically `~/Library/Android/sdk` or `~/Android/Sdk`).
+- **Rust buffer core (JNI)**: Android builds and packages a Rust `cdylib` (no C++/CMake) during Gradle `preBuild`.
+  - Build task: `:app:rustAndroidBuild` (runs `cargo-ndk` and copies outputs into `android/app/src/main/jniLibs/`).
+  - Prereqs: `rustup` toolchain + Android targets (at least `aarch64-linux-android`) + Android NDK + `cargo-ndk` (auto-installed by the task if missing).
+  - PATH note: if you have a system `cargo` (e.g. `/usr/local/bin/cargo`) *and* rustup, the Gradle task forces `~/.cargo/bin` to avoid “missing std/core for android target” failures.
+  - ABI note: defaults to building **arm64-v8a only** for fastest iteration; set `EMWAVER_ANDROID_ALL_ABIS=1` to build `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`.
 - **Git fragment**: UI section for GitHub repo operations (clone, pull, push) using GitHub REST API with token-based auth.
 - Wavelet console/sampler loads `.js` and `.raw` assets from local storage (synced via Git fragment).
 - Mirror iOS feature parity for wavelets, IR tooling, and hardware interaction.
