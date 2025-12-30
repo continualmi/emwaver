@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 struct EMWaverView: View {
     @EnvironmentObject var bleManager: BLEManager
@@ -12,34 +11,16 @@ struct EMWaverView: View {
 
     @State private var showTxHex = false
     @State private var showRxHex = false
-    @State private var bufferEntries: [BufferEntry] = []
-    @State private var rxIndex: UInt64 = 0
-    @State private var txIndex: UInt64 = 0
-    @State private var entrySeq: UInt64 = 0
     @State private var showingSettingsSheet = false
 
-    private let timerPublisher = Timer.publish(every: 0.5, on: .main, in: .common)
-    @State private var timerSubscription: AnyCancellable?
-
     private static let maxMonitorEntries = 1500
-    private static let packetSizeBytes = 64
 
     private static let monitorBackground = Color(red: 2/255, green: 6/255, blue: 23/255) // slate-950
     private static let monitorBorder = Color.white.opacity(0.10)
-    private static let monitorTextPrimary = Color(red: 226/255, green: 232/255, blue: 240/255) // slate-200
-    private static let monitorTextSecondary = Color(red: 148/255, green: 163/255, blue: 184/255) // slate-400
-    private static let txColor = Color(red: 250/255, green: 204/255, blue: 21/255) // amber-400
-    private static let rxColor = Color(red: 34/255, green: 197/255, blue: 94/255) // green-500
-
-    struct BufferEntry: Identifiable {
-        let id: UInt64
-        let data: Data
-        let timestampMs: UInt64
-        let timeStr: String
-        let isTx: Bool
-        let ascii: String
-        let hex: String
-    }
+    private static let monitorTextPrimary = Color.white
+    private static let monitorTextSecondary = Color.white.opacity(0.70)
+    private static let txColor = Color.white
+    private static let rxColor = Color(red: 59/255, green: 130/255, blue: 246/255) // blue-500
 
     var body: some View {
         ScrollView {
@@ -67,24 +48,15 @@ struct EMWaverView: View {
         .sheet(isPresented: $showingSettingsSheet) {
             SettingsSheet()
         }
-        .onAppear {
-            timerSubscription = timerPublisher
-                .autoconnect()
-                .sink { _ in
-                    pollBufferMonitor()
-                }
-        }
         .onChange(of: bleManager.isConnected) { connected in
             if !connected {
                 firmwareVersion = "Unknown"
-                resetLocalMonitor()
             } else {
                 requestFirmwareVersionSoon()
             }
         }
-        .onDisappear {
-            timerSubscription?.cancel()
-            timerSubscription = nil
+        .onChange(of: bleManager.bufferVersion) { _ in
+            updateFirmwareVersionFromBufferIfNeeded()
         }
     }
 
@@ -248,7 +220,10 @@ struct EMWaverView: View {
     }
 
     private var bufferMonitor: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let _ = bleManager.bufferVersion
+        let entries = bleManager.bufferMonitorEntries(limit: Self.maxMonitorEntries)
+
+        return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("Buffer Monitor")
@@ -269,17 +244,18 @@ struct EMWaverView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
-                        if bufferEntries.isEmpty {
+                        if entries.isEmpty {
                             Text("No buffer entries yet.")
                                 .foregroundColor(Self.monitorTextSecondary)
                                 .font(.subheadline)
                                 .padding(.vertical, 8)
                         } else {
-                            ForEach(bufferEntries) { entry in
+                            ForEach(entries) { entry in
+                                let timeStr = Self.formatTimestampMs(entry.ts_ms)
                                 let content = entry.isTx
-                                    ? (showTxHex ? entry.hex : entry.ascii)
-                                    : (showRxHex ? entry.hex : entry.ascii)
-                                Text("[\(entry.timeStr)] \(entry.isTx ? "TX" : "RX"): \(content)")
+                                    ? (showTxHex ? Self.hexString(entry.data) : Self.asciiString(entry.data))
+                                    : (showRxHex ? Self.hexString(entry.data) : Self.asciiString(entry.data))
+                                Text("[\(timeStr)] \(entry.isTx ? "TX" : "RX"): \(content)")
                                     .font(.system(.caption, design: .monospaced))
                                     .foregroundColor(entry.isTx ? Self.txColor : Self.rxColor)
                                     .textSelection(.enabled)
@@ -326,8 +302,7 @@ struct EMWaverView: View {
 
     private func requestFirmwareVersion() {
         guard bleManager.isConnected else { return }
-        let versionCommand = Data("version".utf8)
-        bleManager.sendPacket(versionCommand)
+        bleManager.sendPacket(BLEManager.frameAsciiCommand("version"))
     }
 
     private func sendCommandFromInput() {
@@ -335,119 +310,56 @@ struct EMWaverView: View {
         guard !trimmed.isEmpty else { return }
         guard bleManager.isConnected else { return }
 
-        guard let data = BLEManager.parseCommand(trimmed) else {
-            commandInput = ""
-            return
-        }
-        bleManager.sendPacket(data)
+        bleManager.sendPacket(BLEManager.frameAsciiCommand(trimmed))
         commandInput = ""
-    }
-
-    private func pollBufferMonitor() {
-        guard bleManager.isConnected else { return }
-
-        var batch: [(data: Data, timestampMs: UInt64, isTx: Bool)] = []
-
-        let txResp = bleManager.bufferReadTxSince(packetIndex: txIndex, maxPackets: 64)
-        if !txResp.ts_ms.isEmpty, !txResp.data.isEmpty {
-            let count = txResp.ts_ms.count
-            for p in 0..<count {
-                let start = p * Self.packetSizeBytes
-                let end = start + Self.packetSizeBytes
-                if end <= txResp.data.count {
-                    let pkt = Data(txResp.data[start..<end])
-                    batch.append((pkt, txResp.ts_ms[p], true))
-                }
-            }
-            txIndex = txResp.next_packet_index
-        }
-
-        let rxResp = bleManager.bufferReadPacketsSince(packetIndex: rxIndex, maxPackets: 64)
-        if !rxResp.ts_ms.isEmpty, !rxResp.data.isEmpty {
-            let count = rxResp.ts_ms.count
-            for p in 0..<count {
-                let start = p * Self.packetSizeBytes
-                let end = start + Self.packetSizeBytes
-                if end <= rxResp.data.count {
-                    let pkt = Data(rxResp.data[start..<end])
-                    batch.append((pkt, rxResp.ts_ms[p], false))
-                    updateFirmwareVersionIfNeeded(from: pkt)
-                }
-            }
-            rxIndex = rxResp.next_packet_index
-        }
-
-        appendBatchToMonitor(batch)
-    }
-
-    private func resetLocalMonitor() {
-        bufferEntries.removeAll()
-        rxIndex = 0
-        txIndex = 0
-        entrySeq = 0
     }
 
     private func clearMonitorAndBuffer() {
         bleManager.bufferClear()
-        resetLocalMonitor()
-    }
-
-    private func appendBatchToMonitor(_ batch: [(data: Data, timestampMs: UInt64, isTx: Bool)]) {
-        guard !batch.isEmpty else { return }
-
-        var built: [BufferEntry] = []
-        built.reserveCapacity(batch.count)
-        for item in batch {
-            let timeStr = Self.formatTimestampMs(item.timestampMs)
-            let hex = item.data.map { String(format: "%02X", $0) }.joined(separator: " ")
-            let ascii = item.data.map { byte in
-                (32...126).contains(Int(byte)) ? String(UnicodeScalar(byte)) : "."
-            }.joined()
-            built.append(
-                BufferEntry(
-                    id: entrySeq,
-                    data: item.data,
-                    timestampMs: item.timestampMs,
-                    timeStr: timeStr,
-                    isTx: item.isTx,
-                    ascii: ascii,
-                    hex: hex
-                )
-            )
-            entrySeq += 1
-        }
-
-        bufferEntries.append(contentsOf: built)
-        bufferEntries.sort { a, b in
-            if a.timestampMs != b.timestampMs { return a.timestampMs < b.timestampMs }
-            if a.isTx != b.isTx { return a.isTx && !b.isTx }
-            return a.id < b.id
-        }
-        if bufferEntries.count > Self.maxMonitorEntries {
-            bufferEntries = Array(bufferEntries.suffix(Self.maxMonitorEntries))
-        }
-    }
-
-    private func updateFirmwareVersionIfNeeded(from packet: Data) {
-        guard firmwareVersion == "Unknown" else { return }
-
-        let trimmed = packet.split(separator: 0, maxSplits: 1, omittingEmptySubsequences: false).first ?? Data()
-        let text = String(decoding: trimmed, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        if let match = text.range(of: #"\b\d+\.\d+\.\d+\b"#, options: .regularExpression) {
-            firmwareVersion = String(text[match])
-        } else if text.contains("Welcome to"), let dash = text.firstIndex(of: "-") {
-            let versionPart = text[..<dash].trimmingCharacters(in: .whitespacesAndNewlines)
-            if !versionPart.isEmpty {
-                firmwareVersion = String(versionPart)
-            }
-        }
     }
 
     private static func formatTimestampMs(_ tsMs: UInt64) -> String {
         let date = Date(timeIntervalSince1970: Double(tsMs) / 1000.0)
         return timestampFormatter.string(from: date)
+    }
+
+    private func updateFirmwareVersionFromBufferIfNeeded() {
+        guard firmwareVersion == "Unknown" else { return }
+        let entries = bleManager.bufferMonitorEntries(limit: 64)
+        for entry in entries.reversed() where !entry.isTx {
+            if let v = Self.extractFirmwareVersion(from: entry.data) {
+                firmwareVersion = v
+                return
+            }
+        }
+    }
+
+    private static func extractFirmwareVersion(from bytes: [UInt8]) -> String? {
+        guard !bytes.isEmpty else { return nil }
+        let trimmed = bytes.prefix { $0 != 0 }
+        let text = String(decoding: trimmed, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        if let match = text.range(of: #"\b\d+\.\d+\.\d+\b"#, options: .regularExpression) {
+            return String(text[match])
+        }
+        if text.contains("Welcome to"), let dash = text.firstIndex(of: "-") {
+            let versionPart = text[..<dash].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !versionPart.isEmpty {
+                return String(versionPart)
+            }
+        }
+        return nil
+    }
+
+    private static func hexString(_ bytes: [UInt8]) -> String {
+        bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
+    }
+
+    private static func asciiString(_ bytes: [UInt8]) -> String {
+        bytes.map { byte in
+            (32...126).contains(Int(byte)) ? String(UnicodeScalar(byte)) : "."
+        }.joined()
     }
 
     private static let timestampFormatter: DateFormatter = {
