@@ -806,9 +806,8 @@ function SamplerFragment() {
         if (plot && autoFitXRef.current && !isChartInteractingRef.current) {
           const rawMin = Number(plot.scales?.x?.min);
           const rawMax = Number(plot.scales?.x?.max);
-          const span = Number.isFinite(rawMin) && Number.isFinite(rawMax) && rawMax > rawMin ? rawMax - rawMin : maxX;
+          const nextMin = 0;
           const nextMax = maxX;
-          const nextMin = Math.max(0, nextMax - span);
           const shouldRescale =
             !Number.isFinite(rawMin) ||
             !Number.isFinite(rawMax) ||
@@ -995,29 +994,6 @@ function SamplerFragment() {
 			        alert('Failed to build timings');
 			      });
 		  };
-
-      const copyDebug = () => {
-        const compressionBitsPerBin = getCompressionBitsPerBin();
-        const lines = [
-          `transport=${status.transport}`,
-          `connected=${status.connected}`,
-          `bytes=${bufferLenBytesRef.current}`,
-          `points=${chartPointCount}`,
-          `view=${debugViewport.visibleStart}..${debugViewport.visibleEnd}`,
-          `bins=${debugViewport.requestedBins}`,
-          `compressionBitsPerBin=${formatFinite(compressionBitsPerBin, 2)}`,
-          `chartWidth=${debugViewport.chartWidth ?? '—'}`,
-          `minRenderIntervalMs=${debugViewport.minRenderIntervalMs}`,
-          `refreshRateMs=${refreshRate}`,
-          `chartResolution=${chartResolution}`,
-        ];
-        const payload = lines.join('\n');
-        void copyTextToClipboard(payload).then((ok) => {
-          if (!ok) {
-            alert('Clipboard copy failed');
-          }
-        });
-      };
 
 				  const clearBuffer = () => {
 				    void safeInvoke<void>('buffer_clear', undefined, { throwOnError: true }).catch((error) => {
@@ -1574,23 +1550,16 @@ function SamplerFragment() {
       <div className="flex flex-1 min-h-0 flex-col gap-5 overflow-y-auto px-6 py-6">
         {/* Chart */}
 		        <div className="flex-shrink-0 bg-slate-900 rounded-lg p-4">
-			          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-			            <div>Backend: rust</div>
+          <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
 			            <div>Bytes: {bufferLenBytes}</div>
+                  <div>Samples: {bufferLenBytes * 8}</div>
+                  <div>Resolution: 10 µs</div>
                   <div>Points: {chartPointCount}</div>
-                  <div>
-                    View: {debugViewport.visibleStart}..{debugViewport.visibleEnd} Bins: {debugViewport.requestedBins}
-                  </div>
+                  <div>View: {debugViewport.visibleStart}..{debugViewport.visibleEnd}</div>
+                  <div>Bins: {debugViewport.requestedBins}</div>
                   <div>
                     Compression: {formatFinite(getCompressionBitsPerBin(), 2)} bits/bin
                   </div>
-                  <button
-                    type="button"
-                    onClick={copyDebug}
-                    className="ml-auto rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200 hover:bg-slate-700"
-                  >
-                    Copy debug
-                  </button>
 			          </div>
 	          <div className="w-full" style={{ minHeight: '400px', height: '400px' }}>
               <div
