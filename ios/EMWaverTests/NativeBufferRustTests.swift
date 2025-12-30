@@ -1,4 +1,5 @@
 import XCTest
+@testable import EMWaver
 
 final class NativeBufferRustTests: XCTestCase {
     func testMakePacket64RejectsOversize() {
