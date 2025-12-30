@@ -430,6 +430,16 @@ function SamplerFragment() {
     return isRecording ? Math.max(base, 250) : base;
   }, [isRecording, refreshRate]);
 
+  const getCompressionBitsPerBin = useCallback(() => {
+    const spanBits = Math.max(0, debugViewport.visibleEnd - debugViewport.visibleStart);
+    const bins = Math.max(1, debugViewport.requestedBins);
+    return spanBits / bins;
+  }, [debugViewport.requestedBins, debugViewport.visibleEnd, debugViewport.visibleStart]);
+
+  const formatFinite = useCallback((value: number, decimals: number) => {
+    return Number.isFinite(value) ? value.toFixed(decimals) : '—';
+  }, []);
+
   const getViewportBits = useCallback(() => {
     const bufferBytes = bufferLenBytesRef.current;
     const maxX = Math.max(10000, bufferBytes * 8);
@@ -796,14 +806,17 @@ function SamplerFragment() {
         if (plot && autoFitXRef.current && !isChartInteractingRef.current) {
           const rawMin = Number(plot.scales?.x?.min);
           const rawMax = Number(plot.scales?.x?.max);
+          const span = Number.isFinite(rawMin) && Number.isFinite(rawMax) && rawMax > rawMin ? rawMax - rawMin : maxX;
+          const nextMax = maxX;
+          const nextMin = Math.max(0, nextMax - span);
           const shouldRescale =
             !Number.isFinite(rawMin) ||
             !Number.isFinite(rawMax) ||
-            rawMin !== 0 ||
-            Math.abs(rawMax - maxX) > 1;
+            Math.abs(rawMin - nextMin) > 1 ||
+            Math.abs(rawMax - nextMax) > 1;
           if (shouldRescale) {
             try {
-              plot.setScale('x', { min: 0, max: maxX });
+              plot.setScale('x', { min: nextMin, max: nextMax });
             } catch {
               // ignore
             }
@@ -984,6 +997,7 @@ function SamplerFragment() {
 		  };
 
       const copyDebug = () => {
+        const compressionBitsPerBin = getCompressionBitsPerBin();
         const lines = [
           `transport=${status.transport}`,
           `connected=${status.connected}`,
@@ -991,9 +1005,9 @@ function SamplerFragment() {
           `points=${chartPointCount}`,
           `view=${debugViewport.visibleStart}..${debugViewport.visibleEnd}`,
           `bins=${debugViewport.requestedBins}`,
+          `compressionBitsPerBin=${formatFinite(compressionBitsPerBin, 2)}`,
           `chartWidth=${debugViewport.chartWidth ?? '—'}`,
           `minRenderIntervalMs=${debugViewport.minRenderIntervalMs}`,
-          `scale=${debugViewport.scaleMin ?? '—'}..${debugViewport.scaleMax ?? '—'}`,
           `refreshRateMs=${refreshRate}`,
           `chartResolution=${chartResolution}`,
         ];
@@ -1565,10 +1579,10 @@ function SamplerFragment() {
 			            <div>Bytes: {bufferLenBytes}</div>
                   <div>Points: {chartPointCount}</div>
                   <div>
-                    View: {debugViewport.visibleStart}..{debugViewport.visibleEnd} bins {debugViewport.requestedBins}
+                    View: {debugViewport.visibleStart}..{debugViewport.visibleEnd} Bins: {debugViewport.requestedBins}
                   </div>
                   <div>
-                    Scale: {debugViewport.scaleMin ?? '—'}..{debugViewport.scaleMax ?? '—'}
+                    Compression: {formatFinite(getCompressionBitsPerBin(), 2)} bits/bin
                   </div>
                   <button
                     type="button"
