@@ -39,13 +39,14 @@ const LAST_SIGNAL_KEY = 'sampler.lastSignal';
 const PWM_ENABLED_KEY = 'sampler.pwm.enabled';
 const PWM_FREQ_KEY = 'sampler.pwm.freq';
 const PWM_DUTY_KEY = 'sampler.pwm.duty';
+const PWM_PREFS_MIGRATED_KEY = 'sampler.pwm.prefsMigrated.v2';
 const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
 const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
 const SETTINGS_MAX_SAMPLES_KEY = 'sampler.settings.maxSamples';
 const SETTINGS_EVENT = 'emwaver-settings-change';
 
 const DEFAULT_PWM_FREQ_HZ = 38000;
-const DEFAULT_PWM_DUTY_PERCENT = 50;
+const DEFAULT_PWM_DUTY_PERCENT = 100;
 const SIGNALS_DIR_NAME = 'signals';
 const MAX_CHART_BINS = 5000;
 const MIN_CHART_BINS = 100;
@@ -312,6 +313,24 @@ function SamplerFragment() {
 
   const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
   const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
+
+  useEffect(() => {
+    if (deviceType !== 'stm32') {
+      return;
+    }
+    if (localStorage.getItem(PWM_PREFS_MIGRATED_KEY) === 'true') {
+      return;
+    }
+
+    // Historically the desktop default duty was 50%. For STM32 transmit, match
+    // Android/iOS: default duty=100% unless the user explicitly changed it.
+    const storedDuty = localStorage.getItem(PWM_DUTY_KEY);
+    if (storedDuty === '50') {
+      localStorage.setItem(PWM_DUTY_KEY, '100');
+      setPwmDutyPercent(100);
+    }
+    localStorage.setItem(PWM_PREFS_MIGRATED_KEY, 'true');
+  }, [deviceType]);
 
   const pollBufferLenBytes = useCallback(async (): Promise<number | null> => {
     try {
@@ -904,30 +923,34 @@ function SamplerFragment() {
       return;
     }
 
-    try {
-      let commandStr = `transmit start --pin=${pinNumber}`;
-      if (deviceType === 'esp32' && pwmEnabled) {
-        const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
-        const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
-        if (freqHz < 1) {
-          alert('Invalid PWM frequency');
-          return;
-        }
-        if (dutyPercent < 1 || dutyPercent > 100) {
-          alert('Invalid PWM duty (1-100)');
-          return;
-        }
-        setPwmFreqHz(freqHz);
-        setPwmDutyPercent(dutyPercent);
-        commandStr += ` --pwm --freq=${freqHz} --duty=${dutyPercent}`;
-      }
+	    try {
+	      let commandStr = `transmit start --pin=${pinNumber}`;
+	      if ((deviceType === 'esp32' && pwmEnabled) || deviceType === 'stm32') {
+	        const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
+	        const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
+	        if (freqHz < 1) {
+	          alert('Invalid PWM frequency');
+	          return;
+	        }
+	        if (dutyPercent < 1 || dutyPercent > 100) {
+	          alert('Invalid PWM duty (1-100)');
+	          return;
+	        }
+	        setPwmFreqHz(freqHz);
+	        setPwmDutyPercent(dutyPercent);
+	        if (deviceType === 'esp32') {
+	          commandStr += ` --pwm --freq=${freqHz} --duty=${dutyPercent}`;
+	        } else {
+	          commandStr += ` --freq=${freqHz} --duty=${dutyPercent}`;
+	        }
+	      }
 
-      // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-      if (deviceType === 'esp32') {
-        await sendNoWait(commandStr);
-      } else {
-        await send(commandStr, 2000, 1);
-      }
+	      // Send "transmit start --pin=<pin>" command (matching Android/iOS)
+	      if (deviceType === 'esp32') {
+	        await sendNoWait(commandStr);
+	      } else {
+	        await sendNoWait(commandStr);
+	      }
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);

@@ -1051,6 +1051,11 @@ async fn usb_send_command(
 }
 
 #[tauri::command]
+async fn usb_transmit_buffer(state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Result<(), String> {
+    state.transmit_buffer(data).await
+}
+
+#[tauri::command]
 async fn usb_get_status(state: State<'_, Arc<USBState>>) -> Result<USBStatus, String> {
     Ok(state.get_status().await)
 }
@@ -1841,7 +1846,8 @@ pub fn run() {
             usb_disconnect,
 		            usb_send_packet,
                     usb_send_command,
-		            usb_get_status,
+                    usb_transmit_buffer,
+                    usb_get_status,
 		            dfu_is_connected,
 	            dfu_flash_embedded,
 	            dfu_flash_file,
