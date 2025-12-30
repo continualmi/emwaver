@@ -1,0 +1,12 @@
+[package]
+name = "emwaver-buffer-ios-ffi"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "emwaver_buffer_ios"
+crate-type = ["staticlib"]
+
+[dependencies]
+emwaver-buffer-core = { path = "../emwaver-buffer-core" }
+

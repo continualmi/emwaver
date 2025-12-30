@@ -136,3 +136,42 @@ pub fn build_signed_raw_timings(buffer: &[u8], sample_period_us: usize) -> Strin
     timings.join(" ")
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compress_bits_returns_raw_points_when_small_range() {
+        // 16 bits: alternating 0/1 starting from LSB of first byte.
+        let buf = [0b0101_0101u8, 0b0101_0101u8];
+        let (t, v) = compress_bits(&buf, 0, 16, 10);
+        assert_eq!(t.len(), 16);
+        assert_eq!(v.len(), 16);
+        assert_eq!(t[0], 0.0);
+        assert_eq!(t[15], 15.0);
+        assert_eq!(v[0], 255.0); // bit0 = 1
+        assert_eq!(v[1], 0.0); // bit1 = 0
+    }
+
+    #[test]
+    fn compress_bits_emits_min_max_pairs_for_large_range() {
+        // 128 bits, all ones.
+        let buf = vec![0xFFu8; 16];
+        let (t, v) = compress_bits(&buf, 0, 128, 4);
+        // 4 bins => 2 points per bin.
+        assert_eq!(t.len(), 8);
+        assert_eq!(v.len(), 8);
+        assert!(v.iter().all(|x| *x == 255.0));
+    }
+
+    #[test]
+    fn compress_bits_detects_mixed_bins() {
+        // First half zeros, second half ones.
+        let mut buf = vec![0x00u8; 8];
+        buf.extend(vec![0xFFu8; 8]);
+        let (t, v) = compress_bits(&buf, 0, 128, 2);
+        // Each bin has a single level (all low, then all high).
+        assert_eq!(t.len(), 4);
+        assert_eq!(v, vec![0.0, 0.0, 255.0, 255.0]);
+    }
+}
