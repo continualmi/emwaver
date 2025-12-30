@@ -4,30 +4,116 @@ title: Wavelets
 
 # Wavelets
 
-Wavelets are JavaScript bundles that let you orchestrate the EMWaver hardware without modifying firmware or shipping bespoke mobile builds. They expose a high-level API that mirrors the device capabilities—Sub-GHz RF, GPIO, storage, and logging—while remaining portable across the mobile app, CLI, and future surfaces.
+Wavelets are JavaScript scripts that render portable UI and orchestrate EMWaver hardware workflows without requiring custom native app builds.
 
-## Goals and Motivation
+## UI and Components
 
-- **Hardware access without flashing** – author custom behaviors that run on top of the stock firmware.
-- **Rapid iteration** – save, sync, and test scripts directly from the app or CLI with hot reload-style feedback.
-- **Shareable experiences** – distribute bundles to other EMWaver owners without requiring Xcode or Android Studio.
-- **UI parity** – render identical interfaces across platforms through the shared DSL renderer.
+Wavelets build UI by constructing a tree of components and passing it to `UI.render(...)`. Every node is a plain object created by calling a `UI.*` function (for example `UI.column({ ... })`).
 
-Wavelets keep the core EMWaver application closed and stable while still giving makers deep customization. You can tailor workflows, dashboards, and signal utilities in days instead of maintaining forks of the native apps.
+### Rendering model
 
-## Working with Wavelets
+- Start with module-scoped state (`let ...`) at the top of the script.
+- Implement a `render()` function that calls `UI.render(...)`.
+- Update state inside event handlers (`onTap`, `onChange`, `onSubmit`), then call `render()` again.
 
-1. Open the **Wavelets** fragment in the app to browse local bundles and cloud-synced scripts.
-2. Create or edit a script using the built-in editor, which includes syntax highlighting, console output, and integration with the EMWaver DSL renderer.
-3. Deploy updates instantly—the runtime pulls new builds from storage and restarts the wavelet session on demand.
-4. Use the **Agents** fragment to chat with the EMWaver assistant for debugging tips, coding guidance, or walkthroughs of existing scripts.
+```javascript title="Minimal wavelet UI"
+let count = 0;
 
-The runtime surfaces `UI.logViewer` output alongside agent responses so you can inspect execution traces, warnings, and custom diagnostics while iterating.
+function render() {
+    UI.render(UI.column({
+        padding: 16,
+        spacing: 12,
+        children: [
+            UI.text({ text: "Count: " + count, font: "title2", fontWeight: "semibold" }),
+            UI.button({ label: "Increment", onTap: () => { count += 1; render(); } })
+        ]
+    }));
+}
 
-## Sharing and Collaboration
+render();
+```
 
-- Store wavelets in the backend to sync across devices.
-- Distribute bundles alongside hardware projects so other users can replicate your setup.
-- Use the CLI to clone, diff, and manage versions when collaborating with teammates.
+### Common props
 
-Future updates will expand the capability registry, hot reload pipeline, and sandboxed storage so wavelets can orchestrate even richer device workflows.
+Most components accept a common set of props (extra props are ignored or may be platform-specific):
+
+- `id` (string): optional stable identifier (otherwise one is generated).
+- `children` (array): nested nodes (use `null` to conditionally hide a child).
+- `padding` (number or object): either a single number (all edges), or `{ top, bottom, leading, trailing }`.
+- `spacing` (number): spacing between children (for containers).
+- `backgroundColor` / `foregroundColor` (string): typically hex colors (for example `#2563EB`).
+- `cornerRadius` (number): rounded corners on supported components.
+
+### Layout components
+
+- `UI.column({ children, spacing, padding, ... })`: vertical layout.
+- `UI.row({ children, spacing, padding, ... })`: horizontal layout.
+- `UI.scroll({ children, spacing, padding, ... })`: scroll container (use for long forms).
+- `UI.grid({ columns, spacing, children, ... })`: grid layout (common for repeated inputs).
+- `UI.spacer({ ... })`: flexible spacer (exact behavior depends on host renderer).
+- `UI.divider({ ... })`: visual separator line.
+
+### Content components
+
+- `UI.text({ text, font, fontWeight, ... })`
+  - `text` (string): content to display.
+  - `font` (string): semantic font name (for example `title2`).
+  - `fontWeight` (string): (for example `medium`, `semibold`).
+- `UI.logViewer({ text, minHeight, ... })`
+  - Renders logs inline; commonly bound to a growing `logLines.join("\\n")` buffer.
+
+### Input components
+
+- `UI.button({ label, onTap, ... })`
+- `UI.textField({ value, placeholder, onChange, onSubmit, ... })`
+- `UI.textEditor({ value, placeholder, onChange, ... })`
+- `UI.picker({ style, selected, options, onChange, ... })`
+  - `style`: `"menu"` or `"segmented"`.
+  - `options`: `[{ label, value }, ...]`.
+- `UI.slider({ value, onChange, ... })`: slider input (exact range/step props depend on the host renderer).
+- `UI.progress({ ... })`: progress indicator (props depend on the host renderer).
+
+### Events
+
+Event handlers are passed as functions in props:
+
+- `onTap`: buttons.
+- `onChange`: inputs/pickers/sliders.
+- `onSubmit`: text fields (if supported by the host).
+
+Handlers should be fast; for longer device operations, update UI state with a status message and re-render as you go.
+
+## APIs
+
+Wavelets run inside a sandbox that exposes a small set of global objects. The exact set can vary by surface (Android, iOS, desktop, CLI). For now, the docs only cover the three public wavelet classes below.
+
+### `DeviceConnection`
+
+`DeviceConnection` is the transport-agnostic way to talk to an attached device (BLE or USB).
+
+- `DeviceConnection.sendCommandString(command, timeoutMs?)` → response bytes (or `null` on failure)
+  - Appends a trailing `\\n` if missing.
+  - If `timeoutMs` is omitted, the runtime uses a default timeout.
+- `DeviceConnection.write(bytes)` → `void` (stream/write without expecting a response)
+- `DeviceConnection.connectionStatus()` → `string` (if provided by the host)
+
+`sendCommandString(...)` is typically used with the EMWaver ASCII command protocol (verbs + flags) like `gpio read --pin=4` or `cc1101 set_freq --mhz=433.92`.
+
+### `Utils`
+
+Utility helpers provided by the host runtime.
+
+- `Utils.delay(ms)` → `void` (blocking sleep)
+- `Utils.sleep(ms)` → `void` (alias on some hosts)
+
+### `SamplerSignals`
+
+Access to saved sampler signals (typically `.raw` captures stored by the app).
+
+- `SamplerSignals.listSignals()` → `string[]`
+  - Returns available signal filenames (usually ending in `.raw`).
+- `SamplerSignals.listSignalsCsv()` → `string`
+  - Returns newline-separated filenames (empty string if none).
+- `SamplerSignals.readSignal(name)` → bytes (or `null`)
+  - Reads the contents of a saved signal by filename.
+
