@@ -443,6 +443,9 @@ function SamplerFragment() {
   const getViewportBits = useCallback(() => {
     const bufferBytes = bufferLenBytesRef.current;
     const maxX = Math.max(10000, bufferBytes * 8);
+    if (isRecordingRef.current) {
+      return { visibleRangeStart: 0, visibleRangeEnd: maxX, maxX };
+    }
     const plot = uplotRef.current;
     if (!plot || !plot.scales?.x) {
       return { visibleRangeStart: 0, visibleRangeEnd: maxX, maxX };
@@ -693,6 +696,14 @@ function SamplerFragment() {
       const plot = uplotRef.current;
       if (!plot) return;
 
+      // While recording, keep the live view locked to "full range" so incoming
+      // data is always visible.
+      if (isRecordingRef.current) {
+        event.preventDefault();
+        markChartInteracting();
+        return;
+      }
+
       event.preventDefault();
       markChartInteracting();
       autoFitXRef.current = false;
@@ -741,6 +752,14 @@ function SamplerFragment() {
       if (!dragging) return;
       const plot = uplotRef.current;
       if (!plot) return;
+
+      // While recording, keep the live view locked to "full range" so incoming
+      // data is always visible.
+      if (isRecordingRef.current) {
+        event.preventDefault();
+        markChartInteracting();
+        return;
+      }
 
       event.preventDefault();
       autoFitXRef.current = false;
@@ -803,7 +822,15 @@ function SamplerFragment() {
         const availableBits = bufferBytes * 8;
         const maxX = Math.max(10000, availableBits);
 
-        if (plot && autoFitXRef.current && !isChartInteractingRef.current) {
+        if (plot && isRecordingRef.current) {
+          // Recording: always show the full range (Android/iOS behavior).
+          autoFitXRef.current = true;
+          try {
+            plot.setScale('x', { min: 0, max: maxX });
+          } catch {
+            // ignore
+          }
+        } else if (plot && autoFitXRef.current && !isChartInteractingRef.current) {
           const rawMin = Number(plot.scales?.x?.min);
           const rawMax = Number(plot.scales?.x?.max);
           const nextMin = 0;
