@@ -906,7 +906,7 @@ struct ISMView: View {
                 }
                 return rfm69!
             }
-            await MainActor.run { currentCommand = "spi open --name=rfm69" }
+            await MainActor.run { currentCommand = "rfm69 init" }
             if !rfm69Instance.openDevice() {
                 await MainActor.run { statusMessage = "Failed to initialize RFM69" }
                 return false

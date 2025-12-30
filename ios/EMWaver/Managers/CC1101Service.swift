@@ -71,8 +71,8 @@ final class CC1101Service {
     func readBurst(_ reg: UInt8, len: Int, timeoutMs: Int = 1000) throws -> [UInt8] {
         guard len > 0 else { return [] }
         let data = try sendData(String(format: "cc1101 read_burst --reg=0x%02X --len=%d\n", reg, len), timeoutMs: timeoutMs)
-        guard data.count == len else { throw CC1101Error.invalidResponse }
-        return Array(data)
+        guard data.count >= len else { throw CC1101Error.invalidResponse }
+        return Array(data.prefix(len))
     }
 
     func setFrequencyMHz(_ mhz: Double, timeoutMs: Int = 1000) throws {
