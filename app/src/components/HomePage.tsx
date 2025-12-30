@@ -220,7 +220,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             const end = start + 64;
             const pkt = new Uint8Array(txResp.data.slice(start, end));
             const ts = txResp.ts_ms[p];
-            batch.push({ data: pkt, timestamp: ts && ts > 0 ? ts : Date.now(), isTx: true });
+            batch.push({ data: pkt, timestamp: ts, isTx: true });
           }
           txIndexRef.current = txResp.next_packet_index ?? txIndexRef.current + count;
           break;
@@ -245,7 +245,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             const end = start + 64;
             const pkt = new Uint8Array(rxResp.data.slice(start, end));
             const ts = rxResp.ts_ms[p];
-            batch.push({ data: pkt, timestamp: ts && ts > 0 ? ts : Date.now(), isTx: false });
+            batch.push({ data: pkt, timestamp: ts, isTx: false });
           }
           rxIndexRef.current = rxResp.next_packet_index ?? rxIndexRef.current + count;
           break;

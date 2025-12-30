@@ -575,7 +575,7 @@ async fn buffer_get_counter(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64,
     let state = state.inner().clone();
     spawn_blocking(move || {
         let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<u64, String>(guard.1)
+        Ok::<u64, String>(guard.rx_counter)
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -586,7 +586,7 @@ async fn buffer_set_counter(state: State<'_, Arc<Mutex<Buffer>>>, value: u64) ->
     let state = state.inner().clone();
     spawn_blocking(move || {
         let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        guard.1 = value;
+        guard.rx_counter = value;
         Ok::<(), String>(())
     })
     .await
@@ -1459,7 +1459,7 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
-    let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new((Vec::new(), 0, Vec::new())));
+    let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new(Buffer::default()));
     let rx_buffer_for_setup = Arc::clone(&rx_buffer);
     let rx_notify = Arc::new(tokio::sync::Notify::new());
     let rx_notify_for_setup = Arc::clone(&rx_notify);
