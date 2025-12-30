@@ -32,6 +32,8 @@ use tokio::time::{sleep, timeout};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
+use emwaver_buffer_core::packet::make_packet64;
+
 const TARGET_DEVICE_NAME: &str = "EMWaver";
 const SERVICE_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14191");
 const CMD_CHAR_UUID: Uuid = uuid::uuid!("46c7158e-0c3b-4e90-a847-452a15b14191");
@@ -289,7 +291,7 @@ async fn run_repl(peripheral: Peripheral, cmd_char: &Characteristic) -> Result<(
     Ok(())
 }
 
-fn parse_command(input: &str) -> Result<Vec<u8>> {
+fn parse_command(input: &str) -> Result<[u8; emwaver_buffer_core::PACKET_SIZE]> {
     let mut bytes = Vec::new();
     let mut idx = 0;
     let data = input.as_bytes();
@@ -310,7 +312,7 @@ fn parse_command(input: &str) -> Result<Vec<u8>> {
         }
     }
 
-    Ok(bytes)
+    make_packet64(&bytes).map_err(|e| anyhow!(e))
 }
 
 fn parse_bracket_value(content: &str) -> Result<u8> {
