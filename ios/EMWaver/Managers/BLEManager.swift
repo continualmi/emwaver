@@ -7,6 +7,17 @@ import CryptoKit
 class BLEManager: NSObject, ObservableObject {
     private static let packetSizeBytes: Int = 64
 
+    static func isPaddedOkFrame(_ data: Data) -> Bool {
+        guard data.count == packetSizeBytes else { return false }
+        return data.allSatisfy { $0 == 0x00 }
+    }
+
+    static func isPaddedErrFrame(_ data: Data) -> Bool {
+        guard data.count == packetSizeBytes else { return false }
+        guard data.first == 0xFF else { return false }
+        return data.dropFirst().allSatisfy { $0 == 0x00 }
+    }
+
     struct ReadPackets {
         let data: [UInt8]
         let ts_ms: [UInt64]
@@ -30,7 +41,10 @@ class BLEManager: NSObject, ObservableObject {
         }
 
         func rxLenBytes() -> Int { rxBytes.count }
-        func rxPacketCount() -> UInt64 { UInt64(rxBytes.count / BLEManager.packetSizeBytes) }
+        func rxPacketCount() -> UInt64 {
+            guard BLEManager.packetSizeBytes > 0 else { return 0 }
+            return UInt64((rxBytes.count + (BLEManager.packetSizeBytes - 1)) / BLEManager.packetSizeBytes)
+        }
         func txPacketCount() -> UInt64 { UInt64(txTsMs.count) }
 
         mutating func rxSetBytes(_ data: Data) {
@@ -41,9 +55,9 @@ class BLEManager: NSObject, ObservableObject {
 
         mutating func appendRxBytes(_ data: Data, tsMs: UInt64) {
             guard !data.isEmpty else { return }
-            let prevPackets = rxBytes.count / BLEManager.packetSizeBytes
+            let prevPackets = (rxBytes.count + (BLEManager.packetSizeBytes - 1)) / BLEManager.packetSizeBytes
             rxBytes.append(data)
-            let newPackets = rxBytes.count / BLEManager.packetSizeBytes
+            let newPackets = (rxBytes.count + (BLEManager.packetSizeBytes - 1)) / BLEManager.packetSizeBytes
             let delta = max(0, newPackets - prevPackets)
             if delta > 0 {
                 rxTsMs.append(contentsOf: Array(repeating: tsMs, count: delta))
@@ -78,7 +92,11 @@ class BLEManager: NSObject, ObservableObject {
             let take = min(remaining, maxPackets)
             let start = Int(packetIndex) * BLEManager.packetSizeBytes
             let end = start + take * BLEManager.packetSizeBytes
-            let slice = rxBytes.subdata(in: start..<min(end, rxBytes.count))
+            let sliceEnd = min(end, rxBytes.count)
+            var slice = rxBytes.subdata(in: start..<sliceEnd)
+            if slice.count < (take * BLEManager.packetSizeBytes) {
+                slice.append(Data(repeating: 0, count: (take * BLEManager.packetSizeBytes) - slice.count))
+            }
 
             let tsStart = Int(packetIndex)
             let tsEnd = min(tsStart + take, rxTsMs.count)
@@ -979,7 +997,7 @@ class BLEManager: NSObject, ObservableObject {
         let startTime = Date().timeIntervalSince1970
         print("BLE: Sending command: \(command.map { String(format: "%02X", $0) }.joined(separator: " "))")
 
-        let startPacketIndex = bufferQueue.sync { logBuffer.rxPacketCount() }
+        let startByteIndex = bufferQueue.sync { logBuffer.rxLenBytes() }
 
         bufferQueue.sync {
             logBuffer.appendTxBytesAsPackets(command, tsMs: Self.nowMs())
@@ -993,18 +1011,18 @@ class BLEManager: NSObject, ObservableObject {
         print("BLE: Command written, waiting for response (timeout: \(timeout)ms)")
         
         var firstResponseAt: TimeInterval? = nil
-        var lastPacketCount = startPacketIndex
+        var lastByteCount = startByteIndex
 
         while (Date().timeIntervalSince1970 - startTime) * 1000 < Double(timeout) {
-            let packetCount = bufferQueue.sync { logBuffer.rxPacketCount() }
-            if packetCount > lastPacketCount {
-                lastPacketCount = packetCount
+            let byteCount = bufferQueue.sync { logBuffer.rxLenBytes() }
+            if byteCount > lastByteCount {
+                lastByteCount = byteCount
                 if firstResponseAt == nil {
                     firstResponseAt = Date().timeIntervalSince1970
                 }
             }
 
-            if packetCount > startPacketIndex, let firstAt = firstResponseAt {
+            if byteCount > startByteIndex, let firstAt = firstResponseAt {
                 // Small idle window to accumulate multi-packet responses.
                 let elapsedSinceFirstMs = (Date().timeIntervalSince1970 - firstAt) * 1000
                 if elapsedSinceFirstMs >= 30 {
@@ -1015,17 +1033,27 @@ class BLEManager: NSObject, ObservableObject {
             Thread.sleep(forTimeInterval: 0.01)
         }
 
-        let endPacketCount = bufferQueue.sync { logBuffer.rxPacketCount() }
-        guard endPacketCount > startPacketIndex else {
+        let endByteIndex = bufferQueue.sync { logBuffer.rxLenBytes() }
+        guard endByteIndex > startByteIndex else {
             let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
             print("BLE: Command timed out after \(Int(elapsedMs))ms or received empty response")
             return nil
         }
 
-        let resp = bufferQueue.sync {
-            logBuffer.readRxSince(packetIndex: startPacketIndex, maxPackets: Int(endPacketCount - startPacketIndex))
+        let response = bufferQueue.sync {
+            let rx = logBuffer.rxBytes
+            if startByteIndex >= rx.count {
+                return Data()
+            }
+            let end = min(endByteIndex, rx.count)
+            if end <= startByteIndex {
+                return Data()
+            }
+            return rx.subdata(in: startByteIndex..<end)
         }
-        let response = Data(resp.data)
+
+        // Return the raw bytes captured from notifications. Firmware pads all <=64B payloads to a
+        // fixed 64B frame (zero-padded), so callers must interpret the response per-command.
         let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
         print("BLE: Response received after \(Int(elapsedMs))ms: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
         return response

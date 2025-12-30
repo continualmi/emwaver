@@ -91,9 +91,16 @@ final class CC1101Service {
 
     private func sendAck(_ command: String, timeoutMs: Int) throws -> UInt8 {
         let data = try sendData(command, timeoutMs: timeoutMs)
-        guard data.count == 1 else { throw CC1101Error.invalidResponse }
-        if data[0] == 0xFF { throw CC1101Error.deviceError }
-        return data[0]
+
+        if BLEManager.isPaddedErrFrame(data) || (data.count == 1 && data[0] == 0xFF) {
+            throw CC1101Error.deviceError
+        }
+
+        if BLEManager.isPaddedOkFrame(data) || (data.count == 1 && data[0] == 0x00) {
+            return 0x00
+        }
+
+        throw CC1101Error.invalidResponse
     }
 
     private func sendData(_ command: String, timeoutMs: Int) throws -> Data {

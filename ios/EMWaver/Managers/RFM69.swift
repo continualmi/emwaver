@@ -173,7 +173,7 @@ class RFM69 {
         let command = "spi open --name=\(RFM69.DEVICE_NAME) --host=2 --miso=13 --mosi=11 --sck=12 --cs=\(csPin) --mode=0 --clock=8000000 --cs_active_high=\(csActiveHigh ? "1" : "0")\n"
         
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-            if response.count == 1, response[response.startIndex] == 0xFF {
+            if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
                 print("RFM69: SPI open failed (device error)")
                 return false
             }
@@ -192,7 +192,7 @@ class RFM69 {
     func closeDevice() -> Bool {
         let command = "spi close --name=\(RFM69.DEVICE_NAME)\n"
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-            if response.count == 1, response[response.startIndex] == 0xFF {
+            if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
                 print("RFM69: SPI close failed (device error)")
                 return false
             }
@@ -221,15 +221,15 @@ class RFM69 {
         guard let response = response, !response.isEmpty else {
             return []
         }
-        if response.count == 1 {
-            let byte = response[response.startIndex]
-            if byte == 0x00 {
-                return []
-            }
-            if byte == 0xFF {
-                print("RFM69: Device returned error")
-                return []
-            }
+        if BLEManager.isPaddedOkFrame(response) {
+            return []
+        }
+        if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
+            print("RFM69: Device returned error")
+            return []
+        }
+        if response.count == 1, response[response.startIndex] == 0x00 {
+            return []
         }
         return Array(response)
     }
@@ -257,9 +257,15 @@ class RFM69 {
         }
         
         if let response = sendSpiCommand(command, timeoutMs: 1000) {
-            let parsed = parseRawResponse(response)
-            if !parsed.isEmpty {
-                return parsed[parsed.count - 1]
+            if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
+                print("RFM69: Device returned error during register read")
+                return 0
+            }
+
+            // Firmware pads <=64B responses to a fixed 64B frame; `spi xfer --rx=2` returns the
+            // two received bytes in the first two positions.
+            if response.count >= 2 {
+                return response[response.startIndex + 1]
             }
         }
         
