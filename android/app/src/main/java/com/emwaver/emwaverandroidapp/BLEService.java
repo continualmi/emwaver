@@ -1331,9 +1331,14 @@ public class BLEService extends Service implements DeviceConnectionService {
                     }
                 }
 
-                logTx(bytes);
-                
-                cmdCharacteristic.setValue(bytes);
+                byte[] packet = padCommand64(bytes);
+                if (packet == null) {
+                    Log.e(TAG, "Write too large: " + bytes.length + " bytes (max 64)");
+                    return;
+                }
+
+                logTx(packet);
+                cmdCharacteristic.setValue(packet);
                 // Use write without response to avoid acknowledgment delay
                 //cmdCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
                 
