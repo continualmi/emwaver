@@ -39,3 +39,4 @@ rusb = "0.9"
 portable-pty = "0.9"
 sha2 = "0.10"
 emw = { path = "../../cli" }
+emwaver-buffer-core = { path = "../../cli/crates/emwaver-buffer-core", features = ["serde"] }

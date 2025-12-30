@@ -34,3 +34,10 @@ notes.md
 
 # MkDocs build output (generated; deployed via GitHub Actions)
 docs/docs/
+
+# Rust build output (generated)
+target/
+**/target/
+
+# Library crates don't need lockfiles
+cli/crates/**/Cargo.lock
