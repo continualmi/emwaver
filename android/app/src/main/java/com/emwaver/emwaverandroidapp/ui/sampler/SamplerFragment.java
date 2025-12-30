@@ -422,6 +422,9 @@ public class SamplerFragment extends Fragment {
 
                     // Always update the chart when zooming
                     lastBufferSize = -1; // Force refresh by making lastBufferSize different
+                    updateMetricsLabel(getCurrentBufferLengthBytes(),
+                            rawModeViewModel.getVisibleRangeStart(),
+                            rawModeViewModel.getVisibleRangeEnd());
                     updateChartWithCompression(
                         rawModeViewModel.getVisibleRangeStart(), 
                         rawModeViewModel.getVisibleRangeEnd(), 
@@ -434,7 +437,7 @@ public class SamplerFragment extends Fragment {
                 int visibleRangeStart = (int) chart.getLowestVisibleX();
                 int visibleRangeEnd = (int) chart.getHighestVisibleX();
                 rawModeViewModel.setVisibleRangeStart(visibleRangeStart);
-                rawModeViewModel.setVisibleRangeEnd(visibleRangeStart);
+                rawModeViewModel.setVisibleRangeEnd(visibleRangeEnd);
 
                 int span = visibleRangeEnd - visibleRangeStart;
                 float translationThreshold = (float)span / 100;
@@ -452,6 +455,7 @@ public class SamplerFragment extends Fragment {
 
                     // Always update the chart when panning
                     lastBufferSize = -1; // Force refresh by making lastBufferSize different
+                    updateMetricsLabel(getCurrentBufferLengthBytes(), visibleRangeStart, visibleRangeEnd);
                     updateChartWithCompression(visibleRangeStart, visibleRangeEnd, visiblePoints);
                 }
             }
@@ -900,6 +904,13 @@ public class SamplerFragment extends Fragment {
         refreshHandler.removeCallbacks(refreshRunnable);
     }
 
+    private int getCurrentBufferLengthBytes() {
+        if (currentDeviceType == DEVICE_STM32) {
+            return USBService != null ? USBService.getBufferLength() : 0;
+        }
+        return BLEService != null ? BLEService.getBufferLength() : 0;
+    }
+
     private void refreshChart() {
         int currentBufferSize = 0;
         if (currentDeviceType == DEVICE_STM32) {
@@ -945,7 +956,39 @@ public class SamplerFragment extends Fragment {
         xAxis.setAxisMinimum(chartMinX);
         xAxis.setAxisMaximum(chartMaxX);
 
+        updateMetricsLabel(currentBufferSize, visibleRangeStart, visibleRangeEnd);
         updateChartWithCompression(visibleRangeStart, visibleRangeEnd, visiblePoints);
+    }
+
+    private void updateMetricsLabel(int bufferLenBytes, int visibleRangeStart, int visibleRangeEnd) {
+        if (!isAdded() || binding == null) {
+            return;
+        }
+
+        int maxX = Math.max(0, bufferLenBytes * 8);
+        int clampedStart = Math.max(0, Math.min(visibleRangeStart, maxX));
+        int clampedEnd = Math.max(0, Math.min(visibleRangeEnd, maxX));
+        if (clampedEnd < clampedStart) {
+            int tmp = clampedEnd;
+            clampedEnd = clampedStart;
+            clampedStart = tmp;
+        }
+
+        int viewSpan = Math.max(0, clampedEnd - clampedStart);
+        double bitsPerBin = visiblePoints > 0 ? (double) viewSpan / (double) visiblePoints : 0.0;
+
+        String text = String.format(
+                Locale.US,
+                "bytes=%d  samples=%d  view=%d..%d  bins=%d  bits/bin=%.1f",
+                bufferLenBytes,
+                bufferLenBytes * 8,
+                clampedStart,
+                clampedEnd,
+                visiblePoints,
+                bitsPerBin
+        );
+
+        binding.metricsRowText.setText(text);
     }
 
     private void startRecording() {
