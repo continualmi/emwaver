@@ -1,7 +1,7 @@
-use emwaver_buffer_core::{buffer as core_buf, packet, sampler, status};
+use emwaver_buffer_core::{buffer as core_buf, packet, sampler, status, tx};
 use jni::{
     objects::{JByteArray, JClass, JLongArray, JObject, JValue},
-    sys::{jbyteArray, jint, jlong, jlongArray, jobjectArray},
+    sys::{jbyteArray, jint, jintArray, jlong, jlongArray, jobjectArray},
     JNIEnv,
 };
 use std::sync::{Mutex, OnceLock};
@@ -94,6 +94,21 @@ fn make_float_array<'a>(
     };
     if !values.is_empty() {
         if env.set_float_array_region(&out, 0, values).is_err() {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+fn make_int_array<'a>(
+    env: &mut JNIEnv<'a>,
+    values: &[jint],
+) -> Option<jni::objects::JIntArray<'a>> {
+    let Ok(out) = env.new_int_array(values.len() as i32) else {
+        return None;
+    };
+    if !values.is_empty() {
+        if env.set_int_array_region(&out, 0, values).is_err() {
             return None;
         }
     }
@@ -446,4 +461,82 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_restoreRx
         let desired = if rx_counter < 0 { 0 } else { rx_counter as u64 };
         state.buffer.rx_counter = desired.min(packets);
     });
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleProfile(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+) -> jintArray {
+    let p = tx::BleTxProfile::default();
+    let values: [jint; 11] = [
+        p.max_packet_size as jint,
+        p.min_packet_size as jint,
+        p.initial_packet_size as jint,
+        p.fixed_delay_ms as jint,
+        p.target_buffer_level as jint,
+        p.buffer_high_threshold as jint,
+        p.buffer_low_threshold as jint,
+        p.initial_fill_bytes as jint,
+        p.nudge_band as jint,
+        p.step_large as jint,
+        p.step_small as jint,
+    ];
+
+    make_int_array(&mut env, &values)
+        .map(|arr| arr.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleNextPacketSize(
+    _env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    bytes_sent: jint,
+    last_status: jint,
+    current_packet_size: jint,
+) -> jint {
+    let bytes_sent = if bytes_sent < 0 { 0 } else { bytes_sent as usize };
+    let current_packet_size = if current_packet_size < 0 {
+        0
+    } else {
+        current_packet_size as usize
+    };
+
+    tx::ble_next_packet_size(
+        tx::BleTxProfile::default(),
+        bytes_sent,
+        last_status as i32,
+        current_packet_size,
+    ) as jint
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txUsbProfile(
+    mut env: JNIEnv<'_>,
+    _class: JClass<'_>,
+) -> jintArray {
+    let p = tx::UsbTxProfile::default();
+    let values: [jint; 5] = [
+        p.packet_size as jint,
+        p.period_ns as jint,
+        p.flow_time_delta_ns as jint,
+        p.buffer_high_threshold as jint,
+        p.buffer_low_threshold as jint,
+    ];
+
+    make_int_array(&mut env, &values)
+        .map(|arr| arr.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txUsbAdjustDeadlineNs(
+    _env: JNIEnv<'_>,
+    _class: JClass<'_>,
+    deadline_ns: jlong,
+    last_status: jint,
+) -> jlong {
+    let deadline_ns = deadline_ns as i64;
+    tx::usb_adjust_deadline_ns(tx::UsbTxProfile::default(), deadline_ns, last_status as i32) as jlong
 }
