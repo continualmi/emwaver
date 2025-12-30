@@ -172,7 +172,7 @@ impl USBState {
                 // Check if we should stop
                 {
                     let running = match running_clone.blocking_lock() {
-                        mut guard => *guard,
+                        guard => *guard,
                     };
                     if !running {
                         break;
@@ -187,8 +187,7 @@ impl USBState {
                                     let chunk = pending.drain(0..PACKET_SIZE).collect::<Vec<u8>>();
                                     let ts_ms = now_ms();
                                     if let Ok(mut guard) = buffer_clone.lock() {
-                                        buffer::append_rx_bytes(&mut *guard, &chunk);
-                                        let _ = ts_ms;
+                                        buffer::append_rx_bytes(&mut *guard, &chunk, ts_ms);
                                     }
                                     rx_notify_clone.notify_waiters();
                                 }
@@ -252,7 +251,7 @@ impl USBState {
 
         if let Ok(mut guard) = self.buffer.lock() {
             let count = buffer::rx_packet_count(&*guard);
-            guard.1 = count;
+            guard.rx_counter = count;
         }
 
         self.send_packet(data).await?;
@@ -294,15 +293,16 @@ impl USBState {
 
         // Swap out the shared RX buffer while transmitting so response packets
         // don't contaminate sampler data stored in the same buffer.
-        let (saved_rx, saved_counter) = {
+        let (saved_rx, saved_rx_ts, saved_counter) = {
             let mut guard = self
                 .buffer
                 .lock()
                 .map_err(|_| "Failed to lock buffer".to_string())?;
-            let saved_rx = std::mem::take(&mut guard.0);
-            let saved_counter = guard.1;
-            guard.1 = 0;
-            (saved_rx, saved_counter)
+            let saved_rx = std::mem::take(&mut guard.rx_bytes);
+            let saved_rx_ts = std::mem::take(&mut guard.rx_ts_ms);
+            let saved_counter = guard.rx_counter;
+            guard.rx_counter = 0;
+            (saved_rx, saved_rx_ts, saved_counter)
         };
 
         let mut write_port = {
@@ -375,8 +375,9 @@ impl USBState {
 
         // Restore sampler RX buffer (discarding packets accumulated during transmit).
         if let Ok(mut guard) = self.buffer.lock() {
-            guard.0 = saved_rx;
-            guard.1 = saved_counter;
+            guard.rx_bytes = saved_rx;
+            guard.rx_ts_ms = saved_rx_ts;
+            guard.rx_counter = saved_counter;
         }
 
         write_result

@@ -194,11 +194,7 @@ impl BLEState {
                                                             if data.uuid == notif_uuid {
                                                                 let ts_ms = now_ms();
                                                                 if let Ok(mut guard) = buffer_clone.lock() {
-                                                                    buffer::append_rx_bytes(&mut *guard, &data.value);
-                                                                    // Keep API-compatible RX packet logs (used by the buffer monitor).
-                                                                    // We don't preserve notification boundaries here; RX parsing happens
-                                                                    // as 64B packets at read time.
-                                                                    let _ = ts_ms;
+                                                                    buffer::append_rx_bytes(&mut *guard, &data.value, ts_ms);
                                                                 }
                                                                 rx_notify_clone.notify_waiters();
                                                             } else if data.uuid == ota_status_uuid {
@@ -322,7 +318,7 @@ impl BLEState {
         // Drop any stale RX packets before sending so the "next packet" is the response to this command.
         if let Ok(mut guard) = self.buffer.lock() {
             let count = buffer::rx_packet_count(&*guard);
-            guard.1 = count;
+            guard.rx_counter = count;
         }
 
         self.send_packet(data).await?;
@@ -433,15 +429,16 @@ impl BLEState {
 
         // Swap out the shared RX buffer while transmitting so BS flow-control packets
         // don't contaminate sampler data stored in the same buffer.
-        let (saved_rx, saved_counter) = {
+        let (saved_rx, saved_rx_ts, saved_counter) = {
             let mut guard = self
                 .buffer
                 .lock()
                 .map_err(|_| "Failed to lock buffer".to_string())?;
-            let saved_rx = std::mem::take(&mut guard.0);
-            let saved_counter = guard.1;
-            guard.1 = 0;
-            (saved_rx, saved_counter)
+            let saved_rx = std::mem::take(&mut guard.rx_bytes);
+            let saved_rx_ts = std::mem::take(&mut guard.rx_ts_ms);
+            let saved_counter = guard.rx_counter;
+            guard.rx_counter = 0;
+            (saved_rx, saved_rx_ts, saved_counter)
         };
 
         let result = async {
@@ -461,7 +458,7 @@ impl BLEState {
         let mut bytes_sent = 0;
         let mut last_status: Option<u16> = None;
 
-        let mut drain_bs_status = || -> Option<u16> {
+        let drain_bs_status = || -> Option<u16> {
             let mut latest: Option<u16> = None;
             loop {
                 let pkt = (|| {
@@ -529,8 +526,9 @@ impl BLEState {
 
         // Restore sampler RX buffer (discarding BS packets accumulated during transmit).
         if let Ok(mut guard) = self.buffer.lock() {
-            guard.0 = saved_rx;
-            guard.1 = saved_counter;
+            guard.rx_bytes = saved_rx;
+            guard.rx_ts_ms = saved_rx_ts;
+            guard.rx_counter = saved_counter;
         }
 
         result
