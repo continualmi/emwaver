@@ -165,10 +165,10 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         NativeBuffer.setRxCounter(0);
 
         int nativeBufferSize = samplerBytes.length;
-        int packetSize = 50; // match desktop pacing (<= 64B endpoint packet)
+        int[] txProfile = NativeBuffer.txUsbProfile();
+        int packetSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : 50; // <= 64B endpoint packet
         long startTime = System.nanoTime();
-        final long period = 4000 * 1000;
-        final long flow_time_delta = 1000 * 1000;
+        final long period = (txProfile != null && txProfile.length > 1 ? txProfile[1] : 4000 * 1000);
 
         for (int i = 0; i < nativeBufferSize; i += packetSize) {
             int end = Math.min(i + packetSize, nativeBufferSize);
@@ -192,11 +192,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
             // Log TX as padded 64B packets for the home monitor.
             NativeBuffer.appendTxBytes(packet, System.currentTimeMillis());
 
-            if (lastStatus > 300) {
-                startTime += flow_time_delta;
-            } else if (lastStatus < 200) {
-                startTime -= flow_time_delta;
-            }
+            startTime = NativeBuffer.txUsbAdjustDeadlineNs(startTime, lastStatus);
 
             while (System.nanoTime() < startTime) {
                 // Busy wait

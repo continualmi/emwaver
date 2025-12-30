@@ -39,6 +39,17 @@ public final class NativeBuffer {
     // Returns -1 when not a BS frame.
     public static native int parseBsStatus(byte[] packet64);
 
+    // Transmit helpers (desktop parity logic lives in Rust core; platform does I/O).
+    // Returns int[] { maxPacketSize, minPacketSize, initialPacketSize, fixedDelayMs,
+    //                 targetBufferLevel, bufferHighThreshold, bufferLowThreshold,
+    //                 initialFillBytes, nudgeBand, stepLarge, stepSmall }.
+    public static native int[] txBleProfile();
+    public static native int txBleNextPacketSize(int bytesSent, int lastStatus, int currentPacketSize);
+
+    // Returns int[] { packetSize, periodNs, flowTimeDeltaNs, bufferHighThreshold, bufferLowThreshold }.
+    public static native int[] txUsbProfile();
+    public static native long txUsbAdjustDeadlineNs(long deadlineNs, int lastStatus);
+
     // Internal RX swap used during transmit to avoid contaminating sampler capture with BS packets.
     // Returns Object[] { byte[] rxBytes, long[] rxTsMs, long rxCounter }.
     static native Object[] takeRxState();
@@ -49,4 +60,3 @@ public final class NativeBuffer {
         clearAll();
     }
 }
-

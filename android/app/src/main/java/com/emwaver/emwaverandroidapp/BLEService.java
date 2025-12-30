@@ -1601,19 +1601,17 @@ public class BLEService extends Service implements DeviceConnectionService {
             }
 
             int nativeBufferSize = samplerBytes.length;
-            final int maxPacketSize = 240;  // Maximum packet size (allowed to go this high)
-            final int minPacketSize = 128;  // Minimum packet size we'll use
-            final int initialPacketSize = 188; // Starting point (matching ~100kbps)
+            int[] txProfile = NativeBuffer.txBleProfile();
+            final int maxPacketSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : 240;
+            final int minPacketSize = txProfile != null && txProfile.length > 1 ? txProfile[1] : 128;
+            final int initialPacketSize = txProfile != null && txProfile.length > 2 ? txProfile[2] : 188;
+            final int fixedDelayMs = txProfile != null && txProfile.length > 3 ? txProfile[3] : 15;
+            final int targetBufferLevel = txProfile != null && txProfile.length > 4 ? txProfile[4] : 2048;
+            final int bufferHighThreshold = txProfile != null && txProfile.length > 5 ? txProfile[5] : 3000;
+            final int bufferLowThreshold = txProfile != null && txProfile.length > 6 ? txProfile[6] : 1000;
+            final int initialFillBytes = txProfile != null && txProfile.length > 7 ? txProfile[7] : 2048;
+
             int currentPacketSize = maxPacketSize; // Start with max for fill phase
-
-            // Use a constant delay of 15ms (BLE connection interval)
-            final int fixedDelayMs = 15;
-
-            // Simple buffer thresholds - target is 2048
-            final int targetBufferLevel = 2048;  // Ideal buffer level
-            final int bufferHighThreshold = 3000; // If above this, we reduce packet size
-            final int bufferLowThreshold = 1000;  // If below this, we increase packet size
-            final int initialFillBytes = 2048;    // Bytes to send before enabling flow control
 
             Log.i(TAG, "Starting buffer transmission: " + nativeBufferSize + " bytes, Fixed Delay: " + fixedDelayMs + "ms");
             Log.i(TAG, "Flow control: Decrease if buffer > " + bufferHighThreshold + ", Increase if buffer < " + bufferLowThreshold);
@@ -1657,22 +1655,8 @@ public class BLEService extends Service implements DeviceConnectionService {
                 // Log TX as padded 64B packets for the buffer monitor.
                 NativeBuffer.appendTxBytes(packet, System.currentTimeMillis());
 
-                // Apply flow control after every packet once we've sent the initial fill
-                if (i >= initialFillBytes) {
-                    if (lastStatus > bufferHighThreshold) {
-                        currentPacketSize = Math.max(minPacketSize, currentPacketSize - 32);
-                    } else if (lastStatus < bufferLowThreshold) {
-                        currentPacketSize = Math.min(maxPacketSize, currentPacketSize + 32);
-                    } else if (currentPacketSize != initialPacketSize && Math.abs(lastStatus - targetBufferLevel) < 100) {
-                        if (currentPacketSize < initialPacketSize) {
-                            currentPacketSize = Math.min(initialPacketSize, currentPacketSize + 16);
-                        } else if (currentPacketSize > initialPacketSize) {
-                            currentPacketSize = Math.max(initialPacketSize, currentPacketSize - 16);
-                        }
-                    }
-                } else {
-                    currentPacketSize = maxPacketSize;
-                }
+                currentPacketSize = NativeBuffer.txBleNextPacketSize(i, lastStatus, currentPacketSize);
+                currentPacketSize = Math.max(minPacketSize, Math.min(maxPacketSize, currentPacketSize));
 
                 try {
                     Thread.sleep(fixedDelayMs);
