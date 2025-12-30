@@ -183,11 +183,11 @@ JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getStatus
 }
 
 JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_clearCommandBuffer(JNIEnv *env, jclass) {
-    rx_bytes.clear();
-    rx_counter_packets = 0;
-    rx_ts_ms.clear();
-    command_cursor_bytes = 0;
-    status_offset = 0;
+    // Desktop-parity: do not clear the shared RX buffer (it may contain sampler/stream data
+    // and/or logs needed by the Buffer Monitor). This call is only meant to discard any
+    // previously-seen command/status data for the *command reader*.
+    command_cursor_bytes = rx_bytes.size();
+    status_offset = rx_bytes.size();
 }
 
 JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_setCaptureMode(JNIEnv *env, jclass, jboolean enabled) {
