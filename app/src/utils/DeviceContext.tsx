@@ -229,10 +229,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (status.transport === 'BLE') {
         await safeInvoke('ble_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
     } else if (status.transport === 'USB') {
-        // For USB, we can just send the packet for now, or implement specific flow control if needed.
-        // The firmware likely expects the same streaming behavior.
-        // For now, mapping to usb_send_packet.
-        await safeInvoke('usb_send_packet', { data: Array.from(data) }, { throwOnError: true });
+        await safeInvoke('usb_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
     }
   }, [status.transport]);
 

@@ -285,6 +285,103 @@ impl USBState {
         Ok(out)
     }
 
+    pub async fn transmit_buffer(&self, data: Vec<u8>) -> Result<(), String> {
+        let _in_flight = self.in_flight.lock().await;
+
+        if data.is_empty() {
+            return Err("Buffer is empty".to_string());
+        }
+
+        // Swap out the shared RX buffer while transmitting so response packets
+        // don't contaminate sampler data stored in the same buffer.
+        let (saved_rx, saved_counter) = {
+            let mut guard = self
+                .buffer
+                .lock()
+                .map_err(|_| "Failed to lock buffer".to_string())?;
+            let saved_rx = std::mem::take(&mut guard.0);
+            let saved_counter = guard.1;
+            guard.1 = 0;
+            (saved_rx, saved_counter)
+        };
+
+        let mut write_port = {
+            let mut port_guard = self.port.lock().await;
+            if let Some(p) = port_guard.as_mut() {
+                p.try_clone().map_err(|e| format!("Failed to clone port: {e}"))?
+            } else {
+                return Err("Not connected".to_string());
+            }
+        };
+
+        let buffer_clone = Arc::clone(&self.buffer);
+        let write_result = spawn_blocking(move || {
+            // STM32 transmit mode uses a small (512B) circular RX buffer and emits `BS` status
+            // packets as flow-control. If we flood the link, the device returns USBD_FAIL and
+            // stops accepting OUT packets, which makes retransmit stop mid-way.
+            let packet_size: usize = 50; // match Android pacing (<= 64B endpoint packet)
+            let base_period = Duration::from_millis(4);
+            let flow_delta = Duration::from_millis(1);
+
+            std::thread::sleep(Duration::from_millis(20));
+
+            let mut last_status: u16 = 0;
+            let mut next_send_at = std::time::Instant::now();
+
+            for chunk in data.chunks(packet_size) {
+                // Drain buffer-status packets (if any) to update flow-control state.
+                if let Ok(mut guard) = buffer_clone.lock() {
+                    loop {
+                        let pkt = crate::buffer::next_rx_packet(&mut *guard);
+                        let Some(pkt) = pkt else { break };
+                        if pkt.data.len() >= 4 && pkt.data[0] == b'B' && pkt.data[1] == b'S' {
+                            last_status = u16::from_be_bytes([pkt.data[2], pkt.data[3]]);
+                        }
+                    }
+                }
+
+                write_port
+                    .write_all(chunk)
+                    .map_err(|e| format!("Failed to write: {e}"))?;
+
+                // Log TX as 64B entries (padded) for the home monitor.
+                if let Ok(mut guard) = buffer_clone.lock() {
+                    let mut packet = [0u8; PACKET_SIZE];
+                    packet[..chunk.len()].copy_from_slice(chunk);
+                    buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+                }
+
+                // Pacing rules (roughly matching Android thresholds for a 512B circular buffer).
+                next_send_at += base_period;
+                if last_status > 300 {
+                    next_send_at += flow_delta;
+                } else if last_status < 200 {
+                    if next_send_at.duration_since(std::time::Instant::now()) > flow_delta {
+                        next_send_at -= flow_delta;
+                    }
+                }
+
+                let now = std::time::Instant::now();
+                if next_send_at > now {
+                    std::thread::sleep(next_send_at - now);
+                }
+            }
+
+            write_port.flush().map_err(|e| format!("Failed to flush: {e}"))?;
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| format!("Task failed: {e}"))?;
+
+        // Restore sampler RX buffer (discarding packets accumulated during transmit).
+        if let Ok(mut guard) = self.buffer.lock() {
+            guard.0 = saved_rx;
+            guard.1 = saved_counter;
+        }
+
+        write_result
+    }
+
     fn normalize_port_name_for_platform(port_name: &str) -> String {
         let trimmed = port_name.trim();
         #[cfg(target_os = "macos")]
