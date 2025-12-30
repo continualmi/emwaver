@@ -1,0 +1,161 @@
+name: Release Android App
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "cmake;3.22.1" \
+            "ndk;25.2.9519653"
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="android-${VERSION}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#android-}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+          echo "Tag: $TAG"
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease
+
+      - name: Collect APK artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          APK_DIR="android/app/build/outputs/apk/release"
+
+          if [ ! -d "$APK_DIR" ]; then
+            echo "APK output directory not found at $APK_DIR"
+            find android/app/build/outputs -maxdepth 3 -type d -print || true
+            exit 1
+          fi
+
+          found=0
+          while IFS= read -r -d '' apk; do
+            found=1
+            base="$(basename "$apk")"
+            cp "$apk" "artifacts/emwaver-android-${{ steps.version.outputs.version }}-${base}"
+          done < <(find "$APK_DIR" -maxdepth 1 -type f -name "*.apk" -print0)
+
+          if [ "$found" -eq 0 ]; then
+            echo "No APKs found under $APK_DIR"
+            find "$APK_DIR" -maxdepth 2 -type f -print || true
+            exit 1
+          fi
+
+          ls -la artifacts
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: emwaver-android-apk
+          path: artifacts/*
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="android-${VERSION}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#android-}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+          echo "Tag: $TAG"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd artifacts
+          find . -type f ! -name "*.sha256" -print0 | while IFS= read -r -d '' file; do
+            sha256sum "$file" > "${file}.sha256"
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: EMWaver Android ${{ steps.version.outputs.version }}
+          body: |
+            ## EMWaver Android ${{ steps.version.outputs.version }}
+
+            The APK(s) for this release are attached below.
+
+            ### Notes
+            - APKs are produced from the Android app module (`android/app`).
+            - If signing is not configured, the APK may be unsigned and intended for manual testing.
+          files: artifacts/**/*
+          fail_on_unmatched_files: false
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
