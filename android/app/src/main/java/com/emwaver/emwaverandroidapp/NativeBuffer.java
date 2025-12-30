@@ -8,10 +8,8 @@ public final class NativeBuffer {
     private NativeBuffer() {}
 
     public static native void storeBulkPkt(byte[] data, long tsMs);
-    public static native byte[] getCommand();
     public static native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
     public static native int getStatusNumber();
-    public static native void clearCommandBuffer();
     public static native void setCaptureMode(boolean enabled);
     public static native void clearBuffer();
     // Clears RX+TX logs and counters (desktop `buffer_clear` parity).
@@ -26,6 +24,13 @@ public final class NativeBuffer {
     // Returns Object[] { byte[] data, long[] tsMs, long nextPacketIndex, long availablePackets }.
     public static native Object[] readRxSince(long packetIndex, int maxPackets);
     public static native Object[] readTxSince(long packetIndex, int maxPackets);
+
+    // Desktop-parity command-response cursor APIs (rx_counter consumption).
+    public static native long getRxPacketCount();
+    public static native long getRxCounter();
+    public static native void setRxCounter(long value);
+    // Returns Object[] { byte[] packet64, long tsMs } or null if no packet available.
+    public static native Object[] nextRxPacket();
 
     // Append outbound bytes to the TX log as padded 64B packets (one tsMs per 64B packet).
     public static native void appendTxBytes(byte[] data, long tsMs);

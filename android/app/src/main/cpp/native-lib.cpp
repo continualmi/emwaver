@@ -25,7 +25,6 @@ static std::vector<uint64_t> rx_ts_ms;
 static std::vector<uint8_t> tx_bytes;
 static std::vector<uint64_t> tx_ts_ms;
 
-static size_t command_cursor_bytes = 0;
 static size_t status_offset = 0;
 static bool capture_mode = false;
 static bool capture_invert = false;
@@ -85,7 +84,6 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_clearBuff
     rx_bytes.clear();
     rx_counter_packets = 0;
     rx_ts_ms.clear();
-    command_cursor_bytes = 0;
     status_offset = 0;
 }
 
@@ -97,7 +95,6 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_clearAll(
     tx_bytes.clear();
     tx_ts_ms.clear();
 
-    command_cursor_bytes = 0;
     status_offset = 0;
 }
 
@@ -114,7 +111,6 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_loadBuffe
         rx_bytes.insert(rx_bytes.end(), reinterpret_cast<uint8_t*>(dataBytes), reinterpret_cast<uint8_t*>(dataBytes) + dataSize);
         rx_counter_packets = 0;
         rx_ts_ms.assign(static_cast<size_t>(rx_packet_count()), 0ULL);
-        command_cursor_bytes = 0;
         status_offset = 0;
 
         env->ReleaseByteArrayElements(data, dataBytes, 0);
@@ -138,27 +134,6 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_storeBulk
     env->ReleaseByteArrayElements(data, bufferPtr, JNI_ABORT);
 }
 
-JNIEXPORT jbyteArray JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getCommand(JNIEnv *env, jclass) {
-    if (command_cursor_bytes >= rx_bytes.size()) {
-        return env->NewByteArray(0);
-    }
-
-    const size_t bytes_available = rx_bytes.size() - command_cursor_bytes;
-    jbyteArray returnArray = env->NewByteArray(bytes_available);
-    if (bytes_available > 0) {
-        env->SetByteArrayRegion(
-            returnArray,
-            0,
-            bytes_available,
-            reinterpret_cast<const jbyte*>(rx_bytes.data() + command_cursor_bytes)
-        );
-    }
-
-    command_cursor_bytes = rx_bytes.size();
-
-    return returnArray;
-}
-
 JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getStatusNumber(JNIEnv *env, jclass) {
     const std::string HEADER = "BS";
     const size_t HEADER_SIZE = HEADER.size();
@@ -180,14 +155,6 @@ JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getStatus
     }
 
     return -1;
-}
-
-JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_clearCommandBuffer(JNIEnv *env, jclass) {
-    // Desktop-parity: do not clear the shared RX buffer (it may contain sampler/stream data
-    // and/or logs needed by the Buffer Monitor). This call is only meant to discard any
-    // previously-seen command/status data for the *command reader*.
-    command_cursor_bytes = rx_bytes.size();
-    status_offset = rx_bytes.size();
 }
 
 JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_setCaptureMode(JNIEnv *env, jclass, jboolean enabled) {
@@ -266,6 +233,65 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_invertBuf
     for (size_t i = 0; i < rx_bytes.size(); ++i) {
         rx_bytes[i] = ~rx_bytes[i];  // Bitwise NOT operation inverts all bits
     }
+}
+
+JNIEXPORT jlong JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getRxPacketCount(JNIEnv *env, jclass) {
+    return static_cast<jlong>(rx_packet_count());
+}
+
+JNIEXPORT jlong JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getRxCounter(JNIEnv *env, jclass) {
+    return static_cast<jlong>(rx_counter_packets);
+}
+
+JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_setRxCounter(JNIEnv *env, jclass, jlong value) {
+    const uint64_t available = rx_packet_count();
+    const uint64_t v = value < 0 ? 0 : static_cast<uint64_t>(value);
+    rx_counter_packets = std::min(v, available);
+}
+
+// Desktop-parity: consume the next 64B RX packet using rx_counter.
+// Returns Object[] { byte[] packet64, Long tsMs } or null when no packet available.
+JNIEXPORT jobjectArray JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_nextRxPacket(JNIEnv *env, jclass) {
+    const uint64_t available = rx_packet_count();
+    if (rx_counter_packets >= available) {
+        return nullptr;
+    }
+
+    const size_t byte_start = static_cast<size_t>(rx_counter_packets * PACKET_SIZE);
+    const size_t byte_end = byte_start + PACKET_SIZE;
+    if (byte_end > rx_bytes.size()) {
+        return nullptr;
+    }
+
+    jbyteArray dataArray = env->NewByteArray(static_cast<jsize>(PACKET_SIZE));
+    env->SetByteArrayRegion(
+        dataArray,
+        0,
+        static_cast<jsize>(PACKET_SIZE),
+        reinterpret_cast<const jbyte*>(rx_bytes.data() + byte_start)
+    );
+
+    uint64_t ts = 0;
+    const size_t ts_index = static_cast<size_t>(rx_counter_packets);
+    if (ts_index < rx_ts_ms.size()) {
+        ts = rx_ts_ms[ts_index];
+    }
+
+    rx_counter_packets++;
+
+    jclass objectClass = env->FindClass("java/lang/Object");
+    jobjectArray result = env->NewObjectArray(2, objectClass, nullptr);
+    env->SetObjectArrayElement(result, 0, dataArray);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longCtor = env->GetMethodID(longClass, "<init>", "(J)V");
+    jobject tsObj = env->NewObject(longClass, longCtor, static_cast<jlong>(ts));
+    env->SetObjectArrayElement(result, 1, tsObj);
+
+    env->DeleteLocalRef(dataArray);
+    env->DeleteLocalRef(tsObj);
+
+    return result;
 }
 
 JNIEXPORT jobjectArray JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_readRxSince(JNIEnv *env, jclass, jlong packetIndex, jint maxPackets) {

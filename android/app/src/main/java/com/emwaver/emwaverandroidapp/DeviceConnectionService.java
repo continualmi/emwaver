@@ -41,13 +41,7 @@ public interface DeviceConnectionService {
      * @return true if connected, false otherwise
      */
     boolean checkConnection();
-    
-    /**
-     * Get the next command from the receive buffer
-     * @return Command bytes, or null if no data available
-     */
-    byte[] getCommand();
-    
+
     /**
      * Transmit the buffer to the device
      */
