@@ -7,6 +7,27 @@
     android:background="@color/surfaceBackground"
     tools:context=".ui.sampler.SamplerFragment">
 
+    <TextView
+        android:id="@+id/metricsRowText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="4dp"
+        android:ellipsize="end"
+        android:fontFamily="monospace"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:singleLine="true"
+        android:text=""
+        android:textColor="@color/textSecondary"
+        android:textIsSelectable="true"
+        android:textSize="9sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <androidx.constraintlayout.widget.Guideline
         android:id="@+id/guideline1"
         android:layout_width="wrap_content"
@@ -22,7 +43,7 @@
         app:layout_constraintBottom_toTopOf="@id/guideline1"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toBottomOf="@id/metricsRowText" />
 
 
     <androidx.core.widget.NestedScrollView
