@@ -48,20 +48,12 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         NativeBuffer.storeBulkPkt(data, System.currentTimeMillis());
     }
 
-    public byte[] getCommand() {
-        return NativeBuffer.getCommand();
-    }
-
     public Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
         return NativeBuffer.compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
     public int getStatusNumber() {
         return NativeBuffer.getStatusNumber();
-    }
-
-    public void clearCommandBuffer() {
-        NativeBuffer.clearCommandBuffer();
     }
 
     public void setCaptureMode(boolean enabled) {
@@ -419,7 +411,10 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public byte[] sendCommand(byte[] command, int timeout) {
         if (command != null && finalPort != null) {
             try {
-                clearCommandBuffer(); // Clear any existing command/status data
+                // Desktop-parity: drop any stale RX packets before sending so the "next packet"
+                // consumed via rx_counter belongs to this command's response.
+                NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
+
                 byte[] packet = padCommand64(command);
                 if (packet == null) {
                     Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
@@ -429,30 +424,21 @@ public class USBService extends Service implements DeviceConnectionService, Seri
                 finalPort.write(packet, timeout);
                 logTx(packet);
 
-                // Wait for response; USB CDC/serial reads may deliver a single response in multiple chunks.
-                // Collect chunks until the response "settles" (no new data for a short window) or we time out.
-                final int settleWindowMs = 30;
+                // Wait for exactly one 64B response packet (desktop convention).
                 long startTime = System.currentTimeMillis();
-                long lastDataTime = 0;
-                java.io.ByteArrayOutputStream collected = new java.io.ByteArrayOutputStream();
-
-                while (System.currentTimeMillis() - startTime < timeout) {
-                    byte[] chunk = getCommand();
-                    if (chunk != null && chunk.length > 0) {
-                        collected.write(chunk);
-                        lastDataTime = System.currentTimeMillis();
+                java.io.ByteArrayOutputStream collected = new java.io.ByteArrayOutputStream(64);
+                while (System.currentTimeMillis() - startTime < timeout && collected.size() < 64) {
+                    Object[] next = NativeBuffer.nextRxPacket();
+                    if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
+                        collected.write((byte[]) next[0], 0, 64);
+                        break;
                     }
-
-                    if (collected.size() > 0 && lastDataTime > 0
-                            && (System.currentTimeMillis() - lastDataTime) >= settleWindowMs) {
-                        return collected.toByteArray();
-                    }
-
                     Thread.sleep(5); // Small delay to prevent busy waiting
                 }
 
-                if (collected.size() > 0) {
-                    return collected.toByteArray();
+                byte[] response = collected.toByteArray();
+                if (response.length > 0) {
+                    return response;
                 }
             } catch (IOException | InterruptedException e) {
                 Log.e(TAG, "Error in sendCommand: ", e);

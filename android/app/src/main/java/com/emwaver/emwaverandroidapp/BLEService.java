@@ -152,20 +152,12 @@ public class BLEService extends Service implements DeviceConnectionService {
         NativeBuffer.storeBulkPkt(data, System.currentTimeMillis());
     }
 
-    public byte[] getCommand() {
-        return NativeBuffer.getCommand();
-    }
-
     public Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
         return NativeBuffer.compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
     public int getStatusNumber() {
         return NativeBuffer.getStatusNumber();
-    }
-
-    public void clearCommandBuffer() {
-        NativeBuffer.clearCommandBuffer();
     }
 
     public void setCaptureMode(boolean enabled) {
@@ -1392,8 +1384,10 @@ public class BLEService extends Service implements DeviceConnectionService {
         try {
             // Start timing
             long startTime = System.currentTimeMillis();
-            
-            clearCommandBuffer(); // Clear any existing command/status data
+
+            // Desktop-parity: drop any stale RX packets before sending so the "next packet"
+            // consumed via rx_counter belongs to this command's response.
+            NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
             
             // Check permission
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1436,12 +1430,12 @@ public class BLEService extends Service implements DeviceConnectionService {
 
             logTx(packet);
             
-            // Wait for response
-            byte[] response = null;
-            
-            while (System.currentTimeMillis() - startTime < timeout) {
-                response = getCommand();
-                if (response != null && response.length > 0) {
+            // Wait for exactly one 64B response packet (desktop convention).
+            java.io.ByteArrayOutputStream collected = new java.io.ByteArrayOutputStream(64);
+            while (System.currentTimeMillis() - startTime < timeout && collected.size() < 64) {
+                Object[] next = NativeBuffer.nextRxPacket();
+                if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
+                    collected.write((byte[]) next[0], 0, 64);
                     break;
                 }
                 Thread.sleep(10); // Small delay to prevent busy waiting
@@ -1453,8 +1447,10 @@ public class BLEService extends Service implements DeviceConnectionService {
             Log.i(TAG, "BLE command operation took " + elapsedTime + "ms (retries: " + retryCount + ")");
             
             // If we timed out waiting for a response
-            if (response == null || response.length == 0) {
+            byte[] response = collected.toByteArray();
+            if (response.length == 0) {
                 Log.e(TAG, "Command timed out or received empty response");
+                return null;
             }
             
             return response;
