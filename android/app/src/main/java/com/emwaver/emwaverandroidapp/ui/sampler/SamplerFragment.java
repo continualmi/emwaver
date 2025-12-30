@@ -994,7 +994,6 @@ public class SamplerFragment extends Fragment {
     private void startRecording() {
         updateDeviceTypeFromConnection();
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        boolean invertRecording = prefs.getBoolean(PREF_INVERT_RECORDING, false);
         if (currentDeviceType == DEVICE_STM32) {
             if (USBService == null) {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
@@ -1002,8 +1001,6 @@ public class SamplerFragment extends Fragment {
             }
 
             USBService.clearBuffer();
-            USBService.setCaptureInvert(invertRecording);
-            USBService.setCaptureMode(true);
 
             String selected = binding.gpioSpinner.getSelectedItem().toString();
             int encodedPin = getStm32EncodedPinFromSelection(selected);
@@ -1022,8 +1019,6 @@ public class SamplerFragment extends Fragment {
                 return;
             }
             BLEService.clearBuffer();
-            BLEService.setCaptureInvert(invertRecording);
-            BLEService.setCaptureMode(true);
             String selectedPinString = binding.gpioSpinner.getSelectedItem().toString();
             byte pinNumber = getPinNumberFromSelection(selectedPinString);
 
@@ -1053,15 +1048,11 @@ public class SamplerFragment extends Fragment {
         updateDeviceTypeFromConnection();
         if (currentDeviceType == DEVICE_STM32) {
              if (USBService != null) {
-                 USBService.setCaptureMode(false);
-                 USBService.setCaptureInvert(false);
                  byte[] command = "sample stop".getBytes();
                  USBService.write(command);
              }
         } else {
             if (BLEService != null) {
-                BLEService.setCaptureMode(false);
-                BLEService.setCaptureInvert(false);
                 // Use firmware command format: "sample stop"
                 byte[] command = "sample stop".getBytes();
                 BLEService.write(command);
@@ -1087,8 +1078,6 @@ public class SamplerFragment extends Fragment {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
                 return;
             }
-
-            USBService.setCaptureMode(false);
 
             int bufferLength = USBService.getBufferLength();
             if (bufferLength <= 0) {
@@ -1138,8 +1127,6 @@ public class SamplerFragment extends Fragment {
                 Toast.makeText(getContext(), "BLE Service not available", Toast.LENGTH_SHORT).show();
                 return;
             }
-
-            BLEService.setCaptureMode(false);
 
             int bufferLength = BLEService.getBufferLength();
             if (bufferLength <= 0) {

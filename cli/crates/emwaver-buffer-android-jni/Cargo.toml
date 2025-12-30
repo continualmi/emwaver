@@ -1,0 +1,14 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "emwaver-buffer-android-jni"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "emwaver_buffer_android"
+crate-type = ["cdylib"]
+
+[dependencies]
+emwaver-buffer-core = { path = "../emwaver-buffer-core" }
+jni = "0.21"

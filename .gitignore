@@ -22,6 +22,9 @@ node_modules/
 # CMake
 cmake-build-*/
 
+# Android JNI outputs (generated)
+android/app/src/main/jniLibs/
+
 # ESP-IDF build output (generated)
 build/
 esp/build/
