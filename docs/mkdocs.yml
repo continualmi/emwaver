@@ -12,6 +12,7 @@ theme:
     - navigation.indexes
     - navigation.sections
     - navigation.expand
+    - navigation.footer
   logo: logo.png
   favicon: logo.png
   toc:
@@ -37,7 +38,9 @@ extra:
       link: https://www.youtube.com/@EMWavers
       name: EMWavers on YouTube
 nav:
-  - Get Started: overview.md
+  - Get Started:
+      - EMWaver: overview.md
+      - Installing & Using: installing-using.md
   - Hardware:
       - Build & Reproduce: hardware-catalog.md
       - Written Guide: hardware/build-reproduce.md
@@ -46,11 +49,8 @@ nav:
       - STM32 (STM32F042): flashing-firmware/stm32.md
       - ESP32 (ESP32-S3): flashing-firmware/esp32.md
   - Documentation:
-      - Protocol:
-          - Buffer: documentation/buffer.md
-      - Wavelets:
-          - Overview: wavelets.md
-          - EMWaver DSL: emwaver-dsl.md
+      - Buffer: documentation/buffer.md
+      - Wavelets: wavelets.md
 
 extra_css:
   - styles/theme.css
