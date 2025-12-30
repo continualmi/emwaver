@@ -279,7 +279,7 @@ static void transmission_monitor_task(void *pv_parameters)
         if (!timer_started) {
             // Match STM32 semantics: wait for a small initial fill (or timeout),
             // then start draining the circular RX buffer in the transmit ISR.
-            if (current_bytes_available >= 250 || fill_wait_time_ms >= TRANSMISSION_TIMEOUT_MS) {
+            if (current_bytes_available >= 1000 || fill_wait_time_ms >= TRANSMISSION_TIMEOUT_MS) {
                 timer_start(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
                 timer_started = true;
                 unchanged_time_ms = 0;
