@@ -25,12 +25,6 @@ static std::vector<uint64_t> rx_ts_ms;
 static std::vector<uint8_t> tx_bytes;
 static std::vector<uint64_t> tx_ts_ms;
 
-// Retransmit swap state (see NativeBuffer.beginTransmitSwap/endTransmitRestore).
-static bool tx_swap_active = false;
-static std::vector<uint8_t> saved_rx_bytes;
-static std::vector<uint64_t> saved_rx_ts_ms;
-static uint64_t saved_rx_counter_packets = 0;
-
 static size_t status_offset = 0;
 static bool capture_mode = false;
 static bool capture_invert = false;
@@ -140,44 +134,64 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_storeBulk
     env->ReleaseByteArrayElements(data, bufferPtr, JNI_ABORT);
 }
 
-JNIEXPORT jbyteArray JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_beginTransmitSwap(JNIEnv *env, jclass) {
-    if (tx_swap_active) {
-        // Nested swaps are not supported; return an empty snapshot.
-        return env->NewByteArray(0);
+JNIEXPORT jlongArray JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getRxTimestampsMs(JNIEnv *env, jclass) {
+    jlongArray out = env->NewLongArray(static_cast<jsize>(rx_ts_ms.size()));
+    if (out == nullptr || rx_ts_ms.empty()) {
+        return out;
     }
+    std::vector<jlong> tmp;
+    tmp.reserve(rx_ts_ms.size());
+    for (uint64_t v : rx_ts_ms) {
+        tmp.push_back(static_cast<jlong>(v));
+    }
+    env->SetLongArrayRegion(out, 0, static_cast<jsize>(tmp.size()), tmp.data());
+    return out;
+}
 
-    tx_swap_active = true;
-    saved_rx_bytes = std::move(rx_bytes);
-    saved_rx_ts_ms = std::move(rx_ts_ms);
-    saved_rx_counter_packets = rx_counter_packets;
-
+JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_setRxState(
+    JNIEnv *env,
+    jclass,
+    jbyteArray rxBytes,
+    jlongArray rxTimestampsMs,
+    jlong rxCounter)
+{
     rx_bytes.clear();
     rx_ts_ms.clear();
     rx_counter_packets = 0;
     status_offset = 0;
 
-    jbyteArray javaArray = env->NewByteArray(saved_rx_bytes.size());
-    if (!saved_rx_bytes.empty()) {
-        env->SetByteArrayRegion(javaArray, 0, saved_rx_bytes.size(), reinterpret_cast<const jbyte*>(saved_rx_bytes.data()));
+    if (rxBytes) {
+        const jsize dataSize = env->GetArrayLength(rxBytes);
+        if (dataSize > 0) {
+            jbyte* dataPtr = env->GetByteArrayElements(rxBytes, nullptr);
+            rx_bytes.insert(rx_bytes.end(),
+                            reinterpret_cast<uint8_t*>(dataPtr),
+                            reinterpret_cast<uint8_t*>(dataPtr) + dataSize);
+            env->ReleaseByteArrayElements(rxBytes, dataPtr, JNI_ABORT);
+        }
     }
-    return javaArray;
-}
 
-JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_endTransmitRestore(JNIEnv *env, jclass) {
-    if (!tx_swap_active) {
-        return;
+    const uint64_t packets = rx_packet_count();
+
+    if (rxTimestampsMs) {
+        const jsize tsLen = env->GetArrayLength(rxTimestampsMs);
+        if (tsLen > 0) {
+            jlong* tsPtr = env->GetLongArrayElements(rxTimestampsMs, nullptr);
+            const uint64_t want = std::min<uint64_t>(static_cast<uint64_t>(tsLen), packets);
+            rx_ts_ms.reserve(static_cast<size_t>(want));
+            for (uint64_t i = 0; i < want; i++) {
+                rx_ts_ms.push_back(static_cast<uint64_t>(tsPtr[i]));
+            }
+            env->ReleaseLongArrayElements(rxTimestampsMs, tsPtr, JNI_ABORT);
+        }
     }
 
-    rx_bytes = std::move(saved_rx_bytes);
-    rx_ts_ms = std::move(saved_rx_ts_ms);
-    rx_counter_packets = saved_rx_counter_packets;
+    if (rx_ts_ms.size() < static_cast<size_t>(packets)) {
+        rx_ts_ms.resize(static_cast<size_t>(packets), 0ULL);
+    }
 
-    saved_rx_bytes.clear();
-    saved_rx_ts_ms.clear();
-    saved_rx_counter_packets = 0;
-    tx_swap_active = false;
-
-    status_offset = 0;
+    const uint64_t desired = rxCounter < 0 ? 0ULL : static_cast<uint64_t>(rxCounter);
+    rx_counter_packets = std::min<uint64_t>(desired, packets);
 }
 
 JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getStatusNumber(JNIEnv *env, jclass) {
