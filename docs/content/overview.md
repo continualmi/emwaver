@@ -10,13 +10,15 @@ Because boards can plug straight into your phone over USB‑C for power + commun
 
 EMWaver also targets the “Arduino workflow” directly: the desktop app includes an IDE with a firmware editor and a single-button build/flash flow for EMWaver boards, so you can iterate quickly without wiring together separate toolchains.
 
-The ecosystem includes mobile apps, a desktop app, and the EMWaver CLI (for fast project generation and automation). EMWaver also introduces a middleware layer called Wavelets: self-contained scripts written in a JavaScript-like language (EMWaver DSL) that automate hardware workflows and render portable UI components across Android, iOS, and desktop in a consistent way.
+Hardware comes in two platform families: STM32 devices are ultra low-cost, USB-only, and optimized for the smallest form factors (Android/PC focused), while ESP32-S3 devices support all platforms including iOS, enable wireless workflows (BLE/Wi‑Fi), and serve as the more general-purpose, multi-function boards.
+
+EMWaver ships first-class apps on iOS, Android, and desktop. All three can connect to EMWaver devices and include plug-and-play tooling for the built-in hardware so you can get productive immediately. On desktop, EMWaver is also a complete development environment: an IDE with a firmware editor and one-button build/flash for EMWaver boards. 
+
+Wavelets are small JavaScript scripts that render real, native-feeling UI (via the Wavelet UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Wavelet, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
 
 The goal is simple: how fast can you fully exploit a new sensor/module/chip—not just “read a register” on a 1D serial monitor, but ship a complete UI for the chip’s functionality? With EMWaver, Wavelets let you build that UI in minutes with zero reflashing, while the EMWaver IDE and ecosystem let you iterate on firmware when needed alongside the Wavelet UI. Instead of parsing logs, you get real controls (buttons, lists, pickers) that make it practical to explore and operate hardware features across common embedded protocols like SPI and I2C.
 
-Hardware comes in two platform families: STM32 devices are ultra low-cost, USB-only, and optimized for the smallest form factors (Android/PC focused), while ESP32-S3 devices support all platforms including iOS, enable wireless workflows (BLE/Wi‑Fi), and serve as the more general-purpose, multi-function boards.
-
-The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shield, EMWaver DIY, ISM Waver, Infrared Waver, RFID Waver, GPIO Waver) with capabilities like Sub‑GHz ISM radio (RFM69HW / CC1101), infrared RX + TX, GPIO expansion, USB scripting/BadUSB, RFID (RC522), and 2.4 GHz modules (NRF24L01+). Browse the hardware catalog and build guides here: https://luispl77.github.io/emwaver/hardware/
+The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shield, EMWaver DIY, ISM Waver, Infrared Waver, RFID Waver, GPIO Waver) with capabilities like Sub‑GHz ISM radio (RFM69HW / CC1101), infrared RX + TX, GPIO expansion, USB scripting/BadUSB, RFID (RC522), and 2.4 GHz modules (NRF24L01+). Browse the [hardware catalog](hardware-catalog.md) and [build guides](hardware/build-reproduce.md).
 
 ## Next steps
 
@@ -26,7 +28,7 @@ The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shi
 
     ---
 
-    Install the apps, install the CLI, and watch the walkthrough.
+    Install the apps and watch the walkthrough.
 
     [:octicons-arrow-right-24: Open Installing & Using](installing-using.md)
 
