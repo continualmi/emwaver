@@ -25,6 +25,12 @@ static std::vector<uint64_t> rx_ts_ms;
 static std::vector<uint8_t> tx_bytes;
 static std::vector<uint64_t> tx_ts_ms;
 
+// Retransmit swap state (see NativeBuffer.beginTransmitSwap/endTransmitRestore).
+static bool tx_swap_active = false;
+static std::vector<uint8_t> saved_rx_bytes;
+static std::vector<uint64_t> saved_rx_ts_ms;
+static uint64_t saved_rx_counter_packets = 0;
+
 static size_t status_offset = 0;
 static bool capture_mode = false;
 static bool capture_invert = false;
@@ -132,6 +138,46 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_storeBulk
     append_rx_bytes_with_ts(reinterpret_cast<uint8_t*>(bufferPtr), static_cast<size_t>(lengthOfArray), static_cast<uint64_t>(tsMs));
 
     env->ReleaseByteArrayElements(data, bufferPtr, JNI_ABORT);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_beginTransmitSwap(JNIEnv *env, jclass) {
+    if (tx_swap_active) {
+        // Nested swaps are not supported; return an empty snapshot.
+        return env->NewByteArray(0);
+    }
+
+    tx_swap_active = true;
+    saved_rx_bytes = std::move(rx_bytes);
+    saved_rx_ts_ms = std::move(rx_ts_ms);
+    saved_rx_counter_packets = rx_counter_packets;
+
+    rx_bytes.clear();
+    rx_ts_ms.clear();
+    rx_counter_packets = 0;
+    status_offset = 0;
+
+    jbyteArray javaArray = env->NewByteArray(saved_rx_bytes.size());
+    if (!saved_rx_bytes.empty()) {
+        env->SetByteArrayRegion(javaArray, 0, saved_rx_bytes.size(), reinterpret_cast<const jbyte*>(saved_rx_bytes.data()));
+    }
+    return javaArray;
+}
+
+JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_endTransmitRestore(JNIEnv *env, jclass) {
+    if (!tx_swap_active) {
+        return;
+    }
+
+    rx_bytes = std::move(saved_rx_bytes);
+    rx_ts_ms = std::move(saved_rx_ts_ms);
+    rx_counter_packets = saved_rx_counter_packets;
+
+    saved_rx_bytes.clear();
+    saved_rx_ts_ms.clear();
+    saved_rx_counter_packets = 0;
+    tx_swap_active = false;
+
+    status_offset = 0;
 }
 
 JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getStatusNumber(JNIEnv *env, jclass) {

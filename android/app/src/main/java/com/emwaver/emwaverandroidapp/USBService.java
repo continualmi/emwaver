@@ -163,9 +163,12 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     public void transmitBuffer() {
-        byte[] javaBuffer = getBuffer();
-        clearBuffer();
-        
+        byte[] javaBuffer = NativeBuffer.beginTransmitSwap();
+        if (javaBuffer == null || javaBuffer.length == 0) {
+            NativeBuffer.endTransmitRestore();
+            return;
+        }
+
         int nativeBufferSize = javaBuffer.length;
         int packetSize = 50; // 12.5 bytes per frame, 10us sampling period
         long startTime = System.nanoTime();
@@ -195,7 +198,14 @@ public class USBService extends Service implements DeviceConnectionService, Seri
                 // Busy wait
             }
         }
-        loadBuffer(javaBuffer);
+
+        // Allow queued BS packets to be delivered into the temporary RX buffer, then discard them.
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException ignored) {
+        }
+
+        NativeBuffer.endTransmitRestore();
     }
 
     public int getLogStatus() {
