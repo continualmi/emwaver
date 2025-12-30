@@ -14,6 +14,8 @@ public final class NativeBuffer {
     public static native void clearCommandBuffer();
     public static native void setCaptureMode(boolean enabled);
     public static native void clearBuffer();
+    // Clears RX+TX logs and counters (desktop `buffer_clear` parity).
+    public static native void clearAll();
     public static native int getBufferLength();
     public static native void loadBuffer(byte[] data);
     public static native byte[] getBuffer();

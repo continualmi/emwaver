@@ -201,6 +201,15 @@ public class BLEService extends Service implements DeviceConnectionService {
         NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
+    private static byte[] padCommand64(byte[] data) {
+        if (data == null) return null;
+        if (data.length > 64) return null;
+        if (data.length == 64) return data;
+        byte[] out = new byte[64];
+        System.arraycopy(data, 0, out, 0, data.length);
+        return out;
+    }
+
     public class LocalBinder extends Binder {
         public BLEService getService() {
             return BLEService.this;
@@ -1390,7 +1399,13 @@ public class BLEService extends Service implements DeviceConnectionService {
                 }
             }
             
-            cmdCharacteristic.setValue(command);
+            byte[] packet = padCommand64(command);
+            if (packet == null) {
+                Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
+                return null;
+            }
+
+            cmdCharacteristic.setValue(packet);
             // Use write without response to avoid acknowledgment delay
             //cmdCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
             
@@ -1414,7 +1429,7 @@ public class BLEService extends Service implements DeviceConnectionService {
                 return null;
             }
 
-            logTx(command);
+            logTx(packet);
             
             // Wait for response
             byte[] response = null;
@@ -1469,7 +1484,13 @@ public class BLEService extends Service implements DeviceConnectionService {
                     }
                 }
                 
-                cmdCharacteristic.setValue(data);
+                byte[] packet = padCommand64(data);
+                if (packet == null) {
+                    Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
+                    return;
+                }
+
+                cmdCharacteristic.setValue(packet);
                 
                 // Aggressively retry until success or max attempts reached
                 boolean success = false;
@@ -1489,7 +1510,7 @@ public class BLEService extends Service implements DeviceConnectionService {
                 if (!success) {
                     Log.e(TAG, "Failed to write packet after " + maxRetries + " attempts");
                 } else {
-                    logTx(data);
+                    logTx(packet);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error writing packet", e);

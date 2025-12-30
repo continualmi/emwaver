@@ -104,13 +104,80 @@
 
     </LinearLayout>
 
-
-
+    <!-- Buffer Monitor -->
     <LinearLayout
+        android:id="@+id/buffer_monitor_card"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:padding="12dp"
         android:orientation="vertical"
-        android:layout_marginTop="24dp">
+        android:background="@color/bufferMonitorCardBg">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Buffer Monitor"
+                android:textStyle="bold"
+                android:textColor="@color/bufferMonitorTimestamp" />
+
+            <CheckBox
+                android:id="@+id/show_tx_hex"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="TX HEX"
+                android:checked="false"
+                android:textSize="12sp"
+                android:includeFontPadding="false"
+                android:textColor="@color/bufferMonitorTimestamp" />
+
+            <CheckBox
+                android:id="@+id/show_rx_hex"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="RX HEX"
+                android:checked="false"
+                android:textSize="12sp"
+                android:includeFontPadding="false"
+                android:textColor="@color/bufferMonitorTimestamp"
+                android:layout_marginStart="8dp" />
+
+            <Button
+                android:id="@+id/clear_monitor_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Clear"
+                android:textSize="12sp"
+                android:includeFontPadding="false"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <ScrollView
+            android:id="@+id/serial_monitor_scroll"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="8dp"
+            android:background="@color/bufferMonitorInnerBg">
+
+            <TextView
+                android:id="@+id/serial_monitor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:textColor="@color/bufferMonitorTx"
+                android:fontFamily="monospace"
+                android:textSize="13sp" />
+
+        </ScrollView>
 
         <TextView
             android:id="@+id/command_label"
@@ -118,8 +185,9 @@
             android:layout_height="wrap_content"
             android:text="Command"
             android:textStyle="bold"
-            android:textColor="@color/textSecondary"
+            android:textColor="@color/bufferMonitorTimestamp"
             android:gravity="center_vertical"
+            android:layout_marginTop="12dp"
             android:layout_marginBottom="8dp" />
 
         <LinearLayout
@@ -132,56 +200,20 @@
                 android:layout_width="0dp"
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:hint="e.g., version[0x00][255][0xFF]"
+                android:hint="e.g., version"
                 android:inputType="text"
-                android:padding="8dp"
-                android:textColor="@color/textPrimary"
-                android:textColorHint="@color/textSecondary" />
+                android:padding="10dp"
+                android:textColor="@color/bufferMonitorTx"
+                android:textColorHint="@color/bufferMonitorTimestamp"
+                android:background="@color/bufferMonitorInnerBg" />
 
             <Button
                 android:id="@+id/send_packet_button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Send Packet"
+                android:text="Send"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
     </LinearLayout>
-
-    <!-- Display options -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="8dp"
-        android:gravity="end">
-
-        <CheckBox
-            android:id="@+id/show_hex"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="HEX"
-            android:checked="false"
-            android:textColor="@color/textPrimary" />
-    </LinearLayout>
-
-    <!-- Serial Monitor -->
-    <ScrollView
-        android:id="@+id/serial_monitor_scroll"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:background="@color/monitorBackground">
-
-        <TextView
-            android:id="@+id/serial_monitor"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="8dp"
-            android:textColor="@color/monitorText"
-            android:fontFamily="monospace"
-            android:textSize="14sp" />
-
-    </ScrollView>
 
 </LinearLayout> 
