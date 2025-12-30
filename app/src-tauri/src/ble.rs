@@ -3,6 +3,7 @@ use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use uuid::Uuid;
 
@@ -443,7 +444,7 @@ impl BLEState {
 
         let result = async {
             // Flow control parameters (matching Android/iOS)
-        let max_packet_size = 200;
+        let max_packet_size = 240;
         let min_packet_size = 128;
         let initial_packet_size = 188;
         let mut current_packet_size = max_packet_size;
@@ -457,6 +458,9 @@ impl BLEState {
         let total_bytes = data.len();
         let mut bytes_sent = 0;
         let mut last_status: Option<u16> = None;
+        let mut last_print_status: Option<u16> = None;
+        let mut last_send_at = Instant::now();
+        let mut last_send_bytes_sent: usize = 0;
 
         let drain_bs_status = || -> Option<u16> {
             let mut latest: Option<u16> = None;
@@ -487,6 +491,7 @@ impl BLEState {
             let packet = &data[bytes_sent..end];
 
             // Send packet
+            let write_start = Instant::now();
             let peripheral_guard = self.peripheral.lock().await;
             let peripheral = peripheral_guard.as_ref().ok_or("Not connected")?;
             peripheral
@@ -494,6 +499,7 @@ impl BLEState {
                 .await
                 .map_err(|e| format!("Failed to write packet: {}", e))?;
             drop(peripheral_guard);
+            let write_ms = write_start.elapsed().as_millis() as u64;
 
             // Flow control logic (matching Android/iOS)
             if bytes_sent >= initial_fill_bytes {
@@ -515,9 +521,38 @@ impl BLEState {
             }
 
             // Fixed delay between packets
+            let sleep_start = Instant::now();
             tokio::time::sleep(tokio::time::Duration::from_millis(fixed_delay_ms)).await;
+            let sleep_ms = sleep_start.elapsed().as_millis() as u64;
 
             bytes_sent += packet_size;
+
+            // Option A logging (stderr): show latest parsed BS + pacing parameters.
+            // Throttle to avoid flooding the terminal.
+            if last_print_status != last_status || last_send_at.elapsed() >= tokio::time::Duration::from_millis(250) {
+                let dt_ms = last_send_at.elapsed().as_millis() as u64;
+                let delta_bytes = bytes_sent.saturating_sub(last_send_bytes_sent) as u64;
+                let rate_bps = if dt_ms > 0 {
+                    delta_bytes.saturating_mul(8).saturating_mul(1000) / dt_ms
+                } else {
+                    0
+                };
+                let bs_print: i64 = last_status.map(|v| v as i64).unwrap_or(-1);
+                eprintln!(
+                    "BS={} pkt={} sent={}/{} dt_ms={} rate_bps={} write_ms={} sleep_ms={}",
+                    bs_print,
+                    current_packet_size,
+                    bytes_sent,
+                    total_bytes,
+                    dt_ms,
+                    rate_bps,
+                    write_ms,
+                    sleep_ms
+                );
+                last_print_status = last_status;
+                last_send_at = Instant::now();
+                last_send_bytes_sent = bytes_sent;
+            }
         }
 
         Ok(())
