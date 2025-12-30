@@ -490,8 +490,8 @@ public class EMWaverFragment extends Fragment {
                                     int end = start + 64;
                                     batch.add(new PacketEntry(tx.tsMs[i], true, Arrays.copyOfRange(tx.data, start, end), seq++));
                                 }
-                                txIndex = tx.nextPacketIndex;
                             }
+                            txIndex = tx.nextPacketIndex;
 
                             ReadPackets rx = parseReadPackets(NativeBuffer.readRxSince(rxIndex, 64));
                             int rxCount = rx.tsMs.length;
@@ -501,8 +501,8 @@ public class EMWaverFragment extends Fragment {
                                     int end = start + 64;
                                     batch.add(new PacketEntry(rx.tsMs[i], false, Arrays.copyOfRange(rx.data, start, end), seq++));
                                 }
-                                rxIndex = rx.nextPacketIndex;
                             }
+                            rxIndex = rx.nextPacketIndex;
 
                             if (!batch.isEmpty()) {
                                 Collections.sort(batch, (a, b) -> {
