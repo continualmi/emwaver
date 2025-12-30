@@ -643,14 +643,20 @@ class BLEManager: NSObject, ObservableObject {
             return
         }
 
+        #if EMWAVER_RUST_BUFFER_CORE
+        guard let packet = NativeBufferRust.makePacket64(data) else {
+            print("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
+            return
+        }
+        NativeBufferRust.appendTxBytes(packet, tsMs: Self.nowMs())
+        #else
         guard let packet = Self.makePacket64(data) else {
             print("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
             return
         }
 
-        bufferQueue.sync {
-            logBuffer.appendTxBytesAsPackets(packet, tsMs: Self.nowMs())
-        }
+        bufferQueue.sync { logBuffer.appendTxBytesAsPackets(packet, tsMs: Self.nowMs()) }
+        #endif
         DispatchQueue.main.async {
             self.bufferVersion += 1
         }
@@ -666,23 +672,37 @@ class BLEManager: NSObject, ObservableObject {
     }
 
     func bufferReadPacketsSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
-        bufferQueue.sync {
-            logBuffer.readRxSince(packetIndex: packetIndex, maxPackets: maxPackets)
-        }
+        #if EMWAVER_RUST_BUFFER_CORE
+        let rp = NativeBufferRust.readRxSince(packetIndex: packetIndex, maxPackets: maxPackets)
+        return ReadPackets(data: rp.data, ts_ms: rp.ts_ms, next_packet_index: rp.next_packet_index, available_packets: rp.available_packets)
+        #else
+        return bufferQueue.sync { logBuffer.readRxSince(packetIndex: packetIndex, maxPackets: maxPackets) }
+        #endif
     }
 
     func bufferReadTxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
-        bufferQueue.sync {
-            logBuffer.readTxSince(packetIndex: packetIndex, maxPackets: maxPackets)
-        }
+        #if EMWAVER_RUST_BUFFER_CORE
+        let rp = NativeBufferRust.readTxSince(packetIndex: packetIndex, maxPackets: maxPackets)
+        return ReadPackets(data: rp.data, ts_ms: rp.ts_ms, next_packet_index: rp.next_packet_index, available_packets: rp.available_packets)
+        #else
+        return bufferQueue.sync { logBuffer.readTxSince(packetIndex: packetIndex, maxPackets: maxPackets) }
+        #endif
     }
 
     func bufferGetPacketCount() -> UInt64 {
-        bufferQueue.sync { logBuffer.rxPacketCount() }
+        #if EMWAVER_RUST_BUFFER_CORE
+        return NativeBufferRust.getRxPacketCount()
+        #else
+        return bufferQueue.sync { logBuffer.rxPacketCount() }
+        #endif
     }
 
     func bufferGetTxPacketCount() -> UInt64 {
-        bufferQueue.sync { logBuffer.txPacketCount() }
+        #if EMWAVER_RUST_BUFFER_CORE
+        return NativeBufferRust.getTxPacketCount()
+        #else
+        return bufferQueue.sync { logBuffer.txPacketCount() }
+        #endif
     }
 
     struct BufferPacket {
@@ -691,18 +711,31 @@ class BLEManager: NSObject, ObservableObject {
     }
 
     func bufferNextRxPacket() -> BufferPacket? {
-        bufferQueue.sync {
+        #if EMWAVER_RUST_BUFFER_CORE
+        guard let pkt = NativeBufferRust.nextRxPacket() else { return nil }
+        return BufferPacket(data: Array(pkt.packet64), ts_ms: pkt.tsMs)
+        #else
+        return bufferQueue.sync {
             guard let pkt = logBuffer.nextRxPacket() else { return nil }
             return BufferPacket(data: pkt.data, ts_ms: pkt.tsMs)
         }
+        #endif
     }
 
     func bufferGetRxCounter() -> UInt64 {
-        bufferQueue.sync { logBuffer.rxCounter }
+        #if EMWAVER_RUST_BUFFER_CORE
+        return NativeBufferRust.getRxCounter()
+        #else
+        return bufferQueue.sync { logBuffer.rxCounter }
+        #endif
     }
 
     func bufferSetRxCounter(_ value: UInt64) {
+        #if EMWAVER_RUST_BUFFER_CORE
+        NativeBufferRust.setRxCounter(value)
+        #else
         bufferQueue.sync { logBuffer.rxCounter = value }
+        #endif
     }
 
     struct BufferMonitorEntry: Identifiable {
@@ -718,14 +751,26 @@ class BLEManager: NSObject, ObservableObject {
         return bufferQueue.sync {
             let maxPackets = min(limit, 1500)
 
+            #if EMWAVER_RUST_BUFFER_CORE
+            let txCount = NativeBufferRust.getTxPacketCount()
+            let rxCount = NativeBufferRust.getRxPacketCount()
+            #else
             let txCount = logBuffer.txPacketCount()
             let rxCount = logBuffer.rxPacketCount()
+            #endif
 
             let txStart = txCount > UInt64(maxPackets) ? (txCount - UInt64(maxPackets)) : 0
             let rxStart = rxCount > UInt64(maxPackets) ? (rxCount - UInt64(maxPackets)) : 0
 
+            #if EMWAVER_RUST_BUFFER_CORE
+            let txRust = NativeBufferRust.readTxSince(packetIndex: txStart, maxPackets: maxPackets)
+            let rxRust = NativeBufferRust.readRxSince(packetIndex: rxStart, maxPackets: maxPackets)
+            let tx = ReadPackets(data: txRust.data, ts_ms: txRust.ts_ms, next_packet_index: txRust.next_packet_index, available_packets: txRust.available_packets)
+            let rx = ReadPackets(data: rxRust.data, ts_ms: rxRust.ts_ms, next_packet_index: rxRust.next_packet_index, available_packets: rxRust.available_packets)
+            #else
             let tx = logBuffer.readTxSince(packetIndex: txStart, maxPackets: maxPackets)
             let rx = logBuffer.readRxSince(packetIndex: rxStart, maxPackets: maxPackets)
+            #endif
 
             var out: [BufferMonitorEntry] = []
             out.reserveCapacity(tx.ts_ms.count + rx.ts_ms.count)
@@ -777,9 +822,11 @@ class BLEManager: NSObject, ObservableObject {
     
     // MARK: - Buffer Operations
     @objc func clearBuffer() {
-        bufferQueue.sync {
-            logBuffer.clear()
-        }
+        #if EMWAVER_RUST_BUFFER_CORE
+        NativeBufferRust.clearAll()
+        #else
+        bufferQueue.sync { logBuffer.clear() }
+        #endif
         // Update UI-affecting state on main thread 
         DispatchQueue.main.async {
             self.isNewCommandAvailable = false
@@ -788,10 +835,17 @@ class BLEManager: NSObject, ObservableObject {
     }
     
     func storeBulkPkt(_ data: Data) {
+        #if EMWAVER_RUST_BUFFER_CORE
+        bufferQueue.sync {
+            NativeBufferRust.storeBulkPkt(data, tsMs: Self.nowMs())
+            isNewCommandAvailable = true
+        }
+        #else
         bufferQueue.sync {
             logBuffer.appendRxBytes(data, tsMs: Self.nowMs())
             isNewCommandAvailable = true
         }
+        #endif
         // This flag affects UI state indirectly, so update on main thread
         DispatchQueue.main.async {
             self.bufferVersion += 1
@@ -810,6 +864,16 @@ class BLEManager: NSObject, ObservableObject {
     
     func getCommand() -> Data? {
         var result: Data?
+        #if EMWAVER_RUST_BUFFER_CORE
+        bufferQueue.sync {
+            if isNewCommandAvailable {
+                let saved = NativeBufferRust.takeRxState()
+                NativeBufferRust.setRxCounter(0)
+                result = saved.rxBytes
+                isNewCommandAvailable = false
+            }
+        }
+        #else
         bufferQueue.sync {
             if isNewCommandAvailable {
                 result = logBuffer.rxBytes
@@ -819,6 +883,7 @@ class BLEManager: NSObject, ObservableObject {
                 isNewCommandAvailable = false  // Reset flag synchronously
             }
         }
+        #endif
         return result
     }
     
@@ -842,9 +907,11 @@ class BLEManager: NSObject, ObservableObject {
     /// Replaces the current buffer content with the provided data.
     /// - Parameter data: The new data for the buffer.
     @objc func loadBuffer(data: Data) {
-        bufferQueue.sync {
-            logBuffer.rxSetBytes(data)
-        }
+        #if EMWAVER_RUST_BUFFER_CORE
+        NativeBufferRust.loadBuffer(data)
+        #else
+        bufferQueue.sync { logBuffer.rxSetBytes(data) }
+        #endif
         // Update UI-affecting state on main thread
         DispatchQueue.main.async {
             self.isNewCommandAvailable = !data.isEmpty
@@ -860,20 +927,29 @@ class BLEManager: NSObject, ObservableObject {
     /// Returns the entire content of the buffer.
     /// - Returns: The buffer data.
     @objc func getBuffer() -> Data {
+        #if EMWAVER_RUST_BUFFER_CORE
+        return NativeBufferRust.getBuffer()
+        #else
         var bufferCopy = Data()
-        bufferQueue.sync {
-            bufferCopy = logBuffer.rxBytes
-        }
+        bufferQueue.sync { bufferCopy = logBuffer.rxBytes }
         return bufferCopy
+        #endif
     }
 
     /// Inverts all the bits in the buffer.
     func invertBuffer() {
         var isEmpty = false
+        #if EMWAVER_RUST_BUFFER_CORE
+        let bytes = NativeBufferRust.getBuffer()
+        let inverted = Data(bytes.map { ~$0 })
+        NativeBufferRust.loadBuffer(inverted)
+        isEmpty = inverted.isEmpty
+        #else
         bufferQueue.sync {
             logBuffer.rxBytes = Data(logBuffer.rxBytes.map { ~$0 })
             isEmpty = logBuffer.rxBytes.isEmpty
         }
+        #endif
         // Update UI-affecting state on main thread
         DispatchQueue.main.async {
             self.isNewCommandAvailable = !isEmpty
@@ -917,6 +993,9 @@ class BLEManager: NSObject, ObservableObject {
     ///   - numberBins: The number of bins for compression.
     /// - Returns: A tuple containing arrays of time values (Float) and corresponding data values (Float).
     func compressDataBits(rangeStart: Int, rangeEnd: Int, numberBins: Int) -> ([Float], [Float]) {
+        #if EMWAVER_RUST_BUFFER_CORE
+        return NativeBufferRust.compressDataBits(rangeStart: rangeStart, rangeEnd: rangeEnd, numberBins: numberBins)
+        #else
         // EXACTLY match Android implementation
         let timePerSample: Float = 1.0
         var timeValues: [Float] = []
@@ -988,11 +1067,73 @@ class BLEManager: NSObject, ObservableObject {
         }
         
         return (timeValues, dataValues)
+        #endif
     }
     
     /// Transmits the current buffer content to the connected peripheral.
     /// Implements flow control based on status feedback from the device.
     @objc func transmitBuffer() {
+        #if EMWAVER_RUST_BUFFER_CORE
+        guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
+            print("Cannot transmit buffer: Not connected or characteristic not ready.")
+            return
+        }
+
+        let bufferToSend = getBuffer()
+        guard !bufferToSend.isEmpty else {
+            print("Buffer is empty, nothing to transmit.")
+            return
+        }
+
+        // Desktop parity: swap out RX buffer while transmitting so BS/response packets don't
+        // contaminate sampler data stored in the same shared buffer.
+        let saved = NativeBufferRust.takeRxState()
+        NativeBufferRust.setRxCounter(0)
+        isNewCommandAvailable = false
+        DispatchQueue.main.async { self.bufferVersion += 1 }
+
+        let profile = NativeBufferRust.txBleProfile()
+        let fixedDelayMs = Double(profile.fixed_delay_ms)
+
+        let totalBytesToSend = bufferToSend.count
+        var currentPacketSize = Int(profile.max_packet_size)
+        var lastStatus = Int(profile.target_buffer_level)
+
+        print("Starting buffer transmission: \(totalBytesToSend) bytes, Fixed Delay: \(fixedDelayMs)ms")
+
+        var bytesSent = 0
+        while bytesSent < totalBytesToSend {
+            while let next = NativeBufferRust.nextRxPacket() {
+                let status = NativeBufferRust.parseBsStatus(next.packet64)
+                if status >= 0 { lastStatus = status }
+            }
+
+            currentPacketSize = NativeBufferRust.txBleNextPacketSize(
+                bytesSent: bytesSent,
+                lastStatus: lastStatus,
+                currentPacketSize: currentPacketSize
+            )
+
+            let remainingBytes = totalBytesToSend - bytesSent
+            let packetSize = min(currentPacketSize, remainingBytes)
+            let endRange = bytesSent + packetSize
+            let packet = bufferToSend.subdata(in: bytesSent..<endRange)
+
+            NativeBufferRust.appendTxBytes(packet, tsMs: Self.nowMs())
+            DispatchQueue.main.async { self.bufferVersion += 1 }
+            peripheral.writeValue(packet, for: characteristic, type: .withoutResponse)
+
+            bytesSent = endRange
+            Thread.sleep(forTimeInterval: fixedDelayMs / 1000.0)
+        }
+
+        Thread.sleep(forTimeInterval: 0.1) // 100ms delay (match Android)
+
+        // Discard RX scratch packets accumulated during transmit and restore sampler buffer.
+        NativeBufferRust.restoreRxState(rxBytes: saved.rxBytes, rxTsMs: saved.rxTsMs, rxCounter: saved.rxCounter)
+        isNewCommandAvailable = !bufferToSend.isEmpty
+        DispatchQueue.main.async { self.bufferVersion += 1 }
+        #else
         guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
             print("Cannot transmit buffer: Not connected or characteristic not ready.")
             return
@@ -1021,7 +1162,7 @@ class BLEManager: NSObject, ObservableObject {
         let minPacketSize = 128
         let initialPacketSize = 188
         var currentPacketSize = maxPacketSize // Start with max for initial fill
-        
+
         let fixedDelayMs: Double = 15.0 // Milliseconds, match Android's 15ms
 
         // Flow control thresholds (match Android)
@@ -1037,10 +1178,10 @@ class BLEManager: NSObject, ObservableObject {
         while bytesSent < totalBytesToSend {
             // --- Get ESP32 Buffer Status ---
             let bufferStatus = bufferQueue.sync { getStatusNumber() } // Check for status in RX scratch buffer
-            
+
             // For simulation/testing, if no status received, assume target level
             let effectiveBufferStatus = (bufferStatus != -1) ? bufferStatus : targetBufferLevel
-            
+
             print("Buffer Status: \(effectiveBufferStatus) | Pkt Size: \(currentPacketSize)")
 
             // --- Calculate Packet ---
@@ -1058,7 +1199,7 @@ class BLEManager: NSObject, ObservableObject {
                 self.bufferVersion += 1
             }
             peripheral.writeValue(packet, for: characteristic, type: .withoutResponse)
-            
+
             // --- Apply Flow Control (after initial fill) ---
             if bytesSent >= initialFillBytes {
                 if effectiveBufferStatus > bufferHighThreshold {
@@ -1083,19 +1224,19 @@ class BLEManager: NSObject, ObservableObject {
                 // During initial fill, keep max packet size
                 currentPacketSize = maxPacketSize
             }
-            
+
             // --- Fixed Delay - MATCH ANDROID BEHAVIOR ---
             // Use Thread.sleep for consistent timing (blocks thread but ensures timing precision)
             Thread.sleep(forTimeInterval: fixedDelayMs / 1000.0)
 
             bytesSent = endRange
         }
-        
+
         print("BEFORE_RELOAD: Total bytes sent: \(bytesSent)")
 
         // Add delay for in-flight notifications (100ms - match Android exactly)
         Thread.sleep(forTimeInterval: 0.1) // 100ms delay
-        
+
         // Discard RX scratch packets accumulated during transmit and restore the sampler buffer.
         bufferQueue.sync {
             logBuffer.rxSetBytes(bufferToSend)
@@ -1106,6 +1247,7 @@ class BLEManager: NSObject, ObservableObject {
         }
         print("AFTER_RELOAD: Buffer now contains \(self.getBuffer().count) bytes")
         print("Buffer transmission complete: \(totalBytesToSend) bytes sent")
+        #endif
     }
 
     // MARK: - Public Accessors
@@ -1120,23 +1262,32 @@ class BLEManager: NSObject, ObservableObject {
     }
 
     func sendCommand(_ command: Data, timeout: Int, packets: Int) -> Data? {
-        guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
+        guard isConnected, peripheralDevice != nil, cmdCharacteristic != nil else {
             print("Cannot send command: Not connected to device")
             return nil
         }
         
+        #if EMWAVER_RUST_BUFFER_CORE
+        guard let packet = NativeBufferRust.makePacket64(command) else {
+            print("Cannot send command: too large (\(command.count) bytes, max \(Self.packetSizeBytes))")
+            return nil
+        }
+        #else
         guard let packet = Self.makePacket64(command) else {
             print("Cannot send command: too large (\(command.count) bytes, max \(Self.packetSizeBytes))")
             return nil
         }
+        #endif
 
         let startTime = Date().timeIntervalSince1970
         print("BLE: Sending command: \(packet.map { String(format: "%02X", $0) }.joined(separator: " "))")
 
         // Desktop parity: drop any stale RX packets so next_rx_packet returns this command's response.
-        bufferQueue.sync {
-            logBuffer.rxCounter = logBuffer.rxPacketCount()
-        }
+        #if EMWAVER_RUST_BUFFER_CORE
+        NativeBufferRust.setRxCounter(NativeBufferRust.getRxPacketCount())
+        #else
+        bufferQueue.sync { logBuffer.rxCounter = logBuffer.rxPacketCount() }
+        #endif
 
         // Desktop parity: send as a 64B command packet without waiting for ATT response.
         sendPacket(packet)
@@ -1152,10 +1303,17 @@ class BLEManager: NSObject, ObservableObject {
                 return nil
             }
 
+            #if EMWAVER_RUST_BUFFER_CORE
+            if let pkt = NativeBufferRust.nextRxPacket() {
+                out.append(pkt.packet64)
+                continue
+            }
+            #else
             if let pkt = bufferQueue.sync(execute: { logBuffer.nextRxPacket() }) {
                 out.append(contentsOf: pkt.data)
                 continue
             }
+            #endif
 
             let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
             if elapsedMs >= Double(max(1, timeout)) {
