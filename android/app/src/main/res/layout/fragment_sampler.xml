@@ -129,7 +129,7 @@
                 android:layout_marginTop="8dp"
                 android:text="Use PWM carrier (IR)"
                 android:checked="true"
-                android:visibility="gone" />
+                android:visibility="visible" />
 
             <TextView
                 android:id="@+id/pwmLabel"
