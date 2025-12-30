@@ -89,6 +89,18 @@ JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_clearBuff
     status_offset = 0;
 }
 
+JNIEXPORT void JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_clearAll(JNIEnv *env, jclass) {
+    rx_bytes.clear();
+    rx_counter_packets = 0;
+    rx_ts_ms.clear();
+
+    tx_bytes.clear();
+    tx_ts_ms.clear();
+
+    command_cursor_bytes = 0;
+    status_offset = 0;
+}
+
 JNIEXPORT jint JNICALL Java_com_emwaver_emwaverandroidapp_NativeBuffer_getBufferLength(JNIEnv *env, jclass) {
     return static_cast<jint>(rx_bytes.size());
 }

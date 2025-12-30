@@ -27,7 +27,9 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.widget.AdapterView;
-import android.text.Html;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -38,11 +40,19 @@ import androidx.core.content.ContextCompat;
 import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.DeviceConnectionService;
+import com.emwaver.emwaverandroidapp.NativeBuffer;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.BLEReceiver;
 
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.Deque;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,6 +63,7 @@ public class EMWaverFragment extends Fragment {
 
     private EditText commandInput;
     private Button sendPacketButton;
+    private Button clearMonitorButton;
     private TextView emwaverStatusText;
     private Button disconnectButton;
     private Button connectButton;
@@ -70,11 +81,18 @@ public class EMWaverFragment extends Fragment {
     private TextView serialMonitor;
     private ScrollView serialMonitorScroll;
 
-    private CheckBox showHex;
+    private CheckBox showTxHex;
+    private CheckBox showRxHex;
 
-    private static final int MONITOR_UPDATE_INTERVAL = 100; // 100ms
+    private static final int MONITOR_UPDATE_INTERVAL = 500; // 500ms
     private Handler monitorHandler;
     private Runnable monitorRunnable;
+
+    private static final int MAX_MONITOR_ENTRIES = 1500;
+    private final Deque<CharSequence> monitorLines = new ArrayDeque<>();
+    private long rxIndex = 0;
+    private long txIndex = 0;
+    private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss.SSS");
     
     // Handler for periodic status updates
     private Handler statusUpdateHandler;
@@ -91,9 +109,11 @@ public class EMWaverFragment extends Fragment {
         // Initialize UI elements
         commandInput = root.findViewById(R.id.command_input);
         sendPacketButton = root.findViewById(R.id.send_packet_button);
+        clearMonitorButton = root.findViewById(R.id.clear_monitor_button);
         serialMonitor = root.findViewById(R.id.serial_monitor);
         serialMonitorScroll = root.findViewById(R.id.serial_monitor_scroll);
-        showHex = root.findViewById(R.id.show_hex);
+        showTxHex = root.findViewById(R.id.show_tx_hex);
+        showRxHex = root.findViewById(R.id.show_rx_hex);
         emwaverStatusText = root.findViewById(R.id.emwaver_status_text);
         disconnectButton = root.findViewById(R.id.disconnect_button);
         connectButton = root.findViewById(R.id.connect_button);
@@ -103,6 +123,7 @@ public class EMWaverFragment extends Fragment {
 
 
         setupSendCommandButton();
+        setupClearMonitorButton();
         setupMonitorUpdates();
         setupStatusUpdates();
         setupDisconnectButton();
@@ -253,14 +274,8 @@ public class EMWaverFragment extends Fragment {
                 return;
             }
 
-            byte[] commandBytes = parseCommand(userInput);
-            if (commandBytes == null) {
-                Toast.makeText(getContext(), "Invalid packet format.", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            // Log the sent command bytes
-            logTxData(commandBytes);
+            String framed = userInput.endsWith("\n") ? userInput : userInput + "\n";
+            byte[] commandBytes = framed.getBytes(StandardCharsets.UTF_8);
 
             Log.d(TAG, "Sending packet: " + bytesToHex(commandBytes));
             if (connectionManager != null) {
@@ -269,12 +284,26 @@ public class EMWaverFragment extends Fragment {
                 if (activeService != null && activeService.checkConnection()) {
                     Log.d(TAG, "Sending via: " + activeService.getConnectionType());
                     activeService.sendPacket(commandBytes);
+                    commandInput.setText("");
                 } else {
                     Log.w(TAG, "Cannot send: service=" + (activeService != null) + ", connected=" + (activeService != null ? activeService.checkConnection() : false));
                     Toast.makeText(getContext(), "Device not connected", Toast.LENGTH_SHORT).show();
                 }
             } else {
                 Toast.makeText(getContext(), "Connection manager not initialized", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void setupClearMonitorButton() {
+        if (clearMonitorButton == null) return;
+        clearMonitorButton.setOnClickListener(v -> {
+            NativeBuffer.clearAll();
+            monitorLines.clear();
+            rxIndex = 0;
+            txIndex = 0;
+            if (serialMonitor != null) {
+                serialMonitor.setText("");
             }
         });
     }
@@ -319,96 +348,44 @@ public class EMWaverFragment extends Fragment {
         });
     }
 
-    /**
-     * Parses the user input into a byte array.
-     * Supports:
-     * - Hexadecimal in brackets (e.g., [0x1A], [0xFF])
-     * - Decimal in brackets (e.g., [26], [255])
-     * - Mixed format (e.g., read[0x00][255][0xFF])
-     * - ASCII strings without brackets (e.g., req)
-     *
-     * @param input The command input string.
-     * @return Byte array representation of the command, or null if invalid.
-     */
-    private byte[] parseCommand(String input) {
-        List<Byte> byteList = new ArrayList<>();
+    private static final class PacketEntry {
+        final long tsMs;
+        final boolean isTx;
+        final byte[] data;
+        final long seq;
 
-        try {
-            // Check if the input contains any bracketed values
-            if (input.contains("[") && input.contains("]")) {
-                // Split the input by square brackets
-                String[] parts = input.split("\\[|\\]");
-                for (String part : parts) {
-                    part = part.trim();
-                    if (part.isEmpty()) continue;
-
-                    if (part.startsWith("0x") || part.startsWith("0X")) {
-                        // Hexadecimal value
-                        byteList.add((byte) Integer.parseInt(part.substring(2), 16));
-                    } else if (part.matches("\\d+")) {
-                        // Decimal value
-                        int val = Integer.parseInt(part);
-                        if (val < 0 || val > 255) {
-                            throw new IllegalArgumentException("Decimal value out of byte range: " + val);
-                        }
-                        byteList.add((byte) val);
-                    } else {
-                        // Treat as ASCII if it's not in brackets
-                        byteList.addAll(convertStringToByteList(part));
-                    }
-                }
-            } else {
-                // If no brackets, treat the entire input as ASCII
-                byteList.addAll(convertStringToByteList(input));
-            }
-
-            // Convert List<Byte> to byte[]
-            byte[] bytes = new byte[byteList.size()];
-            for (int i = 0; i < byteList.size(); i++) {
-                bytes[i] = byteList.get(i);
-            }
-            return bytes;
-        } catch (IllegalArgumentException e) {
-            Log.e(TAG, "parseCommand: Error parsing input", e);
-            return null;
+        PacketEntry(long tsMs, boolean isTx, byte[] data, long seq) {
+            this.tsMs = tsMs;
+            this.isTx = isTx;
+            this.data = data;
+            this.seq = seq;
         }
     }
 
-    private List<Byte> convertStringToByteList(String input) {
-        List<Byte> byteList = new ArrayList<>();
-        for (char c : input.toCharArray()) {
-            byteList.add((byte) c);
+    private static final class ReadPackets {
+        final byte[] data;
+        final long[] tsMs;
+        final long nextPacketIndex;
+        final long availablePackets;
+
+        ReadPackets(byte[] data, long[] tsMs, long nextPacketIndex, long availablePackets) {
+            this.data = data != null ? data : new byte[0];
+            this.tsMs = tsMs != null ? tsMs : new long[0];
+            this.nextPacketIndex = nextPacketIndex;
+            this.availablePackets = availablePackets;
         }
-        return byteList;
     }
 
-
-
-    /**
-     * Updates the response TextViews with the provided messages.
-     *
-     * @param hexMessage The hex message to display.
-     * @param asciiMessage The ASCII message to display.
-     */
-    private void updateResponse(final String hexMessage, final String asciiMessage) {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(() -> {
-                String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS")
-                    .format(new java.util.Date());
-                
-                StringBuilder content = new StringBuilder();
-                content.append(String.format("[%s] ", timestamp));
-                
-                if (showHex.isChecked()) {
-                    content.append(hexMessage);
-                } else {
-                    content.append(asciiMessage);
-                }
-                
-                String htmlOutput = "<font color='#00AA00'>" + content.toString() + "</font>";
-                appendToSerialMonitor(htmlOutput);
-            });
+    private ReadPackets parseReadPackets(Object[] resp) {
+        if (resp == null || resp.length < 4) {
+            return new ReadPackets(new byte[0], new long[0], 0, 0);
         }
+
+        byte[] data = (byte[]) resp[0];
+        long[] ts = (long[]) resp[1];
+        long next = ((Long) resp[2]).longValue();
+        long avail = ((Long) resp[3]).longValue();
+        return new ReadPackets(data, ts, next, avail);
     }
 
     /**
@@ -446,34 +423,100 @@ public class EMWaverFragment extends Fragment {
     }
 
     private void clearSerialMonitor() {
-        if (serialMonitor != null) {
-            serialMonitor.setText("");
-        }
+        NativeBuffer.clearAll();
+        monitorLines.clear();
+        rxIndex = 0;
+        txIndex = 0;
+        if (serialMonitor != null) serialMonitor.setText("");
     }
 
-    private void appendToSerialMonitor(String htmlMessage) {
-        if (serialMonitor != null && getActivity() != null) {
-            getActivity().runOnUiThread(() -> {
-                serialMonitor.append(Html.fromHtml(htmlMessage + "<br/>"));
-                serialMonitorScroll.post(() -> 
-                    serialMonitorScroll.fullScroll(View.FOCUS_DOWN));
-            });
+    private void appendMonitorLine(boolean isTx, long tsMs, byte[] bytes) {
+        if (serialMonitor == null || getActivity() == null) return;
+
+        final int timestampColor = ContextCompat.getColor(requireContext(), R.color.bufferMonitorTimestamp);
+        final int contentColor = ContextCompat.getColor(requireContext(), isTx ? R.color.bufferMonitorTx : R.color.bufferMonitorRx);
+
+        final String timeStr = timestampFormat.format(new Date(tsMs));
+        final boolean showHexForPacket = isTx ? (showTxHex != null && showTxHex.isChecked()) : (showRxHex != null && showRxHex.isChecked());
+        final String content = showHexForPacket ? bytesToHex(bytes) : bytesToAscii(bytes);
+
+        SpannableStringBuilder line = new SpannableStringBuilder();
+        int startTs = line.length();
+        line.append("[").append(timeStr).append("] ");
+        line.setSpan(new ForegroundColorSpan(timestampColor), startTs, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        int startContent = line.length();
+        line.append(content).append("\n");
+        line.setSpan(new ForegroundColorSpan(contentColor), startContent, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        monitorLines.addLast(line);
+        boolean needsRebuild = monitorLines.size() > MAX_MONITOR_ENTRIES;
+        while (monitorLines.size() > MAX_MONITOR_ENTRIES) {
+            monitorLines.removeFirst();
         }
+
+        getActivity().runOnUiThread(() -> {
+            if (needsRebuild) {
+                SpannableStringBuilder rebuilt = new SpannableStringBuilder();
+                for (CharSequence l : monitorLines) {
+                    rebuilt.append(l);
+                }
+                serialMonitor.setText(rebuilt);
+            } else {
+                serialMonitor.append(line);
+            }
+            serialMonitorScroll.post(() -> serialMonitorScroll.fullScroll(View.FOCUS_DOWN));
+        });
     }
 
     private void setupMonitorUpdates() {
         monitorHandler = new Handler(Looper.getMainLooper());
         monitorRunnable = new Runnable() {
+            private long seq = 0;
+
             @Override
             public void run() {
                 if (connectionManager != null) {
                     activeService = connectionManager.getActiveService();
                     if (activeService != null && activeService.checkConnection()) {
-                        byte[] data = activeService.getCommand();
-                        if (data != null && data.length > 0) {
-                            String hexData = bytesToHex(data);
-                            String asciiData = bytesToAscii(data);
-                            updateResponse(hexData, asciiData);
+                        try {
+                            List<PacketEntry> batch = new ArrayList<>();
+
+                            ReadPackets tx = parseReadPackets(NativeBuffer.readTxSince(txIndex, 64));
+                            int txCount = tx.tsMs.length;
+                            if (txCount > 0 && tx.data.length >= txCount * 64) {
+                                for (int i = 0; i < txCount; i++) {
+                                    int start = i * 64;
+                                    int end = start + 64;
+                                    batch.add(new PacketEntry(tx.tsMs[i], true, Arrays.copyOfRange(tx.data, start, end), seq++));
+                                }
+                                txIndex = tx.nextPacketIndex;
+                            }
+
+                            ReadPackets rx = parseReadPackets(NativeBuffer.readRxSince(rxIndex, 64));
+                            int rxCount = rx.tsMs.length;
+                            if (rxCount > 0 && rx.data.length >= rxCount * 64) {
+                                for (int i = 0; i < rxCount; i++) {
+                                    int start = i * 64;
+                                    int end = start + 64;
+                                    batch.add(new PacketEntry(rx.tsMs[i], false, Arrays.copyOfRange(rx.data, start, end), seq++));
+                                }
+                                rxIndex = rx.nextPacketIndex;
+                            }
+
+                            if (!batch.isEmpty()) {
+                                Collections.sort(batch, (a, b) -> {
+                                    if (a.tsMs != b.tsMs) return Long.compare(a.tsMs, b.tsMs);
+                                    if (a.isTx != b.isTx) return a.isTx ? -1 : 1;
+                                    return Long.compare(a.seq, b.seq);
+                                });
+
+                                for (PacketEntry entry : batch) {
+                                    appendMonitorLine(entry.isTx, entry.tsMs, entry.data);
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.e(TAG, "Buffer monitor poll failed", e);
                         }
                     }
                 }
@@ -514,28 +557,6 @@ public class EMWaverFragment extends Fragment {
     }
 
 
-
-    private void logTxData(byte[] data) {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(() -> {
-                String timestamp = new java.text.SimpleDateFormat("HH:mm:ss.SSS")
-                        .format(new java.util.Date());
-
-                StringBuilder content = new StringBuilder();
-                content.append(String.format("[%s] ", timestamp));
-
-                if (showHex.isChecked()) {
-                    content.append(bytesToHex(data));
-                } else {
-                    content.append(bytesToAscii(data));
-                }
-
-                String htmlOutput = "<font color='#FFD700'>" + content.toString() + "</font>";
-                appendToSerialMonitor(htmlOutput);
-            });
-        }
-    }
-
     // Extract version checking logic into a separate method
     private void requestFirmwareVersion() {
         if (connectionManager != null) {
@@ -544,19 +565,11 @@ public class EMWaverFragment extends Fragment {
                 // Create the "version" command (changed from "ver")
                 byte[] command = new byte[]{'v', 'e', 'r', 's', 'i', 'o', 'n'};
                 
-                // Log the command to serial monitor as transmitted
-                logTxData(command);
-                
                 // Send the command to the device using existing command mechanism
                 byte[] response = activeService.sendCommand(command, 2000);
                 
                 // Process the response
                 if (response != null && response.length > 0) {
-                    // Display the response in the serial monitor
-                    String hexData = bytesToHex(response);
-                    String asciiData = bytesToAscii(response);
-                    updateResponse(hexData, asciiData);
-                    
                     // Parse the version from the welcome message (ASCII bytes)
                     String fullMessage = new String(response, StandardCharsets.US_ASCII);
                     String version = extractVersion(fullMessage);

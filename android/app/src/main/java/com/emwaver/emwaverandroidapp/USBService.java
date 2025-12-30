@@ -97,6 +97,15 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
+    private static byte[] padCommand64(byte[] data) {
+        if (data == null) return null;
+        if (data.length > 64) return null;
+        if (data.length == 64) return data;
+        byte[] out = new byte[64];
+        System.arraycopy(data, 0, out, 0, data.length);
+        return out;
+    }
+
     private long lastPacketReceivedTime = 0;
 
     public void setUsbDeviceConnection(UsbDeviceConnection connection) {
@@ -411,8 +420,14 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         if (command != null && finalPort != null) {
             try {
                 clearCommandBuffer(); // Clear any existing command/status data
-                finalPort.write(command, timeout);
-                logTx(command);
+                byte[] packet = padCommand64(command);
+                if (packet == null) {
+                    Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
+                    return null;
+                }
+
+                finalPort.write(packet, timeout);
+                logTx(packet);
 
                 // Wait for response; USB CDC/serial reads may deliver a single response in multiple chunks.
                 // Collect chunks until the response "settles" (no new data for a short window) or we time out.
@@ -449,8 +464,13 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     public void sendPacket(byte[] data) {
         if (data != null && finalPort != null) {
             try {
-                logTx(data);
-                finalPort.write(data, 2000);
+                byte[] packet = padCommand64(data);
+                if (packet == null) {
+                    Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
+                    return;
+                }
+                logTx(packet);
+                finalPort.write(packet, 2000);
             } catch (IOException e) {
                 Log.e(TAG, "Error writing packet: ", e);
             }

@@ -24,4 +24,11 @@
     <color name="monitorText">#00FF00</color>
     <color name="codeText">#003D99</color>
     <color name="codeBlockBackground">#F0F4F8</color>
+
+    <!-- Desktop-parity buffer monitor colors (used in EMWaverFragment). -->
+    <color name="bufferMonitorCardBg">#020617</color> <!-- slate-950 -->
+    <color name="bufferMonitorInnerBg">#0F172A</color> <!-- slate-900 -->
+    <color name="bufferMonitorTimestamp">#64748B</color> <!-- slate-500 -->
+    <color name="bufferMonitorTx">#F1F5F9</color> <!-- slate-100 -->
+    <color name="bufferMonitorRx">#38BDF8</color> <!-- sky-400 -->
 </resources>
