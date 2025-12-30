@@ -5,6 +5,147 @@ import Combine
 import CryptoKit
 
 class BLEManager: NSObject, ObservableObject {
+    private static let packetSizeBytes: Int = 64
+
+    static func isPaddedOkFrame(_ data: Data) -> Bool {
+        guard data.count == packetSizeBytes else { return false }
+        return data.allSatisfy { $0 == 0x00 }
+    }
+
+    static func isPaddedErrFrame(_ data: Data) -> Bool {
+        guard data.count == packetSizeBytes else { return false }
+        guard data.first == 0xFF else { return false }
+        return data.dropFirst().allSatisfy { $0 == 0x00 }
+    }
+
+    struct ReadPackets {
+        let data: [UInt8]
+        let ts_ms: [UInt64]
+        let next_packet_index: UInt64
+        let available_packets: UInt64
+    }
+
+    private struct LogBuffer {
+        var rxBytes = Data()
+        var rxCounter: UInt64 = 0
+        var rxTsMs: [UInt64] = []
+        var txBytes = Data()
+        var txTsMs: [UInt64] = []
+
+        mutating func clear() {
+            rxBytes.removeAll(keepingCapacity: true)
+            rxCounter = 0
+            rxTsMs.removeAll(keepingCapacity: true)
+            txBytes.removeAll(keepingCapacity: true)
+            txTsMs.removeAll(keepingCapacity: true)
+        }
+
+        func rxLenBytes() -> Int { rxBytes.count }
+        func rxPacketCount() -> UInt64 {
+            guard BLEManager.packetSizeBytes > 0 else { return 0 }
+            return UInt64(rxBytes.count / BLEManager.packetSizeBytes)
+        }
+        func txPacketCount() -> UInt64 { UInt64(txTsMs.count) }
+
+        mutating func rxSetBytes(_ data: Data) {
+            rxBytes = data
+            rxCounter = 0
+            rxTsMs = Array(repeating: 0, count: Int(rxPacketCount()))
+        }
+
+        mutating func appendRxBytes(_ data: Data, tsMs: UInt64) {
+            guard !data.isEmpty else { return }
+            let prevPackets = rxBytes.count / BLEManager.packetSizeBytes
+            rxBytes.append(data)
+            let newPackets = rxBytes.count / BLEManager.packetSizeBytes
+            let delta = max(0, newPackets - prevPackets)
+            if delta > 0 {
+                rxTsMs.append(contentsOf: Array(repeating: tsMs, count: delta))
+            }
+        }
+
+        mutating func appendTxBytesAsPackets(_ data: Data, tsMs: UInt64) {
+            guard !data.isEmpty else { return }
+            let chunks = data.chunked(into: BLEManager.packetSizeBytes)
+            for chunk in chunks {
+                var packet = chunk
+                if packet.count < BLEManager.packetSizeBytes {
+                    packet.append(Data(repeating: 0, count: BLEManager.packetSizeBytes - packet.count))
+                }
+                txBytes.append(packet)
+                txTsMs.append(tsMs)
+            }
+        }
+
+        func readRxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
+            let available = rxPacketCount()
+            guard available > 0, maxPackets > 0, packetIndex < available else {
+                return ReadPackets(
+                    data: [],
+                    ts_ms: [],
+                    next_packet_index: min(packetIndex, available),
+                    available_packets: available
+                )
+            }
+
+            let remaining = Int(available - packetIndex)
+            let take = min(remaining, maxPackets)
+            let start = Int(packetIndex) * BLEManager.packetSizeBytes
+            let end = start + take * BLEManager.packetSizeBytes
+            let slice = rxBytes.subdata(in: start..<end)
+
+            let tsStart = Int(packetIndex)
+            let tsEnd = min(tsStart + take, rxTsMs.count)
+            let ts = Array(rxTsMs[tsStart..<tsEnd])
+
+            return ReadPackets(
+                data: Array(slice),
+                ts_ms: ts,
+                next_packet_index: packetIndex + UInt64(take),
+                available_packets: available
+            )
+        }
+
+        func readTxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
+            let available = txPacketCount()
+            guard available > 0, maxPackets > 0, packetIndex < available else {
+                return ReadPackets(
+                    data: [],
+                    ts_ms: [],
+                    next_packet_index: min(packetIndex, available),
+                    available_packets: available
+                )
+            }
+
+            let remaining = Int(available - packetIndex)
+            let take = min(remaining, maxPackets)
+            let start = Int(packetIndex) * BLEManager.packetSizeBytes
+            let end = start + take * BLEManager.packetSizeBytes
+            let slice = txBytes.subdata(in: start..<min(end, txBytes.count))
+
+            let tsStart = Int(packetIndex)
+            let tsEnd = min(tsStart + take, txTsMs.count)
+            let ts = Array(txTsMs[tsStart..<tsEnd])
+
+            return ReadPackets(
+                data: Array(slice),
+                ts_ms: ts,
+                next_packet_index: packetIndex + UInt64(take),
+                available_packets: available
+            )
+        }
+
+        mutating func nextRxPacket() -> (data: [UInt8], tsMs: UInt64)? {
+            let packetIndex = rxCounter
+            let response = readRxSince(packetIndex: packetIndex, maxPackets: 1)
+            if response.data.count != BLEManager.packetSizeBytes || response.ts_ms.count != 1 {
+                return nil
+            }
+            rxCounter = rxCounter &+ 1
+            return (response.data, response.ts_ms[0])
+        }
+    }
+
     // MARK: - Published Properties
     @Published var isConnected = false
     @Published var isScanning = false
@@ -118,6 +259,33 @@ class BLEManager: NSObject, ObservableObject {
         
         return Data(byteArray)
     }
+
+    static func frameAsciiCommand(_ command: String) -> Data {
+        var framed = command
+        if !framed.hasSuffix("\n") {
+            framed += "\n"
+        }
+        var data = Data(framed.utf8)
+        if data.count < packetSizeBytes {
+            data.append(Data(repeating: 0, count: packetSizeBytes - data.count))
+        }
+        return data
+    }
+
+    private static func makePacket64(_ data: Data) -> Data? {
+        if data.isEmpty {
+            return Data(repeating: 0, count: packetSizeBytes)
+        }
+        if data.count > packetSizeBytes {
+            return nil
+        }
+        if data.count == packetSizeBytes {
+            return data
+        }
+        var out = data
+        out.append(Data(repeating: 0, count: packetSizeBytes - out.count))
+        return out
+    }
     
     // MARK: - Constants
     // EMWaver BLE Service and Characteristic UUIDs - matching Android implementation
@@ -145,7 +313,7 @@ class BLEManager: NSObject, ObservableObject {
     private var canSendWithoutResponseContinuation: CheckedContinuation<Void, Never>?
     private var otaCompletionContinuation: CheckedContinuation<Void, Error>?
     
-    private var buffer = Data()
+    private var logBuffer = LogBuffer()
     private var isNewCommandAvailable = false
     // Add a serial queue for thread-safe buffer access
     private let bufferQueue = DispatchQueue(label: "com.emwaver.bufferQueue")
@@ -474,15 +642,143 @@ class BLEManager: NSObject, ObservableObject {
             print("Cannot send packet: Not connected to device")
             return
         }
-        
-        // Write the data to the characteristic
-        peripheral.writeValue(data, for: characteristic, type: .withResponse)
+
+        guard let packet = Self.makePacket64(data) else {
+            print("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
+            return
+        }
+
+        bufferQueue.sync {
+            logBuffer.appendTxBytesAsPackets(packet, tsMs: Self.nowMs())
+        }
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
+
+        // Desktop parity: commands are fixed 64B packets and we avoid waiting for ATT write response.
+        peripheral.writeValue(packet, for: characteristic, type: .withoutResponse)
+    }
+
+    // MARK: - Desktop-like Buffer Monitor APIs (non-destructive)
+
+    func bufferClear() {
+        clearBuffer()
+    }
+
+    func bufferReadPacketsSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
+        bufferQueue.sync {
+            logBuffer.readRxSince(packetIndex: packetIndex, maxPackets: maxPackets)
+        }
+    }
+
+    func bufferReadTxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
+        bufferQueue.sync {
+            logBuffer.readTxSince(packetIndex: packetIndex, maxPackets: maxPackets)
+        }
+    }
+
+    func bufferGetPacketCount() -> UInt64 {
+        bufferQueue.sync { logBuffer.rxPacketCount() }
+    }
+
+    func bufferGetTxPacketCount() -> UInt64 {
+        bufferQueue.sync { logBuffer.txPacketCount() }
+    }
+
+    struct BufferPacket {
+        let data: [UInt8]
+        let ts_ms: UInt64
+    }
+
+    func bufferNextRxPacket() -> BufferPacket? {
+        bufferQueue.sync {
+            guard let pkt = logBuffer.nextRxPacket() else { return nil }
+            return BufferPacket(data: pkt.data, ts_ms: pkt.tsMs)
+        }
+    }
+
+    func bufferGetRxCounter() -> UInt64 {
+        bufferQueue.sync { logBuffer.rxCounter }
+    }
+
+    func bufferSetRxCounter(_ value: UInt64) {
+        bufferQueue.sync { logBuffer.rxCounter = value }
+    }
+
+    struct BufferMonitorEntry: Identifiable {
+        let id: String
+        let data: [UInt8]
+        let ts_ms: UInt64
+        let isTx: Bool
+        let packetIndex: UInt64
+    }
+
+    func bufferMonitorEntries(limit: Int) -> [BufferMonitorEntry] {
+        guard limit > 0 else { return [] }
+        return bufferQueue.sync {
+            let maxPackets = min(limit, 1500)
+
+            let txCount = logBuffer.txPacketCount()
+            let rxCount = logBuffer.rxPacketCount()
+
+            let txStart = txCount > UInt64(maxPackets) ? (txCount - UInt64(maxPackets)) : 0
+            let rxStart = rxCount > UInt64(maxPackets) ? (rxCount - UInt64(maxPackets)) : 0
+
+            let tx = logBuffer.readTxSince(packetIndex: txStart, maxPackets: maxPackets)
+            let rx = logBuffer.readRxSince(packetIndex: rxStart, maxPackets: maxPackets)
+
+            var out: [BufferMonitorEntry] = []
+            out.reserveCapacity(tx.ts_ms.count + rx.ts_ms.count)
+
+            for i in 0..<tx.ts_ms.count {
+                let start = i * BLEManager.packetSizeBytes
+                let end = start + BLEManager.packetSizeBytes
+                if end <= tx.data.count {
+                    let pkt = Array(tx.data[start..<end])
+                    let idx = txStart + UInt64(i)
+                    out.append(BufferMonitorEntry(
+                        id: "tx:\(idx)",
+                        data: pkt,
+                        ts_ms: tx.ts_ms[i],
+                        isTx: true,
+                        packetIndex: idx
+                    ))
+                }
+            }
+
+            for i in 0..<rx.ts_ms.count {
+                let start = i * BLEManager.packetSizeBytes
+                let end = start + BLEManager.packetSizeBytes
+                if end <= rx.data.count {
+                    let pkt = Array(rx.data[start..<end])
+                    let idx = rxStart + UInt64(i)
+                    out.append(BufferMonitorEntry(
+                        id: "rx:\(idx)",
+                        data: pkt,
+                        ts_ms: rx.ts_ms[i],
+                        isTx: false,
+                        packetIndex: idx
+                    ))
+                }
+            }
+
+            out.sort {
+                if $0.ts_ms != $1.ts_ms { return $0.ts_ms < $1.ts_ms }
+                if $0.isTx != $1.isTx { return $0.isTx && !$1.isTx }
+                return $0.packetIndex < $1.packetIndex
+            }
+
+            if out.count > limit {
+                return Array(out.suffix(limit))
+            }
+            return out
+        }
     }
     
     // MARK: - Buffer Operations
     @objc func clearBuffer() {
         bufferQueue.sync {
-            buffer.removeAll()
+            logBuffer.clear()
         }
         // Update UI-affecting state on main thread 
         DispatchQueue.main.async {
@@ -493,7 +789,7 @@ class BLEManager: NSObject, ObservableObject {
     
     func storeBulkPkt(_ data: Data) {
         bufferQueue.sync {
-            buffer.append(data)
+            logBuffer.appendRxBytes(data, tsMs: Self.nowMs())
             isNewCommandAvailable = true
         }
         // This flag affects UI state indirectly, so update on main thread
@@ -516,8 +812,10 @@ class BLEManager: NSObject, ObservableObject {
         var result: Data?
         bufferQueue.sync {
             if isNewCommandAvailable {
-                result = buffer
-                buffer.removeAll()
+                result = logBuffer.rxBytes
+                logBuffer.rxBytes.removeAll(keepingCapacity: true)
+                logBuffer.rxCounter = 0
+                logBuffer.rxTsMs.removeAll(keepingCapacity: true)
                 isNewCommandAvailable = false  // Reset flag synchronously
             }
         }
@@ -545,11 +843,11 @@ class BLEManager: NSObject, ObservableObject {
     /// - Parameter data: The new data for the buffer.
     @objc func loadBuffer(data: Data) {
         bufferQueue.sync {
-            buffer = data
+            logBuffer.rxSetBytes(data)
         }
         // Update UI-affecting state on main thread
         DispatchQueue.main.async {
-            self.isNewCommandAvailable = !data.isEmpty // Use data parameter instead of buffer
+            self.isNewCommandAvailable = !data.isEmpty
             self.bufferVersion += 1
         }
         
@@ -564,7 +862,7 @@ class BLEManager: NSObject, ObservableObject {
     @objc func getBuffer() -> Data {
         var bufferCopy = Data()
         bufferQueue.sync {
-            bufferCopy = buffer
+            bufferCopy = logBuffer.rxBytes
         }
         return bufferCopy
     }
@@ -573,8 +871,8 @@ class BLEManager: NSObject, ObservableObject {
     func invertBuffer() {
         var isEmpty = false
         bufferQueue.sync {
-            buffer = Data(buffer.map { ~$0 })
-            isEmpty = buffer.isEmpty
+            logBuffer.rxBytes = Data(logBuffer.rxBytes.map { ~$0 })
+            isEmpty = logBuffer.rxBytes.isEmpty
         }
         // Update UI-affecting state on main thread
         DispatchQueue.main.async {
@@ -592,19 +890,19 @@ class BLEManager: NSObject, ObservableObject {
         let statusSize = 2 // 2 bytes for the status number
         let totalSize = headerSize + statusSize
 
-        guard buffer.count >= totalSize else { return -1 }
+        guard logBuffer.rxBytes.count >= totalSize else { return -1 }
 
         // Check from the end of the buffer
-        for i in stride(from: buffer.count, to: totalSize - 1, by: -1) {
+        for i in stride(from: logBuffer.rxBytes.count, to: totalSize - 1, by: -1) {
             let potentialHeaderIndex = i - totalSize
-            let potentialHeader = buffer.subdata(in: potentialHeaderIndex..<(potentialHeaderIndex + headerSize))
+            let potentialHeader = logBuffer.rxBytes.subdata(in: potentialHeaderIndex..<(potentialHeaderIndex + headerSize))
             
             if potentialHeader == header {
-                let statusData = buffer.subdata(in: (potentialHeaderIndex + headerSize)..<i)
+                let statusData = logBuffer.rxBytes.subdata(in: (potentialHeaderIndex + headerSize)..<i)
                 let status = UInt16(statusData[0]) << 8 | UInt16(statusData[1])
                 
                 // Remove the parsed status message from the buffer
-                buffer.removeSubrange((potentialHeaderIndex)..<i)
+                logBuffer.rxBytes.removeSubrange((potentialHeaderIndex)..<i)
                 
                 return Int(status)
             }
@@ -625,7 +923,7 @@ class BLEManager: NSObject, ObservableObject {
         var dataValues: [Float] = []
         
         // Get a thread-safe copy of the buffer
-        let bufferCopy = bufferQueue.sync { return buffer }
+        let bufferCopy = bufferQueue.sync { return logBuffer.rxBytes }
         
         // Empty buffer check
         if bufferCopy.isEmpty || rangeStart >= rangeEnd || numberBins <= 0 {
@@ -705,8 +1003,18 @@ class BLEManager: NSObject, ObservableObject {
             print("Buffer is empty, nothing to transmit.")
             return
         }
-        
-        clearBuffer() // Clear the main buffer after copying
+
+        // Desktop parity: swap out RX buffer while transmitting so status/response packets
+        // don't contaminate sampler data stored in the same buffer.
+        bufferQueue.sync {
+            logBuffer.rxBytes.removeAll(keepingCapacity: true)
+            logBuffer.rxCounter = 0
+            logBuffer.rxTsMs.removeAll(keepingCapacity: true)
+            isNewCommandAvailable = false
+        }
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
 
         let totalBytesToSend = bufferToSend.count
         let maxPacketSize = 200 // Corresponds to peripheral's capability or MTU-3
@@ -728,7 +1036,7 @@ class BLEManager: NSObject, ObservableObject {
         var bytesSent = 0
         while bytesSent < totalBytesToSend {
             // --- Get ESP32 Buffer Status ---
-            let bufferStatus = getStatusNumber() // Check for status in buffer
+            let bufferStatus = bufferQueue.sync { getStatusNumber() } // Check for status in RX scratch buffer
             
             // For simulation/testing, if no status received, assume target level
             let effectiveBufferStatus = (bufferStatus != -1) ? bufferStatus : targetBufferLevel
@@ -743,6 +1051,12 @@ class BLEManager: NSObject, ObservableObject {
 
             // --- Send Packet ---
             // Use .withoutResponse to match Android's behavior
+            bufferQueue.sync {
+                logBuffer.appendTxBytesAsPackets(packet, tsMs: Self.nowMs())
+            }
+            DispatchQueue.main.async {
+                self.bufferVersion += 1
+            }
             peripheral.writeValue(packet, for: characteristic, type: .withoutResponse)
             
             // --- Apply Flow Control (after initial fill) ---
@@ -782,12 +1096,14 @@ class BLEManager: NSObject, ObservableObject {
         // Add delay for in-flight notifications (100ms - match Android exactly)
         Thread.sleep(forTimeInterval: 0.1) // 100ms delay
         
-        // Clear buffer again to remove status packets received during transmission
-        self.clearBuffer()
-        print("SECOND_CLEAR: Buffer cleared again before reload")
-        
-        // Reload the original buffer content
-        self.loadBuffer(data: bufferToSend)
+        // Discard RX scratch packets accumulated during transmit and restore the sampler buffer.
+        bufferQueue.sync {
+            logBuffer.rxSetBytes(bufferToSend)
+            isNewCommandAvailable = !bufferToSend.isEmpty
+        }
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
         print("AFTER_RELOAD: Buffer now contains \(self.getBuffer().count) bytes")
         print("Buffer transmission complete: \(totalBytesToSend) bytes sent")
     }
@@ -800,45 +1116,59 @@ class BLEManager: NSObject, ObservableObject {
 
     // Send a command and wait for response
     @objc func sendCommand(_ command: Data, timeout: Int) -> Data? {
+        sendCommand(command, timeout: timeout, packets: 1)
+    }
+
+    func sendCommand(_ command: Data, timeout: Int, packets: Int) -> Data? {
         guard isConnected, let peripheral = peripheralDevice, let characteristic = cmdCharacteristic else {
             print("Cannot send command: Not connected to device")
             return nil
         }
         
-        // Start timing
+        guard let packet = Self.makePacket64(command) else {
+            print("Cannot send command: too large (\(command.count) bytes, max \(Self.packetSizeBytes))")
+            return nil
+        }
+
         let startTime = Date().timeIntervalSince1970
-        print("BLE: Sending command: \(command.map { String(format: "%02X", $0) }.joined(separator: " "))")
-        
-        // Clear any existing data
+        print("BLE: Sending command: \(packet.map { String(format: "%02X", $0) }.joined(separator: " "))")
+
+        // Desktop parity: drop any stale RX packets so next_rx_packet returns this command's response.
         bufferQueue.sync {
-            buffer.removeAll()
-            isNewCommandAvailable = false
+            logBuffer.rxCounter = logBuffer.rxPacketCount()
         }
-        
-        // Write the command to the characteristic
-        peripheral.writeValue(command, for: characteristic, type: .withResponse)
-        print("BLE: Command written, waiting for response (timeout: \(timeout)ms)")
-        
-        // Wait for response
-        var response: Data? = nil
-        
-        while (Date().timeIntervalSince1970 - startTime) * 1000 < Double(timeout) {
-            response = getCommand()
-            if let response = response, !response.isEmpty {
-                let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
-                print("BLE: Response received after \(Int(elapsedMs))ms: \(response.map { String(format: "%02X", $0) }.joined(separator: " "))")
-                break
+
+        // Desktop parity: send as a 64B command packet without waiting for ATT response.
+        sendPacket(packet)
+        print("BLE: Command written, waiting for response (timeout: \(timeout)ms, packets: \(packets))")
+
+        let wantPackets = max(1, packets)
+        let wantBytes = wantPackets * Self.packetSizeBytes
+        var out = Data()
+        out.reserveCapacity(wantBytes)
+
+        while out.count < wantBytes {
+            if !isConnected {
+                return nil
             }
-            Thread.sleep(forTimeInterval: 0.01) // 10ms sleep to prevent busy waiting
-        }
-        
-        // If we timed out waiting for a response
-        if response == nil || response!.isEmpty {
+
+            if let pkt = bufferQueue.sync(execute: { logBuffer.nextRxPacket() }) {
+                out.append(contentsOf: pkt.data)
+                continue
+            }
+
             let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
-            print("BLE: Command timed out after \(Int(elapsedMs))ms or received empty response")
+            if elapsedMs >= Double(max(1, timeout)) {
+                print("BLE: Command timed out after \(Int(elapsedMs))ms waiting for response packets")
+                return nil
+            }
+
+            Thread.sleep(forTimeInterval: 0.01)
         }
-        
-        return response
+
+        let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
+        print("BLE: Response received after \(Int(elapsedMs))ms: \(out.map { String(format: "%02X", $0) }.joined(separator: " "))")
+        return out
     }
 }
 
@@ -1107,5 +1437,11 @@ private extension Data {
         }
 
         return chunks
+    }
+}
+
+private extension BLEManager {
+    static func nowMs() -> UInt64 {
+        UInt64(Date().timeIntervalSince1970 * 1000)
     }
 }
