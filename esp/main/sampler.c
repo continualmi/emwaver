@@ -46,6 +46,7 @@
 #define SAMPLER_TIMER_INTERVAL_US 10
 #define TRANSMIT_INTERVAL_US 10
 #define TRANSMISSION_TIMEOUT_MS 2000
+#define TRANSMISSION_IDLE_EXIT_MS 100
 #define MONITOR_CHECK_INTERVAL_MS 10
 #define BLE_RX_BUFFER_SIZE 4096
 #define TRANSMIT_PWM_DEFAULT_FREQ_HZ 38000
@@ -267,31 +268,53 @@ static void transmission_monitor_task(void *pv_parameters)
 {
     uint16_t last_bytes_available = 0;
     uint16_t current_bytes_available = 0;
-    uint32_t elapsed_time_ms = 0;
+    uint32_t unchanged_time_ms = 0;
+    uint32_t idle_zero_time_ms = 0;
+    uint32_t fill_wait_time_ms = 0;
     bool timer_started = false;
 
     while (transmission_active) {
         current_bytes_available = ble_get_rx_bytes_available();
 
-        if (!timer_started && current_bytes_available >= (BLE_RX_BUFFER_SIZE / 2)) {
-            timer_start(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
-            timer_started = true;
+        if (!timer_started) {
+            // Match STM32 semantics: wait for a small initial fill (or timeout),
+            // then start draining the circular RX buffer in the transmit ISR.
+            if (current_bytes_available >= 250 || fill_wait_time_ms >= TRANSMISSION_TIMEOUT_MS) {
+                timer_start(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+                timer_started = true;
+                unchanged_time_ms = 0;
+                idle_zero_time_ms = 0;
+                last_bytes_available = current_bytes_available;
+            } else {
+                fill_wait_time_ms += MONITOR_CHECK_INTERVAL_MS;
+            }
         }
 
         if (timer_started) {
+            if (current_bytes_available == 0) {
+                idle_zero_time_ms += MONITOR_CHECK_INTERVAL_MS;
+                // Mimic STM32 behavior: once the RX ring has drained, leave transmitter
+                // mode promptly so the command channel can resume normal parsing.
+                if (idle_zero_time_ms >= TRANSMISSION_IDLE_EXIT_MS) {
+                    ESP_LOGI(TAG, "Transmission complete (buffer drained)");
+                    transmit_stop_impl(NULL);
+                    break;
+                }
+            } else {
+                idle_zero_time_ms = 0;
+            }
+
             if (current_bytes_available != last_bytes_available) {
-                elapsed_time_ms = 0;
+                unchanged_time_ms = 0;
                 last_bytes_available = current_bytes_available;
             } else {
-                elapsed_time_ms += MONITOR_CHECK_INTERVAL_MS;
-                if (elapsed_time_ms >= TRANSMISSION_TIMEOUT_MS) {
+                unchanged_time_ms += MONITOR_CHECK_INTERVAL_MS;
+                if (unchanged_time_ms >= TRANSMISSION_TIMEOUT_MS) {
                     ESP_LOGI(TAG, "Transmission timeout");
                     transmit_stop_impl(NULL);
                     break;
                 }
             }
-        } else {
-            last_bytes_available = current_bytes_available;
         }
 
         vTaskDelay(pdMS_TO_TICKS(MONITOR_CHECK_INTERVAL_MS));
