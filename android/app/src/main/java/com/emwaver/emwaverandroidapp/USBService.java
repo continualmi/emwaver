@@ -163,11 +163,15 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     public void transmitBuffer() {
-        byte[] javaBuffer = NativeBuffer.beginTransmitSwap();
+        byte[] javaBuffer = getBuffer();
         if (javaBuffer == null || javaBuffer.length == 0) {
-            NativeBuffer.endTransmitRestore();
             return;
         }
+        long[] savedRxTsMs = NativeBuffer.getRxTimestampsMs();
+        long savedRxCounter = NativeBuffer.getRxCounter();
+
+        // Clear RX so BS packets can be received/parsed during transmit.
+        clearBuffer();
 
         int nativeBufferSize = javaBuffer.length;
         int packetSize = 50; // 12.5 bytes per frame, 10us sampling period
@@ -205,7 +209,8 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         } catch (InterruptedException ignored) {
         }
 
-        NativeBuffer.endTransmitRestore();
+        // Restore original RX snapshot (discarding BS packets accumulated during transmit).
+        NativeBuffer.setRxState(javaBuffer, savedRxTsMs, savedRxCounter);
     }
 
     public int getLogStatus() {

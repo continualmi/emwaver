@@ -32,12 +32,10 @@ public final class NativeBuffer {
     // Returns Object[] { byte[] packet64, long tsMs } or null if no packet available.
     public static native Object[] nextRxPacket();
 
-    // Retransmit helpers: atomically snapshot RX buffer to Java for TX, while swapping
-    // the native RX buffer to accept BS flow-control packets during transmit.
-    // `beginTransmitSwap()` returns the snapshot (bytes) to transmit; native RX becomes empty.
-    // `endTransmitRestore()` restores the original RX buffer (discarding any BS packets received).
-    public static native byte[] beginTransmitSwap();
-    public static native void endTransmitRestore();
+    // RX state accessors for Java-side swap/restore flows (e.g., retransmit).
+    public static native long[] getRxTimestampsMs();
+    // Restores RX bytes + per-64B timestamps + rx_counter in one call (timestamps are clamped).
+    public static native void setRxState(byte[] rxBytes, long[] rxTimestampsMs, long rxCounter);
 
     // Append outbound bytes to the TX log as padded 64B packets (one tsMs per 64B packet).
     public static native void appendTxBytes(byte[] data, long tsMs);
