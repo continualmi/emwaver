@@ -9,6 +9,7 @@ type HomePageProps = {
 };
 
 const MAX_MONITOR_ENTRIES = 1500;
+const AUTO_CONNECT_ENABLED_KEY = "emwaver:autoConnectEnabled";
 
 type BufferEntry = {
   data: Uint8Array;
@@ -43,6 +44,24 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [usbPorts, setUsbPorts] = useState<string[]>([]);
   const [selectedPort, setSelectedPort] = useState<string>("");
   const [isRefreshingPorts, setIsRefreshingPorts] = useState(false);
+  const [autoConnectEnabled, setAutoConnectEnabled] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem(AUTO_CONNECT_ENABLED_KEY);
+      if (raw === null) return true;
+      return raw === "1";
+    } catch {
+      return true;
+    }
+  });
+
+  const persistAutoConnectEnabled = useCallback((enabled: boolean) => {
+    setAutoConnectEnabled(enabled);
+    try {
+      localStorage.setItem(AUTO_CONNECT_ENABLED_KEY, enabled ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const monitorContainerRef = useRef<HTMLDivElement>(null);
   const entrySeqRef = useRef(0);
@@ -161,6 +180,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   useEffect(() => {
     if (!isActive) return;
     if (status.connected) return;
+    if (!autoConnectEnabled) return;
 
     let cancelled = false;
 
@@ -210,7 +230,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [connectBLE, connectUSB, isActive, refreshPorts, selectedPort, status.connected, status.scanning]);
+  }, [autoConnectEnabled, connectBLE, connectUSB, isActive, refreshPorts, selectedPort, status.connected, status.scanning]);
 
   // Auto-scroll monitor
   useEffect(() => {
@@ -365,6 +385,14 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       }
   };
 
+  const handleDisconnect = async () => {
+    persistAutoConnectEnabled(false);
+    autoConnectRef.current.inFlight = false;
+    autoConnectRef.current.lastAttemptMs = 0;
+    await safeInvoke("ble_stop_scan").catch(() => {});
+    await disconnect();
+  };
+
   const handleSendCommand = async () => {
     if (!commandInput.trim()) {
       return;
@@ -504,12 +532,21 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         <div className="grid grid-cols-2 gap-3 flex-shrink-0">
           {/* Connection Status */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-400">Connection</span>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoConnectEnabled}
+                        onChange={(e) => persistAutoConnectEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                      />
+                      <span>Auto-connect</span>
+                    </label>
                     {!status.connected && (
-                        <>
+                        <div className="flex gap-2">
                             <button
                                 onClick={() => setSelectedTransport('USB')}
                                 className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'USB' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
@@ -522,7 +559,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                             >
                                 BLE
                             </button>
-                        </>
+                        </div>
                     )}
                 </div>
               </div>
@@ -574,7 +611,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                            <span className="text-[10px] text-slate-500 truncate max-w-[120px]" title={status.device_address || ""}>{status.device_address}</span>
                        </div>
                        <button
-                          onClick={disconnect}
+                          onClick={handleDisconnect}
                           className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
                        >
                           Disconnect
