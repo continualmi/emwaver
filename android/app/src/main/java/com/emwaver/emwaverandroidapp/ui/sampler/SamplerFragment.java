@@ -43,6 +43,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.emwaver.emwaverandroidapp.BLEService;
+import com.emwaver.emwaverandroidapp.NativeBuffer;
 import com.emwaver.emwaverandroidapp.USBService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
@@ -994,6 +995,7 @@ public class SamplerFragment extends Fragment {
     private void startRecording() {
         updateDeviceTypeFromConnection();
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        boolean invertDuringRecording = prefs.getBoolean(PREF_INVERT_RECORDING, false);
         if (currentDeviceType == DEVICE_STM32) {
             if (USBService == null) {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
@@ -1011,6 +1013,7 @@ public class SamplerFragment extends Fragment {
 
             String commandStr = "sample start --pin=" + encodedPin;
             byte[] command = commandStr.getBytes();
+            NativeBuffer.setInvertRx(invertDuringRecording);
             USBService.write(command);
             
         } else {
@@ -1030,6 +1033,7 @@ public class SamplerFragment extends Fragment {
             // Format command for ESP32: "sample start --pin=<pin>"
             String commandStr = "sample start --pin=" + pinNumber;
             byte[] command = commandStr.getBytes();
+            NativeBuffer.setInvertRx(invertDuringRecording);
             BLEService.write(command);
         }
         
@@ -1058,6 +1062,8 @@ public class SamplerFragment extends Fragment {
                 BLEService.write(command);
             }
         }
+
+        NativeBuffer.setInvertRx(false);
             
         // Clear recording flag
         isRecording = false;

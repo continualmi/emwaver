@@ -9,8 +9,8 @@
 
         <SwitchPreferenceCompat
             android:key="sampler_invert_recording"
-            android:title="Invert Recorded Signal"
-            android:summary="Invert 0/1 samples while recording"
+            android:title="Invert Capture During Recording"
+            android:summary="Only affects Sampler while recording (0↔1)."
             android:defaultValue="false"
             app:iconSpaceReserved="false" />
 

@@ -16,6 +16,9 @@ public final class NativeBuffer {
     // Append raw incoming bytes; timestamps are assigned per completed 64B packet.
     public static native void storeBulkPkt(byte[] data, long tsMs);
 
+    // Sampler-only option: invert bits (0↔1) on RX ingest when enabled.
+    public static native void setInvertRx(boolean enabled);
+
     // Append outbound bytes to the TX log as padded 64B packets (one tsMs per 64B packet).
     public static native void appendTxBytes(byte[] data, long tsMs);
 
