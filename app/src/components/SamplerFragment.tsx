@@ -40,6 +40,8 @@ const PWM_ENABLED_KEY = 'sampler.pwm.enabled';
 const PWM_FREQ_KEY = 'sampler.pwm.freq';
 const PWM_DUTY_KEY = 'sampler.pwm.duty';
 const PWM_PREFS_MIGRATED_KEY = 'sampler.pwm.prefsMigrated.v2';
+const INVERT_CAPTURE_KEY = 'sampler.capture.invert';
+const LEGACY_INVERT_RECORDING_KEY = 'sampler.settings.invertRecording';
 const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
 const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
 const SETTINGS_MAX_SAMPLES_KEY = 'sampler.settings.maxSamples';
@@ -239,6 +241,22 @@ function SamplerFragment() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [chartPointCount, setChartPointCount] = useState(0);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [invertCaptureDuringRecording, setInvertCaptureDuringRecording] = useState(() => {
+    const stored = localStorage.getItem(INVERT_CAPTURE_KEY);
+    if (stored != null) {
+      return stored === 'true';
+    }
+    const legacy = localStorage.getItem(LEGACY_INVERT_RECORDING_KEY);
+    return legacy === 'true';
+  });
+  const invertCaptureDuringRecordingRef = useRef(invertCaptureDuringRecording);
+  useEffect(() => {
+    invertCaptureDuringRecordingRef.current = invertCaptureDuringRecording;
+    localStorage.setItem(INVERT_CAPTURE_KEY, invertCaptureDuringRecording ? 'true' : 'false');
+    if (isRecordingRef.current) {
+      void safeInvoke<void>('buffer_set_invert_rx', { enabled: invertCaptureDuringRecording }).catch(() => {});
+    }
+  }, [invertCaptureDuringRecording]);
   const [debugViewport, setDebugViewport] = useState<{
     chartReady: boolean;
     scaleMin: number | null;
@@ -517,11 +535,11 @@ function SamplerFragment() {
             minRenderIntervalMs,
           });
 
-			    void safeInvoke<SamplerCompressViewportResponse>(
-			      'buffer_compress_viewport',
-			      { rangeStart: visibleRangeStart, rangeEnd: visibleRangeEnd, numberBins: requestedBins },
-            { throwOnError: true },
-			    )
+				    void safeInvoke<SamplerCompressViewportResponse>(
+				      'buffer_compress_viewport',
+				      { rangeStart: visibleRangeStart, rangeEnd: visibleRangeEnd, numberBins: requestedBins },
+	            { throwOnError: true },
+				    )
 			      .then((result) => {
 			        if (!result) {
                 setChartError('buffer_compress_viewport returned null');
@@ -903,7 +921,8 @@ function SamplerFragment() {
 		      return;
 		    }
 
-		    await safeInvoke<void>('buffer_clear').catch(() => {});
+			    await safeInvoke<void>('buffer_clear').catch(() => {});
+        await safeInvoke<void>('buffer_set_invert_rx', { enabled: invertCaptureDuringRecordingRef.current }).catch(() => {});
 			    bufferLenBytesRef.current = 0;
 			    setBufferLenBytes(0);
 			    lastBufferSizeRef.current = 0;
@@ -931,14 +950,14 @@ function SamplerFragment() {
 		    if (!isConnected) return;
 
 		    // Send "sample stop" command (matching Android/iOS)
-		    if (deviceType === 'esp32') {
-		      await sendNoWait("sample stop");
-		    } else {
-		      await sendNoWait("sample stop");
-		    }
-
-	    setIsRecording(false);
-	  };
+			    if (deviceType === 'esp32') {
+			      await sendNoWait("sample stop");
+			    } else {
+			      await sendNoWait("sample stop");
+			    }
+        await safeInvoke<void>('buffer_set_invert_rx', { enabled: false }).catch(() => {});
+		    setIsRecording(false);
+		  };
 
 				  const retransmitSignal = async () => {
 				    if (!isConnected) {
@@ -1001,7 +1020,7 @@ function SamplerFragment() {
     }
 	  };
 
-				  const getTimings = () => {
+					  const getTimings = () => {
 			    void safeInvoke<string>('buffer_build_signed_raw_timings')
 			      .then((timings) => {
 			        if (!timings) {
@@ -1022,10 +1041,11 @@ function SamplerFragment() {
 			      });
 		  };
 
-				  const clearBuffer = () => {
+	  const clearBuffer = () => {
 				    void safeInvoke<void>('buffer_clear', undefined, { throwOnError: true }).catch((error) => {
 				      console.error('Failed to clear sampler buffer:', error);
 				    });
+            void safeInvoke<void>('buffer_set_invert_rx', { enabled: false }).catch(() => {});
 				    bufferLenBytesRef.current = 0;
 				    setBufferLenBytes(0);
 				    lastBufferSizeRef.current = 0;
@@ -1622,6 +1642,16 @@ function SamplerFragment() {
               Stop
             </button>
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={invertCaptureDuringRecording}
+              onChange={(event) => setInvertCaptureDuringRecording(event.target.checked)}
+              className="h-4 w-4 accent-sky-500"
+            />
+            Invert capture (0↔1)
+          </label>
 
           <button
             onClick={retransmitSignal}

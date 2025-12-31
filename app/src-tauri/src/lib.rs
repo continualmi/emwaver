@@ -545,6 +545,18 @@ async fn buffer_set_bytes(state: State<'_, Arc<Mutex<Buffer>>>, data: Vec<u8>) -
 }
 
 #[tauri::command]
+async fn buffer_set_invert_rx(state: State<'_, Arc<Mutex<Buffer>>>, enabled: bool) -> Result<(), String> {
+    let state = state.inner().clone();
+    spawn_blocking(move || {
+        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
+        crate::buffer::set_invert_rx(&mut *guard, enabled);
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("Task failed: {error}"))?
+}
+
+#[tauri::command]
 async fn buffer_compress_viewport(
     state: State<'_, Arc<Mutex<Buffer>>>,
     range_start: usize,
@@ -595,7 +607,10 @@ async fn buffer_compress_viewport(
 }
 
 #[tauri::command]
-async fn buffer_write_file(state: State<'_, Arc<Mutex<Buffer>>>, path: String) -> Result<(), String> {
+async fn buffer_write_file(
+    state: State<'_, Arc<Mutex<Buffer>>>,
+    path: String,
+) -> Result<(), String> {
     let state = state.inner().clone();
     let path = expand_path(&path);
     spawn_blocking(move || {
@@ -609,7 +624,9 @@ async fn buffer_write_file(state: State<'_, Arc<Mutex<Buffer>>>, path: String) -
 }
 
 #[tauri::command]
-async fn buffer_build_signed_raw_timings(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<String, String> {
+async fn buffer_build_signed_raw_timings(
+    state: State<'_, Arc<Mutex<Buffer>>>,
+) -> Result<String, String> {
     let state = state.inner().clone();
     spawn_blocking(move || {
         let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
@@ -1684,6 +1701,7 @@ pub fn run() {
             buffer_read_tx_since,
             buffer_get_bytes,
             buffer_set_bytes,
+            buffer_set_invert_rx,
             buffer_compress_viewport,
             buffer_write_file,
             buffer_build_signed_raw_timings,
