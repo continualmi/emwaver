@@ -180,11 +180,18 @@ struct SamplerView: View {
     @State private var selectedPinIndex = 5 // Default to GPIO6 (IO6) to match Android
     @State private var selectedSignalIndex = 0
     @State private var isRecording = false
+    @AppStorage("sampler_capture_invert") private var invertCaptureDuringRecording = false
     @AppStorage("sampler_tx_pwm_enabled") private var pwmEnabled = false
     @AppStorage("sampler_tx_pwm_freq_hz") private var pwmFreqHz = 38000
     @AppStorage("sampler_tx_pwm_duty_percent") private var pwmDutyPercent = 50
     @State private var pwmFreqText = ""
     @State private var pwmDutyText = ""
+
+    enum FocusField: Hashable {
+        case pwmFreq
+    }
+
+    @FocusState private var focusedField: FocusField?
 
     @State private var chartEntries: [ChartDataEntry] = []
     @State private var chartView: LineChartView?
@@ -380,6 +387,14 @@ struct SamplerView: View {
             }
             .padding(.horizontal, 8)
 
+            Toggle("Invert capture (0↔1)", isOn: $invertCaptureDuringRecording)
+                .onChange(of: invertCaptureDuringRecording) { enabled in
+                    if isRecording {
+                        bleManager.setInvertRx(enabled)
+                    }
+                }
+                .padding(.horizontal, 8)
+
             Button(action: getTimings) {
                 Label("Timings", systemImage: "waveform")
                     .lineLimit(1)
@@ -408,30 +423,46 @@ struct SamplerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle("PWM Infrared", isOn: $pwmEnabled)
+                    Toggle("TX PWM (Infrared)", isOn: $pwmEnabled)
                         .onChange(of: pwmEnabled) { _ in
                             syncPwmTextIfNeeded()
                         }
 
                     if pwmEnabled {
-                        HStack(spacing: 12) {
-                            TextField("Freq (Hz)", text: $pwmFreqText)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(.roundedBorder)
-                                .onChange(of: pwmFreqText) { newValue in
-                                    if let value = parsePwmInt(newValue) {
-                                        pwmFreqHz = value
-                                    }
-                                }
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Frequency (Hz)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
 
-                            TextField("Duty (%)", text: $pwmDutyText)
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(.roundedBorder)
-                                .onChange(of: pwmDutyText) { newValue in
-                                    if let value = parsePwmInt(newValue) {
-                                        pwmDutyPercent = value
+                                TextField("38000", text: $pwmFreqText)
+                                    .keyboardType(.numberPad)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($focusedField, equals: .pwmFreq)
+                                    .onChange(of: pwmFreqText) { newValue in
+                                        if let value = parsePwmInt(newValue) {
+                                            pwmFreqHz = value
+                                        }
                                     }
+                            }
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Duty Cycle")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+
+                                Picker("Duty Cycle", selection: $pwmDutyPercent) {
+                                    Text("50%").tag(50)
+                                    Text("100%").tag(100)
                                 }
+                                .pickerStyle(.segmented)
+                                .onChange(of: pwmDutyPercent) { newValue in
+                                    if newValue != 50 && newValue != 100 {
+                                        pwmDutyPercent = 100
+                                    }
+                                    pwmDutyText = String(pwmDutyPercent)
+                                }
+                            }
                         }
                     }
                 }
@@ -499,6 +530,13 @@ struct SamplerView: View {
                 Button("Settings", action: { showingSettingsSheet = true })
             } label: {
                 Image(systemName: "ellipsis.circle")
+            }
+        }
+
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done") {
+                focusedField = nil
             }
         }
     }
@@ -640,6 +678,7 @@ struct SamplerView: View {
 
     private func startRecording() {
         guard let pin = selectedPinNumber() else { return }
+        bleManager.setInvertRx(invertCaptureDuringRecording)
         let command = Data("sample start --pin=\(pin)".utf8)
         bleManager.sendPacket(command)
         isRecording = true
@@ -648,6 +687,7 @@ struct SamplerView: View {
     private func stopRecording() {
         let command = Data("sample stop".utf8)
         bleManager.sendPacket(command)
+        bleManager.setInvertRx(false)
         isRecording = false
         viewModel.markBufferDirty()
     }
@@ -657,16 +697,12 @@ struct SamplerView: View {
         var commandString = "transmit start --pin=\(pin)"
         if pwmEnabled {
             let freqHz = parsePwmInt(pwmFreqText) ?? pwmFreqHz
-            let dutyPercent = parsePwmInt(pwmDutyText) ?? pwmDutyPercent
             if freqHz < 1 {
                 showToast("Invalid PWM frequency")
                 return
             }
-            if dutyPercent < 1 || dutyPercent > 100 {
-                showToast("Invalid PWM duty (1-100)")
-                return
-            }
             pwmFreqHz = freqHz
+            let dutyPercent = (pwmDutyPercent == 50) ? 50 : 100
             pwmDutyPercent = dutyPercent
             commandString += " --pwm --freq=\(freqHz) --duty=\(dutyPercent)"
         }
@@ -686,12 +722,14 @@ struct SamplerView: View {
 
     private func clearBufferAndChart() {
         bleManager.clearBuffer()
+        bleManager.setInvertRx(false)
         viewModel.markBufferDirty()
         refreshChart(force: true)
     }
 
     private func createNewSignal() {
         bleManager.clearBuffer()
+        bleManager.setInvertRx(false)
         viewModel.createNewSignal()
         selectedSignalIndex = 0
         refreshChart(force: true)
@@ -856,12 +894,13 @@ struct SamplerView: View {
     }
 
     private func syncPwmTextIfNeeded() {
+        if pwmDutyPercent != 50 && pwmDutyPercent != 100 {
+            pwmDutyPercent = 100
+        }
         if pwmFreqText.isEmpty {
             pwmFreqText = String(pwmFreqHz)
         }
-        if pwmDutyText.isEmpty {
-            pwmDutyText = String(pwmDutyPercent)
-        }
+        pwmDutyText = String(pwmDutyPercent)
     }
 
     private func parsePwmInt(_ raw: String) -> Int? {

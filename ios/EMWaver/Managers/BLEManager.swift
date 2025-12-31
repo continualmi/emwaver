@@ -661,6 +661,12 @@ class BLEManager: NSObject, ObservableObject {
             self.bufferVersion += 1
         }
     }
+
+    func setInvertRx(_ enabled: Bool) {
+        withBufferQueueSync {
+            NativeBufferRust.setInvertRx(enabled)
+        }
+    }
     
     func storeBulkPkt(_ data: Data) {
         withBufferQueueSync {
