@@ -10,6 +10,7 @@ pub struct Buffer {
     pub rx_ts_ms: Vec<u64>,
     pub tx_bytes: Vec<u8>,
     pub tx_ts_ms: Vec<u64>,
+    pub invert_rx: bool,
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize))]
@@ -27,6 +28,7 @@ pub fn clear(buffer: &mut Buffer) {
     buffer.rx_ts_ms.clear();
     buffer.tx_bytes.clear();
     buffer.tx_ts_ms.clear();
+    buffer.invert_rx = false;
 }
 
 pub fn rx_len_bytes(buffer: &Buffer) -> usize {
@@ -41,6 +43,7 @@ pub fn rx_set_bytes(buffer: &mut Buffer, data: Vec<u8>) {
     buffer.rx_bytes = data;
     buffer.rx_counter = 0;
     buffer.rx_ts_ms = vec![0u64; rx_packet_count(buffer) as usize];
+    buffer.invert_rx = false;
 }
 
 pub fn rx_copy_byte_range(buffer: &Buffer, byte_start: usize, byte_end: usize) -> Vec<u8> {
@@ -69,7 +72,13 @@ pub fn append_rx_bytes(buffer: &mut Buffer, data: &[u8], ts_ms: u64) {
     }
 
     let prev_packets = (buffer.rx_bytes.len() / PACKET_SIZE) as u64;
-    buffer.rx_bytes.extend_from_slice(data);
+    if buffer.invert_rx {
+        buffer
+            .rx_bytes
+            .extend(data.iter().copied().map(|b| b ^ 0xFF));
+    } else {
+        buffer.rx_bytes.extend_from_slice(data);
+    }
     let new_packets = (buffer.rx_bytes.len() / PACKET_SIZE) as u64;
     let delta = new_packets.saturating_sub(prev_packets);
     if delta > 0 {
@@ -77,6 +86,10 @@ pub fn append_rx_bytes(buffer: &mut Buffer, data: &[u8], ts_ms: u64) {
             .rx_ts_ms
             .extend(std::iter::repeat_n(ts_ms, delta as usize));
     }
+}
+
+pub fn set_invert_rx(buffer: &mut Buffer, enabled: bool) {
+    buffer.invert_rx = enabled;
 }
 
 pub fn append_rx_packet(buffer: &mut Buffer, packet: &[u8; PACKET_SIZE], ts_ms: u64) {
@@ -196,5 +209,13 @@ mod tests {
         append_rx_bytes(&mut buf, &[0u8; 64], 333);
         assert_eq!(rx_packet_count(&buf), 2);
         assert_eq!(buf.rx_ts_ms, vec![222, 333]);
+    }
+
+    #[test]
+    fn append_rx_bytes_inverts_when_enabled() {
+        let mut buf = Buffer::default();
+        set_invert_rx(&mut buf, true);
+        append_rx_bytes(&mut buf, &[0x00, 0x0F, 0xFF], 1);
+        assert_eq!(buf.rx_bytes, vec![0xFF, 0xF0, 0x00]);
     }
 }
