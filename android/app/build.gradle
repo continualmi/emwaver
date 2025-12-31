@@ -43,21 +43,21 @@ android {
 }
 
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
-def emwaverSharedWaveletBootstrap = new File(emwaverRepoRootDir, "app/public/wavelet-assets/wavelet_bootstrap.js")
+def emwaverSharedWaveletAssetsDir = new File(emwaverRepoRootDir, "app/public/wavelet-assets")
 def emwaverGeneratedWaveletAssetsDir = new File(buildDir, "generated/emwaver-wavelets/assets")
 
-tasks.register("syncWaveletBootstrap", Copy) {
+tasks.register("syncWaveletAssets", Copy) {
     group = "emwaver"
-    description = "Copies the canonical wavelet bootstrap.js into generated Android assets."
+    description = "Copies the canonical wavelet asset scripts into generated Android assets."
 
-    from(emwaverSharedWaveletBootstrap)
+    from(emwaverSharedWaveletAssetsDir) {
+        include("*.js")
+    }
     into(emwaverGeneratedWaveletAssetsDir)
 
-    rename { _ -> "wavelet_bootstrap.js" }
-
     doFirst {
-        if (!emwaverSharedWaveletBootstrap.exists()) {
-            throw new GradleException("Missing canonical wavelet bootstrap at: ${emwaverSharedWaveletBootstrap}")
+        if (!emwaverSharedWaveletAssetsDir.exists()) {
+            throw new GradleException("Missing canonical wavelet assets dir at: ${emwaverSharedWaveletAssetsDir}")
         }
     }
 }
@@ -117,7 +117,7 @@ tasks.register("rustAndroidBuild", Exec) {
 
 // Ensure Rust native library exists before Java compilation packages jniLibs.
 // This will fail fast with a clear message if Rust/NDK tooling isn't installed.
-preBuild.dependsOn("syncWaveletBootstrap")
+preBuild.dependsOn("syncWaveletAssets")
 preBuild.dependsOn("rustAndroidBuild")
 
 dependencies {
