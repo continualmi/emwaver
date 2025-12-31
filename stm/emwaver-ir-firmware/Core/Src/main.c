@@ -104,20 +104,34 @@ static void free_bulk_packet(void)
 
 static void command_send_ok(const uint8_t *data, size_t len)
 {
-    if (data && len > 0) {
-        (void)CDC_SendResponsePkt_FS((uint8_t *)data, (uint16_t)len, CDC_TIMEOUT);
+    // Match stm/emwaver-ism-firmware framing: always send 64-byte packets.
+    // The desktop/mobile buffer logic treats USB as fixed 64B framing.
+    if (!data || len == 0) {
+        uint8_t packet[64] = {0};
+        packet[0] = 0x00;
+        (void)CDC_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
         return;
     }
-    const uint8_t ok = 0x00;
-    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, CDC_TIMEOUT);
+
+    size_t offset = 0;
+    while (offset < len) {
+        uint8_t packet[64] = {0};
+        size_t chunk = len - offset;
+        if (chunk > sizeof(packet)) {
+            chunk = sizeof(packet);
+        }
+        memcpy(packet, data + offset, chunk);
+        (void)CDC_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+        offset += chunk;
+    }
 }
 
 static void command_send_err(const char *msg)
 {
     (void)msg;
     // Match the registry firmware behavior: errors are best-effort no-ops.
-    const uint8_t ok = 0x00;
-    (void)CDC_SendResponsePkt_FS((uint8_t *)&ok, 1, CDC_TIMEOUT);
+    const uint8_t packet[64] = {0};
+    (void)CDC_SendResponsePkt_FS((uint8_t *)packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
 }
 
 static void ISR_Sampler_raw(void)
@@ -679,7 +693,7 @@ int main(void)
 
       if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
           static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION;
-          (void)CDC_SendResponsePkt_FS((uint8_t *)msg, (uint16_t)(sizeof(msg) - 1u), CDC_TIMEOUT);
+          command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
           free_bulk_packet();
           continue;
       }
