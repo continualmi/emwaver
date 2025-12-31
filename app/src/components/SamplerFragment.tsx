@@ -1675,29 +1675,6 @@ function SamplerFragment() {
             </button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-200">
-            <input
-              type="checkbox"
-              checked={invertCaptureDuringRecording}
-              onChange={(event) => setInvertCaptureDuringRecording(event.target.checked)}
-              className="h-4 w-4 accent-sky-500"
-            />
-            Invert capture (0↔1)
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm text-slate-200">
-            <span className="text-xs text-slate-400">Invert capture applies to</span>
-            <select
-              value={invertCaptureTargets}
-              onChange={(event) => setInvertCaptureTargets(event.target.value as SamplerInvertTargets)}
-              className="px-3 py-2 bg-slate-900 text-slate-200 rounded border border-slate-700"
-            >
-              <option value="stm32">STM32 only</option>
-              <option value="esp32">ESP32 only</option>
-              <option value="both">STM32 + ESP32</option>
-            </select>
-          </label>
-
           <button
             onClick={retransmitSignal}
             disabled={!isConnected}
@@ -1842,6 +1819,36 @@ function SamplerFragment() {
 	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
 	          <div className="w-96 rounded-lg bg-slate-900 p-6 shadow-xl border border-slate-700">
             <h3 className="mb-4 text-lg font-semibold text-slate-100">Settings</h3>
+
+            <div className="mb-6 space-y-3">
+              <div className="text-sm font-medium text-slate-200">Sampler</div>
+
+              <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+                <div className="flex flex-col">
+                  <span>Invert capture during recording</span>
+                  <span className="text-xs text-slate-500">Only affects Sampler while recording (0↔1).</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={invertCaptureDuringRecording}
+                  onChange={(event) => setInvertCaptureDuringRecording(event.target.checked)}
+                  className="h-4 w-4 accent-sky-500"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1 text-sm text-slate-200">
+                <span className="text-xs text-slate-400">Invert capture applies to</span>
+                <select
+                  value={invertCaptureTargets}
+                  onChange={(event) => setInvertCaptureTargets(event.target.value as SamplerInvertTargets)}
+                  className="px-3 py-2 bg-slate-800 text-slate-200 rounded border border-slate-700"
+                >
+                  <option value="stm32">STM32 only</option>
+                  <option value="esp32">ESP32 only</option>
+                  <option value="both">STM32 + ESP32</option>
+                </select>
+              </label>
+            </div>
             
             <div className="mb-4 space-y-2">
               <label className="block text-sm font-medium text-slate-300">
