@@ -7,7 +7,6 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var authManager: AuthenticationManager
     @AppStorage("sampler_capture_invert") private var invertCaptureDuringRecording = false
-    @AppStorage("sampler_capture_invert_targets") private var invertCaptureTargets = "stm32"
     
     var body: some View {
         List {
@@ -24,26 +23,6 @@ struct SettingsView: View {
                     Spacer()
 
                     Toggle("", isOn: $invertCaptureDuringRecording)
-                }
-                .padding(.vertical, 4)
-
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Invert Capture Applies To")
-                            .font(.body)
-                        Text("Choose which devices are affected.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-
-                    Picker("", selection: $invertCaptureTargets) {
-                        Text("STM32 only").tag("stm32")
-                        Text("ESP32 only").tag("esp32")
-                        Text("STM32 + ESP32").tag("both")
-                    }
-                    .pickerStyle(.menu)
                 }
                 .padding(.vertical, 4)
 
