@@ -173,6 +173,7 @@ public class SamplerFragment extends Fragment {
     private static final String PREF_TX_PWM_FREQ_HZ = "sampler_tx_pwm_freq_hz";
     private static final String PREF_TX_PWM_DUTY_PERCENT = "sampler_tx_pwm_duty_percent";
     private static final String PREF_INVERT_RECORDING = "sampler_invert_recording";
+    private static final String PREF_INVERT_RECORDING_TARGETS = "sampler_invert_recording_targets";
     private static final int DEFAULT_TX_PWM_FREQ_HZ = 38000;
     private static final int DEFAULT_TX_PWM_DUTY_PERCENT = 100;
     private static final String SIGNALS_DIR = "signals";
@@ -996,6 +997,8 @@ public class SamplerFragment extends Fragment {
         updateDeviceTypeFromConnection();
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
         boolean invertDuringRecording = prefs.getBoolean(PREF_INVERT_RECORDING, false);
+        String invertTargets = prefs.getString(PREF_INVERT_RECORDING_TARGETS, "stm32");
+        boolean shouldInvert = invertDuringRecording && invertShouldApplyToDevice(getActiveDeviceType(), invertTargets);
         if (currentDeviceType == DEVICE_STM32) {
             if (USBService == null) {
                 Toast.makeText(getContext(), "USB Service not available", Toast.LENGTH_SHORT).show();
@@ -1013,7 +1016,7 @@ public class SamplerFragment extends Fragment {
 
             String commandStr = "sample start --pin=" + encodedPin;
             byte[] command = commandStr.getBytes();
-            NativeBuffer.setInvertRx(invertDuringRecording);
+            NativeBuffer.setInvertRx(shouldInvert);
             USBService.write(command);
             
         } else {
@@ -1033,7 +1036,7 @@ public class SamplerFragment extends Fragment {
             // Format command for ESP32: "sample start --pin=<pin>"
             String commandStr = "sample start --pin=" + pinNumber;
             byte[] command = commandStr.getBytes();
-            NativeBuffer.setInvertRx(invertDuringRecording);
+            NativeBuffer.setInvertRx(shouldInvert);
             BLEService.write(command);
         }
         
@@ -1046,6 +1049,18 @@ public class SamplerFragment extends Fragment {
         binding.stopButton.setEnabled(true);
         
         Toast.makeText(getContext(), "Recording started", Toast.LENGTH_SHORT).show();
+    }
+
+    private static boolean invertShouldApplyToDevice(int deviceType, @Nullable String targets) {
+        String value = targets == null ? "stm32" : targets;
+        if ("both".equals(value)) {
+            return true;
+        }
+        if ("esp32".equals(value)) {
+            return deviceType == DEVICE_ESP32;
+        }
+        // Default: stm32 only
+        return deviceType == DEVICE_STM32;
     }
 
     private void stopRecording() {

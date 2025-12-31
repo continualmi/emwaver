@@ -181,6 +181,7 @@ struct SamplerView: View {
     @State private var selectedSignalIndex = 0
     @State private var isRecording = false
     @AppStorage("sampler_capture_invert") private var invertCaptureDuringRecording = false
+    @AppStorage("sampler_capture_invert_targets") private var invertCaptureTargets = "stm32"
     @AppStorage("sampler_tx_pwm_enabled") private var pwmEnabled = false
     @AppStorage("sampler_tx_pwm_freq_hz") private var pwmFreqHz = 38000
     @AppStorage("sampler_tx_pwm_duty_percent") private var pwmDutyPercent = 50
@@ -262,6 +263,12 @@ struct SamplerView: View {
                 syncPwmTextIfNeeded()
             }
             .onChange(of: bleManager.isConnected) { handleConnectionChange($0) }
+            .onChange(of: invertCaptureDuringRecording) { _ in
+                syncInvertCaptureIfRecording()
+            }
+            .onChange(of: invertCaptureTargets) { _ in
+                syncInvertCaptureIfRecording()
+            }
             .onDisappear { stopScheduler() }
             .onChange(of: selectedSignalIndex) { newValue in
                 handleSignalSelection(index: newValue)
@@ -668,9 +675,16 @@ struct SamplerView: View {
         }
     }
 
+    private func syncInvertCaptureIfRecording() {
+        guard isRecording else { return }
+        let shouldInvert = invertCaptureDuringRecording && (invertCaptureTargets == "esp32" || invertCaptureTargets == "both")
+        bleManager.setInvertRx(shouldInvert)
+    }
+
     private func startRecording() {
         guard let pin = selectedPinNumber() else { return }
-        bleManager.setInvertRx(invertCaptureDuringRecording)
+        let shouldInvert = invertCaptureDuringRecording && (invertCaptureTargets == "esp32" || invertCaptureTargets == "both")
+        bleManager.setInvertRx(shouldInvert)
         let command = Data("sample start --pin=\(pin)".utf8)
         bleManager.sendPacket(command)
         isRecording = true

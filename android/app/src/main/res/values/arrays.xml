@@ -40,4 +40,16 @@
         <item>131072</item>
         <item>0</item>
     </string-array>
+
+    <string-array name="sampler_invert_targets_entries">
+        <item>STM32 only</item>
+        <item>ESP32 only</item>
+        <item>STM32 + ESP32</item>
+    </string-array>
+
+    <string-array name="sampler_invert_targets_values">
+        <item>stm32</item>
+        <item>esp32</item>
+        <item>both</item>
+    </string-array>
 </resources> 
