@@ -32,6 +32,8 @@ type SamplerCompressViewportResponse = {
   data_values: number[];
 };
 
+type SamplerInvertTargets = 'stm32' | 'esp32' | 'both';
+
 const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
 const PIN_IO_ESP32_KEY = 'sampler.pinIo.esp32';
@@ -41,6 +43,7 @@ const PWM_FREQ_KEY = 'sampler.pwm.freq';
 const PWM_DUTY_KEY = 'sampler.pwm.duty';
 const PWM_PREFS_MIGRATED_KEY = 'sampler.pwm.prefsMigrated.v2';
 const INVERT_CAPTURE_KEY = 'sampler.capture.invert';
+const INVERT_CAPTURE_TARGETS_KEY = 'sampler.capture.invert.targets';
 const LEGACY_INVERT_RECORDING_KEY = 'sampler.settings.invertRecording';
 const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
 const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
@@ -54,6 +57,13 @@ const MAX_CHART_BINS = 5000;
 const MIN_CHART_BINS = 100;
 const MIN_CHART_RENDER_INTERVAL_MS = 120;
 const INTERACTION_REFRESH_THROTTLE_MS = 80;
+
+function invertShouldApplyToDevice(deviceType: SamplerDeviceType, targets: SamplerInvertTargets) {
+  if (targets === 'both') {
+    return true;
+  }
+  return targets === deviceType;
+}
 
 const ESP32_PINS = [
   'IO1 DIO0[S]/GDO0[F]',
@@ -250,13 +260,32 @@ function SamplerFragment() {
     return legacy === 'true';
   });
   const invertCaptureDuringRecordingRef = useRef(invertCaptureDuringRecording);
+  const [invertCaptureTargets, setInvertCaptureTargets] = useState<SamplerInvertTargets>(() => {
+    const stored = localStorage.getItem(INVERT_CAPTURE_TARGETS_KEY);
+    if (stored === 'esp32' || stored === 'both' || stored === 'stm32') {
+      return stored;
+    }
+    return 'stm32';
+  });
+  const invertCaptureTargetsRef = useRef(invertCaptureTargets);
   useEffect(() => {
     invertCaptureDuringRecordingRef.current = invertCaptureDuringRecording;
     localStorage.setItem(INVERT_CAPTURE_KEY, invertCaptureDuringRecording ? 'true' : 'false');
     if (isRecordingRef.current) {
-      void safeInvoke<void>('buffer_set_invert_rx', { enabled: invertCaptureDuringRecording }).catch(() => {});
+      const shouldInvert =
+        invertCaptureDuringRecording && invertShouldApplyToDevice(deviceType, invertCaptureTargetsRef.current);
+      void safeInvoke<void>('buffer_set_invert_rx', { enabled: shouldInvert }).catch(() => {});
     }
-  }, [invertCaptureDuringRecording]);
+  }, [deviceType, invertCaptureDuringRecording]);
+  useEffect(() => {
+    invertCaptureTargetsRef.current = invertCaptureTargets;
+    localStorage.setItem(INVERT_CAPTURE_TARGETS_KEY, invertCaptureTargets);
+    if (isRecordingRef.current) {
+      const shouldInvert =
+        invertCaptureDuringRecordingRef.current && invertShouldApplyToDevice(deviceType, invertCaptureTargets);
+      void safeInvoke<void>('buffer_set_invert_rx', { enabled: shouldInvert }).catch(() => {});
+    }
+  }, [deviceType, invertCaptureTargets]);
   const [debugViewport, setDebugViewport] = useState<{
     chartReady: boolean;
     scaleMin: number | null;
@@ -922,7 +951,10 @@ function SamplerFragment() {
 		    }
 
 			    await safeInvoke<void>('buffer_clear').catch(() => {});
-        await safeInvoke<void>('buffer_set_invert_rx', { enabled: invertCaptureDuringRecordingRef.current }).catch(() => {});
+        const shouldInvert =
+          invertCaptureDuringRecordingRef.current &&
+          invertShouldApplyToDevice(deviceType, invertCaptureTargetsRef.current);
+        await safeInvoke<void>('buffer_set_invert_rx', { enabled: shouldInvert }).catch(() => {});
 			    bufferLenBytesRef.current = 0;
 			    setBufferLenBytes(0);
 			    lastBufferSizeRef.current = 0;
@@ -1651,6 +1683,19 @@ function SamplerFragment() {
               className="h-4 w-4 accent-sky-500"
             />
             Invert capture (0↔1)
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm text-slate-200">
+            <span className="text-xs text-slate-400">Invert capture applies to</span>
+            <select
+              value={invertCaptureTargets}
+              onChange={(event) => setInvertCaptureTargets(event.target.value as SamplerInvertTargets)}
+              className="px-3 py-2 bg-slate-900 text-slate-200 rounded border border-slate-700"
+            >
+              <option value="stm32">STM32 only</option>
+              <option value="esp32">ESP32 only</option>
+              <option value="both">STM32 + ESP32</option>
+            </select>
           </label>
 
           <button

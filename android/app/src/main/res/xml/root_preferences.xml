@@ -15,6 +15,16 @@
             app:iconSpaceReserved="false" />
 
         <ListPreference
+            android:key="sampler_invert_recording_targets"
+            android:title="Invert Capture Applies To"
+            android:summary="Choose which devices are affected"
+            android:defaultValue="stm32"
+            android:entries="@array/sampler_invert_targets_entries"
+            android:entryValues="@array/sampler_invert_targets_values"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
             android:key="refresh_time"
             android:title="Refresh Time"
             android:summary="Select the refresh time interval for the sampler"
