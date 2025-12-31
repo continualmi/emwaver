@@ -128,17 +128,21 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     refreshPorts();
   }, [listUSBPorts]);
 
-  const refreshPorts = async () => {
+  const refreshPorts = async (): Promise<string[]> => {
     setIsRefreshingPorts(true);
     try {
         const ports = await listUSBPorts();
         setUsbPorts(ports);
-        if (ports.length > 0 && !selectedPort) {
-            setSelectedPort(ports[0]);
-        }
+        setSelectedPort((prev) => {
+          if (ports.length === 0) return "";
+          if (!prev || !ports.includes(prev)) return ports[0];
+          return prev;
+        });
+        return ports;
     } catch (e) {
         console.error("Failed to list ports", e);
         alert(`Failed to list USB ports: ${String(e)}`);
+        return [];
     } finally {
         setIsRefreshingPorts(false);
     }
@@ -282,11 +286,14 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         if (selectedTransport === 'BLE') {
             await connectBLE();
         } else {
-            if (!selectedPort) {
-                alert("Please select a USB port");
-                return;
+            const ports = await refreshPorts();
+            const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : (ports[0] ?? "");
+            if (!portToUse) {
+              alert("Please select a USB port");
+              return;
             }
-            await connectUSB(selectedPort);
+            setSelectedPort(portToUse);
+            await connectUSB(portToUse);
         }
       } catch (e) {
         console.error("Connect failed", e);

@@ -5,6 +5,7 @@ use std::io::{Read, Write};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::spawn_blocking;
+#[cfg(target_os = "macos")]
 use std::collections::HashSet;
 
 use crate::buffer::{self, Buffer, PACKET_SIZE};
@@ -28,6 +29,12 @@ pub struct USBState {
 unsafe impl Send for USBState {}
 unsafe impl Sync for USBState {}
 
+#[derive(Debug)]
+struct OpenPortError {
+    rendered: String,
+    is_not_found: bool,
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -50,84 +57,153 @@ impl USBState {
         }
     }
 
-    pub async fn list_ports() -> Result<Vec<String>, String> {
-        spawn_blocking(move || {
-            let ports = serialport::available_ports().map_err(|e| format!("Failed to list ports: {}", e))?;
-            let (mut usb, mut other): (Vec<SerialPortInfo>, Vec<SerialPortInfo>) =
-                ports.into_iter().partition(|p| matches!(p.port_type, SerialPortType::UsbPort(_)));
+    fn is_not_found_message(message: &str) -> bool {
+        let msg = message.to_ascii_lowercase();
+        msg.contains("no such file or directory")
+            || msg.contains("no such file")
+            || msg.contains("no such device")
+            || msg.contains("device not found")
+            || msg.contains("the system cannot find the file specified")
+    }
 
-            if usb.is_empty() {
-                usb.append(&mut other);
-            }
+    fn render_open_error(message: &str) -> String {
+        if message.contains("Permission denied") {
+            format!(
+                "Failed to open port (permission denied): {}. On Linux, ensure your user is in the 'dialout' group and re-login.",
+                message
+            )
+        } else if message.contains("Device or resource busy") || message.contains("Resource busy") {
+            format!(
+                "Failed to open port (busy): {}. Close any other serial monitors (idf.py monitor, screen, ModemManager) and try again.",
+                message
+            )
+        } else {
+            format!("Failed to open port: {}", message)
+        }
+    }
 
-            let mut names: Vec<String> = usb.into_iter().map(|p| p.port_name).collect();
+    fn open_port_blocking(port_name_for_open: &str) -> Result<Box<dyn SerialPort + Send>, OpenPortError> {
+        let mut port = serialport::new(port_name_for_open, 115200)
+            .data_bits(DataBits::Eight)
+            .parity(Parity::None)
+            .stop_bits(StopBits::One)
+            .flow_control(FlowControl::None)
+            .timeout(Duration::from_millis(100))
+            .open()
+            .map_err(|e| {
+                let message = e.to_string();
+                OpenPortError {
+                    is_not_found: Self::is_not_found_message(&message),
+                    rendered: Self::render_open_error(&message),
+                }
+            })?;
 
-            // macOS has both /dev/tty.* and /dev/cu.* entries for the same device. The tty device
-            // can behave like a "call-in" device and appear unresponsive for outbound use. Prefer cu.
-            #[cfg(target_os = "macos")]
-            {
-                let set: HashSet<String> = names.iter().cloned().collect();
-                names.retain(|n| {
-                    if let Some(rest) = n.strip_prefix("/dev/tty.") {
-                        !set.contains(&format!("/dev/cu.{}", rest))
-                    } else {
-                        true
-                    }
-                });
+        let _ = port.write_data_terminal_ready(true);
+        let _ = port.write_request_to_send(true);
+        Ok(port)
+    }
 
-                // Drop common non-device pseudo-ports that confuse selection on macOS.
-                names.retain(|n| !n.contains("Bluetooth-Incoming-Port"));
-            }
+    fn list_ports_blocking() -> Result<Vec<String>, String> {
+        let ports = serialport::available_ports().map_err(|e| format!("Failed to list ports: {}", e))?;
+        let (mut usb, mut other): (Vec<SerialPortInfo>, Vec<SerialPortInfo>) =
+            ports.into_iter().partition(|p| matches!(p.port_type, SerialPortType::UsbPort(_)));
 
-            names.sort_by_key(|n| {
-                // Prefer real USB CDC devices first.
-                if n.contains("usbmodem") {
-                    (0, n.clone())
-                } else if n.contains("usbserial") {
-                    (1, n.clone())
+        if usb.is_empty() {
+            usb.append(&mut other);
+        }
+
+        let mut names: Vec<String> = usb.into_iter().map(|p| p.port_name).collect();
+
+        #[cfg(target_os = "macos")]
+        {
+            let set: HashSet<String> = names.iter().cloned().collect();
+            names.retain(|n| {
+                if let Some(rest) = n.strip_prefix("/dev/tty.") {
+                    !set.contains(&format!("/dev/cu.{}", rest))
                 } else {
-                    (2, n.clone())
+                    true
                 }
             });
-            Ok(names)
+
+            names.retain(|n| !n.contains("Bluetooth-Incoming-Port"));
+        }
+
+        names.sort_by_key(|n| {
+            if n.contains("usbmodem") {
+                (0, n.clone())
+            } else if n.contains("usbserial") {
+                (1, n.clone())
+            } else {
+                (2, n.clone())
+            }
+        });
+
+        Ok(names)
+    }
+
+    fn choose_fallback_port(requested: &str, candidates: &[String]) -> Option<String> {
+        if candidates.iter().any(|c| c == requested) {
+            return Some(requested.to_string());
+        }
+
+        let family = if requested.contains("usbmodem") {
+            Some("usbmodem")
+        } else if requested.contains("usbserial") {
+            Some("usbserial")
+        } else {
+            None
+        };
+
+        let mut filtered: Vec<&String> = match family {
+            Some(tag) => candidates.iter().filter(|c| c.contains(tag)).collect(),
+            None => candidates.iter().collect(),
+        };
+
+        if filtered.len() == 1 {
+            return Some(filtered.remove(0).clone());
+        }
+
+        None
+    }
+
+    pub async fn list_ports() -> Result<Vec<String>, String> {
+        spawn_blocking(move || {
+            Self::list_ports_blocking()
         })
         .await
         .map_err(|e| format!("Task failed: {}", e))?
     }
 
     pub async fn connect(&self, port_name: String) -> Result<(), String> {
-        let port_name_for_open = Self::normalize_port_name_for_platform(&port_name);
-        
-        // Open port in blocking task
-        let port = spawn_blocking(move || {
-            let mut port = serialport::new(port_name_for_open, 115200)
-                .data_bits(DataBits::Eight)
-                .parity(Parity::None)
-                .stop_bits(StopBits::One)
-                .flow_control(FlowControl::None)
-                .timeout(Duration::from_millis(100))
-                .open()
-                .map_err(|e| {
-                    let message = e.to_string();
-                    if message.contains("Permission denied") {
-                        format!(
-                            "Failed to open port (permission denied): {}. On Linux, ensure your user is in the 'dialout' group and re-login.",
-                            message
-                        )
-                    } else if message.contains("Device or resource busy") || message.contains("Resource busy") {
-                        format!(
-                            "Failed to open port (busy): {}. Close any other serial monitors (idf.py monitor, screen, ModemManager) and try again.",
-                            message
-                        )
-                    } else {
-                        format!("Failed to open port: {}", message)
-                    }
-                })?;
+        // Ensure we don't keep stale read threads/handles around when reconnecting.
+        if self.status.lock().await.connected {
+            let _ = self.disconnect().await;
+        }
 
-            // Many CDC devices expect DTR/RTS asserted by the host.
-            let _ = port.write_data_terminal_ready(true);
-            let _ = port.write_request_to_send(true);
-            Ok::<Box<dyn SerialPort + Send>, String>(port)
+        let requested = Self::normalize_port_name_for_platform(&port_name);
+
+        let (opened_name, port) = spawn_blocking(move || {
+            match Self::open_port_blocking(&requested) {
+                Ok(port) => Ok::<(String, Box<dyn SerialPort + Send>), String>((requested.clone(), port)),
+                Err(err) if err.is_not_found => {
+                    let candidates = Self::list_ports_blocking()?;
+                    let Some(fallback) = Self::choose_fallback_port(&requested, &candidates) else {
+                        let mut message = err.rendered;
+                        if !candidates.is_empty() {
+                            message.push_str(". Available ports: ");
+                            message.push_str(&candidates.join(", "));
+                        } else {
+                            message.push_str(". No serial ports are currently available.");
+                        }
+                        message.push_str(" (Try refreshing the port list.)");
+                        return Err(message);
+                    };
+
+                    let port = Self::open_port_blocking(&fallback).map_err(|e| e.rendered)?;
+                    Ok((fallback, port))
+                }
+                Err(err) => Err(err.rendered),
+            }
         })
         .await
         .map_err(|e| format!("Task failed: {}", e))??;
@@ -138,7 +214,7 @@ impl USBState {
             
             let mut status = self.status.lock().await;
             status.connected = true;
-            status.device_path = Some(port_name.clone());
+            status.device_path = Some(opened_name.clone());
             
             let mut running = self.running.lock().await;
             *running = true;
@@ -148,6 +224,8 @@ impl USBState {
         let running_clone = Arc::clone(&self.running);
         let buffer_clone = Arc::clone(&self.buffer);
         let rx_notify_clone = Arc::clone(&self.rx_notify);
+        let port_state_clone = Arc::clone(&self.port);
+        let status_clone = Arc::clone(&self.status);
 
         // We need a way to read from the port without locking it forever.
         // Since SerialPort is not async, we need a dedicated thread that polls or reads with timeout.
@@ -169,6 +247,21 @@ impl USBState {
         std::thread::spawn(move || {
             let mut buffer = [0u8; 1024];
             let mut pending: Vec<u8> = Vec::new();
+            let mark_disconnected = || {
+                {
+                    let mut running = running_clone.blocking_lock();
+                    *running = false;
+                }
+                {
+                    let mut port_guard = port_state_clone.blocking_lock();
+                    *port_guard = None;
+                }
+                {
+                    let mut status = status_clone.blocking_lock();
+                    status.connected = false;
+                    status.device_path = None;
+                }
+            };
             loop {
                 // Check if we should stop
                 {
@@ -199,6 +292,7 @@ impl USBState {
                     }
                     Err(_) => {
                         // Error (e.g. disconnected), stop loop
+                        mark_disconnected();
                         break;
                     }
                 }
@@ -396,5 +490,31 @@ impl USBState {
 
     pub async fn get_status(&self) -> USBStatus {
         self.status.lock().await.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::USBState;
+
+    #[test]
+    fn choose_fallback_port_prefers_single_family_match() {
+        let candidates = vec![
+            "/dev/cu.Bluetooth-Incoming-Port".to_string(),
+            "/dev/cu.usbmodem101".to_string(),
+        ];
+        assert_eq!(
+            USBState::choose_fallback_port("/dev/cu.usbmodem999", &candidates),
+            Some("/dev/cu.usbmodem101".to_string())
+        );
+    }
+
+    #[test]
+    fn choose_fallback_port_is_none_when_ambiguous() {
+        let candidates = vec![
+            "/dev/cu.usbmodem101".to_string(),
+            "/dev/cu.usbmodem102".to_string(),
+        ];
+        assert_eq!(USBState::choose_fallback_port("/dev/cu.usbmodem999", &candidates), None);
     }
 }
