@@ -6,10 +6,26 @@ struct SettingsView: View {
     @State private var showingBufferSizePicker = false
     @Environment(\.openURL) private var openURL
     @EnvironmentObject private var authManager: AuthenticationManager
+    @AppStorage("sampler_capture_invert") private var invertCaptureDuringRecording = false
     
     var body: some View {
         List {
             Section("Sampler Settings") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Invert Capture During Recording")
+                            .font(.body)
+                        Text("Only affects Sampler while recording (0↔1).")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $invertCaptureDuringRecording)
+                }
+                .padding(.vertical, 4)
+
                 // Refresh Time Setting
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {

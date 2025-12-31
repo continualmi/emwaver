@@ -380,20 +380,12 @@ struct SamplerView: View {
                         Text("Transmit")
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .disabled(bleManager.getBuffer().isEmpty)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .disabled(bleManager.getBuffer().isEmpty)
             }
             .padding(.horizontal, 8)
-
-            Toggle("Invert capture (0↔1)", isOn: $invertCaptureDuringRecording)
-                .onChange(of: invertCaptureDuringRecording) { enabled in
-                    if isRecording {
-                        bleManager.setInvertRx(enabled)
-                    }
-                }
-                .padding(.horizontal, 8)
 
             Button(action: getTimings) {
                 Label("Timings", systemImage: "waveform")
