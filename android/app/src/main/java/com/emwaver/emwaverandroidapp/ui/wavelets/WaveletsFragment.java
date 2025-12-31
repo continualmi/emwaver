@@ -1589,6 +1589,7 @@ public class WaveletsFragment extends Fragment {
         if (waveletEngine == null) {
             waveletEngine = new WaveletEngine();
             waveletEngine.setDialogCallback(this::showDialog);
+            waveletEngine.setBootstrapSource(readAssetUtf8("wavelet_bootstrap.js"));
             waveletEngine.setup(this::printLog, this::handleWaveletTree, buildBindings());
             waveletEngine.updateModuleSources(moduleSources());
         }
@@ -1622,6 +1623,24 @@ public class WaveletsFragment extends Fragment {
             bindings.put("BLEService", bleService);
         }
         return bindings;
+    }
+
+    private String readAssetUtf8(String name) {
+        if (!isAdded() || name == null || name.isEmpty()) {
+            return "";
+        }
+        try (InputStream inputStream = requireContext().getAssets().open(name);
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+            return outputStream.toString(StandardCharsets.UTF_8.name());
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to read asset " + name, e);
+            return "";
+        }
     }
 
     private void handleWaveletTree(WaveletTree tree) {

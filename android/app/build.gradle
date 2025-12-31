@@ -2,9 +2,6 @@ plugins {
     id 'com.android.application'
 }
 
-def openAiApiKey = "REDACTED_OPENAI_PROJECT_KEY"
-def escapedOpenAiKey = openAiApiKey.replace("\\", "\\\\").replace('"', '\\"')
-
 android {
     namespace 'com.emwaver.emwaverandroidapp'
     compileSdk 35
@@ -19,7 +16,6 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // buildConfigField "String", "BACKEND_BASE_URL", '"https://emwaver-backend.azurewebsites.net"'
         buildConfigField "String", "BACKEND_BASE_URL", '"http://192.168.1.209:8000"'
-        buildConfigField "String", "OPENAI_API_KEY", '"' + escapedOpenAiKey + '"'
     }
 
     buildTypes {
@@ -37,6 +33,32 @@ android {
     buildFeatures {
         viewBinding true
         buildConfig true
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += ["${buildDir}/generated/emwaver-wavelets/assets"]
+        }
+    }
+}
+
+def emwaverRepoRootDir = rootProject.projectDir.parentFile
+def emwaverSharedWaveletBootstrap = new File(emwaverRepoRootDir, "app/public/wavelet-assets/wavelet_bootstrap.js")
+def emwaverGeneratedWaveletAssetsDir = new File(buildDir, "generated/emwaver-wavelets/assets")
+
+tasks.register("syncWaveletBootstrap", Copy) {
+    group = "emwaver"
+    description = "Copies the canonical wavelet bootstrap.js into generated Android assets."
+
+    from(emwaverSharedWaveletBootstrap)
+    into(emwaverGeneratedWaveletAssetsDir)
+
+    rename { _ -> "wavelet_bootstrap.js" }
+
+    doFirst {
+        if (!emwaverSharedWaveletBootstrap.exists()) {
+            throw new GradleException("Missing canonical wavelet bootstrap at: ${emwaverSharedWaveletBootstrap}")
+        }
     }
 }
 
@@ -95,6 +117,7 @@ tasks.register("rustAndroidBuild", Exec) {
 
 // Ensure Rust native library exists before Java compilation packages jniLibs.
 // This will fail fast with a clear message if Rust/NDK tooling isn't installed.
+preBuild.dependsOn("syncWaveletBootstrap")
 preBuild.dependsOn("rustAndroidBuild")
 
 dependencies {
