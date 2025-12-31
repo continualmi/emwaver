@@ -9,45 +9,79 @@ const TARGETS = [
     { label: "STM32F042", value: "stm32" }
 ];
 
-const ESP32_PINS = [
-    { label: "GPIO0 (IO0)", value: "0" },
-    { label: "CC1101 GDO0 (IO1)", value: "1" },
-    { label: "CC1101 GDO2 (IO2)", value: "2" },
-    { label: "IR TX (IO4)", value: "4" },
-    { label: "IR RX (IO5)", value: "5" },
-    { label: "GPIO6 (IO6)", value: "6" },
-    { label: "GPIO7 (IO7)", value: "7" },
-    { label: "GPIO9 (IO9)", value: "9" },
-    { label: "CC1101 NSS (IO10)", value: "10" },
-    { label: "CC1101 MOSI (IO11)", value: "11" },
-    { label: "CC1101 SCK (IO12)", value: "12" },
-    { label: "CC1101 MISO (IO13)", value: "13" },
-    { label: "GPIO14 (IO14)", value: "14" },
-    { label: "GPIO15 (IO15)", value: "15" },
-    { label: "GPIO16 (IO16)", value: "16" }
+// Keep ESP32 pin labels aligned with the Sampler's ESP32 pin list (Desktop/iOS/Android),
+// including the [F]/[D]/[S] distinctions shown in the UI.
+const ESP32_PIN_LABELS = [
+    "IO1 DIO0[S]/GDO0[F]",
+    "IO2 DIO1[S]/GDO2[F]",
+    "IO3 GPIO3",
+    "IO4 IR TX[F/D]",
+    "IO5 IR RX[F/D]",
+    "IO6 GPIO6",
+    "IO7 GPIO7",
+    "IO8 GPIO8",
+    "IO9 GPIO9",
+    "IO10 GPIO10",
+    "IO11 GPIO11",
+    "IO12 GPIO12",
+    "IO13 GPIO13",
+    "IO14 GPIO14",
+    "IO15 GPIO15",
+    "IO16 GPIO16",
+    "IO17 GPIO17",
+    "IO18 GPIO18",
+    "IO37 IR TX[S]",
+    "IO38 IR RX[S]",
+    "IO39 DIO5[S]",
+    "IO40 DIO4[S]",
+    "IO41 DIO3[S]",
+    "IO42 DIO2[S]",
+    "IO46 GPIO46",
 ];
 
-const STM32_PINS = [
-    { label: "PA0 (TIM2_CH1)", value: "0" },
-    { label: "PA1 (IR RX / TIM2_CH2)", value: "1" },
-    { label: "PA2 (IR TX on Infrared Waver / GDO0 on ISM Waver, TIM2_CH3)", value: "2" },
-    { label: "PA3 (TIM2_CH4)", value: "3" },
-    { label: "PA4 (NSS_RFID / CC1101 CS)", value: "4" },
-    { label: "PA5 (SPI1 SCK)", value: "5" },
-    { label: "PA6 (SPI1 MISO)", value: "6" },
-    { label: "PA7 (SPI1 MOSI)", value: "7" },
-    { label: "PA13", value: "13" },
-    { label: "PA14", value: "14" },
-    { label: "PB0 (VCTL)", value: "16" },
-    { label: "PB6 (RESET)", value: "22" },
-    { label: "PB7", value: "23" }
+// Keep STM32 pin labels aligned with the Sampler's STM32 pin list (Desktop/iOS/Android).
+const STM32_PIN_LABELS = [
+    "PA0 (TIM2 CH1)",
+    "PA1 (IR_RX)",
+    "PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)",
+    "PA3 (TIM2 CH4)",
+    "PA4",
+    "PA5",
+    "PA6",
+    "PA7",
+    "PA13",
+    "PA14",
+    "PB6",
+    "PB7",
 ];
+
+function esp32PinValueFromLabel(label) {
+    const match = String(label).match(/\bIO(\d+)\b/);
+    return match ? match[1] : "";
+}
+
+function stm32PinValueFromLabel(label) {
+    const match = String(label).match(/\bP([AB])(\d{1,2})\b/);
+    if (!match) return "";
+    const bank = match[1];
+    const pin = parseInt(match[2], 10);
+    if (!Number.isFinite(pin) || pin < 0 || pin > 15) return "";
+    return String(bank === "A" ? pin : 16 + pin);
+}
+
+const ESP32_PINS = ESP32_PIN_LABELS
+    .map((label) => ({ label, value: esp32PinValueFromLabel(label) }))
+    .filter((pin) => pin.value !== "");
+
+const STM32_PINS = STM32_PIN_LABELS
+    .map((label) => ({ label, value: stm32PinValueFromLabel(label) }))
+    .filter((pin) => pin.value !== "");
 
 function pinsForTarget(target) {
     return target === "stm32" ? STM32_PINS : ESP32_PINS;
 }
 
-selectedPin = pinsForTarget(selectedTarget)[0].value;
+selectedPin = (pinsForTarget(selectedTarget)[0] || { value: "" }).value;
 
 function gpioRead() {
     status = "Reading...";
