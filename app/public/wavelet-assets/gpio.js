@@ -3,6 +3,7 @@ let selectedTarget = "esp32";
 let selectedPin = "";
 let selectedMode = "out";
 let status = "";
+let lastResponse = "";
 
 const TARGETS = [
     { label: "ESP32-S3", value: "esp32" },
@@ -85,15 +86,20 @@ selectedPin = (pinsForTarget(selectedTarget)[0] || { value: "" }).value;
 
 function gpioRead() {
     status = "Reading...";
+    lastResponse = "";
     render();
 
-    DeviceConnection.sendCommandString("gpio " + selectedMode + " --pin=" + selectedPin);
+    if (selectedMode === "in") {
+        DeviceConnection.sendCommandString("gpio in --pin=" + selectedPin);
+    }
+
     let response = DeviceConnection.sendCommandString("gpio read --pin=" + selectedPin);
 
     let state = response && response.length > 0 && response[0] !== 0;
     let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
     let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
     status = pinName + " is " + (state ? "HIGH" : "LOW");
+    lastResponse = "gpio read -> " + (response && response.length ? ("0x" + response[0].toString(16).padStart(2, "0")) : "(no data)");
     render();
 }
 
@@ -107,14 +113,27 @@ function gpioWriteLow() {
 
 function gpioWrite(value) {
     status = value ? "Setting HIGH..." : "Setting LOW...";
+    lastResponse = "";
     render();
 
-    DeviceConnection.sendCommandString("gpio out --pin=" + selectedPin);
-    DeviceConnection.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+    let outResp = DeviceConnection.sendCommandString("gpio out --pin=" + selectedPin);
+    let writeResp = DeviceConnection.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+    let readResp = DeviceConnection.sendCommandString("gpio read --pin=" + selectedPin);
 
     let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
     let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-    status = "Set " + pinName + " " + (value ? "HIGH" : "LOW");
+
+    let readLevel = readResp && readResp.length > 0 && readResp[0] !== 0;
+    status = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readLevel ? "HIGH" : "LOW") + ")";
+
+    function fmt(resp) {
+        if (!resp || !resp.length) return "(no data)";
+        return "0x" + resp[0].toString(16).padStart(2, "0");
+    }
+    lastResponse =
+        "gpio out -> " + fmt(outResp) + "\n" +
+        (value ? "gpio high -> " : "gpio low -> ") + fmt(writeResp) + "\n" +
+        "gpio read -> " + fmt(readResp);
     render();
 }
 
@@ -177,6 +196,14 @@ function render() {
                 text: status,
                 backgroundColor: "#111827",
                 foregroundColor: "#FFFFFF",
+                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                cornerRadius: 8
+            }) : null
+            ,
+            lastResponse ? UI.text({
+                text: lastResponse,
+                backgroundColor: "#0B1220",
+                foregroundColor: "#E5E7EB",
                 padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
                 cornerRadius: 8
             }) : null
