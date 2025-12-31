@@ -51,6 +51,7 @@ public final class WaveletEngine {
 
     private volatile Scriptable scope;
     private volatile boolean initialized;
+    private volatile String bootstrapSource = "";
 
     public interface DialogCallback {
         void showDialog(String title, String message);
@@ -59,6 +60,10 @@ public final class WaveletEngine {
     private PrintCallback printCallback;
     private RenderCallback renderCallback;
     private DialogCallback dialogCallback;
+
+    public void setBootstrapSource(String source) {
+        bootstrapSource = source != null ? source : "";
+    }
 
     public void setDialogCallback(DialogCallback dialogCallback) {
         this.dialogCallback = dialogCallback;
@@ -369,7 +374,11 @@ public final class WaveletEngine {
     }
 
     private void injectDsl(Context cx, Scriptable scope) {
-        cx.evaluateString(scope, DSL_BOOTSTRAP, "WaveletDSL", 1, null);
+        String source = bootstrapSource;
+        if (source == null || source.trim().isEmpty()) {
+            throw new EvaluatorException("Wavelet bootstrap not loaded (missing wavelet_bootstrap.js)");
+        }
+        cx.evaluateString(scope, source, "WaveletBootstrap", 1, null);
     }
 
     private Object importModule(Context cx, String rawName) {
@@ -793,194 +802,4 @@ public final class WaveletEngine {
         mainHandler.post(() -> renderCallback.onRender(tree));
     }
 
-    private static final String DSL_BOOTSTRAP =
-        "'use strict';\n" +
-        "\n" +
-        "var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {\n" +
-        "    render: function (node) {\n" +
-        "        _waveletRender(node);\n" +
-        "    },\n" +
-        "    registerCallback: function (token, fn) {\n" +
-        "        if (typeof fn === 'function') {\n" +
-        "            _waveletRegisterCallback(token, fn);\n" +
-        "        }\n" +
-        "    },\n" +
-        "    log: function (message) {\n" +
-        "        var text = String(message);\n" +
-        "        _waveletPrint(text);\n" +
-        "    }\n" +
-        "};\n" +
-        "\n" +
-        "if (typeof WaveletModules === 'undefined') {\n" +
-        "    var WaveletModules = (function () {\n" +
-        "        var cache = {};\n" +
-        "        var normalize = function (name) {\n" +
-        "            return String(name || '').trim();\n" +
-        "        };\n" +
-        "        return {\n" +
-        "            import: function (name) {\n" +
-        "                if (typeof _waveletImportModule !== 'function') {\n" +
-        "                    throw new Error('Module loader unavailable');\n" +
-        "                }\n" +
-        "                var key = normalize(name);\n" +
-        "                if (!key) {\n" +
-        "                    throw new Error('Module name is required');\n" +
-        "                }\n" +
-        "                if (!Object.prototype.hasOwnProperty.call(cache, key)) {\n" +
-        "                    cache[key] = _waveletImportModule(key);\n" +
-        "                }\n" +
-        "                return cache[key];\n" +
-        "            },\n" +
-        "            clear: function () {\n" +
-        "                cache = {};\n" +
-        "            }\n" +
-        "        };\n" +
-        "    })();\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof require !== 'function') {\n" +
-        "    var require = function (name) {\n" +
-        "        return WaveletModules.import(name);\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof print === 'undefined') {\n" +
-        "    var print = function () {\n" +
-        "        var parts = [];\n" +
-        "        for (var i = 0; i < arguments.length; i += 1) {\n" +
-        "            var arg = arguments[i];\n" +
-        "            if (typeof arg === 'string') {\n" +
-        "                parts.push(arg);\n" +
-        "            } else {\n" +
-        "                try {\n" +
-        "                    parts.push(JSON.stringify(arg));\n" +
-        "                } catch (e) {\n" +
-        "                    parts.push(String(arg));\n" +
-        "                }\n" +
-        "            }\n" +
-        "        }\n" +
-        "        WaveletBridge.log(parts.join(' '));\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof dialog === 'undefined') {\n" +
-        "    var dialog = function (title, message) {\n" +
-        "        _waveletShowDialog(String(title || ''), String(message || ''));\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof createByteArray === 'undefined') {\n" +
-        "    var createByteArray = function (jsArray) {\n" +
-        "        return _waveletCreateByteArray(jsArray);\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof console === 'undefined') {\n" +
-        "    var console = {};\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof console.log !== 'function') {\n" +
-        "    console.log = function () {\n" +
-        "        print.apply(null, arguments);\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof console.warn !== 'function') {\n" +
-        "    console.warn = function () {\n" +
-        "        print.apply(null, arguments);\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof console.error !== 'function') {\n" +
-        "    console.error = function () {\n" +
-        "        print.apply(null, arguments);\n" +
-        "    };\n" +
-        "}\n" +
-        "\n" +
-        "if (typeof UI === 'undefined') {\n" +
-        "    var UI = (function () {\n" +
-        "        var idCounter = 0;\n" +
-        "\n" +
-        "        var ensureId = function (type, props) {\n" +
-        "            if (props && typeof props.id === 'string' && props.id.length > 0) {\n" +
-        "                return props.id;\n" +
-        "            }\n" +
-        "            idCounter += 1;\n" +
-        "            return type + '_' + idCounter;\n" +
-        "        };\n" +
-        "\n" +
-        "        var normalizeProps = function (type, props) {\n" +
-        "            var assigned = props ? Object.assign({}, props) : {};\n" +
-        "            var children = Array.isArray(assigned.children) ? assigned.children : [];\n" +
-        "            delete assigned.children;\n" +
-        "            var id = ensureId(type, assigned);\n" +
-        "            assigned.id = id;\n" +
-        "            var cleanedChildren = [];\n" +
-        "            for (var i = 0; i < children.length; i += 1) {\n" +
-        "                var child = children[i];\n" +
-        "                if (child !== null && child !== undefined) {\n" +
-        "                    cleanedChildren.push(child);\n" +
-        "                }\n" +
-        "            }\n" +
-        "            return { id: id, props: assigned, children: cleanedChildren };\n" +
-        "        };\n" +
-        "\n" +
-        "        var collectHandlers = function (id, props) {\n" +
-        "            var handlers = {};\n" +
-        "            var events = [\n" +
-        "                { key: 'onTap', type: 'tap' },\n" +
-        "                { key: 'onChange', type: 'change' },\n" +
-        "                { key: 'onSubmit', type: 'submit' }\n" +
-        "            ];\n" +
-        "            events.forEach(function (event) {\n" +
-        "                var fn = props[event.key];\n" +
-        "                if (typeof fn === 'function') {\n" +
-        "                    var token = id + ':' + event.type;\n" +
-        "                    WaveletBridge.registerCallback(token, fn);\n" +
-        "                    handlers[event.type] = token;\n" +
-        "                }\n" +
-        "                if (props.hasOwnProperty(event.key)) {\n" +
-        "                    delete props[event.key];\n" +
-        "                }\n" +
-        "            });\n" +
-        "            return handlers;\n" +
-        "        };\n" +
-        "\n" +
-        "        var makeNode = function (type, props) {\n" +
-        "            var normalized = normalizeProps(type, props);\n" +
-        "            var handlerTokens = collectHandlers(normalized.id, normalized.props);\n" +
-        "            return {\n" +
-        "                type: type,\n" +
-        "                id: normalized.id,\n" +
-        "                props: normalized.props,\n" +
-        "                children: normalized.children,\n" +
-        "                handlers: handlerTokens\n" +
-        "            };\n" +
-        "        };\n" +
-        "\n" +
-        "        return {\n" +
-        "            column: function (props) { return makeNode('column', props || {}); },\n" +
-        "            row: function (props) { return makeNode('row', props || {}); },\n" +
-        "            text: function (props) { return makeNode('text', props || {}); },\n" +
-        "            button: function (props) { return makeNode('button', props || {}); },\n" +
-        "            slider: function (props) { return makeNode('slider', props || {}); },\n" +
-        "            logViewer: function (props) { return makeNode('logViewer', props || {}); },\n" +
-        "            scroll: function (props) { return makeNode('scroll', props || {}); },\n" +
-        "            textField: function (props) { return makeNode('textField', props || {}); },\n" +
-        "            textEditor: function (props) { return makeNode('textEditor', props || {}); },\n" +
-        "            picker: function (props) { return makeNode('picker', props || {}); },\n" +
-        "            grid: function (props) { return makeNode('grid', props || {}); },\n" +
-        "            spacer: function (props) { return makeNode('spacer', props || {}); },\n" +
-        "            divider: function (props) { return makeNode('divider', props || {}); },\n" +
-        "            progress: function (props) { return makeNode('progress', props || {}); },\n" +
-        "            render: function (node) {\n" +
-        "                if (!node || typeof node !== 'object') {\n" +
-        "                    WaveletBridge.log('UI.render called with invalid node');\n" +
-        "                    return;\n" +
-        "                }\n" +
-        "                WaveletBridge.render(node);\n" +
-        "            }\n" +
-        "        };\n" +
-        "    })();\n" +
-        "}\n";
 }

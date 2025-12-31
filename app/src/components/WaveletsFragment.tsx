@@ -20,6 +20,7 @@ const ASSET_SCRIPT_FILES = [
 
 const WAVELET_ASSET_ROOT = "/wavelet-assets";
 const WAVELETS_DIR_NAME = "wavelets";
+const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.js";
 const MIGRATION_CLEAR_KEY = "emwaver.wavelets.clearLegacy";
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
@@ -320,16 +321,25 @@ export default function WaveletsFragment({ theme = "dark" }: { theme?: ThemeMode
 
     const bleService = createBLEServiceWrapper();
 
-    engine.setup(printCallback, renderCallback, dialogCallback, {
-      BLEService: bleService,
-      DeviceConnection: deviceConnection,
-      Utils: utilsBinding,
-      createByteArray,
-    });
+    let cancelled = false;
+    void (async () => {
+      const bootstrap = (await readAssetScript(WAVELET_BOOTSTRAP_FILENAME)) ?? "";
+      if (cancelled) {
+        return;
+      }
 
-    waveletEngineRef.current = engine;
+      engine.setBootstrapSource(bootstrap);
+      engine.setup(printCallback, renderCallback, dialogCallback, {
+        BLEService: bleService,
+        DeviceConnection: deviceConnection,
+        Utils: utilsBinding,
+        createByteArray,
+      });
+      waveletEngineRef.current = engine;
+    })();
 
     return () => {
+      cancelled = true;
       engine.shutdown();
       waveletEngineRef.current = null;
     };

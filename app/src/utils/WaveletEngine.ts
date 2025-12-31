@@ -37,6 +37,7 @@ export class WaveletEngine {
   private moduleSources: Map<string, ModuleSource> = new Map();
   private moduleCache: Map<string, unknown> = new Map();
   private moduleLoadingStack: Set<string> = new Set();
+  private bootstrapSource = '';
   
   private printCallback?: PrintCallback;
   private renderCallback?: RenderCallback;
@@ -62,11 +63,14 @@ export class WaveletEngine {
     const sandbox: Record<string, unknown> = {};
     this.context = sandbox as unknown as Window;
     
-    // Setup bridge and DSL
+    // Setup bridge and shared bootstrap
     this.installBridge();
-    this.injectDSL();
     this.applyGlobalBindings();
     this.initialized = true;
+  }
+
+  setBootstrapSource(source: string): void {
+    this.bootstrapSource = String(source ?? "");
   }
 
   /**
@@ -90,8 +94,7 @@ export class WaveletEngine {
     console.log('[WaveletEngine.execute] About to inject DSL');
 
     try {
-      // Re-inject DSL and bindings for each execution
-      this.injectDSL();
+      // Re-apply bindings for each execution.
       this.applyGlobalBindings();
       
       console.log('[WaveletEngine.execute] DSL injected, about to execute script');
@@ -101,20 +104,20 @@ export class WaveletEngine {
       const ctx = this.context as any;
       
       // Execute in the sandbox context by passing variables as parameters
+      const fullScript = `${this.bootstrapSource}\n${script}`;
+
       const func = new Function(
         '_waveletPrint',
         '_waveletRender', 
         '_waveletRegisterCallback',
         '_waveletImportModule',
         '_waveletShowDialog',
-        'UI',
-        'print',
-        'require',
+        '_waveletCreateByteArray',
         'BLEService',
         'DeviceConnection',
         'Utils',
-        'createByteArray',
-        script
+        'SamplerSignals',
+        fullScript
       );
       
       console.log('[WaveletEngine.execute] Calling function with context');
@@ -128,13 +131,11 @@ export class WaveletEngine {
         ctx._waveletRegisterCallback,
         ctx._waveletImportModule,
         ctx._waveletShowDialog,
-        ctx.UI,
-        ctx.print,
-        ctx.require,
+        ctx._waveletCreateByteArray,
         ctx.BLEService,
         ctx.DeviceConnection,
         ctx.Utils,
-        ctx.createByteArray
+        ctx.SamplerSignals
       );
       
       console.log('[WaveletEngine.execute] Function executed successfully');
@@ -253,118 +254,17 @@ export class WaveletEngine {
     (this.context as any)._waveletShowDialog = (title: string, message: string) => {
       this.dialogCallback?.(title, message);
     };
-  }
 
-  /**
-   * Inject UI DSL into context
-   */
-  private injectDSL(): void {
-    if (!this.context) return;
-
-    // Create callback counter in the context
-    (this.context as any)._callbackCounter = 0;
-    (this.context as any)._nodeCounter = 0;
-    
-    // Store reference to context for use in closures
-    const ctx = this.context as any;
-    
-    // Create UI object directly in the context
-    ctx.UI = {
-      column: (props: any) => ctx._waveletMakeNode('column', props || {}),
-      row: (props: any) => ctx._waveletMakeNode('row', props || {}),
-      text: (props: any) => ctx._waveletMakeNode('text', props || {}),
-      button: (props: any) => ctx._waveletMakeNode('button', props || {}),
-      slider: (props: any) => ctx._waveletMakeNode('slider', props || {}),
-      logViewer: (props: any) => ctx._waveletMakeNode('logViewer', props || {}),
-      scroll: (props: any) => ctx._waveletMakeNode('scroll', props || {}),
-      textField: (props: any) => ctx._waveletMakeNode('textField', props || {}),
-      textEditor: (props: any) => ctx._waveletMakeNode('textEditor', props || {}),
-      picker: (props: any) => ctx._waveletMakeNode('picker', props || {}),
-      grid: (props: any) => ctx._waveletMakeNode('grid', props || {}),
-      spacer: (props: any) => ctx._waveletMakeNode('spacer', props || {}),
-      divider: (props: any) => ctx._waveletMakeNode('divider', props || {}),
-      progress: (props: any) => ctx._waveletMakeNode('progress', props || {}),
-      render: (tree: any) => {
-        console.log('[UI.render] Called with tree:', tree);
-        const renderFn = ctx._waveletRender;
-        console.log('[UI.render] renderFn type:', typeof renderFn);
-        if (typeof renderFn === 'function') {
-          console.log('[UI.render] Calling _waveletRender');
-          renderFn(tree);
-        } else {
-          // Fallback: try to print error
-          console.error('[UI.render] _waveletRender is not a function!');
-          const printFn = ctx._waveletPrint;
-          if (typeof printFn === 'function') {
-            printFn('ERROR: _waveletRender is not a function. Type: ' + typeof renderFn);
-          }
-        }
+    // Byte array helper (kept as a bridge primitive so the shared bootstrap can call it).
+    (this.context as any)._waveletCreateByteArray = (jsArray: unknown) => {
+      const ctx = this.context as any;
+      if (typeof ctx.createByteArray === "function") {
+        return ctx.createByteArray(jsArray);
       }
-    };
-
-    // Create print function
-    (this.context as any).print = (message: string) => {
-      if (typeof (this.context as any)._waveletPrint === 'function') {
-        (this.context as any)._waveletPrint(String(message));
+      if (Array.isArray(jsArray)) {
+        return new Uint8Array(jsArray.map((value) => Number(value) & 0xff));
       }
-    };
-
-    // Create dialog function
-    (this.context as any).dialog = (title: string, message: string) => {
-      if (typeof (this.context as any)._waveletShowDialog === 'function') {
-        (this.context as any)._waveletShowDialog(String(title || ''), String(message || ''));
-      }
-    };
-
-    // Create require function
-    (this.context as any).require = (moduleName: string) => {
-      if (typeof (this.context as any)._waveletImportModule === 'function') {
-        return (this.context as any)._waveletImportModule(moduleName);
-      }
-      throw new Error('Module loading not available');
-    };
-
-    (this.context as any)._waveletNormalizeProps = (type: string, props: any) => {
-      const raw = props || {};
-      const children = Array.isArray(raw.children) ? raw.children : [];
-      const id = raw.id ? String(raw.id) : `${type}_${++ctx._nodeCounter}`;
-      const { children: _children, id: _id, ...rest } = raw;
-      return { id, props: rest, children };
-    };
-
-    (this.context as any)._waveletCollectHandlers = (id: string, props: any) => {
-      const handlers: Record<string, string> = {};
-      const events = [
-        { key: 'onTap', type: 'tap' },
-        { key: 'onChange', type: 'change' },
-        { key: 'onSubmit', type: 'submit' },
-      ];
-      events.forEach((event) => {
-        const fn = props[event.key];
-        if (typeof fn === 'function') {
-          const token = `${id}:${event.type}`;
-          if (typeof ctx._waveletRegisterCallback === 'function') {
-            ctx._waveletRegisterCallback(token, fn);
-          }
-          handlers[event.type] = token;
-        }
-        if (Object.prototype.hasOwnProperty.call(props, event.key)) {
-          delete props[event.key];
-        }
-      });
-      return handlers;
-    };
-
-    (this.context as any)._waveletMakeNode = (type: string, props: any) => {
-      const normalized = ctx._waveletNormalizeProps(type, props || {});
-      const handlerTokens = ctx._waveletCollectHandlers(normalized.id, normalized.props);
-      return {
-        type,
-        id: normalized.id,
-        props: normalized.props,
-        children: normalized.children,
-        handlers: handlerTokens,
-      };
+      return new Uint8Array([]);
     };
   }
 

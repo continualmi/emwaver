@@ -1,0 +1,369 @@
+'use strict';
+
+// Canonical Wavelet bootstrap/runtime.
+// This file is intended to be the single source of truth for the JS-side Wavelet API surface.
+//
+// Hosts must provide (at minimum) these bridge functions:
+// - _waveletPrint(message: string): void
+// - _waveletRender(node: object): void
+// - _waveletRegisterCallback(token: string, fn: Function): void
+// - _waveletImportModule(name: string): any
+// - _waveletShowDialog(title: string, message: string): void
+// - _waveletCreateByteArray(jsArray: any): any
+//
+// Hosts may optionally provide:
+// - _waveletSendCommandString(command: string, timeoutMs: number): any
+// - _waveletWrite(bytes: any): void
+// - _waveletConnectionStatus(): string
+// - _waveletListSignals(): string[]
+// - _waveletReadSignal(name: string): any
+
+var __waveletGlobal = (function () {
+  try {
+    return Function('return this')();
+  } catch (e) {
+    return {};
+  }
+})();
+
+var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
+  render: function (node) {
+    _waveletRender(node);
+  },
+  registerCallback: function (token, fn) {
+    if (typeof fn === 'function') {
+      _waveletRegisterCallback(token, fn);
+    }
+  },
+  log: function (message) {
+    _waveletPrint(String(message));
+  },
+};
+
+function _waveletJoinArgs(args) {
+  var parts = [];
+  for (var i = 0; i < args.length; i += 1) {
+    var arg = args[i];
+    if (typeof arg === 'string') {
+      parts.push(arg);
+    } else {
+      try {
+        parts.push(JSON.stringify(arg));
+      } catch (e) {
+        parts.push(String(arg));
+      }
+    }
+  }
+  return parts.join(' ');
+}
+
+if (typeof print === 'undefined') {
+  var print = function () {
+    WaveletBridge.log(_waveletJoinArgs(arguments));
+  };
+}
+
+if (typeof console === 'undefined') {
+  var console = {};
+}
+if (typeof console.log !== 'function') {
+  console.log = function () {
+    print.apply(null, arguments);
+  };
+}
+if (typeof console.warn !== 'function') {
+  console.warn = function () {
+    print.apply(null, arguments);
+  };
+}
+if (typeof console.error !== 'function') {
+  console.error = function () {
+    print.apply(null, arguments);
+  };
+}
+
+if (typeof dialog === 'undefined') {
+  var dialog = function (title, message) {
+    if (typeof _waveletShowDialog !== 'function') {
+      throw new Error('dialog unavailable (missing _waveletShowDialog)');
+    }
+    _waveletShowDialog(String(title || ''), String(message || ''));
+  };
+}
+
+if (typeof createByteArray === 'undefined') {
+  var createByteArray = function (jsArray) {
+    if (typeof _waveletCreateByteArray !== 'function') {
+      throw new Error('createByteArray unavailable (missing _waveletCreateByteArray)');
+    }
+    return _waveletCreateByteArray(jsArray);
+  };
+}
+
+if (typeof WaveletModules === 'undefined') {
+  var WaveletModules = (function () {
+    var cache = {};
+    var normalize = function (name) {
+      return String(name || '').trim();
+    };
+    return {
+      import: function (name) {
+        if (typeof _waveletImportModule !== 'function') {
+          throw new Error('Module loader unavailable (missing _waveletImportModule)');
+        }
+        var key = normalize(name);
+        if (!key) {
+          throw new Error('Module name is required');
+        }
+        if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+          cache[key] = _waveletImportModule(key);
+        }
+        return cache[key];
+      },
+      clear: function () {
+        cache = {};
+      },
+    };
+  })();
+}
+
+if (typeof require !== 'function') {
+  var require = function (name) {
+    return WaveletModules.import(name);
+  };
+}
+
+function __waveletIsShim(obj) {
+  return !!obj && obj.__waveletShim === true;
+}
+
+var __waveletHostDeviceConnection =
+  typeof DeviceConnection !== 'undefined' && !__waveletIsShim(DeviceConnection) ? DeviceConnection : null;
+var __waveletHostUtils = typeof Utils !== 'undefined' && !__waveletIsShim(Utils) ? Utils : null;
+var __waveletHostSamplerSignals =
+  typeof SamplerSignals !== 'undefined' && !__waveletIsShim(SamplerSignals) ? SamplerSignals : null;
+
+var DeviceConnection = {};
+DeviceConnection.__waveletShim = true;
+DeviceConnection.sendCommandString = function (command, timeoutMs) {
+  var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
+  var framed = String(command || '');
+  if (framed.length > 0 && !/\n$/.test(framed)) {
+    framed += '\n';
+  }
+
+  if (__waveletHostDeviceConnection && typeof __waveletHostDeviceConnection.sendCommandString === 'function') {
+    return __waveletHostDeviceConnection.sendCommandString.call(__waveletHostDeviceConnection, framed, timeout);
+  }
+
+  if (typeof _waveletSendCommandString === 'function') {
+    return _waveletSendCommandString(framed, timeout);
+  }
+
+  throw new Error('DeviceConnection.sendCommandString unavailable on this host');
+};
+
+DeviceConnection.write = function (bytes) {
+  if (__waveletHostDeviceConnection && typeof __waveletHostDeviceConnection.write === 'function') {
+    return __waveletHostDeviceConnection.write.call(__waveletHostDeviceConnection, bytes);
+  }
+  if (typeof _waveletWrite === 'function') {
+    return _waveletWrite(bytes);
+  }
+};
+
+DeviceConnection.connectionStatus = function () {
+  if (__waveletHostDeviceConnection && typeof __waveletHostDeviceConnection.connectionStatus === 'function') {
+    return String(__waveletHostDeviceConnection.connectionStatus.call(__waveletHostDeviceConnection));
+  }
+  if (typeof _waveletConnectionStatus === 'function') {
+    return String(_waveletConnectionStatus());
+  }
+  return 'unknown';
+};
+
+var Utils = {};
+Utils.__waveletShim = true;
+Utils.delay = function (ms) {
+  if (__waveletHostUtils && typeof __waveletHostUtils.delay === 'function') {
+    return __waveletHostUtils.delay.call(__waveletHostUtils, ms);
+  }
+  var durationMs = Math.max(0, Number(ms) || 0);
+  var start = Date.now();
+  while (Date.now() - start < durationMs) {
+    // busy-wait for parity with mobile hosts
+  }
+};
+
+Utils.sleep = function (ms) {
+  if (__waveletHostUtils && typeof __waveletHostUtils.sleep === 'function') {
+    return __waveletHostUtils.sleep.call(__waveletHostUtils, ms);
+  }
+  return Utils.delay(ms);
+};
+
+var SamplerSignals = {};
+SamplerSignals.__waveletShim = true;
+SamplerSignals.listSignals = function () {
+  if (__waveletHostSamplerSignals && typeof __waveletHostSamplerSignals.listSignals === 'function') {
+    return __waveletHostSamplerSignals.listSignals.call(__waveletHostSamplerSignals) || [];
+  }
+  if (typeof _waveletListSignals === 'function') {
+    return _waveletListSignals() || [];
+  }
+  return [];
+};
+
+SamplerSignals.listSignalsCsv = function () {
+  if (__waveletHostSamplerSignals && typeof __waveletHostSamplerSignals.listSignalsCsv === 'function') {
+    return String(__waveletHostSamplerSignals.listSignalsCsv.call(__waveletHostSamplerSignals) || '');
+  }
+  var names = SamplerSignals.listSignals();
+  return (names || []).join('\n');
+};
+
+SamplerSignals.readSignal = function (name) {
+  if (__waveletHostSamplerSignals && typeof __waveletHostSamplerSignals.readSignal === 'function') {
+    return __waveletHostSamplerSignals.readSignal.call(__waveletHostSamplerSignals, String(name || ''));
+  }
+  if (typeof _waveletReadSignal === 'function') {
+    return _waveletReadSignal(String(name || ''));
+  }
+  return null;
+};
+
+__waveletGlobal.DeviceConnection = DeviceConnection;
+__waveletGlobal.Utils = Utils;
+__waveletGlobal.SamplerSignals = SamplerSignals;
+
+// Optional host compatibility: some hosts expose BLEService but can't directly bridge methods.
+// iOS provides `_manualSendCommand` as a JS-callable block.
+if (typeof BLEService !== 'undefined' && typeof BLEService.sendCommand === 'undefined') {
+  if (typeof _manualSendCommand === 'function') {
+    BLEService.sendCommand = _manualSendCommand;
+  }
+}
+
+if (typeof UI === 'undefined') {
+  var UI = (function () {
+    var idCounter = 0;
+
+    var ensureId = function (type, props) {
+      if (props && typeof props.id === 'string' && props.id.length > 0) {
+        return props.id;
+      }
+      idCounter += 1;
+      return type + '_' + idCounter;
+    };
+
+    var normalizeProps = function (type, props) {
+      var assigned = props ? Object.assign({}, props) : {};
+      var children = Array.isArray(assigned.children) ? assigned.children : [];
+      delete assigned.children;
+      var id = ensureId(type, assigned);
+      assigned.id = id;
+
+      var cleanedChildren = [];
+      for (var i = 0; i < children.length; i += 1) {
+        var child = children[i];
+        if (child !== null && child !== undefined) {
+          cleanedChildren.push(child);
+        }
+      }
+
+      return { id: id, props: assigned, children: cleanedChildren };
+    };
+
+    var collectHandlers = function (id, props) {
+      var handlers = {};
+      var events = [
+        { key: 'onTap', type: 'tap' },
+        { key: 'onChange', type: 'change' },
+        { key: 'onSubmit', type: 'submit' },
+      ];
+      events.forEach(function (event) {
+        var fn = props[event.key];
+        if (typeof fn === 'function') {
+          var token = id + ':' + event.type;
+          WaveletBridge.registerCallback(token, fn);
+          handlers[event.type] = token;
+        }
+        if (Object.prototype.hasOwnProperty.call(props, event.key)) {
+          delete props[event.key];
+        }
+      });
+      return handlers;
+    };
+
+    var makeNode = function (type, props) {
+      var normalized = normalizeProps(type, props);
+      var handlerTokens = collectHandlers(normalized.id, normalized.props);
+      return {
+        type: type,
+        id: normalized.id,
+        props: normalized.props,
+        children: normalized.children,
+        handlers: handlerTokens,
+      };
+    };
+
+    return {
+      column: function (props) {
+        return makeNode('column', props || {});
+      },
+      row: function (props) {
+        return makeNode('row', props || {});
+      },
+      text: function (props) {
+        return makeNode('text', props || {});
+      },
+      button: function (props) {
+        return makeNode('button', props || {});
+      },
+      slider: function (props) {
+        return makeNode('slider', props || {});
+      },
+      logViewer: function (props) {
+        return makeNode('logViewer', props || {});
+      },
+      scroll: function (props) {
+        return makeNode('scroll', props || {});
+      },
+      textField: function (props) {
+        return makeNode('textField', props || {});
+      },
+      textEditor: function (props) {
+        return makeNode('textEditor', props || {});
+      },
+      picker: function (props) {
+        return makeNode('picker', props || {});
+      },
+      grid: function (props) {
+        return makeNode('grid', props || {});
+      },
+      spacer: function (props) {
+        return makeNode('spacer', props || {});
+      },
+      divider: function (props) {
+        return makeNode('divider', props || {});
+      },
+      progress: function (props) {
+        return makeNode('progress', props || {});
+      },
+      render: function (node) {
+        if (!node || typeof node !== 'object') {
+          WaveletBridge.log('UI.render called with invalid node');
+          return;
+        }
+        WaveletBridge.render(node);
+      },
+    };
+  })();
+}
+
+__waveletGlobal.WaveletBridge = WaveletBridge;
+__waveletGlobal.WaveletModules = WaveletModules;
+__waveletGlobal.UI = UI;
+__waveletGlobal.print = print;
+__waveletGlobal.dialog = dialog;
+__waveletGlobal.createByteArray = createByteArray;

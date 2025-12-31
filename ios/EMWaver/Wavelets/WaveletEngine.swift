@@ -224,10 +224,24 @@ final class WaveletEngine {
     }
 
     private func injectDSL(into context: JSContext) {
-        Swift.print("[WaveletEngine] Injecting DSL bundle")
-        context.evaluateScript(Self.dslBootstrap)
-        let uiType = context.evaluateScript("typeof UI")?.toString() ?? "undefined"
-        Swift.print("[WaveletEngine] After inject typeof UI = \(uiType)")
+        Swift.print("[WaveletEngine] Injecting shared wavelet bootstrap")
+        guard let url = Bundle.main.url(forResource: "wavelet_bootstrap", withExtension: "js") else {
+            let message = "Wavelet bootstrap missing from app bundle (wavelet_bootstrap.js)"
+            printHandler?(message)
+            Swift.print("[WaveletEngine] \(message)")
+            return
+        }
+
+        do {
+            let source = try String(contentsOf: url, encoding: .utf8)
+            context.evaluateScript(source)
+            let uiType = context.evaluateScript("typeof UI")?.toString() ?? "undefined"
+            Swift.print("[WaveletEngine] After inject typeof UI = \(uiType)")
+        } catch {
+            let message = "Failed to load wavelet bootstrap: \(error)"
+            printHandler?(message)
+            Swift.print("[WaveletEngine] \(message)")
+        }
     }
 
     private func applyGlobalBindings(to context: JSContext) {
@@ -397,215 +411,3 @@ final class WaveletEngine {
     }
 }
 
-private extension WaveletEngine {
-    static let dslBootstrap = """
-        'use strict';
-
-        var WaveletBridge = typeof WaveletBridge !== 'undefined' ? WaveletBridge : {
-            render(node) {
-                _waveletRender(node);
-            },
-            registerCallback(token, fn) {
-                if (typeof fn === 'function') {
-                    _waveletRegisterCallback(token, fn);
-                }
-            },
-            log(message) {
-                var text = String(message);
-                _waveletPrint(text);
-            }
-        };
-
-        if (typeof DeviceConnection === 'undefined') {
-            var DeviceConnection = {
-                sendCommandString: function (command, timeoutMs) {
-                    var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
-                    if (typeof _waveletSendCommandString !== 'function') {
-                        throw new Error('DeviceConnection unavailable (missing _waveletSendCommandString)');
-                    }
-                    return _waveletSendCommandString(String(command || ''), timeout);
-                }
-            };
-        }
-
-        if (typeof WaveletModules === 'undefined') {
-            var WaveletModules = (function () {
-                var cache = {};
-                var normalize = function (name) {
-                    return String(name || '').trim();
-                };
-                return {
-                    import: function (name) {
-                        if (typeof _waveletImportModule !== 'function') {
-                            throw new Error('Module loader unavailable');
-                        }
-                        var key = normalize(name);
-                        if (!key) {
-                            throw new Error('Module name is required');
-                        }
-                        if (!Object.prototype.hasOwnProperty.call(cache, key)) {
-                            cache[key] = _waveletImportModule(key);
-                        }
-                        return cache[key];
-                    },
-                    clear: function () {
-                        cache = {};
-                    }
-                };
-            })();
-        }
-
-        if (typeof require !== 'function') {
-            var require = function (name) {
-                return WaveletModules.import(name);
-            };
-        }
-
-        if (typeof print === 'undefined') {
-            var print = function () {
-                var parts = [];
-                for (var i = 0; i < arguments.length; i += 1) {
-                    var arg = arguments[i];
-                    if (typeof arg === 'string') {
-                        parts.push(arg);
-                    } else {
-                        try {
-                            parts.push(JSON.stringify(arg));
-                        } catch (e) {
-                            parts.push(String(arg));
-                        }
-                    }
-                }
-                WaveletBridge.log(parts.join(' '));
-            };
-        }
-
-        if (typeof console === 'undefined') {
-            var console = {};
-        }
-
-        if (typeof console.log !== 'function') {
-            console.log = function () {
-                print.apply(null, arguments);
-            };
-        }
-
-        if (typeof console.warn !== 'function') {
-            console.warn = function () {
-                print.apply(null, arguments);
-            };
-        }
-
-        if (typeof console.error !== 'function') {
-            console.error = function () {
-                print.apply(null, arguments);
-            };
-        }
-
-        if (typeof createByteArray === 'undefined') {
-            var createByteArray = function (jsArray) {
-                return _waveletCreateByteArray(jsArray);
-            };
-        }
-
-        if (typeof dialog === 'undefined') {
-            var dialog = function (title, message) {
-                _waveletShowDialog(String(title || ''), String(message || ''));
-            };
-        }
-
-        // Ensure BLEService.sendCommand is available
-        if (typeof BLEService !== 'undefined' && typeof BLEService.sendCommand === 'undefined') {
-            if (typeof _manualSendCommand === 'function') {
-                BLEService.sendCommand = _manualSendCommand;
-            }
-        }
-
-        if (typeof UI === 'undefined') {
-            var UI = (function () {
-                var idCounter = 0;
-
-                var ensureId = function (type, props) {
-                    if (props && typeof props.id === 'string' && props.id.length > 0) {
-                        return props.id;
-                    }
-                    idCounter += 1;
-                    return type + '_' + idCounter;
-                };
-
-                var normalizeProps = function (type, props) {
-                    var assigned = props ? Object.assign({}, props) : {};
-                    var children = Array.isArray(assigned.children) ? assigned.children : [];
-                    delete assigned.children;
-                    var id = ensureId(type, assigned);
-                    assigned.id = id;
-                    var cleanedChildren = [];
-                    for (var i = 0; i < children.length; i += 1) {
-                        var child = children[i];
-                        if (child !== null && child !== undefined) {
-                            cleanedChildren.push(child);
-                        }
-                    }
-                    return { id: id, props: assigned, children: cleanedChildren };
-                };
-
-                var collectHandlers = function (id, props) {
-                    var handlers = {};
-                    var events = [
-                        { key: 'onTap', type: 'tap' },
-                        { key: 'onChange', type: 'change' },
-                        { key: 'onSubmit', type: 'submit' }
-                    ];
-                    events.forEach(function (event) {
-                        var fn = props[event.key];
-                        if (typeof fn === 'function') {
-                            var token = id + ':' + event.type;
-                            WaveletBridge.registerCallback(token, fn);
-                            handlers[event.type] = token;
-                        }
-                        if (props.hasOwnProperty(event.key)) {
-                            delete props[event.key];
-                        }
-                    });
-                    return handlers;
-                };
-
-                var makeNode = function (type, props) {
-                    var normalized = normalizeProps(type, props);
-                    var handlerTokens = collectHandlers(normalized.id, normalized.props);
-                    return {
-                        type: type,
-                        id: normalized.id,
-                        props: normalized.props,
-                        children: normalized.children,
-                        handlers: handlerTokens
-                    };
-                };
-
-                return {
-                    column: function (props) { return makeNode('column', props || {}); },
-                    row: function (props) { return makeNode('row', props || {}); },
-                    text: function (props) { return makeNode('text', props || {}); },
-                    button: function (props) { return makeNode('button', props || {}); },
-                    slider: function (props) { return makeNode('slider', props || {}); },
-                    logViewer: function (props) { return makeNode('logViewer', props || {}); },
-                    scroll: function (props) { return makeNode('scroll', props || {}); },
-                    textField: function (props) { return makeNode('textField', props || {}); },
-                    textEditor: function (props) { return makeNode('textEditor', props || {}); },
-                    picker: function (props) { return makeNode('picker', props || {}); },
-                    grid: function (props) { return makeNode('grid', props || {}); },
-                    spacer: function (props) { return makeNode('spacer', props || {}); },
-                    divider: function (props) { return makeNode('divider', props || {}); },
-                    progress: function (props) { return makeNode('progress', props || {}); },
-                    render: function (node) {
-                        if (!node || typeof node !== 'object') {
-                            WaveletBridge.log('UI.render called with invalid node');
-                            return;
-                        }
-                        WaveletBridge.render(node);
-                    }
-                };
-            })();
-        }
-    """
-}
