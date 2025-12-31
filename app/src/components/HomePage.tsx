@@ -28,6 +28,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     disconnect, 
     listUSBPorts, 
     send,
+    sendNoWait,
   } = useDevice();
 
   const [commandInput, setCommandInput] = useState("");
@@ -47,6 +48,11 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const entrySeqRef = useRef(0);
   const rxIndexRef = useRef(0);
   const txIndexRef = useRef(0);
+  const autoConnectRef = useRef<{ inFlight: boolean; lastAttemptMs: number }>({
+    inFlight: false,
+    lastAttemptMs: 0,
+  });
+  const lastVersionQueryKeyRef = useRef<string>("");
   
   const fragments = [
     {
@@ -123,30 +129,88 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     },
   ];
 
-  // Refresh ports on mount
-  useEffect(() => {
-    refreshPorts();
-  }, [listUSBPorts]);
-
-  const refreshPorts = async (): Promise<string[]> => {
+  const refreshPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {
+    const { silent = false } = options;
     setIsRefreshingPorts(true);
     try {
-        const ports = await listUSBPorts();
-        setUsbPorts(ports);
-        setSelectedPort((prev) => {
-          if (ports.length === 0) return "";
-          if (!prev || !ports.includes(prev)) return ports[0];
-          return prev;
-        });
-        return ports;
+      const ports = await listUSBPorts();
+      setUsbPorts(ports);
+      setSelectedPort((prev) => {
+        if (ports.length === 0) return "";
+        if (!prev || !ports.includes(prev)) return ports[0];
+        return prev;
+      });
+      return ports;
     } catch (e) {
-        console.error("Failed to list ports", e);
+      console.error("Failed to list ports", e);
+      if (!silent) {
         alert(`Failed to list USB ports: ${String(e)}`);
-        return [];
+      }
+      return [];
     } finally {
-        setIsRefreshingPorts(false);
+      setIsRefreshingPorts(false);
     }
-  };
+  }, [listUSBPorts]);
+
+  // Refresh ports on mount
+  useEffect(() => {
+    refreshPorts({ silent: true });
+  }, [refreshPorts]);
+
+  // Auto-connect when Home is active: prefer USB if available, otherwise BLE.
+  useEffect(() => {
+    if (!isActive) return;
+    if (status.connected) return;
+
+    let cancelled = false;
+
+    const attempt = async () => {
+      const now = Date.now();
+      if (cancelled) return;
+      if (autoConnectRef.current.inFlight) return;
+      if (now - autoConnectRef.current.lastAttemptMs < 2000) return;
+
+      autoConnectRef.current.inFlight = true;
+      autoConnectRef.current.lastAttemptMs = now;
+
+      try {
+        const ports = await refreshPorts({ silent: true });
+        if (cancelled) return;
+
+        if (ports.length > 0) {
+          const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : ports[0];
+          setSelectedTransport("USB");
+          setSelectedPort(portToUse);
+          // If a BLE scan is running, stop it so USB can take priority.
+          if (status.scanning) {
+            await safeInvoke("ble_stop_scan").catch(() => {});
+          }
+          await connectUSB(portToUse);
+          return;
+        }
+
+        if (!status.scanning) {
+          setSelectedTransport("BLE");
+          await connectBLE();
+        }
+      } catch (e) {
+        // Don't alert on auto-connect failure; user can use manual controls.
+        console.error("Auto-connect failed", e);
+      } finally {
+        autoConnectRef.current.inFlight = false;
+      }
+    };
+
+    void attempt();
+    const interval = window.setInterval(() => {
+      void attempt();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [connectBLE, connectUSB, isActive, refreshPorts, selectedPort, status.connected, status.scanning]);
 
   // Auto-scroll monitor
   useEffect(() => {
@@ -334,14 +398,50 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
 
     try {
-      const response = await send("version", 2500, 1);
-      if (!response) {
-        return;
-      }
+      await sendNoWait("version");
     } catch (error) {
       console.error("Failed to check version:", error);
     }
   };
+
+  // Automatically query firmware version after each (new) connection.
+  useEffect(() => {
+    if (!status.connected) {
+      lastVersionQueryKeyRef.current = "";
+      return;
+    }
+    if (!status.transport) return;
+
+    const key = `${status.transport}:${status.device_address ?? ""}`;
+    if (key === lastVersionQueryKeyRef.current) return;
+    lastVersionQueryKeyRef.current = key;
+
+    let cancelled = false;
+
+    const sendVersion = async () => {
+      try {
+        await sendNoWait("version");
+      } catch (e) {
+        console.error("Auto version query failed", e);
+      }
+    };
+
+    void sendVersion();
+
+    // Retry once if we still haven't parsed a version.
+    const retry = window.setTimeout(() => {
+      if (cancelled) return;
+      if (!status.connected) return;
+      if (lastVersionQueryKeyRef.current !== key) return;
+      if (firmwareVersion !== "Unknown") return;
+      void sendVersion();
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retry);
+    };
+  }, [firmwareVersion, sendNoWait, status.connected, status.device_address, status.transport]);
 
   const clearMonitor = async () => {
     try {
@@ -440,7 +540,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                                {usbPorts.map(port => <option key={port} value={port}>{port}</option>)}
                            </select>
                            <button 
-                                onClick={refreshPorts}
+                                onClick={() => { void refreshPorts(); }}
                                 disabled={isRefreshingPorts}
                                 className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
                                 title="Refresh Ports"
