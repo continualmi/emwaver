@@ -42,6 +42,9 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+const EMWAVER_STM32_VID: u16 = 0x0483;
+const EMWAVER_STM32_USB_PID_FS: u16 = 0x5740;
+
 impl USBState {
     pub fn new(buffer: Arc<Mutex<Buffer>>, rx_notify: Arc<Notify>) -> Self {
         Self {
@@ -103,13 +106,41 @@ impl USBState {
         Ok(port)
     }
 
+    fn is_emwaver_waver_usb_port(port: &SerialPortInfo) -> bool {
+        let SerialPortType::UsbPort(usb) = &port.port_type else {
+            return false;
+        };
+
+        if usb.vid == EMWAVER_STM32_VID && usb.pid == EMWAVER_STM32_USB_PID_FS {
+            return true;
+        }
+
+        if usb
+            .manufacturer
+            .as_deref()
+            .is_some_and(|m| m.eq_ignore_ascii_case("EMWaver"))
+        {
+            return true;
+        }
+
+        usb.product.as_deref().is_some_and(|p| {
+            matches!(
+                p,
+                "ISM Waver" | "EMWaver" | "GPIO Waver" | "IR Waver"
+            )
+        })
+    }
+
     fn list_ports_blocking() -> Result<Vec<String>, String> {
         let ports = serialport::available_ports().map_err(|e| format!("Failed to list ports: {}", e))?;
-        let (mut usb, mut other): (Vec<SerialPortInfo>, Vec<SerialPortInfo>) =
-            ports.into_iter().partition(|p| matches!(p.port_type, SerialPortType::UsbPort(_)));
+        let usb: Vec<SerialPortInfo> = ports
+            .into_iter()
+            .filter(|p| matches!(p.port_type, SerialPortType::UsbPort(_)))
+            .filter(Self::is_emwaver_waver_usb_port)
+            .collect();
 
         if usb.is_empty() {
-            usb.append(&mut other);
+            return Ok(Vec::new());
         }
 
         let mut names: Vec<String> = usb.into_iter().map(|p| p.port_name).collect();
