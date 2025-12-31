@@ -29,4 +29,11 @@ final class NativeBufferRustTests: XCTestCase {
         XCTAssertEqual(v.count, 8)
         XCTAssertTrue(v.allSatisfy { $0 == 255.0 })
     }
+
+    func testStoreBulkPktInvertsWhenEnabled() {
+        NativeBufferRust.clearAll()
+        NativeBufferRust.setInvertRx(true)
+        NativeBufferRust.storeBulkPkt(Data([0x00, 0x0F, 0xFF]), tsMs: 123)
+        XCTAssertEqual(Array(NativeBufferRust.getBuffer()), [0xFF, 0xF0, 0x00])
+    }
 }

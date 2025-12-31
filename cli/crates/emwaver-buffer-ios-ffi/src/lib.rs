@@ -167,6 +167,11 @@ pub extern "C" fn emw_buffer_set_rx_counter(value: u64) {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn emw_buffer_set_invert_rx(enabled: bool) {
+    with_state(|state| core_buf::set_invert_rx(&mut state.buffer, enabled));
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn emw_buffer_load_rx_bytes(data: *const u8, len: usize) {
     let bytes = slice_from_raw(data, len).to_vec();
     with_state(|state| core_buf::rx_set_bytes(&mut state.buffer, bytes));
