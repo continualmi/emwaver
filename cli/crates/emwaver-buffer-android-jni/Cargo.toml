@@ -4,6 +4,7 @@ cargo-features = ["edition2024"]
 name = "emwaver-buffer-android-jni"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
 
 [lib]
 name = "emwaver_buffer_android"
