@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -18,6 +18,7 @@ import GitSidebarPanel from "./sidebar/GitSidebarPanel";
 import WorkspaceTopBar from "./top/WorkspaceTopBar";
 import GitDiffPanel from "./main/GitDiffPanel";
 import WaveletPreviewPanel from "./main/WaveletPreviewPanel";
+import WorkspaceBottomPanel from "./terminal/WorkspaceBottomPanel";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
@@ -2216,6 +2217,124 @@ export default function WorkspaceShell({
     return () => window.removeEventListener("keydown", handler);
   }, [activeFile, closeFile, handleSaveFile]);
 
+  const handleToggleTerminalVisible = useCallback(() => {
+    setIsTerminalVisible((prev) => {
+      const next = !prev;
+      if (next && terminalSessions.length === 0 && !terminalStartInFlightRef.current) {
+        void startTerminalSession({ makeActive: true });
+      }
+      return next;
+    });
+  }, [startTerminalSession, terminalSessions.length]);
+
+  const handleTerminalResizeMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      terminalResizeActiveRef.current = true;
+      terminalResizeStartYRef.current = event.clientY;
+      terminalResizeStartHeightRef.current = terminalHeight;
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+    },
+    [terminalHeight],
+  );
+
+  const handleTerminalListResizeMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      setIsTerminalListCollapsed(false);
+      terminalListResizeActiveRef.current = true;
+      terminalListResizeStartXRef.current = event.clientX;
+      terminalListResizeStartWidthRef.current = terminalListWidth;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [terminalListWidth],
+  );
+
+  const handleExpandTerminalList = useCallback(() => {
+    setIsTerminalListCollapsed(false);
+    setTerminalListWidth(clamp(terminalListLastExpandedWidthRef.current, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH));
+  }, []);
+
+  const handleFirmwareStopMonitor = useCallback(() => {
+    const sessionId = firmwareMonitorPtySessionIdRef.current;
+    if (!sessionId || !isTauriAvailable()) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: stopSequence } });
+      } catch {
+        // ignore
+      } finally {
+        firmwareMonitorRunningRef.current = false;
+        firmwareMonitorRunningKeyRef.current = null;
+        setIsFirmwareMonitorRunning(false);
+        writeFirmwareInfo("monitor", "Monitor stopped.");
+      }
+    })();
+  }, [firmwareProjectKind, writeFirmwareInfo]);
+
+  const handleFirmwareClearLog = useCallback(() => {
+    setFirmwareProgressPct(null);
+    if (firmwarePanelTab === "build") {
+      setFirmwareBuildHasOutput(false);
+      const terminal = firmwareBuildTerminalRef.current;
+      if (terminal) {
+        try {
+          terminal.reset();
+          terminal.clear();
+        } catch {
+          // ignore
+        }
+      } else {
+        pendingFirmwareBuildTextRef.current = [];
+      }
+    } else {
+      setFirmwareMonitorHasOutput(false);
+      const terminal = firmwareMonitorTerminalRef.current;
+      if (terminal) {
+        try {
+          terminal.reset();
+          terminal.clear();
+        } catch {
+          // ignore
+        }
+      } else {
+        pendingFirmwareMonitorTextRef.current = [];
+      }
+    }
+  }, [firmwarePanelTab]);
+
+  const handleSelectFirmwareBuildPanel = useCallback(() => {
+    setFirmwarePanelTab("build");
+    void (async () => {
+      try {
+        const sessionId = await ensureFirmwareBuildPtySession();
+        if (sessionId) {
+          await ensureFirmwareEnv("build", sessionId);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv]);
+
+  const handleSelectFirmwareMonitorPanel = useCallback(() => {
+    setFirmwarePanelTab("monitor");
+    void (async () => {
+      try {
+        const sessionId = await ensureFirmwareMonitorPtySession();
+        if (sessionId) {
+          await ensureFirmwareEnv("monitor", sessionId);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [ensureFirmwareEnv, ensureFirmwareMonitorPtySession]);
+
   return (
     <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
       {!rootDir ? (
@@ -2605,471 +2724,55 @@ export default function WorkspaceShell({
               )}
             </div>
 
-            <div className="border-t border-slate-900 bg-slate-950">
-              <button
-                type="button"
-	                onClick={() => {
-	                  setIsTerminalVisible((prev) => {
-	                    const next = !prev;
-	                    if (next && terminalSessions.length === 0 && !terminalStartInFlightRef.current) {
-	                      void startTerminalSession({ makeActive: true });
-	                    }
-	                    return next;
-	                  });
-	                }}
-                className={`flex w-full items-center justify-between px-4 py-2 text-left ${isTerminalVisible ? "hidden" : ""}`}
-                title="Toggle terminal (Cmd/Ctrl+J)"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-200">Terminal</span>
-                  <span className="text-xs text-slate-600">▸</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>{rootDir ? `root: ${rootDir}` : "No folder"}</span>
-                  <span className="text-slate-600">Cmd/Ctrl+J</span>
-                </div>
-              </button>
-
-              <div className={isTerminalVisible ? "" : "hidden"}>
-                  <div
-                    role="separator"
-                    aria-orientation="horizontal"
-                    title="Drag to resize terminal"
-                    onMouseDown={(event) => {
-                      terminalResizeActiveRef.current = true;
-                      terminalResizeStartYRef.current = event.clientY;
-                      terminalResizeStartHeightRef.current = terminalHeight;
-                      document.body.style.cursor = "row-resize";
-                      document.body.style.userSelect = "none";
-                    }}
-                    className="h-2 cursor-row-resize bg-slate-900/50 hover:bg-slate-700/80"
-                    />
-
-                    <div
-                      ref={terminalPanelRef}
-                      className={`flex flex-col overflow-hidden ${theme === "light" ? "bg-slate-50" : "bg-slate-950"}`}
-                      style={{ height: terminalHeight }}
-                    >
-                      <div className="flex items-center justify-between border-b border-slate-900/70 px-2 py-1 text-xs">
-                        <div className="flex items-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setBottomPanelTab("terminal")}
-                            className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                              effectiveBottomPanelTab === "terminal"
-                                ? "border-b-2 border-sky-400 text-slate-100"
-                                : "text-slate-400 hover:text-slate-200"
-                            }`}
-                          >
-                            TERMINAL
-                          </button>
-                          {variant === "ide" ? (
-                            <button
-                              type="button"
-                              onClick={() => setBottomPanelTab("firmware")}
-                              className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                                effectiveBottomPanelTab === "firmware"
-                                  ? "border-b-2 border-sky-400 text-slate-100"
-                                  : "text-slate-400 hover:text-slate-200"
-                              }`}
-                            >
-                              DEVICE
-                            </button>
-                          ) : null}
-                        </div>
-
-                        <div ref={terminalPickerAnchorRef} className="relative flex items-center gap-1">
-                          {effectiveBottomPanelTab === "terminal" ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setIsTerminalPickerOpen((prev) => !prev)}
-                                className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
-                                title="Select terminal"
-                              >
-                                <TerminalIcon className="h-4 w-4 text-slate-500" />
-                                <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
-                                <ChevronDownIcon className="h-4 w-4 text-slate-500" />
-                              </button>
-
-                              {isTerminalPickerOpen ? (
-                                <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
-                                  <div className="max-h-64 overflow-auto p-1">
-                                    {terminalSessions.map((session) => {
-                                      const isActive = session.id === activeTerminalSessionId;
-                                      return (
-                                        <button
-                                          key={session.id}
-                                          type="button"
-                                          onClick={() => {
-                                            setIsTerminalPickerOpen(false);
-                                            setActiveTerminalSessionId(session.id);
-                                            requestAnimationFrame(() => {
-                                              ensureSessionTerminal(session.id);
-                                              focusActiveTerminal();
-                                            });
-                                          }}
-                                          className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-                                            isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
-                                          }`}
-                                        >
-                                          <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                                          <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              ) : null}
-
-                              <button
-                                type="button"
-                                onClick={() => void startTerminalSession({ makeActive: true })}
-                                className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                                title="New terminal"
-                              >
-                                <PlusIcon />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const sessionId = activeTerminalSessionId;
-                                  if (!sessionId) {
-                                    return;
-                                  }
-                                  void closeTerminalSession(sessionId);
-                                }}
-                                disabled={!activeTerminalSessionId}
-                                className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
-                                title="Kill active terminal"
-                              >
-                                <TrashIcon />
-                              </button>
-                            </>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleFirmwareBuild()}
-                                  disabled={isFirmwareBusy || !rootDir}
-                                  className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                  title={firmwareProjectKind === "esp32" ? "Build (idf.py build)" : "Build firmware"}
-                                >
-                                  Build
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleFirmwareFlash()}
-                                  disabled={isFirmwareBusy || !rootDir}
-                                  className="rounded border border-sky-300/70 bg-sky-500 px-2 py-1 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                  title={firmwareProjectKind === "esp32" ? "Flash (idf.py flash)" : "Flash firmware"}
-                                >
-                                  Flash
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setFirmwarePanelTab("monitor");
-                                    void handleFirmwareMonitor();
-                                  }}
-                                  disabled={!rootDir}
-                                  className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                  title={firmwareProjectKind === "esp32" ? "Monitor (idf.py monitor)" : "Monitor (emwaver monitor)"}
-                                >
-                                  Monitor
-                                </button>
-
-                                {firmwarePanelTab === "monitor" && isFirmwareMonitorRunning ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const sessionId = firmwareMonitorPtySessionIdRef.current;
-                                      if (!sessionId || !isTauriAvailable()) {
-                                        return;
-                                      }
-                                      void (async () => {
-                                        try {
-                                          const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
-                                          await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: stopSequence } });
-                                        } catch {
-                                          // ignore
-                                        } finally {
-                                          firmwareMonitorRunningRef.current = false;
-                                          firmwareMonitorRunningKeyRef.current = null;
-                                          setIsFirmwareMonitorRunning(false);
-                                          writeFirmwareInfo("monitor", "Monitor stopped.");
-                                        }
-                                      })();
-                                    }}
-                                    className="rounded border border-rose-300/70 bg-rose-600 px-2 py-1 text-white shadow-sm hover:bg-rose-500 hover:shadow"
-                                    title="Stop monitor"
-                                  >
-                                    Stop
-                                  </button>
-                                ) : null}
-                              </>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFirmwareProgressPct(null);
-                                  if (firmwarePanelTab === "build") {
-                                    setFirmwareBuildHasOutput(false);
-                                    const terminal = firmwareBuildTerminalRef.current;
-                                    if (terminal) {
-                                      try {
-                                        terminal.reset();
-                                        terminal.clear();
-                                      } catch {
-                                        // ignore
-                                      }
-                                    } else {
-                                      pendingFirmwareBuildTextRef.current = [];
-                                    }
-                                  } else {
-                                    setFirmwareMonitorHasOutput(false);
-                                    const terminal = firmwareMonitorTerminalRef.current;
-                                    if (terminal) {
-                                      try {
-                                        terminal.reset();
-                                        terminal.clear();
-                                      } catch {
-                                        // ignore
-                                      }
-                                    } else {
-                                      pendingFirmwareMonitorTextRef.current = [];
-                                    }
-                                  }
-                                }}
-                                className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                                title="Clear firmware log"
-                              >
-                                Clear
-                              </button>
-                            </div>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => setIsTerminalVisible(false)}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                            title="Close panel (Cmd/Ctrl+J)"
-                          >
-                            <CloseIcon />
-                          </button>
-                        </div>
-                      </div>
-
-	                      <div className="flex min-h-0 flex-1">
-	                        <div className="flex min-w-0 flex-1 flex-col">
-		                          <div
-                                className={`relative min-h-0 flex-1 overflow-hidden ${effectiveBottomPanelTab === "terminal" ? "" : "hidden"}`}
-                              >
-	                              {terminalSessions.map((session) => (
-	                                <div
-	                                  key={session.id}
-	                                  ref={(node) => {
-	                                    if (!node) {
-	                                      terminalContainerBySessionRef.current.delete(session.id);
-	                                      return;
-	                                    }
-	                                    terminalContainerBySessionRef.current.set(session.id, node);
-	                                    if (isTerminalVisible) {
-	                                      ensureSessionTerminal(session.id);
-	                                    }
-	                                  }}
-	                                  className={`absolute inset-0 select-text px-2 py-2 ${
-	                                    session.id === activeTerminalSessionId ? "block" : "hidden"
-	                                  }`}
-	                                />
-	                              ))}
-	                              {terminalSessions.length === 0 ? (
-	                                <div className="flex h-full items-center justify-center text-sm text-slate-500">
-	                                  Starting shell…
-	                                </div>
-	                              ) : null}
-	                            </div>
-
-                            <div className={`relative min-h-0 flex-1 ${effectiveBottomPanelTab === "firmware" ? "" : "hidden"}`}>
-                              {firmwarePanelTab === "build" && !firmwareBuildHasOutput ? (
-                                <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">
-                                  No firmware activity yet.
-                                </div>
-                              ) : null}
-                              {firmwarePanelTab === "monitor" && !firmwareMonitorHasOutput ? (
-                                <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">
-                                  No firmware activity yet.
-                                </div>
-                              ) : null}
-
-                              <div
-                                ref={firmwareBuildTerminalContainerRef}
-                                className={`absolute inset-0 px-2 py-2 ${firmwarePanelTab === "build" ? "" : "hidden"}`}
-                              />
-                              <div
-                                ref={firmwareMonitorTerminalContainerRef}
-                                className={`absolute inset-0 px-2 py-2 ${firmwarePanelTab === "monitor" ? "" : "hidden"}`}
-                              />
-                            </div>
-	                        </div>
-	
-	                        {isTerminalListCollapsed ? (
-	                          <button
-	                            type="button"
-	                            onClick={() => {
-	                              setIsTerminalListCollapsed(false);
-	                              setTerminalListWidth(
-	                                clamp(
-	                                  terminalListLastExpandedWidthRef.current,
-	                                  TERMINAL_LIST_MIN_WIDTH,
-	                                  TERMINAL_LIST_MAX_WIDTH,
-	                                ),
-	                              );
-	                            }}
-	                            className="flex w-9 shrink-0 items-center justify-center border-l border-slate-900 bg-slate-950 text-slate-500 hover:bg-slate-900/30 hover:text-slate-200"
-	                            title="Show terminals"
-	                          >
-	                            <TerminalIcon className="h-4 w-4" />
-	                          </button>
-	                        ) : (
-	                          <>
-	                            <div
-	                              role="separator"
-	                              aria-orientation="vertical"
-	                              title="Drag to resize right panel"
-	                              onDoubleClick={() => setIsTerminalListCollapsed(true)}
-	                              onMouseDown={(event) => {
-	                                setIsTerminalListCollapsed(false);
-	                                terminalListResizeActiveRef.current = true;
-	                                terminalListResizeStartXRef.current = event.clientX;
-	                                terminalListResizeStartWidthRef.current = terminalListWidth;
-	                                document.body.style.cursor = "col-resize";
-	                                document.body.style.userSelect = "none";
-	                              }}
-	                              className="w-2 cursor-col-resize bg-slate-900/40 hover:bg-slate-700/80"
-	                            />
-	
-	                            <aside
-	                              className="shrink-0 bg-slate-900/15 shadow-[-10px_0_20px_-20px_rgba(0,0,0,0.9)]"
-	                              style={{ width: terminalListWidth }}
-	                            >
-	                              {effectiveBottomPanelTab === "terminal" ? (
-	                                <div className="h-full min-h-0 overflow-auto p-2 pt-3">
-	                                  {terminalSessions.length === 0 ? (
-	                                    <div className="px-2 py-1 text-xs text-slate-500">
-	                                      No terminals yet. Use the + button.
-	                                    </div>
-	                                  ) : (
-	                                    terminalSessions.map((session) => {
-	                                      const isActive = session.id === activeTerminalSessionId;
-	                                      return (
-	                                        <div
-	                                          key={session.id}
-	                                          className={`group mb-1 flex items-center gap-2 rounded ${
-	                                            isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
-	                                          }`}
-	                                        >
-	                                          <button
-	                                            type="button"
-	                                            onClick={() => {
-	                                              setActiveTerminalSessionId(session.id);
-	                                              requestAnimationFrame(() => {
-	                                                ensureSessionTerminal(session.id);
-	                                                focusActiveTerminal();
-	                                              });
-	                                            }}
-	                                            className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
-	                                              isActive ? "text-sky-200" : "text-slate-300"
-	                                            }`}
-	                                            title={session.title}
-	                                          >
-	                                            <TerminalIcon
-	                                              className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`}
-	                                            />
-	                                            <span className="min-w-0 flex-1 truncate">{session.title}</span>
-	                                          </button>
-	                                          <button
-	                                            type="button"
-	                                            onClick={() => void closeTerminalSession(session.id)}
-	                                            className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
-	                                              isActive
-	                                                ? "opacity-100"
-	                                                : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-	                                            }`}
-	                                            title="Close terminal"
-	                                          >
-	                                            <CloseIcon className="h-4 w-4" />
-	                                          </button>
-	                                        </div>
-	                                      );
-	                                    })
-	                                  )}
-	                                </div>
-	                              ) : (
-	                                <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
-	                                  <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">
-	                                    DEVICE
-	                                  </div>
-
-	                                  <button
-	                                    type="button"
-	                                    onClick={() => {
-	                                      setFirmwarePanelTab("build");
-	                                      void (async () => {
-	                                        try {
-	                                          const sessionId = await ensureFirmwareBuildPtySession();
-	                                          if (sessionId) {
-	                                            await ensureFirmwareEnv("build", sessionId);
-	                                          }
-	                                        } catch {
-	                                          // ignore
-	                                        }
-	                                      })();
-	                                    }}
-	                                    className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
-	                                      firmwarePanelTab === "build"
-	                                        ? "bg-slate-900/70 text-sky-200"
-	                                        : "text-slate-300 hover:bg-slate-900/40"
-	                                    }`}
-	                                  >
-	                                    <HammerIcon className="h-4 w-4 text-slate-500" />
-	                                    <span>Build/Flash</span>
-	                                  </button>
-
-	                                  <button
-	                                    type="button"
-	                                    onClick={() => {
-	                                      setFirmwarePanelTab("monitor");
-	                                      void (async () => {
-	                                        try {
-	                                          const sessionId = await ensureFirmwareMonitorPtySession();
-	                                          if (sessionId) {
-	                                            await ensureFirmwareEnv("monitor", sessionId);
-	                                          }
-	                                        } catch {
-	                                          // ignore
-	                                        }
-	                                      })();
-	                                    }}
-	                                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
-	                                      firmwarePanelTab === "monitor"
-	                                        ? "bg-slate-900/70 text-emerald-200"
-	                                        : "text-slate-300 hover:bg-slate-900/40"
-	                                    }`}
-	                                  >
-	                                    <MonitorIcon className="h-4 w-4 text-slate-500" />
-	                                    <span>Monitor</span>
-	                                  </button>
-	                                </div>
-	                              )}
-	                            </aside>
-	                          </>
-	                        )}
-	                      </div>
-	                    </div>
-              </div>
-            </div>
+            <WorkspaceBottomPanel
+              theme={theme}
+              variant={variant}
+              rootDir={rootDir}
+              isTerminalVisible={isTerminalVisible}
+              onToggleTerminalVisible={handleToggleTerminalVisible}
+              onClosePanel={() => setIsTerminalVisible(false)}
+              terminalPanelRef={terminalPanelRef}
+              terminalHeight={terminalHeight}
+              onTerminalResizeMouseDown={handleTerminalResizeMouseDown}
+              effectiveBottomPanelTab={effectiveBottomPanelTab}
+              onSelectTerminalTab={() => setBottomPanelTab("terminal")}
+              onSelectFirmwareTab={() => setBottomPanelTab("firmware")}
+              terminalPickerAnchorRef={terminalPickerAnchorRef}
+              activeTerminalTitle={activeTerminalTitle}
+              isTerminalPickerOpen={isTerminalPickerOpen}
+              setIsTerminalPickerOpen={setIsTerminalPickerOpen}
+              terminalSessions={terminalSessions}
+              activeTerminalSessionId={activeTerminalSessionId}
+              setActiveTerminalSessionId={setActiveTerminalSessionId}
+              ensureSessionTerminal={ensureSessionTerminal}
+              focusActiveTerminal={focusActiveTerminal}
+              startTerminalSession={startTerminalSession}
+              closeTerminalSession={closeTerminalSession}
+              terminalContainerBySessionRef={terminalContainerBySessionRef}
+              firmwareProjectKind={firmwareProjectKind}
+              isFirmwareBusy={isFirmwareBusy}
+              firmwarePanelTab={firmwarePanelTab}
+              firmwareBuildHasOutput={firmwareBuildHasOutput}
+              firmwareMonitorHasOutput={firmwareMonitorHasOutput}
+              isFirmwareMonitorRunning={isFirmwareMonitorRunning}
+              onFirmwareBuild={() => void handleFirmwareBuild()}
+              onFirmwareFlash={() => void handleFirmwareFlash()}
+              onFirmwareMonitor={() => {
+                setFirmwarePanelTab("monitor");
+                void handleFirmwareMonitor();
+              }}
+              onFirmwareStopMonitor={handleFirmwareStopMonitor}
+              onFirmwareClearLog={handleFirmwareClearLog}
+              onSelectFirmwareBuildPanel={handleSelectFirmwareBuildPanel}
+              onSelectFirmwareMonitorPanel={handleSelectFirmwareMonitorPanel}
+              firmwareBuildTerminalContainerRef={firmwareBuildTerminalContainerRef}
+              firmwareMonitorTerminalContainerRef={firmwareMonitorTerminalContainerRef}
+              isTerminalListCollapsed={isTerminalListCollapsed}
+              onExpandTerminalList={handleExpandTerminalList}
+              onCollapseTerminalList={() => setIsTerminalListCollapsed(true)}
+              onTerminalListResizeMouseDown={handleTerminalListResizeMouseDown}
+              terminalListWidth={terminalListWidth}
+            />
           </div>
         </main>
 	      </div>
