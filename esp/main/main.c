@@ -1,4 +1,4 @@
-#include "init.h"
+#include "main.h"
 #include "command_registry.h"
 
 #include "driver/gpio.h"
