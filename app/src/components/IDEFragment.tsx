@@ -507,6 +507,11 @@ function detectFirmwareProjectKind(entries: DirectoryChildEntry[]): FirmwareProj
   return "unknown";
 }
 
+let ideFirmwareWarmupKey: string | null = null;
+let ideCachedTerminalSessionId: string | null = null;
+let ideCachedFirmwareBuildSessionId: string | null = null;
+let ideCachedFirmwareMonitorSessionId: string | null = null;
+
 export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
@@ -1218,10 +1223,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const startTerminalSession = useCallback(
     async (options?: { makeActive?: boolean }) => {
       if (!isTauriAvailable()) {
-        return;
+        return null;
       }
       if (terminalStartInFlightRef.current) {
-        return;
+        return null;
       }
       terminalStartInFlightRef.current = true;
       const makeActive = options?.makeActive ?? true;
@@ -1254,6 +1259,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         if (makeActive) {
           setActiveTerminalSessionId(sessionId);
         }
+        if (!ideCachedTerminalSessionId) {
+          ideCachedTerminalSessionId = sessionId;
+        }
+        return sessionId;
       } finally {
         terminalStartInFlightRef.current = false;
       }
@@ -1297,6 +1306,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     } catch {
       // ignore
     } finally {
+      if (ideCachedTerminalSessionId === sessionId) {
+        ideCachedTerminalSessionId = null;
+      }
       window.setTimeout(() => closingTerminalSessionsRef.current.delete(sessionId), 750);
     }
   }, []);
@@ -1321,8 +1333,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       return null;
     }
 
-    const existing = firmwareBuildPtySessionIdRef.current;
+    const existing = firmwareBuildPtySessionIdRef.current ?? ideCachedFirmwareBuildSessionId;
     if (existing) {
+      firmwareBuildPtySessionIdRef.current = existing;
       return existing;
     }
 
@@ -1335,6 +1348,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
 
     firmwareBuildPtySessionIdRef.current = sessionId;
+    ideCachedFirmwareBuildSessionId = sessionId;
     firmwareBuildEnvReadyRef.current = false;
     firmwareBuildEnvKeyRef.current = null;
 
@@ -1346,8 +1360,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       return null;
     }
 
-    const existing = firmwareMonitorPtySessionIdRef.current;
+    const existing = firmwareMonitorPtySessionIdRef.current ?? ideCachedFirmwareMonitorSessionId;
     if (existing) {
+      firmwareMonitorPtySessionIdRef.current = existing;
       return existing;
     }
 
@@ -1360,6 +1375,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
 
     firmwareMonitorPtySessionIdRef.current = sessionId;
+    ideCachedFirmwareMonitorSessionId = sessionId;
     firmwareMonitorEnvReadyRef.current = false;
     firmwareMonitorEnvKeyRef.current = null;
 
@@ -1402,24 +1418,105 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   }, [ensureInitialTerminalSession]);
 
   useEffect(() => {
+    if (!isTauriAvailable() || !rootDir || firmwareProjectKind !== "esp32") {
+      return;
+    }
+
+    const key = `${firmwareProjectKind}:${rootDir}`;
+    if (ideFirmwareWarmupKey === key) {
+      firmwareBuildEnvReadyRef.current = true;
+      firmwareBuildEnvKeyRef.current = key;
+      firmwareMonitorEnvReadyRef.current = true;
+      firmwareMonitorEnvKeyRef.current = key;
+      return;
+    }
+    ideFirmwareWarmupKey = key;
+
+    void (async () => {
+      try {
+        const [buildSessionId, monitorSessionId] = await Promise.all([
+          ensureFirmwareBuildPtySession(),
+          ensureFirmwareMonitorPtySession(),
+        ]);
+
+        const terminalSessionId =
+          activeTerminalSessionId ??
+          sessionsRef.current[sessionsRef.current.length - 1]?.id ??
+          ideCachedTerminalSessionId ??
+          (await startTerminalSession({ makeActive: false }));
+
+        const cwd = rootDir.replace(/\"/g, "\\\"");
+        const source = `cd "${cwd}" && source setup.sh`;
+
+        const writes: Array<Promise<unknown>> = [];
+        if (terminalSessionId) {
+          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: terminalSessionId, data: `${source}\r` } }));
+        }
+        if (buildSessionId) {
+          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: buildSessionId, data: `${source} && clear\r` } }));
+        }
+        if (monitorSessionId) {
+          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: `${source} && clear\r` } }));
+        }
+        await Promise.all(writes);
+
+        firmwareBuildEnvReadyRef.current = true;
+        firmwareBuildEnvKeyRef.current = key;
+        firmwareMonitorEnvReadyRef.current = true;
+        firmwareMonitorEnvKeyRef.current = key;
+
+        try {
+          firmwareBuildTerminalRef.current?.reset();
+          firmwareBuildTerminalRef.current?.clear();
+        } catch {
+          // ignore
+        }
+        try {
+          firmwareMonitorTerminalRef.current?.reset();
+          firmwareMonitorTerminalRef.current?.clear();
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [
+    activeTerminalSessionId,
+    ensureFirmwareBuildPtySession,
+    ensureFirmwareMonitorPtySession,
+    firmwareProjectKind,
+    rootDir,
+    startTerminalSession,
+  ]);
+
+  useEffect(() => {
     firmwareBuildEnvReadyRef.current = false;
     firmwareBuildEnvKeyRef.current = null;
     firmwareMonitorEnvReadyRef.current = false;
     firmwareMonitorEnvKeyRef.current = null;
 
-    if (!rootDir || !isTauriAvailable()) {
-      const buildSessionId = firmwareBuildPtySessionIdRef.current;
+    const key = rootDir ? `${firmwareProjectKind}:${rootDir}` : null;
+    const shouldReset = !rootDir || !isTauriAvailable() || (ideFirmwareWarmupKey && key && ideFirmwareWarmupKey !== key);
+
+    if (shouldReset) {
+      ideFirmwareWarmupKey = null;
+
+      const buildSessionId = firmwareBuildPtySessionIdRef.current ?? ideCachedFirmwareBuildSessionId;
       if (buildSessionId) {
         void safeInvoke<void>("pty_stop", { payload: { session_id: buildSessionId } });
-        firmwareBuildPtySessionIdRef.current = null;
       }
-      const monitorSessionId = firmwareMonitorPtySessionIdRef.current;
+      firmwareBuildPtySessionIdRef.current = null;
+      ideCachedFirmwareBuildSessionId = null;
+
+      const monitorSessionId = firmwareMonitorPtySessionIdRef.current ?? ideCachedFirmwareMonitorSessionId;
       if (monitorSessionId) {
         void safeInvoke<void>("pty_stop", { payload: { session_id: monitorSessionId } });
-        firmwareMonitorPtySessionIdRef.current = null;
       }
+      firmwareMonitorPtySessionIdRef.current = null;
+      ideCachedFirmwareMonitorSessionId = null;
     }
-  }, [rootDir]);
+  }, [firmwareProjectKind, rootDir]);
 
   useEffect(() => {
     if (!activeTerminalSessionId && terminalSessions.length > 0) {
@@ -1566,20 +1663,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
   useEffect(() => {
     return () => {
-      sessionsRef.current.forEach((session) => {
-        void safeInvoke<void>("pty_stop", { payload: { session_id: session.id } });
-      });
-      if (firmwareBuildPtySessionIdRef.current) {
-        void safeInvoke<void>("pty_stop", { payload: { session_id: firmwareBuildPtySessionIdRef.current } });
-        firmwareBuildPtySessionIdRef.current = null;
-      }
-      if (firmwareMonitorPtySessionIdRef.current) {
-        void safeInvoke<void>("pty_stop", { payload: { session_id: firmwareMonitorPtySessionIdRef.current } });
-        firmwareMonitorPtySessionIdRef.current = null;
-        firmwareMonitorRunningRef.current = false;
-        firmwareMonitorRunningKeyRef.current = null;
-        setIsFirmwareMonitorRunning(false);
-      }
+      // Intentionally keep PTYs alive across IDE fragment remounts so sourced env stays warm.
       terminalBySessionRef.current.forEach((terminal) => terminal.dispose());
       fitAddonBySessionRef.current.forEach((addon) => addon.dispose());
       terminalBySessionRef.current.clear();
@@ -1797,16 +1881,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     const monitorSessionId = firmwareMonitorPtySessionIdRef.current;
     if (monitorSessionId) {
       try {
-        await safeInvoke<void>("pty_stop", { payload: { session_id: monitorSessionId } });
+        const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
+        await safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: stopSequence } });
       } catch {
         // ignore
       } finally {
-        firmwareMonitorPtySessionIdRef.current = null;
-        firmwareMonitorEnvReadyRef.current = false;
-        firmwareMonitorEnvKeyRef.current = null;
         firmwareMonitorRunningRef.current = false;
         firmwareMonitorRunningKeyRef.current = null;
-        setIsFirmwareMonitorRunning(false);
         setIsFirmwareMonitorRunning(false);
       }
     }
@@ -3061,13 +3142,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                       }
                                       void (async () => {
                                         try {
-                                          await safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
+                                          const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
+                                          await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: stopSequence } });
                                         } catch {
                                           // ignore
                                         } finally {
-                                          firmwareMonitorPtySessionIdRef.current = null;
-                                          firmwareMonitorEnvReadyRef.current = false;
-                                          firmwareMonitorEnvKeyRef.current = null;
                                           firmwareMonitorRunningRef.current = false;
                                           firmwareMonitorRunningKeyRef.current = null;
                                           setIsFirmwareMonitorRunning(false);
