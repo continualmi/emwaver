@@ -70,7 +70,7 @@ type NewProjectPayload = {
   name: string;
   location: string;
   target: "esp32s3" | "stm32f042";
-  components: Array<"gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
+  components: Array<"ota" | "gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
   stm32_firmware?: "gpio" | "ir" | "ism" | "rfid" | null;
 };
 
@@ -2658,7 +2658,9 @@ function NewProjectModal({
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [target, setTarget] = useState<NewProjectPayload["target"]>("esp32s3");
 
-  const [components, setComponents] = useState<Set<NewProjectPayload["components"][number]>>(() => new Set(["gpio"]));
+  const [components, setComponents] = useState<Set<NewProjectPayload["components"][number]>>(
+    () => new Set(["gpio", "ota"]),
+  );
   const [stm32Firmware, setStm32Firmware] = useState<
     Exclude<NewProjectPayload["stm32_firmware"], undefined | null>
   >(() => "gpio");
@@ -2668,7 +2670,7 @@ function NewProjectModal({
 
   const resetForTarget = useCallback((nextTarget: NewProjectPayload["target"]) => {
     if (nextTarget === "esp32s3") {
-      setComponents(new Set(["gpio"]));
+      setComponents(new Set(["gpio", "ota"]));
     } else {
       setStm32Firmware("gpio");
       setComponents(new Set());
@@ -2776,11 +2778,12 @@ function NewProjectModal({
                 <div>
                   <div className="mb-2">
                     <div className="text-sm font-semibold text-slate-100">Components</div>
-                    <div className="text-xs text-slate-400">Default is GPIO only; add what you need.</div>
+                    <div className="text-xs text-slate-400">Default is GPIO + OTA; add what you need.</div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {(
                       [
+                        { id: "ota", label: "OTA" },
                         { id: "gpio", label: "GPIO" },
                         { id: "sampler", label: "Sampler" },
                         { id: "cc1101", label: "CC1101" },
