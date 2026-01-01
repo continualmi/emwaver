@@ -730,9 +730,8 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       if (!payload?.message) {
         return;
       }
-      const date = payload.timestamp_ms ? new Date(payload.timestamp_ms) : new Date();
       const label = payload.stream ? String(payload.stream).toUpperCase() : "INFO";
-      const line = `[${timestampLabel(date)}] ${label} ${payload.message}`;
+      const line = `${label} ${payload.message}`;
 
       setFirmwareLines((prev) => {
         const next = [...prev, line];
@@ -1292,9 +1291,8 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   );
 
   const appendFirmwareLine = useCallback((line: string) => {
-    const label = timestampLabel(new Date());
     setFirmwareLines((prev) => {
-      const next = [...prev, `[${label}] ${line}`];
+      const next = [...prev, line];
       return next.length <= 2000 ? next : next.slice(next.length - 2000);
     });
   }, []);
@@ -2474,7 +2472,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
                             <div
                               ref={firmwareScrollRef}
-                              className={`min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30 ${
+                              className={`min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30 select-text ${
                                 bottomPanelTab === "firmware" ? "" : "hidden"
                               }`}
                             >
