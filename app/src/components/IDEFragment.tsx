@@ -1786,6 +1786,20 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       return;
     }
 
+    // Always stop monitor before flashing; monitor typically holds the serial port.
+    const monitorSessionId = firmwareMonitorPtySessionIdRef.current;
+    if (monitorSessionId) {
+      try {
+        await safeInvoke<void>("pty_stop", { payload: { session_id: monitorSessionId } });
+      } catch {
+        // ignore
+      } finally {
+        firmwareMonitorPtySessionIdRef.current = null;
+        firmwareMonitorEnvReadyRef.current = false;
+        firmwareMonitorEnvKeyRef.current = null;
+      }
+    }
+
     setFirmwareProgressPct(null);
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
@@ -2983,55 +2997,35 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                             </>
                           ) : (
                             <div className="flex items-center gap-2">
-                              {firmwarePanelTab === "build" ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleFirmwareBuild()}
-                                    disabled={isFirmwareBusy || !rootDir}
-                                    className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                    title={firmwareProjectKind === "esp32" ? "Build (idf.py build)" : "Build firmware"}
-                                  >
-                                    Build
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleFirmwareFlash()}
-                                    disabled={isFirmwareBusy || !rootDir}
-                                    className="rounded border border-sky-300/70 bg-sky-500 px-2 py-1 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                    title={firmwareProjectKind === "esp32" ? "Flash (idf.py flash)" : "Flash firmware"}
-                                  >
-                                    Flash
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleFirmwareMonitor()}
-                                    disabled={!rootDir}
-                                    className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                    title={firmwareProjectKind === "esp32" ? "Monitor (idf.py monitor)" : "Monitor (emwaver monitor)"}
-                                  >
-                                    Start
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const sessionId = firmwareMonitorPtySessionIdRef.current;
-                                      if (!sessionId || !isTauriAvailable()) {
-                                        return;
-                                      }
-                                      void safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "\u0003" } });
-                                    }}
-                                    disabled={!firmwareMonitorPtySessionIdRef.current}
-                                    className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                                    title="Send Ctrl+C"
-                                  >
-                                    Stop
-                                  </button>
-                                </>
-                              )}
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleFirmwareBuild()}
+                                  disabled={isFirmwareBusy || !rootDir}
+                                  className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                  title={firmwareProjectKind === "esp32" ? "Build (idf.py build)" : "Build firmware"}
+                                >
+                                  Build
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleFirmwareFlash()}
+                                  disabled={isFirmwareBusy || !rootDir}
+                                  className="rounded border border-sky-300/70 bg-sky-500 px-2 py-1 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                  title={firmwareProjectKind === "esp32" ? "Flash (idf.py flash)" : "Flash firmware"}
+                                >
+                                  Flash
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleFirmwareMonitor()}
+                                  disabled={!rootDir}
+                                  className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                  title={firmwareProjectKind === "esp32" ? "Monitor (idf.py monitor)" : "Monitor (emwaver monitor)"}
+                                >
+                                  Monitor
+                                </button>
+                              </>
 
                               <button
                                 type="button"
