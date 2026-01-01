@@ -7,6 +7,7 @@ export type WorkspaceStorageKeys = {
   terminalHeight: string;
   terminalListWidth: string;
   terminalListCollapsed: string;
+  assetScriptsCollapsed?: string;
   legacy?: Partial<WorkspaceStorageKeys>;
 };
 
@@ -34,6 +35,7 @@ export function storageKeys(variant: WorkspaceVariant): WorkspaceStorageKeys {
       terminalHeight: "emwaver.waveletsWorkspace.terminalHeight",
       terminalListWidth: "emwaver.waveletsWorkspace.terminalListWidth",
       terminalListCollapsed: "emwaver.waveletsWorkspace.terminalListCollapsed",
+      assetScriptsCollapsed: "emwaver.waveletsWorkspace.assetScriptsCollapsed",
     };
   }
 
@@ -183,4 +185,18 @@ export function readStoredTerminalListCollapsed(keys: WorkspaceStorageKeys): boo
     }
   }
   return selected === "true";
+}
+
+export function readStoredAssetScriptsCollapsed(keys: WorkspaceStorageKeys): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  if (!keys.assetScriptsCollapsed) {
+    return false;
+  }
+  const stored = window.localStorage.getItem(keys.assetScriptsCollapsed);
+  if (!stored) {
+    return false;
+  }
+  return stored === "true";
 }

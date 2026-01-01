@@ -31,6 +31,7 @@ export type OpenFile = {
   language: string;
   isDirty: boolean;
   diskMtimeMs?: number;
+  source?: "disk" | "asset";
 };
 
 export type GitStatusEntry = {
@@ -70,4 +71,3 @@ export type NewProjectPayload = {
 export type CreateProjectResponse = {
   path: string;
 };
-

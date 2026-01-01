@@ -15,6 +15,7 @@ import { readWaveletsTabState, writeWaveletsTabState } from "../waveletsTabState
 import { useWorkspaceGit } from "./hooks/useWorkspaceGit";
 import ExplorerTree from "./sidebar/ExplorerTree";
 import GitSidebarPanel from "./sidebar/GitSidebarPanel";
+import WaveletAssetsPanel from "./sidebar/WaveletAssetsPanel";
 import WorkspaceTopBar from "./top/WorkspaceTopBar";
 import GitDiffPanel from "./main/GitDiffPanel";
 import WaveletPreviewPanel from "./main/WaveletPreviewPanel";
@@ -72,20 +73,24 @@ import {
   readStoredTerminalHeight,
   readStoredTerminalListCollapsed,
   readStoredTerminalListWidth,
+  readStoredAssetScriptsCollapsed,
 } from "./workspaceStorage";
 import {
   WAVELET_ASSET_SCRIPTS,
+  WAVELET_ASSET_ROOT,
   WAVELET_BOOTSTRAP_FILENAME,
   basename,
   defaultIgnoredName,
   detectFirmwareProjectKind,
   formatConsoleArgs,
   iconLabelForPath,
+  isWaveletAssetPath,
   isWaveletScriptPath,
   languageForPath,
   nextTerminalTitle,
   readWaveletAssetScript,
   timestampLabel,
+  waveletAssetPath,
 } from "./workspaceUtils";
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
@@ -190,6 +195,8 @@ export default function WorkspaceShell({
   const terminalListResizeActiveRef = useRef(false);
   const terminalListResizeStartXRef = useRef(0);
   const terminalListResizeStartWidthRef = useRef(0);
+
+  const [isAssetScriptsCollapsed, setIsAssetScriptsCollapsed] = useState<boolean>(() => readStoredAssetScriptsCollapsed(keys));
 
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
@@ -347,9 +354,22 @@ export default function WorkspaceShell({
     return openFiles.find((file) => file.path === activeFilePath) ?? null;
   }, [activeFilePath, openFiles]);
 
+  const editorOptions = useMemo(() => {
+    if (!activeFile) {
+      return MONACO_EDITOR_OPTIONS;
+    }
+    if (activeFile.source === "asset") {
+      return { ...MONACO_EDITOR_OPTIONS, readOnly: true };
+    }
+    return MONACO_EDITOR_OPTIONS;
+  }, [activeFile]);
+
   const waveletTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
   const canRunWavelet = useMemo(() => {
     if (variant !== "wavelets" || !rootDir || !waveletTargetPath) {
+      return false;
+    }
+    if (isWaveletAssetPath(waveletTargetPath)) {
       return false;
     }
     return isWaveletScriptPath(waveletTargetPath);
@@ -376,7 +396,7 @@ export default function WorkspaceShell({
       }
 
       const snapshot = openFilesRef.current;
-      const candidates = snapshot.filter((file) => !file.isDirty);
+      const candidates = snapshot.filter((file) => !file.isDirty && file.source !== "asset");
       if (candidates.length === 0) {
         return;
       }
@@ -616,7 +636,8 @@ export default function WorkspaceShell({
 
         const paths = Array.from(new Set(state.open))
           .filter((path) => typeof path === "string")
-          .filter((path) => path.replace(/\\/g, "/") !== stateFilePath);
+          .filter((path) => path.replace(/\\/g, "/") !== stateFilePath)
+          .filter((path) => !isWaveletAssetPath(path));
         if (paths.length === 0) {
           return;
         }
@@ -637,6 +658,7 @@ export default function WorkspaceShell({
               language: languageForPath(path),
               isDirty: false,
               diskMtimeMs,
+              source: "disk",
             } satisfies OpenFile;
           }),
         );
@@ -670,9 +692,11 @@ export default function WorkspaceShell({
     }
 
     const rootPrefix = rootDir ? rootDir.replace(/\\/g, "/").replace(/\/$/, "") : null;
-    const stateFilePath = rootPrefix ? `${rootPrefix}/.emwaver/ide-tabs.json` : null;
+    const stateFilePath = rootPrefix ? `${rootPrefix}/.emwaver/${tabStateFileName}` : null;
 
-    const open = (openFilesStorageKey ? openFilesStorageKey.split("\n") : []).filter(Boolean);
+    const open = (openFilesStorageKey ? openFilesStorageKey.split("\n") : [])
+      .filter(Boolean)
+      .filter((path) => !isWaveletAssetPath(path));
     const filteredOpen = stateFilePath ? open.filter((path) => path.replace(/\\/g, "/") !== stateFilePath) : open;
 
     const activeNormalized = activeFilePath ? activeFilePath.replace(/\\/g, "/") : null;
@@ -684,7 +708,7 @@ export default function WorkspaceShell({
     }
 
     void writeTabState(rootDir, filteredOpen, active);
-  }, [activeFilePath, openFilesStorageKey, rootDir]);
+  }, [activeFilePath, openFilesStorageKey, rootDir, tabStateFileName, writeTabState]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -732,6 +756,16 @@ export default function WorkspaceShell({
       window.localStorage.removeItem(keys.legacy.terminalListCollapsed);
     }
   }, [isTerminalListCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!keys.assetScriptsCollapsed) {
+      return;
+    }
+    window.localStorage.setItem(keys.assetScriptsCollapsed, String(isAssetScriptsCollapsed));
+  }, [isAssetScriptsCollapsed, keys.assetScriptsCollapsed]);
 
   useEffect(() => {
     if (isTerminalListCollapsed) {
@@ -1870,23 +1904,42 @@ export default function WorkspaceShell({
 
   const handleOpenFile = useCallback(async (path: string) => {
     tabsUserTouchedRef.current = true;
-    if (!isTauriAvailable()) {
-      return;
-    }
+    const normalizedPath = path.replace(/\\/g, "/");
+    const isAssetPath = normalizedPath.startsWith(`${WAVELET_ASSET_ROOT}/`);
+    const effectivePath = isAssetPath ? normalizedPath : path;
     setActiveMainTabKind("file");
     setActivePreviewPath(null);
-    setSelectedPath(path);
-    setActiveFilePath(path);
+    setSelectedPath(effectivePath);
+    setActiveFilePath(effectivePath);
     setGitSelectedDiff(null);
-    if (openFiles.some((file) => file.path === path)) {
+    if (openFiles.some((file) => file.path === effectivePath)) {
       return;
     }
-    if (openingFilePathsRef.current.has(path)) {
+    if (openingFilePathsRef.current.has(effectivePath)) {
       return;
     }
-    openingFilePathsRef.current.add(path);
+    openingFilePathsRef.current.add(effectivePath);
     setIsLoadingFile(true);
     try {
+      if (isAssetPath) {
+        const filename = basename(effectivePath);
+        const content = await readWaveletAssetScript(filename);
+        const next: OpenFile = {
+          path: effectivePath,
+          name: filename,
+          content: content ?? "",
+          language: languageForPath(filename),
+          isDirty: false,
+          source: "asset",
+        };
+        setOpenFiles((prev) => (prev.some((file) => file.path === effectivePath) ? prev : [...prev, next]));
+        return;
+      }
+
+      if (!isTauriAvailable()) {
+        return;
+      }
+
       const [content, diskMtimeMs] = await Promise.all([
         safeInvoke<string>("read_file", { payload: { path } }),
         safeInvoke<number>("file_modified_ms", { payload: { path } })
@@ -1900,10 +1953,11 @@ export default function WorkspaceShell({
         language: languageForPath(path),
         isDirty: false,
         diskMtimeMs,
+        source: "disk",
       };
       setOpenFiles((prev) => (prev.some((file) => file.path === path) ? prev : [...prev, next]));
     } finally {
-      openingFilePathsRef.current.delete(path);
+      openingFilePathsRef.current.delete(effectivePath);
       setIsLoadingFile(false);
     }
   }, [openFiles]);
@@ -2129,6 +2183,9 @@ export default function WorkspaceShell({
 
   const handleSaveFile = useCallback(async () => {
     if (!activeFile || !isTauriAvailable()) {
+      return;
+    }
+    if (activeFile.source === "asset") {
       return;
     }
     if (!activeFile.isDirty) {
@@ -2414,98 +2471,111 @@ export default function WorkspaceShell({
 	        ) : (
 	          <>
 	            <aside className="shrink-0 border-r border-slate-900" style={{ width: sidebarWidth }}>
-	              <div className="border-b border-slate-900 px-4 py-3">
-	                <div className="flex items-start justify-between gap-2">
-	                  <div className="min-w-0 cursor-default">
-	                    <h2
-                        className="truncate text-sm font-semibold text-slate-200"
-                        title={
-                          sidebarPanel === "explorer"
-                            ? rootDir ?? (variant === "ide" ? "IDE" : "Wavelets Workspace")
-                            : "Source Control"
-                        }
-                      >
-	                      {sidebarPanel === "explorer"
-	                        ? rootDir
-	                          ? basename(rootDir)
-	                          : variant === "ide"
-	                            ? "IDE"
-	                            : "WAVELETS"
-	                        : "SOURCE CONTROL"}
-	                    </h2>
-                      {sidebarPanel === "git" ? <p className="mt-1 text-[11px] text-slate-500">Git</p> : null}
-	                  </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setSidebarPanel("explorer")}
-                        className={`rounded p-1.5 ${
-                          sidebarPanel === "explorer"
-                            ? "bg-slate-900/60 text-slate-200"
-                            : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                        }`}
-                        title="Explorer"
-                      >
-                        <FolderIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSidebarPanel("git")}
-                        className={`rounded p-1.5 ${
-                          sidebarPanel === "git"
-                            ? "bg-slate-900/60 text-slate-200"
-                            : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                        }`}
-                        title="Source Control"
-                      >
-                        <GitIcon className="h-4 w-4" />
-                      </button>
-	                    <button
-	                      type="button"
-	                      onClick={() => setIsSidebarCollapsed(true)}
-                        className="rounded p-1.5 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                        title="Hide Sidebar (Cmd/Ctrl+B)"
-                      >
-                        <PanelLeftIcon className="h-4 w-4" />
-                      </button>
+	              <div className="flex h-full min-h-0 flex-col">
+                  <div className="border-b border-slate-900 px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 cursor-default">
+                        <h2
+                          className="truncate text-sm font-semibold text-slate-200"
+                          title={
+                            sidebarPanel === "explorer"
+                              ? rootDir ?? (variant === "ide" ? "IDE" : "Wavelets Workspace")
+                              : "Source Control"
+                          }
+                        >
+                          {sidebarPanel === "explorer"
+                            ? rootDir
+                              ? basename(rootDir)
+                              : variant === "ide"
+                                ? "IDE"
+                                : "WAVELETS"
+                            : "SOURCE CONTROL"}
+                        </h2>
+                        {sidebarPanel === "git" ? <p className="mt-1 text-[11px] text-slate-500">Git</p> : null}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setSidebarPanel("explorer")}
+                          className={`rounded p-1.5 ${
+                            sidebarPanel === "explorer"
+                              ? "bg-slate-900/60 text-slate-200"
+                              : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                          }`}
+                          title="Explorer"
+                        >
+                          <FolderIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSidebarPanel("git")}
+                          className={`rounded p-1.5 ${
+                            sidebarPanel === "git"
+                              ? "bg-slate-900/60 text-slate-200"
+                              : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                          }`}
+                          title="Source Control"
+                        >
+                          <GitIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsSidebarCollapsed(true)}
+                          className="rounded p-1.5 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
+                          title="Hide Sidebar (Cmd/Ctrl+B)"
+                        >
+                          <PanelLeftIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-auto p-2">
+                    {sidebarPanel === "explorer" ? (
+                      <ExplorerTree
+                        root={explorerRoot}
+                        dirChildren={dirChildren}
+                        openDirs={openDirs}
+                        selectedPath={selectedPath}
+                        onToggleDir={handleToggleDir}
+                        onOpenFile={handleOpenFile}
+                      />
+                    ) : (
+                      <GitSidebarPanel
+                        rootDir={rootDir}
+                        gitStatus={gitStatus}
+                        gitError={gitError}
+                        gitHasChecked={gitHasChecked}
+                        isGitLoading={isGitLoading}
+                        isGitBusy={isGitBusy}
+                        showGitNeedsInitIndicator={showGitNeedsInitIndicator}
+                        gitCommitMessage={gitCommitMessage}
+                        onCommitMessageChange={setGitCommitMessage}
+                        gitSelectedDiff={gitSelectedDiff}
+                        onSelectDiff={setGitSelectedDiff}
+                        onRefresh={refreshGit}
+                        onStage={handleGitStage}
+                        onUnstage={handleGitUnstage}
+                        onDiscard={handleGitDiscard}
+                        onCommit={handleGitCommit}
+                        onPush={handleGitPush}
+                        onStageAll={handleGitStageAll}
+                        onUnstageAll={handleGitUnstageAll}
+                      />
+                    )}
+                  </div>
+
+                  {variant === "wavelets" ? (
+                    <div className="border-t border-slate-900 bg-slate-950 p-2">
+                      <WaveletAssetsPanel
+                        isCollapsed={isAssetScriptsCollapsed}
+                        onToggleCollapsed={() => setIsAssetScriptsCollapsed((prev) => !prev)}
+                        onOpenAsset={(filename) => handleOpenFile(waveletAssetPath(filename))}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-              <div className="h-full min-h-0 overflow-auto p-2">
-                {sidebarPanel === "explorer" ? (
-                  <ExplorerTree
-                    root={explorerRoot}
-                    dirChildren={dirChildren}
-                    openDirs={openDirs}
-                    selectedPath={selectedPath}
-                    onToggleDir={handleToggleDir}
-                    onOpenFile={handleOpenFile}
-                  />
-                ) : (
-                  <GitSidebarPanel
-                    rootDir={rootDir}
-                    gitStatus={gitStatus}
-                    gitError={gitError}
-                    gitHasChecked={gitHasChecked}
-                    isGitLoading={isGitLoading}
-                    isGitBusy={isGitBusy}
-                    showGitNeedsInitIndicator={showGitNeedsInitIndicator}
-                    gitCommitMessage={gitCommitMessage}
-                    onCommitMessageChange={setGitCommitMessage}
-                    gitSelectedDiff={gitSelectedDiff}
-                    onSelectDiff={setGitSelectedDiff}
-                    onRefresh={refreshGit}
-                    onStage={handleGitStage}
-                    onUnstage={handleGitUnstage}
-                    onDiscard={handleGitDiscard}
-                    onCommit={handleGitCommit}
-                    onPush={handleGitPush}
-                    onStageAll={handleGitStageAll}
-                    onUnstageAll={handleGitUnstageAll}
-                  />
-                )}
-              </div>
-            </aside>
+	            </aside>
 
 	            <div
 	              role="separator"
@@ -2709,8 +2779,11 @@ export default function WorkspaceShell({
                     path={activeFile.path}
                     language={activeFile.language}
                     value={activeFile.content}
-                    options={MONACO_EDITOR_OPTIONS}
+                    options={editorOptions}
                     onChange={(value) => {
+                      if (activeFile.source === "asset") {
+                        return;
+                      }
                       setOpenFiles((prev) =>
                         prev.map((file) =>
                           file.path === activeFile.path ? { ...file, content: value ?? "", isDirty: true } : file,

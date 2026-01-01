@@ -37,6 +37,15 @@ export function isWaveletScriptPath(path: string): boolean {
   return ext === "js" || ext === "jsx" || ext === "ts" || ext === "tsx";
 }
 
+export function isWaveletAssetPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/");
+  return normalized === WAVELET_ASSET_ROOT || normalized.startsWith(`${WAVELET_ASSET_ROOT}/`);
+}
+
+export function waveletAssetPath(filename: string): string {
+  return `${WAVELET_ASSET_ROOT}/${filename}`;
+}
+
 export function defaultIgnoredName(name: string): boolean {
   return (
     name === ".git" ||
