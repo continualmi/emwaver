@@ -91,6 +91,14 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       iconClass: "text-slate-300",
     },
     {
+      id: "waveletsWorkspace" as FragmentType,
+      name: "Wavelets Workspace",
+      description: "Wavelet project workspace with preview tabs",
+      icon: <WaveletIcon />,
+      borderClass: "hover:border-sky-500/60",
+      iconClass: "text-sky-400",
+    },
+    {
       id: "ism" as FragmentType,
       name: "ISM (RFM69)",
       description: "Sub-GHz radio control and signal capture",
