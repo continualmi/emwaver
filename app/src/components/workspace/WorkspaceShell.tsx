@@ -366,13 +366,17 @@ export default function WorkspaceShell({
 
   const waveletTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
   const canRunWavelet = useMemo(() => {
-    if (variant !== "wavelets" || !rootDir || !waveletTargetPath) {
+    if (variant !== "wavelets" || !waveletTargetPath) {
       return false;
     }
-    if (isWaveletAssetPath(waveletTargetPath)) {
+    const normalizedPath = waveletTargetPath.replace(/\\/g, "/");
+    if (!isWaveletScriptPath(normalizedPath)) {
       return false;
     }
-    return isWaveletScriptPath(waveletTargetPath);
+    if (isWaveletAssetPath(normalizedPath)) {
+      return true;
+    }
+    return Boolean(rootDir);
   }, [rootDir, variant, waveletTargetPath]);
 
   const effectiveBottomPanelTab: BottomPanelTab = variant === "ide" ? bottomPanelTab : "terminal";
@@ -2032,20 +2036,25 @@ export default function WorkspaceShell({
 
   const runWaveletForPath = useCallback(
     async (path: string) => {
-      if (variant !== "wavelets" || !rootDir) {
+      if (variant !== "wavelets") {
         return;
       }
 
-      const normalizedRoot = rootDir.replace(/\\/g, "/").replace(/\/$/, "");
       const normalizedPath = path.replace(/\\/g, "/");
-      if (!isWaveletScriptPath(path)) {
+      const isAssetPath = isWaveletAssetPath(normalizedPath);
+      if (!isWaveletScriptPath(normalizedPath)) {
         return;
       }
+      if (!rootDir && !isAssetPath) {
+        return;
+      }
+
+      const normalizedRoot = rootDir ? rootDir.replace(/\\/g, "/").replace(/\/$/, "") : null;
 
       setWaveletPreviewState((prev) => ({
         ...prev,
-        [path]: {
-          tree: prev[path]?.tree ?? null,
+        [normalizedPath]: {
+          tree: prev[normalizedPath]?.tree ?? null,
           console: [],
           isRunning: true,
         },
@@ -2055,7 +2064,7 @@ export default function WorkspaceShell({
         waveletBootstrapRef.current = await readWaveletAssetScript(WAVELET_BOOTSTRAP_FILENAME);
       }
 
-      let engine = waveletEngineByPathRef.current.get(path);
+      let engine = waveletEngineByPathRef.current.get(normalizedPath);
       if (!engine) {
         engine = new WaveletEngine();
         const bleService = createBLEServiceWrapper();
@@ -2065,20 +2074,20 @@ export default function WorkspaceShell({
           (message: string) => {
             setWaveletPreviewState((prev) => ({
               ...prev,
-              [path]: {
-                tree: prev[path]?.tree ?? null,
-                console: [...(prev[path]?.console ?? []), String(message)],
-                isRunning: prev[path]?.isRunning ?? false,
+              [normalizedPath]: {
+                tree: prev[normalizedPath]?.tree ?? null,
+                console: [...(prev[normalizedPath]?.console ?? []), String(message)],
+                isRunning: prev[normalizedPath]?.isRunning ?? false,
               },
             }));
           },
           (tree: WaveletTree) => {
             setWaveletPreviewState((prev) => ({
               ...prev,
-              [path]: {
+              [normalizedPath]: {
                 tree,
-                console: prev[path]?.console ?? [],
-                isRunning: prev[path]?.isRunning ?? false,
+                console: prev[normalizedPath]?.console ?? [],
+                isRunning: prev[normalizedPath]?.isRunning ?? false,
               },
             }));
           },
@@ -2092,7 +2101,7 @@ export default function WorkspaceShell({
             createByteArray: waveletCreateByteArray,
           },
         );
-        waveletEngineByPathRef.current.set(path, engine);
+        waveletEngineByPathRef.current.set(normalizedPath, engine);
       }
 
       const moduleSources: Record<string, string> = {};
@@ -2106,44 +2115,49 @@ export default function WorkspaceShell({
       const openFileSnapshot = openFilesRef.current;
       const openFileByPath = new Map(openFileSnapshot.map((file) => [file.path, file] as const));
 
-      const queue: string[] = [rootDir];
-      const visited = new Set<string>();
       const maxFiles = 200;
       const filePaths: string[] = [];
 
-      while (queue.length > 0 && filePaths.length < maxFiles) {
-        const current = queue.shift();
-        if (!current || visited.has(current)) {
-          continue;
-        }
-        visited.add(current);
-        const entries = await safeInvoke<DirectoryChildEntry[]>("read_directory_children", {
-          payload: { path: current },
-        });
-        for (const entry of (entries ?? []).filter((child) => !defaultIgnoredName(child.name))) {
-          const entryPath = entry.path;
-          if (entry.kind === "directory") {
-            queue.push(entryPath);
+      if (rootDir && isTauriAvailable()) {
+        const queue: string[] = [rootDir];
+        const visited = new Set<string>();
+
+        while (queue.length > 0 && filePaths.length < maxFiles) {
+          const current = queue.shift();
+          if (!current || visited.has(current)) {
             continue;
           }
-          if (!isWaveletScriptPath(entryPath)) {
-            continue;
-          }
-          filePaths.push(entryPath);
-          if (filePaths.length >= maxFiles) {
-            break;
+          visited.add(current);
+          const entries = await safeInvoke<DirectoryChildEntry[]>("read_directory_children", {
+            payload: { path: current },
+          });
+          for (const entry of (entries ?? []).filter((child) => !defaultIgnoredName(child.name))) {
+            const entryPath = entry.path;
+            if (entry.kind === "directory") {
+              queue.push(entryPath);
+              continue;
+            }
+            if (!isWaveletScriptPath(entryPath)) {
+              continue;
+            }
+            filePaths.push(entryPath);
+            if (filePaths.length >= maxFiles) {
+              break;
+            }
           }
         }
       }
 
       for (const filePath of filePaths) {
         const normalizedFilePath = filePath.replace(/\\/g, "/");
-        const relative = normalizedFilePath.startsWith(`${normalizedRoot}/`)
+        const relative = normalizedRoot && normalizedFilePath.startsWith(`${normalizedRoot}/`)
           ? normalizedFilePath.slice(`${normalizedRoot}/`.length)
           : basename(filePath);
 
         const openFile = openFileByPath.get(filePath);
-        const content = openFile ? openFile.content : (await safeInvoke<string>("read_file", { payload: { path: filePath } })) ?? "";
+        const content =
+          openFile?.content ??
+          (!isTauriAvailable() ? "" : (await safeInvoke<string>("read_file", { payload: { path: filePath } })) ?? "");
         if (!content) {
           continue;
         }
@@ -2156,14 +2170,20 @@ export default function WorkspaceShell({
 
       engine.updateModuleSources(moduleSources);
 
-      const entryFile = openFileByPath.get(path);
-      const entrySource = entryFile ? entryFile.content : (await safeInvoke<string>("read_file", { payload: { path } })) ?? "";
+      const entryFile = openFileByPath.get(normalizedPath);
+      const entrySource =
+        entryFile?.content ??
+        (isAssetPath
+          ? await readWaveletAssetScript(basename(normalizedPath))
+          : !isTauriAvailable()
+            ? ""
+            : (await safeInvoke<string>("read_file", { payload: { path: normalizedPath } })) ?? "");
       engine.execute(entrySource, () => {
         setWaveletPreviewState((prev) => ({
           ...prev,
-          [path]: {
-            tree: prev[path]?.tree ?? null,
-            console: [...(prev[path]?.console ?? []), "Wavelet execution completed."],
+          [normalizedPath]: {
+            tree: prev[normalizedPath]?.tree ?? null,
+            console: [...(prev[normalizedPath]?.console ?? []), "Wavelet execution completed."],
             isRunning: false,
           },
         }));
@@ -2171,9 +2191,9 @@ export default function WorkspaceShell({
 
       setWaveletPreviewState((prev) => ({
         ...prev,
-        [path]: {
-          tree: prev[path]?.tree ?? null,
-          console: prev[path]?.console ?? [],
+        [normalizedPath]: {
+          tree: prev[normalizedPath]?.tree ?? null,
+          console: prev[normalizedPath]?.console ?? [],
           isRunning: false,
         },
       }));
@@ -2394,7 +2414,7 @@ export default function WorkspaceShell({
 
   return (
     <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
-      {!rootDir ? (
+      {!rootDir && variant === "ide" ? (
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
           <div className="mx-auto mb-6 h-24 w-24 overflow-hidden rounded-full bg-slate-900/60 shadow-2xl shadow-sky-500/20 ring-2 ring-sky-500/40">
             <img src="/emwaver-logo.png" alt="EMWaver" className="h-full w-full object-contain p-4" />
@@ -2571,6 +2591,20 @@ export default function WorkspaceShell({
                         isCollapsed={isAssetScriptsCollapsed}
                         onToggleCollapsed={() => setIsAssetScriptsCollapsed((prev) => !prev)}
                         onOpenAsset={(filename) => handleOpenFile(waveletAssetPath(filename))}
+                        onPreviewAsset={(filename) => {
+                          const assetPath = waveletAssetPath(filename);
+                          void (async () => {
+                            await openWaveletPreviewTab(assetPath, { activate: true });
+                            await runWaveletForPath(assetPath);
+                          })();
+                        }}
+                        onRunAsset={(filename) => {
+                          const assetPath = waveletAssetPath(filename);
+                          void (async () => {
+                            await openWaveletPreviewTab(assetPath, { activate: false });
+                            await runWaveletForPath(assetPath);
+                          })();
+                        }}
                       />
                     </div>
                   ) : null}
