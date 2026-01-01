@@ -4,16 +4,6 @@ title: Installing & Using EMWaver Apps (Android, iOS, Desktop)
 
 # Installing & Using EMWaver Apps (Android, iOS, Desktop)
 
-<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:12px;">
-  <iframe
-    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
-    src="https://www.youtube.com/embed/VIDEO_ID_HERE"
-    title="Installing & Using EMWaver Apps (Android, iOS, Desktop)"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-    allowfullscreen
-  ></iframe>
-</div>
-
 ## Download The Apps
 
 Mobile apps are the primary UI for connecting to devices and running workflows.
