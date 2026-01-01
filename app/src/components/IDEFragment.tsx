@@ -373,6 +373,27 @@ function UploadIcon({ className }: { className?: string }) {
   );
 }
 
+function HammerIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"} aria-hidden="true">
+      <path d="M9.6 2.6l3.8 3.8-1.3 1.3-3.8-3.8z" strokeLinejoin="round" />
+      <path d="M7.6 4.6l3.8 3.8" strokeLinecap="round" />
+      <path d="M6.8 6.3L3 10.1c-.5.5-.5 1.3 0 1.8l1.1 1.1c.5.5 1.3.5 1.8 0l3.8-3.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.2 3.9l1.7-1.7 2.2 2.2-1.7 1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MonitorIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"} aria-hidden="true">
+      <path d="M3 3.5h10c.6 0 1 .4 1 1v6.2c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1V4.5c0-.6.4-1 1-1z" strokeLinejoin="round" />
+      <path d="M6.2 13.5h3.6" strokeLinecap="round" />
+      <path d="M8 11.7v1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function PanelLeftIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
@@ -544,6 +565,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [firmwareHasOutput, setFirmwareHasOutput] = useState(false);
   const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
   const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
+  const [firmwarePanelTab, setFirmwarePanelTab] = useState<"build" | "monitor">("build");
+
+  const firmwarePtySessionIdRef = useRef<string | null>(null);
+  const firmwareEnvReadyRef = useRef(false);
+  const firmwareEnvKeyRef = useRef<string | null>(null);
 
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
@@ -613,7 +639,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       inFlight = true;
       try {
         const mtimes = await Promise.all(
-          candidates.map((file) => safeInvoke<number>("file_modified_ms", { payload: { path: file.path } }).catch(() => null)),
+          candidates.map((file) =>
+            safeInvoke<number>("file_modified_ms", { payload: { path: file.path } })
+              .then((value) => value ?? undefined)
+              .catch(() => undefined),
+          ),
         );
 
         const initMtimes = new Map<string, number>();
@@ -1200,6 +1230,12 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const closeTerminalSession = useCallback(async (sessionId: string) => {
     closingTerminalSessionsRef.current.add(sessionId);
 
+    if (firmwarePtySessionIdRef.current === sessionId) {
+      firmwarePtySessionIdRef.current = null;
+      firmwareEnvReadyRef.current = false;
+      firmwareEnvKeyRef.current = null;
+    }
+
     const terminal = terminalBySessionRef.current.get(sessionId);
     if (terminal) {
       terminal.dispose();
@@ -1251,9 +1287,72 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
   }, [startTerminalSession, terminalSessions.length]);
 
+  const ensureFirmwarePtySession = useCallback(async () => {
+    if (!isTauriAvailable() || !rootDir) {
+      return null;
+    }
+
+    const existing = firmwarePtySessionIdRef.current;
+    if (existing) {
+      return existing;
+    }
+
+    const response = await safeInvoke<{ session_id: string }>("pty_start", {
+      payload: { cwd: rootDir, cols: 80, rows: 24 },
+    });
+    const sessionId = response?.session_id;
+    if (!sessionId) {
+      throw new Error("PTY start returned no session id");
+    }
+
+    firmwarePtySessionIdRef.current = sessionId;
+    firmwareEnvReadyRef.current = false;
+    firmwareEnvKeyRef.current = null;
+
+    return sessionId;
+  }, [rootDir]);
+
+  const ensureFirmwareEnv = useCallback(
+    async (sessionId: string) => {
+      if (!rootDir) {
+        return;
+      }
+
+      const key = `${firmwareProjectKind}:${rootDir}`;
+      if (firmwareEnvReadyRef.current && firmwareEnvKeyRef.current === key) {
+        return;
+      }
+
+      if (firmwareProjectKind === "esp32") {
+        await safeInvoke<void>("pty_write", {
+          payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}" && source setup.sh\r` },
+        });
+      } else {
+        await safeInvoke<void>("pty_write", {
+          payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}"\r` },
+        });
+      }
+
+      firmwareEnvReadyRef.current = true;
+      firmwareEnvKeyRef.current = key;
+    },
+    [firmwareProjectKind, rootDir],
+  );
+
   useEffect(() => {
     void ensureInitialTerminalSession();
   }, [ensureInitialTerminalSession]);
+
+  useEffect(() => {
+    firmwareEnvReadyRef.current = false;
+    firmwareEnvKeyRef.current = null;
+
+    const sessionId = firmwarePtySessionIdRef.current;
+    if (!rootDir && sessionId && isTauriAvailable()) {
+      void safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
+      firmwarePtySessionIdRef.current = null;
+    }
+  }, [rootDir]);
 
   useEffect(() => {
     if (!activeTerminalSessionId && terminalSessions.length > 0) {
@@ -1331,9 +1430,24 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         return;
       }
       const bytes = new Uint8Array(payload.data);
+      const decoder = outputDecoderRef.current;
+
+      const firmwareSessionId = firmwarePtySessionIdRef.current;
+      if (firmwareSessionId && payload.session_id === firmwareSessionId) {
+        ensureFirmwareTerminal();
+        const text = decoder.decode(bytes, { stream: true });
+        const fwTerminal = firmwareTerminalRef.current;
+        if (fwTerminal) {
+          fwTerminal.write(text);
+        } else {
+          pendingFirmwareTextRef.current.push(text);
+        }
+        setFirmwareHasOutput(true);
+        return;
+      }
+
       const terminal = terminalBySessionRef.current.get(payload.session_id);
       if (terminal) {
-        const decoder = outputDecoderRef.current;
         terminal.write(decoder.decode(bytes, { stream: true }));
         return;
       }
@@ -1374,6 +1488,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       sessionsRef.current.forEach((session) => {
         void safeInvoke<void>("pty_stop", { payload: { session_id: session.id } });
       });
+      if (firmwarePtySessionIdRef.current) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: firmwarePtySessionIdRef.current } });
+        firmwarePtySessionIdRef.current = null;
+      }
       terminalBySessionRef.current.forEach((terminal) => terminal.dispose());
       fitAddonBySessionRef.current.forEach((addon) => addon.dispose());
       terminalBySessionRef.current.clear();
@@ -1535,6 +1653,18 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
 
     try {
+      if (firmwareProjectKind === "esp32") {
+        const sessionId = await ensureFirmwarePtySession();
+        if (!sessionId) {
+          return;
+        }
+        await ensureFirmwareEnv(sessionId);
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py build\r" } });
+        setFirmwareProgressPct(null);
+        setIsFirmwareBusy(false);
+        return;
+      }
+
       await safeInvoke<void>(
         "firmware_build",
         {
@@ -1554,7 +1684,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [ensureFirmwareEnv, ensureFirmwarePtySession, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
 
   const handleFirmwareFlash = useCallback(async () => {
     if (!isTauriAvailable()) {
@@ -1578,6 +1708,18 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
 
     try {
+      if (firmwareProjectKind === "esp32") {
+        const sessionId = await ensureFirmwarePtySession();
+        if (!sessionId) {
+          return;
+        }
+        await ensureFirmwareEnv(sessionId);
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py flash\r" } });
+        setFirmwareProgressPct(null);
+        setIsFirmwareBusy(false);
+        return;
+      }
+
       await safeInvoke<void>(
         "firmware_flash",
         {
@@ -1597,7 +1739,36 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [ensureFirmwareEnv, ensureFirmwarePtySession, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+
+  const handleFirmwareMonitor = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      writeFirmwareInfo("Tauri not available; cannot monitor firmware.");
+      return;
+    }
+    if (!rootDir) {
+      writeFirmwareInfo("No folder open; cannot monitor firmware.");
+      return;
+    }
+
+    setIsTerminalVisible(true);
+    setBottomPanelTab("firmware");
+
+    try {
+      const sessionId = await ensureFirmwarePtySession();
+      if (!sessionId) {
+        return;
+      }
+      await ensureFirmwareEnv(sessionId);
+
+      const command = firmwareProjectKind === "esp32" ? "idf.py monitor" : "emwaver monitor";
+      await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: `${command}\r` } });
+    } catch (error) {
+      console.error(error);
+      writeFirmwareInfo(`Monitor failed: ${String(error)}`);
+    }
+  }, [ensureFirmwareEnv, ensureFirmwarePtySession, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+
 
 		  useEffect(() => {
 		    const handleMove = (event: MouseEvent) => {
@@ -1732,7 +1903,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     try {
       const [content, diskMtimeMs] = await Promise.all([
         safeInvoke<string>("read_file", { payload: { path } }),
-        safeInvoke<number>("file_modified_ms", { payload: { path } }).catch(() => undefined),
+        safeInvoke<number>("file_modified_ms", { payload: { path } })
+          .then((value) => value ?? undefined)
+          .catch(() => undefined),
       ]);
       const next: OpenFile = {
         path,
@@ -1779,9 +1952,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setIsSaving(true);
     try {
       await safeInvoke<void>("write_file", { payload: { path: activeFile.path, content: activeFile.content } });
-      const diskMtimeMs = await safeInvoke<number>("file_modified_ms", { payload: { path: activeFile.path } }).catch(
-        () => undefined,
-      );
+      const diskMtimeMs = await safeInvoke<number>("file_modified_ms", { payload: { path: activeFile.path } })
+        .then((value) => value ?? undefined)
+        .catch(() => undefined);
       setOpenFiles((prev) =>
         prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false, diskMtimeMs } : file)),
       );
@@ -2435,6 +2608,50 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
             <div className="flex shrink-0 items-center justify-end gap-3 px-4 py-2 text-xs text-slate-500">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTerminalVisible(true);
+                    setBottomPanelTab("firmware");
+                    setFirmwarePanelTab("build");
+                    void handleFirmwareBuild();
+                  }}
+                  disabled={isFirmwareBusy || !rootDir}
+                  className="rounded border border-slate-700 bg-slate-900/60 px-1.5 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                  title="Build"
+                >
+                  <HammerIcon className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTerminalVisible(true);
+                    setBottomPanelTab("firmware");
+                    setFirmwarePanelTab("build");
+                    void handleFirmwareFlash();
+                  }}
+                  disabled={isFirmwareBusy || !rootDir}
+                  className="rounded border border-sky-300/70 bg-sky-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                  title="Flash"
+                >
+                  <UploadIcon className="h-4 w-4 text-sky-50" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTerminalVisible(true);
+                    setBottomPanelTab("firmware");
+                    setFirmwarePanelTab("monitor");
+                    void handleFirmwareMonitor();
+                  }}
+                  disabled={!rootDir}
+                  className="rounded border border-emerald-300/70 bg-emerald-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                  title="Monitor"
+                >
+                  <MonitorIcon className="h-4 w-4 text-emerald-50" />
+                </button>
                 {firmwareProjectKind === "stm32" ? (
                   <select
                     value={firmwareCodegenMode}
@@ -2463,15 +2680,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                   </div>
                 ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => void handleFirmwareFlash()}
-                  disabled={isFirmwareBusy || !rootDir}
-                  className="rounded border border-sky-300/70 bg-sky-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                  title="Flash firmware (build if needed)"
-                >
-                  <UploadIcon className="h-4 w-4 text-sky-50" />
-                </button>
               </div>
 
               {isLoadingFile ? <span>Loading…</span> : null}
@@ -2679,28 +2887,80 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                               </button>
                             </>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFirmwareProgressPct(null);
-                                setFirmwareHasOutput(false);
-                                const terminal = firmwareTerminalRef.current;
-                                if (terminal) {
-                                  try {
-                                    terminal.reset();
-                                    terminal.clear();
-                                  } catch {
-                                    // ignore
+                            <div className="flex items-center gap-2">
+                              {firmwarePanelTab === "build" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleFirmwareBuild()}
+                                    disabled={isFirmwareBusy || !rootDir}
+                                    className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                    title={firmwareProjectKind === "esp32" ? "Build (idf.py build)" : "Build firmware"}
+                                  >
+                                    Build
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleFirmwareFlash()}
+                                    disabled={isFirmwareBusy || !rootDir}
+                                    className="rounded border border-sky-300/70 bg-sky-500 px-2 py-1 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                    title={firmwareProjectKind === "esp32" ? "Flash (idf.py flash)" : "Flash firmware"}
+                                  >
+                                    Flash
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleFirmwareMonitor()}
+                                    disabled={!rootDir}
+                                    className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                    title={firmwareProjectKind === "esp32" ? "Monitor (idf.py monitor)" : "Monitor (emwaver monitor)"}
+                                  >
+                                    Start
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const sessionId = firmwarePtySessionIdRef.current;
+                                      if (!sessionId || !isTauriAvailable()) {
+                                        return;
+                                      }
+                                      void safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "\u0003" } });
+                                    }}
+                                    disabled={!firmwarePtySessionIdRef.current}
+                                    className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                                    title="Send Ctrl+C"
+                                  >
+                                    Stop
+                                  </button>
+                                </>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFirmwareProgressPct(null);
+                                  setFirmwareHasOutput(false);
+                                  const terminal = firmwareTerminalRef.current;
+                                  if (terminal) {
+                                    try {
+                                      terminal.reset();
+                                      terminal.clear();
+                                    } catch {
+                                      // ignore
+                                    }
+                                  } else {
+                                    pendingFirmwareTextRef.current = [];
                                   }
-                                } else {
-                                  pendingFirmwareTextRef.current = [];
-                                }
-                              }}
-                              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                              title="Clear firmware log"
-                            >
-                              Clear
-                            </button>
+                                }}
+                                className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                                title="Clear firmware log"
+                              >
+                                Clear
+                              </button>
+                            </div>
                           )}
 
                           <button
@@ -2851,9 +3111,32 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 	                                  <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">
 	                                    FIRMWARE
 	                                  </div>
-	                                  <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">
-	                                    Build/Flash
-	                                  </div>
+
+	                                  <button
+	                                    type="button"
+	                                    onClick={() => setFirmwarePanelTab("build")}
+	                                    className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
+	                                      firmwarePanelTab === "build"
+	                                        ? "bg-slate-900/70 text-sky-200"
+	                                        : "text-slate-300 hover:bg-slate-900/40"
+	                                    }`}
+	                                  >
+	                                    <HammerIcon className="h-4 w-4 text-slate-500" />
+	                                    <span>Build/Flash</span>
+	                                  </button>
+
+	                                  <button
+	                                    type="button"
+	                                    onClick={() => setFirmwarePanelTab("monitor")}
+	                                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
+	                                      firmwarePanelTab === "monitor"
+	                                        ? "bg-slate-900/70 text-emerald-200"
+	                                        : "text-slate-300 hover:bg-slate-900/40"
+	                                    }`}
+	                                  >
+	                                    <MonitorIcon className="h-4 w-4 text-slate-500" />
+	                                    <span>Monitor</span>
+	                                  </button>
 	                                </div>
 	                              )}
 	                            </aside>
