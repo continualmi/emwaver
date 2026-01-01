@@ -2429,7 +2429,7 @@ export default function WorkspaceShell({
           <p className="mt-2 max-w-lg text-sm text-slate-400">
             {variant === "ide"
               ? "The IDE needs a firmware folder to browse, edit, build, and flash."
-              : "Wavelets Workspace needs a folder to browse, edit, run, and preview wavelets."}
+              : "Wavelets needs a folder to browse, edit, run, and preview wavelets."}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             {variant === "ide" ? (
@@ -2503,7 +2503,7 @@ export default function WorkspaceShell({
                           className="truncate text-sm font-semibold text-slate-200"
                           title={
                             sidebarPanel === "explorer"
-                              ? rootDir ?? (variant === "ide" ? "IDE" : "Wavelets Workspace")
+                              ? rootDir ?? (variant === "ide" ? "IDE" : "Wavelets")
                               : "Source Control"
                           }
                         >
