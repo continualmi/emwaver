@@ -492,6 +492,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
   const [gitStatus, setGitStatus] = useState<GitRepoStatus | null>(null);
   const [gitError, setGitError] = useState<string | null>(null);
+  const [gitHasChecked, setGitHasChecked] = useState(false);
   const [isGitLoading, setIsGitLoading] = useState(false);
   const [isGitBusy, setIsGitBusy] = useState(false);
   const [gitCommitMessage, setGitCommitMessage] = useState("");
@@ -570,34 +571,55 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     return openFiles.find((file) => file.path === activeFilePath) ?? null;
   }, [activeFilePath, openFiles]);
 
+  const gitRepoIssue = useMemo(() => {
+    const message = (gitError ?? "").toLowerCase();
+    if (!message) {
+      return null;
+    }
+    if (message.includes("not a git repository")) {
+      return "not_repo" as const;
+    }
+    if (message.includes("git is not installed")) {
+      return "git_missing" as const;
+    }
+    return null;
+  }, [gitError]);
+  const showGitNeedsInitIndicator = gitRepoIssue === "not_repo";
+
   const refreshGit = useCallback(async () => {
     if (!rootDir || !isTauriAvailable()) {
       setGitStatus(null);
       setGitError(null);
+      setGitHasChecked(false);
       return;
     }
     setIsGitLoading(true);
-    setGitError(null);
+    if (!gitHasChecked) {
+      setGitStatus(null);
+      setGitError(null);
+    }
     try {
-      const status = await safeInvoke<GitRepoStatus>("git_status", { payload: { path: rootDir } });
+      const status = await safeInvoke<GitRepoStatus>("git_status", { payload: { path: rootDir } }, { throwOnError: true });
       setGitStatus(status ?? null);
+      setGitError(null);
     } catch (error) {
       setGitStatus(null);
       setGitError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsGitLoading(false);
+      setGitHasChecked(true);
     }
-  }, [rootDir]);
+  }, [gitHasChecked, rootDir]);
 
   useEffect(() => {
     void refreshGit();
   }, [refreshGit]);
 
   useEffect(() => {
-    if (sidebarPanel === "git") {
+    if (sidebarPanel === "git" && !gitHasChecked) {
       void refreshGit();
     }
-  }, [refreshGit, sidebarPanel]);
+  }, [gitHasChecked, refreshGit, sidebarPanel]);
 
   useEffect(() => {
     if (!gitSelectedDiff || !rootDir || !isTauriAvailable()) {
@@ -615,7 +637,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         view: gitSelectedDiff.view,
         orig_path: gitSelectedDiff.orig_path ?? undefined,
       },
-    })
+    }, { throwOnError: true })
       .then((contents) => {
         if (canceled) return;
         setGitDiffContents(contents ?? null);
@@ -1264,6 +1286,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setSidebarPanel("explorer");
     setGitStatus(null);
     setGitError(null);
+    setGitHasChecked(false);
     setGitSelectedDiff(null);
     setGitDiffContents(null);
   }, []);
@@ -1585,13 +1608,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       if (!rootDir || !isTauriAvailable()) {
         return;
       }
-      setIsGitBusy(true);
-      setGitError(null);
-      try {
-        await action();
-        await refreshGit();
-      } catch (error) {
-        setGitError(error instanceof Error ? error.message : String(error));
+    setIsGitBusy(true);
+    setGitError(null);
+    try {
+      await action();
+      await refreshGit();
+    } catch (error) {
+      setGitError(error instanceof Error ? error.message : String(error));
       } finally {
         setIsGitBusy(false);
       }
@@ -1832,7 +1855,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                     setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
                     setIsSidebarCollapsed(false);
                   }}
-                  className={`flex h-9 items-center justify-center text-slate-500 hover:bg-slate-900/30 hover:text-slate-200 ${
+                  className={`relative flex h-9 items-center justify-center text-slate-500 hover:bg-slate-900/30 hover:text-slate-200 ${
                     sidebarPanel === "git" ? "bg-slate-900/50 text-slate-200" : ""
                   }`}
                   title="Show Source Control"
@@ -1899,7 +1922,49 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                   )
 	                ) : !rootDir ? (
 	                  <p className="px-2 text-xs text-slate-500">Open a folder to use Source Control.</p>
-	                ) : (
+                  ) : !gitHasChecked ? (
+                    <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 px-4 py-6 text-slate-400">
+                      <div
+                        aria-hidden="true"
+                        className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400"
+                      />
+                      <div className="text-xs">Checking Git status…</div>
+                    </div>
+	                ) : showGitNeedsInitIndicator ? (
+                    <div className="space-y-2 px-2 py-2">
+                      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-100">
+                        <div className="text-xs font-semibold">Not a Git repository</div>
+                        <div className="mt-1 text-[11px] text-amber-200/80">
+                          Run <span className="font-mono">git init</span> in this folder to enable Source Control.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void refreshGit()}
+                        disabled={isGitLoading || isGitBusy}
+                        className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        title="Refresh"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  ) : gitError ? (
+                    <div className="space-y-2 px-2 py-2">
+                      <div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-100">
+                        <div className="text-xs font-semibold">Source Control unavailable</div>
+                        <div className="mt-1 break-words text-[11px] text-rose-200/80">{gitError}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void refreshGit()}
+                        disabled={isGitLoading || isGitBusy}
+                        className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        title="Refresh"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
 	                  <div className="space-y-3 px-2 py-2">
                       <div className="px-1 text-[11px] text-slate-500">
                         <span className="font-semibold text-slate-300">
