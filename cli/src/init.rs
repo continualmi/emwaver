@@ -71,6 +71,7 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     write_template_file("CMakeLists.txt", destination)?;
     write_template_file("sdkconfig", destination)?;
     write_template_file("sdkconfig.ci", destination)?;
+    write_template_file("partitions_ota_4mb.csv", destination)?;
     write_template_file("dependencies.lock", destination)?;
     write_template_file("setup.sh", destination)?;
     write_template_file("main/idf_component.yml", destination)?;

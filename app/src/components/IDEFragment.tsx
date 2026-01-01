@@ -360,6 +360,16 @@ function PlayIcon({ className }: { className?: string }) {
   );
 }
 
+function UploadIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
+      <path d="M8 9.2V3.6" strokeLinecap="round" />
+      <path d="M5.4 6.2L8 3.6l2.6 2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.5 9.6v2.2c0 .6.4 1 1 1h7c.6 0 1-.4 1-1V9.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function PanelLeftIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
@@ -528,6 +538,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const [firmwareLines, setFirmwareLines] = useState<string[]>([]);
+  const [firmwareProgressPct, setFirmwareProgressPct] = useState<number | null>(null);
   const firmwareScrollRef = useRef<HTMLDivElement | null>(null);
   const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
   const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
@@ -724,6 +735,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     node.scrollTop = node.scrollHeight;
   }, [bottomPanelTab, firmwareLines.length]);
 
+  const updateFirmwareProgressFromMessage = useCallback((message: string) => {
+    const matches = message.match(/(\d{1,3})%/g);
+    if (!matches || matches.length === 0) {
+      return;
+    }
+    const last = matches[matches.length - 1];
+    const value = Number.parseInt(last.replace("%", ""), 10);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    setFirmwareProgressPct(Math.max(0, Math.min(100, value)));
+  }, []);
+
   useEffect(() => {
     const unlistenPromise = safeListen<FirmwareProgressPayload>("firmware-progress", (event) => {
       const payload = event.payload;
@@ -732,6 +756,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       }
       const label = payload.stream ? String(payload.stream).toUpperCase() : "INFO";
       const line = `${label} ${payload.message}`;
+      updateFirmwareProgressFromMessage(payload.message);
 
       setFirmwareLines((prev) => {
         const next = [...prev, line];
@@ -742,7 +767,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, []);
+  }, [updateFirmwareProgressFromMessage]);
 
   useEffect(() => {
     if (!monaco) {
@@ -1304,6 +1329,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
 
     setFirmwareLines([]);
+    setFirmwareProgressPct(null);
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
     setIsFirmwareBusy(true);
@@ -1321,6 +1347,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         { throwOnError: true },
       );
       appendFirmwareLine("Build complete.");
+      setFirmwareProgressPct(100);
     } catch (error) {
       console.error(error);
       appendFirmwareLine(`Build failed: ${String(error)}`);
@@ -1336,6 +1363,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
 
     setFirmwareLines([]);
+    setFirmwareProgressPct(null);
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
     setIsFirmwareBusy(true);
@@ -1353,6 +1381,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         { throwOnError: true },
       );
       appendFirmwareLine("Flash complete.");
+      setFirmwareProgressPct(100);
     } catch (error) {
       console.error(error);
       appendFirmwareLine(`Flash failed: ${String(error)}`);
@@ -2202,18 +2231,31 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                   </select>
                 ) : null}
 
+                {isFirmwareBusy ? (
+                  <div
+                    className="h-1.5 w-14 overflow-hidden rounded bg-slate-800"
+                    title="Flashing…"
+                    aria-label="Flashing…"
+                  >
+                    {firmwareProgressPct === null ? (
+                      <div className="h-full w-full bg-sky-400/80 animate-pulse" />
+                    ) : (
+                      <div className="h-full bg-sky-400/80" style={{ width: `${firmwareProgressPct}%` }} />
+                    )}
+                  </div>
+                ) : null}
+
                 <button
                   type="button"
                   onClick={() => void handleFirmwareFlash()}
                   disabled={isFirmwareBusy || !rootDir}
-                  className="rounded border border-slate-800 bg-slate-950 p-1.5 text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                  title="Build & Flash firmware"
+                  className="rounded border border-sky-300/70 bg-sky-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                  title="Flash firmware (build if needed)"
                 >
-                  <PlayIcon className="h-4 w-4" />
+                  <UploadIcon className="h-4 w-4 text-sky-50" />
                 </button>
               </div>
 
-              {isFirmwareBusy ? <span className="text-sky-200">Running…</span> : null}
               {isLoadingFile ? <span>Loading…</span> : null}
               {activeFile?.isDirty ? <span className="text-amber-300">Unsaved</span> : null}
             </div>

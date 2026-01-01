@@ -216,6 +216,14 @@ pub fn flash_at_streaming(
                 bail!("`--dfu-alt` is only supported for STM32 USB DFU flashing");
             }
 
+            let build_dir = project.join("build");
+            if !build_dir.is_dir() {
+                on_event(FirmwareProgress::Info(
+                    "No `build/` folder found; running `idf.py build` first.".to_string(),
+                ));
+                run_idf_streaming(&project, &["build"], on_event)?;
+            }
+
             let args_owned: Vec<String> = match port {
                 Some(port) => vec!["-p".into(), port, "flash".into()],
                 None => vec!["flash".into()],
