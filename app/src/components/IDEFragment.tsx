@@ -3026,7 +3026,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 : "text-slate-400 hover:text-slate-200"
                             }`}
                           >
-                            FIRMWARE
+                            DEVICE
                           </button>
                         </div>
 
@@ -3361,7 +3361,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 	                              ) : (
 	                                <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
 	                                  <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">
-	                                    FIRMWARE
+	                                    DEVICE
 	                                  </div>
 
 	                                  <button
