@@ -562,14 +562,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const [firmwareProgressPct, setFirmwareProgressPct] = useState<number | null>(null);
-  const [firmwareHasOutput, setFirmwareHasOutput] = useState(false);
+  const [firmwareBuildHasOutput, setFirmwareBuildHasOutput] = useState(false);
+  const [firmwareMonitorHasOutput, setFirmwareMonitorHasOutput] = useState(false);
   const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
   const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
   const [firmwarePanelTab, setFirmwarePanelTab] = useState<"build" | "monitor">("build");
 
-  const firmwarePtySessionIdRef = useRef<string | null>(null);
-  const firmwareEnvReadyRef = useRef(false);
-  const firmwareEnvKeyRef = useRef<string | null>(null);
+  const firmwareBuildPtySessionIdRef = useRef<string | null>(null);
+  const firmwareBuildEnvReadyRef = useRef(false);
+  const firmwareBuildEnvKeyRef = useRef<string | null>(null);
+
+  const firmwareMonitorPtySessionIdRef = useRef<string | null>(null);
+  const firmwareMonitorEnvReadyRef = useRef(false);
+  const firmwareMonitorEnvKeyRef = useRef<string | null>(null);
 
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
@@ -583,10 +588,15 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const pendingTerminalOutputRef = useRef<Map<string, Uint8Array[]>>(new Map());
   const outputDecoderRef = useRef(new TextDecoder());
 
-  const firmwareTerminalContainerRef = useRef<HTMLDivElement | null>(null);
-  const firmwareTerminalRef = useRef<Terminal | null>(null);
-  const firmwareFitAddonRef = useRef<FitAddon | null>(null);
-  const pendingFirmwareTextRef = useRef<string[]>([]);
+  const firmwareBuildTerminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const firmwareBuildTerminalRef = useRef<Terminal | null>(null);
+  const firmwareBuildFitAddonRef = useRef<FitAddon | null>(null);
+  const pendingFirmwareBuildTextRef = useRef<string[]>([]);
+
+  const firmwareMonitorTerminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const firmwareMonitorTerminalRef = useRef<Terminal | null>(null);
+  const firmwareMonitorFitAddonRef = useRef<FitAddon | null>(null);
+  const pendingFirmwareMonitorTextRef = useRef<string[]>([]);
 
   const monaco = useMonaco();
 
@@ -1007,55 +1017,75 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     terminalBySessionRef.current.forEach((terminal) => {
       terminal.options.theme = terminalTheme;
     });
-    if (firmwareTerminalRef.current) {
-      firmwareTerminalRef.current.options.theme = terminalTheme;
+    if (firmwareBuildTerminalRef.current) {
+      firmwareBuildTerminalRef.current.options.theme = terminalTheme;
+    }
+    if (firmwareMonitorTerminalRef.current) {
+      firmwareMonitorTerminalRef.current.options.theme = terminalTheme;
     }
   }, [terminalTheme]);
 
-  const ensureFirmwareTerminal = useCallback(() => {
-    if (firmwareTerminalRef.current) {
-      return;
-    }
-    const container = firmwareTerminalContainerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const term = new Terminal({
-      convertEol: true,
-      cursorBlink: false,
-      disableStdin: true,
-      fontFamily:
-        '"Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      fontSize: 12,
-      theme: terminalTheme,
-      scrollback: 8000,
-    });
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(container);
-
-    firmwareTerminalRef.current = term;
-    firmwareFitAddonRef.current = fitAddon;
-
-    const buffered = pendingFirmwareTextRef.current;
-    if (buffered.length > 0) {
-      buffered.forEach((chunk) => term.write(chunk));
-      pendingFirmwareTextRef.current = [];
-      setFirmwareHasOutput(true);
-    }
-
-    requestAnimationFrame(() => {
-      try {
-        fitAddon.fit();
-      } catch {
-        // ignore
+  const ensureFirmwareTerminal = useCallback(
+    (tab: "build" | "monitor") => {
+      const isBuild = tab === "build";
+      const terminalRef = isBuild ? firmwareBuildTerminalRef : firmwareMonitorTerminalRef;
+      if (terminalRef.current) {
+        return;
       }
-    });
-  }, [terminalTheme]);
+      const container = isBuild ? firmwareBuildTerminalContainerRef.current : firmwareMonitorTerminalContainerRef.current;
+      if (!container) {
+        return;
+      }
 
-  const fitFirmwareTerminal = useCallback(() => {
-    const fitAddon = firmwareFitAddonRef.current;
+      const term = new Terminal({
+        convertEol: true,
+        cursorBlink: false,
+        disableStdin: true,
+        fontFamily:
+          '"Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontSize: 12,
+        theme: terminalTheme,
+        scrollback: 8000,
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(container);
+
+      if (isBuild) {
+        firmwareBuildTerminalRef.current = term;
+        firmwareBuildFitAddonRef.current = fitAddon;
+
+        const buffered = pendingFirmwareBuildTextRef.current;
+        if (buffered.length > 0) {
+          buffered.forEach((chunk) => term.write(chunk));
+          pendingFirmwareBuildTextRef.current = [];
+          setFirmwareBuildHasOutput(true);
+        }
+      } else {
+        firmwareMonitorTerminalRef.current = term;
+        firmwareMonitorFitAddonRef.current = fitAddon;
+
+        const buffered = pendingFirmwareMonitorTextRef.current;
+        if (buffered.length > 0) {
+          buffered.forEach((chunk) => term.write(chunk));
+          pendingFirmwareMonitorTextRef.current = [];
+          setFirmwareMonitorHasOutput(true);
+        }
+      }
+
+      requestAnimationFrame(() => {
+        try {
+          fitAddon.fit();
+        } catch {
+          // ignore
+        }
+      });
+    },
+    [terminalTheme],
+  );
+
+  const fitFirmwareTerminal = useCallback((tab: "build" | "monitor") => {
+    const fitAddon = tab === "build" ? firmwareBuildFitAddonRef.current : firmwareMonitorFitAddonRef.current;
     if (!fitAddon) {
       return;
     }
@@ -1073,10 +1103,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         return;
       }
 
-      ensureFirmwareTerminal();
+      ensureFirmwareTerminal("build");
       updateFirmwareProgressFromMessage(payload.message);
 
-      const terminal = firmwareTerminalRef.current;
+      const terminal = firmwareBuildTerminalRef.current;
       const message = payload.message;
       const stream = payload.stream ? String(payload.stream) : "info";
 
@@ -1093,10 +1123,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       if (terminal) {
         terminal.write(formatted);
       } else {
-        pendingFirmwareTextRef.current.push(formatted);
+        pendingFirmwareBuildTextRef.current.push(formatted);
       }
 
-      setFirmwareHasOutput(true);
+      setFirmwareBuildHasOutput(true);
     });
 
     return () => {
@@ -1230,11 +1260,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const closeTerminalSession = useCallback(async (sessionId: string) => {
     closingTerminalSessionsRef.current.add(sessionId);
 
-    if (firmwarePtySessionIdRef.current === sessionId) {
-      firmwarePtySessionIdRef.current = null;
-      firmwareEnvReadyRef.current = false;
-      firmwareEnvKeyRef.current = null;
-    }
 
     const terminal = terminalBySessionRef.current.get(sessionId);
     if (terminal) {
@@ -1287,12 +1312,12 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
   }, [startTerminalSession, terminalSessions.length]);
 
-  const ensureFirmwarePtySession = useCallback(async () => {
+  const ensureFirmwareBuildPtySession = useCallback(async () => {
     if (!isTauriAvailable() || !rootDir) {
       return null;
     }
 
-    const existing = firmwarePtySessionIdRef.current;
+    const existing = firmwareBuildPtySessionIdRef.current;
     if (existing) {
       return existing;
     }
@@ -1305,21 +1330,50 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       throw new Error("PTY start returned no session id");
     }
 
-    firmwarePtySessionIdRef.current = sessionId;
-    firmwareEnvReadyRef.current = false;
-    firmwareEnvKeyRef.current = null;
+    firmwareBuildPtySessionIdRef.current = sessionId;
+    firmwareBuildEnvReadyRef.current = false;
+    firmwareBuildEnvKeyRef.current = null;
+
+    return sessionId;
+  }, [rootDir]);
+
+  const ensureFirmwareMonitorPtySession = useCallback(async () => {
+    if (!isTauriAvailable() || !rootDir) {
+      return null;
+    }
+
+    const existing = firmwareMonitorPtySessionIdRef.current;
+    if (existing) {
+      return existing;
+    }
+
+    const response = await safeInvoke<{ session_id: string }>("pty_start", {
+      payload: { cwd: rootDir, cols: 80, rows: 24 },
+    });
+    const sessionId = response?.session_id;
+    if (!sessionId) {
+      throw new Error("PTY start returned no session id");
+    }
+
+    firmwareMonitorPtySessionIdRef.current = sessionId;
+    firmwareMonitorEnvReadyRef.current = false;
+    firmwareMonitorEnvKeyRef.current = null;
 
     return sessionId;
   }, [rootDir]);
 
   const ensureFirmwareEnv = useCallback(
-    async (sessionId: string) => {
+    async (tab: "build" | "monitor", sessionId: string) => {
       if (!rootDir) {
         return;
       }
 
       const key = `${firmwareProjectKind}:${rootDir}`;
-      if (firmwareEnvReadyRef.current && firmwareEnvKeyRef.current === key) {
+      const isBuild = tab === "build";
+      const envReadyRef = isBuild ? firmwareBuildEnvReadyRef : firmwareMonitorEnvReadyRef;
+      const envKeyRef = isBuild ? firmwareBuildEnvKeyRef : firmwareMonitorEnvKeyRef;
+
+      if (envReadyRef.current && envKeyRef.current === key) {
         return;
       }
 
@@ -1333,8 +1387,8 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         });
       }
 
-      firmwareEnvReadyRef.current = true;
-      firmwareEnvKeyRef.current = key;
+      envReadyRef.current = true;
+      envKeyRef.current = key;
     },
     [firmwareProjectKind, rootDir],
   );
@@ -1344,13 +1398,22 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   }, [ensureInitialTerminalSession]);
 
   useEffect(() => {
-    firmwareEnvReadyRef.current = false;
-    firmwareEnvKeyRef.current = null;
+    firmwareBuildEnvReadyRef.current = false;
+    firmwareBuildEnvKeyRef.current = null;
+    firmwareMonitorEnvReadyRef.current = false;
+    firmwareMonitorEnvKeyRef.current = null;
 
-    const sessionId = firmwarePtySessionIdRef.current;
-    if (!rootDir && sessionId && isTauriAvailable()) {
-      void safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
-      firmwarePtySessionIdRef.current = null;
+    if (!rootDir || !isTauriAvailable()) {
+      const buildSessionId = firmwareBuildPtySessionIdRef.current;
+      if (buildSessionId) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: buildSessionId } });
+        firmwareBuildPtySessionIdRef.current = null;
+      }
+      const monitorSessionId = firmwareMonitorPtySessionIdRef.current;
+      if (monitorSessionId) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: monitorSessionId } });
+        firmwareMonitorPtySessionIdRef.current = null;
+      }
     }
   }, [rootDir]);
 
@@ -1386,8 +1449,8 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       if (bottomPanelTab === "terminal") {
         focusActiveTerminal();
       } else if (bottomPanelTab === "firmware") {
-        ensureFirmwareTerminal();
-        fitFirmwareTerminal();
+        ensureFirmwareTerminal(firmwarePanelTab);
+        fitFirmwareTerminal(firmwarePanelTab);
       }
       const panelWidth = panel.getBoundingClientRect().width;
       const computedMax = Math.floor(panelWidth * 0.45);
@@ -1396,7 +1459,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     });
     observer.observe(panel);
     return () => observer.disconnect();
-  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, focusActiveTerminal, isTerminalVisible]);
+  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, focusActiveTerminal, firmwarePanelTab, isTerminalVisible]);
 
   useEffect(() => {
     if (!isTerminalVisible) {
@@ -1415,9 +1478,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     if (bottomPanelTab !== "firmware") {
       return;
     }
-    ensureFirmwareTerminal();
-    requestAnimationFrame(() => fitFirmwareTerminal());
-  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, isTerminalVisible]);
+    ensureFirmwareTerminal(firmwarePanelTab);
+    requestAnimationFrame(() => fitFirmwareTerminal(firmwarePanelTab));
+  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, firmwarePanelTab, isTerminalVisible]);
 
   useEffect(() => {
     const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
@@ -1432,17 +1495,31 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       const bytes = new Uint8Array(payload.data);
       const decoder = outputDecoderRef.current;
 
-      const firmwareSessionId = firmwarePtySessionIdRef.current;
-      if (firmwareSessionId && payload.session_id === firmwareSessionId) {
-        ensureFirmwareTerminal();
+      const firmwareBuildSessionId = firmwareBuildPtySessionIdRef.current;
+      if (firmwareBuildSessionId && payload.session_id === firmwareBuildSessionId) {
+        ensureFirmwareTerminal("build");
         const text = decoder.decode(bytes, { stream: true });
-        const fwTerminal = firmwareTerminalRef.current;
+        const fwTerminal = firmwareBuildTerminalRef.current;
         if (fwTerminal) {
           fwTerminal.write(text);
         } else {
-          pendingFirmwareTextRef.current.push(text);
+          pendingFirmwareBuildTextRef.current.push(text);
         }
-        setFirmwareHasOutput(true);
+        setFirmwareBuildHasOutput(true);
+        return;
+      }
+
+      const firmwareMonitorSessionId = firmwareMonitorPtySessionIdRef.current;
+      if (firmwareMonitorSessionId && payload.session_id === firmwareMonitorSessionId) {
+        ensureFirmwareTerminal("monitor");
+        const text = decoder.decode(bytes, { stream: true });
+        const fwTerminal = firmwareMonitorTerminalRef.current;
+        if (fwTerminal) {
+          fwTerminal.write(text);
+        } else {
+          pendingFirmwareMonitorTextRef.current.push(text);
+        }
+        setFirmwareMonitorHasOutput(true);
         return;
       }
 
@@ -1488,9 +1565,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       sessionsRef.current.forEach((session) => {
         void safeInvoke<void>("pty_stop", { payload: { session_id: session.id } });
       });
-      if (firmwarePtySessionIdRef.current) {
-        void safeInvoke<void>("pty_stop", { payload: { session_id: firmwarePtySessionIdRef.current } });
-        firmwarePtySessionIdRef.current = null;
+      if (firmwareBuildPtySessionIdRef.current) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: firmwareBuildPtySessionIdRef.current } });
+        firmwareBuildPtySessionIdRef.current = null;
+      }
+      if (firmwareMonitorPtySessionIdRef.current) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: firmwareMonitorPtySessionIdRef.current } });
+        firmwareMonitorPtySessionIdRef.current = null;
       }
       terminalBySessionRef.current.forEach((terminal) => terminal.dispose());
       fitAddonBySessionRef.current.forEach((addon) => addon.dispose());
@@ -1616,24 +1697,36 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   );
 
   const writeFirmwareInfo = useCallback(
-    (message: string) => {
+    (tab: "build" | "monitor", message: string) => {
       const formatted = message.endsWith("\n") || message.endsWith("\r") ? message : `${message}\r\n`;
       const line = `\u001b[90m${formatted}\u001b[0m`;
-      ensureFirmwareTerminal();
-      const terminal = firmwareTerminalRef.current;
-      if (terminal) {
-        terminal.write(line);
+
+      ensureFirmwareTerminal(tab);
+
+      if (tab === "build") {
+        const terminal = firmwareBuildTerminalRef.current;
+        if (terminal) {
+          terminal.write(line);
+        } else {
+          pendingFirmwareBuildTextRef.current.push(line);
+        }
+        setFirmwareBuildHasOutput(true);
       } else {
-        pendingFirmwareTextRef.current.push(line);
+        const terminal = firmwareMonitorTerminalRef.current;
+        if (terminal) {
+          terminal.write(line);
+        } else {
+          pendingFirmwareMonitorTextRef.current.push(line);
+        }
+        setFirmwareMonitorHasOutput(true);
       }
-      setFirmwareHasOutput(true);
     },
     [ensureFirmwareTerminal],
   );
 
   const handleFirmwareBuild = useCallback(async () => {
     if (!isTauriAvailable()) {
-      writeFirmwareInfo("Tauri not available; cannot build firmware.");
+      writeFirmwareInfo("build", "Tauri not available; cannot build firmware.");
       return;
     }
 
@@ -1641,12 +1734,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
     setIsFirmwareBusy(true);
-    setFirmwareHasOutput(false);
-    pendingFirmwareTextRef.current = [];
-    if (firmwareTerminalRef.current) {
+    setFirmwareBuildHasOutput(false);
+    pendingFirmwareBuildTextRef.current = [];
+    ensureFirmwareTerminal("build");
+    if (firmwareBuildTerminalRef.current) {
       try {
-        firmwareTerminalRef.current.reset();
-        firmwareTerminalRef.current.clear();
+        firmwareBuildTerminalRef.current.reset();
+        firmwareBuildTerminalRef.current.clear();
       } catch {
         // ignore
       }
@@ -1654,11 +1748,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
     try {
       if (firmwareProjectKind === "esp32") {
-        const sessionId = await ensureFirmwarePtySession();
+        const sessionId = await ensureFirmwareBuildPtySession();
         if (!sessionId) {
           return;
         }
-        await ensureFirmwareEnv(sessionId);
+        await ensureFirmwareEnv("build", sessionId);
         await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py build\r" } });
         setFirmwareProgressPct(null);
         setIsFirmwareBusy(false);
@@ -1676,19 +1770,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         },
         { throwOnError: true },
       );
-      writeFirmwareInfo("Build complete.");
+      writeFirmwareInfo("build", "Build complete.");
       setFirmwareProgressPct(100);
     } catch (error) {
       console.error(error);
-      writeFirmwareInfo(`Build failed: ${String(error)}`);
+      writeFirmwareInfo("build", `Build failed: ${String(error)}`);
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [ensureFirmwareEnv, ensureFirmwarePtySession, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
 
   const handleFirmwareFlash = useCallback(async () => {
     if (!isTauriAvailable()) {
-      writeFirmwareInfo("Tauri not available; cannot flash firmware.");
+      writeFirmwareInfo("build", "Tauri not available; cannot flash firmware.");
       return;
     }
 
@@ -1696,12 +1790,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
     setIsFirmwareBusy(true);
-    setFirmwareHasOutput(false);
-    pendingFirmwareTextRef.current = [];
-    if (firmwareTerminalRef.current) {
+    setFirmwareBuildHasOutput(false);
+    pendingFirmwareBuildTextRef.current = [];
+    ensureFirmwareTerminal("build");
+    if (firmwareBuildTerminalRef.current) {
       try {
-        firmwareTerminalRef.current.reset();
-        firmwareTerminalRef.current.clear();
+        firmwareBuildTerminalRef.current.reset();
+        firmwareBuildTerminalRef.current.clear();
       } catch {
         // ignore
       }
@@ -1709,11 +1804,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
     try {
       if (firmwareProjectKind === "esp32") {
-        const sessionId = await ensureFirmwarePtySession();
+        const sessionId = await ensureFirmwareBuildPtySession();
         if (!sessionId) {
           return;
         }
-        await ensureFirmwareEnv(sessionId);
+        await ensureFirmwareEnv("build", sessionId);
         await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py flash\r" } });
         setFirmwareProgressPct(null);
         setIsFirmwareBusy(false);
@@ -1731,23 +1826,23 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         },
         { throwOnError: true },
       );
-      writeFirmwareInfo("Flash complete.");
+      writeFirmwareInfo("build", "Flash complete.");
       setFirmwareProgressPct(100);
     } catch (error) {
       console.error(error);
-      writeFirmwareInfo(`Flash failed: ${String(error)}`);
+      writeFirmwareInfo("build", `Flash failed: ${String(error)}`);
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [ensureFirmwareEnv, ensureFirmwarePtySession, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
 
   const handleFirmwareMonitor = useCallback(async () => {
     if (!isTauriAvailable()) {
-      writeFirmwareInfo("Tauri not available; cannot monitor firmware.");
+      writeFirmwareInfo("monitor", "Tauri not available; cannot monitor firmware.");
       return;
     }
     if (!rootDir) {
-      writeFirmwareInfo("No folder open; cannot monitor firmware.");
+      writeFirmwareInfo("monitor", "No folder open; cannot monitor firmware.");
       return;
     }
 
@@ -1755,19 +1850,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setBottomPanelTab("firmware");
 
     try {
-      const sessionId = await ensureFirmwarePtySession();
+      const sessionId = await ensureFirmwareMonitorPtySession();
       if (!sessionId) {
         return;
       }
-      await ensureFirmwareEnv(sessionId);
+      await ensureFirmwareEnv("monitor", sessionId);
 
       const command = firmwareProjectKind === "esp32" ? "idf.py monitor" : "emwaver monitor";
       await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: `${command}\r` } });
     } catch (error) {
       console.error(error);
-      writeFirmwareInfo(`Monitor failed: ${String(error)}`);
+      writeFirmwareInfo("monitor", `Monitor failed: ${String(error)}`);
     }
-  }, [ensureFirmwareEnv, ensureFirmwarePtySession, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [ensureFirmwareEnv, ensureFirmwareMonitorPtySession, firmwareProjectKind, rootDir, writeFirmwareInfo]);
 
 
 		  useEffect(() => {
@@ -2923,13 +3018,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const sessionId = firmwarePtySessionIdRef.current;
+                                      const sessionId = firmwareMonitorPtySessionIdRef.current;
                                       if (!sessionId || !isTauriAvailable()) {
                                         return;
                                       }
                                       void safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "\u0003" } });
                                     }}
-                                    disabled={!firmwarePtySessionIdRef.current}
+                                    disabled={!firmwareMonitorPtySessionIdRef.current}
                                     className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
                                     title="Send Ctrl+C"
                                   >
@@ -2942,17 +3037,32 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 type="button"
                                 onClick={() => {
                                   setFirmwareProgressPct(null);
-                                  setFirmwareHasOutput(false);
-                                  const terminal = firmwareTerminalRef.current;
-                                  if (terminal) {
-                                    try {
-                                      terminal.reset();
-                                      terminal.clear();
-                                    } catch {
-                                      // ignore
+                                  if (firmwarePanelTab === "build") {
+                                    setFirmwareBuildHasOutput(false);
+                                    const terminal = firmwareBuildTerminalRef.current;
+                                    if (terminal) {
+                                      try {
+                                        terminal.reset();
+                                        terminal.clear();
+                                      } catch {
+                                        // ignore
+                                      }
+                                    } else {
+                                      pendingFirmwareBuildTextRef.current = [];
                                     }
                                   } else {
-                                    pendingFirmwareTextRef.current = [];
+                                    setFirmwareMonitorHasOutput(false);
+                                    const terminal = firmwareMonitorTerminalRef.current;
+                                    if (terminal) {
+                                      try {
+                                        terminal.reset();
+                                        terminal.clear();
+                                      } catch {
+                                        // ignore
+                                      }
+                                    } else {
+                                      pendingFirmwareMonitorTextRef.current = [];
+                                    }
                                   }
                                 }}
                                 className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
@@ -3005,12 +3115,25 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 	                            </div>
 
                             <div className={`relative min-h-0 flex-1 ${bottomPanelTab === "firmware" ? "" : "hidden"}`}>
-                              {!firmwareHasOutput ? (
+                              {firmwarePanelTab === "build" && !firmwareBuildHasOutput ? (
                                 <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">
                                   No firmware activity yet.
                                 </div>
                               ) : null}
-                              <div ref={firmwareTerminalContainerRef} className="absolute inset-0 px-2 py-2" />
+                              {firmwarePanelTab === "monitor" && !firmwareMonitorHasOutput ? (
+                                <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">
+                                  No firmware activity yet.
+                                </div>
+                              ) : null}
+
+                              <div
+                                ref={firmwareBuildTerminalContainerRef}
+                                className={`absolute inset-0 px-2 py-2 ${firmwarePanelTab === "build" ? "" : "hidden"}`}
+                              />
+                              <div
+                                ref={firmwareMonitorTerminalContainerRef}
+                                className={`absolute inset-0 px-2 py-2 ${firmwarePanelTab === "monitor" ? "" : "hidden"}`}
+                              />
                             </div>
 	                        </div>
 	
@@ -3114,7 +3237,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
 	                                  <button
 	                                    type="button"
-	                                    onClick={() => setFirmwarePanelTab("build")}
+	                                    onClick={() => {
+	                                      setFirmwarePanelTab("build");
+	                                      void (async () => {
+	                                        try {
+	                                          const sessionId = await ensureFirmwareBuildPtySession();
+	                                          if (sessionId) {
+	                                            await ensureFirmwareEnv("build", sessionId);
+	                                          }
+	                                        } catch {
+	                                          // ignore
+	                                        }
+	                                      })();
+	                                    }}
 	                                    className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
 	                                      firmwarePanelTab === "build"
 	                                        ? "bg-slate-900/70 text-sky-200"
@@ -3127,7 +3262,19 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
 	                                  <button
 	                                    type="button"
-	                                    onClick={() => setFirmwarePanelTab("monitor")}
+	                                    onClick={() => {
+	                                      setFirmwarePanelTab("monitor");
+	                                      void (async () => {
+	                                        try {
+	                                          const sessionId = await ensureFirmwareMonitorPtySession();
+	                                          if (sessionId) {
+	                                            await ensureFirmwareEnv("monitor", sessionId);
+	                                          }
+	                                        } catch {
+	                                          // ignore
+	                                        }
+	                                      })();
+	                                    }}
 	                                    className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
 	                                      firmwarePanelTab === "monitor"
 	                                        ? "bg-slate-900/70 text-emerald-200"
