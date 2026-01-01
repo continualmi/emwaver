@@ -94,7 +94,7 @@ Retransmit examples:
 
 Firmware implementations:
 
-- ESP32 BLE “transmitter mode” uses a circular buffer: [`esp/main/ble_server.c`](https://github.com/luispl77/emwaver/blob/main/esp/main/ble_server.c)
+- ESP32 BLE “transmitter mode” uses a circular buffer: [`esp/main/libraries/ble_server.c`](https://github.com/luispl77/emwaver/blob/main/esp/main/libraries/ble_server.c)
 - STM32 retransmit switches the CDC RX buffer into circular mode: [`stm/emwaver-ir-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/Core/Src/main.c)
 - STM32 CDC buffer types (`PACKET`/`CIRCULAR`/`DOUBLE`): [`stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.h`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.h)
 - STM32 CDC circular buffer implementation: [`stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.c)

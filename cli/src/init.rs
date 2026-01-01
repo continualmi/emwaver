@@ -76,47 +76,47 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     write_template_file("setup.sh", destination)?;
     write_template_file("main/idf_component.yml", destination)?;
 
-    write_template_file("main/ble_server.c", destination)?;
-    write_template_file("main/ble_server.h", destination)?;
-    write_template_file("main/command_registry.c", destination)?;
-    write_template_file("main/command_registry.h", destination)?;
-    write_template_file("main/init.h", destination)?;
+    write_template_file("main/libraries/ble_server.c", destination)?;
+    write_template_file("main/libraries/ble_server.h", destination)?;
+    write_template_file("main/libraries/command_registry.c", destination)?;
+    write_template_file("main/libraries/command_registry.h", destination)?;
+    write_template_file("main/main.h", destination)?;
     if components.contains(&Component::Ota) {
-        write_template_file("main/ota_ble.c", destination)?;
-        write_template_file("main/ota_ble.h", destination)?;
-        write_template_file("main/ota_ble_gatt.c", destination)?;
-        write_template_file("main/ota_ble_gatt.h", destination)?;
-        write_template_file("main/ota_core.c", destination)?;
-        write_template_file("main/ota_core.h", destination)?;
-        write_template_file("main/ota_status.c", destination)?;
-        write_template_file("main/ota_status.h", destination)?;
-        write_template_file("main/ota_wifi.c", destination)?;
-        write_template_file("main/ota_wifi.h", destination)?;
+        write_template_file("main/libraries/ota_ble.c", destination)?;
+        write_template_file("main/libraries/ota_ble.h", destination)?;
+        write_template_file("main/libraries/ota_ble_gatt.c", destination)?;
+        write_template_file("main/libraries/ota_ble_gatt.h", destination)?;
+        write_template_file("main/libraries/ota_core.c", destination)?;
+        write_template_file("main/libraries/ota_core.h", destination)?;
+        write_template_file("main/libraries/ota_status.c", destination)?;
+        write_template_file("main/libraries/ota_status.h", destination)?;
+        write_template_file("main/libraries/ota_wifi.c", destination)?;
+        write_template_file("main/libraries/ota_wifi.h", destination)?;
     }
 
     if components.contains(&Component::Gpio) {
-        write_template_file("main/gpio_commands.c", destination)?;
-        write_template_file("main/gpio_commands.h", destination)?;
+        write_template_file("main/libraries/gpio_commands.c", destination)?;
+        write_template_file("main/libraries/gpio_commands.h", destination)?;
     }
     if components.contains(&Component::Sampler) {
-        write_template_file("main/sampler.c", destination)?;
-        write_template_file("main/sampler.h", destination)?;
+        write_template_file("main/libraries/sampler.c", destination)?;
+        write_template_file("main/libraries/sampler.h", destination)?;
     }
     if components.contains(&Component::Cc1101) {
-        write_template_file("main/spi.c", destination)?;
-        write_template_file("main/spi.h", destination)?;
-        write_template_file("main/cc1101.c", destination)?;
-        write_template_file("main/cc1101.h", destination)?;
+        write_template_file("main/libraries/spi.c", destination)?;
+        write_template_file("main/libraries/spi.h", destination)?;
+        write_template_file("main/libraries/cc1101.c", destination)?;
+        write_template_file("main/libraries/cc1101.h", destination)?;
     }
     if components.contains(&Component::Rfm69) {
-        write_template_file("main/spi.c", destination)?;
-        write_template_file("main/spi.h", destination)?;
-        write_template_file("main/rfm69.c", destination)?;
-        write_template_file("main/rfm69.h", destination)?;
+        write_template_file("main/libraries/spi.c", destination)?;
+        write_template_file("main/libraries/spi.h", destination)?;
+        write_template_file("main/libraries/rfm69.c", destination)?;
+        write_template_file("main/libraries/rfm69.h", destination)?;
     }
     if components.contains(&Component::Mfrc522) {
-        write_template_file("main/spi.c", destination)?;
-        write_template_file("main/spi.h", destination)?;
+        write_template_file("main/libraries/spi.c", destination)?;
+        write_template_file("main/libraries/spi.h", destination)?;
         write_template_file("main/libraries/mfrc522.c", destination)?;
         write_template_file("main/libraries/mfrc522.h", destination)?;
     }
@@ -389,7 +389,7 @@ fn replace_between_markers(haystack: &str, start: &str, end: &str, replacement: 
 }
 
 fn write_generated_main(destination: &Path) -> Result<()> {
-    let contents = r#"#include "init.h"
+    let contents = r#"#include "main.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -407,7 +407,7 @@ void app_main(void)
 
 fn write_generated_init(destination: &Path, components: &HashSet<Component>) -> Result<()> {
     let mut includes = vec![
-        "#include \"init.h\"",
+        "#include \"main.h\"",
         "",
         "#include <string.h>",
         "",
@@ -577,7 +577,7 @@ fn write_generated_init(destination: &Path, components: &HashSet<Component>) -> 
     lines.push("".to_string());
 
     let contents = lines.join("\n");
-    write_generated_file(destination, "main/init.c", &contents)
+    write_generated_file(destination, "main/libraries/init.c", &contents)
 }
 
 fn write_generated_component_cmake(
@@ -587,28 +587,28 @@ fn write_generated_component_cmake(
     let ota_enabled = components.contains(&Component::Ota);
     let mut sources = vec![
         "main.c",
-        "init.c",
-        "ble_server.c",
-        "command_registry.c",
+        "libraries/init.c",
+        "libraries/ble_server.c",
+        "libraries/command_registry.c",
     ];
     if ota_enabled {
-        sources.push("ota_ble.c");
-        sources.push("ota_ble_gatt.c");
-        sources.push("ota_core.c");
-        sources.push("ota_status.c");
-        sources.push("ota_wifi.c");
+        sources.push("libraries/ota_ble.c");
+        sources.push("libraries/ota_ble_gatt.c");
+        sources.push("libraries/ota_core.c");
+        sources.push("libraries/ota_status.c");
+        sources.push("libraries/ota_wifi.c");
     }
     if components.contains(&Component::Gpio) {
-        sources.push("gpio_commands.c");
+        sources.push("libraries/gpio_commands.c");
     }
     if components.contains(&Component::Sampler) {
-        sources.push("sampler.c");
+        sources.push("libraries/sampler.c");
     }
     if components.contains(&Component::Cc1101) {
-        sources.push("cc1101.c");
+        sources.push("libraries/cc1101.c");
     }
     if components.contains(&Component::Rfm69) {
-        sources.push("rfm69.c");
+        sources.push("libraries/rfm69.c");
     }
     if components.contains(&Component::Mfrc522) {
         sources.push("libraries/mfrc522.c");
@@ -621,7 +621,7 @@ fn write_generated_component_cmake(
         cmake.push_str(src);
         cmake.push('"');
     }
-    cmake.push_str(" INCLUDE_DIRS \".\")\n");
+    cmake.push_str(" INCLUDE_DIRS \".\" \"libraries\")\n");
     cmake.push_str(&format!(
         "target_compile_definitions(${{COMPONENT_LIB}} PRIVATE EMWAVER_ENABLE_OTA={})\n",
         if ota_enabled { 1 } else { 0 }

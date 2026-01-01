@@ -16,9 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef INIT_H
-#define INIT_H
+#ifndef MAIN_H
+#define MAIN_H
 
 void emwaver_init(void);
 
-#endif /* INIT_H */
+#endif /* MAIN_H */
