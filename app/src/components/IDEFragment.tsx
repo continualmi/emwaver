@@ -10,7 +10,7 @@ import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
 
 type ThemeMode = "dark" | "light";
 
-type BottomPanelTab = "terminal" | "output" | "firmware";
+type BottomPanelTab = "terminal" | "firmware";
 
 type FirmwareProgressPayload = {
   message: string;
@@ -527,9 +527,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [isTerminalPickerOpen, setIsTerminalPickerOpen] = useState(false);
   const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
 
-  const [outputLines, setOutputLines] = useState<string[]>([]);
-  const outputScrollRef = useRef<HTMLDivElement | null>(null);
-
   const [firmwareLines, setFirmwareLines] = useState<string[]>([]);
   const firmwareScrollRef = useRef<HTMLDivElement | null>(null);
   const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
@@ -717,17 +714,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   }, [isTerminalVisible]);
 
   useEffect(() => {
-    if (bottomPanelTab !== "output") {
-      return;
-    }
-    const node = outputScrollRef.current;
-    if (!node) {
-      return;
-    }
-    node.scrollTop = node.scrollHeight;
-  }, [bottomPanelTab, outputLines.length]);
-
-  useEffect(() => {
     if (bottomPanelTab !== "firmware") {
       return;
     }
@@ -756,59 +742,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
     return () => {
       void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, []);
-
-  useEffect(() => {
-    const MAX_LINES = 2000;
-    const pushLine = (line: string) => {
-      setOutputLines((prev) => {
-        const next = [...prev, line];
-        if (next.length <= MAX_LINES) {
-          return next;
-        }
-        return next.slice(next.length - MAX_LINES);
-      });
-    };
-
-    const original = {
-      log: console.log,
-      info: console.info,
-      warn: console.warn,
-      error: console.error,
-    };
-
-    const wrap =
-      (level: "log" | "info" | "warn" | "error") =>
-      (...args: unknown[]) => {
-        original[level](...args);
-        const label = timestampLabel(new Date());
-        pushLine(`[${label}] ${level.toUpperCase()} ${formatConsoleArgs(args)}`);
-      };
-
-    console.log = wrap("log");
-    console.info = wrap("info");
-    console.warn = wrap("warn");
-    console.error = wrap("error");
-
-    const onWindowError = (event: ErrorEvent) => {
-      const label = timestampLabel(new Date());
-      pushLine(`[${label}] ERROR ${event.message}`);
-    };
-    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const label = timestampLabel(new Date());
-      pushLine(`[${label}] ERROR Unhandled rejection: ${formatConsoleArgs([event.reason])}`);
-    };
-    window.addEventListener("error", onWindowError);
-    window.addEventListener("unhandledrejection", onUnhandledRejection);
-
-    return () => {
-      console.log = original.log;
-      console.info = original.info;
-      console.warn = original.warn;
-      console.error = original.error;
-      window.removeEventListener("error", onWindowError);
-      window.removeEventListener("unhandledrejection", onUnhandledRejection);
     };
   }, []);
 
@@ -1170,6 +1103,16 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     observer.observe(panel);
     return () => observer.disconnect();
   }, [focusActiveTerminal, isTerminalVisible]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (bottomPanelTab !== "terminal") {
+      return;
+    }
+    requestAnimationFrame(() => focusActiveTerminal());
+  }, [bottomPanelTab, focusActiveTerminal, isTerminalVisible]);
 
   useEffect(() => {
     const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
@@ -2398,17 +2341,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setBottomPanelTab("output")}
-                            className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                              bottomPanelTab === "output"
-                                ? "border-b-2 border-sky-400 text-slate-100"
-                                : "text-slate-400 hover:text-slate-200"
-                            }`}
-                          >
-                            OUTPUT
-                          </button>
-                          <button
-                            type="button"
                             onClick={() => setBottomPanelTab("firmware")}
                             className={`select-none px-3 py-2 font-semibold tracking-wide ${
                               bottomPanelTab === "firmware"
@@ -2488,15 +2420,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 <TrashIcon />
                               </button>
                             </>
-                          ) : bottomPanelTab === "output" ? (
-                            <button
-                              type="button"
-                              onClick={() => setOutputLines([])}
-                              className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                              title="Clear output"
-                            >
-                              Clear
-                            </button>
                           ) : (
                             <button
                               type="button"
@@ -2521,48 +2444,39 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 
 	                      <div className="flex min-h-0 flex-1">
 	                        <div className="flex min-w-0 flex-1 flex-col">
-		                          {bottomPanelTab === "terminal" ? (
-		                            <div className="relative min-h-0 flex-1 overflow-hidden">
+		                          <div
+                                className={`relative min-h-0 flex-1 overflow-hidden ${bottomPanelTab === "terminal" ? "" : "hidden"}`}
+                              >
 	                              {terminalSessions.map((session) => (
 	                                <div
 	                                  key={session.id}
 	                                  ref={(node) => {
-                                    if (!node) {
-                                      terminalContainerBySessionRef.current.delete(session.id);
-                                      return;
-                                    }
-                                    terminalContainerBySessionRef.current.set(session.id, node);
-                                    if (isTerminalVisible) {
-                                      ensureSessionTerminal(session.id);
-                                    }
-                                  }}
-                                  className={`absolute inset-0 select-text px-2 py-2 ${
-                                    session.id === activeTerminalSessionId ? "block" : "hidden"
-                                  }`}
-                                />
-                              ))}
-                              {terminalSessions.length === 0 ? (
-                                <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
-                              ) : null}
-                            </div>
-                          ) : bottomPanelTab === "output" ? (
-                            <div
-                              ref={outputScrollRef}
-                              className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30"
-                            >
-                              {outputLines.length === 0 ? (
-                                <div className="text-slate-500">No output yet.</div>
-                              ) : (
-                                <pre className="whitespace-pre-wrap">
-                                  {outputLines.join("\n")}
-                                  {"\n"}
-                                </pre>
-                              )}
-                            </div>
-                          ) : (
+	                                    if (!node) {
+	                                      terminalContainerBySessionRef.current.delete(session.id);
+	                                      return;
+	                                    }
+	                                    terminalContainerBySessionRef.current.set(session.id, node);
+	                                    if (isTerminalVisible) {
+	                                      ensureSessionTerminal(session.id);
+	                                    }
+	                                  }}
+	                                  className={`absolute inset-0 select-text px-2 py-2 ${
+	                                    session.id === activeTerminalSessionId ? "block" : "hidden"
+	                                  }`}
+	                                />
+	                              ))}
+	                              {terminalSessions.length === 0 ? (
+	                                <div className="flex h-full items-center justify-center text-sm text-slate-500">
+	                                  Starting shell…
+	                                </div>
+	                              ) : null}
+	                            </div>
+
                             <div
                               ref={firmwareScrollRef}
-                              className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30"
+                              className={`min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30 ${
+                                bottomPanelTab === "firmware" ? "" : "hidden"
+                              }`}
                             >
                               {firmwareLines.length === 0 ? (
                                 <div className="text-slate-500">No firmware activity yet.</div>
@@ -2573,7 +2487,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 </pre>
                               )}
                             </div>
-	                          )}
 	                        </div>
 	
 	                        {isTerminalListCollapsed ? (
@@ -2671,10 +2584,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 	                              ) : (
 	                                <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
 	                                  <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">
-	                                    {bottomPanelTab === "output" ? "OUTPUT" : "FIRMWARE"}
+	                                    FIRMWARE
 	                                  </div>
 	                                  <div className="rounded bg-slate-900/60 px-2 py-1 text-sky-200">
-	                                    {bottomPanelTab === "output" ? "IDE" : "Build/Flash"}
+	                                    Build/Flash
 	                                  </div>
 	                                </div>
 	                              )}
