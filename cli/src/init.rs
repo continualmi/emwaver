@@ -84,6 +84,8 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     if components.contains(&Component::Ota) {
         write_template_file("main/ota_ble.c", destination)?;
         write_template_file("main/ota_ble.h", destination)?;
+        write_template_file("main/ota_ble_gatt.c", destination)?;
+        write_template_file("main/ota_ble_gatt.h", destination)?;
         write_template_file("main/ota_core.c", destination)?;
         write_template_file("main/ota_core.h", destination)?;
         write_template_file("main/ota_status.c", destination)?;
@@ -591,6 +593,7 @@ fn write_generated_component_cmake(
     ];
     if ota_enabled {
         sources.push("ota_ble.c");
+        sources.push("ota_ble_gatt.c");
         sources.push("ota_core.c");
         sources.push("ota_status.c");
         sources.push("ota_wifi.c");
