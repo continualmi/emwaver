@@ -3,7 +3,7 @@
 **/Release/
 
 # STM32CubeMX-generated vendor middleware (ST SLA0044; regenerate via .ioc)
-emwaver-ir-firmware/Middlewares/ST/STM32_USB_Device_Library/
+emwaver-*-firmware/Middlewares/ST/STM32_USB_Device_Library/
 
 # Eclipse / CubeIDE metadata
 **/.settings/
