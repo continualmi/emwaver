@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DiffEditor, Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
+import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { FitAddon } from "@xterm/addon-fit";
@@ -12,143 +12,84 @@ import { useDevice } from "../../utils/DeviceContext";
 import { WaveletEngine, type WaveletTree } from "../../utils/WaveletEngine";
 import { readIdeTabState, writeIdeTabState } from "../ideTabState";
 import { readWaveletsTabState, writeWaveletsTabState } from "../waveletsTabState";
-import WaveletUIRenderer from "../wavelets/WaveletUIRenderer";
-
-type ThemeMode = "dark" | "light";
-
-export type WorkspaceVariant = "ide" | "wavelets";
-
-type BottomPanelTab = "terminal" | "firmware";
-
-type FirmwareProgressPayload = {
-  message: string;
-  stream?: "info" | "stdout" | "stderr" | string;
-  timestamp_ms?: number;
-};
-
-type TerminalSession = {
-  id: string;
-  title: string;
-  createdAt: number;
-};
-
-type DirectoryChildEntry = {
-  name: string;
-  path: string;
-  kind: "file" | "directory";
-};
-
-type FirmwareProjectKind = "esp32" | "stm32" | "unknown";
-
-type OpenFile = {
-  path: string;
-  name: string;
-  content: string;
-  language: string;
-  isDirty: boolean;
-  diskMtimeMs?: number;
-};
-
-type GitStatusEntry = {
-  path: string;
-  orig_path?: string | null;
-  index_status: string;
-  worktree_status: string;
-  is_untracked: boolean;
-  is_ignored: boolean;
-};
-
-type GitRepoStatus = {
-  repo_root: string;
-  branch?: string | null;
-  upstream?: string | null;
-  ahead: number;
-  behind: number;
-  staged: GitStatusEntry[];
-  changes: GitStatusEntry[];
-  timestamp_ms: number;
-};
-
-type GitDiffContents = {
-  original: string;
-  modified: string;
-  is_binary: boolean;
-};
-
-type NewProjectPayload = {
-  name: string;
-  location: string;
-  target: "esp32s3" | "stm32f042";
-  components: Array<"ble" | "command_registry" | "ota" | "gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
-  stm32_firmware?: "gpio" | "ir" | "ism" | "rfid" | null;
-};
-
-type CreateProjectResponse = {
-  path: string;
-};
+import { useWorkspaceGit } from "./hooks/useWorkspaceGit";
+import ExplorerTree from "./sidebar/ExplorerTree";
+import GitSidebarPanel from "./sidebar/GitSidebarPanel";
+import WorkspaceTopBar from "./top/WorkspaceTopBar";
+import GitDiffPanel from "./main/GitDiffPanel";
+import WaveletPreviewPanel from "./main/WaveletPreviewPanel";
+import {
+  ArrowUpIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  FolderIcon,
+  GitIcon,
+  HammerIcon,
+  MinusIcon,
+  MonitorIcon,
+  PanelLeftIcon,
+  PlayIcon,
+  PlusIcon,
+  RefreshIcon,
+  TerminalIcon,
+  TrashIcon,
+  UploadIcon,
+} from "./WorkspaceIcons";
+import type {
+  BottomPanelTab,
+  CreateProjectResponse,
+  DirectoryChildEntry,
+  FirmwareProgressPayload,
+  FirmwareProjectKind,
+  GitDiffContents,
+  GitRepoStatus,
+  NewProjectPayload,
+  OpenFile,
+  TerminalSession,
+  ThemeMode,
+  WorkspaceVariant,
+} from "./workspaceTypes";
+import {
+  DEFAULT_TERMINAL_HEIGHT,
+  DEFAULT_TERMINAL_LIST_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+  SIDEBAR_COLLAPSE_THRESHOLD,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  TERMINAL_LIST_COLLAPSE_THRESHOLD,
+  TERMINAL_LIST_MAX_WIDTH,
+  TERMINAL_LIST_MIN_WIDTH,
+  TERMINAL_MAX_HEIGHT,
+  TERMINAL_MIN_HEIGHT,
+  TERMINAL_VIEW_MIN_WIDTH,
+  clamp,
+  storageKeys,
+  readStoredRoot,
+  readStoredSidebarCollapsed,
+  readStoredSidebarWidth,
+  readStoredTerminalHeight,
+  readStoredTerminalListCollapsed,
+  readStoredTerminalListWidth,
+} from "./workspaceStorage";
+import {
+  WAVELET_ASSET_SCRIPTS,
+  WAVELET_BOOTSTRAP_FILENAME,
+  basename,
+  defaultIgnoredName,
+  detectFirmwareProjectKind,
+  formatConsoleArgs,
+  iconLabelForPath,
+  isWaveletScriptPath,
+  languageForPath,
+  nextTerminalTitle,
+  readWaveletAssetScript,
+  timestampLabel,
+} from "./workspaceUtils";
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
 
 const FILE_AUTO_RELOAD_INTERVAL_MS = 2000;
-
-const WAVELET_ASSET_ROOT = "/wavelet-assets";
-const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.js";
-const WAVELET_ASSET_SCRIPTS = ["cc1101.js", "rfm69.js", "usb.js", "wavelet_demo.js", "gpio.js", "ir_send_saved_signal.js"];
-
-type WorkspaceStorageKeys = {
-  root: string;
-  sidebarWidth: string;
-  sidebarCollapsed: string;
-  terminalHeight: string;
-  terminalListWidth: string;
-  terminalListCollapsed: string;
-  legacy?: Partial<WorkspaceStorageKeys>;
-};
-
-function storageKeys(variant: WorkspaceVariant): WorkspaceStorageKeys {
-  if (variant === "wavelets") {
-    return {
-      root: "emwaver.waveletsWorkspace.root",
-      sidebarWidth: "emwaver.waveletsWorkspace.sidebarWidth",
-      sidebarCollapsed: "emwaver.waveletsWorkspace.sidebarCollapsed",
-      terminalHeight: "emwaver.waveletsWorkspace.terminalHeight",
-      terminalListWidth: "emwaver.waveletsWorkspace.terminalListWidth",
-      terminalListCollapsed: "emwaver.waveletsWorkspace.terminalListCollapsed",
-    };
-  }
-
-  return {
-    root: "emwaver.ide.root",
-    sidebarWidth: "emwaver.ide.sidebarWidth",
-    sidebarCollapsed: "emwaver.ide.sidebarCollapsed",
-    terminalHeight: "emwaver.ide.terminalHeight",
-    terminalListWidth: "emwaver.ide.terminalListWidth",
-    terminalListCollapsed: "emwaver.ide.terminalListCollapsed",
-    legacy: {
-      root: "emwaver.devtools.root",
-      sidebarWidth: "emwaver.devtools.sidebarWidth",
-      sidebarCollapsed: "emwaver.devtools.sidebarCollapsed",
-      terminalHeight: "emwaver.devtools.terminalHeight",
-      terminalListWidth: "emwaver.devtools.terminalListWidth",
-      terminalListCollapsed: "emwaver.devtools.terminalListCollapsed",
-    },
-  };
-}
-
-const DEFAULT_SIDEBAR_WIDTH = 320;
-const SIDEBAR_MIN_WIDTH = 140;
-const SIDEBAR_MAX_WIDTH = 1400;
-const SIDEBAR_COLLAPSE_THRESHOLD = 90;
-
-const DEFAULT_TERMINAL_HEIGHT = 260;
-const TERMINAL_MIN_HEIGHT = 180;
-const TERMINAL_MAX_HEIGHT = 560;
-
-const DEFAULT_TERMINAL_LIST_WIDTH = 224;
-const TERMINAL_LIST_MIN_WIDTH = 140;
-const TERMINAL_LIST_MAX_WIDTH = 720;
-const TERMINAL_LIST_COLLAPSE_THRESHOLD = 90;
-const TERMINAL_VIEW_MIN_WIDTH = 320;
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   fontFamily: '"Fira Code", "Courier New", monospace',
@@ -165,420 +106,6 @@ const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
     horizontal: "auto",
   },
 };
-
-function readStoredRoot(keys: WorkspaceStorageKeys): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const stored = window.localStorage.getItem(keys.root);
-  if (stored) {
-    return stored;
-  }
-  const legacyKey = keys.legacy?.root;
-  if (!legacyKey) {
-    return null;
-  }
-  const legacy = window.localStorage.getItem(legacyKey);
-  if (!legacy) {
-    return null;
-  }
-  window.localStorage.setItem(keys.root, legacy);
-  window.localStorage.removeItem(legacyKey);
-  return legacy;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function readStoredSidebarWidth(keys: WorkspaceStorageKeys): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_SIDEBAR_WIDTH;
-  }
-  const stored = window.localStorage.getItem(keys.sidebarWidth);
-  const selected = stored ?? (keys.legacy?.sidebarWidth ? window.localStorage.getItem(keys.legacy.sidebarWidth) : null);
-  if (!selected) {
-    return DEFAULT_SIDEBAR_WIDTH;
-  }
-  if (!stored) {
-    window.localStorage.setItem(keys.sidebarWidth, selected);
-    if (keys.legacy?.sidebarWidth) {
-      window.localStorage.removeItem(keys.legacy.sidebarWidth);
-    }
-  }
-  const parsed = Number.parseFloat(selected);
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_SIDEBAR_WIDTH;
-  }
-  return clamp(parsed, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
-}
-
-function readStoredSidebarCollapsed(keys: WorkspaceStorageKeys): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const stored = window.localStorage.getItem(keys.sidebarCollapsed);
-  const selected =
-    stored ?? (keys.legacy?.sidebarCollapsed ? window.localStorage.getItem(keys.legacy.sidebarCollapsed) : null);
-  if (!selected) {
-    return false;
-  }
-  if (!stored) {
-    window.localStorage.setItem(keys.sidebarCollapsed, selected);
-    if (keys.legacy?.sidebarCollapsed) {
-      window.localStorage.removeItem(keys.legacy.sidebarCollapsed);
-    }
-  }
-  return selected === "true";
-}
-
-function readStoredTerminalHeight(keys: WorkspaceStorageKeys): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_TERMINAL_HEIGHT;
-  }
-  const stored = window.localStorage.getItem(keys.terminalHeight);
-  const selected = stored ?? (keys.legacy?.terminalHeight ? window.localStorage.getItem(keys.legacy.terminalHeight) : null);
-  if (!selected) {
-    return DEFAULT_TERMINAL_HEIGHT;
-  }
-  if (!stored) {
-    window.localStorage.setItem(keys.terminalHeight, selected);
-    if (keys.legacy?.terminalHeight) {
-      window.localStorage.removeItem(keys.legacy.terminalHeight);
-    }
-  }
-  const parsed = Number.parseFloat(selected);
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_TERMINAL_HEIGHT;
-  }
-  return clamp(parsed, TERMINAL_MIN_HEIGHT, TERMINAL_MAX_HEIGHT);
-}
-
-function readStoredTerminalListWidth(keys: WorkspaceStorageKeys): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_TERMINAL_LIST_WIDTH;
-  }
-  const stored = window.localStorage.getItem(keys.terminalListWidth);
-  const selected =
-    stored ?? (keys.legacy?.terminalListWidth ? window.localStorage.getItem(keys.legacy.terminalListWidth) : null);
-  if (!selected) {
-    return DEFAULT_TERMINAL_LIST_WIDTH;
-  }
-  if (!stored) {
-    window.localStorage.setItem(keys.terminalListWidth, selected);
-    if (keys.legacy?.terminalListWidth) {
-      window.localStorage.removeItem(keys.legacy.terminalListWidth);
-    }
-  }
-  const parsed = Number.parseFloat(selected);
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_TERMINAL_LIST_WIDTH;
-  }
-  return clamp(parsed, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH);
-}
-
-function readStoredTerminalListCollapsed(keys: WorkspaceStorageKeys): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const stored = window.localStorage.getItem(keys.terminalListCollapsed);
-  const selected =
-    stored ?? (keys.legacy?.terminalListCollapsed ? window.localStorage.getItem(keys.legacy.terminalListCollapsed) : null);
-  if (!selected) {
-    return false;
-  }
-  if (!stored) {
-    window.localStorage.setItem(keys.terminalListCollapsed, selected);
-    if (keys.legacy?.terminalListCollapsed) {
-      window.localStorage.removeItem(keys.legacy.terminalListCollapsed);
-    }
-  }
-  return selected === "true";
-}
-
-function basename(path: string): string {
-  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  const idx = normalized.lastIndexOf("/");
-  return idx >= 0 ? normalized.slice(idx + 1) : normalized;
-}
-
-function extension(path: string): string {
-  const name = basename(path);
-  const idx = name.lastIndexOf(".");
-  return idx >= 0 ? name.slice(idx + 1).toLowerCase() : "";
-}
-
-function languageForPath(path: string): string {
-  const ext = extension(path);
-  if (ext === "ts" || ext === "tsx") return "typescript";
-  if (ext === "js" || ext === "jsx") return "javascript";
-  if (ext === "json") return "json";
-  if (ext === "md") return "markdown";
-  if (ext === "rs") return "rust";
-  if (ext === "c" || ext === "h") return "c";
-  if (ext === "cpp" || ext === "hpp" || ext === "cc") return "cpp";
-  if (ext === "py") return "python";
-  if (ext === "toml") return "toml";
-  if (ext === "yml" || ext === "yaml") return "yaml";
-  if (ext === "sh") return "shell";
-  return "plaintext";
-}
-
-function isWaveletScriptPath(path: string): boolean {
-  const ext = extension(path);
-  return ext === "js" || ext === "jsx" || ext === "ts" || ext === "tsx";
-}
-
-function defaultIgnoredName(name: string): boolean {
-  return (
-    name === ".git" ||
-    name === "node_modules" ||
-    name === "dist" ||
-    name === "build" ||
-    name === "target" ||
-    name === ".next" ||
-    name === ".emwaver"
-  );
-}
-
-async function readWaveletAssetScript(filename: string): Promise<string> {
-  try {
-    const response = await fetch(`${WAVELET_ASSET_ROOT}/${filename}`);
-    if (!response.ok) {
-      return "";
-    }
-    return await response.text();
-  } catch {
-    return "";
-  }
-}
-
-function nextTerminalTitle(existing: TerminalSession[], baseTitle: string): string {
-  const taken = existing
-    .map((session) => session.title)
-    .filter((title) => title === baseTitle || title.startsWith(`${baseTitle} `)).length;
-  return taken === 0 ? baseTitle : `${baseTitle} ${taken + 1}`;
-}
-
-function TerminalIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      className={className ?? "h-4 w-4"}
-      aria-hidden="true"
-    >
-      <path d="M2.5 3.5h11v9h-11z" />
-      <path d="M4.6 6.1l2 1.9-2 1.9" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M7.6 10.1h3.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
-      <path d="M8 3.3v9.4M3.3 8h9.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MinusIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
-      <path d="M3.3 8h9.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrashIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
-      <path d="M5.4 5.4v7M8 5.4v7M10.6 5.4v7" strokeLinecap="round" />
-      <path d="M3.6 4.3h8.8" strokeLinecap="round" />
-      <path d="M6.1 4.3l.7-1.4h2.4l.7 1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4.5 4.3l.5 9.2h6l.5-9.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
-      <path d="M4.2 6.2l3.8 3.8 3.8-3.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
-      <path d="M6.2 4.2l3.8 3.8-3.8 3.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function CloseIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" className={className ?? "h-4 w-4"}>
-      <path d="M4.3 4.3l7.4 7.4M11.7 4.3l-7.4 7.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" className={className ?? "h-4 w-4"} aria-hidden="true">
-      <path d="M5.2 3.6a.8.8 0 011.2-.7l6.2 3.6a.8.8 0 010 1.4l-6.2 3.6a.8.8 0 01-1.2-.7V3.6z" />
-    </svg>
-  );
-}
-
-function UploadIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
-      <path d="M8 9.2V3.6" strokeLinecap="round" />
-      <path d="M5.4 6.2L8 3.6l2.6 2.6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M3.5 9.6v2.2c0 .6.4 1 1 1h7c.6 0 1-.4 1-1V9.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function HammerIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"} aria-hidden="true">
-      <path d="M9.6 2.6l3.8 3.8-1.3 1.3-3.8-3.8z" strokeLinejoin="round" />
-      <path d="M7.6 4.6l3.8 3.8" strokeLinecap="round" />
-      <path d="M6.8 6.3L3 10.1c-.5.5-.5 1.3 0 1.8l1.1 1.1c.5.5 1.3.5 1.8 0l3.8-3.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6.2 3.9l1.7-1.7 2.2 2.2-1.7 1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MonitorIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"} aria-hidden="true">
-      <path d="M3 3.5h10c.6 0 1 .4 1 1v6.2c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1V4.5c0-.6.4-1 1-1z" strokeLinejoin="round" />
-      <path d="M6.2 13.5h3.6" strokeLinecap="round" />
-      <path d="M8 11.7v1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function PanelLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
-      <path d="M2.5 3.5h11v9h-11z" />
-      <path d="M6 3.5v9" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function FolderIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
-      <path
-        d="M2.6 4.6c0-.6.4-1 1-1h3l1.1 1.1H12.4c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H3.6c-.6 0-1-.4-1-1z"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function GitIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      className={className ?? "h-4 w-4"}
-      aria-hidden="true"
-    >
-      <path d="M5.2 4.2a2 2 0 104 0 2 2 0 00-4 0z" />
-      <path d="M6.2 6.1v3.8a2 2 0 101.6 0V6.1" strokeLinecap="round" />
-      <path d="M8 10.9h2.6a2 2 0 101.4-3.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
-      <path
-        d="M13.2 7.1A5.4 5.4 0 103 12.1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M12.8 3.4v3.8H9" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ArrowUpIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
-      <path d="M8 12.7V3.7" strokeLinecap="round" />
-      <path d="M4.7 6.9L8 3.6l3.3 3.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function formatConsoleArgs(args: unknown[]): string {
-  return args
-    .map((arg) => {
-      if (typeof arg === "string") {
-        return arg;
-      }
-      if (arg instanceof Error) {
-        return arg.stack || arg.message;
-      }
-      try {
-        return JSON.stringify(arg);
-      } catch {
-        return String(arg);
-      }
-    })
-    .join(" ");
-}
-
-function timestampLabel(date: Date): string {
-  const pad = (value: number, size = 2) => String(value).padStart(size, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
-}
-
-function iconLabelForPath(path: string): { label: string; accentClass: string } {
-  const ext = extension(path);
-  if (ext === "ts" || ext === "tsx") return { label: "TS", accentClass: "text-sky-400" };
-  if (ext === "js" || ext === "jsx") return { label: "JS", accentClass: "text-amber-300" };
-  if (ext === "json") return { label: "{}", accentClass: "text-yellow-200" };
-  if (ext === "md") return { label: "M", accentClass: "text-slate-300" };
-  if (ext === "rs") return { label: "RS", accentClass: "text-orange-300" };
-  if (ext === "c") return { label: "C", accentClass: "text-sky-300" };
-  if (ext === "h") return { label: "H", accentClass: "text-pink-300" };
-  if (ext === "toml") return { label: "T", accentClass: "text-slate-300" };
-  if (ext === "yml" || ext === "yaml") return { label: "Y", accentClass: "text-emerald-300" };
-  if (ext === "sh") return { label: "$", accentClass: "text-emerald-300" };
-  return { label: "•", accentClass: "text-slate-400" };
-}
-
-function detectFirmwareProjectKind(entries: DirectoryChildEntry[]): FirmwareProjectKind {
-  const hasFile = (name: string) => entries.some((entry) => entry.kind === "file" && entry.name === name);
-  const hasDir = (name: string) => entries.some((entry) => entry.kind === "directory" && entry.name === name);
-
-  if (hasFile("setup.sh") && hasFile("sdkconfig") && hasFile("CMakeLists.txt")) {
-    return "esp32";
-  }
-
-  const hasIoc = entries.some((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".ioc"));
-  if (hasDir("Release") && hasIoc) {
-    return "stm32";
-  }
-
-  return "unknown";
-}
 
 let ideFirmwareWarmupKey: string | null = null;
 let ideCachedTerminalSessionId: string | null = null;
@@ -620,19 +147,28 @@ export default function WorkspaceShell({
   const sidebarLastExpandedWidthRef = useRef<number>(readStoredSidebarWidth(keys));
   const openingFilePathsRef = useRef<Set<string>>(new Set());
 
-  const [gitStatus, setGitStatus] = useState<GitRepoStatus | null>(null);
-  const [gitError, setGitError] = useState<string | null>(null);
-  const [gitHasChecked, setGitHasChecked] = useState(false);
-  const [isGitLoading, setIsGitLoading] = useState(false);
-  const [isGitBusy, setIsGitBusy] = useState(false);
-  const [gitCommitMessage, setGitCommitMessage] = useState("");
-  const [gitSelectedDiff, setGitSelectedDiff] = useState<{
-    path: string;
-    view: "staged" | "unstaged";
-    orig_path?: string | null;
-  } | null>(null);
-  const [gitDiffContents, setGitDiffContents] = useState<GitDiffContents | null>(null);
-  const [isGitDiffLoading, setIsGitDiffLoading] = useState(false);
+  const {
+    gitStatus,
+    gitError,
+    gitHasChecked,
+    isGitLoading,
+    isGitBusy,
+    gitCommitMessage,
+    setGitCommitMessage,
+    gitSelectedDiff,
+    setGitSelectedDiff,
+    gitDiffContents,
+    isGitDiffLoading,
+    showGitNeedsInitIndicator,
+    refreshGit,
+    handleGitStage,
+    handleGitUnstage,
+    handleGitDiscard,
+    handleGitCommit,
+    handleGitPush,
+    handleGitStageAll,
+    handleGitUnstageAll,
+  } = useWorkspaceGit(rootDir);
 
   const explorerResizeActiveRef = useRef(false);
   const explorerResizeStartXRef = useRef(0);
@@ -919,92 +455,6 @@ export default function WorkspaceShell({
       window.clearInterval(intervalId);
     };
   }, []);
-
-  const gitRepoIssue = useMemo(() => {
-    const message = (gitError ?? "").toLowerCase();
-    if (!message) {
-      return null;
-    }
-    if (message.includes("not a git repository")) {
-      return "not_repo" as const;
-    }
-    if (message.includes("git is not installed")) {
-      return "git_missing" as const;
-    }
-    return null;
-  }, [gitError]);
-  const showGitNeedsInitIndicator = gitRepoIssue === "not_repo";
-
-  const refreshGit = useCallback(async () => {
-    if (!rootDir || !isTauriAvailable()) {
-      setGitStatus(null);
-      setGitError(null);
-      setGitHasChecked(false);
-      return;
-    }
-    setIsGitLoading(true);
-    if (!gitHasChecked) {
-      setGitStatus(null);
-      setGitError(null);
-    }
-    try {
-      const status = await safeInvoke<GitRepoStatus>("git_status", { payload: { path: rootDir } }, { throwOnError: true });
-      setGitStatus(status ?? null);
-      setGitError(null);
-    } catch (error) {
-      setGitStatus(null);
-      setGitError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsGitLoading(false);
-      setGitHasChecked(true);
-    }
-  }, [gitHasChecked, rootDir]);
-
-  useEffect(() => {
-    void refreshGit();
-  }, [refreshGit]);
-
-  useEffect(() => {
-    if (sidebarPanel === "git" && !gitHasChecked) {
-      void refreshGit();
-    }
-  }, [gitHasChecked, refreshGit, sidebarPanel]);
-
-  useEffect(() => {
-    if (!gitSelectedDiff || !rootDir || !isTauriAvailable()) {
-      setGitDiffContents(null);
-      return;
-    }
-
-    let canceled = false;
-    setIsGitDiffLoading(true);
-    setGitError(null);
-    void safeInvoke<GitDiffContents>("git_diff_contents", {
-      payload: {
-        path: rootDir,
-        file_path: gitSelectedDiff.path,
-        view: gitSelectedDiff.view,
-        orig_path: gitSelectedDiff.orig_path ?? undefined,
-      },
-    }, { throwOnError: true })
-      .then((contents) => {
-        if (canceled) return;
-        setGitDiffContents(contents ?? null);
-      })
-      .catch((error) => {
-        if (canceled) return;
-        setGitDiffContents(null);
-        setGitError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (canceled) return;
-        setIsGitDiffLoading(false);
-      });
-
-    return () => {
-      canceled = true;
-    };
-  }, [gitSelectedDiff, rootDir]);
 
   useEffect(() => {
     sessionsRef.current = terminalSessions;
@@ -2046,11 +1496,8 @@ export default function WorkspaceShell({
     setDirChildren({});
     setOpenDirs(new Set());
     setSidebarPanel("explorer");
-    setGitStatus(null);
-    setGitError(null);
-    setGitHasChecked(false);
     setGitSelectedDiff(null);
-    setGitDiffContents(null);
+    setGitCommitMessage("");
   }, []);
 
   const handlePickFolder = useCallback(async () => {
@@ -2702,67 +2149,6 @@ export default function WorkspaceShell({
     }
   }, [activeFile, refreshGit]);
 
-  const runGitAction = useCallback(
-    async (action: () => Promise<unknown>) => {
-      if (!rootDir || !isTauriAvailable()) {
-        return;
-      }
-    setIsGitBusy(true);
-    setGitError(null);
-    try {
-      await action();
-      await refreshGit();
-    } catch (error) {
-      setGitError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setIsGitBusy(false);
-      }
-    },
-    [refreshGit, rootDir],
-  );
-
-  const handleGitStage = useCallback(
-    async (paths: string[]) => {
-      await runGitAction(() => safeInvoke<void>("git_stage", { payload: { path: rootDir!, paths } }));
-    },
-    [rootDir, runGitAction],
-  );
-
-  const handleGitUnstage = useCallback(
-    async (paths: string[]) => {
-      await runGitAction(() => safeInvoke<void>("git_unstage", { payload: { path: rootDir!, paths } }));
-    },
-    [rootDir, runGitAction],
-  );
-
-  const handleGitDiscard = useCallback(
-    async (paths: string[]) => {
-      await runGitAction(() => safeInvoke<void>("git_discard", { payload: { path: rootDir!, paths } }));
-    },
-    [rootDir, runGitAction],
-  );
-
-  const handleGitCommit = useCallback(async () => {
-    const message = gitCommitMessage.trim();
-    if (!message) {
-      return;
-    }
-    await runGitAction(() => safeInvoke<void>("git_commit", { payload: { path: rootDir!, message } }));
-    setGitCommitMessage("");
-  }, [gitCommitMessage, rootDir, runGitAction]);
-
-  const handleGitPush = useCallback(async () => {
-    await runGitAction(() => safeInvoke<void>("git_push", { payload: { path: rootDir! } }));
-  }, [rootDir, runGitAction]);
-
-  const handleGitStageAll = useCallback(async () => {
-    await runGitAction(() => safeInvoke<void>("git_stage_all", { payload: { path: rootDir! } }));
-  }, [rootDir, runGitAction]);
-
-  const handleGitUnstageAll = useCallback(async () => {
-    await runGitAction(() => safeInvoke<void>("git_unstage_all", { payload: { path: rootDir! } }));
-  }, [rootDir, runGitAction]);
-
   useEffect(() => {
     const unlistenTogglePromise = safeListen("menu-toggle-explorer", () => {
       setIsSidebarCollapsed((prev) => !prev);
@@ -2829,68 +2215,6 @@ export default function WorkspaceShell({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [activeFile, closeFile, handleSaveFile]);
-
-  const renderDirectory = useCallback(
-    (dir: string, depth: number) => {
-      const children = dirChildren[dir] ?? [];
-      return (
-        <div>
-          {children.map((entry) => {
-            const paddingLeft = 6 + depth * 10;
-            const isDir = entry.kind === "directory";
-            const isOpen = isDir ? openDirs.has(entry.path) : false;
-            const isSelected = selectedPath === entry.path;
-            const iconLabel = !isDir ? iconLabelForPath(entry.path) : null;
-	            return (
-	              <div key={entry.path}>
-	                <button
-	                  type="button"
-                  onClick={() => {
-                    if (isDir) {
-                      void handleToggleDir(entry.path);
-                    } else {
-                      void handleOpenFile(entry.path);
-                    }
-                  }}
-	                  className={`group grid w-full items-center rounded px-2 py-[3px] text-left text-xs transition-colors ${
-	                    isDir ? "grid-cols-[16px_22px_1fr]" : "grid-cols-[16px_1fr]"
-	                  } ${
-	                    isSelected ? "bg-slate-900 text-sky-200" : "text-slate-300 hover:bg-slate-900/70"
-	                  }`}
-	                  style={{ paddingLeft }}
-	                  title={entry.path}
-	                >
-                  <span className="flex h-4 w-4 items-center justify-center text-slate-500" aria-hidden="true">
-                    {isDir ? (
-                      isOpen ? (
-                        <ChevronDownIcon className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronRightIcon className="h-3.5 w-3.5" />
-                      )
-                    ) : (
-                      <span
-                        className={`flex h-4 w-4 items-center justify-center rounded bg-slate-900/50 text-[9px] font-semibold leading-none ${iconLabel?.accentClass ?? ""}`}
-                      >
-                        {iconLabel?.label}
-                      </span>
-                    )}
-                  </span>
-	                  {isDir ? (
-	                    <span className="flex h-4 w-[22px] items-center justify-center text-slate-500" aria-hidden="true">
-	                      <FolderIcon className="h-4 w-4" />
-	                    </span>
-	                  ) : null}
-	                  <span className={`min-w-0 truncate ${isDir ? "text-slate-200" : ""}`}>{entry.name}</span>
-	                </button>
-	                {isDir && isOpen ? <div>{renderDirectory(entry.path, depth + 1)}</div> : null}
-	              </div>
-	            );
-	          })}
-        </div>
-      );
-    },
-    [dirChildren, handleOpenFile, handleToggleDir, openDirs, selectedPath],
-  );
 
   return (
     <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
@@ -3030,262 +2354,39 @@ export default function WorkspaceShell({
               </div>
               <div className="h-full min-h-0 overflow-auto p-2">
                 {sidebarPanel === "explorer" ? (
-                  explorerRoot ? (
-                    renderDirectory(explorerRoot, 0)
-                  ) : (
-                    <p className="px-2 text-xs text-slate-500">No folder open.</p>
-                  )
-	                ) : !rootDir ? (
-	                  <p className="px-2 text-xs text-slate-500">Open a folder to use Source Control.</p>
-                  ) : !gitHasChecked ? (
-                    <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 px-4 py-6 text-slate-400">
-                      <div
-                        aria-hidden="true"
-                        className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-sky-400"
-                      />
-                      <div className="text-xs">Checking Git status…</div>
-                    </div>
-	                ) : showGitNeedsInitIndicator ? (
-                    <div className="space-y-2 px-2 py-2">
-                      <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-100">
-                        <div className="text-xs font-semibold">Not a Git repository</div>
-                        <div className="mt-1 text-[11px] text-amber-200/80">
-                          Run <span className="font-mono">git init</span> in this folder to enable Source Control.
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void refreshGit()}
-                        disabled={isGitLoading || isGitBusy}
-                        className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                        title="Refresh"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                  ) : gitError ? (
-                    <div className="space-y-2 px-2 py-2">
-                      <div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-100">
-                        <div className="text-xs font-semibold">Source Control unavailable</div>
-                        <div className="mt-1 break-words text-[11px] text-rose-200/80">{gitError}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void refreshGit()}
-                        disabled={isGitLoading || isGitBusy}
-                        className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
-                        title="Refresh"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : (
-	                  <div className="space-y-3 px-2 py-2">
-                      <div className="px-1 text-[11px] text-slate-500">
-                        <span className="font-semibold text-slate-300">
-                          {gitStatus?.branch ? gitStatus.branch : "detached"}
-                        </span>
-                        {gitStatus?.upstream ? <span className="text-slate-600"> → {gitStatus.upstream}</span> : null}
-                        <span className="ml-2">↑ {gitStatus?.ahead ?? 0}</span>
-                        <span className="ml-2">↓ {gitStatus?.behind ?? 0}</span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between px-1">
-                          <div className="text-[11px] font-semibold tracking-wide text-slate-400">CHANGES</div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => void refreshGit()}
-                              disabled={isGitLoading || isGitBusy}
-                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                              title="Refresh"
-                            >
-                              <RefreshIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleGitStageAll()}
-                              disabled={isGitLoading || isGitBusy || (gitStatus?.changes?.length ?? 0) === 0}
-                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                              title="Stage all changes"
-                            >
-                              <PlusIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleGitUnstageAll()}
-                              disabled={isGitLoading || isGitBusy || (gitStatus?.staged?.length ?? 0) === 0}
-                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                              title="Unstage all changes"
-                            >
-                              <MinusIcon className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleGitPush()}
-                              disabled={isGitLoading || isGitBusy || (gitStatus?.ahead ?? 0) === 0}
-                              className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200 disabled:opacity-50"
-                              title="Push"
-                            >
-                              <ArrowUpIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <textarea
-                          rows={2}
-                          value={gitCommitMessage}
-                          onChange={(event) => setGitCommitMessage(event.target.value)}
-                          onKeyDown={(event) => {
-                            const isCommit = (event.ctrlKey || event.metaKey) && event.key === "Enter";
-                            if (!isCommit) {
-                              return;
-                            }
-                            if (isGitLoading || isGitBusy) {
-                              return;
-                            }
-                            if ((gitStatus?.staged?.length ?? 0) === 0) {
-                              return;
-                            }
-                            if (!gitCommitMessage.trim()) {
-                              return;
-                            }
-                            event.preventDefault();
-                            void handleGitCommit();
-                          }}
-                          placeholder="Message"
-                          className="w-full resize-none rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:border-slate-700 focus:outline-none"
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => void handleGitCommit()}
-                          disabled={
-                            isGitLoading ||
-                            isGitBusy ||
-                            (gitStatus?.staged?.length ?? 0) === 0 ||
-                            !gitCommitMessage.trim()
-                          }
-                          className="w-full rounded bg-sky-600 px-2 py-2 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
-                          title="Commit staged changes"
-                        >
-                          Commit
-                        </button>
-                      </div>
-
-                      {gitError ? <p className="px-1 text-[11px] text-rose-300">{gitError}</p> : null}
-
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-slate-300">
-                          <span>Staged Changes</span>
-                          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200">
-                            {gitStatus?.staged?.length ?? 0}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          {(gitStatus?.staged ?? []).map((entry) => {
-                            const isActive = gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "staged";
-                            return (
-                              <div
-                                key={`staged:${entry.path}`}
-                                className={`group flex items-center gap-1 rounded px-1 py-0.5 ${
-                                  isActive ? "bg-slate-900/60" : "hover:bg-slate-900/60"
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setGitSelectedDiff({
-                                      path: entry.path,
-                                      view: "staged",
-                                      orig_path: entry.orig_path ?? null,
-                                    })
-                                  }
-                                  className="min-w-0 flex-1 truncate px-1 py-1 text-left text-xs text-slate-200"
-                                  title={entry.path}
-                                >
-                                  <span className="mr-2 inline-block w-4 text-slate-500">{entry.index_status}</span>
-                                  {entry.path}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleGitUnstage([entry.path])}
-                                  disabled={isGitLoading || isGitBusy}
-                                  className="rounded p-1 text-slate-500 opacity-0 hover:bg-slate-900/60 hover:text-slate-200 group-hover:opacity-100 disabled:opacity-50"
-                                  title="Unstage"
-                                >
-                                  <MinusIcon className="h-4 w-4" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-slate-300">
-                          <span>Changes</span>
-                          <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-200">
-                            {gitStatus?.changes?.length ?? 0}
-                          </span>
-                        </div>
-                        <div className="space-y-0.5">
-                          {(gitStatus?.changes ?? []).map((entry) => {
-                            const isActive =
-                              gitSelectedDiff?.path === entry.path && gitSelectedDiff?.view === "unstaged";
-                            const canDiscard = !entry.is_untracked && entry.worktree_status.trim() !== "";
-                            return (
-                              <div
-                                key={`change:${entry.path}`}
-                                className={`group flex items-center gap-1 rounded px-1 py-0.5 ${
-                                  isActive ? "bg-slate-900/60" : "hover:bg-slate-900/60"
-                                }`}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setGitSelectedDiff({
-                                      path: entry.path,
-                                      view: "unstaged",
-                                      orig_path: entry.orig_path ?? null,
-                                    })
-                                  }
-                                  className="min-w-0 flex-1 truncate px-1 py-1 text-left text-xs text-slate-200"
-                                  title={entry.path}
-                                >
-                                  <span className="mr-2 inline-block w-4 text-slate-500">
-                                    {entry.is_untracked ? "?" : entry.worktree_status}
-                                  </span>
-                                  {entry.path}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleGitStage([entry.path])}
-                                  disabled={isGitLoading || isGitBusy}
-                                  className="rounded p-1 text-slate-500 opacity-0 hover:bg-slate-900/60 hover:text-slate-200 group-hover:opacity-100 disabled:opacity-50"
-                                  title="Stage"
-                                >
-                                  <PlusIcon className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleGitDiscard([entry.path])}
-                                  disabled={isGitLoading || isGitBusy || !canDiscard}
-                                  className="rounded p-1 text-slate-500 opacity-0 hover:bg-slate-900/60 hover:text-slate-200 group-hover:opacity-100 disabled:opacity-50"
-                                  title={entry.is_untracked ? "Discard is not available for untracked files" : "Discard"}
-                                >
-                                  <TrashIcon className="h-4 w-4" />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-	                )}
-	              </div>
-	            </aside>
+                  <ExplorerTree
+                    root={explorerRoot}
+                    dirChildren={dirChildren}
+                    openDirs={openDirs}
+                    selectedPath={selectedPath}
+                    onToggleDir={handleToggleDir}
+                    onOpenFile={handleOpenFile}
+                  />
+                ) : (
+                  <GitSidebarPanel
+                    rootDir={rootDir}
+                    gitStatus={gitStatus}
+                    gitError={gitError}
+                    gitHasChecked={gitHasChecked}
+                    isGitLoading={isGitLoading}
+                    isGitBusy={isGitBusy}
+                    showGitNeedsInitIndicator={showGitNeedsInitIndicator}
+                    gitCommitMessage={gitCommitMessage}
+                    onCommitMessageChange={setGitCommitMessage}
+                    gitSelectedDiff={gitSelectedDiff}
+                    onSelectDiff={setGitSelectedDiff}
+                    onRefresh={refreshGit}
+                    onStage={handleGitStage}
+                    onUnstage={handleGitUnstage}
+                    onDiscard={handleGitDiscard}
+                    onCommit={handleGitCommit}
+                    onPush={handleGitPush}
+                    onStageAll={handleGitStageAll}
+                    onUnstageAll={handleGitUnstageAll}
+                  />
+                )}
+              </div>
+            </aside>
 
 	            <div
 	              role="separator"
@@ -3308,344 +2409,180 @@ export default function WorkspaceShell({
 	        )}
 
 	        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950">
-	            <div className="flex min-w-0 flex-1 items-center overflow-hidden">
-	              <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
-	                {openFiles.length === 0 ? (
-	                  <div className="px-4 py-2 text-xs text-slate-500">Select a file to edit</div>
-	                ) : (
-	                  openFiles.map((file) => {
-	                    const isActive = activeMainTabKind === "file" && file.path === activeFilePath;
-	                    const icon = iconLabelForPath(file.path);
-	                    return (
-	                      <div
-	                        key={file.path}
-	                        className={`group relative flex shrink-0 items-center border-r border-slate-900 ${
-	                          isActive ? "bg-slate-900" : "bg-slate-950 hover:bg-slate-900/60"
-	                        }`}
-	                        title={file.path}
-	                      >
-	                        <button
-	                          type="button"
-	                          onClick={() => {
-                              setActiveMainTabKind("file");
-                              setActivePreviewPath(null);
-	                            setActiveFilePath(file.path);
-	                            setSelectedPath(file.path);
-	                          }}
-	                          className={`flex items-center gap-2 px-3 py-2 pr-9 text-left text-xs ${
-	                            isActive ? "text-slate-100" : "text-slate-400 group-hover:text-slate-200"
-	                          }`}
-	                        >
-	                          <span
-	                            className={`flex h-4 w-6 items-center justify-center rounded bg-slate-950/40 text-[10px] font-semibold ${icon.accentClass}`}
-                            aria-hidden="true"
-                          >
-                            {icon.label}
-                          </span>
-	                          <span className="max-w-[12rem] truncate">{file.name}</span>
-	                          {file.isDirty ? <span className="text-amber-300">●</span> : null}
-	                        </button>
-	
-	                        <button
-	                          type="button"
-	                          onClick={() => closeFile(file.path)}
-	                          className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200 group-hover:block"
-	                          title="Close (Cmd/Ctrl+W)"
-	                        >
-	                          <CloseIcon className="h-3.5 w-3.5" />
-	                        </button>
-	                      </div>
-                    );
-                  })
-                )}
-                {variant === "wavelets"
-                  ? waveletPreviewTabs.map((path) => {
-                      const isActive = activeMainTabKind === "preview" && activePreviewPath === path;
-                      return (
-                        <div
-                          key={`preview:${path}`}
-                          className={`group relative flex shrink-0 items-center border-r border-slate-900 ${
-                            isActive ? "bg-slate-900" : "bg-slate-950 hover:bg-slate-900/60"
-                          }`}
-                          title={`Preview: ${path}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveMainTabKind("preview");
-                              setActivePreviewPath(path);
-                              setGitSelectedDiff(null);
-                            }}
-                            className={`flex items-center gap-2 px-3 py-2 pr-9 text-left text-xs ${
-                              isActive ? "text-slate-100" : "text-slate-400 group-hover:text-slate-200"
-                            }`}
-                          >
-                            <span
-                              className="flex h-4 w-6 items-center justify-center rounded bg-slate-950/40 text-[10px] font-semibold text-emerald-200"
-                              aria-hidden="true"
-                            >
-                              ▶
-                            </span>
-                            <span className="max-w-[12rem] truncate">{basename(path)}</span>
-                          </button>
+          <WorkspaceTopBar
+            variant={variant}
+            theme={theme}
+            openFiles={openFiles}
+            activeFilePath={activeFilePath}
+            activeFileIsDirty={activeFile?.isDirty ?? false}
+            isLoadingFile={isLoadingFile}
+            activeMainTabKind={activeMainTabKind}
+            activePreviewPath={activePreviewPath}
+            waveletPreviewTabs={waveletPreviewTabs}
+            onSelectFile={(path) => {
+              setActiveMainTabKind("file");
+              setActivePreviewPath(null);
+              setActiveFilePath(path);
+              setSelectedPath(path);
+            }}
+            onCloseFile={closeFile}
+            onSelectPreview={(path) => {
+              setActiveMainTabKind("preview");
+              setActivePreviewPath(path);
+              setGitSelectedDiff(null);
+            }}
+            onClosePreview={closeWaveletPreviewTab}
+            rightActions={
+              variant === "ide" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalVisible(true);
+                      setBottomPanelTab("firmware");
+                      setFirmwarePanelTab("build");
+                      void handleFirmwareBuild();
+                    }}
+                    disabled={isFirmwareBusy || !rootDir}
+                    className="rounded border border-slate-700 bg-slate-900/60 px-1.5 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Build"
+                  >
+                    <HammerIcon className="h-4 w-4" />
+                  </button>
 
-                          <button
-                            type="button"
-                            onClick={() => closeWaveletPreviewTab(path)}
-                            className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200 group-hover:block"
-                            title="Close preview"
-                          >
-                            <CloseIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })
-                  : null}
-              </div>
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalVisible(true);
+                      setBottomPanelTab("firmware");
+                      setFirmwarePanelTab("build");
+                      void handleFirmwareFlash();
+                    }}
+                    disabled={isFirmwareBusy || !rootDir}
+                    className="rounded border border-sky-300/70 bg-sky-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Flash"
+                  >
+                    <UploadIcon className="h-4 w-4 text-sky-50" />
+                  </button>
 
-            <div className="flex shrink-0 items-center justify-end gap-3 px-4 py-2 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                {variant === "ide" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsTerminalVisible(true);
-                        setBottomPanelTab("firmware");
-                        setFirmwarePanelTab("build");
-                        void handleFirmwareBuild();
-                      }}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalVisible(true);
+                      setBottomPanelTab("firmware");
+                      setFirmwarePanelTab("monitor");
+                      void handleFirmwareMonitor();
+                    }}
+                    disabled={!rootDir}
+                    className="rounded border border-emerald-300/70 bg-emerald-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Monitor"
+                  >
+                    <MonitorIcon className="h-4 w-4 text-emerald-50" />
+                  </button>
+                  {firmwareProjectKind === "stm32" ? (
+                    <select
+                      value={firmwareCodegenMode}
                       disabled={isFirmwareBusy || !rootDir}
-                      className="rounded border border-slate-700 bg-slate-900/60 px-1.5 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Build"
+                      onChange={(event) => setFirmwareCodegenMode(event.target.value as "auto" | "always" | "never")}
+                      className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50"
+                      title="STM32CubeMX code generation mode"
                     >
-                      <HammerIcon className="h-4 w-4" />
-                    </button>
+                      <option value="auto">codegen:auto</option>
+                      <option value="always">codegen:always</option>
+                      <option value="never">codegen:never</option>
+                    </select>
+                  ) : null}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsTerminalVisible(true);
-                        setBottomPanelTab("firmware");
-                        setFirmwarePanelTab("build");
-                        void handleFirmwareFlash();
-                      }}
-                      disabled={isFirmwareBusy || !rootDir}
-                      className="rounded border border-sky-300/70 bg-sky-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Flash"
-                    >
-                      <UploadIcon className="h-4 w-4 text-sky-50" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsTerminalVisible(true);
-                        setBottomPanelTab("firmware");
-                        setFirmwarePanelTab("monitor");
-                        void handleFirmwareMonitor();
-                      }}
-                      disabled={!rootDir}
-                      className="rounded border border-emerald-300/70 bg-emerald-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Monitor"
-                    >
-                      <MonitorIcon className="h-4 w-4 text-emerald-50" />
-                    </button>
-                    {firmwareProjectKind === "stm32" ? (
-                      <select
-                        value={firmwareCodegenMode}
-                        disabled={isFirmwareBusy || !rootDir}
-                        onChange={(event) => setFirmwareCodegenMode(event.target.value as "auto" | "always" | "never")}
-                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50"
-                        title="STM32CubeMX code generation mode"
-                      >
-                        <option value="auto">codegen:auto</option>
-                        <option value="always">codegen:always</option>
-                        <option value="never">codegen:never</option>
-                      </select>
-                    ) : null}
-
-                    {isFirmwareBusy ? (
-                      <div
-                        className="h-1.5 w-14 overflow-hidden rounded bg-slate-800"
-                        title="Flashing…"
-                        aria-label="Flashing…"
-                      >
-                        {firmwareProgressPct === null ? (
-                          <div className="h-full w-full bg-sky-400/80 animate-pulse" />
-                        ) : (
-                          <div className="h-full bg-sky-400/80" style={{ width: `${firmwareProgressPct}%` }} />
-                        )}
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!waveletTargetPath) return;
-                        void (async () => {
-                          await openWaveletPreviewTab(waveletTargetPath, { activate: true });
-                          await runWaveletForPath(waveletTargetPath);
-                        })();
-                      }}
-                      disabled={!canRunWavelet || !waveletTargetPath}
-                      className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Preview wavelet"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <PlayIcon className="h-4 w-4" />
-                        <span className="text-[11px] font-semibold">Preview</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!waveletTargetPath) return;
-                        void (async () => {
-                          await openWaveletPreviewTab(waveletTargetPath, { activate: false });
-                          await runWaveletForPath(waveletTargetPath);
-                        })();
-                      }}
-                      disabled={!canRunWavelet || !waveletTargetPath}
-                      className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Run wavelet"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <PlayIcon className="h-4 w-4" />
-                        <span className="text-[11px] font-semibold">Run</span>
-                      </span>
-                    </button>
-                    {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
-                      <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
-                        <div className="h-full w-full bg-emerald-400/80 animate-pulse" />
-                      </div>
-                    ) : null}
-                  </>
-                )}
-
-              </div>
-
-              {isLoadingFile ? <span>Loading…</span> : null}
-              {activeFile?.isDirty ? <span className="text-amber-300">Unsaved</span> : null}
-            </div>
-          </div>
+                  {isFirmwareBusy ? (
+                    <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Flashing…" aria-label="Flashing…">
+                      {firmwareProgressPct === null ? (
+                        <div className="h-full w-full animate-pulse bg-sky-400/80" />
+                      ) : (
+                        <div className="h-full bg-sky-400/80" style={{ width: `${firmwareProgressPct}%` }} />
+                      )}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!waveletTargetPath) return;
+                      void (async () => {
+                        await openWaveletPreviewTab(waveletTargetPath, { activate: true });
+                        await runWaveletForPath(waveletTargetPath);
+                      })();
+                    }}
+                    disabled={!canRunWavelet || !waveletTargetPath}
+                    className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Preview wavelet"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <PlayIcon className="h-4 w-4" />
+                      <span className="text-[11px] font-semibold">Preview</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!waveletTargetPath) return;
+                      void (async () => {
+                        await openWaveletPreviewTab(waveletTargetPath, { activate: false });
+                        await runWaveletForPath(waveletTargetPath);
+                      })();
+                    }}
+                    disabled={!canRunWavelet || !waveletTargetPath}
+                    className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Run wavelet"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <PlayIcon className="h-4 w-4" />
+                      <span className="text-[11px] font-semibold">Run</span>
+                    </span>
+                  </button>
+                  {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
+                    <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
+                      <div className="h-full w-full animate-pulse bg-emerald-400/80" />
+                    </div>
+                  ) : null}
+                </>
+              )
+            }
+          />
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
               {gitSelectedDiff ? (
-                <div className="flex h-full min-h-0 flex-col">
-                  <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-3 py-2 text-xs">
-                    <div className="min-w-0 truncate text-slate-200" title={gitSelectedDiff.path}>
-                      Diff: {gitSelectedDiff.path}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setGitSelectedDiff(null)}
-                      className="rounded p-1 text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                      title="Close diff"
-                    >
-                      <CloseIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="min-h-0 flex-1 select-text">
-                    {isGitDiffLoading ? (
-                      <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading diff…</div>
-                    ) : gitDiffContents?.is_binary ? (
-                      <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                        Binary file diff not supported.
-                      </div>
-                    ) : (
-                      <DiffEditor
-                        theme={getEmwaverMonacoTheme(theme)}
-                        original={gitDiffContents?.original ?? ""}
-                        modified={gitDiffContents?.modified ?? ""}
-                        options={{
-                          ...MONACO_EDITOR_OPTIONS,
-                          readOnly: true,
-                          renderSideBySide: true,
-                        }}
-                      />
-                    )}
-                  </div>
-                </div>
+                <GitDiffPanel
+                  theme={theme}
+                  filePath={gitSelectedDiff.path}
+                  onClose={() => setGitSelectedDiff(null)}
+                  isLoading={isGitDiffLoading}
+                  diffContents={gitDiffContents}
+                  editorOptions={MONACO_EDITOR_OPTIONS as unknown as Record<string, unknown>}
+                />
               ) : variant === "wavelets" && activeMainTabKind === "preview" && activePreviewPath ? (
-                <div className="flex h-full min-h-0 flex-col select-text">
-                  <div className="flex items-center justify-between border-b border-slate-900 bg-slate-950 px-3 py-2 text-xs">
-                    <div className="min-w-0 truncate text-slate-200" title={activePreviewPath}>
-                      Preview: {basename(activePreviewPath)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setWaveletPreviewState((prev) => ({
-                            ...prev,
-                            [activePreviewPath]: { tree: null, console: [], isRunning: false },
-                          }));
-                        }}
-                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-900"
-                        title="Clear preview output"
-                      >
-                        Clear
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void runWaveletForPath(activePreviewPath)}
-                        className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-400"
-                        title="Run wavelet"
-                      >
-                        Run
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveMainTabKind("file");
-                          setActivePreviewPath(null);
-                        }}
-                        className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-900"
-                        title="Back to editor"
-                      >
-                        Editor
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto p-6">
-                    {waveletPreviewState[activePreviewPath]?.tree ? (
-                      <WaveletUIRenderer
-                        tree={waveletPreviewState[activePreviewPath]?.tree as WaveletTree}
-                        consoleOutput={waveletPreviewState[activePreviewPath]?.console ?? []}
-                        onInvokeCallback={(token, args) => {
-                          waveletEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
-                        }}
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                        Run this wavelet to render a preview.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="border-t border-slate-900 bg-slate-950 px-4 py-3">
-                    <div className="mb-2 flex items-center justify-between text-[11px] font-semibold tracking-wide text-slate-400">
-                      <span>CONSOLE</span>
-                      <span className="text-slate-600">{waveletDeviceConnection.connectionStatus()}</span>
-                    </div>
-                    <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded border border-slate-800 bg-slate-950/40 p-2 font-mono text-[11px] text-slate-200">
-                      {(waveletPreviewState[activePreviewPath]?.console ?? []).length === 0 ? (
-                        <div className="text-slate-500">No output yet.</div>
-                      ) : (
-                        (waveletPreviewState[activePreviewPath]?.console ?? []).map((line, idx) => (
-                          <div key={idx}>{line}</div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <WaveletPreviewPanel
+                  theme={theme}
+                  path={activePreviewPath}
+                  state={waveletPreviewState[activePreviewPath]}
+                  onClear={() => {
+                    setWaveletPreviewState((prev) => ({
+                      ...prev,
+                      [activePreviewPath]: { tree: null, console: [], isRunning: false },
+                    }));
+                  }}
+                  onRun={() => void runWaveletForPath(activePreviewPath)}
+                  onBackToEditor={() => {
+                    setActiveMainTabKind("file");
+                    setActivePreviewPath(null);
+                  }}
+                  deviceStatus={waveletDeviceConnection.connectionStatus()}
+                  onInvokeCallback={(token, args) => {
+                    waveletEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
+                  }}
+                />
               ) : activeFile ? (
                 <div className="h-full select-text">
                   <MonacoEditor
