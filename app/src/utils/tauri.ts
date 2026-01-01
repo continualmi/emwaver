@@ -9,9 +9,10 @@ export function isTauriAvailable(): boolean {
     return false;
   }
   
-  // Cache the result
-  if (_tauriAvailable !== null) {
-    return _tauriAvailable;
+  // Cache only once we have a definitive true. In some Tauri setups the globals
+  // may be injected after the first tick; caching false would break detection.
+  if (_tauriAvailable === true) {
+    return true;
   }
   
   // In Tauri v2, the APIs are injected at runtime

@@ -7,6 +7,7 @@ import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
+import { readIdeTabState, writeIdeTabState } from "./ideTabState";
 
 type ThemeMode = "dark" | "light";
 
@@ -512,7 +513,7 @@ let ideCachedTerminalSessionId: string | null = null;
 let ideCachedFirmwareBuildSessionId: string | null = null;
 let ideCachedFirmwareMonitorSessionId: string | null = null;
 
-export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
+export default function IDEFragment({ theme = "dark", isActive = false }: { theme?: ThemeMode; isActive?: boolean }) {
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot());
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -524,6 +525,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const restoringTabsRef = useRef(false);
+  const restoredTabsRootRef = useRef<string | null>(null);
+  const tabsHydratedRef = useRef(false);
+  const tabsRestoreSucceededRef = useRef(false);
+  const tabsUserTouchedRef = useRef(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => readStoredSidebarCollapsed());
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth());
   const sidebarLastExpandedWidthRef = useRef<number>(readStoredSidebarWidth());
@@ -925,6 +931,114 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     window.localStorage.setItem(ROOT_STORAGE_KEY, rootDir);
     window.localStorage.removeItem(LEGACY_ROOT_STORAGE_KEY);
   }, [rootDir]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    if (!rootDir || !isTauriAvailable()) {
+      restoredTabsRootRef.current = null;
+      restoringTabsRef.current = false;
+      tabsHydratedRef.current = false;
+      return;
+    }
+
+    // When the IDE pane becomes active, always hydrate from disk for the current root.
+    restoredTabsRootRef.current = rootDir;
+    tabsHydratedRef.current = false;
+    tabsRestoreSucceededRef.current = false;
+    tabsUserTouchedRef.current = false;
+
+    let canceled = false;
+
+    void (async () => {
+      const state = await readIdeTabState(rootDir);
+      if (canceled || !state || state.open.length === 0) {
+        restoringTabsRef.current = false;
+        tabsHydratedRef.current = true;
+        return;
+      }
+
+      tabsRestoreSucceededRef.current = true;
+
+      restoringTabsRef.current = true;
+      setIsLoadingFile(true);
+      try {
+        const rootPrefix = rootDir.replace(/\\/g, "/").replace(/\/$/, "");
+        const stateFilePath = `${rootPrefix}/.emwaver/ide-tabs.json`;
+
+        const paths = Array.from(new Set(state.open))
+          .filter((path) => typeof path === "string")
+          .filter((path) => path.replace(/\\/g, "/") !== stateFilePath);
+        if (paths.length === 0) {
+          return;
+        }
+
+        const restored = await Promise.all(
+          paths.map(async (path) => {
+            const [content, diskMtimeMs] = await Promise.all([
+              safeInvoke<string>("read_file", { payload: { path } }),
+              safeInvoke<number>("file_modified_ms", { payload: { path } })
+                .then((value) => value ?? undefined)
+                .catch(() => undefined),
+            ]);
+
+            return {
+              path,
+              name: basename(path),
+              content: content ?? "",
+              language: languageForPath(path),
+              isDirty: false,
+              diskMtimeMs,
+            } satisfies OpenFile;
+          }),
+        );
+
+        if (canceled) {
+          return;
+        }
+
+        setOpenFiles(restored);
+        const active = state.active && paths.includes(state.active) ? state.active : paths[0];
+        setActiveFilePath(active);
+        setSelectedPath(active);
+      } finally {
+        if (!canceled) {
+          setIsLoadingFile(false);
+        }
+        restoringTabsRef.current = false;
+        tabsHydratedRef.current = true;
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, [isActive, rootDir]);
+
+  const openFilesStorageKey = useMemo(() => openFiles.map((file) => file.path).join("\n"), [openFiles]);
+  useEffect(() => {
+    if (restoringTabsRef.current || !tabsHydratedRef.current) {
+      return;
+    }
+
+    const rootPrefix = rootDir ? rootDir.replace(/\\/g, "/").replace(/\/$/, "") : null;
+    const stateFilePath = rootPrefix ? `${rootPrefix}/.emwaver/ide-tabs.json` : null;
+
+    const open = (openFilesStorageKey ? openFilesStorageKey.split("\n") : []).filter(Boolean);
+    const filteredOpen = stateFilePath ? open.filter((path) => path.replace(/\\/g, "/") !== stateFilePath) : open;
+
+    const activeNormalized = activeFilePath ? activeFilePath.replace(/\\/g, "/") : null;
+    const active = stateFilePath && activeNormalized === stateFilePath ? (filteredOpen[0] ?? null) : activeFilePath;
+
+    // Avoid clobbering an existing tab-state file with an "empty" state on startup.
+    if (!tabsRestoreSucceededRef.current && !tabsUserTouchedRef.current && filteredOpen.length === 0 && !active) {
+      return;
+    }
+
+    void writeIdeTabState(rootDir, filteredOpen, active);
+  }, [activeFilePath, openFilesStorageKey, rootDir]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -2098,6 +2212,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   );
 
   const handleOpenFile = useCallback(async (path: string) => {
+    tabsUserTouchedRef.current = true;
     if (!isTauriAvailable()) {
       return;
     }
@@ -2135,6 +2250,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   }, [openFiles]);
 
   const closeFile = useCallback((path: string) => {
+    tabsUserTouchedRef.current = true;
     setOpenFiles((prev) => {
       const next = prev.filter((file) => file.path !== path);
       setActiveFilePath((prevActive) => {
