@@ -537,9 +537,8 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const [isTerminalPickerOpen, setIsTerminalPickerOpen] = useState(false);
   const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
 
-  const [firmwareLines, setFirmwareLines] = useState<string[]>([]);
   const [firmwareProgressPct, setFirmwareProgressPct] = useState<number | null>(null);
-  const firmwareScrollRef = useRef<HTMLDivElement | null>(null);
+  const [firmwareHasOutput, setFirmwareHasOutput] = useState(false);
   const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
   const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
 
@@ -554,6 +553,11 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const fitAddonBySessionRef = useRef<Map<string, FitAddon>>(new Map());
   const pendingTerminalOutputRef = useRef<Map<string, Uint8Array[]>>(new Map());
   const outputDecoderRef = useRef(new TextDecoder());
+
+  const firmwareTerminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const firmwareTerminalRef = useRef<Terminal | null>(null);
+  const firmwareFitAddonRef = useRef<FitAddon | null>(null);
+  const pendingFirmwareTextRef = useRef<string[]>([]);
 
   const monaco = useMonaco();
 
@@ -724,17 +728,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
   }, [isTerminalVisible]);
 
-  useEffect(() => {
-    if (bottomPanelTab !== "firmware") {
-      return;
-    }
-    const node = firmwareScrollRef.current;
-    if (!node) {
-      return;
-    }
-    node.scrollTop = node.scrollHeight;
-  }, [bottomPanelTab, firmwareLines.length]);
-
   const updateFirmwareProgressFromMessage = useCallback((message: string) => {
     const matches = message.match(/(\d{1,3})%/g);
     if (!matches || matches.length === 0) {
@@ -747,27 +740,6 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
     setFirmwareProgressPct(Math.max(0, Math.min(100, value)));
   }, []);
-
-  useEffect(() => {
-    const unlistenPromise = safeListen<FirmwareProgressPayload>("firmware-progress", (event) => {
-      const payload = event.payload;
-      if (!payload?.message) {
-        return;
-      }
-      const label = payload.stream ? String(payload.stream).toUpperCase() : "INFO";
-      const line = `${label} ${payload.message}`;
-      updateFirmwareProgressFromMessage(payload.message);
-
-      setFirmwareLines((prev) => {
-        const next = [...prev, line];
-        return next.length <= 2000 ? next : next.slice(next.length - 2000);
-      });
-    });
-
-    return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [updateFirmwareProgressFromMessage]);
 
   useEffect(() => {
     if (!monaco) {
@@ -906,7 +878,102 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     terminalBySessionRef.current.forEach((terminal) => {
       terminal.options.theme = terminalTheme;
     });
+    if (firmwareTerminalRef.current) {
+      firmwareTerminalRef.current.options.theme = terminalTheme;
+    }
   }, [terminalTheme]);
+
+  const ensureFirmwareTerminal = useCallback(() => {
+    if (firmwareTerminalRef.current) {
+      return;
+    }
+    const container = firmwareTerminalContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const term = new Terminal({
+      convertEol: true,
+      cursorBlink: false,
+      disableStdin: true,
+      fontFamily:
+        '"Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: 12,
+      theme: terminalTheme,
+      scrollback: 8000,
+    });
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(container);
+
+    firmwareTerminalRef.current = term;
+    firmwareFitAddonRef.current = fitAddon;
+
+    const buffered = pendingFirmwareTextRef.current;
+    if (buffered.length > 0) {
+      buffered.forEach((chunk) => term.write(chunk));
+      pendingFirmwareTextRef.current = [];
+      setFirmwareHasOutput(true);
+    }
+
+    requestAnimationFrame(() => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // ignore
+      }
+    });
+  }, [terminalTheme]);
+
+  const fitFirmwareTerminal = useCallback(() => {
+    const fitAddon = firmwareFitAddonRef.current;
+    if (!fitAddon) {
+      return;
+    }
+    try {
+      fitAddon.fit();
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const unlistenPromise = safeListen<FirmwareProgressPayload>("firmware-progress", (event) => {
+      const payload = event.payload;
+      if (!payload?.message) {
+        return;
+      }
+
+      ensureFirmwareTerminal();
+      updateFirmwareProgressFromMessage(payload.message);
+
+      const terminal = firmwareTerminalRef.current;
+      const message = payload.message;
+      const stream = payload.stream ? String(payload.stream) : "info";
+
+      const ansiWrapped =
+        stream === "stderr" && !message.includes("\u001b[")
+          ? `\u001b[31m${message}\u001b[0m`
+          : message;
+
+      const formatted =
+        stream === "info" && !ansiWrapped.endsWith("\n") && !ansiWrapped.endsWith("\r")
+          ? `${ansiWrapped}\r\n`
+          : ansiWrapped;
+
+      if (terminal) {
+        terminal.write(formatted);
+      } else {
+        pendingFirmwareTextRef.current.push(formatted);
+      }
+
+      setFirmwareHasOutput(true);
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [ensureFirmwareTerminal, updateFirmwareProgressFromMessage]);
 
   const ensureSessionTerminal = useCallback(
     (sessionId: string) => {
@@ -1118,7 +1185,12 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       return;
     }
     const observer = new ResizeObserver(() => {
-      focusActiveTerminal();
+      if (bottomPanelTab === "terminal") {
+        focusActiveTerminal();
+      } else if (bottomPanelTab === "firmware") {
+        ensureFirmwareTerminal();
+        fitFirmwareTerminal();
+      }
       const panelWidth = panel.getBoundingClientRect().width;
       const computedMax = Math.floor(panelWidth * 0.45);
       const effectiveMax = Math.max(TERMINAL_LIST_MIN_WIDTH, Math.min(TERMINAL_LIST_MAX_WIDTH, computedMax));
@@ -1126,7 +1198,7 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     });
     observer.observe(panel);
     return () => observer.disconnect();
-  }, [focusActiveTerminal, isTerminalVisible]);
+  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, focusActiveTerminal, isTerminalVisible]);
 
   useEffect(() => {
     if (!isTerminalVisible) {
@@ -1137,6 +1209,17 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
     requestAnimationFrame(() => focusActiveTerminal());
   }, [bottomPanelTab, focusActiveTerminal, isTerminalVisible]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (bottomPanelTab !== "firmware") {
+      return;
+    }
+    ensureFirmwareTerminal();
+    requestAnimationFrame(() => fitFirmwareTerminal());
+  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, isTerminalVisible]);
 
   useEffect(() => {
     const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
@@ -1315,24 +1398,42 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     [openRoot],
   );
 
-  const appendFirmwareLine = useCallback((line: string) => {
-    setFirmwareLines((prev) => {
-      const next = [...prev, line];
-      return next.length <= 2000 ? next : next.slice(next.length - 2000);
-    });
-  }, []);
+  const writeFirmwareInfo = useCallback(
+    (message: string) => {
+      const formatted = message.endsWith("\n") || message.endsWith("\r") ? message : `${message}\r\n`;
+      const line = `\u001b[90m${formatted}\u001b[0m`;
+      ensureFirmwareTerminal();
+      const terminal = firmwareTerminalRef.current;
+      if (terminal) {
+        terminal.write(line);
+      } else {
+        pendingFirmwareTextRef.current.push(line);
+      }
+      setFirmwareHasOutput(true);
+    },
+    [ensureFirmwareTerminal],
+  );
 
   const handleFirmwareBuild = useCallback(async () => {
     if (!isTauriAvailable()) {
-      appendFirmwareLine("Tauri not available; cannot build firmware.");
+      writeFirmwareInfo("Tauri not available; cannot build firmware.");
       return;
     }
 
-    setFirmwareLines([]);
     setFirmwareProgressPct(null);
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
     setIsFirmwareBusy(true);
+    setFirmwareHasOutput(false);
+    pendingFirmwareTextRef.current = [];
+    if (firmwareTerminalRef.current) {
+      try {
+        firmwareTerminalRef.current.reset();
+        firmwareTerminalRef.current.clear();
+      } catch {
+        // ignore
+      }
+    }
 
     try {
       await safeInvoke<void>(
@@ -1346,27 +1447,36 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         },
         { throwOnError: true },
       );
-      appendFirmwareLine("Build complete.");
+      writeFirmwareInfo("Build complete.");
       setFirmwareProgressPct(100);
     } catch (error) {
       console.error(error);
-      appendFirmwareLine(`Build failed: ${String(error)}`);
+      writeFirmwareInfo(`Build failed: ${String(error)}`);
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [appendFirmwareLine, firmwareCodegenMode, firmwareProjectKind, rootDir]);
+  }, [firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
 
   const handleFirmwareFlash = useCallback(async () => {
     if (!isTauriAvailable()) {
-      appendFirmwareLine("Tauri not available; cannot flash firmware.");
+      writeFirmwareInfo("Tauri not available; cannot flash firmware.");
       return;
     }
 
-    setFirmwareLines([]);
     setFirmwareProgressPct(null);
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
     setIsFirmwareBusy(true);
+    setFirmwareHasOutput(false);
+    pendingFirmwareTextRef.current = [];
+    if (firmwareTerminalRef.current) {
+      try {
+        firmwareTerminalRef.current.reset();
+        firmwareTerminalRef.current.clear();
+      } catch {
+        // ignore
+      }
+    }
 
     try {
       await safeInvoke<void>(
@@ -1380,15 +1490,15 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         },
         { throwOnError: true },
       );
-      appendFirmwareLine("Flash complete.");
+      writeFirmwareInfo("Flash complete.");
       setFirmwareProgressPct(100);
     } catch (error) {
       console.error(error);
-      appendFirmwareLine(`Flash failed: ${String(error)}`);
+      writeFirmwareInfo(`Flash failed: ${String(error)}`);
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [appendFirmwareLine, firmwareCodegenMode, firmwareProjectKind, rootDir]);
+  }, [firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
 
 		  useEffect(() => {
 		    const handleMove = (event: MouseEvent) => {
@@ -2463,7 +2573,21 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setFirmwareLines([])}
+                              onClick={() => {
+                                setFirmwareProgressPct(null);
+                                setFirmwareHasOutput(false);
+                                const terminal = firmwareTerminalRef.current;
+                                if (terminal) {
+                                  try {
+                                    terminal.reset();
+                                    terminal.clear();
+                                  } catch {
+                                    // ignore
+                                  }
+                                } else {
+                                  pendingFirmwareTextRef.current = [];
+                                }
+                              }}
                               className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
                               title="Clear firmware log"
                             >
@@ -2512,20 +2636,13 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
 	                              ) : null}
 	                            </div>
 
-                            <div
-                              ref={firmwareScrollRef}
-                              className={`min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-slate-200 selection:bg-sky-500/30 select-text ${
-                                bottomPanelTab === "firmware" ? "" : "hidden"
-                              }`}
-                            >
-                              {firmwareLines.length === 0 ? (
-                                <div className="text-slate-500">No firmware activity yet.</div>
-                              ) : (
-                                <pre className="whitespace-pre-wrap">
-                                  {firmwareLines.join("\n")}
-                                  {"\n"}
-                                </pre>
-                              )}
+                            <div className={`relative min-h-0 flex-1 ${bottomPanelTab === "firmware" ? "" : "hidden"}`}>
+                              {!firmwareHasOutput ? (
+                                <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">
+                                  No firmware activity yet.
+                                </div>
+                              ) : null}
+                              <div ref={firmwareTerminalContainerRef} className="absolute inset-0 px-2 py-2" />
                             </div>
 	                        </div>
 	

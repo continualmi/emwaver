@@ -1120,6 +1120,7 @@ dependencies = [
  "dialoguer",
  "emwaver-buffer-core",
  "include_dir",
+ "portable-pty",
  "rusb",
  "sha2",
  "tempfile",

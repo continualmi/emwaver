@@ -25,6 +25,7 @@ emwaver-buffer-core = { path = "crates/emwaver-buffer-core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rusb = { version = "0.9", features = ["vendored"] }
+portable-pty = "0.9"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 rusb = "0.9"

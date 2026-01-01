@@ -85,7 +85,7 @@ pub async fn firmware_build(app: tauri::AppHandle, payload: FirmwareBuildPayload
 
     tauri::async_runtime::spawn_blocking(move || {
         let mut on_event = |event| emit_progress(&app_handle, event);
-        emw::firmware::build_at_streaming(start_dir, project, codegen, verbose, &mut on_event)
+        emw::firmware::build_at_streaming(start_dir, project, codegen, verbose, true, &mut on_event)
             .map_err(|error| error.to_string())
     })
     .await
@@ -113,6 +113,7 @@ pub async fn firmware_flash(app: tauri::AppHandle, payload: FirmwareFlashPayload
             codegen,
             payload.dfu_alt,
             verbose,
+            true,
             &mut on_event,
         )
         .map_err(|error| error.to_string())
@@ -120,4 +121,3 @@ pub async fn firmware_flash(app: tauri::AppHandle, payload: FirmwareFlashPayload
     .await
     .map_err(|error| format!("Task failed: {error}"))?
 }
-
