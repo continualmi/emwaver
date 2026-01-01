@@ -13,6 +13,7 @@ adapter/managed_components/
 # Editors / IDEs
 *.iml
 node_modules/
+**/.emwaver/
 
 # Vim swap files
 *.swp

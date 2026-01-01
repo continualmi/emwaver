@@ -950,7 +950,7 @@ function App() {
         <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
         <Pane active={isTemplateActive}><TemplateFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
-        <Pane active={isIDEActive}><IDEFragment theme={theme} /></Pane>
+        <Pane active={isIDEActive}><IDEFragment theme={theme} isActive={isIDEActive} /></Pane>
       </div>
       {isModalOpen && (
         <NewProjectModal
