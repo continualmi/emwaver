@@ -10,17 +10,17 @@ import { isTauriAvailable, safeInvoke, safeJoin } from "../utils/tauri";
 import WaveletUIRenderer from "./wavelets/WaveletUIRenderer";
 
 const ASSET_SCRIPT_FILES = [
-  "cc1101.js",
-  "rfm69.js",
-  "usb.js",
-  "wavelet_demo.js",
-  "gpio.js",
-  "ir_send_saved_signal.js",
+  "cc1101.emw",
+  "rfm69.emw",
+  "usb.emw",
+  "wavelet_demo.emw",
+  "gpio.emw",
+  "ir_send_saved_signal.emw",
 ];
 
 const WAVELET_ASSET_ROOT = "/wavelet-assets";
 const WAVELETS_DIR_NAME = "wavelets";
-const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.js";
+const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.emw";
 const MIGRATION_CLEAR_KEY = "emwaver.wavelets.clearLegacy";
 
 const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {

@@ -51,7 +51,7 @@ tasks.register("syncWaveletAssets", Copy) {
     description = "Copies the canonical wavelet asset scripts into generated Android assets."
 
     from(emwaverSharedWaveletAssetsDir) {
-        include("*.js")
+        include("*.emw")
     }
     into(emwaverGeneratedWaveletAssetsDir)
 

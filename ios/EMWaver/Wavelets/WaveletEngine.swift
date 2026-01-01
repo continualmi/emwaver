@@ -225,8 +225,8 @@ final class WaveletEngine {
 
     private func injectDSL(into context: JSContext) {
         Swift.print("[WaveletEngine] Injecting shared wavelet bootstrap")
-        guard let url = Bundle.main.url(forResource: "wavelet_bootstrap", withExtension: "js") else {
-            let message = "Wavelet bootstrap missing from app bundle (wavelet_bootstrap.js)"
+        guard let url = Bundle.main.url(forResource: "wavelet_bootstrap", withExtension: "emw") else {
+            let message = "Wavelet bootstrap missing from app bundle (wavelet_bootstrap.emw)"
             printHandler?(message)
             Swift.print("[WaveletEngine] \(message)")
             return
@@ -312,11 +312,10 @@ final class WaveletEngine {
     private func normalizeModuleName(_ rawName: String) -> String {
         let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
-        var lower = trimmed.lowercased()
-        if !lower.hasSuffix(".js") {
-            lower.append(".js")
-        }
-        return lower
+        return trimmed
+            .replacingOccurrences(of: #"^\./"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\.(js|emw)$"#, with: "", options: .regularExpression)
+            .lowercased()
     }
 
     private func moduleError(_ message: String, context: JSContext) -> JSValue? {
@@ -410,4 +409,3 @@ final class WaveletEngine {
         return !suffix.isEmpty && suffix.allSatisfy { $0.isNumber }
     }
 }
-

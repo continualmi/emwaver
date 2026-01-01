@@ -85,6 +85,7 @@ public class WaveletsFragment extends Fragment {
 
     private static final String TAG = "WaveletsFragment";
     private static final String SCRIPT_EXTENSION = ".js";
+    private static final String ASSET_SCRIPT_EXTENSION = ".emw";
 
     private FragmentWaveletsBinding binding;
     private final List<ScriptMetadata> assetScripts = new ArrayList<>();
@@ -650,12 +651,12 @@ public class WaveletsFragment extends Fragment {
     private List<String> getAssetScriptNames() {
         List<String> names = new ArrayList<>();
         String[] defaultWavelets = {
-            "cc1101.js",
-            "rfm69.js",
-            "usb.js",
-            "wavelet_demo.js",
-            "gpio.js",
-            "ir_send_saved_signal.js"
+            "cc1101.emw",
+            "rfm69.emw",
+            "usb.emw",
+            "wavelet_demo.emw",
+            "gpio.emw",
+            "ir_send_saved_signal.emw"
         };
         for (String filename : defaultWavelets) {
             names.add(filename);
@@ -671,12 +672,12 @@ public class WaveletsFragment extends Fragment {
         assetScripts.clear(); // Clear existing asset scripts
         
         String[] assetScriptFiles = {
-            "cc1101.js",
-            "rfm69.js",
-            "usb.js",
-            "wavelet_demo.js",
-            "gpio.js",
-            "ir_send_saved_signal.js"
+            "cc1101.emw",
+            "rfm69.emw",
+            "usb.emw",
+            "wavelet_demo.emw",
+            "gpio.emw",
+            "ir_send_saved_signal.emw"
         };
         
         for (String filename : assetScriptFiles) {
@@ -684,12 +685,12 @@ public class WaveletsFragment extends Fragment {
                 InputStream is = requireContext().getAssets().open(filename);
                 is.close(); // Just check if it exists
                 
-                String name = filename.replace(".js", "");
+                String name = filename.replace(ASSET_SCRIPT_EXTENSION, "");
                 String id = "__asset__" + filename; // Special ID prefix for asset scripts
                 UserFileMetadata metadata = new UserFileMetadata(
                     id,
                     name,
-                    ".js",
+                    ASSET_SCRIPT_EXTENSION,
                     "file",
                     "asset", // Special etag for assets
                     0,
@@ -1470,7 +1471,12 @@ public class WaveletsFragment extends Fragment {
         for (ScriptMetadata scriptMetadata : metadataList) {
             if (scriptMetadata != null && scriptMetadata.isAssetScript()) {
                 try {
-                    String filename = scriptMetadata.getName() + ".js";
+                    UserFileMetadata assetMeta = scriptMetadata.getMetadata();
+                    String baseName = assetMeta != null && assetMeta.getName() != null ? assetMeta.getName() : scriptMetadata.getName();
+                    String ext = assetMeta != null && assetMeta.getExtension() != null && !assetMeta.getExtension().isEmpty()
+                        ? assetMeta.getExtension()
+                        : ASSET_SCRIPT_EXTENSION;
+                    String filename = baseName + ext;
                     InputStream is = requireContext().getAssets().open(filename);
                     String content = readTextFromInputStream(is);
                     is.close();
@@ -1589,7 +1595,7 @@ public class WaveletsFragment extends Fragment {
         if (waveletEngine == null) {
             waveletEngine = new WaveletEngine();
             waveletEngine.setDialogCallback(this::showDialog);
-            waveletEngine.setBootstrapSource(readAssetUtf8("wavelet_bootstrap.js"));
+            waveletEngine.setBootstrapSource(readAssetUtf8("wavelet_bootstrap.emw"));
             waveletEngine.setup(this::printLog, this::handleWaveletTree, buildBindings());
             waveletEngine.updateModuleSources(moduleSources());
         }
