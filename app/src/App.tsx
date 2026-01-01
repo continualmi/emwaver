@@ -35,6 +35,7 @@ import HomePage from "./components/HomePage";
 import FlashFragment from "./components/FlashFragment";
 import IDEFragment from "./components/IDEFragment";
 import TemplateFragment from "./components/TemplateFragment";
+import WaveletsWorkspaceFragment from "./components/WaveletsWorkspaceFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -79,6 +80,7 @@ type OpenFile = {
 };
 export type FragmentType =
   | "wavelets"
+  | "waveletsWorkspace"
   | "ism"
   | "sampler"
   | "emwaver"
@@ -929,6 +931,7 @@ function App() {
   const isTemplateActive = activePane === "template";
   const isSettingsActive = activePane === "settings";
   const isIDEActive = activePane === "ide";
+  const isWaveletsWorkspaceActive = activePane === "waveletsWorkspace";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -951,6 +954,9 @@ function App() {
         <Pane active={isTemplateActive}><TemplateFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
         <Pane active={isIDEActive}><IDEFragment theme={theme} isActive={isIDEActive} /></Pane>
+        <Pane active={isWaveletsWorkspaceActive}>
+          <WaveletsWorkspaceFragment theme={theme} isActive={isWaveletsWorkspaceActive} />
+        </Pane>
       </div>
       {isModalOpen && (
         <NewProjectModal
@@ -1132,6 +1138,12 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<WaveletIcon />}
       />
       <ActivityButton
+        label="Wavelets Workspace"
+        isActive={activePane === "waveletsWorkspace"}
+        onClick={() => onFragmentClick("waveletsWorkspace")}
+        icon={<WaveletsWorkspaceIcon />}
+      />
+      <ActivityButton
         label="ISM"
         isActive={activePane === "ism"}
         onClick={() => onFragmentClick("ism")}
@@ -1211,6 +1223,24 @@ function IDEIcon() {
         strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function WaveletsWorkspaceIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" aria-hidden="true">
+      <path
+        d="M7 8l-3 4 3 4M13 8l3 4-3 4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M18.5 9.5v5l3-2.5-3-2.5Z"
+        fill="currentColor"
       />
     </svg>
   );
