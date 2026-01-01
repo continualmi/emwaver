@@ -14,7 +14,10 @@
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
-  */
+  *
+  * EMWaver modifications
+  * Copyright (c) 2026 Luís Marnoto
+*/
 /* USER CODE END Header */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
