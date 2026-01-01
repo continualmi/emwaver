@@ -178,6 +178,17 @@ Replace the serial device as appropriate for your platform. Use `idf.py clean` o
   - Orchestrates build/flash by platform: ESP32 via `idf.py`; STM32 via CubeMX (when code generation is needed) + `arm-none-eabi-gcc`, plus DFU flows for supported devices.
 - Development environment and build instructions specific to the desktop app tooling.
 
+#### Workspace Structure (IDE + Wavelets)
+The desktop app now has **two separate workspaces** that reuse the same workspace shell UI:
+- Firmware IDE Workspace: `app/src/components/IDEFragment.tsx` → `app/src/components/workspace/WorkspaceShell.tsx` with `variant="ide"`
+- Wavelets Workspace: `app/src/components/WaveletsWorkspaceFragment.tsx` → `app/src/components/workspace/WorkspaceShell.tsx` with `variant="wavelets"`
+
+To keep the workspace code maintainable, common pieces live under `app/src/components/workspace/`:
+- Core shell + contracts: `WorkspaceShell.tsx`, `workspaceTypes.ts`, `workspaceStorage.ts`, `workspaceUtils.ts`, `WorkspaceIcons.tsx`
+- Sidebar: `sidebar/ExplorerTree.tsx`, `sidebar/GitSidebarPanel.tsx`, Git logic in `hooks/useWorkspaceGit.ts`
+- Top + main panels: `top/WorkspaceTopBar.tsx`, `main/GitDiffPanel.tsx`, `main/WaveletPreviewPanel.tsx`
+- Bottom panel (Terminal/Device): `terminal/WorkspaceBottomPanel.tsx`
+
 ### VS Code Extension (`/vsc`)
 - VS Code extension scaffold for a simple **Build & Flash** sidebar, delegating to the `emwaver` CLI (`emwaver build` / `emwaver flash`).
 - Dev workflow is documented in `vsc/README.md`.
