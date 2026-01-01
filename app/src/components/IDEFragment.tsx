@@ -576,6 +576,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
   const firmwareMonitorEnvReadyRef = useRef(false);
   const firmwareMonitorEnvKeyRef = useRef<string | null>(null);
 
+  const firmwareMonitorRunningRef = useRef(false);
+  const firmwareMonitorRunningKeyRef = useRef<string | null>(null);
+  const [isFirmwareMonitorRunning, setIsFirmwareMonitorRunning] = useState(false);
+
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
   const terminalStartInFlightRef = useRef(false);
@@ -1572,6 +1576,9 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       if (firmwareMonitorPtySessionIdRef.current) {
         void safeInvoke<void>("pty_stop", { payload: { session_id: firmwareMonitorPtySessionIdRef.current } });
         firmwareMonitorPtySessionIdRef.current = null;
+        firmwareMonitorRunningRef.current = false;
+        firmwareMonitorRunningKeyRef.current = null;
+        setIsFirmwareMonitorRunning(false);
       }
       terminalBySessionRef.current.forEach((terminal) => terminal.dispose());
       fitAddonBySessionRef.current.forEach((addon) => addon.dispose());
@@ -1797,6 +1804,10 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
         firmwareMonitorPtySessionIdRef.current = null;
         firmwareMonitorEnvReadyRef.current = false;
         firmwareMonitorEnvKeyRef.current = null;
+        firmwareMonitorRunningRef.current = false;
+        firmwareMonitorRunningKeyRef.current = null;
+        setIsFirmwareMonitorRunning(false);
+        setIsFirmwareMonitorRunning(false);
       }
     }
 
@@ -1860,18 +1871,29 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
       return;
     }
 
+    setFirmwarePanelTab("monitor");
     setIsTerminalVisible(true);
     setBottomPanelTab("firmware");
 
     try {
+      const key = `${firmwareProjectKind}:${rootDir}`;
       const sessionId = await ensureFirmwareMonitorPtySession();
       if (!sessionId) {
         return;
       }
+
+      if (firmwareMonitorRunningRef.current && firmwareMonitorRunningKeyRef.current === key) {
+        writeFirmwareInfo("monitor", "Monitor already running.");
+        return;
+      }
+
       await ensureFirmwareEnv("monitor", sessionId);
 
       const command = firmwareProjectKind === "esp32" ? "idf.py monitor" : "emwaver monitor";
       await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: `${command}\r` } });
+      firmwareMonitorRunningRef.current = true;
+      firmwareMonitorRunningKeyRef.current = key;
+      setIsFirmwareMonitorRunning(true);
     } catch (error) {
       console.error(error);
       writeFirmwareInfo("monitor", `Monitor failed: ${String(error)}`);
@@ -3018,13 +3040,47 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => void handleFirmwareMonitor()}
+                                  onClick={() => {
+                                    setFirmwarePanelTab("monitor");
+                                    void handleFirmwareMonitor();
+                                  }}
                                   disabled={!rootDir}
                                   className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
                                   title={firmwareProjectKind === "esp32" ? "Monitor (idf.py monitor)" : "Monitor (emwaver monitor)"}
                                 >
                                   Monitor
                                 </button>
+
+                                {firmwarePanelTab === "monitor" && isFirmwareMonitorRunning ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const sessionId = firmwareMonitorPtySessionIdRef.current;
+                                      if (!sessionId || !isTauriAvailable()) {
+                                        return;
+                                      }
+                                      void (async () => {
+                                        try {
+                                          await safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
+                                        } catch {
+                                          // ignore
+                                        } finally {
+                                          firmwareMonitorPtySessionIdRef.current = null;
+                                          firmwareMonitorEnvReadyRef.current = false;
+                                          firmwareMonitorEnvKeyRef.current = null;
+                                          firmwareMonitorRunningRef.current = false;
+                                          firmwareMonitorRunningKeyRef.current = null;
+                                          setIsFirmwareMonitorRunning(false);
+                                          writeFirmwareInfo("monitor", "Monitor stopped.");
+                                        }
+                                      })();
+                                    }}
+                                    className="rounded border border-rose-300/70 bg-rose-600 px-2 py-1 text-white shadow-sm hover:bg-rose-500 hover:shadow"
+                                    title="Stop monitor"
+                                  >
+                                    Stop
+                                  </button>
+                                ) : null}
                               </>
 
                               <button
