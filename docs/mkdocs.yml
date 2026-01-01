@@ -50,6 +50,7 @@ nav:
       - STM32 (STM32F042): flashing-firmware/stm32.md
       - ESP32 (ESP32-S3): flashing-firmware/esp32.md
   - Documentation:
+      - EMWaver CLI: documentation/cli.md
       - Buffer: documentation/buffer.md
       - Wavelets: wavelets.md
 
