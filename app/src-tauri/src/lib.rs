@@ -241,6 +241,7 @@ fn parse_init_components(raw: &[String]) -> Result<Vec<emw::Component>, String> 
     let mut out = Vec::with_capacity(raw.len());
     for item in raw {
         let component = match item.trim().to_ascii_lowercase().as_str() {
+            "ota" => emw::Component::Ota,
             "gpio" => emw::Component::Gpio,
             "sampler" => emw::Component::Sampler,
             "cc1101" => emw::Component::Cc1101,

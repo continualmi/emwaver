@@ -81,6 +81,16 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     write_template_file("main/command_registry.c", destination)?;
     write_template_file("main/command_registry.h", destination)?;
     write_template_file("main/init.h", destination)?;
+    if components.contains(&Component::Ota) {
+        write_template_file("main/ota_ble.c", destination)?;
+        write_template_file("main/ota_ble.h", destination)?;
+        write_template_file("main/ota_core.c", destination)?;
+        write_template_file("main/ota_core.h", destination)?;
+        write_template_file("main/ota_status.c", destination)?;
+        write_template_file("main/ota_status.h", destination)?;
+        write_template_file("main/ota_wifi.c", destination)?;
+        write_template_file("main/ota_wifi.h", destination)?;
+    }
 
     if components.contains(&Component::Gpio) {
         write_template_file("main/gpio_commands.c", destination)?;
@@ -572,12 +582,19 @@ fn write_generated_component_cmake(
     destination: &Path,
     components: &HashSet<Component>,
 ) -> Result<()> {
+    let ota_enabled = components.contains(&Component::Ota);
     let mut sources = vec![
         "main.c",
         "init.c",
         "ble_server.c",
         "command_registry.c",
     ];
+    if ota_enabled {
+        sources.push("ota_ble.c");
+        sources.push("ota_core.c");
+        sources.push("ota_status.c");
+        sources.push("ota_wifi.c");
+    }
     if components.contains(&Component::Gpio) {
         sources.push("gpio_commands.c");
     }
@@ -602,6 +619,10 @@ fn write_generated_component_cmake(
         cmake.push('"');
     }
     cmake.push_str(" INCLUDE_DIRS \".\")\n");
+    cmake.push_str(&format!(
+        "target_compile_definitions(${{COMPONENT_LIB}} PRIVATE EMWAVER_ENABLE_OTA={})\n",
+        if ota_enabled { 1 } else { 0 }
+    ));
     write_generated_file(destination, "main/CMakeLists.txt", &cmake)
 }
 

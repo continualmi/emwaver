@@ -83,6 +83,7 @@ fn prompt_components(theme: &ColorfulTheme, target: Target) -> Result<Vec<Compon
     let (choices, core_label) = match target {
         Target::Esp32s3 => (
             vec![
+                (Component::Ota, "OTA services (BLE + Wi‑Fi)"),
                 (Component::Gpio, "GPIO commands"),
                 (Component::Sampler, "Sampler commands"),
                 (Component::Cc1101, "CC1101 radio"),

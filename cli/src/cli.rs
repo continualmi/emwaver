@@ -169,6 +169,8 @@ pub enum Stm32Firmware {
 
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq, Hash)]
 pub enum Component {
+    /// Enables OTA services (BLE + Wi‑Fi) in the ESP32 template.
+    Ota,
     Gpio,
     Sampler,
     Cc1101,
