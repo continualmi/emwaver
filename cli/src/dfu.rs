@@ -420,19 +420,41 @@ impl DfuDevice {
         mut on_progress: impl FnMut(String),
     ) -> Result<(), String> {
         let _ = self.clear_status();
-        on_progress("Starting mass erase...".to_string());
+        let total_blocks = firmware
+            .len()
+            .div_ceil(BLOCK_SIZE)
+            .try_into()
+            .unwrap_or(u32::MAX);
+        let total_steps = total_blocks.saturating_mul(2).saturating_add(2).max(1);
+        let mut step_index: u32 = 0;
+        let mut emit = |step: u32, message: String| {
+            let pct = (step.saturating_mul(100) / total_steps).min(100);
+            on_progress(format!("{message} ({pct}%)"));
+        };
+
+        emit(step_index, "Starting mass erase...".to_string());
         self.mass_erase()?;
-        on_progress("Mass erase complete. Setting address pointer...".to_string());
+        step_index = step_index.saturating_add(1);
+        emit(step_index, "Mass erase complete. Setting address pointer...".to_string());
         self.set_address_pointer(address)?;
-        on_progress("Address pointer set. Starting flash write...".to_string());
+        step_index = step_index.saturating_add(1);
+        emit(step_index, "Address pointer set. Starting flash write...".to_string());
 
         let mut block_num: u16 = 2;
         let mut read_buffer = vec![0u8; BLOCK_SIZE];
-        for chunk in firmware.chunks(BLOCK_SIZE) {
-            on_progress(format!("Writing block {block_num}..."));
+        for (block_index, chunk) in firmware.chunks(BLOCK_SIZE).enumerate() {
+            let block_index = (block_index as u32).saturating_add(1);
+            emit(
+                step_index,
+                format!("Writing block {block_num} ({block_index}/{total_blocks})..."),
+            );
             self.write_block(block_num, chunk)?;
 
-            on_progress(format!("Verifying block {block_num}..."));
+            step_index = step_index.saturating_add(1);
+            emit(
+                step_index,
+                format!("Verifying block {block_num} ({block_index}/{total_blocks})..."),
+            );
             self.wait_upload_idle()?;
 
             let buf = &mut read_buffer[..chunk.len()];
@@ -447,10 +469,11 @@ impl DfuDevice {
                 return Err(format!("Error verifying block {}", block_num.saturating_sub(2)));
             }
 
+            step_index = step_index.saturating_add(1);
             block_num = block_num.wrapping_add(1);
         }
 
-        on_progress("Flash write completed successfully.".to_string());
+        emit(total_steps, "Flash write completed successfully.".to_string());
         Ok(())
     }
 }
