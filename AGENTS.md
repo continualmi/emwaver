@@ -189,7 +189,7 @@ To keep the workspace code maintainable, common pieces live under `app/src/compo
 - Top + main panels: `top/WorkspaceTopBar.tsx`, `main/GitDiffPanel.tsx`, `main/WaveletPreviewPanel.tsx`
 - Bottom panel (Terminal/Device): `terminal/WorkspaceBottomPanel.tsx`
 
-Wavelets Workspace also exposes a persistent “asset scripts” panel (collapsible) under the sidebar, and asset scripts can be opened/previewed even without a project folder open.
+Wavelets Workspace also exposes a persistent “asset scripts” panel (collapsible) under the sidebar; asset scripts can be opened and previewed (via the top-bar `Preview` action) even without a project folder open.
 
 ### VS Code Extension (`/vsc`)
 - VS Code extension scaffold for a simple **Build & Flash** sidebar, delegating to the `emwaver` CLI (`emwaver build` / `emwaver flash`).
