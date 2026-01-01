@@ -26,6 +26,11 @@ use std::process::{Command, Stdio};
 use std::env;
 use std::io::Write;
 use std::io::{self, BufRead, BufReader, IsTerminal};
+
+#[cfg(target_os = "macos")]
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+#[cfg(target_os = "macos")]
+use std::io::Read;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -43,11 +48,38 @@ pub enum FirmwareProgress {
     Stderr(String),
 }
 
+#[derive(Clone, Debug)]
+struct CommandExitStatus {
+    success: bool,
+    description: String,
+}
+
+impl CommandExitStatus {
+    fn from_std(status: std::process::ExitStatus) -> Self {
+        Self {
+            success: status.success(),
+            description: format!("{status}"),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn from_pty(status: portable_pty::ExitStatus) -> Self {
+        let description = status
+            .signal()
+            .map(|signal| format!("signal {signal}"))
+            .unwrap_or_else(|| format!("code {}", status.exit_code()));
+        Self {
+            success: status.success(),
+            description,
+        }
+    }
+}
+
 fn run_command_streaming(
     cmd: &mut Command,
     on_event: &mut dyn FnMut(FirmwareProgress),
     label: Option<String>,
-) -> Result<std::process::ExitStatus> {
+) -> Result<CommandExitStatus> {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     if let Some(label) = label {
@@ -71,14 +103,14 @@ fn run_command_streaming(
     let out_handle = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().flatten() {
-            let _ = tx_out.send(FirmwareProgress::Stdout(line));
+            let _ = tx_out.send(FirmwareProgress::Stdout(format!("{line}\n")));
         }
     });
 
     let err_handle = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines().flatten() {
-            let _ = tx_err.send(FirmwareProgress::Stderr(line));
+            let _ = tx_err.send(FirmwareProgress::Stderr(format!("{line}\n")));
         }
     });
 
@@ -97,9 +129,67 @@ fn run_command_streaming(
             while let Ok(event) = rx.try_recv() {
                 on_event(event);
             }
-            return Ok(status);
+            return Ok(CommandExitStatus::from_std(status));
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn run_command_streaming_pty(
+    cwd: &Path,
+    program: &str,
+    args: &[&str],
+    on_event: &mut dyn FnMut(FirmwareProgress),
+    label: Option<String>,
+) -> Result<CommandExitStatus> {
+    if let Some(label) = label {
+        on_event(FirmwareProgress::Info(format!("Running `{label}`...\n")));
+    }
+
+    let system = native_pty_system();
+    let pair = system
+        .openpty(PtySize {
+            rows: 36,
+            cols: 120,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|error| anyhow::anyhow!("Failed to create PTY: {error}"))?;
+
+    let mut cmd = CommandBuilder::new(program);
+    for arg in args {
+        cmd.arg(arg);
+    }
+    cmd.cwd(cwd);
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd.env("LANG", "en_US.UTF-8");
+    cmd.env("LC_ALL", "en_US.UTF-8");
+
+    let mut child = pair
+        .slave
+        .spawn_command(cmd)
+        .map_err(|error| anyhow::anyhow!("Failed to spawn `{program}` in PTY: {error}"))?;
+
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|error| anyhow::anyhow!("Failed to open PTY reader: {error}"))?;
+
+    let mut buffer = [0u8; 8192];
+    loop {
+        let n = reader.read(&mut buffer).unwrap_or(0);
+        if n == 0 {
+            break;
+        }
+        let chunk = String::from_utf8_lossy(&buffer[..n]).into_owned();
+        on_event(FirmwareProgress::Stdout(chunk));
+    }
+
+    let status = child
+        .wait()
+        .map_err(|error| anyhow::anyhow!("Failed to wait for `{program}`: {error}"))?;
+    Ok(CommandExitStatus::from_pty(status))
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -146,6 +236,7 @@ pub fn build_at_streaming(
     project: Option<PathBuf>,
     codegen: CodegenMode,
     verbose: bool,
+    prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
     match resolve_firmware_project_at(&start_dir, project)? {
@@ -153,7 +244,7 @@ pub fn build_at_streaming(
             if !matches!(codegen, CodegenMode::Auto) {
                 bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
             }
-            run_idf_streaming(&project, &["build"], on_event)
+            run_idf_streaming(&project, &["build"], prefer_pty, on_event)
         }
         (FirmwareKind::Stm32Cube, project) => {
             stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
@@ -205,6 +296,7 @@ pub fn flash_at_streaming(
     codegen: CodegenMode,
     dfu_alt: Option<u8>,
     verbose: bool,
+    prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
     match resolve_firmware_project_at(&start_dir, project)? {
@@ -219,9 +311,9 @@ pub fn flash_at_streaming(
             let build_dir = project.join("build");
             if !build_dir.is_dir() {
                 on_event(FirmwareProgress::Info(
-                    "No `build/` folder found; running `idf.py build` first.".to_string(),
+                    "No `build/` folder found; running `idf.py build` first.\n".to_string(),
                 ));
-                run_idf_streaming(&project, &["build"], on_event)?;
+                run_idf_streaming(&project, &["build"], prefer_pty, on_event)?;
             }
 
             let args_owned: Vec<String> = match port {
@@ -229,7 +321,7 @@ pub fn flash_at_streaming(
                 None => vec!["flash".into()],
             };
             let args: Vec<&str> = args_owned.iter().map(|s| s.as_str()).collect();
-            run_idf_streaming(&project, args.as_slice(), on_event)
+            run_idf_streaming(&project, args.as_slice(), prefer_pty, on_event)
         }
         (FirmwareKind::Stm32Cube, project) => {
             if port.is_some() {
@@ -439,6 +531,7 @@ fn run_idf(project: &Path, args: &[&str]) -> Result<()> {
 fn run_idf_streaming(
     project: &Path,
     args: &[&str],
+    prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
     let mut cmd = Command::new("bash");
@@ -449,11 +542,32 @@ fn run_idf_streaming(
         .current_dir(project)
         .stdin(Stdio::null());
 
-    let status = run_command_streaming(&mut cmd, on_event, Some(format!("idf.py {}", args.join(" "))))
-    .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?;
+    let label = Some(format!("idf.py {}", args.join(" ")));
 
-    if !status.success() {
-        bail!("`idf.py {}` exited with {status}", args.join(" "));
+    let status = if prefer_pty && matches!(host_platform(), HostPlatform::Macos) {
+        #[cfg(target_os = "macos")]
+        {
+            let mut pty_args = Vec::with_capacity(3 + args.len());
+            pty_args.push("-lc");
+            pty_args.push("source ./setup.sh && idf.py \"$@\"");
+            pty_args.push("bash");
+            pty_args.extend(args);
+
+            run_command_streaming_pty(project, "bash", &pty_args, on_event, label.clone())
+                .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            run_command_streaming(&mut cmd, on_event, label.clone())
+                .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?
+        }
+    } else {
+        run_command_streaming(&mut cmd, on_event, label.clone())
+            .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?
+    };
+
+    if !status.success {
+        bail!("`idf.py {}` exited with {}", args.join(" "), status.description);
     }
     Ok(())
 }
@@ -717,8 +831,8 @@ fn stm32_codegen_with_streaming(
     let status =
         run_command_streaming(&mut cmd, on_event, Some("STM32CubeMX".into()))
             .context("failed to run STM32CubeMX")?;
-    if !status.success() {
-        bail!("STM32CubeMX exited with {status}");
+    if !status.success {
+        bail!("STM32CubeMX exited with {}", status.description);
     }
     Ok(())
 }
@@ -825,8 +939,8 @@ fn stm32_build_and_export_bin_streaming(
         Some(format!("make -C {}", release.display())),
     )
     .with_context(|| format!("failed to run `make -C {}`", release.display()))?;
-    if !status.success() {
-        bail!("`make -C {}` exited with {status}", release.display());
+    if !status.success {
+        bail!("`make -C {}` exited with {}", release.display(), status.description);
     }
 
     let elf = find_single_elf(&release)?;
@@ -842,8 +956,8 @@ fn stm32_build_and_export_bin_streaming(
         .stdin(Stdio::null());
     let status = run_command_streaming(&mut objcopy, on_event, Some("arm-none-eabi-objcopy".into()))
         .context("failed to run `arm-none-eabi-objcopy`")?;
-    if !status.success() {
-        bail!("`arm-none-eabi-objcopy` exited with {status}");
+    if !status.success {
+        bail!("`arm-none-eabi-objcopy` exited with {}", status.description);
     }
 
     on_event(FirmwareProgress::Info(format!("Exported: {}", bin.display())));
