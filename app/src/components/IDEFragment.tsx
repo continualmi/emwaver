@@ -2716,7 +2716,7 @@ function NewProjectModal({
                     ].join(" ")}
                   >
                     <div className="text-sm font-semibold">ESP32-S3</div>
-                    <div className="mt-1 text-xs text-slate-400">BLE-first device; OTA updates.</div>
+                    <div className="mt-1 text-xs text-slate-400">Supports: EMWaver Flagship, Shield, DIY.</div>
                   </button>
                   <button
                     type="button"
@@ -2729,7 +2729,7 @@ function NewProjectModal({
                     ].join(" ")}
                   >
                     <div className="text-sm font-semibold">STM32F042</div>
-                    <div className="mt-1 text-xs text-slate-400">USB-first device; DFU updates.</div>
+                    <div className="mt-1 text-xs text-slate-400">Supports: Infrared Waver, ISM Waver, GPIO Waver, RFID Waver.</div>
                   </button>
                 </div>
               </div>
