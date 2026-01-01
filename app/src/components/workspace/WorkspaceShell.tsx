@@ -366,10 +366,14 @@ export default function WorkspaceShell({
 
   const waveletTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
   const canRunWavelet = useMemo(() => {
-    if (variant !== "wavelets" || !waveletTargetPath) {
+    if (variant !== "wavelets") {
       return false;
     }
-    const normalizedPath = waveletTargetPath.replace(/\\/g, "/");
+    const candidatePath = (activeMainTabKind === "preview" ? activePreviewPath : waveletTargetPath) ?? null;
+    if (!candidatePath) {
+      return false;
+    }
+    const normalizedPath = candidatePath.replace(/\\/g, "/");
     if (!isWaveletScriptPath(normalizedPath)) {
       return false;
     }
@@ -377,7 +381,7 @@ export default function WorkspaceShell({
       return true;
     }
     return Boolean(rootDir);
-  }, [rootDir, variant, waveletTargetPath]);
+  }, [activeMainTabKind, activePreviewPath, rootDir, variant, waveletTargetPath]);
 
   const effectiveBottomPanelTab: BottomPanelTab = variant === "ide" ? bottomPanelTab : "terminal";
 
@@ -2591,20 +2595,6 @@ export default function WorkspaceShell({
                         isCollapsed={isAssetScriptsCollapsed}
                         onToggleCollapsed={() => setIsAssetScriptsCollapsed((prev) => !prev)}
                         onOpenAsset={(filename) => handleOpenFile(waveletAssetPath(filename))}
-                        onPreviewAsset={(filename) => {
-                          const assetPath = waveletAssetPath(filename);
-                          void (async () => {
-                            await openWaveletPreviewTab(assetPath, { activate: true });
-                            await runWaveletForPath(assetPath);
-                          })();
-                        }}
-                        onRunAsset={(filename) => {
-                          const assetPath = waveletAssetPath(filename);
-                          void (async () => {
-                            await openWaveletPreviewTab(assetPath, { activate: false });
-                            await runWaveletForPath(assetPath);
-                          })();
-                        }}
                       />
                     </div>
                   ) : null}
@@ -2728,46 +2718,33 @@ export default function WorkspaceShell({
                 </>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!waveletTargetPath) return;
-                      void (async () => {
-                        await openWaveletPreviewTab(waveletTargetPath, { activate: true });
-                        await runWaveletForPath(waveletTargetPath);
-                      })();
-                    }}
-                    disabled={!canRunWavelet || !waveletTargetPath}
-                    className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                    title="Preview wavelet"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <PlayIcon className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold">Preview</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!waveletTargetPath) return;
-                      void (async () => {
-                        await openWaveletPreviewTab(waveletTargetPath, { activate: false });
-                        await runWaveletForPath(waveletTargetPath);
-                      })();
-                    }}
-                    disabled={!canRunWavelet || !waveletTargetPath}
-                    className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                    title="Run wavelet"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <PlayIcon className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold">Run</span>
-                    </span>
-                  </button>
-                  {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
-                    <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
-                      <div className="h-full w-full animate-pulse bg-emerald-400/80" />
-                    </div>
+                  {activeMainTabKind !== "preview" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = waveletTargetPath;
+                          if (!target) return;
+                          void (async () => {
+                            await openWaveletPreviewTab(target, { activate: true });
+                            await runWaveletForPath(target);
+                          })();
+                        }}
+                        disabled={!canRunWavelet || !waveletTargetPath}
+                        className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                        title="Preview wavelet"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <PlayIcon className="h-4 w-4" />
+                          <span className="text-[11px] font-semibold">Preview</span>
+                        </span>
+                      </button>
+                      {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
+                        <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
+                          <div className="h-full w-full animate-pulse bg-emerald-400/80" />
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </>
               )
@@ -2790,17 +2767,6 @@ export default function WorkspaceShell({
                   theme={theme}
                   path={activePreviewPath}
                   state={waveletPreviewState[activePreviewPath]}
-                  onClear={() => {
-                    setWaveletPreviewState((prev) => ({
-                      ...prev,
-                      [activePreviewPath]: { tree: null, console: [], isRunning: false },
-                    }));
-                  }}
-                  onRun={() => void runWaveletForPath(activePreviewPath)}
-                  onBackToEditor={() => {
-                    setActiveMainTabKind("file");
-                    setActivePreviewPath(null);
-                  }}
                   deviceStatus={waveletDeviceConnection.connectionStatus()}
                   onInvokeCallback={(token, args) => {
                     waveletEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
