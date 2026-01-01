@@ -38,6 +38,7 @@ type OpenFile = {
   content: string;
   language: string;
   isDirty: boolean;
+  diskMtimeMs?: number;
 };
 
 type GitStatusEntry = {
@@ -79,6 +80,8 @@ type CreateProjectResponse = {
 };
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
+
+const FILE_AUTO_RELOAD_INTERVAL_MS = 2000;
 
 const ROOT_STORAGE_KEY = "emwaver.ide.root";
 const SIDEBAR_WIDTH_STORAGE_KEY = "emwaver.ide.sidebarWidth";
@@ -582,6 +585,102 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     }
     return openFiles.find((file) => file.path === activeFilePath) ?? null;
   }, [activeFilePath, openFiles]);
+
+  const openFilesRef = useRef<OpenFile[]>(openFiles);
+  useEffect(() => {
+    openFilesRef.current = openFiles;
+  }, [openFiles]);
+
+  useEffect(() => {
+    if (!isTauriAvailable() || typeof window === "undefined") {
+      return;
+    }
+
+    let canceled = false;
+    let inFlight = false;
+
+    const tick = async () => {
+      if (canceled || inFlight) {
+        return;
+      }
+
+      const snapshot = openFilesRef.current;
+      const candidates = snapshot.filter((file) => !file.isDirty);
+      if (candidates.length === 0) {
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const mtimes = await Promise.all(
+          candidates.map((file) => safeInvoke<number>("file_modified_ms", { payload: { path: file.path } }).catch(() => null)),
+        );
+
+        const initMtimes = new Map<string, number>();
+        const reloads: Array<{ path: string; mtime: number }> = [];
+
+        candidates.forEach((file, idx) => {
+          const mtime = mtimes[idx];
+          if (mtime == null) {
+            return;
+          }
+          if (file.diskMtimeMs == null) {
+            initMtimes.set(file.path, mtime);
+            return;
+          }
+          if (mtime !== file.diskMtimeMs) {
+            reloads.push({ path: file.path, mtime });
+          }
+        });
+
+        const contents = await Promise.all(
+          reloads.map((entry) => safeInvoke<string>("read_file", { payload: { path: entry.path } }).catch(() => null)),
+        );
+
+        if (reloads.length === 0 && initMtimes.size === 0) {
+          return;
+        }
+
+        setOpenFiles((prev) =>
+          prev.map((file) => {
+            const initMtime = initMtimes.get(file.path);
+            if (initMtime != null && file.diskMtimeMs == null) {
+              return { ...file, diskMtimeMs: initMtime };
+            }
+
+            const reloadIndex = reloads.findIndex((entry) => entry.path === file.path);
+            if (reloadIndex === -1) {
+              return file;
+            }
+
+            if (file.isDirty) {
+              return file;
+            }
+
+            const content = contents[reloadIndex];
+            if (content == null) {
+              return file;
+            }
+
+            return { ...file, content, isDirty: false, diskMtimeMs: reloads[reloadIndex].mtime };
+          }),
+        );
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void tick();
+    }, FILE_AUTO_RELOAD_INTERVAL_MS);
+
+    void tick();
+
+    return () => {
+      canceled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const gitRepoIssue = useMemo(() => {
     const message = (gitError ?? "").toLowerCase();
@@ -1631,13 +1730,17 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     openingFilePathsRef.current.add(path);
     setIsLoadingFile(true);
     try {
-      const content = await safeInvoke<string>("read_file", { payload: { path } });
+      const [content, diskMtimeMs] = await Promise.all([
+        safeInvoke<string>("read_file", { payload: { path } }),
+        safeInvoke<number>("file_modified_ms", { payload: { path } }).catch(() => undefined),
+      ]);
       const next: OpenFile = {
         path,
         name: basename(path),
         content: content ?? "",
         language: languageForPath(path),
         isDirty: false,
+        diskMtimeMs,
       };
       setOpenFiles((prev) => (prev.some((file) => file.path === path) ? prev : [...prev, next]));
     } finally {
@@ -1676,7 +1779,12 @@ export default function IDEFragment({ theme = "dark" }: { theme?: ThemeMode }) {
     setIsSaving(true);
     try {
       await safeInvoke<void>("write_file", { payload: { path: activeFile.path, content: activeFile.content } });
-      setOpenFiles((prev) => prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false } : file)));
+      const diskMtimeMs = await safeInvoke<number>("file_modified_ms", { payload: { path: activeFile.path } }).catch(
+        () => undefined,
+      );
+      setOpenFiles((prev) =>
+        prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false, diskMtimeMs } : file)),
+      );
       void refreshGit();
     } finally {
       setIsSaving(false);
