@@ -318,6 +318,24 @@ async fn read_file(payload: ReadFilePayload) -> Result<String, String> {
     .and_then(|result| result)
 }
 
+#[tauri::command]
+async fn file_modified_ms(payload: ReadFilePayload) -> Result<i64, String> {
+    let path = expand_path(&payload.path);
+    spawn_blocking(move || {
+        let metadata = fs::metadata(&path).map_err(|error| format!("Failed to stat file: {error}"))?;
+        let modified = metadata
+            .modified()
+            .map_err(|error| format!("Failed to stat file: {error}"))?;
+        let duration = modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| format!("Failed to stat file: {error}"))?;
+        Ok::<i64, String>(duration.as_millis() as i64)
+    })
+    .await
+    .map_err(|error| format!("Failed to stat file: {error}"))
+    .and_then(|result| result)
+}
+
 #[derive(Deserialize)]
 struct RunShellCommandPayload {
     command: String,
@@ -1690,6 +1708,7 @@ pub fn run() {
             read_directory,
             read_directory_children,
             read_file,
+            file_modified_ms,
             read_binary_file,
             write_file,
             write_binary_file,
