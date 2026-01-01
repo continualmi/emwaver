@@ -339,11 +339,11 @@ export class WaveletEngine {
   }
 
   /**
-   * Normalize module name (remove .js extension, handle paths)
+   * Normalize module name (remove .js/.emw extension, handle paths)
    */
   private normalizeModuleName(name: string): string {
     return name
-      .replace(/\.js$/, '')
+      .replace(/\.(js|emw)$/, '')
       .replace(/^\.\//, '')
       .toLowerCase();
   }

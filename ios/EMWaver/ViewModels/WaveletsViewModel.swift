@@ -50,12 +50,12 @@ final class WaveletsViewModel: ObservableObject {
     private let lastScriptDefaultsKey = "wavelets.last_script_id"
     private let assetIdPrefix = "__asset__"
     private let assetScriptNames = [
-        "cc1101.js",
-        "gpio.js",
-        "ir_send_saved_signal.js",
-        "rfm69.js",
-        "usb.js",
-        "wavelet_demo.js"
+        "cc1101.emw",
+        "gpio.emw",
+        "ir_send_saved_signal.emw",
+        "rfm69.emw",
+        "usb.emw",
+        "wavelet_demo.emw"
     ]
 
     init(
@@ -418,10 +418,10 @@ final class WaveletsViewModel: ObservableObject {
         var updated: [String: AssetRecord] = [:]
 
         for filename in assetScriptNames {
-            let nameWithoutExt = filename.replacingOccurrences(of: ".js", with: "")
-            var url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js", subdirectory: "DefaultScripts")
+            let nameWithoutExt = filename.replacingOccurrences(of: ".emw", with: "")
+            var url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "emw", subdirectory: "DefaultScripts")
             if url == nil {
-                url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js")
+                url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "emw")
             }
             guard let fileUrl = url,
                   let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
@@ -499,7 +499,10 @@ final class WaveletsViewModel: ObservableObject {
 
     private func isModuleScript(name: String, content: String) -> Bool {
         let lowered = name.lowercased()
-        if lowered.hasSuffix(".module.js") || lowered.hasSuffix("_module.js") {
+        if lowered.hasSuffix(".module.js")
+            || lowered.hasSuffix("_module.js")
+            || lowered.hasSuffix(".module.emw")
+            || lowered.hasSuffix("_module.emw") {
             return true
         }
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)

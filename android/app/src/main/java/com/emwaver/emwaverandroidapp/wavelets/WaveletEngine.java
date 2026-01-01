@@ -376,7 +376,7 @@ public final class WaveletEngine {
     private void injectDsl(Context cx, Scriptable scope) {
         String source = bootstrapSource;
         if (source == null || source.trim().isEmpty()) {
-            throw new EvaluatorException("Wavelet bootstrap not loaded (missing wavelet_bootstrap.js)");
+            throw new EvaluatorException("Wavelet bootstrap not loaded (missing wavelet_bootstrap.emw)");
         }
         cx.evaluateString(scope, source, "WaveletBootstrap", 1, null);
     }
@@ -523,11 +523,10 @@ public final class WaveletEngine {
         if (trimmed.isEmpty()) {
             return "";
         }
-        String lower = trimmed.toLowerCase(Locale.ROOT);
-        if (!lower.endsWith(".js")) {
-            lower = lower + ".js";
-        }
-        return lower;
+        return trimmed
+            .replaceFirst("^\\./", "")
+            .replaceFirst("\\.(js|emw)$", "")
+            .toLowerCase(Locale.ROOT);
     }
 
     private static final class ModuleSource {
