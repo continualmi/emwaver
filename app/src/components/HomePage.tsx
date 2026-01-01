@@ -77,7 +77,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     {
       id: "wavelets" as FragmentType,
       name: "Wavelets",
-      description: "Manage and run wavelet scripts",
+      description: "Wavelet workspace with preview tabs",
       icon: <WaveletIcon />,
       borderClass: "hover:border-sky-500/60",
       iconClass: "text-sky-400",
@@ -89,14 +89,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       icon: <IDEIcon />,
       borderClass: "hover:border-slate-400/60",
       iconClass: "text-slate-300",
-    },
-    {
-      id: "waveletsWorkspace" as FragmentType,
-      name: "Wavelets Workspace",
-      description: "Wavelet project workspace with preview tabs",
-      icon: <WaveletIcon />,
-      borderClass: "hover:border-sky-500/60",
-      iconClass: "text-sky-400",
     },
     {
       id: "ism" as FragmentType,
