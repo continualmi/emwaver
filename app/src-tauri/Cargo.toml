@@ -2,8 +2,9 @@
 name = "emwaver"
 version = "0.1.0"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["Luís Marnoto"]
 edition = "2021"
+license = "Apache-2.0"
 
 [[bin]]
 name = "EMWaver"

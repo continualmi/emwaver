@@ -1,19 +1,18 @@
 /*
- * EMWaver CLI
- * Copyright (C) 2025 Luís Marnoto
+ * EMWaver
+ * Copyright (c) 2026 Luís Marnoto
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 use std::collections::HashSet;
@@ -471,21 +470,20 @@ fn write_generated_init(destination: &Path, components: &HashSet<Component>) -> 
 
     let mut lines = Vec::new();
     lines.push("/*".to_string());
-    lines.push(" * EMWaver Firmware - Initialization".to_string());
-    lines.push(" * Copyright (C) 2025 Luís Marnoto".to_string());
+    lines.push(" * EMWaver".to_string());
+    lines.push(" * Copyright (c) 2026 Luís Marnoto".to_string());
     lines.push(" *".to_string());
-    lines.push(" * This program is free software: you can redistribute it and/or modify".to_string());
-    lines.push(" * it under the terms of the GNU General Public License as published by".to_string());
-    lines.push(" * the Free Software Foundation, either version 3 of the License, or".to_string());
-    lines.push(" * (at your option) any later version.".to_string());
+    lines.push(" * Licensed under the Apache License, Version 2.0 (the \"License\");".to_string());
+    lines.push(" * you may not use this file except in compliance with the License.".to_string());
+    lines.push(" * You may obtain a copy of the License at".to_string());
     lines.push(" *".to_string());
-    lines.push(" * This program is distributed in the hope that it will be useful,".to_string());
-    lines.push(" * but WITHOUT ANY WARRANTY; without even the implied warranty of".to_string());
-    lines.push(" * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the".to_string());
-    lines.push(" * GNU General Public License for more details.".to_string());
+    lines.push(" *     http://www.apache.org/licenses/LICENSE-2.0".to_string());
     lines.push(" *".to_string());
-    lines.push(" * You should have received a copy of the GNU General Public License".to_string());
-    lines.push(" * along with this program.  If not, see <https://www.gnu.org/licenses/>.".to_string());
+    lines.push(" * Unless required by applicable law or agreed to in writing, software".to_string());
+    lines.push(" * distributed under the License is distributed on an \"AS IS\" BASIS,".to_string());
+    lines.push(" * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.".to_string());
+    lines.push(" * See the License for the specific language governing permissions and".to_string());
+    lines.push(" * limitations under the License.".to_string());
     lines.push(" */".to_string());
     lines.push("".to_string());
     lines.extend(includes.iter().map(|line| line.to_string()));
