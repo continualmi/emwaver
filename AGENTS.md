@@ -185,7 +185,7 @@ The desktop app now has **two separate workspaces** that reuse the same workspac
 
 To keep the workspace code maintainable, common pieces live under `app/src/components/workspace/`:
 - Core shell + contracts: `WorkspaceShell.tsx`, `workspaceTypes.ts`, `workspaceStorage.ts`, `workspaceUtils.ts`, `WorkspaceIcons.tsx`
-- Sidebar: `sidebar/ExplorerTree.tsx`, `sidebar/GitSidebarPanel.tsx`, Git logic in `hooks/useWorkspaceGit.ts`
+- Sidebar: `sidebar/ExplorerTree.tsx`, `sidebar/GitSidebarPanel.tsx`, `sidebar/WaveletAssetsPanel.tsx`, Git logic in `hooks/useWorkspaceGit.ts`
 - Top + main panels: `top/WorkspaceTopBar.tsx`, `main/GitDiffPanel.tsx`, `main/WaveletPreviewPanel.tsx`
 - Bottom panel (Terminal/Device): `terminal/WorkspaceBottomPanel.tsx`
 
