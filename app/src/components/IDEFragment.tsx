@@ -70,7 +70,7 @@ type NewProjectPayload = {
   name: string;
   location: string;
   target: "esp32s3" | "stm32f042";
-  components: Array<"ota" | "gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
+  components: Array<"ble" | "command_registry" | "ota" | "gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
   stm32_firmware?: "gpio" | "ir" | "ism" | "rfid" | null;
 };
 
@@ -2657,9 +2657,10 @@ function NewProjectModal({
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [target, setTarget] = useState<NewProjectPayload["target"]>("esp32s3");
+  const [pendingDisableCoreConfirm, setPendingDisableCoreConfirm] = useState<null | "ble" | "command_registry">(null);
 
   const [components, setComponents] = useState<Set<NewProjectPayload["components"][number]>>(
-    () => new Set(["gpio", "ota"]),
+    () => new Set(["ble", "command_registry", "gpio", "ota"]),
   );
   const [stm32Firmware, setStm32Firmware] = useState<
     Exclude<NewProjectPayload["stm32_firmware"], undefined | null>
@@ -2670,7 +2671,7 @@ function NewProjectModal({
 
   const resetForTarget = useCallback((nextTarget: NewProjectPayload["target"]) => {
     if (nextTarget === "esp32s3") {
-      setComponents(new Set(["gpio", "ota"]));
+      setComponents(new Set(["ble", "command_registry", "gpio", "ota"]));
     } else {
       setStm32Firmware("gpio");
       setComponents(new Set());
@@ -2714,6 +2715,64 @@ function NewProjectModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+      {pendingDisableCoreConfirm ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+            <div className="text-sm font-semibold text-slate-100">
+              {pendingDisableCoreConfirm === "ble" ? "Disable BLE?" : "Disable Command Registry?"}
+            </div>
+            {pendingDisableCoreConfirm === "ble" ? (
+              <p className="mt-2 text-sm text-slate-300">
+                Disabling BLE means you won’t be able to interact with EMWaver apps.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-slate-300">
+                You can still connect over BLE, but you won’t have any built-in commands (like <span className="font-semibold">version</span>).
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDisableCoreConfirm(null)}
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const mode = pendingDisableCoreConfirm;
+                  setPendingDisableCoreConfirm(null);
+                  setComponents((prev) => {
+                    const next = new Set(prev);
+                    if (mode === "ble") {
+                      next.delete("ble");
+                      next.delete("command_registry");
+                      next.delete("ota");
+                      next.delete("gpio");
+                      next.delete("sampler");
+                      next.delete("cc1101");
+                      next.delete("rfm69");
+                      next.delete("mfrc522");
+                    } else {
+                      next.delete("command_registry");
+                      next.delete("gpio");
+                      next.delete("sampler");
+                      next.delete("cc1101");
+                      next.delete("rfm69");
+                      next.delete("mfrc522");
+                    }
+                    return next;
+                  });
+                }}
+                className="rounded-md bg-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-rose-400 cursor-pointer"
+              >
+                Disable
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
@@ -2772,13 +2831,93 @@ function NewProjectModal({
             </div>
           ) : null}
 
-          {step === 2 ? (
+	          {step === 2 ? (
             <div className="space-y-3">
               {target === "esp32s3" ? (
                 <div>
                   <div className="mb-2">
                     <div className="text-sm font-semibold text-slate-100">Components</div>
-                    <div className="text-xs text-slate-400">Default is GPIO + OTA; add what you need.</div>
+                    <div className="text-xs text-slate-400">
+                      Default is BLE + Command Registry + GPIO + OTA; uncheck what you don&apos;t need.
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      {
+                        id: "ble" as const,
+                        label: "BLE",
+                      },
+                      {
+                        id: "command_registry" as const,
+                        label: "Command Registry",
+                      },
+                    ].map((item) => {
+                      const checked = components.has(item.id);
+                      const disabled = false;
+                      return (
+                        <label
+                          key={item.id}
+                          className={[
+                            "flex items-center gap-2 rounded-md border bg-slate-950 px-3 py-2 text-sm text-slate-200",
+                            disabled ? "border-slate-800 opacity-60" : "border-slate-700 hover:border-sky-500/60",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const nextChecked = event.target.checked;
+                              setComponents((prev) => {
+                                const next = new Set(prev);
+                                if (item.id === "ble" && !nextChecked) {
+                                  setPendingDisableCoreConfirm("ble");
+                                  return prev;
+                                }
+                                if (item.id === "command_registry" && !nextChecked) {
+                                  setPendingDisableCoreConfirm(item.id);
+                                  return prev;
+                                }
+
+                                if (nextChecked) {
+                                  next.add(item.id);
+                                  if (item.id === "command_registry") {
+                                    next.add("ble");
+                                  }
+                                } else {
+                                  next.delete(item.id);
+                                }
+
+                                if (!next.has("ble")) {
+                                  next.delete("command_registry");
+                                  next.delete("ota");
+                                  next.delete("gpio");
+                                  next.delete("sampler");
+                                  next.delete("cc1101");
+                                  next.delete("rfm69");
+                                  next.delete("mfrc522");
+                                }
+
+                                if (!next.has("command_registry")) {
+                                  next.delete("gpio");
+                                  next.delete("sampler");
+                                  next.delete("cc1101");
+                                  next.delete("rfm69");
+                                  next.delete("mfrc522");
+                                }
+
+                                return next;
+                              });
+                            }}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">
+                    Firmware modules
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {(
@@ -2792,14 +2931,20 @@ function NewProjectModal({
                       ] as const
                     ).map((item) => {
                       const checked = components.has(item.id);
+                      const disabled =
+                        item.id === "ota" ? !components.has("ble") : !components.has("command_registry");
                       return (
                         <label
                           key={item.id}
-                          className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:border-sky-500/60"
+                          className={[
+                            "flex items-center gap-2 rounded-md border bg-slate-950 px-3 py-2 text-sm text-slate-200",
+                            disabled ? "border-slate-800 opacity-60" : "border-slate-700 hover:border-sky-500/60",
+                          ].join(" ")}
                         >
                           <input
                             type="checkbox"
                             checked={checked}
+                            disabled={disabled}
                             onChange={(event) => {
                               const nextChecked = event.target.checked;
                               setComponents((prev) => {
@@ -2808,9 +2953,6 @@ function NewProjectModal({
                                   next.add(item.id);
                                 } else {
                                   next.delete(item.id);
-                                }
-                                if (next.size === 0) {
-                                  next.add("gpio");
                                 }
                                 return next;
                               });

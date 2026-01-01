@@ -68,6 +68,25 @@ pub fn run_init(
 }
 
 fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<()> {
+    let ble_enabled = components.contains(&Component::Ble);
+    let command_registry_enabled = components.contains(&Component::CommandRegistry);
+
+    if command_registry_enabled && !ble_enabled {
+        bail!("command_registry requires ble");
+    }
+    if components.contains(&Component::Ota) && !ble_enabled {
+        bail!("ota requires ble");
+    }
+    if (components.contains(&Component::Gpio)
+        || components.contains(&Component::Sampler)
+        || components.contains(&Component::Cc1101)
+        || components.contains(&Component::Rfm69)
+        || components.contains(&Component::Mfrc522))
+        && !command_registry_enabled
+    {
+        bail!("selected components require command_registry");
+    }
+
     write_template_file("CMakeLists.txt", destination)?;
     write_template_file("sdkconfig", destination)?;
     write_template_file("sdkconfig.ci", destination)?;
@@ -76,11 +95,15 @@ fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<
     write_template_file("setup.sh", destination)?;
     write_template_file("main/idf_component.yml", destination)?;
 
-    write_template_file("main/libraries/ble_server.c", destination)?;
-    write_template_file("main/libraries/ble_server.h", destination)?;
-    write_template_file("main/libraries/command_registry.c", destination)?;
-    write_template_file("main/libraries/command_registry.h", destination)?;
     write_template_file("main/main.h", destination)?;
+    if ble_enabled {
+        write_template_file("main/libraries/ble_server.c", destination)?;
+        write_template_file("main/libraries/ble_server.h", destination)?;
+    }
+    if command_registry_enabled {
+        write_template_file("main/libraries/command_registry.c", destination)?;
+        write_template_file("main/libraries/command_registry.h", destination)?;
+    }
     if components.contains(&Component::Ota) {
         write_template_file("main/libraries/ota_ble.c", destination)?;
         write_template_file("main/libraries/ota_ble.h", destination)?;
@@ -406,23 +429,32 @@ void app_main(void)
 }
 
 fn write_generated_init(destination: &Path, components: &HashSet<Component>) -> Result<()> {
+    let ble_enabled = components.contains(&Component::Ble);
+    let command_registry_enabled = components.contains(&Component::CommandRegistry);
+
     let mut includes = vec![
         "#include \"main.h\"",
         "",
         "#include <string.h>",
         "",
-        "#include \"ble_server.h\"",
-        "#include \"command_registry.h\"",
         "#include \"driver/gpio.h\"",
         "#include \"esp_err.h\"",
-        "#include \"esp_heap_caps.h\"",
         "#include \"esp_log.h\"",
         "#include \"sdkconfig.h\"",
         "#include \"freertos/FreeRTOS.h\"",
-        "#include \"freertos/queue.h\"",
         "#include \"freertos/task.h\"",
         "#include \"nvs_flash.h\"",
     ];
+
+    if ble_enabled {
+        includes.push("#include \"ble_server.h\"");
+    }
+
+    if command_registry_enabled {
+        includes.push("#include \"command_registry.h\"");
+        includes.push("#include \"esp_heap_caps.h\"");
+        includes.push("#include \"freertos/queue.h\"");
+    }
 
     if components.contains(&Component::Sampler) {
         includes.push("#include \"sampler.h\"");
@@ -464,12 +496,14 @@ fn write_generated_init(destination: &Path, components: &HashSet<Component>) -> 
     lines.push("#define IR_TX_PIN GPIO_NUM_37".to_string());
     lines.push("".to_string());
     lines.push("static const char *TAG = \"INIT\";".to_string());
-    lines.push("static QueueHandle_t cmd_queue;".to_string());
-    lines.push("static TaskHandle_t command_task_handle;".to_string());
-    lines.push("".to_string());
-    lines.push("static void command_task(void *pv_parameters);".to_string());
-    lines.push("static void register_core_commands(void);".to_string());
-    lines.push("static void version_command(void);".to_string());
+    if command_registry_enabled {
+        lines.push("static QueueHandle_t cmd_queue;".to_string());
+        lines.push("static TaskHandle_t command_task_handle;".to_string());
+        lines.push("".to_string());
+        lines.push("static void command_task(void *pv_parameters);".to_string());
+        lines.push("static void register_core_commands(void);".to_string());
+        lines.push("static void version_command(void);".to_string());
+    }
     lines.push("".to_string());
     lines.push("void emwaver_init(void)".to_string());
     lines.push("{".to_string());
@@ -498,83 +532,99 @@ fn write_generated_init(destination: &Path, components: &HashSet<Component>) -> 
     lines.push("        gpio_set_level(STARTUP_LED, 0);".to_string());
     lines.push("        vTaskDelay(pdMS_TO_TICKS(200));".to_string());
     lines.push("    }".to_string());
-    lines.push("".to_string());
-    lines.push("    command_registry_init();".to_string());
-    if components.contains(&Component::Sampler) {
-        lines.push("    sampler_module_init();".to_string());
+
+    if command_registry_enabled {
+        lines.push("".to_string());
+        lines.push("    command_registry_init();".to_string());
+        if components.contains(&Component::Sampler) {
+            lines.push("    sampler_module_init();".to_string());
+        }
+        lines.push("".to_string());
+        if components.contains(&Component::Gpio) {
+            lines.push("    gpio_register_commands();".to_string());
+        }
+        if components.contains(&Component::Sampler) {
+            lines.push("    sampler_register_commands();".to_string());
+        }
+        if components.contains(&Component::Cc1101) {
+            lines.push("    cc1101_register_commands();".to_string());
+        }
+        if components.contains(&Component::Rfm69) {
+            lines.push("    rfm69_register_commands();".to_string());
+        }
+        lines.push("    register_core_commands();".to_string());
+        lines.push("".to_string());
+        lines.push("    cmd_queue = xQueueCreate(CMD_QUEUE_LEN, sizeof(command_t));".to_string());
+        lines.push("    configASSERT(cmd_queue != NULL);".to_string());
+        if ble_enabled {
+            lines.push("".to_string());
+            lines.push("    ble_server_init(cmd_queue);".to_string());
+        }
+        lines.push("".to_string());
+        lines.push("    BaseType_t created = xTaskCreatePinnedToCore(command_task,".to_string());
+        lines.push("                                                \"cmd_task\",".to_string());
+        lines.push("                                                8192,".to_string());
+        lines.push("                                                NULL,".to_string());
+        lines.push("                                                5,".to_string());
+        lines.push("                                                &command_task_handle,".to_string());
+        lines.push("                                                APP_CPU_NUM);".to_string());
+        lines.push("    configASSERT(created == pdPASS);".to_string());
+        lines.push("".to_string());
+        lines.push("    ESP_LOGI(TAG, \"Firmware initialized. Free heap: %u bytes\",".to_string());
+        lines.push("             (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));".to_string());
+    } else if ble_enabled {
+        lines.push("".to_string());
+        lines.push("    ble_server_init(NULL);".to_string());
+        lines.push("".to_string());
+        lines.push("    ESP_LOGI(TAG, \"Firmware initialized (BLE enabled)\");".to_string());
+    } else {
+        lines.push("".to_string());
+        lines.push("    ESP_LOGI(TAG, \"Firmware initialized\");".to_string());
     }
-    lines.push("".to_string());
-    if components.contains(&Component::Gpio) {
-        lines.push("    gpio_register_commands();".to_string());
-    }
-    if components.contains(&Component::Sampler) {
-        lines.push("    sampler_register_commands();".to_string());
-    }
-    if components.contains(&Component::Cc1101) {
-        lines.push("    cc1101_register_commands();".to_string());
-    }
-    if components.contains(&Component::Rfm69) {
-        lines.push("    rfm69_register_commands();".to_string());
-    }
-    lines.push("    register_core_commands();".to_string());
-    lines.push("".to_string());
-    lines.push("    cmd_queue = xQueueCreate(CMD_QUEUE_LEN, sizeof(command_t));".to_string());
-    lines.push("    configASSERT(cmd_queue != NULL);".to_string());
-    lines.push("".to_string());
-    lines.push("    ble_server_init(cmd_queue);".to_string());
-    lines.push("".to_string());
-    lines.push("    BaseType_t created = xTaskCreatePinnedToCore(command_task,".to_string());
-    lines.push("                                                \"cmd_task\",".to_string());
-    lines.push("                                                8192,".to_string());
-    lines.push("                                                NULL,".to_string());
-    lines.push("                                                5,".to_string());
-    lines.push("                                                &command_task_handle,".to_string());
-    lines.push("                                                APP_CPU_NUM);".to_string());
-    lines.push("    configASSERT(created == pdPASS);".to_string());
-    lines.push("".to_string());
-    lines.push("    ESP_LOGI(TAG, \"Firmware initialized. Free heap: %u bytes\",".to_string());
-    lines.push("             (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));".to_string());
     lines.push("}".to_string());
-    lines.push("".to_string());
-    lines.push("static void command_task(void *pv_parameters)".to_string());
-    lines.push("{".to_string());
-    lines.push("    (void)pv_parameters;".to_string());
-    lines.push("    command_t cmd;".to_string());
-    lines.push("".to_string());
-    lines.push("    for (;;) {".to_string());
-    lines.push("        if (xQueueReceive(cmd_queue, &cmd, portMAX_DELAY) == pdTRUE) {".to_string());
-    lines.push("            if (cmd.length == 0) {".to_string());
-    lines.push("                continue;".to_string());
-    lines.push("            }".to_string());
-    lines.push("            if (!command_registry_is_ascii(&cmd)) {".to_string());
-    lines.push("                command_send_err(\"binary unsupported\");".to_string());
-    lines.push("                continue;".to_string());
-    lines.push("            }".to_string());
-    lines.push("            command_registry_handle(&cmd);".to_string());
-    lines.push("        }".to_string());
-    lines.push("    }".to_string());
-    lines.push("}".to_string());
-    lines.push("".to_string());
-    lines.push("static void register_core_commands(void)".to_string());
-    lines.push("{".to_string());
-    lines.push("    bool ok = true;".to_string());
-    lines.push("    ok &= register_command(".to_string());
-    lines.push("        \"version\",".to_string());
-    lines.push("        (void *)version_command,".to_string());
-    lines.push("        (const cmd_arg_spec_t[]){".to_string());
-    lines.push("            {NULL, CMD_ARG_DONE, false},".to_string());
-    lines.push("        });".to_string());
-    lines.push("".to_string());
-    lines.push("    if (!ok) {".to_string());
-    lines.push("        ESP_LOGE(TAG, \"Failed to register core commands\");".to_string());
-    lines.push("    }".to_string());
-    lines.push("}".to_string());
-    lines.push("".to_string());
-    lines.push("static void version_command(void)".to_string());
-    lines.push("{".to_string());
-    lines.push("    ble_server_notify((const uint8_t *)FIRMWARE_VERSION, strlen(FIRMWARE_VERSION));".to_string());
-    lines.push("}".to_string());
-    lines.push("".to_string());
+
+    if command_registry_enabled {
+        lines.push("".to_string());
+        lines.push("static void command_task(void *pv_parameters)".to_string());
+        lines.push("{".to_string());
+        lines.push("    (void)pv_parameters;".to_string());
+        lines.push("    command_t cmd;".to_string());
+        lines.push("".to_string());
+        lines.push("    for (;;) {".to_string());
+        lines.push("        if (xQueueReceive(cmd_queue, &cmd, portMAX_DELAY) == pdTRUE) {".to_string());
+        lines.push("            if (cmd.length == 0) {".to_string());
+        lines.push("                continue;".to_string());
+        lines.push("            }".to_string());
+        lines.push("            if (!command_registry_is_ascii(&cmd)) {".to_string());
+        lines.push("                command_send_err(\"binary unsupported\");".to_string());
+        lines.push("                continue;".to_string());
+        lines.push("            }".to_string());
+        lines.push("            command_registry_handle(&cmd);".to_string());
+        lines.push("        }".to_string());
+        lines.push("    }".to_string());
+        lines.push("}".to_string());
+        lines.push("".to_string());
+        lines.push("static void register_core_commands(void)".to_string());
+        lines.push("{".to_string());
+        lines.push("    bool ok = true;".to_string());
+        lines.push("    ok &= register_command(".to_string());
+        lines.push("        \"version\",".to_string());
+        lines.push("        (void *)version_command,".to_string());
+        lines.push("        (const cmd_arg_spec_t[]){".to_string());
+        lines.push("            {NULL, CMD_ARG_DONE, false},".to_string());
+        lines.push("        });".to_string());
+        lines.push("".to_string());
+        lines.push("    if (!ok) {".to_string());
+        lines.push("        ESP_LOGE(TAG, \"Failed to register core commands\");".to_string());
+        lines.push("    }".to_string());
+        lines.push("}".to_string());
+        lines.push("".to_string());
+        lines.push("static void version_command(void)".to_string());
+        lines.push("{".to_string());
+        lines.push("    ble_server_notify((const uint8_t *)FIRMWARE_VERSION, strlen(FIRMWARE_VERSION));".to_string());
+        lines.push("}".to_string());
+        lines.push("".to_string());
+    }
 
     let contents = lines.join("\n");
     write_generated_file(destination, "main/libraries/init.c", &contents)
@@ -584,19 +634,31 @@ fn write_generated_component_cmake(
     destination: &Path,
     components: &HashSet<Component>,
 ) -> Result<()> {
+    let ble_enabled = components.contains(&Component::Ble);
+    let command_registry_enabled = components.contains(&Component::CommandRegistry);
     let ota_enabled = components.contains(&Component::Ota);
+    let spi_enabled = components.contains(&Component::Cc1101)
+        || components.contains(&Component::Rfm69)
+        || components.contains(&Component::Mfrc522);
     let mut sources = vec![
         "main.c",
         "libraries/init.c",
-        "libraries/ble_server.c",
-        "libraries/command_registry.c",
     ];
+    if ble_enabled {
+        sources.push("libraries/ble_server.c");
+    }
+    if command_registry_enabled {
+        sources.push("libraries/command_registry.c");
+    }
     if ota_enabled {
         sources.push("libraries/ota_ble.c");
         sources.push("libraries/ota_ble_gatt.c");
         sources.push("libraries/ota_core.c");
         sources.push("libraries/ota_status.c");
         sources.push("libraries/ota_wifi.c");
+    }
+    if spi_enabled {
+        sources.push("libraries/spi.c");
     }
     if components.contains(&Component::Gpio) {
         sources.push("libraries/gpio_commands.c");

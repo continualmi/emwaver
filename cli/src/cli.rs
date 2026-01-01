@@ -169,6 +169,10 @@ pub enum Stm32Firmware {
 
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq, Hash)]
 pub enum Component {
+    /// Enables BLE transport (required for EMWaver app interaction).
+    Ble,
+    /// Enables the ASCII command registry (depends on BLE).
+    CommandRegistry,
     /// Enables OTA services (BLE + Wi‑Fi) in the ESP32 template.
     Ota,
     Gpio,
