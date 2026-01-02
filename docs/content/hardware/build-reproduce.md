@@ -25,7 +25,7 @@ JLCPCB PCBA usually has a **minimum order of 2** assembled units, and at low vol
 ## 2) Use the hardware catalog
 
 - Build & reproduce guide (docs): https://luispl77.github.io/emwaver/hardware/
-- Hardware catalog (EasyEDA designs + casings): https://luispl77.github.io/emwaver-hardware/
+- Hardware catalog (EasyEDA designs + casings): [hardware-catalog/hardware.html](../hardware-catalog/hardware.html)
 
 On the hardware catalog, each device page includes:
 

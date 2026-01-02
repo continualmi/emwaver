@@ -43,7 +43,7 @@ nav:
       - Installing & Using: installing-using.md
       - Infrared + Sub‑GHz Walkthrough: infrared-ism-walkthrough.md
   - Hardware:
-      - Build & Reproduce: hardware-catalog.md
+      - Build & Reproduce: hardware-catalog/index.md
       - Written Guide: hardware/build-reproduce.md
   - Flashing Firmware:
       - Overview: flashing-firmware/index.md
