@@ -53,14 +53,12 @@ final class CC1101Service {
                     mosi: Int? = nil,
                     sck: Int? = nil,
                     cs: Int? = nil,
-                    csActiveHigh: Bool? = nil,
                     timeoutMs: Int = 1500) throws {
         var args: [String] = []
         if let miso = miso { args.append("--miso=\(miso)") }
         if let mosi = mosi { args.append("--mosi=\(mosi)") }
         if let sck = sck { args.append("--sck=\(sck)") }
         if let cs = cs { args.append("--cs=\(cs)") }
-        if let csActiveHigh = csActiveHigh { args.append("--cs_active_high=\(csActiveHigh ? 1 : 0)") }
         let suffix = args.isEmpty ? "" : " " + args.joined(separator: " ")
         _ = try sendAck("cc1101 init\(suffix)\n", timeoutMs: timeoutMs)
     }

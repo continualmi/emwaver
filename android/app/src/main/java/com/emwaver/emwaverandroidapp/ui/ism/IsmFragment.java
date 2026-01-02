@@ -247,14 +247,12 @@ public class IsmFragment extends Fragment {
     private static final int DEFAULT_RFM69_MOSI = 11;
     private static final int DEFAULT_RFM69_SCK = 12;
     private static final int DEFAULT_RFM69_CS = 36;
-    private static final boolean DEFAULT_RFM69_CS_ACTIVE_HIGH = true;
 
     // Defaults aligned with CC1101 wiring used elsewhere in the repo (IO10 for NSS).
     private static final int DEFAULT_CC1101_MISO = 13;
     private static final int DEFAULT_CC1101_MOSI = 11;
     private static final int DEFAULT_CC1101_SCK = 12;
     private static final int DEFAULT_CC1101_CS = 10;
-    private static final boolean DEFAULT_CC1101_CS_ACTIVE_HIGH = false;
 
     // Modulation values (must match firmware expectations)
     private static final int MOD_FSK = 0;
@@ -1623,7 +1621,6 @@ public class IsmFragment extends Fragment {
         android.content.SharedPreferences preferences =
                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
         String csPin = preferences.getString("rfm69_cs_pin", String.valueOf(DEFAULT_RFM69_CS));
-        boolean csActiveHigh = preferences.getBoolean("rfm69_cs_active_high", DEFAULT_RFM69_CS_ACTIVE_HIGH);
 
         int cs = DEFAULT_RFM69_CS;
         try {
@@ -1637,12 +1634,11 @@ public class IsmFragment extends Fragment {
 
         String cmd = String.format(
                 Locale.US,
-                "rfm69 init --miso=%d --mosi=%d --sck=%d --cs=%d --cs_active_high=%d",
+                "rfm69 init --miso=%d --mosi=%d --sck=%d --cs=%d",
                 DEFAULT_RFM69_MISO,
                 DEFAULT_RFM69_MOSI,
                 DEFAULT_RFM69_SCK,
-                cs,
-                csActiveHigh ? 1 : 0
+                cs
         );
         // First init right after connect can be slow; use a longer timeout and retry once.
         byte[] resp = sendCommand(cmd, 2000);
@@ -2216,12 +2212,11 @@ public class IsmFragment extends Fragment {
 
         String command = String.format(
                 Locale.US,
-                "cc1101 init --miso=%d --mosi=%d --sck=%d --cs=%d --cs_active_high=%d",
+                "cc1101 init --miso=%d --mosi=%d --sck=%d --cs=%d",
                 DEFAULT_CC1101_MISO,
                 DEFAULT_CC1101_MOSI,
                 DEFAULT_CC1101_SCK,
-                DEFAULT_CC1101_CS,
-                DEFAULT_CC1101_CS_ACTIVE_HIGH ? 1 : 0
+                DEFAULT_CC1101_CS
         );
 
         byte[] resp = sendCommand(command, 1500);

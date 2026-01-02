@@ -29,7 +29,6 @@ type RadioChip = "UNKNOWN" | "CC1101" | "RFM69";
 
 const CHIP_STORAGE_KEY = "ism_selected_chip";
 const CS_PIN_STORAGE_KEY = "rfm69_cs_pin";
-const CS_ACTIVE_HIGH_STORAGE_KEY = "rfm69_cs_active_high";
 const SETTINGS_EVENT = "emwaver-settings-change";
 
 const RF_PARAMETER_STEPS = 6;
@@ -38,13 +37,11 @@ const DEFAULT_RFM69_MISO = 13;
 const DEFAULT_RFM69_MOSI = 11;
 const DEFAULT_RFM69_SCK = 12;
 const DEFAULT_RFM69_CS = 36;
-const DEFAULT_RFM69_CS_ACTIVE_HIGH = true;
 
 const DEFAULT_CC1101_MISO = 13;
 const DEFAULT_CC1101_MOSI = 11;
 const DEFAULT_CC1101_SCK = 12;
 const DEFAULT_CC1101_CS = 10;
-const DEFAULT_CC1101_CS_ACTIVE_HIGH = false;
 
 const CC1101_PA_TABLE_SIZE = 8;
 const CC1101_PATABLE_ADDR = 0x3e;
@@ -263,13 +260,8 @@ export default function ISMFragment() {
     const stored = localStorage.getItem(CS_PIN_STORAGE_KEY);
     return stored || String(DEFAULT_RFM69_CS);
   });
-  const [csActiveHigh, setCsActiveHigh] = useState<boolean>(() => {
-    const stored = localStorage.getItem(CS_ACTIVE_HIGH_STORAGE_KEY);
-    return stored ? stored === "true" : DEFAULT_RFM69_CS_ACTIVE_HIGH;
-  });
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [tempCsPin, setTempCsPin] = useState(csPin);
-  const [tempCsActiveHigh, setTempCsActiveHigh] = useState(csActiveHigh);
 
   const [editDialog, setEditDialog] = useState<EditDialogState>({
     isOpen: false,
@@ -289,13 +281,9 @@ export default function ISMFragment() {
         return;
       }
       const storedPin = localStorage.getItem(CS_PIN_STORAGE_KEY);
-      const storedActive = localStorage.getItem(CS_ACTIVE_HIGH_STORAGE_KEY);
       const nextPin = storedPin || String(DEFAULT_RFM69_CS);
-      const nextActive = storedActive ? storedActive === "true" : DEFAULT_RFM69_CS_ACTIVE_HIGH;
       setCsPin(nextPin);
-      setCsActiveHigh(nextActive);
       setTempCsPin(nextPin);
-      setTempCsActiveHigh(nextActive);
     };
 
     window.addEventListener(SETTINGS_EVENT, handler);
@@ -416,8 +404,8 @@ export default function ISMFragment() {
       return false;
     }
     // Keep commands <=64 bytes for the desktop BLE transport. Firmware already has sane defaults
-    // for MISO/MOSI/SCK; only override CS polarity/pin here.
-    const command = `rfm69 init --cs=${cs} --cs_active_high=${csActiveHigh ? 1 : 0}`;
+    // for MISO/MOSI/SCK; only override CS pin here.
+    const command = `rfm69 init --cs=${cs}`;
     const response = await sendCommandString(command, 2000);
     if (isOkAck(response)) return true;
     if (!response || response.length === 0) {
@@ -426,7 +414,7 @@ export default function ISMFragment() {
     }
     setStatusMessage("RFM69 init failed: unexpected response.");
     return false;
-  }, [csActiveHigh, csPin, sendCommandString]);
+  }, [csPin, sendCommandString]);
 
   const ensureCc1101Init = useCallback(async () => {
     const probe = await sendCommandString("cc1101 read --reg=49", 1000);
@@ -434,7 +422,7 @@ export default function ISMFragment() {
       return true;
     }
     // Keep commands <=64 bytes for the desktop BLE transport. Firmware defaults cover pinout.
-    const command = `cc1101 init --cs=${DEFAULT_CC1101_CS} --cs_active_high=${DEFAULT_CC1101_CS_ACTIVE_HIGH ? 1 : 0}`;
+    const command = `cc1101 init --cs=${DEFAULT_CC1101_CS}`;
     const response = await sendCommandString(command, 1500);
     if (isOkAck(response)) return true;
     if (!response || response.length === 0) {
@@ -1010,9 +998,7 @@ export default function ISMFragment() {
       return;
     }
     setCsPin(tempCsPin);
-    setCsActiveHigh(tempCsActiveHigh);
     localStorage.setItem(CS_PIN_STORAGE_KEY, tempCsPin);
-    localStorage.setItem(CS_ACTIVE_HIGH_STORAGE_KEY, String(tempCsActiveHigh));
     setShowSettingsDialog(false);
   };
 
@@ -1029,7 +1015,6 @@ export default function ISMFragment() {
         <button
           onClick={() => {
             setTempCsPin(csPin);
-            setTempCsActiveHigh(csActiveHigh);
             setShowSettingsDialog(true);
           }}
           className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded hover:bg-slate-700"
@@ -1334,15 +1319,6 @@ export default function ISMFragment() {
                   className="w-24 bg-slate-950 border border-slate-700 text-slate-100 rounded px-3 py-2 text-sm"
                   min="1"
                   max="48"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-slate-300">CS Active High</label>
-                <input
-                  type="checkbox"
-                  checked={tempCsActiveHigh}
-                  onChange={(e) => setTempCsActiveHigh(e.target.checked)}
-                  className="w-4 h-4"
                 />
               </div>
             </div>

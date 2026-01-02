@@ -39,7 +39,6 @@ static int cc1101_miso = 13;
 static int cc1101_mosi = 11;
 static int cc1101_sck = 12;
 static int cc1101_cs = 10;
-static bool cc1101_cs_active_high = false;
 
 static spi_device_handle_t cc1101_handle = NULL;
 static bool cc1101_initialized = false;
@@ -99,7 +98,7 @@ static bool cc1101_initialized = false;
 #define CC1101_MOD_4FSK 4
 #define CC1101_MOD_MSK  7
 
-static void cc1101_cmd_init(int miso, int mosi, int sck, int cs, int cs_active_high);
+static void cc1101_cmd_init(int miso, int mosi, int sck, int cs);
 static void cc1101_cmd_write_reg(int reg, int val);
 static void cc1101_cmd_read_reg(int reg);
 static void cc1101_cmd_strobe(int cmd);
@@ -116,8 +115,6 @@ static void cc1101_cmd_set_mod_power(int modulation, int dbm);
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data);
 
 static esp_err_t cc1101_init_device(void);
-static void cc1101_select(void);
-static void cc1101_deselect(void);
 static uint8_t cc1101_read_reg(uint8_t addr);
 static void cc1101_write_reg(uint8_t addr, uint8_t value);
 static void cc1101_strobe(uint8_t cmd);
@@ -141,7 +138,6 @@ void cc1101_register_commands(void)
                                {"mosi", CMD_ARG_INT, false},
                                {"sck", CMD_ARG_INT, false},
                                {"cs", CMD_ARG_INT, false},
-                               {"cs_active_high", CMD_ARG_INT, false},
                                {NULL, CMD_ARG_DONE, false}
                            });
     ok &= register_command("cc1101 write", (void *)cc1101_cmd_write_reg,
@@ -219,16 +215,6 @@ void cc1101_register_commands(void)
     }
 }
 
-static void cc1101_select(void)
-{
-    gpio_set_level(cc1101_cs, cc1101_cs_active_high ? 1 : 0);
-}
-
-static void cc1101_deselect(void)
-{
-    gpio_set_level(cc1101_cs, cc1101_cs_active_high ? 0 : 1);
-}
-
 static esp_err_t cc1101_init_device(void)
 {
     if (cc1101_initialized) {
@@ -253,8 +239,7 @@ static esp_err_t cc1101_init_device(void)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = CC1101_CLOCK,
         .mode = 0,
-        // Manage CS manually so we can support active-high devices.
-        .spics_io_num = -1,
+        .spics_io_num = cc1101_cs,
         .queue_size = 7,
     };
 
@@ -264,18 +249,13 @@ static esp_err_t cc1101_init_device(void)
         return ret;
     }
 
-    gpio_reset_pin(cc1101_cs);
-    gpio_set_direction(cc1101_cs, GPIO_MODE_OUTPUT);
-    cc1101_deselect();
-
     // Basic reset strobe. The TI recommended sequence also includes waiting for SO,
     // but we keep this minimal and deterministic (same philosophy as rfm69.c).
     cc1101_strobe(CC1101_SRES);
     vTaskDelay(pdMS_TO_TICKS(2));
 
     cc1101_initialized = true;
-    ESP_LOGI(TAG, "CC1101 initialized on host %d (CS=%d, ActiveHigh=%d)",
-             CC1101_HOST, cc1101_cs, cc1101_cs_active_high);
+    ESP_LOGI(TAG, "CC1101 initialized on host %d (CS=%d)", CC1101_HOST, cc1101_cs);
     return ESP_OK;
 }
 
@@ -476,7 +456,6 @@ static void cc1101_strobe(uint8_t cmd)
         return;
     }
 
-    cc1101_select();
     uint8_t tx[1] = { cmd };
     spi_transaction_t t = {
         .flags = 0,
@@ -485,7 +464,6 @@ static void cc1101_strobe(uint8_t cmd)
         .rx_buffer = NULL,
     };
     spi_device_transmit(cc1101_handle, &t);
-    cc1101_deselect();
 }
 
 static uint8_t cc1101_read_reg(uint8_t addr)
@@ -502,7 +480,6 @@ static uint8_t cc1101_read_reg(uint8_t addr)
         cmd = (uint8_t)(addr | 0xC0);
     }
 
-    cc1101_select();
     uint8_t tx[2] = { cmd, 0x00 };
     uint8_t rx[2] = { 0 };
     spi_transaction_t t = {
@@ -512,7 +489,6 @@ static uint8_t cc1101_read_reg(uint8_t addr)
         .rx_buffer = rx,
     };
     spi_device_transmit(cc1101_handle, &t);
-    cc1101_deselect();
 
     return rx[1];
 }
@@ -524,7 +500,6 @@ static void cc1101_write_reg(uint8_t addr, uint8_t value)
     }
 
     // CC1101 single register write: address byte with R/W=0, then value.
-    cc1101_select();
     uint8_t tx[2] = { addr, value };
     spi_transaction_t t = {
         .flags = 0,
@@ -533,7 +508,6 @@ static void cc1101_write_reg(uint8_t addr, uint8_t value)
         .rx_buffer = NULL,
     };
     spi_device_transmit(cc1101_handle, &t);
-    cc1101_deselect();
 }
 
 static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
@@ -550,7 +524,6 @@ static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
     }
     tx[0] = (uint8_t)(addr | 0xC0);
 
-    cc1101_select();
     spi_transaction_t t = {
         .flags = 0,
         .length = (uint32_t)((1 + len) * 8),
@@ -558,7 +531,6 @@ static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
         .rx_buffer = rx,
     };
     spi_device_transmit(cc1101_handle, &t);
-    cc1101_deselect();
 
     memcpy(out, &rx[1], len);
 }
@@ -577,7 +549,6 @@ static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
     tx[0] = (uint8_t)(addr | 0x40);
     memcpy(&tx[1], data, len);
 
-    cc1101_select();
     spi_transaction_t t = {
         .flags = 0,
         .length = (uint32_t)((1 + len) * 8),
@@ -585,13 +556,11 @@ static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
         .rx_buffer = NULL,
     };
     spi_device_transmit(cc1101_handle, &t);
-    cc1101_deselect();
 }
 
-static void cc1101_cmd_init(int miso, int mosi, int sck, int cs, int cs_active_high)
+static void cc1101_cmd_init(int miso, int mosi, int sck, int cs)
 {
-    ESP_LOGI(TAG, "cc1101_cmd_init: miso=%d mosi=%d sck=%d cs=%d active_high=%d",
-             miso, mosi, sck, cs, cs_active_high);
+    ESP_LOGI(TAG, "cc1101_cmd_init: miso=%d mosi=%d sck=%d cs=%d", miso, mosi, sck, cs);
 
     if (miso > 0) {
         cc1101_miso = miso;
@@ -604,9 +573,6 @@ static void cc1101_cmd_init(int miso, int mosi, int sck, int cs, int cs_active_h
     }
     if (cs > 0) {
         cc1101_cs = cs;
-    }
-    if (cs_active_high >= 0) {
-        cc1101_cs_active_high = (cs_active_high != 0);
     }
 
     esp_err_t ret = cc1101_init_device();

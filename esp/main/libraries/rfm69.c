@@ -39,7 +39,6 @@ static int rfm69_miso = 13;
 static int rfm69_mosi = 11;
 static int rfm69_sck  = 12;
 static int rfm69_cs   = 36;
-static bool rfm69_cs_active_high = true;
 
 static spi_device_handle_t rfm69_handle = NULL;
 static bool rfm69_initialized = false;
@@ -48,7 +47,7 @@ static bool rfm69_initialized = false;
 #define FSTEP 61.03515625
 
 // Forward declarations
-static void rfm69_cmd_init(int miso, int mosi, int sck, int cs, int cs_active_high);
+static void rfm69_cmd_init(int miso, int mosi, int sck, int cs);
 static void rfm69_cmd_apply_defaults(void);
 static void rfm69_cmd_write_reg(int reg, int val);
 static void rfm69_cmd_read_reg(int reg);
@@ -108,7 +107,6 @@ void rfm69_register_commands(void)
                                {"mosi", CMD_ARG_INT, false},
                                {"sck", CMD_ARG_INT, false},
                                {"cs", CMD_ARG_INT, false},
-                               {"cs_active_high", CMD_ARG_INT, false},
                                {NULL, CMD_ARG_DONE, false}
                            });
     ok &= register_command("rfm69 apply_defaults", (void *)rfm69_cmd_apply_defaults,
@@ -236,10 +234,6 @@ static void rfm69_write_reg(uint8_t addr, uint8_t value)
 {
     if (!rfm69_handle) return;
 
-    // Manual CS for both active-low and active-high.
-    // Select: active level; Deselect: inactive level.
-    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 1 : 0);
-
     uint8_t tx[2] = { addr | 0x80, value };
     spi_transaction_t t = {
         .flags = 0,
@@ -248,15 +242,11 @@ static void rfm69_write_reg(uint8_t addr, uint8_t value)
         .rx_buffer = NULL
     };
     spi_device_transmit(rfm69_handle, &t);
-
-    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 0 : 1);
 }
 
 static uint8_t rfm69_read_reg(uint8_t addr)
 {
     if (!rfm69_handle) return 0;
-
-    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 1 : 0);
 
     uint8_t tx[2] = { addr & 0x7F, 0x00 };
     uint8_t rx[2] = { 0 };
@@ -267,8 +257,6 @@ static uint8_t rfm69_read_reg(uint8_t addr)
         .rx_buffer = rx
     };
     spi_device_transmit(rfm69_handle, &t);
-
-    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 0 : 1);
 
     return rx[1];
 }
@@ -297,8 +285,7 @@ static esp_err_t rfm69_init_device(void)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = RFM69_CLOCK,
         .mode = 0,
-        // Always manage CS manually for determinism (active-low or active-high).
-        .spics_io_num = -1,
+        .spics_io_num = rfm69_cs,
         .queue_size = 7,
     };
 
@@ -308,31 +295,20 @@ static esp_err_t rfm69_init_device(void)
         return ret;
     }
 
-    // Configure CS pin for manual control and default to "deselected".
-    gpio_reset_pin(rfm69_cs);
-    gpio_set_direction(rfm69_cs, GPIO_MODE_OUTPUT);
-    gpio_set_level(rfm69_cs, rfm69_cs_active_high ? 0 : 1);
-
     rfm69_initialized = true;
-    ESP_LOGI(TAG, "RFM69 initialized on host %d (CS=%d, ActiveHigh=%d)", 
-             RFM69_HOST, rfm69_cs, rfm69_cs_active_high);
+    ESP_LOGI(TAG, "RFM69 initialized on host %d (CS=%d)",
+             RFM69_HOST, rfm69_cs);
     return ESP_OK;
 }
 
-static void rfm69_cmd_init(int miso, int mosi, int sck, int cs, int cs_active_high)
+static void rfm69_cmd_init(int miso, int mosi, int sck, int cs)
 {
-    ESP_LOGI(TAG, "rfm69_cmd_init: miso=%d mosi=%d sck=%d cs=%d active_high=%d",
-             miso, mosi, sck, cs, cs_active_high);
+    ESP_LOGI(TAG, "rfm69_cmd_init: miso=%d mosi=%d sck=%d cs=%d", miso, mosi, sck, cs);
 
     if (miso > 0) rfm69_miso = miso;
     if (mosi > 0) rfm69_mosi = mosi;
     if (sck > 0)  rfm69_sck = sck;
     if (cs > 0)   rfm69_cs = cs;
-    
-    // cs_active_high: -1 (default/not set), 0 (false), 1 (true)
-    if (cs_active_high >= 0) {
-        rfm69_cs_active_high = (cs_active_high != 0);
-    }
 
     if (rfm69_handle) {
         // Allow re-init with new pin configuration without requiring a reboot.

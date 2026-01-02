@@ -42,7 +42,6 @@ typedef struct {
     spi_device_handle_t handle;
     spi_host_device_t host;
     int cs_io;
-    bool cs_active_high;
 } spi_device_entry_t;
 
 static const char *TAG = "SPI";
@@ -63,8 +62,7 @@ static void spi_open_command(const char *name,
                              int sck,
                              int cs,
                              int mode,
-                             int clock_hz,
-                             int cs_active_high);
+                             int clock_hz);
 static void spi_close_command(const char *name);
 static void spi_transfer_command(const char *name,
                                  const command_hex_arg_t *tx_arg,
@@ -91,7 +89,6 @@ void spi_register_commands(void)
             {"cs", CMD_ARG_INT, true},
             {"mode", CMD_ARG_INT, false},
             {"clock", CMD_ARG_INT, false},
-            {"cs_active_high", CMD_ARG_INT, false},
             {NULL, CMD_ARG_DONE, false},
         });
     ok &= register_command(
@@ -206,11 +203,10 @@ static void spi_open_command(const char *name,
                              int sck,
                              int cs,
                              int mode,
-                             int clock_hz,
-                             int cs_active_high)
+                             int clock_hz)
 {
-    ESP_LOGI(TAG, "spi open: name=%s host=%d miso=%d mosi=%d sck=%d cs=%d mode=%d clock=%d cs_active_high=%d",
-             name ? name : "NULL", host_id, miso, mosi, sck, cs, mode, clock_hz, cs_active_high);
+    ESP_LOGI(TAG, "spi open: name=%s host=%d miso=%d mosi=%d sck=%d cs=%d mode=%d clock=%d",
+             name ? name : "NULL", host_id, miso, mosi, sck, cs, mode, clock_hz);
 
     if (!name || name[0] == '\0') {
         ESP_LOGE(TAG, "spi open: name missing or empty");
@@ -280,7 +276,7 @@ static void spi_open_command(const char *name,
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = clock_hz,
         .mode = (uint8_t)mode,
-        .spics_io_num = cs_active_high ? -1 : cs,
+        .spics_io_num = cs,
         .queue_size = 7,
     };
 
@@ -292,23 +288,14 @@ static void spi_open_command(const char *name,
         return;
     }
 
-    if (cs_active_high) {
-        ESP_LOGI(TAG, "Configuring CS pin %d for active-high (manual control)", cs);
-        gpio_reset_pin(cs);
-        gpio_set_direction(cs, GPIO_MODE_OUTPUT);
-        gpio_set_level(cs, 0);
-        ESP_LOGI(TAG, "CS pin %d set LOW (deselected)", cs);
-    }
-
     slot->in_use = true;
     slot->host = host;
     slot->cs_io = cs;
-    slot->cs_active_high = (cs_active_high != 0);
     strncpy(slot->name, name, sizeof(slot->name) - 1);
     slot->name[sizeof(slot->name) - 1] = '\0';
 
-    ESP_LOGI(TAG, "SPI device '%s' opened successfully (host=%d, mode=%d, clock=%d, cs=%d, cs_active_high=%d)", 
-             name, host_id, mode, clock_hz, cs, cs_active_high);
+    ESP_LOGI(TAG, "SPI device '%s' opened successfully (host=%d, mode=%d, clock=%d, cs=%d)",
+             name, host_id, mode, clock_hz, cs);
     command_send_ok(NULL, 0);
 }
 
@@ -378,11 +365,6 @@ static void spi_transfer_command(const char *name,
         return;
     }
 
-    if (device->cs_active_high) {
-        ESP_LOGI(TAG, "CS pin %d -> HIGH (select)", device->cs_io);
-        gpio_set_level(device->cs_io, 1);
-    }
-
     spi_transaction_t t = {
         .flags = 0,
         .length = total_len * 8,
@@ -394,11 +376,6 @@ static void spi_transfer_command(const char *name,
     ESP_LOGI(TAG, "Starting SPI transfer: %d bytes", total_len);
     esp_err_t ret = spi_device_transmit(device->handle, &t);
     ESP_LOGI(TAG, "SPI transfer complete: ret=%d", ret);
-    
-    if (device->cs_active_high) {
-        ESP_LOGI(TAG, "CS pin %d -> LOW (deselect)", device->cs_io);
-        gpio_set_level(device->cs_io, 0);
-    }
 
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "spi_device_transmit failed: %s", esp_err_to_name(ret));
