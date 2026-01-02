@@ -15,7 +15,9 @@
     "onView:emwaver.buildFlashView",
     "onCommand:emwaver.build",
     "onCommand:emwaver.flash",
-    "onCommand:emwaver.openBuildFlash"
+    "onCommand:emwaver.openBuildFlash",
+    "onCommand:emwaver.previewWavelet",
+    "onLanguage:emw"
   ],
   "main": "./dist/extension.js",
   "capabilities": {
@@ -36,8 +38,21 @@
       {
         "command": "emwaver.flash",
         "title": "EMWaver: Flash"
+      },
+      {
+        "command": "emwaver.previewWavelet",
+        "title": "EMWaver: Preview Wavelet"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "emwaver.previewWavelet",
+          "when": "resourceExtname == .emw",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "EMWaver",
       "properties": {

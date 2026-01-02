@@ -52,6 +52,9 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
         if (message.type === "run" && (message.action === "build" || message.action === "flash")) {
           await this.runAction(message.action);
         }
+        if (message.type === "previewWavelet") {
+          await vscode.commands.executeCommand("emwaver.previewWavelet");
+        }
       } catch (err) {
         this.output.appendLine(`Webview message handler error: ${String(err)}`);
         throw err;
@@ -137,10 +140,11 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
       <div class="row">
         <button class="primary" id="build">Build</button>
         <button class="primary" id="flash">Flash</button>
+        <button class="primary" id="previewWavelet">Preview</button>
       </div>
       <div class="status" id="status">Idle</div>
       <div class="hint">
-        Runs <code>emwaver build</code> / <code>emwaver flash</code> in the EMWaver terminal.
+        Runs <code>emwaver build</code> / <code>emwaver flash</code>, or previews the active <code>.emw</code> wavelet in an editor tab.
       </div>
     </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
