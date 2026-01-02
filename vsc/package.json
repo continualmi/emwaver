@@ -86,7 +86,37 @@
           "type": "webview"
         }
       ]
-    }
+    },
+    "languages": [
+      {
+        "id": "emw",
+        "aliases": [
+          "EMWaver Wavelet",
+          "emw"
+        ],
+        "extensions": [
+          ".emw"
+        ],
+        "mimetypes": [
+          "text/javascript"
+        ],
+        "configuration": "./language-configuration.emw.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "emw",
+        "scopeName": "source.emw",
+        "path": "./syntaxes/emw.tmLanguage.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "emwaver-icons-minimal",
+        "label": "EMWaver Icons (minimal)",
+        "path": "./emwaver-icon-theme.json"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p .",

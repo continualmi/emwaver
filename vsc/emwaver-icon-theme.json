@@ -1,0 +1,10 @@
+{
+  "iconDefinitions": {
+    "_file_emw": {
+      "iconPath": "./media/emw-file.png"
+    }
+  },
+  "fileExtensions": {
+    "emw": "_file_emw"
+  }
+}
