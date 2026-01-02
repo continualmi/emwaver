@@ -13,6 +13,7 @@
 //
 // Hosts may optionally provide:
 // - _waveletSendCommandString(command: string, timeoutMs: number): any
+// - _waveletSendPacket(bytes: any, timeoutMs: number): any
 // - _waveletWrite(bytes: any): void
 // - _waveletConnectionStatus(): string
 // - _waveletListSignals(): string[]
@@ -163,6 +164,30 @@ DeviceConnection.sendCommandString = function (command, timeoutMs) {
   throw new Error('DeviceConnection.sendCommandString unavailable on this host');
 };
 
+DeviceConnection.sendPacket = function (bytes, timeoutMs) {
+  var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
+
+  if (__waveletHostDeviceConnection) {
+    if (typeof __waveletHostDeviceConnection.sendPacket === 'function') {
+      return __waveletHostDeviceConnection.sendPacket.call(__waveletHostDeviceConnection, bytes, timeout);
+    }
+    if (typeof __waveletHostDeviceConnection.sendCommand === 'function') {
+      return __waveletHostDeviceConnection.sendCommand.call(__waveletHostDeviceConnection, bytes, timeout);
+    }
+  }
+
+  if (typeof _waveletSendPacket === 'function') {
+    return _waveletSendPacket(bytes, timeout);
+  }
+
+  // iOS host compatibility: some surfaces expose only `_manualSendCommand` which accepts (bytes, timeoutMs).
+  if (typeof _manualSendCommand === 'function') {
+    return _manualSendCommand(bytes, timeout);
+  }
+
+  throw new Error('DeviceConnection.sendPacket unavailable on this host');
+};
+
 DeviceConnection.write = function (bytes) {
   if (__waveletHostDeviceConnection && typeof __waveletHostDeviceConnection.write === 'function') {
     return __waveletHostDeviceConnection.write.call(__waveletHostDeviceConnection, bytes);
@@ -235,6 +260,19 @@ SamplerSignals.readSignal = function (name) {
 __waveletGlobal.DeviceConnection = DeviceConnection;
 __waveletGlobal.Utils = Utils;
 __waveletGlobal.SamplerSignals = SamplerSignals;
+
+var emw = typeof emw !== 'undefined' ? emw : {};
+if (typeof emw.send !== 'function') {
+  emw.send = function (command, timeoutMs) {
+    return DeviceConnection.sendCommandString(command, timeoutMs);
+  };
+}
+if (typeof emw.sendPacket !== 'function') {
+  emw.sendPacket = function (bytes, timeoutMs) {
+    return DeviceConnection.sendPacket(bytes, timeoutMs);
+  };
+}
+__waveletGlobal.emw = emw;
 
 // Optional host compatibility: some hosts expose BLEService but can't directly bridge methods.
 // iOS provides `_manualSendCommand` as a JS-callable block.
@@ -367,4 +405,3 @@ __waveletGlobal.UI = UI;
 __waveletGlobal.print = print;
 __waveletGlobal.dialog = dialog;
 __waveletGlobal.createByteArray = createByteArray;
-

@@ -90,10 +90,10 @@ function gpioRead() {
     render();
 
     if (selectedMode === "in") {
-        DeviceConnection.sendCommandString("gpio in --pin=" + selectedPin);
+        emw.send("gpio in --pin=" + selectedPin);
     }
 
-    let response = DeviceConnection.sendCommandString("gpio read --pin=" + selectedPin);
+    let response = emw.send("gpio read --pin=" + selectedPin);
 
     let state = response && response.length > 0 && response[0] !== 0;
     let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
@@ -116,9 +116,9 @@ function gpioWrite(value) {
     lastResponse = "";
     render();
 
-    let outResp = DeviceConnection.sendCommandString("gpio out --pin=" + selectedPin);
-    let writeResp = DeviceConnection.sendCommandString(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
-    let readResp = DeviceConnection.sendCommandString("gpio read --pin=" + selectedPin);
+    let outResp = emw.send("gpio out --pin=" + selectedPin);
+    let writeResp = emw.send(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+    let readResp = emw.send("gpio read --pin=" + selectedPin);
 
     let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
     let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;

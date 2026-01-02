@@ -94,10 +94,19 @@ Wavelets run inside a sandbox that exposes a small set of global objects. The ex
 - `DeviceConnection.sendCommandString(command, timeoutMs?)` → response bytes (or `null` on failure)
   - Appends a trailing `\\n` if missing.
   - If `timeoutMs` is omitted, the runtime uses a default timeout.
+- `DeviceConnection.sendPacket(bytes, timeoutMs?)` → response bytes (or `null` on failure)
+  - Byte-level equivalent of `sendCommandString(...)` (use `createByteArray([...])` when you need a host-native byte buffer).
 - `DeviceConnection.write(bytes)` → `void` (stream/write without expecting a response)
 - `DeviceConnection.connectionStatus()` → `string` (if provided by the host)
 
 `sendCommandString(...)` is typically used with the EMWaver ASCII command protocol (verbs + flags) like `gpio read --pin=4` or `cc1101 set_freq --mhz=433.92`.
+
+### `emw`
+
+Convenience aliases for common device operations.
+
+- `emw.send(command, timeoutMs?)` → same as `DeviceConnection.sendCommandString(...)`
+- `emw.sendPacket(bytes, timeoutMs?)` → same as `DeviceConnection.sendPacket(...)`
 
 ### `Utils`
 
@@ -116,4 +125,3 @@ Access to saved sampler signals (typically `.raw` captures stored by the app).
   - Returns newline-separated filenames (empty string if none).
 - `SamplerSignals.readSignal(name)` → bytes (or `null`)
   - Reads the contents of a saved signal by filename.
-
