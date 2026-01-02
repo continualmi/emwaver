@@ -131,10 +131,17 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Buffer { socket, command }) => match command {
             cli::BufferCommand::Clear => daemon::buffer_clear(socket),
             cli::BufferCommand::Len { json } => daemon::buffer_len(socket, json),
-            cli::BufferCommand::Load { path } => daemon::buffer_load_file(socket, path),
+            cli::BufferCommand::Load { path, no_upload } => {
+                let socket_clone = socket.clone();
+                daemon::buffer_load_file(socket_clone, path)?;
+                if !no_upload {
+                    // Upload to device so it's ready for retransmission immediately.
+                    daemon::buffer_transmit(socket)?;
+                }
+                Ok(())
+            }
             cli::BufferCommand::Save { path } => daemon::buffer_save_file(socket, path),
             cli::BufferCommand::Transmit => daemon::buffer_transmit(socket),
-            cli::BufferCommand::TransmitFile { path } => daemon::buffer_transmit_file(socket, path),
         },
         Some(cli::Command::Sampler { socket, command }) => match command {
             cli::SamplerCommand::Start {
@@ -151,6 +158,30 @@ pub fn run() -> Result<()> {
                 Ok(())
             }
             cli::SamplerCommand::Stop => daemon::sampler_stop(socket),
+        },
+        Some(cli::Command::Retransmit { socket, command }) => match command {
+            cli::RetransmitCommand::Start {
+                pin,
+                pwm,
+                freq,
+                duty,
+                no_upload,
+                duration_ms,
+            } => {
+                if !no_upload {
+                    // Ensure the device RX buffer contains the current capture.
+                    daemon::buffer_transmit(socket.clone())?;
+                }
+                daemon::retransmit_start(socket.clone(), pin, pwm, freq, duty)?;
+                if let Some(ms) = duration_ms {
+                    if ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(ms));
+                        daemon::retransmit_stop(socket)?;
+                    }
+                }
+                Ok(())
+            }
+            cli::RetransmitCommand::Stop => daemon::retransmit_stop(socket),
         },
         None => interactive::run_menu(),
     }

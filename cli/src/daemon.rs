@@ -774,26 +774,6 @@ pub fn buffer_transmit(socket: Option<PathBuf>) -> Result<()> {
 }
 
 #[cfg(unix)]
-pub fn buffer_transmit_file(socket: Option<PathBuf>, path: PathBuf) -> Result<()> {
-    let socket = daemon_socket_or_start(socket)?;
-    let runtime = Runtime::new().context("failed to create async runtime")?;
-    runtime.block_on(async move {
-        let params = serde_json::json!({ "path": path.to_string_lossy().to_string() });
-        let _ = daemon_rpc(
-            &socket,
-            BridgeRequest {
-                id: 1,
-                method: "transmit_buffer_file".to_string(),
-                params,
-            },
-            Duration::from_secs(120),
-        )
-        .await?;
-        Ok(())
-    })
-}
-
-#[cfg(unix)]
 pub fn sampler_start(
     socket: Option<PathBuf>,
     pin: i32,
@@ -806,6 +786,33 @@ pub fn sampler_start(
 #[cfg(unix)]
 pub fn sampler_stop(socket: Option<PathBuf>) -> Result<()> {
     daemon_cmd(socket, vec!["sample stop".to_string()], 500, 0, false)
+}
+
+#[cfg(unix)]
+pub fn retransmit_start(
+    socket: Option<PathBuf>,
+    pin: i32,
+    pwm: bool,
+    freq: Option<i32>,
+    duty: Option<i32>,
+) -> Result<()> {
+    // Fire-and-forget: retransmission reserves the notification channel for BS packets.
+    let mut cmd = format!("transmit start --pin={pin}");
+    if pwm {
+        cmd.push_str(" --pwm=true");
+    }
+    if let Some(freq) = freq {
+        cmd.push_str(&format!(" --freq={freq}"));
+    }
+    if let Some(duty) = duty {
+        cmd.push_str(&format!(" --duty={duty}"));
+    }
+    daemon_cmd(socket, vec![cmd], 500, 0, false)
+}
+
+#[cfg(unix)]
+pub fn retransmit_stop(socket: Option<PathBuf>) -> Result<()> {
+    daemon_cmd(socket, vec!["transmit stop".to_string()], 500, 0, false)
 }
 
 #[cfg(not(unix))]
@@ -889,16 +896,21 @@ pub fn buffer_transmit(_: Option<PathBuf>) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-pub fn buffer_transmit_file(_: Option<PathBuf>, _: PathBuf) -> Result<()> {
-    bail!("daemon is not supported on this platform yet")
-}
-
-#[cfg(not(unix))]
 pub fn sampler_start(_: Option<PathBuf>, _: i32) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
 
 #[cfg(not(unix))]
 pub fn sampler_stop(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn retransmit_start(_: Option<PathBuf>, _: i32, _: bool, _: Option<i32>, _: Option<i32>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn retransmit_stop(_: Option<PathBuf>) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }

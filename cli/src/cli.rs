@@ -186,6 +186,14 @@ pub enum Command {
         #[command(subcommand)]
         command: SamplerCommand,
     },
+    /// Convenience wrapper around retransmit commands (plays RX buffer on a GPIO pin).
+    Retransmit {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        #[command(subcommand)]
+        command: RetransmitCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -296,6 +304,9 @@ pub enum BufferCommand {
     Load {
         /// Path to a `.raw` file.
         path: PathBuf,
+        /// Only load into the daemon RX buffer (do not upload to the device).
+        #[arg(long)]
+        no_upload: bool,
     },
     /// Save RX buffer bytes to a `.raw` file.
     Save {
@@ -304,11 +315,6 @@ pub enum BufferCommand {
     },
     /// Transmit the current RX buffer (sampler upload) using daemon pacing/flow control.
     Transmit,
-    /// Transmit bytes directly from a `.raw` file using daemon pacing/flow control.
-    TransmitFile {
-        /// Path to a `.raw` file.
-        path: PathBuf,
-    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -323,6 +329,33 @@ pub enum SamplerCommand {
         duration_ms: Option<u64>,
     },
     /// Stop sampling (fire-and-forget).
+    Stop,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RetransmitCommand {
+    /// Start retransmitting from the RX buffer on a GPIO pin.
+    Start {
+        /// GPIO pin to drive for retransmission.
+        #[arg(long)]
+        pin: i32,
+        /// Enable PWM carrier (useful for IR).
+        #[arg(long)]
+        pwm: bool,
+        /// PWM carrier frequency (Hz).
+        #[arg(long)]
+        freq: Option<i32>,
+        /// PWM duty cycle (percent, 0-100).
+        #[arg(long)]
+        duty: Option<i32>,
+        /// Do not upload the daemon RX buffer before starting retransmit.
+        #[arg(long)]
+        no_upload: bool,
+        /// Automatically stop retransmitting after this duration (milliseconds).
+        #[arg(long)]
+        duration_ms: Option<u64>,
+    },
+    /// Stop retransmitting (fire-and-forget).
     Stop,
 }
 
