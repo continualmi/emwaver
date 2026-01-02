@@ -43,22 +43,6 @@ pub fn run() -> Result<()> {
             name,
             json,
         }) => ble_cli::list_devices(timeout_ms, all, name, json),
-        Some(cli::Command::Connect {
-            bridge: true,
-            address: _,
-            name: _,
-            timeout_ms: _,
-            stay: _,
-            verbose: _,
-        }) => bridge::run_bridge(),
-        Some(cli::Command::Connect {
-            address,
-            name,
-            timeout_ms,
-            stay,
-            verbose,
-            bridge: false,
-        }) => ble_cli::connect_device(address, name, timeout_ms, stay, verbose),
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
         Some(cli::Command::Ota {
             file,
@@ -117,7 +101,6 @@ pub fn run() -> Result<()> {
             let destination = path.unwrap_or(std::env::current_dir()?);
             init::run_init(target, components, stm32_firmware, destination)
         }
-        Some(cli::Command::Bridge) => bridge::run_bridge(),
         Some(cli::Command::Daemon { command }) => match command {
             cli::DaemonCommand::Run { socket } => daemon::daemon_run(socket),
             cli::DaemonCommand::Start { socket } => daemon::daemon_start(socket),

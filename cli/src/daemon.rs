@@ -31,6 +31,8 @@ use crate::bridge::{
 
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
+#[cfg(unix)]
+use tokio::io;
 
 const DEFAULT_SOCKET_FILENAME: &str = "emwaver.sock";
 
@@ -67,7 +69,7 @@ pub fn default_socket_path() -> Result<PathBuf> {
 }
 
 #[cfg(unix)]
-async fn daemon_rpc(
+pub(crate) async fn daemon_rpc(
     socket: &Path,
     req: BridgeRequest,
     overall_timeout: Duration,
@@ -130,6 +132,13 @@ fn ensure_parent_dir(path: &Path) -> Result<()> {
     std::fs::create_dir_all(parent)
         .with_context(|| format!("failed to create daemon directory: {}", parent.display()))?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn remove_stale_socket_if_present(socket: &Path) {
+    if socket.exists() {
+        let _ = std::fs::remove_file(socket);
+    }
 }
 
 #[cfg(unix)]
@@ -274,6 +283,7 @@ pub fn daemon_start(socket: Option<PathBuf>) -> Result<()> {
     }
 
     ensure_parent_dir(&socket)?;
+    remove_stale_socket_if_present(&socket);
 
     let exe = std::env::current_exe().context("failed to locate current executable")?;
     let mut cmd = std::process::Command::new(exe);
@@ -284,6 +294,70 @@ pub fn daemon_start(socket: Option<PathBuf>) -> Result<()> {
 
     let _child = cmd.spawn().context("failed to start daemon")?;
     println!("emwaver daemon started ({})", socket.display());
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn ensure_daemon_running(socket: Option<PathBuf>) -> Result<PathBuf> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    if daemon_is_running(Some(socket.clone()))? {
+        return Ok(socket);
+    }
+
+    ensure_parent_dir(&socket)?;
+    remove_stale_socket_if_present(&socket);
+
+    let exe = std::env::current_exe().context("failed to locate current executable")?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("daemon").arg("run").arg("--socket").arg(&socket);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    let _child = cmd.spawn().context("failed to start daemon")?;
+
+    // Wait briefly for the socket to come up.
+    use std::os::unix::net::UnixStream as StdUnixStream;
+    for _ in 0..20 {
+        if StdUnixStream::connect(&socket).is_ok() {
+            return Ok(socket);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    Ok(socket)
+}
+
+#[cfg(unix)]
+pub fn daemon_bridge() -> Result<()> {
+    let socket = ensure_daemon_running(None)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move { daemon_bridge_async(socket).await })
+}
+
+#[cfg(unix)]
+async fn daemon_bridge_async(socket: PathBuf) -> Result<()> {
+    let stream = UnixStream::connect(&socket)
+        .await
+        .with_context(|| format!("emwaver daemon not running ({})", socket.display()))?;
+
+    let (read_half, mut write_half) = stream.into_split();
+
+    let mut stdin = io::stdin();
+    let mut stdout = io::stdout();
+
+    let mut daemon_reader = read_half;
+
+    let to_daemon = tokio::spawn(async move {
+        let _ = io::copy(&mut stdin, &mut write_half).await;
+        let _ = write_half.shutdown().await;
+    });
+
+    let from_daemon = tokio::spawn(async move {
+        let _ = io::copy(&mut daemon_reader, &mut stdout).await;
+        let _ = stdout.flush().await;
+    });
+
+    let _ = tokio::join!(to_daemon, from_daemon);
     Ok(())
 }
 
@@ -313,8 +387,11 @@ async fn daemon_stop_async(socket: PathBuf) -> Result<()> {
 #[cfg(unix)]
 pub fn daemon_is_running(socket: Option<PathBuf>) -> Result<bool> {
     let socket = socket.unwrap_or(default_socket_path()?);
-    let runtime = Runtime::new().context("failed to create async runtime")?;
-    runtime.block_on(async { Ok(UnixStream::connect(&socket).await.is_ok()) })
+    if !socket.exists() {
+        return Ok(false);
+    }
+    use std::os::unix::net::UnixStream as StdUnixStream;
+    Ok(StdUnixStream::connect(&socket).is_ok())
 }
 
 #[cfg(unix)]
@@ -663,5 +740,15 @@ pub fn daemon_connected(_: Option<PathBuf>, _: bool) -> Result<()> {
 
 #[cfg(not(unix))]
 pub fn daemon_cmd(_: Option<PathBuf>, _: Vec<String>, _: u64, _: u32, _: bool) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn ensure_daemon_running(_: Option<PathBuf>) -> Result<PathBuf> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_bridge() -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
