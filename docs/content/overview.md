@@ -18,7 +18,7 @@ Wavelets are small JavaScript scripts that render real, native-feeling UI (via t
 
 The goal behind EMWaver IDE is simple: how fast can you fully exploit a new sensor/module/chip—not just “read a register” on a 1D serial monitor, but ship a complete UI for the chip’s functionality? With EMWaver, Wavelets let you build that UI in minutes with zero reflashing, while the EMWaver IDE and ecosystem let you iterate on firmware when needed alongside the Wavelet UI. Instead of parsing logs, you get real controls (buttons, lists, pickers) that make it practical to explore and operate hardware features across common embedded protocols like SPI and I2C.
 
-The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shield, EMWaver DIY, ISM Waver, Infrared Waver, RFID Waver, GPIO Waver) with capabilities like Sub‑GHz ISM radio (RFM69HW / CC1101), infrared RX + TX, GPIO expansion, USB scripting/BadUSB, RFID (RC522), and 2.4 GHz modules (NRF24L01+). Browse the [hardware catalog](hardware-catalog.md) and [build guides](hardware/build-reproduce.md).
+The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shield, EMWaver DIY, ISM Waver, Infrared Waver, RFID Waver, GPIO Waver) with capabilities like Sub‑GHz ISM radio (RFM69HW / CC1101), infrared RX + TX, GPIO expansion, USB scripting/BadUSB, RFID (RC522), and 2.4 GHz modules (NRF24L01+). Browse the [hardware catalog](hardware-catalog/) and [build guides](hardware/build-reproduce.md).
 
 ## Next steps
 
@@ -38,7 +38,7 @@ The current-gen hardware lineup includes 7 devices/modules (EMWaver, EMWaver Shi
 
     Build the boards and 3D-printed casings from the open hardware catalog.
 
-    [:octicons-arrow-right-24: Open Build & Reproduce](hardware-catalog.md)
+    [:octicons-arrow-right-24: Open Build & Reproduce](hardware-catalog/)
 
 -   :material-flash:{ .lg .middle } **Flashing Firmware**
 
