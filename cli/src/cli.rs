@@ -323,7 +323,7 @@ pub enum DaemonCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum VibeCommand {
-    /// Initialize `.emwaver/` markdown guides and add a Vibe Hacking section to `AGENTS.md`.
+    /// Initialize (or update) an `AGENTS.md` Vibe Hacking guide for working with EMWaver.
     Init {
         /// Destination directory (defaults to current directory).
         #[arg(long)]
