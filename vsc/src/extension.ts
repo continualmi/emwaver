@@ -17,6 +17,8 @@
 
 import * as vscode from "vscode";
 import { BuildFlashViewProvider } from "./view";
+import { WaveletCodeLensProvider } from "./waveletCodeLens";
+import { WaveletPreviewManager } from "./waveletPreview";
 
 export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel("EMWaver");
@@ -31,6 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(status);
 
   const buildFlashProvider = new BuildFlashViewProvider(context, output);
+  const waveletPreview = new WaveletPreviewManager(context, output);
 
   try {
     context.subscriptions.push(
@@ -66,6 +69,20 @@ export function activate(context: vscode.ExtensionContext) {
       output.appendLine("Command: emwaver.flash");
       await buildFlashProvider.runAction("flash");
     })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emwaver.previewWavelet", async (uri?: vscode.Uri) => {
+      output.appendLine(`Command: emwaver.previewWavelet ${uri ? uri.fsPath : ""}`);
+      await waveletPreview.preview(uri);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerCodeLensProvider(
+      [{ language: "emw", scheme: "file" }],
+      new WaveletCodeLensProvider()
+    )
   );
 
   output.appendLine("EMWaver extension activated.");

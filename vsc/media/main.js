@@ -5,6 +5,7 @@
   const statusEl = document.getElementById("status");
   const buildBtn = document.getElementById("build");
   const flashBtn = document.getElementById("flash");
+  const previewBtn = document.getElementById("previewWavelet");
 
   function setStatus(text) {
     if (statusEl) statusEl.textContent = text;
@@ -24,6 +25,13 @@
     });
   }
 
+  if (previewBtn) {
+    previewBtn.addEventListener("click", () => {
+      setStatus("Opening wavelet preview…");
+      vscode.postMessage({ type: "previewWavelet" });
+    });
+  }
+
   window.addEventListener("message", (event) => {
     const msg = event.data;
     if (!msg || typeof msg !== "object") return;
@@ -32,4 +40,3 @@
     }
   });
 })();
-
