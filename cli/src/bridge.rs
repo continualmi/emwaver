@@ -16,6 +16,7 @@
  */
 
 use std::collections::HashMap;
+use std::io::{Read as _, Write as _};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -38,16 +39,30 @@ use tokio::time::timeout;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
+use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortInfo, SerialPortType, StopBits};
+
 use emwaver_buffer_core::buffer::{self, Buffer};
 use emwaver_buffer_core::packet::{make_packet64, PACKET_SIZE};
+use emwaver_buffer_core::sampler;
 use emwaver_buffer_core::status;
+use emwaver_buffer_core::tx;
 
 const SERVICE_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14191");
 const CMD_CHAR_UUID: Uuid = uuid::uuid!("46c7158e-0c3b-4e90-a847-452a15b14191");
 const NOTIF_CHAR_UUID: Uuid = uuid::uuid!("47c7158e-0c3b-4e90-a847-452a15b14191");
 
+// Desktop-only OTA service (today used by the Tauri app); keep here so the daemon
+// can be the single BLE owner across processes.
+const OTA_SERVICE_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14192");
+const OTA_CTRL_CHAR_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14193");
+const OTA_DATA_CHAR_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14194");
+const OTA_STATUS_CHAR_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14195");
+
 const DEFAULT_SCAN_TIMEOUT_MS: u64 = 6_000;
 const DEFAULT_DEVICE_NAME: &str = "EMWaver";
+
+const EMWAVER_STM32_VID: u16 = 0x0483;
+const EMWAVER_STM32_USB_PID_FS: u16 = 0x5740;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct BridgeRequest {
@@ -85,11 +100,34 @@ struct DeviceInfo {
     address: String,
 }
 
+#[derive(Debug, Clone)]
+struct BleChars {
+    cmd: Characteristic,
+    notif: Characteristic,
+    ota_ctrl: Option<Characteristic>,
+    ota_data: Option<Characteristic>,
+    ota_status: Option<Characteristic>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct UsbStatus {
+    connected: bool,
+    device_path: Option<String>,
+}
+
+#[derive(Clone)]
+struct UsbConnection {
+    port: Arc<AsyncMutex<Option<Box<dyn SerialPort + Send>>>>,
+    running: Arc<AsyncMutex<bool>>,
+    status: Arc<AsyncMutex<UsbStatus>>,
+}
+
 pub(crate) struct BridgeState {
-    adapter: Adapter,
+    adapter: Option<Adapter>,
     peripherals: Arc<AsyncMutex<HashMap<String, Peripheral>>>,
     connected: Arc<AsyncMutex<Option<Peripheral>>>,
-    chars: Arc<AsyncMutex<Option<(Characteristic, Characteristic)>>>,
+    chars: Arc<AsyncMutex<Option<BleChars>>>,
+    usb: Arc<AsyncMutex<Option<UsbConnection>>>,
     buffer: Arc<Mutex<Buffer>>,
     rx_notify: Arc<Notify>,
     in_flight: Arc<AsyncMutex<()>>,
@@ -219,10 +257,13 @@ pub(crate) async fn dispatch_request(
         "hello" => Ok(json!({
             "protocol": 1,
             "cli": env!("CARGO_PKG_VERSION"),
-            "transports": ["ble"],
+            "transports": ["ble", "usb"],
             "features": {
                 "buffer": true,
-                "send_command": true
+                "send_command": true,
+                "write": true,
+                "transmit_buffer": true,
+                "ota": true
             }
         })),
         "list_devices" => {
@@ -263,21 +304,34 @@ pub(crate) async fn dispatch_request(
             Ok(json!({ "device": info }))
         }
         "list_connected" => {
-            let guard = state.connected.lock().await;
-            if let Some(peripheral) = guard.as_ref() {
-                Ok(json!({
+            if let Some(peripheral) = state.connected.lock().await.as_ref() {
+                return Ok(json!({
                     "devices": [{
                         "transport": "ble",
                         "name": DEFAULT_DEVICE_NAME,
                         "address": peripheral.address().to_string()
                     }]
-                }))
-            } else {
-                Ok(json!({ "devices": [] }))
+                }));
             }
+            if let Some(conn) = state.usb.lock().await.as_ref() {
+                let status = conn.status.lock().await.clone();
+                if status.connected {
+                    if let Some(path) = status.device_path {
+                        return Ok(json!({
+                            "devices": [{
+                                "transport": "usb",
+                                "name": "USB Device",
+                                "address": path
+                            }]
+                        }));
+                    }
+                }
+            }
+            Ok(json!({ "devices": [] }))
         }
         "disconnect" => {
             ble_disconnect(&state).await?;
+            usb_disconnect(&state).await?;
             Ok(json!({}))
         }
         "send_command" => {
@@ -297,8 +351,31 @@ pub(crate) async fn dispatch_request(
                 .get("packets")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(1) as u32;
-            let bytes = ble_send_command(&state, &text, timeout_ms, packets).await?;
+            let bytes = send_command_text(&state, &text, timeout_ms, packets).await?;
             let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+            Ok(json!({ "bytes_b64": bytes_b64 }))
+        }
+        "send_packet_command" => {
+            let bytes_b64 = req
+                .params
+                .get("bytes_b64")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.bytes_b64"))?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(bytes_b64.as_bytes())
+                .map_err(|e| anyhow!("invalid base64: {e}"))?;
+            let timeout_ms = req
+                .params
+                .get("timeout_ms")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1500);
+            let packets = req
+                .params
+                .get("packets")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1) as u32;
+            let resp = send_packet_command(&state, bytes, timeout_ms, packets).await?;
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(resp);
             Ok(json!({ "bytes_b64": bytes_b64 }))
         }
         "write" => {
@@ -310,12 +387,89 @@ pub(crate) async fn dispatch_request(
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(bytes_b64.as_bytes())
                 .map_err(|e| anyhow!("invalid base64: {e}"))?;
-            ble_write(&state, bytes).await?;
+            write_active(&state, bytes).await?;
+            Ok(json!({}))
+        }
+        "transmit_buffer" => {
+            let bytes_b64 = req
+                .params
+                .get("bytes_b64")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.bytes_b64"))?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(bytes_b64.as_bytes())
+                .map_err(|e| anyhow!("invalid base64: {e}"))?;
+            transmit_buffer_active(&state, bytes).await?;
+            Ok(json!({}))
+        }
+        "transmit_buffer_file" => {
+            let path = req
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.path"))?;
+            let bytes = std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
+            transmit_buffer_active(&state, bytes).await?;
             Ok(json!({}))
         }
         "connection_status" => {
-            let connected = state.connected.lock().await.is_some();
+            let connected = if state.connected.lock().await.is_some() {
+                true
+            } else if let Some(conn) = state.usb.lock().await.as_ref() {
+                conn.status.lock().await.connected
+            } else {
+                false
+            };
             Ok(json!({ "connected": connected }))
+        }
+        "usb_list_ports" => {
+            let ports = usb_list_ports_blocking()?;
+            Ok(json!({ "ports": ports }))
+        }
+        "usb_connect" => {
+            let port_name = req
+                .params
+                .get("port_name")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string());
+            let info = usb_connect(&state, port_name).await?;
+            Ok(json!({ "device": info }))
+        }
+        "usb_disconnect" => {
+            usb_disconnect(&state).await?;
+            Ok(json!({}))
+        }
+        "usb_status" => {
+            if let Some(conn) = state.usb.lock().await.as_ref() {
+                let status = conn.status.lock().await.clone();
+                Ok(json!(status))
+            } else {
+                Ok(json!(UsbStatus { connected: false, device_path: None }))
+            }
+        }
+        "ble_ota_write_control" => {
+            let bytes_b64 = req
+                .params
+                .get("bytes_b64")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.bytes_b64"))?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(bytes_b64.as_bytes())
+                .map_err(|e| anyhow!("invalid base64: {e}"))?;
+            ble_ota_write_control(&state, bytes).await?;
+            Ok(json!({}))
+        }
+        "ble_ota_write_data" => {
+            let bytes_b64 = req
+                .params
+                .get("bytes_b64")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.bytes_b64"))?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(bytes_b64.as_bytes())
+                .map_err(|e| anyhow!("invalid base64: {e}"))?;
+            ble_ota_write_data(&state, bytes).await?;
+            Ok(json!({}))
         }
         "buffer_clear" => {
             if let Ok(mut guard) = state.buffer.lock() {
@@ -323,7 +477,7 @@ pub(crate) async fn dispatch_request(
             }
             Ok(json!({}))
         }
-        "buffer_read_rx_since" => {
+        "buffer_read_packets_since" | "buffer_read_rx_since" => {
             let index = req
                 .params
                 .get("packet_index")
@@ -346,6 +500,178 @@ pub(crate) async fn dispatch_request(
                 "next_packet_index": packets.next_packet_index,
                 "available_packets": packets.available_packets
             }))
+        }
+        "buffer_read_tx_since" => {
+            let index = req
+                .params
+                .get("packet_index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let max_packets = req
+                .params
+                .get("max_packets")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(256) as usize;
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            let packets = buffer::read_tx_since(&*snapshot, index, max_packets);
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(packets.data);
+            Ok(json!({
+                "data_b64": bytes_b64,
+                "ts_ms": packets.ts_ms,
+                "next_packet_index": packets.next_packet_index,
+                "available_packets": packets.available_packets
+            }))
+        }
+        "buffer_next_packet" => {
+            let packet = {
+                let mut snapshot = state
+                    .buffer
+                    .lock()
+                    .map_err(|_| anyhow!("buffer lock poisoned"))?;
+                buffer::next_rx_packet(&mut *snapshot)
+            };
+            if let Some(pkt) = packet {
+                let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(pkt.data);
+                Ok(json!({ "packet": { "data_b64": bytes_b64, "ts_ms": pkt.ts_ms } }))
+            } else {
+                Ok(json!({ "packet": null }))
+            }
+        }
+        "buffer_get_packet_count" => {
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            Ok(json!({ "packet_count": buffer::rx_packet_count(&*snapshot) }))
+        }
+        "buffer_get_len_bytes" => {
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            Ok(json!({ "len_bytes": buffer::rx_len_bytes(&*snapshot) }))
+        }
+        "buffer_get_bytes" => {
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            let bytes_b64 =
+                base64::engine::general_purpose::STANDARD.encode(buffer::rx_snapshot(&*snapshot));
+            Ok(json!({ "data_b64": bytes_b64 }))
+        }
+        "buffer_set_bytes" => {
+            let bytes_b64 = req
+                .params
+                .get("data_b64")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.data_b64"))?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(bytes_b64.as_bytes())
+                .map_err(|e| anyhow!("invalid base64: {e}"))?;
+            let len_bytes = {
+                let mut snapshot = state
+                    .buffer
+                    .lock()
+                    .map_err(|_| anyhow!("buffer lock poisoned"))?;
+                buffer::rx_set_bytes(&mut *snapshot, bytes);
+                buffer::rx_len_bytes(&*snapshot)
+            };
+            Ok(json!({ "len_bytes": len_bytes }))
+        }
+        "buffer_set_bytes_file" => {
+            let path = req
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.path"))?;
+            let bytes = std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
+            let len_bytes = {
+                let mut snapshot = state
+                    .buffer
+                    .lock()
+                    .map_err(|_| anyhow!("buffer lock poisoned"))?;
+                buffer::rx_set_bytes(&mut *snapshot, bytes);
+                buffer::rx_len_bytes(&*snapshot)
+            };
+            Ok(json!({ "len_bytes": len_bytes }))
+        }
+        "buffer_save_bytes_file" => {
+            let path = req
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.path"))?;
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            let bytes = buffer::rx_snapshot(&*snapshot);
+            std::fs::write(path, bytes).with_context(|| format!("failed to write file: {path}"))?;
+            Ok(json!({}))
+        }
+        "buffer_transmit" => {
+            let bytes = {
+                let snapshot = state
+                    .buffer
+                    .lock()
+                    .map_err(|_| anyhow!("buffer lock poisoned"))?;
+                buffer::rx_snapshot(&*snapshot).to_vec()
+            };
+            transmit_buffer_active(&state, bytes).await?;
+            Ok(json!({}))
+        }
+        "buffer_set_invert_rx" => {
+            let enabled = req
+                .params
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if let Ok(mut guard) = state.buffer.lock() {
+                buffer::set_invert_rx(&mut *guard, enabled);
+            }
+            Ok(json!({}))
+        }
+        "buffer_compress_viewport" => {
+            let range_start = req
+                .params
+                .get("range_start")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            let range_end = req
+                .params
+                .get("range_end")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            let number_bins = req
+                .params
+                .get("number_bins")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            let bytes = buffer::rx_snapshot(&*snapshot);
+            let buffer_len_bytes = bytes.len();
+            let (time_values, data_values) = sampler::compress_bits(&bytes, range_start, range_end, number_bins);
+            Ok(json!({
+                "buffer_len_bytes": buffer_len_bytes,
+                "time_values": time_values,
+                "data_values": data_values
+            }))
+        }
+        "buffer_build_signed_raw_timings" => {
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            let bytes = buffer::rx_snapshot(&*snapshot);
+            Ok(json!({ "timings": sampler::build_signed_raw_timings(&bytes, 10) }))
         }
         "buffer_get_rx_counter" => {
             let snapshot = state
@@ -370,30 +696,183 @@ pub(crate) async fn dispatch_request(
     }
 }
 
-pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
-    let manager = Manager::new()
-        .await
-        .context("failed to initialize BLE manager")?;
-    let adapters = manager
-        .adapters()
-        .await
-        .context("failed to list BLE adapters")?;
-    let adapter = adapters
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("no BLE adapters found"))?;
-
-    match adapter
-        .adapter_state()
-        .await
-        .context("failed to query Bluetooth power state")?
-    {
-        CentralState::PoweredOff => bail!("bluetooth appears to be off"),
-        CentralState::Unknown => {
-            eprintln!("warning: bluetooth adapter state unknown; discovery may fail");
-        }
-        CentralState::PoweredOn => {}
+async fn write_active(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
+    if state.connected.lock().await.is_some() {
+        return ble_write(state, bytes).await;
     }
+    if let Some(conn) = state.usb.lock().await.as_ref() {
+        if conn.status.lock().await.connected {
+            return usb_write_packet(state, bytes).await;
+        }
+    }
+    bail!("not connected");
+}
+
+async fn send_packet_command(
+    state: &BridgeState,
+    bytes: Vec<u8>,
+    timeout_ms: u64,
+    packets: u32,
+) -> Result<Vec<u8>> {
+    let _in_flight = state.in_flight.lock().await;
+
+    // Drop stale RX so the next N packets correspond to this request.
+    if let Ok(mut guard) = state.buffer.lock() {
+        let count = buffer::rx_packet_count(&*guard);
+        guard.rx_counter = count;
+    }
+
+    write_active(state, bytes).await?;
+
+    if packets == 0 {
+        return Ok(Vec::new());
+    }
+
+    let want_packets = packets as usize;
+    let want_bytes = want_packets.saturating_mul(PACKET_SIZE);
+    let mut out = Vec::with_capacity(want_bytes);
+
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms.max(1));
+    while out.len() < want_bytes {
+        let maybe_packet = (|| {
+            let mut guard = state.buffer.lock().ok()?;
+            buffer::next_rx_packet(&mut *guard)
+        })();
+
+        if let Some(pkt) = maybe_packet {
+            if let Some(value) = status::parse_bs(&pkt.data) {
+                let _ = emit_event(state, "bs", json!({ "value": value }));
+            }
+            out.extend_from_slice(&pkt.data);
+            continue;
+        }
+
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            bail!("timeout waiting for response");
+        }
+        timeout(remaining.min(Duration::from_millis(200)), state.rx_notify.notified())
+            .await
+            .ok();
+    }
+
+    Ok(out)
+}
+
+async fn send_command_text(
+    state: &BridgeState,
+    text: &str,
+    timeout_ms: u64,
+    packets: u32,
+) -> Result<Vec<u8>> {
+    let payload = parse_command(text)?;
+    send_packet_command(state, payload.to_vec(), timeout_ms, packets).await
+}
+
+async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    let _in_flight = state.in_flight.lock().await;
+    if state.connected.lock().await.is_some() {
+        return ble_transmit_buffer(state, data).await;
+    }
+    if let Some(conn) = state.usb.lock().await.as_ref() {
+        if conn.status.lock().await.connected {
+            return usb_transmit_buffer(state, data).await;
+        }
+    }
+    bail!("not connected");
+}
+
+async fn ble_ota_write_control(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    if data.is_empty() {
+        bail!("control payload is empty");
+    }
+
+    let (peripheral, ctrl_char) = {
+        let guard = state.connected.lock().await;
+        let Some(peripheral) = guard.as_ref() else {
+            bail!("not connected");
+        };
+        let chars = state
+            .chars
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow!("characteristics not ready"))?;
+        let ctrl = chars
+            .ota_ctrl
+            .ok_or_else(|| anyhow!("ota control characteristic not found"))?;
+        (peripheral.clone(), ctrl)
+    };
+
+    peripheral
+        .write(&ctrl_char, &data, WriteType::WithResponse)
+        .await
+        .context("failed to write ota control")?;
+    Ok(())
+}
+
+async fn ble_ota_write_data(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    if data.is_empty() {
+        return Ok(());
+    }
+
+    let (peripheral, data_char) = {
+        let guard = state.connected.lock().await;
+        let Some(peripheral) = guard.as_ref() else {
+            bail!("not connected");
+        };
+        let chars = state
+            .chars
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow!("characteristics not ready"))?;
+        let ch = chars
+            .ota_data
+            .ok_or_else(|| anyhow!("ota data characteristic not found"))?;
+        (peripheral.clone(), ch)
+    };
+
+    peripheral
+        .write(&data_char, &data, WriteType::WithoutResponse)
+        .await
+        .context("failed to write ota data")?;
+    Ok(())
+}
+
+pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
+    let adapter = match Manager::new().await {
+        Ok(manager) => match manager.adapters().await {
+            Ok(adapters) => {
+                let adapter = adapters.into_iter().next();
+                if let Some(adapter) = adapter.as_ref() {
+                    match adapter.adapter_state().await {
+                        Ok(CentralState::PoweredOff) => {
+                            eprintln!("warning: bluetooth appears to be off");
+                        }
+                        Ok(CentralState::Unknown) => {
+                            eprintln!("warning: bluetooth adapter state unknown; discovery may fail");
+                        }
+                        Ok(CentralState::PoweredOn) => {}
+                        Err(err) => {
+                            eprintln!("warning: failed to query bluetooth power state: {err:#}");
+                        }
+                    }
+                } else {
+                    eprintln!("warning: no BLE adapters found (BLE transport unavailable)");
+                }
+                adapter
+            }
+            Err(err) => {
+                eprintln!("warning: failed to list BLE adapters: {err:#}");
+                None
+            }
+        },
+        Err(err) => {
+            eprintln!("warning: failed to initialize BLE manager: {err:#}");
+            None
+        }
+    };
 
     let (event_tx, _) = broadcast::channel::<Vec<u8>>(1024);
 
@@ -402,6 +881,7 @@ pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         peripherals: Arc::new(AsyncMutex::new(HashMap::new())),
         connected: Arc::new(AsyncMutex::new(None)),
         chars: Arc::new(AsyncMutex::new(None)),
+        usb: Arc::new(AsyncMutex::new(None)),
         buffer: Arc::new(Mutex::new(Buffer::default())),
         rx_notify: Arc::new(Notify::new()),
         in_flight: Arc::new(AsyncMutex::new(())),
@@ -421,7 +901,7 @@ async fn ble_write(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
             .await
             .clone()
             .ok_or_else(|| anyhow!("characteristics not ready"))?;
-        (peripheral.clone(), chars.0)
+        (peripheral.clone(), chars.cmd)
     };
 
     let packet = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
@@ -435,24 +915,280 @@ async fn ble_write(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     Ok(())
 }
 
+fn is_emwaver_usb_port(port: &SerialPortInfo) -> bool {
+    let SerialPortType::UsbPort(usb) = &port.port_type else {
+        return false;
+    };
+
+    if usb.vid == EMWAVER_STM32_VID && usb.pid == EMWAVER_STM32_USB_PID_FS {
+        return true;
+    }
+
+    if usb
+        .manufacturer
+        .as_deref()
+        .is_some_and(|m| m.eq_ignore_ascii_case("EMWaver"))
+    {
+        return true;
+    }
+
+    usb.product.as_deref().is_some_and(|p| {
+        matches!(
+            p,
+            "ISM Waver" | "EMWaver" | "GPIO Waver" | "IR Waver"
+        )
+    })
+}
+
+fn normalize_port_name_for_platform(port_name: &str) -> String {
+    let trimmed = port_name.trim();
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(rest) = trimmed.strip_prefix("/dev/tty.") {
+            let candidate = format!("/dev/cu.{rest}");
+            if std::path::Path::new(&candidate).exists() {
+                return candidate;
+            }
+        }
+    }
+    trimmed.to_string()
+}
+
+fn usb_list_ports_blocking() -> Result<Vec<String>> {
+    let ports = serialport::available_ports().context("failed to list serial ports")?;
+    let mut names: Vec<String> = ports
+        .into_iter()
+        .filter(|p| matches!(p.port_type, SerialPortType::UsbPort(_)))
+        .filter(is_emwaver_usb_port)
+        .map(|p| p.port_name)
+        .collect();
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::collections::HashSet;
+        let set: HashSet<String> = names.iter().cloned().collect();
+        names.retain(|n| {
+            if let Some(rest) = n.strip_prefix("/dev/tty.") {
+                !set.contains(&format!("/dev/cu.{rest}"))
+            } else {
+                true
+            }
+        });
+        names.retain(|n| !n.contains("Bluetooth-Incoming-Port"));
+    }
+
+    names.sort_by_key(|n| {
+        if n.contains("usbmodem") {
+            (0, n.clone())
+        } else if n.contains("usbserial") {
+            (1, n.clone())
+        } else {
+            (2, n.clone())
+        }
+    });
+
+    Ok(names)
+}
+
+fn usb_open_port_blocking(port_name: &str) -> Result<Box<dyn SerialPort + Send>> {
+    let mut port = serialport::new(port_name, 115_200)
+        .data_bits(DataBits::Eight)
+        .parity(Parity::None)
+        .stop_bits(StopBits::One)
+        .flow_control(FlowControl::None)
+        .timeout(Duration::from_millis(100))
+        .open()
+        .with_context(|| format!("failed to open serial port: {port_name}"))?;
+
+    let _ = port.write_data_terminal_ready(true);
+    let _ = port.write_request_to_send(true);
+    Ok(port)
+}
+
+async fn usb_disconnect(state: &BridgeState) -> Result<()> {
+    let existing = { state.usb.lock().await.take() };
+    if let Some(conn) = existing {
+        *conn.running.lock().await = false;
+        *conn.port.lock().await = None;
+        {
+            let mut s = conn.status.lock().await;
+            s.connected = false;
+            s.device_path = None;
+        }
+        let _ = emit_event(state, "disconnected", json!({ "transport": "usb" }));
+    }
+    Ok(())
+}
+
+fn spawn_usb_reader(
+    state_events: broadcast::Sender<Vec<u8>>,
+    buffer: Arc<Mutex<Buffer>>,
+    rx_notify: Arc<Notify>,
+    running: Arc<AsyncMutex<bool>>,
+    port_state: Arc<AsyncMutex<Option<Box<dyn SerialPort + Send>>>>,
+    status: Arc<AsyncMutex<UsbStatus>>,
+) -> Result<()> {
+    let mut read_port = {
+        let mut guard = port_state.blocking_lock();
+        let Some(port) = guard.as_mut() else {
+            bail!("port not initialized");
+        };
+        port.try_clone().context("failed to clone serial port")?
+    };
+
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 1024];
+        let mut pending: Vec<u8> = Vec::new();
+
+        let mark_disconnected = || {
+            *running.blocking_lock() = false;
+            *port_state.blocking_lock() = None;
+            let mut s = status.blocking_lock();
+            s.connected = false;
+            s.device_path = None;
+
+            let payload = BridgeEvent {
+                event: "disconnected",
+                data: json!({ "transport": "usb" }),
+            };
+            if let Ok(mut out) = serde_json::to_vec(&payload) {
+                out.push(b'\n');
+                let _ = state_events.send(out);
+            }
+        };
+
+        loop {
+            if !*running.blocking_lock() {
+                break;
+            }
+
+            match read_port.read(&mut buf) {
+                Ok(n) => {
+                    if n == 0 {
+                        continue;
+                    }
+                    pending.extend_from_slice(&buf[..n]);
+                    while pending.len() >= PACKET_SIZE {
+                        let chunk: Vec<u8> = pending.drain(0..PACKET_SIZE).collect();
+                        let ts_ms = now_ms();
+                        if let Ok(mut guard) = buffer.lock() {
+                            buffer::append_rx_bytes(&mut *guard, &chunk, ts_ms);
+                        }
+                        rx_notify.notify_waiters();
+
+                        let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&chunk);
+                        let payload = BridgeEvent {
+                            event: "rx_bytes",
+                            data: json!({ "bytes_b64": bytes_b64, "ts_ms": ts_ms }),
+                        };
+                        if let Ok(mut out) = serde_json::to_vec(&payload) {
+                            out.push(b'\n');
+                            let _ = state_events.send(out);
+                        }
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
+                Err(_) => {
+                    mark_disconnected();
+                    break;
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+async fn usb_connect(state: &BridgeState, port_name: Option<String>) -> Result<DeviceInfo> {
+    // Prefer a single active transport: drop BLE if it's active.
+    let _ = ble_disconnect(state).await;
+
+    let chosen = match port_name {
+        Some(p) => normalize_port_name_for_platform(&p),
+        None => {
+            let ports = usb_list_ports_blocking()?;
+            let Some(first) = ports.into_iter().next() else {
+                bail!("no USB EMWaver devices found");
+            };
+            first
+        }
+    };
+
+    let port = usb_open_port_blocking(&chosen)?;
+    let conn = UsbConnection {
+        port: Arc::new(AsyncMutex::new(Some(port))),
+        running: Arc::new(AsyncMutex::new(true)),
+        status: Arc::new(AsyncMutex::new(UsbStatus {
+            connected: true,
+            device_path: Some(chosen.clone()),
+        })),
+    };
+
+    spawn_usb_reader(
+        state.event_tx.clone(),
+        Arc::clone(&state.buffer),
+        Arc::clone(&state.rx_notify),
+        Arc::clone(&conn.running),
+        Arc::clone(&conn.port),
+        Arc::clone(&conn.status),
+    )?;
+
+    *state.usb.lock().await = Some(conn);
+    let _ = emit_event(
+        state,
+        "connected",
+        json!({ "transport": "usb", "address": chosen, "name": "USB Device" }),
+    );
+
+    Ok(DeviceInfo {
+        transport: "usb",
+        name: Some("USB Device".to_string()),
+        address: chosen,
+    })
+}
+
+async fn usb_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
+    let conn = {
+        let guard = state.usb.lock().await;
+        guard.clone().ok_or_else(|| anyhow!("not connected"))?
+    };
+
+    let packet = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+
+    let mut port_guard = conn.port.lock().await;
+    let Some(port) = port_guard.as_mut() else {
+        bail!("not connected");
+    };
+    port.write_all(&packet).context("failed to write serial")?;
+    port.flush().ok();
+
+    if let Ok(mut guard) = state.buffer.lock() {
+        buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+    }
+    Ok(())
+}
+
 async fn ble_list_devices(
     state: &BridgeState,
     timeout_ms: u64,
     name: Option<String>,
 ) -> Result<Vec<DeviceInfo>> {
+    let adapter = state
+        .adapter
+        .as_ref()
+        .ok_or_else(|| anyhow!("BLE transport unavailable"))?;
+
     {
         let mut guard = state.peripherals.lock().await;
         guard.clear();
     }
 
-    let mut events = state
-        .adapter
+    let mut events = adapter
         .events()
         .await
         .context("failed to subscribe to adapter events")?;
 
-    state
-        .adapter
+    adapter
         // Avoid service UUID scan filters for portability (CoreBluetooth can miss results).
         .start_scan(ScanFilter::default())
         .await
@@ -472,8 +1208,7 @@ async fn ble_list_devices(
             _ => continue,
         };
 
-        let peripheral = state
-            .adapter
+        let peripheral = adapter
             .peripheral(&id)
             .await
             .context("failed to access peripheral")?;
@@ -498,7 +1233,7 @@ async fn ble_list_devices(
             .insert(address.clone(), peripheral);
     }
 
-    state.adapter.stop_scan().await.ok();
+    adapter.stop_scan().await.ok();
 
     let snapshot: Vec<(String, Peripheral)> = {
         let guard = state.peripherals.lock().await;
@@ -526,8 +1261,9 @@ async fn ble_connect(
     address: Option<String>,
     name: Option<String>,
 ) -> Result<DeviceInfo> {
-    // Best-effort disconnect any existing connection.
+    // Prefer a single active transport: drop any existing connection.
     let _ = ble_disconnect(state).await;
+    let _ = usb_disconnect(state).await;
 
     let want_name = name.unwrap_or_else(|| "EMWaver".to_string());
     let peripheral = if let Some(address) = address {
@@ -564,9 +1300,12 @@ async fn ble_connect(
     }
     peripheral.discover_services().await?;
 
-    let (cmd_char, notif_char) = locate_characteristics(&peripheral)?;
+    let chars = locate_characteristics(&peripheral)?;
 
-    peripheral.subscribe(&notif_char).await?;
+    peripheral.subscribe(&chars.notif).await?;
+    if let Some(ota_status) = chars.ota_status.as_ref() {
+        let _ = peripheral.subscribe(ota_status).await;
+    }
 
     {
         let mut guard = state.connected.lock().await;
@@ -574,7 +1313,7 @@ async fn ble_connect(
     }
     {
         let mut guard = state.chars.lock().await;
-        *guard = Some((cmd_char.clone(), notif_char.clone()));
+        *guard = Some(chars.clone());
     }
 
     spawn_notifications(
@@ -632,7 +1371,7 @@ async fn ble_send_command(
             .await
             .clone()
             .ok_or_else(|| anyhow!("characteristics not ready"))?;
-        (peripheral.clone(), chars.0)
+        (peripheral.clone(), chars.cmd)
     };
 
     // Drop stale RX so the next N packets correspond to this request.
@@ -681,6 +1420,198 @@ async fn ble_send_command(
     Ok(out)
 }
 
+async fn ble_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    let (peripheral, cmd_char) = {
+        let guard = state.connected.lock().await;
+        let Some(peripheral) = guard.as_ref() else {
+            bail!("not connected");
+        };
+        let chars = state
+            .chars
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow!("characteristics not ready"))?;
+        (peripheral.clone(), chars.cmd)
+    };
+
+    if data.is_empty() {
+        bail!("buffer is empty");
+    }
+
+    // Swap out the shared RX buffer while transmitting so BS flow-control packets
+    // don't contaminate sampler data stored in the same buffer.
+    let (saved_rx, saved_rx_ts, saved_counter) = {
+        let mut guard = state
+            .buffer
+            .lock()
+            .map_err(|_| anyhow!("buffer lock poisoned"))?;
+        let saved_rx = std::mem::take(&mut guard.rx_bytes);
+        let saved_rx_ts = std::mem::take(&mut guard.rx_ts_ms);
+        let saved_counter = guard.rx_counter;
+        guard.rx_counter = 0;
+        (saved_rx, saved_rx_ts, saved_counter)
+    };
+
+    let result = async {
+        let profile = tx::BleTxProfile::default();
+        let mut current_packet_size = profile.max_packet_size;
+
+        let total_bytes = data.len();
+        let mut bytes_sent = 0usize;
+        let mut last_status: Option<u16> = None;
+
+        let drain_bs_status = || -> Option<u16> {
+            let mut latest: Option<u16> = None;
+            loop {
+                let pkt = (|| {
+                    let mut guard = state.buffer.lock().ok()?;
+                    buffer::next_rx_packet(&mut *guard)
+                })();
+                let Some(pkt) = pkt else { break };
+                if let Some(status) = status::parse_bs(&pkt.data) {
+                    latest = Some(status);
+                }
+            }
+            latest
+        };
+
+        while bytes_sent < total_bytes {
+            if let Some(status) = drain_bs_status() {
+                last_status = Some(status);
+            }
+            let effective_buffer_status = last_status
+                .map(|v| v as i32)
+                .unwrap_or(profile.target_buffer_level);
+
+            let remaining = total_bytes - bytes_sent;
+            let packet_size = std::cmp::min(current_packet_size, remaining);
+            let end = bytes_sent + packet_size;
+            let packet = &data[bytes_sent..end];
+
+            peripheral
+                .write(&cmd_char, packet, WriteType::WithoutResponse)
+                .await
+                .context("failed to write transmit chunk")?;
+
+            current_packet_size = tx::ble_next_packet_size(
+                profile,
+                bytes_sent,
+                effective_buffer_status,
+                current_packet_size,
+            )
+            .clamp(profile.min_packet_size, profile.max_packet_size);
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(profile.fixed_delay_ms as u64)).await;
+            bytes_sent += packet_size;
+        }
+
+        Ok::<(), anyhow::Error>(())
+    }
+    .await;
+
+    // Restore sampler RX buffer (discarding BS packets accumulated during transmit).
+    if let Ok(mut guard) = state.buffer.lock() {
+        guard.rx_bytes = saved_rx;
+        guard.rx_ts_ms = saved_rx_ts;
+        guard.rx_counter = saved_counter;
+    }
+
+    result.map_err(|e| anyhow!(e))
+}
+
+async fn usb_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    let conn = state
+        .usb
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| anyhow!("not connected"))?;
+
+    if data.is_empty() {
+        bail!("buffer is empty");
+    }
+
+    // Swap out the shared RX buffer while transmitting so response packets
+    // don't contaminate sampler data stored in the same buffer.
+    let (saved_rx, saved_rx_ts, saved_counter) = {
+        let mut guard = state
+            .buffer
+            .lock()
+            .map_err(|_| anyhow!("buffer lock poisoned"))?;
+        let saved_rx = std::mem::take(&mut guard.rx_bytes);
+        let saved_rx_ts = std::mem::take(&mut guard.rx_ts_ms);
+        let saved_counter = guard.rx_counter;
+        guard.rx_counter = 0;
+        (saved_rx, saved_rx_ts, saved_counter)
+    };
+
+    let mut write_port = {
+        let mut port_guard = conn.port.lock().await;
+        let Some(p) = port_guard.as_mut() else {
+            bail!("not connected");
+        };
+        p.try_clone().context("failed to clone serial port")?
+    };
+
+    let buffer_clone = Arc::clone(&state.buffer);
+    let write_result = tokio::task::spawn_blocking(move || {
+        let profile = tx::UsbTxProfile::default();
+        let packet_size: usize = profile.packet_size;
+
+        std::thread::sleep(Duration::from_millis(20));
+
+        let mut last_status: u16 = 0;
+        let start = std::time::Instant::now();
+        let mut next_send_at_ns: i64 = 0;
+
+        for chunk in data.chunks(packet_size) {
+            if let Ok(mut guard) = buffer_clone.lock() {
+                loop {
+                    let pkt = buffer::next_rx_packet(&mut *guard);
+                    let Some(pkt) = pkt else { break };
+                    if let Some(status) = status::parse_bs(&pkt.data) {
+                        last_status = status;
+                    }
+                }
+            }
+
+            write_port
+                .write_all(chunk)
+                .context("failed to write serial")?;
+
+            if let Ok(mut guard) = buffer_clone.lock() {
+                let mut packet = [0u8; PACKET_SIZE];
+                packet[..chunk.len()].copy_from_slice(chunk);
+                buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+            }
+
+            next_send_at_ns = next_send_at_ns.saturating_add(profile.period_ns);
+            next_send_at_ns = tx::usb_adjust_deadline_ns(profile, next_send_at_ns, last_status as i32);
+
+            let now_ns = start.elapsed().as_nanos() as i64;
+            let sleep_ns = next_send_at_ns.saturating_sub(now_ns);
+            if sleep_ns > 0 {
+                std::thread::sleep(Duration::from_nanos(sleep_ns as u64));
+            }
+        }
+
+        write_port.flush().ok();
+        Ok::<(), anyhow::Error>(())
+    })
+    .await
+    .map_err(|e| anyhow!("task join failed: {e}"))?;
+
+    // Restore sampler RX buffer (discarding packets accumulated during transmit).
+    if let Ok(mut guard) = state.buffer.lock() {
+        guard.rx_bytes = saved_rx;
+        guard.rx_ts_ms = saved_rx_ts;
+        guard.rx_counter = saved_counter;
+    }
+
+    write_result
+}
+
 fn spawn_notifications(
     peripheral: Arc<Peripheral>,
     buffer: Arc<Mutex<Buffer>>,
@@ -694,31 +1625,43 @@ fn spawn_notifications(
         };
 
         while let Some(event) = stream.next().await {
-            if event.uuid != NOTIF_CHAR_UUID {
-                continue;
-            }
             let ts_ms = now_ms();
-            if let Ok(mut guard) = buffer.lock() {
-                buffer::append_rx_bytes(&mut *guard, &event.value, ts_ms);
-            }
-            rx_notify.notify_waiters();
+            if event.uuid == NOTIF_CHAR_UUID {
+                if let Ok(mut guard) = buffer.lock() {
+                    buffer::append_rx_bytes(&mut *guard, &event.value, ts_ms);
+                }
+                rx_notify.notify_waiters();
 
-            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&event.value);
-            let payload = BridgeEvent {
-                event: "rx_bytes",
-                data: json!({ "bytes_b64": bytes_b64, "ts_ms": ts_ms }),
-            };
-            if let Ok(mut buf) = serde_json::to_vec(&payload) {
-                buf.push(b'\n');
-                let _ = event_tx.send(buf);
+                let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&event.value);
+                let payload = BridgeEvent {
+                    event: "rx_bytes",
+                    data: json!({ "bytes_b64": bytes_b64, "ts_ms": ts_ms }),
+                };
+                if let Ok(mut buf) = serde_json::to_vec(&payload) {
+                    buf.push(b'\n');
+                    let _ = event_tx.send(buf);
+                }
+            } else if event.uuid == OTA_STATUS_CHAR_UUID {
+                let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&event.value);
+                let payload = BridgeEvent {
+                    event: "ota_status",
+                    data: json!({ "bytes_b64": bytes_b64, "ts_ms": ts_ms }),
+                };
+                if let Ok(mut buf) = serde_json::to_vec(&payload) {
+                    buf.push(b'\n');
+                    let _ = event_tx.send(buf);
+                }
             }
         }
     });
 }
 
-fn locate_characteristics(peripheral: &Peripheral) -> Result<(Characteristic, Characteristic)> {
+fn locate_characteristics(peripheral: &Peripheral) -> Result<BleChars> {
     let mut cmd_char = None;
     let mut notif_char = None;
+    let mut ota_ctrl = None;
+    let mut ota_data = None;
+    let mut ota_status = None;
 
     for service in peripheral.services() {
         if service.uuid == SERVICE_UUID {
@@ -730,13 +1673,28 @@ fn locate_characteristics(peripheral: &Peripheral) -> Result<(Characteristic, Ch
                     notif_char = Some(characteristic.clone());
                 }
             }
+        } else if service.uuid == OTA_SERVICE_UUID {
+            for characteristic in service.characteristics.iter() {
+                if characteristic.uuid == OTA_CTRL_CHAR_UUID {
+                    ota_ctrl = Some(characteristic.clone());
+                }
+                if characteristic.uuid == OTA_DATA_CHAR_UUID {
+                    ota_data = Some(characteristic.clone());
+                }
+                if characteristic.uuid == OTA_STATUS_CHAR_UUID {
+                    ota_status = Some(characteristic.clone());
+                }
+            }
         }
     }
 
-    let cmd = cmd_char.ok_or_else(|| anyhow!("command characteristic not found"))?;
-    let notif = notif_char.ok_or_else(|| anyhow!("notification characteristic not found"))?;
-
-    Ok((cmd, notif))
+    Ok(BleChars {
+        cmd: cmd_char.ok_or_else(|| anyhow!("command characteristic not found"))?,
+        notif: notif_char.ok_or_else(|| anyhow!("notification characteristic not found"))?,
+        ota_ctrl,
+        ota_data,
+        ota_status,
+    })
 }
 
 fn parse_command(input: &str) -> Result<[u8; PACKET_SIZE]> {
