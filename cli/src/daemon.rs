@@ -31,8 +31,6 @@ use crate::bridge::{
 
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
-#[cfg(unix)]
-use tokio::io;
 
 const DEFAULT_SOCKET_FILENAME: &str = "emwaver.sock";
 
@@ -327,39 +325,6 @@ pub fn ensure_daemon_running(socket: Option<PathBuf>) -> Result<PathBuf> {
     Ok(socket)
 }
 
-#[cfg(unix)]
-pub fn daemon_bridge() -> Result<()> {
-    let socket = ensure_daemon_running(None)?;
-    let runtime = Runtime::new().context("failed to create async runtime")?;
-    runtime.block_on(async move { daemon_bridge_async(socket).await })
-}
-
-#[cfg(unix)]
-async fn daemon_bridge_async(socket: PathBuf) -> Result<()> {
-    let stream = UnixStream::connect(&socket)
-        .await
-        .with_context(|| format!("emwaver daemon not running ({})", socket.display()))?;
-
-    let (read_half, mut write_half) = stream.into_split();
-
-    let mut stdin = io::stdin();
-    let mut stdout = io::stdout();
-
-    let mut daemon_reader = read_half;
-
-    let to_daemon = tokio::spawn(async move {
-        let _ = io::copy(&mut stdin, &mut write_half).await;
-        let _ = write_half.shutdown().await;
-    });
-
-    let from_daemon = tokio::spawn(async move {
-        let _ = io::copy(&mut daemon_reader, &mut stdout).await;
-        let _ = stdout.flush().await;
-    });
-
-    let _ = tokio::join!(to_daemon, from_daemon);
-    Ok(())
-}
 
 #[cfg(unix)]
 pub fn daemon_stop(socket: Option<PathBuf>) -> Result<()> {
@@ -745,10 +710,5 @@ pub fn daemon_cmd(_: Option<PathBuf>, _: Vec<String>, _: u64, _: u32, _: bool) -
 
 #[cfg(not(unix))]
 pub fn ensure_daemon_running(_: Option<PathBuf>) -> Result<PathBuf> {
-    bail!("daemon is not supported on this platform yet")
-}
-
-#[cfg(not(unix))]
-pub fn daemon_bridge() -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
