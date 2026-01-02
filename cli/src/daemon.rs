@@ -1,0 +1,603 @@
+/*
+ * EMWaver
+ * Copyright (c) 2026 Luís Marnoto
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::Duration;
+
+use anyhow::{Context, Result, bail};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
+
+use crate::bridge::{
+    BridgeError, BridgeRequest, BridgeResponse, create_bridge_state, dispatch_request, send_json_line,
+};
+
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
+
+const DEFAULT_SOCKET_FILENAME: &str = "emwaver.sock";
+
+pub fn default_socket_path() -> Result<PathBuf> {
+    if let Ok(value) = std::env::var("EMWAVER_DAEMON_SOCKET") {
+        if !value.trim().is_empty() {
+            return Ok(PathBuf::from(value));
+        }
+    }
+
+    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
+        let dir = dir.trim();
+        if !dir.is_empty() {
+            return Ok(PathBuf::from(dir).join(DEFAULT_SOCKET_FILENAME));
+        }
+    }
+
+    let home = std::env::var("HOME").context("HOME is not set")?;
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(PathBuf::from(home)
+            .join("Library")
+            .join("Caches")
+            .join("emwaver")
+            .join(DEFAULT_SOCKET_FILENAME));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        return Ok(PathBuf::from(home)
+            .join(".cache")
+            .join("emwaver")
+            .join(DEFAULT_SOCKET_FILENAME));
+    }
+}
+
+#[cfg(unix)]
+async fn daemon_rpc(
+    socket: &Path,
+    req: BridgeRequest,
+    overall_timeout: Duration,
+) -> Result<serde_json::Value> {
+    let mut stream = UnixStream::connect(socket)
+        .await
+        .with_context(|| format!("emwaver daemon not running ({})", socket.display()))?;
+
+    let request = serde_json::to_vec(&req)?;
+    stream.write_all(&request).await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let deadline = tokio::time::Instant::now() + overall_timeout;
+    loop {
+        line.clear();
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            bail!("timeout waiting for daemon response");
+        }
+        let n = match tokio::time::timeout(remaining, reader.read_line(&mut line)).await {
+            Ok(v) => v?,
+            Err(_) => bail!("timeout waiting for daemon response"),
+        };
+        if n == 0 {
+            bail!("daemon closed connection unexpectedly");
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let value: serde_json::Value = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if value.get("event").is_some() {
+            continue;
+        }
+        if value.get("id").and_then(|v| v.as_u64()) != Some(req.id) {
+            continue;
+        }
+        if value.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            let msg = value
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error");
+            bail!("{msg}");
+        }
+        return Ok(value.get("result").cloned().unwrap_or_default());
+    }
+}
+
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create daemon directory: {}", parent.display()))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn daemon_run(socket: Option<PathBuf>) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    ensure_parent_dir(&socket)?;
+
+    if socket.exists() {
+        let _ = std::fs::remove_file(&socket);
+    }
+
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async { daemon_run_async(socket).await })
+}
+
+#[cfg(unix)]
+async fn daemon_run_async(socket: PathBuf) -> Result<()> {
+    let listener = UnixListener::bind(&socket)
+        .with_context(|| format!("failed to bind daemon socket: {}", socket.display()))?;
+
+    let state = create_bridge_state().await?;
+    let shutdown = std::sync::Arc::new(tokio::sync::Notify::new());
+
+    eprintln!("emwaver daemon listening on {}", socket.display());
+    loop {
+        tokio::select! {
+            _ = shutdown.notified() => break,
+            accept = listener.accept() => {
+                let (stream, _) = accept.context("daemon accept failed")?;
+                let state = state.clone();
+                let shutdown = shutdown.clone();
+                tokio::spawn(async move {
+                    let _ = handle_client(stream, state, shutdown).await;
+                });
+            }
+        }
+    }
+
+    let _ = std::fs::remove_file(&socket);
+    Ok(())
+}
+
+#[cfg(unix)]
+async fn handle_client(
+    stream: UnixStream,
+    state: std::sync::Arc<crate::bridge::BridgeState>,
+    shutdown: std::sync::Arc<tokio::sync::Notify>,
+) -> Result<()> {
+    let (read_half, write_half) = stream.into_split();
+    let mut reader = BufReader::new(read_half);
+
+    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+
+    let writer_task = tokio::spawn(async move {
+        let mut out = write_half;
+        while let Some(line) = out_rx.recv().await {
+            if out.write_all(&line).await.is_err() {
+                break;
+            }
+            let _ = out.flush().await;
+        }
+    });
+
+    // Forward broadcast events to this client.
+    let mut events_rx = state.event_tx.subscribe();
+    let out_tx_events = out_tx.clone();
+    let events_task = tokio::spawn(async move {
+        loop {
+            match events_rx.recv().await {
+                Ok(line) => {
+                    let _ = out_tx_events.send(line);
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .await
+            .context("daemon read failed")?;
+        if bytes_read == 0 {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let req: BridgeRequest = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        if req.method == "shutdown" {
+            let response = BridgeResponse {
+                id: req.id,
+                ok: true,
+                result: Some(serde_json::json!({})),
+                error: None,
+            };
+            let _ = send_json_line(&out_tx, &response);
+            shutdown.notify_waiters();
+            break;
+        }
+
+        let id = req.id;
+        let response = match dispatch_request(state.clone(), req).await {
+            Ok(result) => BridgeResponse {
+                id,
+                ok: true,
+                result: Some(result),
+                error: None,
+            },
+            Err(err) => BridgeResponse {
+                id,
+                ok: false,
+                result: None,
+                error: Some(BridgeError {
+                    message: format!("{err:#}"),
+                }),
+            },
+        };
+        let _ = send_json_line(&out_tx, &response);
+    }
+
+    let _ = tokio::time::timeout(Duration::from_millis(200), writer_task).await;
+    let _ = tokio::time::timeout(Duration::from_millis(200), events_task).await;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn daemon_start(socket: Option<PathBuf>) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    if daemon_is_running(Some(socket.clone()))? {
+        println!("emwaver daemon already running ({})", socket.display());
+        return Ok(());
+    }
+
+    ensure_parent_dir(&socket)?;
+
+    let exe = std::env::current_exe().context("failed to locate current executable")?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("daemon").arg("run").arg("--socket").arg(&socket);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+
+    let _child = cmd.spawn().context("failed to start daemon")?;
+    println!("emwaver daemon started ({})", socket.display());
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn daemon_stop(socket: Option<PathBuf>) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async { daemon_stop_async(socket).await })
+}
+
+#[cfg(unix)]
+async fn daemon_stop_async(socket: PathBuf) -> Result<()> {
+    let mut stream = UnixStream::connect(&socket)
+        .await
+        .with_context(|| format!("emwaver daemon not running ({})", socket.display()))?;
+    let request = serde_json::to_vec(&BridgeRequest {
+        id: 1,
+        method: "shutdown".to_string(),
+        params: serde_json::json!({}),
+    })?;
+    stream.write_all(&request).await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn daemon_is_running(socket: Option<PathBuf>) -> Result<bool> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async { Ok(UnixStream::connect(&socket).await.is_ok()) })
+}
+
+#[cfg(unix)]
+pub fn daemon_status(socket: Option<PathBuf>, json: bool) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async { daemon_status_async(socket, json).await })
+}
+
+#[cfg(unix)]
+async fn daemon_status_async(socket: PathBuf, json: bool) -> Result<()> {
+    let mut stream = match UnixStream::connect(&socket).await {
+        Ok(s) => s,
+        Err(_) => {
+            if json {
+                println!("{}", serde_json::json!({ "running": false }));
+            } else {
+                println!("emwaver daemon: not running");
+            }
+            return Ok(());
+        }
+    };
+
+    // Ask the daemon for connection status + connected devices.
+    let req1 = serde_json::to_vec(&BridgeRequest {
+        id: 1,
+        method: "connection_status".to_string(),
+        params: serde_json::json!({}),
+    })?;
+    stream.write_all(&req1).await?;
+    stream.write_all(b"\n").await?;
+
+    let req2 = serde_json::to_vec(&BridgeRequest {
+        id: 2,
+        method: "list_connected".to_string(),
+        params: serde_json::json!({}),
+    })?;
+    stream.write_all(&req2).await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let mut connected = None::<bool>;
+    let mut devices = None::<serde_json::Value>;
+    let mut seen1 = false;
+    let mut seen2 = false;
+    while !(seen1 && seen2) {
+        line.clear();
+        let n = tokio::time::timeout(Duration::from_secs(1), reader.read_line(&mut line))
+            .await
+            .unwrap_or(Ok(0))?;
+        if n == 0 {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let value: serde_json::Value = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if value.get("event").is_some() {
+            continue;
+        }
+        if value.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+            continue;
+        }
+        let id = value.get("id").and_then(|v| v.as_u64());
+        let result = value.get("result").cloned().unwrap_or_default();
+        match id {
+            Some(1) => {
+                connected = result.get("connected").and_then(|v| v.as_bool());
+                seen1 = true;
+            }
+            Some(2) => {
+                devices = result.get("devices").cloned();
+                seen2 = true;
+            }
+            _ => {}
+        }
+    }
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "running": true,
+                "socket": socket.display().to_string(),
+                "connected": connected.unwrap_or(false),
+                "devices": devices.unwrap_or_else(|| serde_json::json!([]))
+            })
+        );
+        return Ok(());
+    }
+
+    println!(
+        "emwaver daemon: running ({})",
+        socket.display()
+    );
+    if connected.unwrap_or(false) {
+        println!("device: connected");
+    } else {
+        println!("device: disconnected");
+    }
+    if let Some(devices) = devices {
+        if let Some(first) = devices.as_array().and_then(|a| a.first()) {
+            if let Some(addr) = first.get("address").and_then(|v| v.as_str()) {
+                println!("address: {addr}");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn daemon_list(
+    socket: Option<PathBuf>,
+    timeout_ms: u64,
+    all: bool,
+    name: String,
+    json: bool,
+) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let params = serde_json::json!({
+            "timeout_ms": timeout_ms,
+            "all": all,
+            "name": name
+        });
+        let result = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "list_devices".to_string(),
+                params,
+            },
+            Duration::from_millis(timeout_ms.saturating_add(3_000).max(1)),
+        )
+        .await?;
+        let devices = result.get("devices").cloned().unwrap_or_else(|| serde_json::json!([]));
+
+        if json {
+            println!("{devices}");
+            return Ok(());
+        }
+
+        if let Some(arr) = devices.as_array() {
+            if arr.is_empty() {
+                println!("No EMWaver devices found.");
+                return Ok(());
+            }
+            for dev in arr {
+                let name = dev.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                let address = dev.get("address").and_then(|v| v.as_str()).unwrap_or("?");
+                println!("{name}\t{address}");
+            }
+        }
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn daemon_connect(socket: Option<PathBuf>, address: Option<String>, name: String) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let params = serde_json::json!({
+            "address": address,
+            "name": name,
+        });
+        let result = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "connect".to_string(),
+                params,
+            },
+            Duration::from_millis(15_000),
+        )
+        .await?;
+        let device = result.get("device").cloned().unwrap_or_else(|| serde_json::json!({}));
+        println!("{device}");
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn daemon_disconnect(socket: Option<PathBuf>) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let _ = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "disconnect".to_string(),
+                params: serde_json::json!({}),
+            },
+            Duration::from_secs(5),
+        )
+        .await?;
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn daemon_connected(socket: Option<PathBuf>, json: bool) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let result = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "list_connected".to_string(),
+                params: serde_json::json!({}),
+            },
+            Duration::from_secs(5),
+        )
+        .await?;
+        let devices = result.get("devices").cloned().unwrap_or_else(|| serde_json::json!([]));
+        if json {
+            println!("{devices}");
+            return Ok(());
+        }
+        if let Some(arr) = devices.as_array() {
+            if arr.is_empty() {
+                println!("No devices connected.");
+                return Ok(());
+            }
+            for dev in arr {
+                let name = dev.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                let address = dev.get("address").and_then(|v| v.as_str()).unwrap_or("?");
+                println!("{name}\t{address}");
+            }
+        }
+        Ok(())
+    })
+}
+
+#[cfg(not(unix))]
+pub fn daemon_run(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_start(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_stop(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_is_running(_: Option<PathBuf>) -> Result<bool> {
+    Ok(false)
+}
+
+#[cfg(not(unix))]
+pub fn daemon_status(_: Option<PathBuf>, _: bool) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_list(_: Option<PathBuf>, _: u64, _: bool, _: String, _: bool) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_connect(_: Option<PathBuf>, _: Option<String>, _: String) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_disconnect(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_connected(_: Option<PathBuf>, _: bool) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
