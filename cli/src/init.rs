@@ -36,7 +36,10 @@ pub fn run_init(
     stm32_firmware: Option<Stm32Firmware>,
     destination: PathBuf,
 ) -> Result<()> {
-    let component_set: HashSet<Component> = components.into_iter().collect();
+    let component_set: HashSet<Component> = match target {
+        Target::Esp32s3 => resolve_esp32s3_components(components),
+        Target::Stm32f042 => components.into_iter().collect(),
+    };
 
     if destination.exists() {
         if !destination.is_dir() {
@@ -64,6 +67,33 @@ pub fn run_init(
         }
     }
     Ok(())
+}
+
+fn resolve_esp32s3_components(components: Vec<Component>) -> HashSet<Component> {
+    let mut component_set: HashSet<Component> = components.into_iter().collect();
+
+    if component_set.is_empty() {
+        component_set.insert(Component::Ble);
+        component_set.insert(Component::CommandRegistry);
+        return component_set;
+    }
+
+    let needs_command_registry = component_set.contains(&Component::Gpio)
+        || component_set.contains(&Component::Sampler)
+        || component_set.contains(&Component::Cc1101)
+        || component_set.contains(&Component::Rfm69)
+        || component_set.contains(&Component::Mfrc522);
+
+    if needs_command_registry {
+        component_set.insert(Component::CommandRegistry);
+    }
+
+    if component_set.contains(&Component::CommandRegistry) || component_set.contains(&Component::Ota)
+    {
+        component_set.insert(Component::Ble);
+    }
+
+    component_set
 }
 
 fn write_esp32s3(destination: &Path, components: &HashSet<Component>) -> Result<()> {
