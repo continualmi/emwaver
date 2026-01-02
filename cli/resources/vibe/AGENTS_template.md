@@ -1,3 +1,12 @@
+# AGENTS.md
+
+This repository may be operated by humans and coding agents. Use this file to document how to work in the repo, run device commands, and avoid common foot-guns.
+
+General rules:
+- Do not commit secrets (tokens, credentials, pairing keys).
+- Prefer small, reversible changes; avoid unrelated refactors.
+- Keep on-wire/device command semantics compatible unless explicitly requested.
+
 <!-- EMWAVER_VIBE_HACKING_START -->
 ## Vibe Hacking
 
@@ -33,7 +42,7 @@ emwaver stop
 
 **Golden rules**
 - Commands are ASCII and must fit in the device’s 64-byte packet; prefer `--key=value` to keep commands short.
-- `emwaver cmd ...` is shorthand for `emwaver daemon cmd ...`.
+- `emwaver cmd ...` sends an ASCII command to the connected device (daemon-backed).
 
 Examples:
 

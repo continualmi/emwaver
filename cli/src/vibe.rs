@@ -21,14 +21,9 @@ use std::path::{Path, PathBuf};
 
 const AGENTS_FILENAME: &str = "AGENTS.md";
 
-const VIBE_SNIPPET_START: &str = "<!-- EMWAVER_VIBE_HACKING_START -->";
-const VIBE_SNIPPET_END: &str = "<!-- EMWAVER_VIBE_HACKING_END -->";
-
-const AGENTS_BASE: &str = include_str!("../resources/vibe/AGENTS_BASE.md");
-const AGENTS_VIBE_SNIPPET: &str = include_str!("../resources/vibe/AGENTS_VIBE_SNIPPET.md");
+const AGENTS_TEMPLATE: &str = include_str!("../resources/vibe/AGENTS_template.md");
 
 pub fn init_repo(destination: PathBuf, force: bool, update_agents: bool) -> Result<()> {
-    let _ = force;
     if destination.exists() && !destination.is_dir() {
         bail!("destination exists and is not a directory: {}", destination.display());
     }
@@ -36,7 +31,7 @@ pub fn init_repo(destination: PathBuf, force: bool, update_agents: bool) -> Resu
         .with_context(|| format!("failed to create {}", destination.display()))?;
 
     if update_agents {
-        upsert_agents_md(&destination.join(AGENTS_FILENAME))?;
+        write_agents_md(&destination.join(AGENTS_FILENAME), force)?;
         println!("Updated {}", destination.join(AGENTS_FILENAME).display());
     } else {
         println!(
@@ -49,51 +44,24 @@ pub fn init_repo(destination: PathBuf, force: bool, update_agents: bool) -> Resu
     Ok(())
 }
 
-fn upsert_agents_md(path: &Path) -> Result<()> {
-    let updated = if path.exists() {
+fn write_agents_md(path: &Path, force: bool) -> Result<()> {
+    let template = normalize_newlines(AGENTS_TEMPLATE).trim_end().to_string() + "\n";
+
+    if path.exists() {
         let existing =
             fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-        upsert_marked_section(&existing, AGENTS_VIBE_SNIPPET)
-    } else {
-        let mut base = String::new();
-        base.push_str(AGENTS_BASE.trim_end());
-        base.push('\n');
-        base.push('\n');
-        base.push_str(AGENTS_VIBE_SNIPPET.trim_end());
-        base.push('\n');
-        base
-    };
+        if normalize_newlines(&existing) == template {
+            return Ok(());
+        }
+        if !force {
+            bail!("refusing to overwrite {}; re-run with --force", path.display());
+        }
+    }
 
-    fs::write(path, updated).with_context(|| format!("failed to write {}", path.display()))?;
+    fs::write(path, template).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
 
-fn upsert_marked_section(existing: &str, snippet: &str) -> String {
-    let snippet = snippet.trim_end_matches(['\n', '\r']);
-    let mut out = String::new();
-
-    let start = existing.find(VIBE_SNIPPET_START);
-    let end = existing.find(VIBE_SNIPPET_END);
-
-    if let (Some(start_idx), Some(end_idx)) = (start, end) {
-        let end_idx = end_idx + VIBE_SNIPPET_END.len();
-        out.push_str(existing[..start_idx].trim_end_matches(['\n', '\r']));
-        out.push('\n');
-        out.push('\n');
-        out.push_str(snippet);
-        out.push('\n');
-        out.push('\n');
-        out.push_str(existing[end_idx..].trim_start_matches(['\n', '\r']));
-        if !out.ends_with('\n') {
-            out.push('\n');
-        }
-        return out;
-    }
-
-    out.push_str(existing.trim_end_matches(['\n', '\r']));
-    out.push('\n');
-    out.push('\n');
-    out.push_str(snippet);
-    out.push('\n');
-    out
+fn normalize_newlines(s: &str) -> String {
+    s.replace("\r\n", "\n")
 }
