@@ -44,9 +44,9 @@ export class EmwaverBridgeClient implements vscode.Disposable {
     const config = vscode.workspace.getConfiguration("emwaver");
     const cliPath = expandCliPath(config.get<string>("cliPath", "emwaver"));
 
-    this.output.appendLine(`Device bridge: starting ${cliPath} bridge`);
+    this.output.appendLine(`Device bridge: starting ${cliPath} connect --bridge`);
 
-    const proc = cp.spawn(cliPath, ["bridge"], {
+    const proc = cp.spawn(cliPath, ["connect", "--bridge"], {
       stdio: "pipe",
     });
     this.proc = proc;

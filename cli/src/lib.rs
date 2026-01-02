@@ -16,6 +16,7 @@
  */
 
 mod cli;
+mod ble_cli;
 mod bridge;
 pub mod ble_ota;
 pub mod dfu;
@@ -35,6 +36,28 @@ pub use cli::OtaTransport;
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
+        Some(cli::Command::List {
+            timeout_ms,
+            all,
+            name,
+            json,
+        }) => ble_cli::list_devices(timeout_ms, all, name, json),
+        Some(cli::Command::Connect {
+            bridge: true,
+            address: _,
+            name: _,
+            timeout_ms: _,
+            stay: _,
+            verbose: _,
+        }) => bridge::run_bridge(),
+        Some(cli::Command::Connect {
+            address,
+            name,
+            timeout_ms,
+            stay,
+            verbose,
+            bridge: false,
+        }) => ble_cli::connect_device(address, name, timeout_ms, stay, verbose),
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
         Some(cli::Command::Ota {
             file,
