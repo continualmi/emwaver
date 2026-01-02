@@ -270,6 +270,24 @@ pub enum DaemonCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Send an ASCII command to the connected device (e.g. `version`).
+    Cmd {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Command text to send.
+        #[arg(required = true)]
+        text: Vec<String>,
+        /// Command response timeout in milliseconds.
+        #[arg(long, default_value_t = 1500)]
+        timeout_ms: u64,
+        /// Number of 64-byte packets to read back.
+        #[arg(long, default_value_t = 1)]
+        packets: u32,
+        /// Output as JSON (includes base64 bytes).
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]

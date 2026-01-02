@@ -20,6 +20,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use base64::Engine;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
@@ -557,6 +558,64 @@ pub fn daemon_connected(socket: Option<PathBuf>, json: bool) -> Result<()> {
     })
 }
 
+#[cfg(unix)]
+pub fn daemon_cmd(
+    socket: Option<PathBuf>,
+    text: Vec<String>,
+    timeout_ms: u64,
+    packets: u32,
+    json: bool,
+) -> Result<()> {
+    let socket = socket.unwrap_or(default_socket_path()?);
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let text = text.join(" ");
+        let params = serde_json::json!({
+            "text": text,
+            "timeout_ms": timeout_ms,
+            "packets": packets
+        });
+        let result = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "send_command".to_string(),
+                params,
+            },
+            Duration::from_millis(timeout_ms.saturating_add(5_000).max(1)),
+        )
+        .await?;
+
+        let bytes_b64 = result
+            .get("bytes_b64")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(bytes_b64.as_bytes())
+            .unwrap_or_default();
+
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "bytes_b64": bytes_b64,
+                    "text": String::from_utf8_lossy(&bytes).to_string()
+                })
+            );
+            return Ok(());
+        }
+
+        let text = String::from_utf8_lossy(&bytes);
+        let trimmed = text.trim_matches(|c: char| c == '\0' || c == '\n' || c == '\r');
+        if trimmed.is_empty() {
+            println!("{text}");
+        } else {
+            println!("{trimmed}");
+        }
+        Ok(())
+    })
+}
+
 #[cfg(not(unix))]
 pub fn daemon_run(_: Option<PathBuf>) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
@@ -599,5 +658,10 @@ pub fn daemon_disconnect(_: Option<PathBuf>) -> Result<()> {
 
 #[cfg(not(unix))]
 pub fn daemon_connected(_: Option<PathBuf>, _: bool) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn daemon_cmd(_: Option<PathBuf>, _: Vec<String>, _: u64, _: u32, _: bool) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
