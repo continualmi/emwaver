@@ -141,6 +141,37 @@ final class WaveletEngine {
             }
             context?.setObject(sendCommandStringBlock, forKeyedSubscript: "_waveletSendCommandString" as NSString)
 
+            // Byte-level command variant (used by DeviceConnection.sendPacket / emw.sendPacket).
+            let sendPacketBlock: @convention(block) (JSValue, Int) -> JSValue? = { [weak self] bytesValue, timeout in
+                guard let context else { return nil }
+                guard let bleServiceWrapper = self?.globalBindings["BLEService"] as? BLEServiceWrapper else {
+                    return JSValue(nullIn: context)
+                }
+
+                let data: Data?
+                if let direct = bytesValue.toObject() as? Data {
+                    data = direct
+                } else if bytesValue.isArray {
+                    let length = bytesValue.forProperty("length")?.toInt32() ?? 0
+                    var bytes: [UInt8] = []
+                    bytes.reserveCapacity(Int(length))
+                    for i in 0..<length {
+                        if let element = bytesValue.atIndex(Int(i)), element.isNumber {
+                            bytes.append(UInt8(element.toInt32() & 0xFF))
+                        }
+                    }
+                    data = Data(bytes)
+                } else {
+                    data = nil
+                }
+
+                guard let data else { return JSValue(nullIn: context) }
+                let result = bleServiceWrapper.sendCommand(data, timeout: timeout)
+                guard let result else { return JSValue(nullIn: context) }
+                return JSValue(object: Array(result), in: context)
+            }
+            context?.setObject(sendPacketBlock, forKeyedSubscript: "_waveletSendPacket" as NSString)
+
             let dialogBlock: @convention(block) (String, String) -> Void = { [weak self] title, message in
                 guard let self else { return }
                 self.printHandler?("[WaveletEngine] dialog requested: \(title)")

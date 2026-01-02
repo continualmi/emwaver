@@ -3,14 +3,14 @@ let status = "Ready";
 function initRx() {
     status = "Initializing RX...";
     render();
-    DeviceConnection.sendCommandString("rfm69 init");
-    DeviceConnection.sendCommandString("rfm69 set_mode --mode=standby");
-    DeviceConnection.sendCommandString("rfm69 set_mod --mod=ook");
-    DeviceConnection.sendCommandString("rfm69 set_freq --mhz=433.92");
-    DeviceConnection.sendCommandString("rfm69 set_bitrate --bps=100000");
-    DeviceConnection.sendCommandString("rfm69 set_bw_khz --khz=250.0");
-    DeviceConnection.sendCommandString("rfm69 set_power --dbm=10 --pa_mode=3 --ocp");
-    DeviceConnection.sendCommandString("rfm69 set_mode --mode=rx");
+    emw.send("rfm69 init");
+    emw.send("rfm69 set_mode --mode=standby");
+    emw.send("rfm69 set_mod --mod=ook");
+    emw.send("rfm69 set_freq --mhz=433.92");
+    emw.send("rfm69 set_bitrate --bps=100000");
+    emw.send("rfm69 set_bw_khz --khz=250.0");
+    emw.send("rfm69 set_power --dbm=10 --pa_mode=3 --ocp");
+    emw.send("rfm69 set_mode --mode=rx");
     status = "RX init complete";
     render();
 }
@@ -18,14 +18,14 @@ function initRx() {
 function initTx() {
     status = "Initializing TX...";
     render();
-    DeviceConnection.sendCommandString("rfm69 init");
-    DeviceConnection.sendCommandString("rfm69 set_mode --mode=standby");
-    DeviceConnection.sendCommandString("rfm69 set_mod --mod=ook");
-    DeviceConnection.sendCommandString("rfm69 set_freq --mhz=433.92");
-    DeviceConnection.sendCommandString("rfm69 set_bitrate --bps=100000");
-    DeviceConnection.sendCommandString("rfm69 set_bw_khz --khz=250.0");
-    DeviceConnection.sendCommandString("rfm69 set_power --dbm=10 --pa_mode=3 --ocp");
-    DeviceConnection.sendCommandString("rfm69 set_mode --mode=tx");
+    emw.send("rfm69 init");
+    emw.send("rfm69 set_mode --mode=standby");
+    emw.send("rfm69 set_mod --mod=ook");
+    emw.send("rfm69 set_freq --mhz=433.92");
+    emw.send("rfm69 set_bitrate --bps=100000");
+    emw.send("rfm69 set_bw_khz --khz=250.0");
+    emw.send("rfm69 set_power --dbm=10 --pa_mode=3 --ocp");
+    emw.send("rfm69 set_mode --mode=tx");
     status = "TX init complete";
     render();
 }

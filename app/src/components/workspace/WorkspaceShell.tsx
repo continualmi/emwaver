@@ -307,6 +307,25 @@ export default function WorkspaceShell({
         );
         return queued as Promise<Uint8Array | null>;
       },
+      sendPacket: (data: Uint8Array, timeoutMs: number = 1500) => {
+        const queued = waveletCommandQueueRef.current
+          .then(async () => {
+            const { status, sendPacket } = waveletDeviceRef.current;
+            if (!status.connected) {
+              return null;
+            }
+            const response = await sendPacket(data, timeoutMs, 1);
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
+            return response;
+          })
+          .catch(async () => null);
+
+        waveletCommandQueueRef.current = queued.then(
+          () => undefined,
+          () => undefined,
+        );
+        return queued as Promise<Uint8Array | null>;
+      },
       write: (data: Uint8Array) => {
         const { status, sendPacket } = waveletDeviceRef.current;
         if (!status.connected) {

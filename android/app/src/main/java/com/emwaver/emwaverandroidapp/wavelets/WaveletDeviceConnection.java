@@ -80,6 +80,20 @@ public final class WaveletDeviceConnection {
         return sendCommandString(command, 2000);
     }
 
+    /**
+     * Sends a raw command packet and waits for the response.
+     * This is the byte-level equivalent of sendCommandString(...).
+     */
+    @Nullable
+    public byte[] sendPacket(byte[] data, int timeoutMs) {
+        return sendCommand(data, timeoutMs);
+    }
+
+    @Nullable
+    public byte[] sendPacket(byte[] data) {
+        return sendPacket(data, 2000);
+    }
+
     public void write(byte[] bytes) {
         DeviceConnectionService service = activeService();
         if (service == null) {
@@ -94,4 +108,3 @@ public final class WaveletDeviceConnection {
         }
     }
 }
-
