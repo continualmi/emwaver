@@ -3,19 +3,111 @@
 
 Vibe hacking means: quickly probing and controlling connected modules (SPI/I2C/GPIO/radios) using the EMWaver ASCII command protocol, then turning successful probes into repeatable recipes and Wavelet UIs.
 
-Repo-local docs live under `.emwaver/` (Markdown-only).
+This section is meant to be copy/paste friendly.
+
+### Install / update the CLI
+
+From this repo:
+
+```bash
+cd cli
+cargo install --path . --bin emwaver --force --locked
+```
+
+### Device discovery + connection management
+
+Scan for nearby devices (BLE):
+
+```bash
+emwaver list
+```
+
+Start a persistent daemon connection (recommended when iterating):
+
+```bash
+emwaver daemon start
+emwaver daemon status
+emwaver daemon list
+emwaver daemon connect
+emwaver daemon connected
+```
+
+Disconnect/stop:
+
+```bash
+emwaver daemon disconnect
+emwaver daemon stop
+```
+
+### Sending raw commands
 
 **Golden rules**
 - Commands are ASCII and must fit in the device’s 64-byte packet; prefer `--key=value` to keep commands short.
-- For raw interaction, use `emwaver cmd --verbose "<command>"` to see both hex and ASCII.
+- `emwaver cmd ...` is shorthand for `emwaver daemon cmd ...`.
 
-**SPI quickstart (examples)**
-- CC1101 `VERSION` register (expects `0x14`):
-  - `spi open --name=c --miso=13 --mosi=11 --sck=12 --cs=10`
-  - `spi xfer --name=c --tx=0xF1,0x00 --rx=2`  (byte0=status, byte1=version)
-- NRF24L01(+) sanity register reads on CS=14:
-  - `spi open --name=n --miso=13 --mosi=11 --sck=12 --cs=14`
-  - `spi xfer --name=n --tx=0x00,0x00 --rx=2`  (`CONFIG` reset default often `0x08`)
+Examples:
 
-See `.emwaver/SPI.md` for more.
+```bash
+emwaver cmd version
+emwaver cmd "gpio read --pin=4"
+emwaver cmd --packets 0 "gpio write --pin=4 --level=1"
+emwaver cmd --verbose "spi xfer --name=c --tx=0xF1,0x00 --rx=2"
+```
+
+### SPI vibe hacking (quickstart)
+
+Core commands:
+- `spi open --name=<id> --miso=<pin> --mosi=<pin> --sck=<pin> --cs=<pin>`
+- `spi xfer --name=<id> --tx=<hexbytes> --rx=<n>`
+- `spi close --name=<id>`
+
+**CC1101 example: read `VERSION` (expects `0x14`)**
+- `VERSION` register: `0x31`
+- Status-read command byte: `0x31 | 0xC0 = 0xF1`
+
+```bash
+emwaver cmd "spi open --name=c --miso=13 --mosi=11 --sck=12 --cs=10"
+emwaver cmd --verbose "spi xfer --name=c --tx=0xF1,0x00 --rx=2"
+emwaver cmd "spi close --name=c"
+```
+
+### Wavelets (turn commands into a UI)
+
+Wavelet `.emw` files are JavaScript plus a small UI DSL (see `app/public/wavelet-assets/cc1101.emw` for a concrete example).
+
+**Key API**
+- `emw.send("<ascii command>")` sends a command string (same semantics as the CLI `cmd` command).
+- `emw.sendPacket([0x01, 0x02, ...])` sends raw bytes as a packet command (rare; use only when you need byte-level control).
+
+**Minimal wavelet template**
+
+```js
+let status = "Ready";
+
+async function ping() {
+  status = "Pinging...";
+  render();
+  const res = await emw.send("version");
+  status = `Got: ${res}`;
+  render();
+}
+
+function render() {
+  UI.render(UI.column({
+    padding: 16,
+    spacing: 12,
+    children: [
+      UI.text({ text: "My Wavelet", font: "title2" }),
+      UI.button({ label: "Ping", onTap: ping }),
+      UI.text({ text: status })
+    ]
+  }));
+}
+
+render();
+```
+
+**Previewing**
+- Desktop app: open the Wavelets workspace, open a `.emw` file, and use the `Preview` action.
+- Keep wavelets transport-agnostic: emit the same ASCII commands you validated via `emwaver cmd ...`.
 <!-- EMWAVER_VIBE_HACKING_END -->
