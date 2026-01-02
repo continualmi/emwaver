@@ -168,11 +168,13 @@ pub fn run() -> Result<()> {
                 no_upload,
                 duration_ms,
             } => {
+                daemon::retransmit_start(socket.clone(), pin, pwm, freq, duty)?;
                 if !no_upload {
-                    // Ensure the device RX buffer contains the current capture.
+                    // Match desktop behavior: enter transmit mode first, then upload
+                    // the capture (the device monitors RX fill level before draining).
+                    std::thread::sleep(std::time::Duration::from_millis(25));
                     daemon::buffer_transmit(socket.clone())?;
                 }
-                daemon::retransmit_start(socket.clone(), pin, pwm, freq, duty)?;
                 if let Some(ms) = duration_ms {
                     if ms > 0 {
                         std::thread::sleep(std::time::Duration::from_millis(ms));
