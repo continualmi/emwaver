@@ -72,4 +72,7 @@ emwaver init --target stm32f042 --stm32-firmware ism --path ./my-stm32-fw
 
 ## License
 
-This project is open source and available under the `LICENSE` file.
+- **Software** (everything except `hardware/`): Apache 2.0 (see `LICENSE`).
+- **Hardware design files** (`hardware/`): source-available for **non-commercial** use (see `hardware/LICENSE`).
+  You may copy/modify and build boards for personal/non-commercial use, including via paid fabrication services,
+  but you may not sell or otherwise commercialize without a separate license.
