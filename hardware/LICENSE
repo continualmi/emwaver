@@ -4,7 +4,8 @@ Version 1.0
 Copyright (c) 2026 EMWaver contributors
 
 This license applies to the hardware design files in this repository under the
-"hardware/" directory (the "Design Files").
+"hardware/" directory and the hardware catalog data under
+"docs/content/hardware-catalog/hardware/" (the "Design Files").
 
 By using, copying, modifying, or distributing the Design Files, you agree to the
 terms below.
