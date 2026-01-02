@@ -137,6 +137,13 @@ pub fn run() -> Result<()> {
             } => daemon::daemon_connect(socket, address, name),
             cli::DaemonCommand::Disconnect { socket } => daemon::daemon_disconnect(socket),
             cli::DaemonCommand::Connected { socket, json } => daemon::daemon_connected(socket, json),
+            cli::DaemonCommand::Cmd {
+                socket,
+                text,
+                timeout_ms,
+                packets,
+                json,
+            } => daemon::daemon_cmd(socket, text, timeout_ms, packets, json),
         },
         None => interactive::run_menu(),
     }
