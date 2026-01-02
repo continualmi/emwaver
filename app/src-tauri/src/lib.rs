@@ -25,6 +25,7 @@ use std::{
     env,
     fs,
     io,
+    io::Write as _,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -1056,13 +1057,36 @@ async fn ble_get_status(state: State<'_, DaemonState>) -> Result<BLEStatus, Stri
 
 #[tauri::command]
 async fn ble_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
-    state
+    if data.is_empty() {
+        return Err("Buffer is empty".to_string());
+    }
+
+    let path = spawn_blocking(move || {
+        let mut file = tempfile::NamedTempFile::new()
+            .map_err(|e| format!("Failed to create temp file: {e}"))?;
+        file.write_all(&data)
+            .map_err(|e| format!("Failed to write temp file: {e}"))?;
+        let (_file, path) = file.keep().map_err(|e| format!("Failed to persist temp file: {e}"))?;
+        Ok::<PathBuf, String>(path)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {e}"))??;
+
+    let result = state
         .rpc(
-            "transmit_buffer",
-            serde_json::json!({ "bytes_b64": encode_b64(&data) }),
-            Duration::from_secs(60),
+            "transmit_buffer_file",
+            serde_json::json!({ "path": path }),
+            Duration::from_secs(120),
         )
-        .await?;
+        .await;
+
+    // Best-effort cleanup.
+    let _ = spawn_blocking(move || {
+        let _ = std::fs::remove_file(&path);
+    })
+    .await;
+
+    result?;
     Ok(())
 }
 

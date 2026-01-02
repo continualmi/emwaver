@@ -402,6 +402,16 @@ pub(crate) async fn dispatch_request(
             transmit_buffer_active(&state, bytes).await?;
             Ok(json!({}))
         }
+        "transmit_buffer_file" => {
+            let path = req
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.path"))?;
+            let bytes = std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
+            transmit_buffer_active(&state, bytes).await?;
+            Ok(json!({}))
+        }
         "connection_status" => {
             let connected = if state.connected.lock().await.is_some() {
                 true
