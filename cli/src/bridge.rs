@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::runtime::Runtime;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
@@ -47,27 +47,27 @@ const NOTIF_CHAR_UUID: Uuid = uuid::uuid!("47c7158e-0c3b-4e90-a847-452a15b14191"
 const DEFAULT_SCAN_TIMEOUT_MS: u64 = 6_000;
 const DEFAULT_DEVICE_NAME: &str = "EMWaver";
 
-#[derive(Debug, Deserialize)]
-struct BridgeRequest {
-    id: u64,
-    method: String,
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) struct BridgeRequest {
+    pub(crate) id: u64,
+    pub(crate) method: String,
     #[serde(default)]
-    params: serde_json::Value,
+    pub(crate) params: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]
-struct BridgeResponse {
-    id: u64,
-    ok: bool,
+pub(crate) struct BridgeResponse {
+    pub(crate) id: u64,
+    pub(crate) ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    result: Option<serde_json::Value>,
+    pub(crate) result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<BridgeError>,
+    pub(crate) error: Option<BridgeError>,
 }
 
 #[derive(Debug, Serialize)]
-struct BridgeError {
-    message: String,
+pub(crate) struct BridgeError {
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,7 +83,7 @@ struct DeviceInfo {
     address: String,
 }
 
-struct BridgeState {
+pub(crate) struct BridgeState {
     adapter: Adapter,
     peripherals: Arc<AsyncMutex<HashMap<String, Peripheral>>>,
     connected: Arc<AsyncMutex<Option<Peripheral>>>,
@@ -91,7 +91,7 @@ struct BridgeState {
     buffer: Arc<Mutex<Buffer>>,
     rx_notify: Arc<Notify>,
     in_flight: Arc<AsyncMutex<()>>,
-    out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    pub(crate) event_tx: broadcast::Sender<Vec<u8>>,
 }
 
 fn now_ms() -> u64 {
@@ -107,29 +107,7 @@ pub fn run_bridge() -> Result<()> {
 }
 
 async fn run_bridge_async() -> Result<()> {
-    let manager = Manager::new()
-        .await
-        .context("failed to initialize BLE manager")?;
-    let adapters = manager
-        .adapters()
-        .await
-        .context("failed to list BLE adapters")?;
-    let adapter = adapters
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("no BLE adapters found"))?;
-
-    match adapter
-        .adapter_state()
-        .await
-        .context("failed to query Bluetooth power state")?
-    {
-        CentralState::PoweredOff => bail!("bluetooth appears to be off"),
-        CentralState::Unknown => {
-            eprintln!("warning: bluetooth adapter state unknown; discovery may fail");
-        }
-        CentralState::PoweredOn => {}
-    }
+    let state = create_bridge_state().await?;
 
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Vec<u8>>();
 
@@ -143,15 +121,18 @@ async fn run_bridge_async() -> Result<()> {
         }
     });
 
-    let state = Arc::new(BridgeState {
-        adapter,
-        peripherals: Arc::new(AsyncMutex::new(HashMap::new())),
-        connected: Arc::new(AsyncMutex::new(None)),
-        chars: Arc::new(AsyncMutex::new(None)),
-        buffer: Arc::new(Mutex::new(Buffer::default())),
-        rx_notify: Arc::new(Notify::new()),
-        in_flight: Arc::new(AsyncMutex::new(())),
-        out_tx,
+    let mut events_rx = state.event_tx.subscribe();
+    let out_tx_events = out_tx.clone();
+    let events_task = tokio::spawn(async move {
+        loop {
+            match events_rx.recv().await {
+                Ok(line) => {
+                    let _ = out_tx_events.send(line);
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
     });
 
     // Important: do not print anything non-JSON to stdout (extension parses this stream).
@@ -199,31 +180,35 @@ async fn run_bridge_async() -> Result<()> {
             },
         };
 
-        send_json_line(&state, &response)?;
+        send_json_line(&out_tx, &response)?;
     }
 
     // Drain pending stdout lines before exiting so callers don't lose responses.
     drop(state);
     let _ = timeout(Duration::from_secs(1), writer_task).await;
+    let _ = timeout(Duration::from_secs(1), events_task).await;
 
     Ok(())
 }
 
-fn send_json_line(state: &BridgeState, value: &impl Serialize) -> Result<()> {
+pub(crate) fn send_json_line(tx: &mpsc::UnboundedSender<Vec<u8>>, value: &impl Serialize) -> Result<()> {
     let mut buf = serde_json::to_vec(value).context("failed to encode json")?;
     buf.push(b'\n');
-    state
-        .out_tx
-        .send(buf)
-        .map_err(|_| anyhow!("stdout channel closed"))?;
+    tx.send(buf).map_err(|_| anyhow!("output channel closed"))?;
     Ok(())
 }
 
 fn emit_event(state: &BridgeState, event: &str, data: serde_json::Value) -> Result<()> {
-    send_json_line(state, &BridgeEvent { event, data })
+    let mut buf = serde_json::to_vec(&BridgeEvent { event, data }).context("failed to encode json")?;
+    buf.push(b'\n');
+    let _ = state.event_tx.send(buf);
+    Ok(())
 }
 
-async fn dispatch_request(state: Arc<BridgeState>, req: BridgeRequest) -> Result<serde_json::Value> {
+pub(crate) async fn dispatch_request(
+    state: Arc<BridgeState>,
+    req: BridgeRequest,
+) -> Result<serde_json::Value> {
     let method = req.method.as_str();
 
     match method {
@@ -379,6 +364,45 @@ async fn dispatch_request(state: Arc<BridgeState>, req: BridgeRequest) -> Result
         }
         _ => Err(anyhow!("unknown method: {method}")),
     }
+}
+
+pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
+    let manager = Manager::new()
+        .await
+        .context("failed to initialize BLE manager")?;
+    let adapters = manager
+        .adapters()
+        .await
+        .context("failed to list BLE adapters")?;
+    let adapter = adapters
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("no BLE adapters found"))?;
+
+    match adapter
+        .adapter_state()
+        .await
+        .context("failed to query Bluetooth power state")?
+    {
+        CentralState::PoweredOff => bail!("bluetooth appears to be off"),
+        CentralState::Unknown => {
+            eprintln!("warning: bluetooth adapter state unknown; discovery may fail");
+        }
+        CentralState::PoweredOn => {}
+    }
+
+    let (event_tx, _) = broadcast::channel::<Vec<u8>>(1024);
+
+    Ok(Arc::new(BridgeState {
+        adapter,
+        peripherals: Arc::new(AsyncMutex::new(HashMap::new())),
+        connected: Arc::new(AsyncMutex::new(None)),
+        chars: Arc::new(AsyncMutex::new(None)),
+        buffer: Arc::new(Mutex::new(Buffer::default())),
+        rx_notify: Arc::new(Notify::new()),
+        in_flight: Arc::new(AsyncMutex::new(())),
+        event_tx,
+    }))
 }
 
 async fn ble_write(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
@@ -553,7 +577,7 @@ async fn ble_connect(
         Arc::new(peripheral.clone()),
         Arc::clone(&state.buffer),
         Arc::clone(&state.rx_notify),
-        state.out_tx.clone(),
+        state.event_tx.clone(),
     );
     let _ = emit_event(
         state,
@@ -657,7 +681,7 @@ fn spawn_notifications(
     peripheral: Arc<Peripheral>,
     buffer: Arc<Mutex<Buffer>>,
     rx_notify: Arc<Notify>,
-    out_tx: mpsc::UnboundedSender<Vec<u8>>,
+    event_tx: broadcast::Sender<Vec<u8>>,
 ) {
     tokio::spawn(async move {
         let Ok(mut stream) = peripheral.notifications().await else {
@@ -682,7 +706,7 @@ fn spawn_notifications(
             };
             if let Ok(mut buf) = serde_json::to_vec(&payload) {
                 buf.push(b'\n');
-                let _ = out_tx.send(buf);
+                let _ = event_tx.send(buf);
             }
         }
     });

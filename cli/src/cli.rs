@@ -189,6 +189,87 @@ pub enum Command {
     /// JSON-lines sidecar for editor/desktop integrations (stdio protocol).
     #[deprecated(note = "use `emwaver connect --bridge`")]
     Bridge,
+    /// Background daemon that keeps device connections alive (local socket IPC).
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DaemonCommand {
+    /// Run the daemon in the foreground.
+    Run {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Start the daemon in the background.
+    Start {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Stop the running daemon.
+    Stop {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Check whether the daemon is running.
+    Status {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Ask the daemon to scan for nearby devices.
+    List {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Scan timeout in milliseconds.
+        #[arg(long, default_value_t = 6000)]
+        timeout_ms: u64,
+        /// Show all BLE devices (disables EMWaver filtering).
+        #[arg(long)]
+        all: bool,
+        /// Device name to filter for (defaults to EMWaver).
+        #[arg(long, default_value = "EMWaver")]
+        name: String,
+        /// Output as JSON (one array on stdout).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Ask the daemon to connect to a device.
+    Connect {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// BLE address to connect to (if omitted, connects to the first matching device).
+        #[arg(long)]
+        address: Option<String>,
+        /// Device name to filter for when scanning (defaults to EMWaver).
+        #[arg(long, default_value = "EMWaver")]
+        name: String,
+    },
+    /// Ask the daemon to disconnect from the active device.
+    Disconnect {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Ask the daemon for its currently connected device(s).
+    Connected {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]

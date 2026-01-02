@@ -18,6 +18,7 @@
 mod cli;
 mod ble_cli;
 mod bridge;
+mod daemon;
 pub mod ble_ota;
 pub mod dfu;
 pub mod firmware;
@@ -117,6 +118,26 @@ pub fn run() -> Result<()> {
             init::run_init(target, components, stm32_firmware, destination)
         }
         Some(cli::Command::Bridge) => bridge::run_bridge(),
+        Some(cli::Command::Daemon { command }) => match command {
+            cli::DaemonCommand::Run { socket } => daemon::daemon_run(socket),
+            cli::DaemonCommand::Start { socket } => daemon::daemon_start(socket),
+            cli::DaemonCommand::Stop { socket } => daemon::daemon_stop(socket),
+            cli::DaemonCommand::Status { socket, json } => daemon::daemon_status(socket, json),
+            cli::DaemonCommand::List {
+                socket,
+                timeout_ms,
+                all,
+                name,
+                json,
+            } => daemon::daemon_list(socket, timeout_ms, all, name, json),
+            cli::DaemonCommand::Connect {
+                socket,
+                address,
+                name,
+            } => daemon::daemon_connect(socket, address, name),
+            cli::DaemonCommand::Disconnect { socket } => daemon::daemon_disconnect(socket),
+            cli::DaemonCommand::Connected { socket, json } => daemon::daemon_connected(socket, json),
+        },
         None => interactive::run_menu(),
     }
 }
