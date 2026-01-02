@@ -115,3 +115,21 @@ fn init_stm32f042_creates_project_files() {
     assert!(project_dir.join("my-stm32-proj.ioc").exists());
     assert!(project_dir.join("Core/Src/main.c").exists());
 }
+
+#[test]
+fn vibe_init_writes_agents_md() {
+    let temp = tempfile::tempdir().expect("tempdir");
+
+    let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
+    cmd.args(["vibe", "init", "--path"])
+        .arg(temp.path())
+        .args(["--force"]);
+    cmd.assert().success();
+
+    let agents_path = temp.path().join("AGENTS.md");
+    assert!(agents_path.exists());
+
+    let agents = std::fs::read_to_string(agents_path).expect("read agents");
+    assert!(agents.contains("## Vibe Hacking"));
+    assert!(agents.contains("emw.send("));
+}
