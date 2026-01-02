@@ -6,7 +6,7 @@
   <p>
     <a href="https://luispl77.github.io/emwaver/"><strong>Docs</strong></a> ·
     <a href="https://www.youtube.com/@EMWavers"><strong>YouTube</strong></a> ·
-    <a href="https://luispl77.github.io/emwaver-hardware/"><strong>Hardware Catalog</strong></a> ·
+    <a href="https://luispl77.github.io/emwaver/hardware-catalog/hardware.html"><strong>Hardware Catalog</strong></a> ·
     <a href="https://github.com/luispl77/emwaver/releases"><strong>Releases</strong></a>
   </p>
 </div>
