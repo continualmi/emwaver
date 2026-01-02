@@ -273,6 +273,20 @@ async fn dispatch_request(state: Arc<BridgeState>, req: BridgeRequest) -> Result
             let info = ble_connect(&state, address, name).await?;
             Ok(json!({ "device": info }))
         }
+        "list_connected" => {
+            let guard = state.connected.lock().await;
+            if let Some(peripheral) = guard.as_ref() {
+                Ok(json!({
+                    "devices": [{
+                        "transport": "ble",
+                        "name": DEFAULT_DEVICE_NAME,
+                        "address": peripheral.address().to_string()
+                    }]
+                }))
+            } else {
+                Ok(json!({ "devices": [] }))
+            }
+        }
         "disconnect" => {
             ble_disconnect(&state).await?;
             Ok(json!({}))
@@ -409,17 +423,10 @@ async fn ble_list_devices(
         .await
         .context("failed to subscribe to adapter events")?;
 
-    let filter = if name.is_some() {
-        ScanFilter {
-            services: vec![SERVICE_UUID],
-        }
-    } else {
-        ScanFilter::default()
-    };
-
     state
         .adapter
-        .start_scan(filter)
+        // Avoid service UUID scan filters for portability (CoreBluetooth can miss results).
+        .start_scan(ScanFilter::default())
         .await
         .context("failed to start scan")?;
 

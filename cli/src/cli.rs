@@ -45,6 +45,42 @@ pub enum OtaTransport {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// List nearby EMWaver devices (BLE).
+    List {
+        /// Scan timeout in milliseconds.
+        #[arg(long, default_value_t = 6000)]
+        timeout_ms: u64,
+        /// Show all BLE devices (disables EMWaver filtering).
+        #[arg(long)]
+        all: bool,
+        /// Device name to filter for (defaults to EMWaver).
+        #[arg(long, default_value = "EMWaver")]
+        name: String,
+        /// Output as JSON (one array on stdout).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Connect to an EMWaver device (BLE) and optionally stay connected.
+    Connect {
+        /// Run the persistent JSON-lines bridge (used by editor integrations).
+        #[arg(long)]
+        bridge: bool,
+        /// BLE address to connect to (if omitted, connects to the first matching device).
+        #[arg(long)]
+        address: Option<String>,
+        /// Device name to filter for when scanning (defaults to EMWaver).
+        #[arg(long, default_value = "EMWaver")]
+        name: String,
+        /// Scan timeout in milliseconds when resolving a device.
+        #[arg(long, default_value_t = 6000)]
+        timeout_ms: u64,
+        /// Stay connected and print notifications until Ctrl-C.
+        #[arg(long)]
+        stay: bool,
+        /// Show raw hex payloads alongside ASCII output (only with --stay).
+        #[arg(long)]
+        verbose: bool,
+    },
     /// Open an interactive shell to a nearby EMWaver device.
     Shell {
         /// Show raw hex payloads alongside ASCII output.
@@ -151,6 +187,7 @@ pub enum Command {
         path: Option<PathBuf>,
     },
     /// JSON-lines sidecar for editor/desktop integrations (stdio protocol).
+    #[deprecated(note = "use `emwaver connect --bridge`")]
     Bridge,
 }
 
