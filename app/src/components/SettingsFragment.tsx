@@ -21,7 +21,6 @@ import { isTauriAvailable } from "../utils/tauri";
 const SETTINGS_REFRESH_KEY = "sampler.settings.refreshRate";
 const SETTINGS_MAX_SAMPLES_KEY = "sampler.settings.maxSamples";
 const CS_PIN_STORAGE_KEY = "rfm69_cs_pin";
-const CS_ACTIVE_HIGH_STORAGE_KEY = "rfm69_cs_active_high";
 const SETTINGS_EVENT = "emwaver-settings-change";
 
 const REFRESH_OPTIONS = [
@@ -76,10 +75,6 @@ export default function SettingsFragment() {
   const [rfm69CsPin, setRfm69CsPin] = useState<string>(() => {
     return localStorage.getItem(CS_PIN_STORAGE_KEY) || "36";
   });
-  const [rfm69CsActiveHigh, setRfm69CsActiveHigh] = useState<boolean>(() => {
-    const stored = localStorage.getItem(CS_ACTIVE_HIGH_STORAGE_KEY);
-    return stored ? stored === "true" : true;
-  });
 
   const refreshOptions = useMemo(() => REFRESH_OPTIONS, []);
   const bufferOptions = useMemo(() => BUFFER_OPTIONS, []);
@@ -96,10 +91,6 @@ export default function SettingsFragment() {
     localStorage.setItem(CS_PIN_STORAGE_KEY, rfm69CsPin);
   }, [rfm69CsPin]);
 
-  useEffect(() => {
-    localStorage.setItem(CS_ACTIVE_HIGH_STORAGE_KEY, rfm69CsActiveHigh ? "true" : "false");
-  }, [rfm69CsActiveHigh]);
-
   const handleRefreshChange = useCallback((value: number) => {
     setRefreshRate(value);
     emitSettingsChange("sampler");
@@ -113,11 +104,6 @@ export default function SettingsFragment() {
   const handleRfm69PinChange = useCallback((value: string) => {
     const trimmed = value.trim();
     setRfm69CsPin(trimmed);
-    emitSettingsChange("ism");
-  }, []);
-
-  const handleRfm69ActiveChange = useCallback((value: boolean) => {
-    setRfm69CsActiveHigh(value);
     emitSettingsChange("ism");
   }, []);
 
@@ -185,21 +171,6 @@ export default function SettingsFragment() {
                 onChange={(event) => handleRfm69PinChange(event.target.value)}
                 className="w-full md:w-32 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
               />
-            </div>
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-100">RFM69 CS Active High</p>
-                <p className="text-xs text-slate-400">Enable if CS is active high (select=high, deselect=low).</p>
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm text-slate-200">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-sky-500"
-                  checked={rfm69CsActiveHigh}
-                  onChange={(event) => handleRfm69ActiveChange(event.target.checked)}
-                />
-                Active High
-              </label>
             </div>
           </div>
         </div>

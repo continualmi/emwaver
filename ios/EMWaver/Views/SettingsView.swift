@@ -108,25 +108,6 @@ struct SettingsView: View {
                     .frame(width: 60)
                 }
                 .padding(.vertical, 4)
-                
-                // RFM69 CS Active High Setting
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("RFM69 CS Active High")
-                            .font(.body)
-                        Text("Enable if CS is active high (select=high, deselect=low)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Toggle("", isOn: Binding(
-                        get: { settingsManager.rfm69CsActiveHigh },
-                        set: { settingsManager.updateRfm69CsActiveHigh($0) }
-                    ))
-                }
-                .padding(.vertical, 4)
             }
             
             Section("Support & Information") {

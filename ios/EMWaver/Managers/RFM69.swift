@@ -184,9 +184,8 @@ class RFM69 {
         // Desktop parity: use the dedicated `rfm69` commands (fits the 64B command protocol).
         let settings = SettingsManager.shared
         let csPin = settings.rfm69CsPin
-        let csActiveHigh = settings.rfm69CsActiveHigh
         
-        let command = "rfm69 init --cs=\(csPin) --cs_active_high=\(csActiveHigh ? 1 : 0)\n"
+        let command = "rfm69 init --cs=\(csPin)\n"
         notifyCommandObserver(command.trimmingCharacters(in: .whitespacesAndNewlines))
         
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
