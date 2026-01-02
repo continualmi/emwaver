@@ -170,6 +170,22 @@ pub enum Command {
         #[command(subcommand)]
         command: DaemonCommand,
     },
+    /// Manage the daemon-owned RX buffer (load/save/transmit `.raw` captures).
+    Buffer {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        #[command(subcommand)]
+        command: BufferCommand,
+    },
+    /// Convenience wrapper around sampler ASCII commands (runs via daemon connection).
+    Sampler {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        #[command(subcommand)]
+        command: SamplerCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -252,7 +268,7 @@ pub enum DaemonCommand {
         #[arg(long)]
         socket: Option<PathBuf>,
         /// Command text to send.
-        #[arg(required = true)]
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         text: Vec<String>,
         /// Command response timeout in milliseconds.
         #[arg(long, default_value_t = 1500)]
@@ -264,6 +280,50 @@ pub enum DaemonCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BufferCommand {
+    /// Clear the daemon RX buffer.
+    Clear,
+    /// Print RX buffer length in bytes.
+    Len {
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Load RX buffer bytes from a `.raw` file (replaces current buffer contents).
+    Load {
+        /// Path to a `.raw` file.
+        path: PathBuf,
+    },
+    /// Save RX buffer bytes to a `.raw` file.
+    Save {
+        /// Destination path.
+        path: PathBuf,
+    },
+    /// Transmit the current RX buffer (sampler upload) using daemon pacing/flow control.
+    Transmit,
+    /// Transmit bytes directly from a `.raw` file using daemon pacing/flow control.
+    TransmitFile {
+        /// Path to a `.raw` file.
+        path: PathBuf,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SamplerCommand {
+    /// Start sampling from a GPIO pin into the daemon RX buffer.
+    Start {
+        /// GPIO pin to sample.
+        #[arg(long)]
+        pin: i32,
+        /// Automatically stop sampling after this duration (milliseconds).
+        #[arg(long)]
+        duration_ms: Option<u64>,
+    },
+    /// Stop sampling (fire-and-forget).
+    Stop,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
