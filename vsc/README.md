@@ -9,6 +9,15 @@ Initial scaffold for a simple **Build & Flash** sidebar.
 3. Press `F5` to start the *Extension Development Host* (auto-compiles TypeScript via a pre-launch task).
 4. In the dev-host window, open a folder/workspace (e.g. the repo root) so the extension has a working directory.
 
+## Install (VSIX / Cursor / VS Code)
+
+1. Build a VSIX:
+   - `cd vsc`
+   - `npm i`
+   - `npm run package`
+2. Install the generated `emwaver-*.vsix`:
+   - VS Code/Cursor → Extensions → `…` → `Install from VSIX…`
+
 ## Troubleshooting
 
 - Check `View → Output → EMWaver` for activation logs.

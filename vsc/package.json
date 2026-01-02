@@ -150,7 +150,9 @@
   },
   "scripts": {
     "compile": "tsc -p .",
-    "watch": "tsc -watch -p ."
+    "watch": "tsc -watch -p .",
+    "vscode:prepublish": "npm run compile",
+    "package": "npm run compile && npx @vscode/vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
