@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EMWaver Hardware</title>
+    <meta name="description" content="EMWaver hardware device page." />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: { sans: ["Inter", "sans-serif"] },
+            colors: {
+              brand: { 400: "#38bdf8", 500: "#0ea5e9", 600: "#0284c7" },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.16), transparent 60%),
+          radial-gradient(900px 700px at 90% 15%, rgba(56, 189, 248, 0.12), transparent 55%),
+          linear-gradient(180deg, #f8fafc 0%, #ffffff 55%, #f8fafc 100%);
+        color: #0f172a;
+      }
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.03;
+        mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+      }
+      .fade-in {
+        animation: fade 280ms ease-out both;
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+
+  <body class="antialiased selection:bg-brand-500 selection:text-white bg-white text-slate-900">
+    <div class="noise"></div>
+
+    <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center gap-3">
+            <a
+              href="hardware.html"
+              class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
+            >
+              <img
+                src="assets/emwaver-logo.png"
+                alt="EMWaver"
+                class="w-7 h-7 rounded-lg object-contain bg-white border border-slate-200"
+                loading="lazy"
+              />
+              EMWaver
+            </a>
+            <span class="text-slate-300 hidden sm:inline">/</span>
+            <a
+              href="hardware.html"
+              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
+              >Hardware</a
+            >
+            <span id="crumb-catalog-sep" class="text-slate-300 hidden sm:inline">/</span>
+            <a
+              id="crumb-catalog"
+              href="catalog.html"
+              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline hidden"
+              >Catalog</a
+            >
+            <span class="text-slate-300 hidden sm:inline">/</span>
+            <span id="crumb-title" class="text-sm font-medium text-slate-600 hidden sm:inline">…</span>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <a
+              id="nav-back"
+              href="hardware.html"
+              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition"
+              >Back</a
+            >
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <main class="pt-28 pb-20">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div id="error" class="hidden rounded-2xl border border-slate-200 bg-white/80 p-6"></div>
+
+        <div id="content" class="hidden fade-in">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+            <div class="lg:col-span-5">
+              <div class="relative group">
+                <div
+                  class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-700"
+                ></div>
+                <div
+                  class="relative rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm"
+                >
+                  <div class="relative">
+                    <img
+                      id="device-image"
+                      src=""
+                      alt=""
+                      class="w-full h-72 sm:h-[26rem] object-contain bg-slate-50"
+                      loading="lazy"
+                    />
+                    <div class="absolute top-4 left-4" id="status-pill"></div>
+                    <div class="absolute top-4 right-4 flex items-center gap-2">
+                      <button
+                        id="gallery-prev"
+                        type="button"
+                        class="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 hover:bg-white shadow-sm transition"
+                        aria-label="Previous image"
+                        title="Previous"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        id="gallery-next"
+                        type="button"
+                        class="hidden h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 hover:bg-white shadow-sm transition"
+                        aria-label="Next image"
+                        title="Next"
+                      >
+                        ›
+                      </button>
+                    </div>
+                    <button
+                      id="gallery-open"
+                      type="button"
+                      class="hidden absolute bottom-4 right-4 px-3 py-1.5 rounded-xl border border-slate-200 bg-white/90 text-xs font-semibold text-slate-700 hover:bg-white shadow-sm transition"
+                      title="Open large view"
+                    >
+                      View
+                      <span id="gallery-counter" class="text-slate-500 font-semibold"></span>
+                    </button>
+                  </div>
+                  <div id="gallery-thumbs-wrap" class="hidden border-t border-slate-200 bg-white">
+                    <div
+                      id="gallery-thumbs"
+                      class="flex gap-2 p-3 overflow-x-auto overscroll-x-contain scroll-smooth"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-7">
+              <div class="flex flex-wrap items-center gap-2">
+                <div id="group-badge" class="flex items-center gap-2 text-sm text-slate-700"></div>
+                <div class="w-px h-4 bg-slate-200"></div>
+                <div id="support-icons" class="flex items-center gap-2"></div>
+              </div>
+
+	              <div id="relations" class="mt-4 hidden"></div>
+	              <div id="variants" class="mt-4 hidden"></div>
+
+              <h1 id="device-title" class="mt-4 text-4xl font-bold text-slate-900 leading-tight">…</h1>
+              <p id="device-description" class="mt-4 text-lg text-slate-600 leading-relaxed">…</p>
+
+              <div class="mt-6 flex flex-wrap gap-3" id="action-buttons"></div>
+
+              <div class="mt-10 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
+                <div class="text-slate-900 font-semibold">Notes</div>
+                <div class="mt-2 text-sm text-slate-600 leading-relaxed">
+                  Fill in links, description, and metadata inside this device’s <code>device.json</code>.
+                </div>
+                <div id="cost" class="mt-3 text-sm text-slate-700"></div>
+                <div id="tags" class="mt-4 flex flex-wrap gap-2"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+		      const params = new URLSearchParams(window.location.search);
+		      const requestedId = params.get("id");
+		      const requestedVariant = (params.get("variant") || "").trim().toLowerCase();
+		      const from = (params.get("from") || "").trim().toLowerCase();
+		      const back = (params.get("back") || "").trim().toLowerCase();
+
+				      const ALIAS = {
+				        EMWAVER_ONE: { id: "emwaver" },
+				        EMWAVER_ONE_PLUS: { id: "emwaver-plus" },
+				        "EMWAVER_V1.0.1": { id: "ISM_WAVER_V0" },
+				        "EMWAVER_V1.0": { id: "ISM_WAVER_V0" },
+				        "ISM_WAVER_V1.0": { id: "ISM_WAVER_V0" },
+				        "EMWAVER_V1.1": { id: "ISM_WAVER_V1" },
+				        "ISM_WAVER_V1.1": { id: "ISM_WAVER_V1" },
+				        "EMWAVER_V2": { id: "ISM_WAVER_V2" },
+				        "EMW-1_16PIN": { id: "EMW1" },
+				        "EMW-1_18PIN": { id: "EMW1" },
+				        EMWAVER_V2_315: { id: "ISM_WAVER_V2" },
+				        EMWAVER_V2_433: { id: "ISM_WAVER_V2" },
+				        EMWAVER_V2_433_RAINSUN: { id: "ISM_WAVER_V2" },
+					        EMWAVER_UNO_V2: { id: "emwaver-plus" },
+				        EMWAVER_UNO_V3: { id: "emwaver-plus" },
+				        EMWAVER_UNO_V4: { id: "emwaver" },
+				        INFRARED_WAVER_V0_CHEAP: { id: "INFRARED_WAVER_V0" },
+				        GPIO_WAVER: { id: "GPIO_WAVER_V0" },
+				        GPIO_WAVER_15PIN: { id: "GPIO_WAVER_V1" },
+				        GPIO_WAVER_15PIN_V2: { id: "GPIO_WAVER" },
+			        GPIO_WAVER_18PIN: { id: "GPIO_WAVER_MODULE" },
+				      };
+
+			      const alias = requestedId && ALIAS[requestedId] ? ALIAS[requestedId] : null;
+
+      function prettyTitle(text) {
+        return String(text || "")
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+	      function safeUrl(url) {
+	        if (!url) return null;
+	        const s = String(url).trim();
+	        if (!s) return null;
+	        return s;
+	      }
+
+	      function isHttpUrl(s) {
+	        return /^https?:\/\//i.test(String(s || "").trim());
+	      }
+
+	      function resolveHardwareAssetUrl(deviceId, raw) {
+	        const s = String(raw || "").trim();
+	        if (!s) return null;
+	        if (isHttpUrl(s)) return s;
+	        if (s.startsWith("hardware/")) return s;
+	        if (s.startsWith("/")) return s.slice(1);
+	        if (s.includes("/")) return `hardware/${s}`;
+	        return `hardware/${deviceId}/${s}`;
+	      }
+
+	      function uniqueStrings(items) {
+	        const out = [];
+	        const seen = new Set();
+	        for (const item of items) {
+	          const s = String(item || "").trim();
+	          if (!s || seen.has(s)) continue;
+	          seen.add(s);
+	          out.push(s);
+	        }
+	        return out;
+	      }
+
+	      function safeText(text) {
+	        return String(text || "")
+	          .replace(/&/g, "&amp;")
+	          .replace(/</g, "&lt;")
+	          .replace(/>/g, "&gt;")
+	          .replace(/"/g, "&quot;")
+	          .replace(/'/g, "&#39;");
+	      }
+
+      function pill(text, className) {
+        return `<span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${className}">${text}</span>`;
+      }
+
+      function statusPill(status) {
+        if (status !== "module") return "";
+        return pill("Module", "text-cyan-700 bg-cyan-50 border-cyan-200");
+      }
+
+      const ICONS = {
+        android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
+        ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
+        desktop: "https://static.thenounproject.com/png/1982056-200.png",
+        esp32: "https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg",
+        stm32: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s",
+      };
+
+      function iconImg(src, label, className) {
+        return `<img src="${src}" alt="${label}" title="${label}" loading="lazy" referrerpolicy="no-referrer" class="${className}" onerror="this.onerror=null; this.style.display='none';" />`;
+      }
+
+      function groupBadge(group) {
+        if (group === "esp32") {
+          return `${iconImg(ICONS.esp32, "Espressif", "w-5 h-5 rounded object-cover border border-slate-200 bg-white")}<span class="font-semibold text-slate-900">Espressif</span>`;
+        }
+        if (group === "stm32") {
+          return `${iconImg(ICONS.stm32, "STM32", "w-5 h-5 rounded object-cover border border-slate-200 bg-white")}<span class="font-semibold text-slate-900">STM32</span>`;
+        }
+        if (group === "module") {
+          return `<span class="font-semibold text-slate-900">Module</span>`;
+        }
+        return `<span class="font-semibold text-slate-900">Other</span>`;
+      }
+
+      function deriveSupport(group, support) {
+        const normalized = Array.isArray(support) ? support : null;
+        return (
+          normalized ||
+          (group === "esp32"
+            ? ["android", "ios", "desktop"]
+            : group === "stm32" || group === "module"
+              ? ["android", "desktop"]
+              : [])
+        );
+      }
+
+      function supportIcons(group, support) {
+        const derived = deriveSupport(group, support);
+        const map = {
+          android: () => iconImg(ICONS.android, "Android", "w-4 h-4 object-contain opacity-90"),
+          ios: () => iconImg(ICONS.ios, "iOS", "w-4 h-4 object-contain opacity-90"),
+          desktop: () => iconImg(ICONS.desktop, "Desktop", "w-4 h-4 object-contain opacity-90"),
+        };
+        return derived.filter((x) => map[x]).map((x) => map[x]()).join("");
+      }
+
+      function actionButton(label, url, primary, iconUrl) {
+        const icon = iconUrl
+          ? `<img src="${iconUrl}" alt="" aria-hidden="true" loading="lazy" referrerpolicy="no-referrer" class="w-5 h-5 object-contain" onerror="this.onerror=null; this.style.display='none';" />`
+          : "";
+        if (!url) {
+          return `<button disabled class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-sm font-medium cursor-not-allowed">${icon}<span>${label}</span></button>`;
+        }
+        if (primary) {
+          return `<a href="${url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-lg shadow-brand-500/10">${icon}<span>${label}</span></a>`;
+        }
+        return `<a href="${url}" target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium transition">${icon}<span>${label}</span></a>`;
+      }
+
+      function casingThumbnailButton(id, src) {
+        return `
+          <button id="${id}" type="button" class="group inline-flex items-center gap-3 p-2 pr-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-sm">
+            <span class="relative w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shrink-0">
+              <img src="${src}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.onerror=null; this.style.display='none'; this.parentElement.classList.add('bg-slate-100');" />
+            </span>
+            <span class="text-left">
+              <span class="block text-sm font-semibold text-slate-900">3D casing</span>
+              <span class="block text-xs text-slate-500">Click to view</span>
+            </span>
+          </button>
+        `.trim();
+      }
+
+      function showError(message, detail) {
+        const errorEl = document.getElementById("error");
+        const isFileProtocol = window.location && window.location.protocol === "file:";
+        errorEl.classList.remove("hidden");
+        errorEl.innerHTML = `
+          <div class="text-slate-900 font-semibold">${message}</div>
+          <div class="text-slate-600 text-sm mt-2">${detail || ""}</div>
+          ${
+            isFileProtocol
+              ? `<div class="text-slate-600 text-sm mt-2">
+                   You’re opening this page via <code>file://</code>, which blocks <code>fetch()</code>.
+                   Run a local server: <code>python3 -m http.server 8000</code> then open
+                   <code>http://localhost:8000/device.html?id=emwaver</code>.
+                 </div>`
+              : ""
+          }
+        `;
+      }
+
+	      async function load() {
+	        if (!requestedId) {
+	          showError("Missing device id", "Use: device.html?id=emwaver");
+	          return;
+	        }
+
+	        const fetchDevice = async (id) => {
+	          const res = await fetch(`hardware/${id}/device.json`, { cache: "no-store" });
+	          return res;
+	        };
+
+	        let deviceId = requestedId;
+	        let activeVariant = requestedVariant;
+	        let res = await fetchDevice(deviceId);
+
+	        // Only apply aliases if the requested folder doesn't exist.
+	        if (!res.ok && alias && alias.id) {
+	          deviceId = alias.id;
+	          activeVariant = alias.variant ? String(alias.variant).trim().toLowerCase() : activeVariant;
+	          res = await fetchDevice(deviceId);
+	        }
+
+	        if (!res.ok) throw new Error(`device.json not found for ${deviceId} (${res.status})`);
+	        const device = await res.json();
+
+        const title = prettyTitle(device.displayTitle || device.title || deviceId);
+        document.title = `${title} — EMWaver Hardware`;
+        document.getElementById("crumb-title").textContent = title;
+        document.getElementById("device-title").textContent = title;
+        document.getElementById("device-description").textContent =
+          device.description || "Description coming soon.";
+
+        const navBack = document.getElementById("nav-back");
+        const crumbCatalog = document.getElementById("crumb-catalog");
+        const crumbCatalogSep = document.getElementById("crumb-catalog-sep");
+        const cameFromCatalog = from === "catalog";
+        const backToCatalog =
+          back === "experimental" ? "catalog.html#experimental" : back === "old" ? "catalog.html#old" : "catalog.html";
+        if (cameFromCatalog) {
+          navBack.href = backToCatalog;
+          navBack.textContent = "Back to catalog";
+          crumbCatalog.classList.remove("hidden");
+          crumbCatalogSep.classList.remove("hidden");
+          crumbCatalog.href = backToCatalog;
+        } else {
+          navBack.href = "hardware.html";
+          navBack.textContent = "Back";
+          crumbCatalog.classList.add("hidden");
+          crumbCatalogSep.classList.add("hidden");
+        }
+
+        const group = device.group || null;
+        document.getElementById("group-badge").innerHTML = groupBadge(group);
+        document.getElementById("support-icons").innerHTML = supportIcons(group, device.appSupport);
+
+        document.getElementById("status-pill").innerHTML = statusPill(device.status);
+
+        const imgEl = document.getElementById("device-image");
+        const defaultImg = `hardware/${deviceId}/${deviceId}.png`;
+
+        const rawPrimary = device.image ? String(device.image).trim() : "";
+
+        const rawGallery =
+          Array.isArray(device.images)
+            ? device.images
+            : Array.isArray(device.gallery)
+              ? device.gallery
+              : Array.isArray(device.photos)
+                ? device.photos
+                : [];
+
+        const normalizedGallery = rawGallery
+          .map((x) => (typeof x === "string" ? x : x && typeof x === "object" ? x.src || x.url || "" : ""))
+          .map((x) => (typeof x === "string" ? x.trim() : ""))
+          .filter(Boolean);
+
+        if (rawPrimary && !normalizedGallery.includes(rawPrimary)) normalizedGallery.push(rawPrimary);
+
+        const resolvedGallery = uniqueStrings(
+          normalizedGallery.map((x) => resolveHardwareAssetUrl(deviceId, x)).filter(Boolean),
+        );
+
+        const resolvedPrimary =
+          resolvedGallery[0] ||
+          (rawPrimary ? resolveHardwareAssetUrl(deviceId, rawPrimary) : defaultImg);
+
+        const gallery = resolvedGallery.length ? resolvedGallery : [resolvedPrimary];
+        const galleryAlt = (idx) => `${title}${gallery.length > 1 ? ` (${idx + 1}/${gallery.length})` : ""}`;
+
+        const prevBtn = document.getElementById("gallery-prev");
+        const nextBtn = document.getElementById("gallery-next");
+        const openBtn = document.getElementById("gallery-open");
+        const counterEl = document.getElementById("gallery-counter");
+        const thumbsWrapEl = document.getElementById("gallery-thumbs-wrap");
+        const thumbsEl = document.getElementById("gallery-thumbs");
+
+        const lightboxEl = document.getElementById("lightbox");
+        const lightboxTitleEl = document.getElementById("lightbox-title");
+        const lightboxImgEl = document.getElementById("lightbox-image");
+        const lightboxPrevBtn = document.getElementById("lightbox-prev");
+        const lightboxNextBtn = document.getElementById("lightbox-next");
+        const lightboxCloseBtn = document.getElementById("lightbox-close");
+
+        let currentIndex = 0;
+        const thumbButtons = [];
+
+        function updateNavVisibility() {
+          const show = gallery.length > 1;
+          imgEl.classList.toggle("cursor-zoom-in", show);
+          for (const button of [prevBtn, nextBtn]) {
+            if (!button) continue;
+            button.classList.toggle("hidden", !show);
+            if (show) button.classList.add("inline-flex");
+          }
+          if (openBtn) openBtn.classList.toggle("hidden", !show);
+          if (thumbsWrapEl) thumbsWrapEl.classList.toggle("hidden", !show);
+        }
+
+        function setActiveThumb(idx) {
+          thumbButtons.forEach((b, i) => {
+            b.classList.toggle("border-brand-500", i === idx);
+            b.classList.toggle("ring-2", i === idx);
+            b.classList.toggle("ring-brand-200", i === idx);
+            b.classList.toggle("border-slate-200", i !== idx);
+          });
+        }
+
+        function setIndex(nextIndex) {
+          const n = gallery.length;
+          if (!n) return;
+          currentIndex = ((Number(nextIndex) % n) + n) % n;
+          imgEl.src = gallery[currentIndex];
+          imgEl.alt = galleryAlt(currentIndex);
+          if (counterEl) counterEl.textContent = ` ${currentIndex + 1}/${n}`;
+          setActiveThumb(currentIndex);
+        }
+
+        function renderLightbox() {
+          if (!lightboxEl || !lightboxState) return;
+          const { images, title: lbTitle, index } = lightboxState;
+          const count = images.length;
+          const alt = `${lbTitle}${count > 1 ? ` (${index + 1}/${count})` : ""}`;
+          lightboxTitleEl.textContent = lbTitle;
+          lightboxImgEl.src = images[index];
+          lightboxImgEl.alt = alt;
+          for (const button of [lightboxPrevBtn, lightboxNextBtn]) {
+            if (!button) continue;
+            button.classList.toggle("hidden", count <= 1);
+            if (count > 1) button.classList.add("inline-flex");
+          }
+
+          const actionEl = document.getElementById("lightbox-action");
+          if (actionEl) {
+            const url = safeUrl(lightboxState.actionUrl);
+            const label = String(lightboxState.actionLabel || "").trim() || "Open link";
+            const iconUrl = safeUrl(lightboxState.actionIconUrl);
+            if (!url) {
+              actionEl.classList.add("hidden");
+            } else {
+              actionEl.href = url;
+              actionEl.innerHTML = `${iconUrl ? `<img src="${iconUrl}" alt="" aria-hidden="true" loading="lazy" class="w-5 h-5 object-contain" onerror="this.onerror=null; this.style.display='none';" />` : ""}<span>${safeText(label)}</span>`;
+              actionEl.classList.remove("hidden");
+            }
+          }
+        }
+
+        let lightboxState = null;
+
+        function openLightbox(state) {
+          if (!lightboxEl) return;
+          lightboxState = state;
+          renderLightbox();
+          lightboxEl.classList.remove("hidden");
+          document.body.style.overflow = "hidden";
+        }
+
+        function closeLightbox() {
+          if (!lightboxEl) return;
+          lightboxEl.classList.add("hidden");
+          document.body.style.overflow = "";
+          lightboxState = null;
+        }
+
+        function step(delta) {
+          if (gallery.length <= 1) return;
+          setIndex(currentIndex + delta);
+        }
+
+        function lightboxStep(delta) {
+          if (!lightboxState) return;
+          const { images } = lightboxState;
+          if (images.length <= 1) return;
+          const n = images.length;
+          const next = ((lightboxState.index + delta) % n + n) % n;
+          lightboxState.index = next;
+          renderLightbox();
+          if (typeof lightboxState.onIndexChange === "function") lightboxState.onIndexChange(next);
+        }
+
+        imgEl.onerror = () => {
+          if (imgEl.dataset.fallbackDone === "1") {
+            imgEl.onerror = null;
+            imgEl.style.display = "none";
+            return;
+          }
+          imgEl.dataset.fallbackDone = "1";
+          imgEl.src = defaultImg;
+        };
+
+        updateNavVisibility();
+
+        if (gallery.length > 1 && thumbsEl) {
+          thumbsEl.innerHTML = "";
+          gallery.forEach((src, idx) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className =
+              "relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white hover:bg-slate-50 transition focus:outline-none focus:ring-2 focus:ring-brand-200";
+            btn.title = `Image ${idx + 1}`;
+
+            const thumb = document.createElement("img");
+            thumb.src = src;
+            thumb.alt = `${title} thumbnail ${idx + 1}`;
+            thumb.loading = "lazy";
+            thumb.className = "w-full h-full object-cover";
+            thumb.onerror = () => {
+              thumb.remove();
+              btn.classList.add("bg-slate-50");
+              const label = document.createElement("div");
+              label.className = "w-full h-full flex items-center justify-center text-[10px] font-semibold text-slate-500 px-2 text-center";
+              const ext = String(src).split("?")[0].split("#")[0].split(".").pop();
+              label.textContent = ext ? ext.toUpperCase() : "IMG";
+              btn.appendChild(label);
+            };
+
+            btn.appendChild(thumb);
+            btn.addEventListener("click", () => setIndex(idx));
+            thumbsEl.appendChild(btn);
+            thumbButtons.push(btn);
+          });
+        }
+
+        if (prevBtn) prevBtn.addEventListener("click", () => step(-1));
+        if (nextBtn) nextBtn.addEventListener("click", () => step(1));
+        if (openBtn)
+          openBtn.addEventListener("click", () =>
+            openLightbox({ title, images: gallery, index: currentIndex, onIndexChange: (idx) => setIndex(idx) })
+          );
+        imgEl.addEventListener("click", () =>
+          gallery.length > 1
+            ? openLightbox({ title, images: gallery, index: currentIndex, onIndexChange: (idx) => setIndex(idx) })
+            : null
+        );
+
+        if (lightboxPrevBtn) lightboxPrevBtn.addEventListener("click", () => lightboxStep(-1));
+        if (lightboxNextBtn) lightboxNextBtn.addEventListener("click", () => lightboxStep(1));
+        if (lightboxCloseBtn) lightboxCloseBtn.addEventListener("click", closeLightbox);
+        if (lightboxEl) {
+          lightboxEl.addEventListener("click", (e) => {
+            if (e.target === lightboxEl) closeLightbox();
+          });
+        }
+
+        document.addEventListener("keydown", (e) => {
+          const isOpen = lightboxEl && !lightboxEl.classList.contains("hidden");
+          if (e.key === "Escape" && isOpen) return closeLightbox();
+          if (e.key === "ArrowLeft") return isOpen ? lightboxStep(-1) : step(-1);
+          if (e.key === "ArrowRight") return isOpen ? lightboxStep(1) : step(1);
+        });
+
+        setIndex(0);
+
+	        const oshwLabUrl = safeUrl(device.oshwLabUrl);
+	        const easyEdaUrl = safeUrl(device.easyEdaUrl);
+	        const githubUrl = safeUrl(device.githubUrl);
+	        const schematicUrl = safeUrl(device.schematicUrl);
+	        const pcbUrl = safeUrl(device.pcbUrl);
+	        const onshapeUrl = safeUrl(device.onshapeUrl || (device.casing && device.casing.onshapeUrl));
+	        const casingRaw = device.casingImage || (device.casing && device.casing.image) || null;
+	        const casingImagesRaw = device.casingImages || (device.casing && device.casing.images) || null;
+	        const resolvedCasingImages = uniqueStrings([].concat(casingRaw || []).concat(casingImagesRaw || []))
+	          .map((x) => resolveHardwareAssetUrl(deviceId, x))
+	          .filter(Boolean);
+	
+	        const OSHW_ICON = "https://image.easyeda.com/avatars/2024/9/66Hu1UIb1xCgdcRIHsJDvgv7caIeg0LwlK8qwMFN.webp";
+	        const EASYEDA_ICON = "https://easyeda.com/images/easyeda-thumbnail.png?id=d5ed1fe5930602975df1";
+	        const ONSHAPE_ICON = "assets/onshape.jpg";
+	
+	        document.getElementById("action-buttons").innerHTML = [
+	          ...(resolvedCasingImages.length ? [casingThumbnailButton("open-casing", resolvedCasingImages[0])] : []),
+	          actionButton("Open in OSHW Lab", oshwLabUrl, true, OSHW_ICON),
+	          actionButton("Open in EasyEDA", easyEdaUrl, true, EASYEDA_ICON),
+	          actionButton("GitHub files", githubUrl, false),
+	          actionButton("Schematic", schematicUrl, false),
+	          actionButton("PCB", pcbUrl, false),
+	        ].join("");
+
+	        const openCasingBtn = document.getElementById("open-casing");
+	        if (openCasingBtn) {
+	          openCasingBtn.addEventListener("click", () =>
+	            openLightbox({
+	              title: `${title} — 3D Casing`,
+	              images: resolvedCasingImages,
+	              index: 0,
+	              actionLabel: "Open in Onshape",
+	              actionUrl: onshapeUrl,
+	              actionIconUrl: ONSHAPE_ICON,
+	            })
+	          );
+	        }
+
+        const relationsEl = document.getElementById("relations");
+        const parent = device.parent ? String(device.parent).trim() : "";
+        if (parent) {
+          relationsEl.classList.remove("hidden");
+          relationsEl.innerHTML = `
+            <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+              <div class="text-xs text-slate-500">Requires</div>
+              <a href="device.html?id=${encodeURIComponent(parent)}" class="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-brand-600 transition">
+                ${prettyTitle(parent)}
+                <span class="text-slate-400">→</span>
+              </a>
+            </div>
+          `;
+        }
+
+	        const tags = Array.isArray(device.tags) ? device.tags.slice(0, 8) : [];
+	        document.getElementById("tags").innerHTML = tags
+	          .map(
+	            (t) =>
+	              `<span class="text-xs px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-700">${t}</span>`
+	          )
+	          .join("");
+
+	        const costEl = document.getElementById("cost");
+	        const cost = device.reproductionCost;
+	        if (typeof cost === "string" && cost.trim()) {
+	          costEl.innerHTML = `<span class="font-semibold text-slate-900">Build cost:</span> ${safeText(cost)}`;
+	        } else if (cost && typeof cost === "object") {
+	          const amount = Number(cost.amount);
+	          const units = Number(cost.units);
+	          const currency = String(cost.currency || "USD").toUpperCase();
+	          const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : "";
+	          if (Number.isFinite(amount)) {
+	            const unitText = Number.isFinite(units) && units > 0 ? ` (${units} units)` : "";
+	            costEl.innerHTML = `<span class="font-semibold text-slate-900">Build cost:</span> ${symbol}${amount}${symbol ? "" : " " + safeText(currency)}${unitText}`;
+	          }
+	        }
+
+	        const variantsEl = document.getElementById("variants");
+	        const variants = Array.isArray(device.variants) ? device.variants : [];
+	        if (variants.length) {
+	          variantsEl.classList.remove("hidden");
+	          variantsEl.innerHTML = `
+	            <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+	              <div class="text-xs text-slate-500">Variants</div>
+	              <div class="mt-2 flex flex-wrap gap-2">
+	                ${variants
+	                  .map((v) => {
+	                    const key = String(v.key || "").trim();
+	                    const title = safeText(v.displayTitle || v.id || key);
+	                    const selected = key && activeVariant && key.toLowerCase() === activeVariant.toLowerCase();
+	                    const href = `device.html?id=${encodeURIComponent(deviceId)}&variant=${encodeURIComponent(key)}`;
+	                    return `<a href="${href}" class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${
+	                      selected ? "text-white bg-brand-600 border-brand-600" : "text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+	                    } transition">${title}</a>`;
+	                  })
+	                  .join("")}
+	              </div>
+	              <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+	                ${variants
+	                  .map((v) => {
+	                    const key = String(v.key || "").trim();
+	                    const selected = key && activeVariant && key.toLowerCase() === activeVariant.toLowerCase();
+	                    const frequency = safeText(v.frequency || "");
+	                    const antenna = safeText(v.antenna || "");
+	                    const schematic = safeUrl(v.files && v.files.schematic);
+	                    const pcb = safeUrl(v.files && v.files.pcb);
+	                    const schematicHref = schematic ? encodeURI(schematic) : null;
+	                    const pcbHref = pcb ? encodeURI(pcb) : null;
+	                    return `
+	                      <div class="rounded-xl border ${selected ? "border-brand-200 bg-brand-50/40" : "border-slate-200 bg-white"} p-3">
+	                        <div class="text-sm font-semibold text-slate-900">${safeText(v.displayTitle || v.id || key)}</div>
+	                        ${
+	                          frequency || antenna
+	                            ? `<div class="mt-1 text-xs text-slate-600">${[frequency, antenna].filter(Boolean).join(" • ")}</div>`
+	                            : ""
+	                        }
+	                        <div class="mt-3 flex flex-wrap gap-2">
+	                          ${
+	                            schematicHref
+	                              ? `<a class="text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition" href="${schematicHref}">Schematic</a>`
+	                              : ""
+	                          }
+	                          ${
+	                            pcbHref
+	                              ? `<a class="text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition" href="${pcbHref}">PCB</a>`
+	                              : ""
+	                          }
+	                        </div>
+	                      </div>
+	                    `;
+	                  })
+	                  .join("")}
+	              </div>
+	            </div>
+	          `;
+	        }
+
+	        document.getElementById("content").classList.remove("hidden");
+	      }
+
+      load().catch((err) => showError("Couldn’t load device", String(err)));
+    </script>
+
+    <div
+      id="lightbox"
+      class="hidden fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="mx-auto max-w-5xl h-full flex flex-col">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div id="lightbox-title" class="text-white font-semibold truncate">Image</div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a
+              id="lightbox-action"
+              href="#"
+              target="_blank"
+              rel="noreferrer"
+              class="hidden items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition text-sm font-semibold"
+            >
+              <span>Open link</span>
+            </a>
+            <button
+              id="lightbox-close"
+              type="button"
+              class="h-10 w-10 inline-flex items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+              aria-label="Close"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="relative flex-1 rounded-2xl overflow-hidden border border-white/10 bg-black/30">
+          <img id="lightbox-image" alt="" class="w-full h-full object-contain" />
+          <button
+            id="lightbox-prev"
+            type="button"
+            class="hidden absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+            aria-label="Previous image"
+            title="Previous"
+          >
+            ‹
+          </button>
+          <button
+            id="lightbox-next"
+            type="button"
+            class="hidden absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition"
+            aria-label="Next image"
+            title="Next"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "title": "ISM_WAVER",
+  "displayTitle": "ISM Waver",
+  "group": "stm32",
+  "image": "ISM_WAVER_DUAL.png",
+  "images": [
+    "IMG_0059.jpg",
+    "IMG_0058.jpg",
+    "IMG_0057.jpg",
+    "IMG_0060.jpg",
+    "ISM_WAVER_DUAL.png"
+  ],
+  "casingImage": "ISM_WAVER_CASING.png",
+  "onshapeUrl": "https://cad.onshape.com/documents/64c96d9fdfbfe408494ae01c/w/8d74fa4788d2c808fc71538c/e/3787db3f5f9202ad718d7c51",
+  "description": "ISM Waver is a dual-band ISM board built around the STM32F042: a low-power 48 MHz MCU with crystal-less native USB 2.0. It pairs a CC1101 transceiver with an RF switch that routes to two chip antennas (315 MHz and 433 MHz), covering the most common ISM device bands. This board communicates over USB (no BLE), so it’s intended for Android (USB OTG) and the desktop EMWaver app. Bonus: the native USB stack also enables USB device emulation.",
+  "tags": ["ISM", "STM32F042", "CC1101", "315MHz", "433MHz"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "https://oshwlab.com/maarnotto/ism_waver_v2",
+  "easyEdaUrl": "https://easyeda.com/editor#project_id=a531cea32a194916ad32bc29ba2defc4",
+  "githubUrl": "",
+  "schematicUrl": "",
+  "reproductionCost": { "amount": 50, "currency": "USD", "units": 5 }
+}

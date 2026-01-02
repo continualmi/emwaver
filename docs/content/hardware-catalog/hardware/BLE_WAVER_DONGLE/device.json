@@ -1,0 +1,14 @@
+{
+  "title": "BLE_WAVER_DONGLE",
+  "displayTitle": "BLE Waver Dongle",
+  "group": "esp32",
+  "status": "device",
+  "experimental": true,
+  "image": "BLE_WAVER_DONGLE.png",
+  "description": "BLE add-on (description coming soon).",
+  "tags": ["BLE", "Espressif"],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}
