@@ -1,0 +1,13 @@
+{
+  "title": "USB_WAVER",
+  "displayTitle": "USB Waver",
+  "group": "stm32",
+  "experimental": true,
+  "image": "USB_WAVER.png",
+  "description": "USB form-factor board (description coming soon).",
+  "tags": ["USB"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}
