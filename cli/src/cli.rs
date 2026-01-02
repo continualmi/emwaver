@@ -165,6 +165,11 @@ pub enum Command {
         #[arg(long)]
         path: Option<PathBuf>,
     },
+    /// Repo-local vibe hacking helpers (docs, skills, templates).
+    Vibe {
+        #[command(subcommand)]
+        command: VibeCommand,
+    },
     /// Background daemon that keeps device connections alive (local socket IPC).
     Daemon {
         #[command(subcommand)]
@@ -290,6 +295,22 @@ pub enum DaemonCommand {
         /// Output as JSON (includes base64 bytes).
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum VibeCommand {
+    /// Initialize `.emwaver/` markdown guides and add a Vibe Hacking section to `AGENTS.md`.
+    Init {
+        /// Destination directory (defaults to current directory).
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Overwrite existing files when they differ.
+        #[arg(long)]
+        force: bool,
+        /// Do not modify or create `AGENTS.md`.
+        #[arg(long)]
+        no_agents: bool,
     },
 }
 
