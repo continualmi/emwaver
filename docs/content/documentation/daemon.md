@@ -41,20 +41,20 @@ emwaver daemon run
 Start in the background:
 
 ```bash
-emwaver daemon start
+emwaver start
 ```
 
 Check status:
 
 ```bash
-emwaver daemon status
-emwaver daemon status --json
+emwaver status
+emwaver status --json
 ```
 
 Stop:
 
 ```bash
-emwaver daemon stop
+emwaver stop
 ```
 
 ## Device Discovery + Connect
@@ -62,32 +62,32 @@ emwaver daemon stop
 Scan for devices via the daemon:
 
 ```bash
-emwaver daemon list
-emwaver daemon list --timeout-ms 8000
-emwaver daemon list --json
+emwaver list
+emwaver list --timeout-ms 8000
+emwaver list --json
 ```
 
 Connect:
 
 ```bash
 # Connect to the first matching device name (default name is "EMWaver")
-emwaver daemon connect
+emwaver connect
 
 # Connect to a specific BLE address
-emwaver daemon connect --address AA:BB:CC:DD:EE:FF
+emwaver connect --address AA:BB:CC:DD:EE:FF
 ```
 
 See what the daemon thinks is connected:
 
 ```bash
-emwaver daemon connected
-emwaver daemon connected --json
+emwaver connected
+emwaver connected --json
 ```
 
 Disconnect:
 
 ```bash
-emwaver daemon disconnect
+emwaver disconnect
 ```
 
 ## Sending Commands (ASCII)
@@ -119,7 +119,7 @@ emwaver shell --verbose
 The CC1101 `VERSION` register is at address `0x31` (read-only; typical value is `0x14`).
 
 ```bash
-emwaver daemon connect
+emwaver connect
 emwaver cmd "cc1101 init --cs=14"
 emwaver cmd "cc1101 read --reg=0x31"
 ```

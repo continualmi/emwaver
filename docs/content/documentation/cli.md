@@ -58,10 +58,10 @@ cargo install --path cli --bin emwaver --force
 emwaver
 
 # Daemon: keep a persistent device connection (recommended for shell/workflows)
-emwaver daemon start
-emwaver daemon status
-emwaver daemon list
-emwaver daemon connect
+emwaver start
+emwaver status
+emwaver list
+emwaver connect
 emwaver cmd version
 
 # Connect to a nearby EMWaver device and open an interactive shell

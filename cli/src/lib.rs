@@ -53,6 +53,16 @@ pub fn run() -> Result<()> {
             verbose,
             json,
         }) => daemon::daemon_cmd(socket, text, timeout_ms, packets, verbose, json),
+        Some(cli::Command::Start { socket }) => daemon::daemon_start(socket),
+        Some(cli::Command::Stop { socket }) => daemon::daemon_stop(socket),
+        Some(cli::Command::Status { socket, json }) => daemon::daemon_status(socket, json),
+        Some(cli::Command::Connect {
+            socket,
+            address,
+            name,
+        }) => daemon::daemon_connect(socket, address, name),
+        Some(cli::Command::Disconnect { socket }) => daemon::daemon_disconnect(socket),
+        Some(cli::Command::Connected { socket, json }) => daemon::daemon_connected(socket, json),
         Some(cli::Command::Ota {
             file,
             stock,
