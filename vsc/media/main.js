@@ -61,11 +61,12 @@
     }
     if (msg.type === "deviceStatus" && msg.device && typeof msg.device === "object") {
       const device = msg.device;
+      const daemon = device.daemonRunning === false ? "Daemon: offline" : "Daemon: running";
       if (device.connected) {
         const addr = device.address ? ` ${device.address}` : "";
-        setDeviceStatus(`Device: ${device.label || "Connected"}${addr}`);
+        setDeviceStatus(`${daemon} | Device: ${device.label || "Connected"}${addr}`);
       } else {
-        setDeviceStatus("Device: Disconnected");
+        setDeviceStatus(`${daemon} | Device: Disconnected`);
       }
     }
   });

@@ -17,7 +17,7 @@
 
 import * as vscode from "vscode";
 import { expandCliPath } from "./cliPath";
-import { EmwaverDeviceManager, DeviceInfo } from "./deviceBridge";
+import { EmwaverDeviceManager, DeviceInfo, DeviceStatusSnapshot } from "./deviceBridge";
 
 type BuildFlashAction = "build" | "flash";
 
@@ -38,8 +38,11 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
   setDeviceManager(deviceManager: EmwaverDeviceManager) {
     this.deviceManager = deviceManager;
     this.deviceStatusDisposable?.dispose();
-    this.deviceStatusDisposable = deviceManager.onStatusChanged((info) => {
-      void this.view?.webview.postMessage({ type: "deviceStatus", device: this.toDeviceStatusPayload(info) });
+    this.deviceStatusDisposable = deviceManager.onStatusChanged((snapshot) => {
+      void this.view?.webview.postMessage({
+        type: "deviceStatus",
+        device: this.toDeviceStatusPayload(snapshot),
+      });
     });
     this.context.subscriptions.push(this.deviceStatusDisposable);
   }
@@ -88,7 +91,10 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     });
 
     const snapshot = this.deviceManager?.getStatusSnapshot();
-    void this.view?.webview.postMessage({ type: "deviceStatus", device: this.toDeviceStatusPayload(snapshot) });
+    void this.view?.webview.postMessage({
+      type: "deviceStatus",
+      device: this.toDeviceStatusPayload(snapshot),
+    });
   }
 
   async runAction(action: BuildFlashAction) {
@@ -193,13 +199,20 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     return text;
   }
 
-  private toDeviceStatusPayload(info: DeviceInfo | undefined): { connected: boolean; label: string; address?: string } {
-    if (!info?.address) return { connected: false, label: "Disconnected" };
+  private toDeviceStatusPayload(
+    snapshot: DeviceStatusSnapshot | undefined
+  ): { connected: boolean; label: string; address?: string; daemonRunning?: boolean } {
+    if (!snapshot) return { connected: false, label: "Disconnected", daemonRunning: false };
+
+    const info: DeviceInfo | undefined = snapshot.device;
+    if (!info?.address) return { connected: false, label: "Disconnected", daemonRunning: snapshot.daemonRunning };
+
     const name = info.name || "Device";
     return {
       connected: true,
       label: `${name} (${info.transport})`,
       address: info.address,
+      daemonRunning: snapshot.daemonRunning,
     };
   }
 }
