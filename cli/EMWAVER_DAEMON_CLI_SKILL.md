@@ -21,7 +21,7 @@ emwaver daemon start
 emwaver daemon status
 emwaver daemon list
 emwaver daemon connect
-emwaver daemon cmd version
+emwaver cmd version
 ```
 
 If you need to stop it:
@@ -39,9 +39,9 @@ emwaver daemon stop
 ## Send Commands
 
 ```bash
-emwaver daemon cmd "gpio read --pin=4"
-emwaver daemon cmd --packets 0 "gpio write --pin=4 --level=1"
-emwaver daemon cmd --json "cc1101 read --reg=0x31"
+emwaver cmd "gpio read --pin=4"
+emwaver cmd --packets 0 "gpio write --pin=4 --level=1"
+emwaver cmd --json "cc1101 read --reg=0x31"
 ```
 
 Firmware parsing notes:
@@ -60,8 +60,8 @@ emwaver shell --verbose
 
 ```bash
 emwaver daemon connect
-emwaver daemon cmd "cc1101 init --cs=14"
-emwaver daemon cmd "cc1101 read --reg=0x31"
+emwaver cmd "cc1101 init --cs=14"
+emwaver cmd "cc1101 read --reg=0x31"
 ```
 
 ## Buffer / Sampler / Retransmit
@@ -79,4 +79,3 @@ emwaver sampler stop
 emwaver retransmit start --pin 5 --duration-ms 1000
 emwaver retransmit stop
 ```
-

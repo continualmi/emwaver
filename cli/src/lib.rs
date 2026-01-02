@@ -45,6 +45,14 @@ pub fn run() -> Result<()> {
             json,
         }) => ble_cli::list_devices(timeout_ms, all, name, json),
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
+        Some(cli::Command::Cmd {
+            socket,
+            text,
+            timeout_ms,
+            packets,
+            verbose,
+            json,
+        }) => daemon::daemon_cmd(socket, text, timeout_ms, packets, verbose, json),
         Some(cli::Command::Ota {
             file,
             stock,

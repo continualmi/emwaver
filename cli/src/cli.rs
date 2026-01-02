@@ -66,6 +66,29 @@ pub enum Command {
         #[arg(long)]
         verbose: bool,
     },
+    /// Send an ASCII command to the connected device (daemon-backed).
+    ///
+    /// This is a shorthand for `emwaver daemon cmd ...`.
+    Cmd {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Command text to send.
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        text: Vec<String>,
+        /// Command response timeout in milliseconds.
+        #[arg(long, default_value_t = 1500)]
+        timeout_ms: u64,
+        /// Number of 64-byte packets to read back.
+        #[arg(long, default_value_t = 1)]
+        packets: u32,
+        /// Print both ASCII (trimmed) and raw hex bytes.
+        #[arg(long, conflicts_with = "json")]
+        verbose: bool,
+        /// Output as JSON (includes base64 bytes).
+        #[arg(long)]
+        json: bool,
+    },
     /// Flash ESP32 firmware over BLE OTA.
     #[command(group(
         ArgGroup::new("source")
