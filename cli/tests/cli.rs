@@ -36,10 +36,25 @@ fn init_creates_expected_files() {
     assert!(temp.path().join("sdkconfig").exists());
     assert!(temp.path().join("setup.sh").exists());
     assert!(temp.path().join("main").join("idf_component.yml").exists());
-    assert!(temp.path().join("main").join("ble_server.c").exists());
-    assert!(temp.path().join("main").join("command_registry.c").exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("ble_server.c")
+        .exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("command_registry.c")
+        .exists());
     assert!(temp.path().join("main").join("main.c").exists());
-    assert!(temp.path().join("main").join("init.c").exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("init.c")
+        .exists());
 }
 
 #[test]
@@ -58,10 +73,30 @@ fn init_writes_selected_components() {
     ]);
     cmd.assert().success();
 
-    assert!(temp.path().join("main").join("gpio_commands.c").exists());
-    assert!(temp.path().join("main").join("cc1101.c").exists());
-    assert!(temp.path().join("main").join("spi.c").exists());
-    assert!(temp.path().join("main").join("spi.h").exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("gpio_commands.c")
+        .exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("cc1101.c")
+        .exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("spi.c")
+        .exists());
+    assert!(temp
+        .path()
+        .join("main")
+        .join("libraries")
+        .join("spi.h")
+        .exists());
 }
 
 #[test]
