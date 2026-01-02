@@ -622,6 +622,7 @@ pub fn daemon_cmd(
     text: Vec<String>,
     timeout_ms: u64,
     packets: u32,
+    verbose: bool,
     json: bool,
 ) -> Result<()> {
     let socket = daemon_socket_or_start(socket)?;
@@ -663,7 +664,17 @@ pub fn daemon_cmd(
             return Ok(());
         }
 
-        println!("{}", trim_packet_text(&bytes));
+        if verbose {
+            let hex = bytes
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            println!("hex:   {hex}");
+            println!("ascii: {}", trim_packet_text(&bytes));
+        } else {
+            println!("{}", trim_packet_text(&bytes));
+        }
         Ok(())
     })
 }
@@ -780,12 +791,12 @@ pub fn sampler_start(
 ) -> Result<()> {
     // Fire-and-forget: sampler streaming must not be contaminated by command-response framing.
     let cmd = format!("sample start --pin={pin}");
-    daemon_cmd(socket, vec![cmd], 500, 0, false)
+    daemon_cmd(socket, vec![cmd], 500, 0, false, false)
 }
 
 #[cfg(unix)]
 pub fn sampler_stop(socket: Option<PathBuf>) -> Result<()> {
-    daemon_cmd(socket, vec!["sample stop".to_string()], 500, 0, false)
+    daemon_cmd(socket, vec!["sample stop".to_string()], 500, 0, false, false)
 }
 
 #[cfg(unix)]
@@ -808,12 +819,12 @@ pub fn retransmit_start(
             cmd.push_str(&format!(" --duty={duty}"));
         }
     }
-    daemon_cmd(socket, vec![cmd], 500, 0, false)
+    daemon_cmd(socket, vec![cmd], 500, 0, false, false)
 }
 
 #[cfg(unix)]
 pub fn retransmit_stop(socket: Option<PathBuf>) -> Result<()> {
-    daemon_cmd(socket, vec!["transmit stop".to_string()], 500, 0, false)
+    daemon_cmd(socket, vec!["transmit stop".to_string()], 500, 0, false, false)
 }
 
 #[cfg(not(unix))]
@@ -862,7 +873,7 @@ pub fn daemon_connected(_: Option<PathBuf>, _: bool) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-pub fn daemon_cmd(_: Option<PathBuf>, _: Vec<String>, _: u64, _: u32, _: bool) -> Result<()> {
+pub fn daemon_cmd(_: Option<PathBuf>, _: Vec<String>, _: u64, _: u32, _: bool, _: bool) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
 

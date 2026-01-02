@@ -125,8 +125,9 @@ pub fn run() -> Result<()> {
                 text,
                 timeout_ms,
                 packets,
+                verbose,
                 json,
-            } => daemon::daemon_cmd(socket, text, timeout_ms, packets, json),
+            } => daemon::daemon_cmd(socket, text, timeout_ms, packets, verbose, json),
         },
         Some(cli::Command::Buffer { socket, command }) => match command {
             cli::BufferCommand::Clear => daemon::buffer_clear(socket),
