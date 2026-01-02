@@ -128,6 +128,63 @@ pub fn run() -> Result<()> {
                 json,
             } => daemon::daemon_cmd(socket, text, timeout_ms, packets, json),
         },
+        Some(cli::Command::Buffer { socket, command }) => match command {
+            cli::BufferCommand::Clear => daemon::buffer_clear(socket),
+            cli::BufferCommand::Len { json } => daemon::buffer_len(socket, json),
+            cli::BufferCommand::Load { path, no_upload } => {
+                let socket_clone = socket.clone();
+                daemon::buffer_load_file(socket_clone, path)?;
+                if !no_upload {
+                    // Upload to device so it's ready for retransmission immediately.
+                    daemon::buffer_transmit(socket)?;
+                }
+                Ok(())
+            }
+            cli::BufferCommand::Save { path } => daemon::buffer_save_file(socket, path),
+            cli::BufferCommand::Transmit => daemon::buffer_transmit(socket),
+        },
+        Some(cli::Command::Sampler { socket, command }) => match command {
+            cli::SamplerCommand::Start {
+                duration_ms,
+                pin,
+            } => {
+                daemon::sampler_start(socket.clone(), pin)?;
+                if let Some(ms) = duration_ms {
+                    if ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(ms));
+                        daemon::sampler_stop(socket)?;
+                    }
+                }
+                Ok(())
+            }
+            cli::SamplerCommand::Stop => daemon::sampler_stop(socket),
+        },
+        Some(cli::Command::Retransmit { socket, command }) => match command {
+            cli::RetransmitCommand::Start {
+                pin,
+                pwm,
+                freq,
+                duty,
+                no_upload,
+                duration_ms,
+            } => {
+                daemon::retransmit_start(socket.clone(), pin, pwm, freq, duty)?;
+                if !no_upload {
+                    // Match desktop behavior: enter transmit mode first, then upload
+                    // the capture (the device monitors RX fill level before draining).
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                    daemon::buffer_transmit(socket.clone())?;
+                }
+                if let Some(ms) = duration_ms {
+                    if ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(ms));
+                        daemon::retransmit_stop(socket)?;
+                    }
+                }
+                Ok(())
+            }
+            cli::RetransmitCommand::Stop => daemon::retransmit_stop(socket),
+        },
         None => interactive::run_menu(),
     }
 }
