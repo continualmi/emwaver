@@ -17,17 +17,17 @@ cargo install --path . --bin emwaver --force --locked
 ## Daemon Flow (Recommended)
 
 ```bash
-emwaver daemon start
-emwaver daemon status
-emwaver daemon list
-emwaver daemon connect
+emwaver start
+emwaver status
+emwaver list
+emwaver connect
 emwaver cmd version
 ```
 
 If you need to stop it:
 
 ```bash
-emwaver daemon stop
+emwaver stop
 ```
 
 ## Socket Overrides
@@ -59,7 +59,7 @@ emwaver shell --verbose
 ## Quick CC1101 VERSION Read (CS=GPIO14)
 
 ```bash
-emwaver daemon connect
+emwaver connect
 emwaver cmd "cc1101 init --cs=14"
 emwaver cmd "cc1101 read --reg=0x31"
 ```

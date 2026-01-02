@@ -44,7 +44,7 @@ pub fn init_repo(destination: PathBuf, force: bool, update_agents: bool) -> Resu
             destination.join(AGENTS_FILENAME).display()
         );
     }
-    println!("Next: `emwaver daemon start`, then `emwaver cmd version`.");
+    println!("Next: `emwaver start`, then `emwaver cmd version`.");
 
     Ok(())
 }

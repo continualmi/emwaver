@@ -89,6 +89,66 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Start the background daemon (recommended).
+    ///
+    /// This is a shorthand for `emwaver daemon start ...`.
+    Start {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Stop the running daemon.
+    ///
+    /// This is a shorthand for `emwaver daemon stop ...`.
+    Stop {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Check whether the daemon is running.
+    ///
+    /// This is a shorthand for `emwaver daemon status ...`.
+    Status {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Connect the daemon to a device.
+    ///
+    /// This is a shorthand for `emwaver daemon connect ...`.
+    Connect {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// BLE address to connect to (if omitted, connects to the first matching device).
+        #[arg(long)]
+        address: Option<String>,
+        /// Device name to filter for when scanning (defaults to EMWaver).
+        #[arg(long, default_value = "EMWaver")]
+        name: String,
+    },
+    /// Disconnect the daemon from the active device.
+    ///
+    /// This is a shorthand for `emwaver daemon disconnect ...`.
+    Disconnect {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Print the currently connected device(s).
+    ///
+    /// This is a shorthand for `emwaver daemon connected ...`.
+    Connected {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Flash ESP32 firmware over BLE OTA.
     #[command(group(
         ArgGroup::new("source")

@@ -5,15 +5,6 @@ Vibe hacking means: quickly probing and controlling connected modules (SPI/I2C/G
 
 This section is meant to be copy/paste friendly.
 
-### Install / update the CLI
-
-From this repo:
-
-```bash
-cd cli
-cargo install --path . --bin emwaver --force --locked
-```
-
 ### Device discovery + connection management
 
 Scan for nearby devices (BLE):
@@ -25,18 +16,17 @@ emwaver list
 Start a persistent daemon connection (recommended when iterating):
 
 ```bash
-emwaver daemon start
-emwaver daemon status
-emwaver daemon list
-emwaver daemon connect
-emwaver daemon connected
+emwaver start
+emwaver status
+emwaver connect
+emwaver connected
 ```
 
 Disconnect/stop:
 
 ```bash
-emwaver daemon disconnect
-emwaver daemon stop
+emwaver disconnect
+emwaver stop
 ```
 
 ### Sending raw commands
