@@ -60,7 +60,7 @@ export class WaveletPreviewManager {
 
     const existing = this.panelsByFsPath.get(resolved.fsPath);
     if (existing) {
-      existing.reveal(existing.viewColumn ?? vscode.ViewColumn.Beside, true);
+      existing.reveal(existing.viewColumn ?? this.getPreferredViewColumn(), false);
       const doc = await vscode.workspace.openTextDocument(resolved);
       await this.updatePanel(existing, resolved, doc.getText());
       return;
@@ -70,7 +70,7 @@ export class WaveletPreviewManager {
     const panel = vscode.window.createWebviewPanel(
       "emwaver.waveletPreview",
       title,
-      { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+      { viewColumn: this.getPreferredViewColumn(), preserveFocus: false },
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -82,6 +82,16 @@ export class WaveletPreviewManager {
     this.panelsByFsPath.set(resolved.fsPath, panel);
     panel.onDidDispose(() => {
       this.panelsByFsPath.delete(resolved.fsPath);
+    });
+    panel.webview.onDidReceiveMessage((message) => {
+      try {
+        if (!message || typeof message !== "object") return;
+        if (message.type === "log" && typeof message.line === "string") {
+          this.output.appendLine(`[wavelet] ${message.line}`);
+        }
+      } catch (err) {
+        this.output.appendLine(`Wavelet preview message error: ${String(err)}`);
+      }
     });
 
     const doc = await vscode.workspace.openTextDocument(resolved);
@@ -184,22 +194,7 @@ export class WaveletPreviewManager {
     <title>Wavelet Preview</title>
   </head>
   <body>
-    <div class="root">
-      <div class="header">
-        <div class="title" id="title">Wavelet Preview</div>
-        <div class="subtitle" id="subtitle">Waiting for script…</div>
-      </div>
-      <div class="content">
-        <div class="panel">
-          <div class="panelTitle">PREVIEW</div>
-          <div id="preview" class="preview"></div>
-        </div>
-        <div class="panel">
-          <div class="panelTitle">LOG</div>
-          <div id="log" class="log"></div>
-        </div>
-      </div>
-    </div>
+    <div id="preview" class="previewRoot"></div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`;
@@ -211,5 +206,8 @@ export class WaveletPreviewManager {
     for (let i = 0; i < 32; i++) text += possible.charAt(Math.floor(Math.random() * possible.length));
     return text;
   }
-}
 
+  private getPreferredViewColumn(): vscode.ViewColumn {
+    return vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.Active;
+  }
+}

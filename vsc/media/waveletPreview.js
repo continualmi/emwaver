@@ -1,28 +1,29 @@
 (function () {
   const vscode = acquireVsCodeApi();
 
-  const titleEl = document.getElementById("title");
-  const subtitleEl = document.getElementById("subtitle");
   const previewEl = document.getElementById("preview");
-  const logEl = document.getElementById("log");
 
   /** @type {string[]} */
   let consoleLines = [];
 
-  const setSubtitle = (text) => {
-    if (subtitleEl) subtitleEl.textContent = text;
-  };
-
   const clearConsole = () => {
     consoleLines = [];
-    if (logEl) logEl.textContent = "";
+    updateInlineLogViewers();
   };
 
   const appendConsole = (line) => {
     consoleLines.push(String(line));
-    if (!logEl) return;
-    logEl.textContent = consoleLines.join("\n");
-    logEl.scrollTop = logEl.scrollHeight;
+    vscode.postMessage({ type: "log", line: String(line) });
+    updateInlineLogViewers();
+  };
+
+  const updateInlineLogViewers = () => {
+    const lines = consoleLines.length ? consoleLines.join("\n") : "No output yet.";
+    const viewers = document.querySelectorAll("[data-wavelet-log='1']");
+    viewers.forEach((viewer) => {
+      const content = viewer.querySelector("[data-wavelet-log-content='1']");
+      if (content) content.textContent = lines;
+    });
   };
 
   const applyPadding = (el, value) => {
@@ -415,6 +416,7 @@
       }
       case "logViewer": {
         const wrap = document.createElement("div");
+        wrap.setAttribute("data-wavelet-log", "1");
         wrap.style.border = "1px solid rgba(148,163,184,0.12)";
         wrap.style.borderRadius = "10px";
         wrap.style.background = "rgba(2,6,23,0.35)";
@@ -430,6 +432,7 @@
         wrap.appendChild(header);
 
         const content = document.createElement("div");
+        content.setAttribute("data-wavelet-log-content", "1");
         content.textContent = consoleLines.length ? consoleLines.join("\n") : "No output yet.";
         wrap.appendChild(content);
         applyPadding(wrap, props.padding);
@@ -554,18 +557,13 @@
     if (!message || typeof message !== "object") return;
 
     if (message.type === "load") {
-      if (titleEl) titleEl.textContent = `Wavelet Preview: ${message.fileName || ""}`;
-      setSubtitle("Running…");
       clearConsole();
       ensureEngine().setBootstrapSource(message.bootstrap || "");
       ensureEngine().updateModuleSources(message.modules || {});
       ensureEngine().execute(message.script || "");
-      setSubtitle("Ready");
     }
   });
 
-  setSubtitle("Open a .emw file and run Preview.");
   appendConsole("Wavelet preview ready.");
   vscode.setState({ ready: true });
 })();
-
