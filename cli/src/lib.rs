@@ -128,6 +128,30 @@ pub fn run() -> Result<()> {
                 json,
             } => daemon::daemon_cmd(socket, text, timeout_ms, packets, json),
         },
+        Some(cli::Command::Buffer { socket, command }) => match command {
+            cli::BufferCommand::Clear => daemon::buffer_clear(socket),
+            cli::BufferCommand::Len { json } => daemon::buffer_len(socket, json),
+            cli::BufferCommand::Load { path } => daemon::buffer_load_file(socket, path),
+            cli::BufferCommand::Save { path } => daemon::buffer_save_file(socket, path),
+            cli::BufferCommand::Transmit => daemon::buffer_transmit(socket),
+            cli::BufferCommand::TransmitFile { path } => daemon::buffer_transmit_file(socket, path),
+        },
+        Some(cli::Command::Sampler { socket, command }) => match command {
+            cli::SamplerCommand::Start {
+                duration_ms,
+                pin,
+            } => {
+                daemon::sampler_start(socket.clone(), pin)?;
+                if let Some(ms) = duration_ms {
+                    if ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(ms));
+                        daemon::sampler_stop(socket)?;
+                    }
+                }
+                Ok(())
+            }
+            cli::SamplerCommand::Stop => daemon::sampler_stop(socket),
+        },
         None => interactive::run_menu(),
     }
 }

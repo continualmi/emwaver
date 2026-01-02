@@ -582,6 +582,48 @@ pub(crate) async fn dispatch_request(
             };
             Ok(json!({ "len_bytes": len_bytes }))
         }
+        "buffer_set_bytes_file" => {
+            let path = req
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.path"))?;
+            let bytes = std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
+            let len_bytes = {
+                let mut snapshot = state
+                    .buffer
+                    .lock()
+                    .map_err(|_| anyhow!("buffer lock poisoned"))?;
+                buffer::rx_set_bytes(&mut *snapshot, bytes);
+                buffer::rx_len_bytes(&*snapshot)
+            };
+            Ok(json!({ "len_bytes": len_bytes }))
+        }
+        "buffer_save_bytes_file" => {
+            let path = req
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow!("missing params.path"))?;
+            let snapshot = state
+                .buffer
+                .lock()
+                .map_err(|_| anyhow!("buffer lock poisoned"))?;
+            let bytes = buffer::rx_snapshot(&*snapshot);
+            std::fs::write(path, bytes).with_context(|| format!("failed to write file: {path}"))?;
+            Ok(json!({}))
+        }
+        "buffer_transmit" => {
+            let bytes = {
+                let snapshot = state
+                    .buffer
+                    .lock()
+                    .map_err(|_| anyhow!("buffer lock poisoned"))?;
+                buffer::rx_snapshot(&*snapshot).to_vec()
+            };
+            transmit_buffer_active(&state, bytes).await?;
+            Ok(json!({}))
+        }
         "buffer_set_invert_rx" => {
             let enabled = req
                 .params
@@ -682,7 +724,11 @@ async fn send_packet_command(
 
     write_active(state, bytes).await?;
 
-    let want_packets = std::cmp::max(1, packets) as usize;
+    if packets == 0 {
+        return Ok(Vec::new());
+    }
+
+    let want_packets = packets as usize;
     let want_bytes = want_packets.saturating_mul(PACKET_SIZE);
     let mut out = Vec::with_capacity(want_bytes);
 

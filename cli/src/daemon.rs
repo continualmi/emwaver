@@ -67,6 +67,17 @@ pub fn default_socket_path() -> Result<PathBuf> {
 }
 
 #[cfg(unix)]
+fn trim_packet_text(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    let trimmed = text.trim_matches(|c: char| c == '\0' || c == '\n' || c == '\r');
+    if trimmed.is_empty() {
+        text.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+#[cfg(unix)]
 pub(crate) async fn daemon_rpc(
     socket: &Path,
     req: BridgeRequest,
@@ -323,6 +334,11 @@ pub fn ensure_daemon_running(socket: Option<PathBuf>) -> Result<PathBuf> {
     }
 
     Ok(socket)
+}
+
+#[cfg(unix)]
+fn daemon_socket_or_start(socket: Option<PathBuf>) -> Result<PathBuf> {
+    ensure_daemon_running(socket)
 }
 
 
@@ -608,7 +624,7 @@ pub fn daemon_cmd(
     packets: u32,
     json: bool,
 ) -> Result<()> {
-    let socket = socket.unwrap_or(default_socket_path()?);
+    let socket = daemon_socket_or_start(socket)?;
     let runtime = Runtime::new().context("failed to create async runtime")?;
     runtime.block_on(async move {
         let text = text.join(" ");
@@ -647,15 +663,149 @@ pub fn daemon_cmd(
             return Ok(());
         }
 
-        let text = String::from_utf8_lossy(&bytes);
-        let trimmed = text.trim_matches(|c: char| c == '\0' || c == '\n' || c == '\r');
-        if trimmed.is_empty() {
-            println!("{text}");
+        println!("{}", trim_packet_text(&bytes));
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn buffer_clear(socket: Option<PathBuf>) -> Result<()> {
+    let socket = daemon_socket_or_start(socket)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let _ = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "buffer_clear".to_string(),
+                params: serde_json::json!({}),
+            },
+            Duration::from_secs(5),
+        )
+        .await?;
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn buffer_len(socket: Option<PathBuf>, json: bool) -> Result<()> {
+    let socket = daemon_socket_or_start(socket)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let result = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "buffer_get_len_bytes".to_string(),
+                params: serde_json::json!({}),
+            },
+            Duration::from_secs(5),
+        )
+        .await?;
+        let len_bytes = result.get("len_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+        if json {
+            println!("{}", serde_json::json!({ "len_bytes": len_bytes }));
         } else {
-            println!("{trimmed}");
+            println!("{len_bytes}");
         }
         Ok(())
     })
+}
+
+#[cfg(unix)]
+pub fn buffer_load_file(socket: Option<PathBuf>, path: PathBuf) -> Result<()> {
+    let socket = daemon_socket_or_start(socket)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let params = serde_json::json!({ "path": path.to_string_lossy().to_string() });
+        let result = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "buffer_set_bytes_file".to_string(),
+                params,
+            },
+            Duration::from_secs(10),
+        )
+        .await?;
+        let len_bytes = result.get("len_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+        println!("{len_bytes}");
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn buffer_save_file(socket: Option<PathBuf>, path: PathBuf) -> Result<()> {
+    let socket = daemon_socket_or_start(socket)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let params = serde_json::json!({ "path": path.to_string_lossy().to_string() });
+        let _ = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "buffer_save_bytes_file".to_string(),
+                params,
+            },
+            Duration::from_secs(10),
+        )
+        .await?;
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn buffer_transmit(socket: Option<PathBuf>) -> Result<()> {
+    let socket = daemon_socket_or_start(socket)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let _ = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "buffer_transmit".to_string(),
+                params: serde_json::json!({}),
+            },
+            Duration::from_secs(120),
+        )
+        .await?;
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn buffer_transmit_file(socket: Option<PathBuf>, path: PathBuf) -> Result<()> {
+    let socket = daemon_socket_or_start(socket)?;
+    let runtime = Runtime::new().context("failed to create async runtime")?;
+    runtime.block_on(async move {
+        let params = serde_json::json!({ "path": path.to_string_lossy().to_string() });
+        let _ = daemon_rpc(
+            &socket,
+            BridgeRequest {
+                id: 1,
+                method: "transmit_buffer_file".to_string(),
+                params,
+            },
+            Duration::from_secs(120),
+        )
+        .await?;
+        Ok(())
+    })
+}
+
+#[cfg(unix)]
+pub fn sampler_start(
+    socket: Option<PathBuf>,
+    pin: i32,
+) -> Result<()> {
+    // Fire-and-forget: sampler streaming must not be contaminated by command-response framing.
+    let cmd = format!("sample start --pin={pin}");
+    daemon_cmd(socket, vec![cmd], 500, 0, false)
+}
+
+#[cfg(unix)]
+pub fn sampler_stop(socket: Option<PathBuf>) -> Result<()> {
+    daemon_cmd(socket, vec!["sample stop".to_string()], 500, 0, false)
 }
 
 #[cfg(not(unix))]
@@ -710,5 +860,45 @@ pub fn daemon_cmd(_: Option<PathBuf>, _: Vec<String>, _: u64, _: u32, _: bool) -
 
 #[cfg(not(unix))]
 pub fn ensure_daemon_running(_: Option<PathBuf>) -> Result<PathBuf> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn buffer_clear(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn buffer_len(_: Option<PathBuf>, _: bool) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn buffer_load_file(_: Option<PathBuf>, _: PathBuf) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn buffer_save_file(_: Option<PathBuf>, _: PathBuf) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn buffer_transmit(_: Option<PathBuf>) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn buffer_transmit_file(_: Option<PathBuf>, _: PathBuf) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn sampler_start(_: Option<PathBuf>, _: i32) -> Result<()> {
+    bail!("daemon is not supported on this platform yet")
+}
+
+#[cfg(not(unix))]
+pub fn sampler_stop(_: Option<PathBuf>) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
