@@ -24,6 +24,7 @@ pub mod dfu;
 pub mod firmware;
 pub mod git;
 pub mod init;
+mod vibe;
 mod interactive;
 mod shell;
 
@@ -101,6 +102,16 @@ pub fn run() -> Result<()> {
             let destination = path.unwrap_or(std::env::current_dir()?);
             init::run_init(target, components, stm32_firmware, destination)
         }
+        Some(cli::Command::Vibe { command }) => match command {
+            cli::VibeCommand::Init {
+                path,
+                force,
+                no_agents,
+            } => {
+                let destination = path.unwrap_or(std::env::current_dir()?);
+                vibe::init_repo(destination, force, !no_agents)
+            }
+        },
         Some(cli::Command::Daemon { command }) => match command {
             cli::DaemonCommand::Run { socket } => daemon::daemon_run(socket),
             cli::DaemonCommand::Start { socket } => daemon::daemon_start(socket),
