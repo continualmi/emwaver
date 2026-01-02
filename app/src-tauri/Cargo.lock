@@ -1115,6 +1115,7 @@ name = "emw"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "btleplug",
  "clap",
  "dialoguer",
@@ -1122,6 +1123,9 @@ dependencies = [
  "include_dir",
  "portable-pty",
  "rusb",
+ "serde",
+ "serde_json",
+ "serialport",
  "sha2",
  "tempfile",
  "tokio",
@@ -1134,15 +1138,13 @@ dependencies = [
 name = "emwaver"
 version = "0.1.0"
 dependencies = [
- "btleplug",
+ "base64 0.22.1",
  "emw",
- "emwaver-buffer-core",
  "futures",
  "portable-pty",
  "rusb",
  "serde",
  "serde_json",
- "serialport",
  "sha2",
  "tauri",
  "tauri-build",
@@ -1158,9 +1160,6 @@ dependencies = [
 [[package]]
 name = "emwaver-buffer-core"
 version = "0.1.0"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "encode_unicode"

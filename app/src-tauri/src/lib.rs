@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-mod ble;
-mod buffer;
 mod firmware;
 mod git;
+mod daemon_client;
 mod pty;
-mod usb;
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -29,23 +27,23 @@ use std::{
     io,
     path::{Path, PathBuf},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::Arc,
+    time::Duration,
 };
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
     Emitter, State,
 };
-use ble::{BLEState, BLEStatus};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use firmware::{firmware_build, firmware_flash};
 use git::{
     git_commit, git_diff_contents, git_discard, git_push, git_stage, git_stage_all, git_status,
     git_unstage, git_unstage_all,
 };
-use usb::{USBState, USBStatus};
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
-use buffer::Buffer;
+use daemon_client::{RpcRequest, decode_b64, encode_b64};
 
 const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
 
@@ -178,6 +176,34 @@ struct SamplerCompressResponse {
     buffer_len_bytes: usize,
     time_values: Vec<f32>,
     data_values: Vec<f32>,
+}
+
+#[derive(Clone, Serialize)]
+struct ReadPacketsResponse {
+    data: Vec<u8>,
+    ts_ms: Vec<u64>,
+    next_packet_index: u64,
+    available_packets: u64,
+}
+
+#[derive(Clone, Serialize)]
+struct BufferPacket {
+    data: Vec<u8>,
+    ts_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BLEStatus {
+    pub connected: bool,
+    pub scanning: bool,
+    pub device_name: Option<String>,
+    pub device_address: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct USBStatus {
+    pub connected: bool,
+    pub device_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -366,6 +392,37 @@ struct RunShellCommandResult {
     code: Option<i32>,
 }
 
+#[derive(Clone)]
+struct DaemonState {
+    socket: PathBuf,
+}
+
+impl DaemonState {
+    fn new() -> Result<Self, String> {
+        Ok(Self {
+            socket: daemon_client::default_socket_path()?,
+        })
+    }
+
+    fn ensure_running(&self) -> Result<(), String> {
+        daemon_client::ensure_daemon_running(&self.socket)
+    }
+
+    async fn rpc(&self, method: &str, params: serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
+        self.ensure_running()?;
+        daemon_client::rpc(
+            &self.socket,
+            RpcRequest {
+                id: 1,
+                method: method.to_string(),
+                params,
+            },
+            timeout,
+        )
+        .await
+    }
+}
+
 #[tauri::command]
 async fn run_shell_command(payload: RunShellCommandPayload) -> Result<RunShellCommandResult, String> {
     let command = payload.command;
@@ -462,199 +519,210 @@ async fn ensure_dir(payload: EnsureDirPayload) -> Result<(), String> {
 // Sampler bitstream utilities are implemented in the shared buffer core.
 
 #[tauri::command]
-async fn buffer_clear(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        crate::buffer::clear(&mut *guard);
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_clear(state: State<'_, DaemonState>) -> Result<(), String> {
+    state
+        .rpc("buffer_clear", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn buffer_get_counter(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<u64, String>(guard.rx_counter)
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_get_counter(state: State<'_, DaemonState>) -> Result<u64, String> {
+    let value = state
+        .rpc("buffer_get_rx_counter", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    Ok(value.get("rx_counter").and_then(|v| v.as_u64()).unwrap_or(0))
 }
 
 #[tauri::command]
-async fn buffer_set_counter(state: State<'_, Arc<Mutex<Buffer>>>, value: u64) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        guard.rx_counter = value;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_set_counter(state: State<'_, DaemonState>, value: u64) -> Result<(), String> {
+    state
+        .rpc(
+            "buffer_set_rx_counter",
+            serde_json::json!({ "value": value }),
+            Duration::from_secs(3),
+        )
+        .await?;
+    Ok(())
 }
 
 	#[tauri::command]
-	async fn buffer_get_packet_count(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<u64, String> {
-	    let state = state.inner().clone();
-	    spawn_blocking(move || {
-	        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-	        Ok::<u64, String>(crate::buffer::rx_packet_count(&*guard))
-	    })
-	    .await
-	    .map_err(|error| format!("Task failed: {error}"))?
+	async fn buffer_get_packet_count(state: State<'_, DaemonState>) -> Result<u64, String> {
+	    let value = state
+            .rpc("buffer_get_packet_count", serde_json::json!({}), Duration::from_secs(3))
+            .await?;
+        Ok(value.get("packet_count").and_then(|v| v.as_u64()).unwrap_or(0))
 	}
 
 	#[tauri::command]
-	async fn buffer_get_len_bytes(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<usize, String> {
-	    let state = state.inner().clone();
-	    spawn_blocking(move || {
-	        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-	        Ok::<usize, String>(crate::buffer::rx_len_bytes(&*guard))
-	    })
-	    .await
-	    .map_err(|error| format!("Task failed: {error}"))?
+	async fn buffer_get_len_bytes(state: State<'_, DaemonState>) -> Result<usize, String> {
+	    let value = state
+            .rpc("buffer_get_len_bytes", serde_json::json!({}), Duration::from_secs(3))
+            .await?;
+        Ok(value.get("len_bytes").and_then(|v| v.as_u64()).unwrap_or(0) as usize)
 	}
 
 #[tauri::command]
 async fn buffer_read_packets_since(
-    state: State<'_, Arc<Mutex<Buffer>>>,
+    state: State<'_, DaemonState>,
     packet_index: u64,
     max_packets: usize,
-) -> Result<crate::buffer::ReadPackets, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<crate::buffer::ReadPackets, String>(crate::buffer::read_rx_since(&*guard, packet_index, max_packets))
+) -> Result<ReadPacketsResponse, String> {
+    let value = state
+        .rpc(
+            "buffer_read_packets_since",
+            serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
+            Duration::from_secs(3),
+        )
+        .await?;
+
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let data = decode_b64(data_b64)?;
+    let ts_ms = value
+        .get("ts_ms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).collect::<Vec<u64>>())
+        .unwrap_or_default();
+    let next_packet_index = value.get("next_packet_index").and_then(|v| v.as_u64()).unwrap_or(packet_index);
+    let available_packets = value.get("available_packets").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    Ok(ReadPacketsResponse {
+        data,
+        ts_ms,
+        next_packet_index,
+        available_packets,
     })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
 }
 
 #[tauri::command]
-async fn buffer_next_packet(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<Option<crate::buffer::Packet>, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<Option<crate::buffer::Packet>, String>(crate::buffer::next_rx_packet(&mut *guard))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_next_packet(state: State<'_, DaemonState>) -> Result<Option<BufferPacket>, String> {
+    let value = state
+        .rpc("buffer_next_packet", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    let pkt = value.get("packet");
+    if pkt.is_none() || pkt.is_some_and(|v| v.is_null()) {
+        return Ok(None);
+    }
+    let pkt = pkt.unwrap();
+    let data_b64 = pkt.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let data = decode_b64(data_b64)?;
+    let ts_ms = pkt.get("ts_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+    Ok(Some(BufferPacket { data, ts_ms }))
 }
 
 #[tauri::command]
 async fn buffer_read_tx_since(
-    state: State<'_, Arc<Mutex<Buffer>>>,
+    state: State<'_, DaemonState>,
     packet_index: u64,
     max_packets: usize,
-) -> Result<crate::buffer::ReadPackets, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<crate::buffer::ReadPackets, String>(crate::buffer::read_tx_since(&*guard, packet_index, max_packets))
+) -> Result<ReadPacketsResponse, String> {
+    let value = state
+        .rpc(
+            "buffer_read_tx_since",
+            serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
+            Duration::from_secs(3),
+        )
+        .await?;
+
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let data = decode_b64(data_b64)?;
+    let ts_ms = value
+        .get("ts_ms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).collect::<Vec<u64>>())
+        .unwrap_or_default();
+    let next_packet_index = value.get("next_packet_index").and_then(|v| v.as_u64()).unwrap_or(packet_index);
+    let available_packets = value.get("available_packets").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    Ok(ReadPacketsResponse {
+        data,
+        ts_ms,
+        next_packet_index,
+        available_packets,
     })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
 }
 
 #[tauri::command]
-async fn buffer_get_bytes(state: State<'_, Arc<Mutex<Buffer>>>) -> Result<Vec<u8>, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        Ok::<Vec<u8>, String>(crate::buffer::rx_snapshot(&*guard))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_get_bytes(state: State<'_, DaemonState>) -> Result<Vec<u8>, String> {
+    let value = state
+        .rpc("buffer_get_bytes", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    decode_b64(data_b64)
 }
 
 #[tauri::command]
-async fn buffer_set_bytes(state: State<'_, Arc<Mutex<Buffer>>>, data: Vec<u8>) -> Result<usize, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        crate::buffer::rx_set_bytes(&mut *guard, data);
-        Ok::<usize, String>(crate::buffer::rx_len_bytes(&*guard))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_set_bytes(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<usize, String> {
+    let value = state
+        .rpc(
+            "buffer_set_bytes",
+            serde_json::json!({ "data_b64": encode_b64(&data) }),
+            Duration::from_secs(3),
+        )
+        .await?;
+    Ok(value.get("len_bytes").and_then(|v| v.as_u64()).unwrap_or(0) as usize)
 }
 
 #[tauri::command]
-async fn buffer_set_invert_rx(state: State<'_, Arc<Mutex<Buffer>>>, enabled: bool) -> Result<(), String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let mut guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        crate::buffer::set_invert_rx(&mut *guard, enabled);
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+async fn buffer_set_invert_rx(state: State<'_, DaemonState>, enabled: bool) -> Result<(), String> {
+    state
+        .rpc(
+            "buffer_set_invert_rx",
+            serde_json::json!({ "enabled": enabled }),
+            Duration::from_secs(3),
+        )
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn buffer_compress_viewport(
-    state: State<'_, Arc<Mutex<Buffer>>>,
+    state: State<'_, DaemonState>,
     range_start: usize,
     range_end: usize,
     number_bins: usize,
 ) -> Result<SamplerCompressResponse, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let (slice, buffer_len_bytes, base_bit_index, start, end) = {
-            let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-            let buffer_len_bytes = crate::buffer::rx_len_bytes(&*guard);
-            let total_bits = buffer_len_bytes.saturating_mul(8);
-            let end = range_end.min(total_bits);
-            let start = range_start.min(end);
-            if buffer_len_bytes == 0 || start >= end || number_bins == 0 {
-                return Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
-                    buffer_len_bytes,
-                    time_values: Vec::new(),
-                    data_values: Vec::new(),
-                });
-            }
+    let value = state
+        .rpc(
+            "buffer_compress_viewport",
+            serde_json::json!({
+                "range_start": range_start,
+                "range_end": range_end,
+                "number_bins": number_bins
+            }),
+            Duration::from_secs(3),
+        )
+        .await?;
 
-            let byte_start = start >> 3;
-            let byte_end = ((end + 7) >> 3).min(buffer_len_bytes);
-            let base_bit_index = byte_start.saturating_mul(8);
-            let slice = crate::buffer::rx_copy_byte_range(&*guard, byte_start, byte_end);
-            let start = start.saturating_sub(base_bit_index);
-            let end = end.saturating_sub(base_bit_index);
-            (slice, buffer_len_bytes, base_bit_index, start, end)
-        };
-
-        let (mut time_values, data_values) =
-            emwaver_buffer_core::sampler::compress_bits(&slice, start, end, number_bins);
-        if base_bit_index != 0 {
-            let offset = base_bit_index as f32;
-            for value in &mut time_values {
-                *value += offset;
-            }
-        }
-        Ok::<SamplerCompressResponse, String>(SamplerCompressResponse {
-            buffer_len_bytes,
-            time_values,
-            data_values,
-        })
+    Ok(SamplerCompressResponse {
+        buffer_len_bytes: value.get("buffer_len_bytes").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
+        time_values: value
+            .get("time_values")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_f64().map(|x| x as f32)).collect::<Vec<f32>>())
+            .unwrap_or_default(),
+        data_values: value
+            .get("data_values")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_f64().map(|x| x as f32)).collect::<Vec<f32>>())
+            .unwrap_or_default(),
     })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
 }
 
 #[tauri::command]
 async fn buffer_write_file(
-    state: State<'_, Arc<Mutex<Buffer>>>,
+    state: State<'_, DaemonState>,
     path: String,
 ) -> Result<(), String> {
-    let state = state.inner().clone();
     let path = expand_path(&path);
+    let value = state
+        .rpc("buffer_get_bytes", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let bytes = decode_b64(data_b64)?;
     spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        let bytes = crate::buffer::rx_snapshot(&*guard);
-        fs::write(&path, bytes).map_err(|error| format!("Failed to write file {}: {error}", path.display()))?;
+        fs::write(&path, bytes)
+            .map_err(|error| format!("Failed to write file {}: {error}", path.display()))?;
         Ok::<(), String>(())
     })
     .await
@@ -663,18 +731,12 @@ async fn buffer_write_file(
 
 #[tauri::command]
 async fn buffer_build_signed_raw_timings(
-    state: State<'_, Arc<Mutex<Buffer>>>,
+    state: State<'_, DaemonState>,
 ) -> Result<String, String> {
-    let state = state.inner().clone();
-    spawn_blocking(move || {
-        let guard = state.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        let bytes = crate::buffer::rx_snapshot(&*guard);
-        Ok::<String, String>(emwaver_buffer_core::sampler::build_signed_raw_timings(
-            &bytes, 10,
-        ))
-    })
-    .await
-    .map_err(|error| format!("Task failed: {error}"))?
+    let value = state
+        .rpc("buffer_build_signed_raw_timings", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    Ok(value.get("timings").and_then(|v| v.as_str()).unwrap_or("").to_string())
 }
 
 #[tauri::command]
@@ -898,89 +960,179 @@ fn expand_path(path: &str) -> PathBuf {
 
 // BLE Commands
 #[tauri::command]
-async fn ble_initialize(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    state.initialize().await
+async fn ble_initialize(state: State<'_, DaemonState>) -> Result<(), String> {
+    state.ensure_running()?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn ble_start_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    state.start_scan().await
+async fn ble_start_scan(state: State<'_, DaemonState>) -> Result<(), String> {
+    // In the daemon world "scan" is request-based; mimic prior UX by connecting.
+    let _ = state
+        .rpc(
+            "connect",
+            serde_json::json!({ "address": null, "name": "EMWaver" }),
+            Duration::from_secs(15),
+        )
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn ble_stop_scan(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    state.stop_scan().await
+async fn ble_stop_scan(_: State<'_, DaemonState>) -> Result<(), String> {
+    // No-op: daemon does not keep a long-running scan loop.
+    Ok(())
 }
 
 #[tauri::command]
-async fn ble_disconnect(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    state.disconnect().await
+async fn ble_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
+    state
+        .rpc("disconnect", serde_json::json!({}), Duration::from_secs(5))
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn ble_send_packet(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
-    state.send_packet(data).await
+async fn ble_send_packet(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+    state
+        .rpc(
+            "write",
+            serde_json::json!({ "bytes_b64": encode_b64(&data) }),
+            Duration::from_secs(5),
+        )
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
 async fn ble_send_command(
-    state: State<'_, Arc<BLEState>>,
+    state: State<'_, DaemonState>,
     data: Vec<u8>,
     timeout_ms: u64,
     packets: u32,
 ) -> Result<Vec<u8>, String> {
-    state.send_command(data, timeout_ms, packets).await
+    let value = state
+        .rpc(
+            "send_packet_command",
+            serde_json::json!({
+                "bytes_b64": encode_b64(&data),
+                "timeout_ms": timeout_ms,
+                "packets": packets
+            }),
+            Duration::from_millis(timeout_ms.saturating_add(5_000).max(1)),
+        )
+        .await?;
+    let bytes_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
+    decode_b64(bytes_b64)
 }
 
 #[tauri::command]
-async fn ble_get_status(state: State<'_, Arc<BLEState>>) -> Result<BLEStatus, String> {
-    Ok(state.get_status().await)
+async fn ble_get_status(state: State<'_, DaemonState>) -> Result<BLEStatus, String> {
+    let value = state
+        .rpc("list_connected", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    let devices = value.get("devices").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    for dev in devices {
+        let transport = dev.get("transport").and_then(|v| v.as_str()).unwrap_or("");
+        if transport == "ble" {
+            return Ok(BLEStatus {
+                connected: true,
+                scanning: false,
+                device_name: dev.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                device_address: dev
+                    .get("address")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+            });
+        }
+    }
+    Ok(BLEStatus {
+        connected: false,
+        scanning: false,
+        device_name: None,
+        device_address: None,
+    })
 }
 
 #[tauri::command]
-async fn ble_transmit_buffer(state: State<'_, Arc<BLEState>>, data: Vec<u8>) -> Result<(), String> {
-    state.transmit_buffer(data).await
+async fn ble_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+    state
+        .rpc(
+            "transmit_buffer",
+            serde_json::json!({ "bytes_b64": encode_b64(&data) }),
+            Duration::from_secs(60),
+        )
+        .await?;
+    Ok(())
 }
 
 // USB Commands
 #[tauri::command]
 async fn usb_list_ports() -> Result<Vec<String>, String> {
-    USBState::list_ports().await
+    let daemon = DaemonState::new()?;
+    let value = daemon
+        .rpc("usb_list_ports", serde_json::json!({}), Duration::from_secs(5))
+        .await?;
+    Ok(value
+        .get("ports")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<String>>())
+        .unwrap_or_default())
 }
 
 #[tauri::command]
-async fn usb_connect(state: State<'_, Arc<USBState>>, port_name: String) -> Result<(), String> {
-    state.connect(port_name).await
+async fn usb_connect(state: State<'_, DaemonState>, port_name: String) -> Result<(), String> {
+    let _ = state
+        .rpc(
+            "usb_connect",
+            serde_json::json!({ "port_name": port_name }),
+            Duration::from_secs(10),
+        )
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn usb_disconnect(state: State<'_, Arc<USBState>>) -> Result<(), String> {
-    state.disconnect().await
+async fn usb_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
+    state
+        .rpc("usb_disconnect", serde_json::json!({}), Duration::from_secs(5))
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn usb_send_packet(state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Result<(), String> {
-    state.send_packet(data).await
+async fn usb_send_packet(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+    // Transport is selected by the daemon's active connection.
+    ble_send_packet(state, data).await
 }
 
 #[tauri::command]
 async fn usb_send_command(
-    state: State<'_, Arc<USBState>>,
+    state: State<'_, DaemonState>,
     data: Vec<u8>,
     timeout_ms: u64,
     packets: u32,
 ) -> Result<Vec<u8>, String> {
-    state.send_command(data, timeout_ms, packets).await
+    ble_send_command(state, data, timeout_ms, packets).await
 }
 
 #[tauri::command]
-async fn usb_transmit_buffer(state: State<'_, Arc<USBState>>, data: Vec<u8>) -> Result<(), String> {
-    state.transmit_buffer(data).await
+async fn usb_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+    ble_transmit_buffer(state, data).await
 }
 
 #[tauri::command]
-async fn usb_get_status(state: State<'_, Arc<USBState>>) -> Result<USBStatus, String> {
-    Ok(state.get_status().await)
+async fn usb_get_status(state: State<'_, DaemonState>) -> Result<USBStatus, String> {
+    let value = state
+        .rpc("usb_status", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    Ok(USBStatus {
+        connected: value.get("connected").and_then(|v| v.as_bool()).unwrap_or(false),
+        device_path: value
+            .get("device_path")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
 }
 
 // DFU Commands
@@ -1067,56 +1219,47 @@ fn bytes_to_hex_lower(bytes: &[u8]) -> String {
     out
 }
 
+#[derive(Clone)]
+struct DaemonEvents {
+    ota_status_tx: tokio::sync::broadcast::Sender<Vec<u8>>,
+}
+
 async fn wait_for_ota_success(
     app: &tauri::AppHandle,
-    buffer: &Arc<Mutex<Buffer>>,
+    events: &DaemonEvents,
     total_bytes: u64,
     timeout_seconds: u64,
 ) -> Result<(), String> {
+    let mut rx = events.ota_status_tx.subscribe();
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_seconds);
-    let mut packet_index = {
-        let guard = buffer.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-        crate::buffer::rx_packet_count(&*guard)
-    };
-    let mut window: Vec<u8> = Vec::with_capacity(256);
+
     loop {
-        let now = tokio::time::Instant::now();
-        if now >= deadline {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
             return Err("Timed out waiting for OTA completion status".to_string());
         }
 
-        let chunk = {
-            let guard = buffer.lock().map_err(|_| "Buffer lock poisoned".to_string())?;
-            let response = crate::buffer::read_rx_since(&*guard, packet_index, 64);
-            packet_index = response.next_packet_index;
-            response.data
+        let next = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .map_err(|_| "Timed out waiting for OTA completion status".to_string())?;
+
+        let bytes = match next {
+            Ok(v) => v,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                return Err("Lost connection to daemon OTA status stream".to_string());
+            }
         };
 
-        if chunk.is_empty() {
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-            continue;
-        }
-
-        window.extend_from_slice(&chunk);
-        if window.len() > 256 {
-            window.drain(0..(window.len() - 256));
-        }
-
-        if window.len() < 14 {
-            continue;
-        }
-
-        for i in 0..=(window.len() - 14) {
-            if let Some((code, received, total, err)) = parse_ota_status(&window[i..i + 14]) {
-                let msg = format!(
-                    "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
-                );
-                emit_ota_progress(app, msg, total_bytes, total_bytes);
-                match code {
-                    0x13 => return Ok(()), // SUCCESS
-                    0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
-                    _ => {}
-                }
+        if let Some((code, received, total, err)) = parse_ota_status(&bytes) {
+            let msg = format!(
+                "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
+            );
+            emit_ota_progress(app, msg, total_bytes, total_bytes);
+            match code {
+                0x13 => return Ok(()), // SUCCESS
+                0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
+                _ => {}
             }
         }
     }
@@ -1179,13 +1322,19 @@ async fn wifi_http_post_firmware(
 
 async fn ble_ota_flash_bytes(
     app: &tauri::AppHandle,
-    state: &BLEState,
+    daemon: &DaemonState,
+    events: &DaemonEvents,
     bytes: &[u8],
     label: &str,
 ) -> Result<(), String> {
-    let status = state.get_status().await;
-    if !status.connected {
-        return Err("Not connected to a BLE device".to_string());
+    let connected = daemon
+        .rpc("connection_status", serde_json::json!({}), Duration::from_secs(3))
+        .await?
+        .get("connected")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !connected {
+        return Err("Not connected to a device".to_string());
     }
 
     if bytes.is_empty() {
@@ -1206,14 +1355,26 @@ async fn ble_ota_flash_bytes(
     start.extend_from_slice(&sha[..]);
 
     emit_ota_progress(app, "Starting OTA session...", 0, total_bytes);
-    state.ota_write_control(&start).await?;
+    daemon
+        .rpc(
+            "ble_ota_write_control",
+            serde_json::json!({ "bytes_b64": encode_b64(&start) }),
+            Duration::from_secs(5),
+        )
+        .await?;
 
     let chunk_size = 200usize;
     let mut sent = 0usize;
     let mut last_progress_emit = 0usize;
 
     for chunk in bytes.chunks(chunk_size) {
-        state.ota_write_data(chunk).await?;
+        daemon
+            .rpc(
+                "ble_ota_write_data",
+                serde_json::json!({ "bytes_b64": encode_b64(chunk) }),
+                Duration::from_secs(5),
+            )
+            .await?;
         sent += chunk.len();
 
         if sent - last_progress_emit >= 16 * 1024 || sent == bytes.len() {
@@ -1225,58 +1386,78 @@ async fn ble_ota_flash_bytes(
     }
 
     emit_ota_progress(app, "Finalizing...", total_bytes, total_bytes);
-    state.ota_write_control(&[0x03]).await?;
+    daemon
+        .rpc(
+            "ble_ota_write_control",
+            serde_json::json!({ "bytes_b64": encode_b64(&[0x03]) }),
+            Duration::from_secs(5),
+        )
+        .await?;
 
-    wait_for_ota_success(app, &state.buffer, total_bytes, 30).await
+    wait_for_ota_success(app, events, total_bytes, 30).await
 }
 
 #[tauri::command]
 async fn ble_ota_flash_file(
     app: tauri::AppHandle,
-    state: State<'_, Arc<BLEState>>,
+    daemon: State<'_, DaemonState>,
+    events: State<'_, DaemonEvents>,
     path: String,
 ) -> Result<(), String> {
     let firmware_path = expand_path(&path);
     let bytes = std::fs::read(&firmware_path)
         .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
-    ble_ota_flash_bytes(&app, &state, &bytes, "Firmware").await
+    ble_ota_flash_bytes(&app, &daemon, &events, &bytes, "Firmware").await
 }
 
 #[tauri::command]
 async fn ble_ota_flash_stock(
     app: tauri::AppHandle,
-    state: State<'_, Arc<BLEState>>,
+    daemon: State<'_, DaemonState>,
+    events: State<'_, DaemonEvents>,
 ) -> Result<(), String> {
-    ble_ota_flash_bytes(&app, &state, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
+    ble_ota_flash_bytes(&app, &daemon, &events, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
 }
 
 #[tauri::command]
-async fn ota_wifi_start(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    let status = state.get_status().await;
-    if !status.connected {
-        return Err("Not connected to a BLE device".to_string());
-    }
-    state.ota_write_control(&[0x10]).await
+async fn ota_wifi_start(daemon: State<'_, DaemonState>) -> Result<(), String> {
+    daemon
+        .rpc(
+            "ble_ota_write_control",
+            serde_json::json!({ "bytes_b64": encode_b64(&[0x10]) }),
+            Duration::from_secs(5),
+        )
+        .await?;
+    Ok(())
 }
 
 #[tauri::command]
-async fn ota_wifi_stop(state: State<'_, Arc<BLEState>>) -> Result<(), String> {
-    let status = state.get_status().await;
-    if !status.connected {
-        return Err("Not connected to a BLE device".to_string());
-    }
-    state.ota_write_control(&[0x11]).await
+async fn ota_wifi_stop(daemon: State<'_, DaemonState>) -> Result<(), String> {
+    daemon
+        .rpc(
+            "ble_ota_write_control",
+            serde_json::json!({ "bytes_b64": encode_b64(&[0x11]) }),
+            Duration::from_secs(5),
+        )
+        .await?;
+    Ok(())
 }
 
 async fn wifi_ota_flash_bytes(
     app: &tauri::AppHandle,
-    state: &BLEState,
+    daemon: &DaemonState,
+    events: &DaemonEvents,
     bytes: &[u8],
     label: &str,
 ) -> Result<(), String> {
-    let status = state.get_status().await;
-    if !status.connected {
-        return Err("Not connected to a BLE device".to_string());
+    let connected = daemon
+        .rpc("connection_status", serde_json::json!({}), Duration::from_secs(3))
+        .await?
+        .get("connected")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !connected {
+        return Err("Not connected to a device".to_string());
     }
 
     if bytes.is_empty() {
@@ -1302,27 +1483,29 @@ async fn wifi_ota_flash_bytes(
     wifi_http_post_firmware(app, bytes, &sha_hex, total_bytes).await?;
 
     emit_ota_progress(app, "Waiting for device to finalize...", total_bytes, total_bytes);
-    wait_for_ota_success(app, &state.buffer, total_bytes, 30).await
+    wait_for_ota_success(app, events, total_bytes, 30).await
 }
 
 #[tauri::command]
 async fn ota_wifi_flash_file(
     app: tauri::AppHandle,
-    state: State<'_, Arc<BLEState>>,
+    daemon: State<'_, DaemonState>,
+    events: State<'_, DaemonEvents>,
     path: String,
 ) -> Result<(), String> {
     let firmware_path = expand_path(&path);
     let bytes = std::fs::read(&firmware_path)
         .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
-    wifi_ota_flash_bytes(&app, &state, &bytes, "Firmware").await
+    wifi_ota_flash_bytes(&app, &daemon, &events, &bytes, "Firmware").await
 }
 
 #[tauri::command]
 async fn ota_wifi_flash_stock(
     app: tauri::AppHandle,
-    state: State<'_, Arc<BLEState>>,
+    daemon: State<'_, DaemonState>,
+    events: State<'_, DaemonEvents>,
 ) -> Result<(), String> {
-    wifi_ota_flash_bytes(&app, &state, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
+    wifi_ota_flash_bytes(&app, &daemon, &events, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
 }
 #[tauri::command]
 async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
@@ -1382,14 +1565,74 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
-    let rx_buffer: Arc<Mutex<Buffer>> = Arc::new(Mutex::new(Buffer::default()));
-    let rx_buffer_for_setup = Arc::clone(&rx_buffer);
-    let rx_notify = Arc::new(tokio::sync::Notify::new());
-    let rx_notify_for_setup = Arc::clone(&rx_notify);
+    let daemon_state = DaemonState::new().unwrap_or(DaemonState {
+        socket: std::env::temp_dir().join("emwaver.sock"),
+    });
+    let (ota_status_tx, _) = tokio::sync::broadcast::channel::<Vec<u8>>(256);
+    let daemon_events = DaemonEvents { ota_status_tx };
+    let daemon_state_for_setup = daemon_state.clone();
+    let daemon_events_for_setup = daemon_events.clone();
 
     tauri::Builder::default()
         .setup(move |app| {
             let handle = app.handle();
+
+            // Background daemon event pump (OTA status notifications).
+            #[cfg(unix)]
+            {
+                use tokio::net::UnixStream;
+                let daemon = daemon_state_for_setup.clone();
+                let events = daemon_events_for_setup.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        if daemon.ensure_running().is_err() {
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            continue;
+                        }
+
+                        let stream = UnixStream::connect(&daemon.socket).await;
+                        let Ok(stream) = stream else {
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            continue;
+                        };
+
+                        let mut reader = BufReader::new(stream);
+                        let mut line = String::new();
+                        loop {
+                            line.clear();
+                            let n = match reader.read_line(&mut line).await {
+                                Ok(v) => v,
+                                Err(_) => break,
+                            };
+                            if n == 0 {
+                                break;
+                            }
+                            let trimmed = line.trim();
+                            if trimmed.is_empty() {
+                                continue;
+                            }
+                            let value: serde_json::Value = match serde_json::from_str(trimmed) {
+                                Ok(v) => v,
+                                Err(_) => continue,
+                            };
+                            let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
+                                continue;
+                            };
+                            if event != "ota_status" {
+                                continue;
+                            }
+                            let bytes_b64 = value
+                                .get("data")
+                                .and_then(|d| d.get("bytes_b64"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            if let Ok(bytes) = decode_b64(bytes_b64) {
+                                let _ = events.ota_status_tx.send(bytes);
+                            }
+                        }
+                    }
+                });
+            }
 
             let new_item = MenuItem::with_id(
                 app,
@@ -1710,16 +1953,9 @@ pub fn run() {
                 .with_state_flags(window_state_flags)
                 .build(),
         )
-        .manage(Arc::new(BLEState::new(
-            Arc::clone(&rx_buffer_for_setup),
-            Arc::clone(&rx_notify_for_setup),
-        )))
+        .manage(daemon_state)
+        .manage(daemon_events)
         .manage(Arc::new(PtyManager::new()))
-        .manage(Arc::new(USBState::new(
-            Arc::clone(&rx_buffer_for_setup),
-            Arc::clone(&rx_notify_for_setup),
-        )))
-        .manage(Arc::clone(&rx_buffer_for_setup))
 			        .invoke_handler(tauri::generate_handler![
             create_project,
             read_directory,
