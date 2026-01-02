@@ -57,6 +57,13 @@ cargo install --path cli --bin emwaver --force
 # Launch the interactive menu
 emwaver
 
+# Daemon: keep a persistent device connection (recommended for shell/workflows)
+emwaver daemon start
+emwaver daemon status
+emwaver daemon list
+emwaver daemon connect
+emwaver daemon cmd version
+
 # Connect to a nearby EMWaver device and open an interactive shell
 emwaver shell
 
@@ -95,6 +102,12 @@ emwaver monitor --port /dev/ttyACM0
 # Standalone STM32 DFU flashing (raw `.bin` or `.dfu` bytes)
 emwaver dfu ./firmware.bin
 ```
+
+## Daemon Notes
+
+The CLI includes a Unix-only local daemon that keeps the BLE connection alive and exposes a local Unix socket for `emwaver shell`, `emwaver daemon ...`, and higher-level workflows (`emwaver buffer/sampler/retransmit`).
+
+See [EMWaver Daemon + CLI](daemon.md) for the full “connect → cmd → workflows” flow.
 
 ## Development
 
