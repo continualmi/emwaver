@@ -799,13 +799,14 @@ pub fn retransmit_start(
     // Fire-and-forget: retransmission reserves the notification channel for BS packets.
     let mut cmd = format!("transmit start --pin={pin}");
     if pwm {
-        cmd.push_str(" --pwm=true");
-    }
-    if let Some(freq) = freq {
-        cmd.push_str(&format!(" --freq={freq}"));
-    }
-    if let Some(duty) = duty {
-        cmd.push_str(&format!(" --duty={duty}"));
+        // Match desktop behavior: `--pwm` is a boolean flag (no explicit value).
+        cmd.push_str(" --pwm");
+        if let Some(freq) = freq {
+            cmd.push_str(&format!(" --freq={freq}"));
+        }
+        if let Some(duty) = duty {
+            cmd.push_str(&format!(" --duty={duty}"));
+        }
     }
     daemon_cmd(socket, vec![cmd], 500, 0, false)
 }
