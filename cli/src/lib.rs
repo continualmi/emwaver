@@ -16,6 +16,7 @@
  */
 
 mod cli;
+mod bridge;
 pub mod ble_ota;
 pub mod dfu;
 pub mod firmware;
@@ -92,6 +93,7 @@ pub fn run() -> Result<()> {
             let destination = path.unwrap_or(std::env::current_dir()?);
             init::run_init(target, components, stm32_firmware, destination)
         }
+        Some(cli::Command::Bridge) => bridge::run_bridge(),
         None => interactive::run_menu(),
     }
 }

@@ -17,6 +17,7 @@
 
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { EmwaverDeviceManager } from "./deviceBridge";
 
 type WaveletPreviewMessage = {
   type: "load";
@@ -24,6 +25,21 @@ type WaveletPreviewMessage = {
   script: string;
   bootstrap: string;
   modules: Record<string, string>;
+};
+
+type WaveletRpcMessage = {
+  type: "rpc";
+  id: number;
+  method: "sendCommandString" | "write" | "connectionStatus";
+  params?: any;
+};
+
+type WaveletRpcResultMessage = {
+  type: "rpcResult";
+  id: number;
+  ok: boolean;
+  result?: any;
+  error?: string;
 };
 
 const MAX_MODULE_FILES = 400;
@@ -35,7 +51,8 @@ export class WaveletPreviewManager {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly output: vscode.OutputChannel
+    private readonly output: vscode.OutputChannel,
+    private readonly deviceManager?: EmwaverDeviceManager
   ) {
     this.context.subscriptions.push(
       vscode.workspace.onDidChangeTextDocument(async (event) => {
@@ -88,6 +105,11 @@ export class WaveletPreviewManager {
         if (!message || typeof message !== "object") return;
         if (message.type === "log" && typeof message.line === "string") {
           this.output.appendLine(`[wavelet] ${message.line}`);
+          return;
+        }
+
+        if (message.type === "rpc") {
+          void this.handleRpc(panel, message as WaveletRpcMessage);
         }
       } catch (err) {
         this.output.appendLine(`Wavelet preview message error: ${String(err)}`);
@@ -96,6 +118,45 @@ export class WaveletPreviewManager {
 
     const doc = await vscode.workspace.openTextDocument(resolved);
     await this.updatePanel(panel, resolved, doc.getText());
+  }
+
+  private async handleRpc(panel: vscode.WebviewPanel, message: WaveletRpcMessage): Promise<void> {
+    const reply = (data: WaveletRpcResultMessage) => panel.webview.postMessage(data);
+
+    if (!this.deviceManager) {
+      await reply({ type: "rpcResult", id: message.id, ok: false, error: "Device support not initialized" });
+      return;
+    }
+
+    try {
+      if (message.method === "connectionStatus") {
+        const status = await this.deviceManager.connectionStatus();
+        await reply({ type: "rpcResult", id: message.id, ok: true, result: { status } });
+        return;
+      }
+
+      if (message.method === "sendCommandString") {
+        const command: string = String(message.params?.command ?? "");
+        const timeoutMs: number = Number(message.params?.timeoutMs ?? 1500);
+        const packets: number = Number(message.params?.packets ?? 1);
+        const rx = await this.deviceManager.sendCommand(command, timeoutMs, packets);
+        const bytes_b64 = Buffer.from(rx).toString("base64");
+        await reply({ type: "rpcResult", id: message.id, ok: true, result: { bytes_b64 } });
+        return;
+      }
+
+      if (message.method === "write") {
+        const bytes_b64: string = String(message.params?.bytes_b64 ?? "");
+        const bytes = Buffer.from(bytes_b64, "base64");
+        await this.deviceManager.write(new Uint8Array(bytes));
+        await reply({ type: "rpcResult", id: message.id, ok: true, result: {} });
+        return;
+      }
+
+      await reply({ type: "rpcResult", id: message.id, ok: false, error: `Unknown method: ${message.method}` });
+    } catch (err) {
+      await reply({ type: "rpcResult", id: message.id, ok: false, error: String(err) });
+    }
   }
 
   private async updatePanel(panel: vscode.WebviewPanel, uri: vscode.Uri, script: string): Promise<void> {

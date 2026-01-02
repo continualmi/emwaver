@@ -3,6 +3,48 @@
 
   const previewEl = document.getElementById("preview");
 
+  let cachedConnectionStatus = "unknown";
+
+  let rpcNextId = 1;
+  /** @type {Map<number, {resolve: (v:any)=>void, reject: (e:any)=>void}>} */
+  const rpcPending = new Map();
+
+  const bytesToBase64 = (bytes) => {
+    if (!bytes || !bytes.length) return "";
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    return btoa(binary);
+  };
+
+  const base64ToBytes = (b64) => {
+    if (!b64) return new Uint8Array([]);
+    const binary = atob(String(b64));
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i) & 0xff;
+    return out;
+  };
+
+  const rpc = (method, params) => {
+    const id = rpcNextId++;
+    vscode.postMessage({ type: "rpc", id, method, params });
+    return new Promise((resolve, reject) => {
+      rpcPending.set(id, { resolve, reject });
+    });
+  };
+
+  const refreshConnectionStatus = () =>
+    rpc("connectionStatus", {})
+      .then((res) => {
+        cachedConnectionStatus = String(res && res.status ? res.status : "unknown");
+      })
+      .catch(() => {
+        cachedConnectionStatus = "unknown";
+      });
+
   /** @type {string[]} */
   let consoleLines = [];
 
@@ -556,13 +598,44 @@
     const message = event.data;
     if (!message || typeof message !== "object") return;
 
+    if (message.type === "rpcResult" && typeof message.id === "number") {
+      const pending = rpcPending.get(message.id);
+      if (!pending) return;
+      rpcPending.delete(message.id);
+      if (message.ok) pending.resolve(message.result);
+      else pending.reject(new Error(message.error || "RPC error"));
+      return;
+    }
+
     if (message.type === "load") {
       clearConsole();
+      refreshConnectionStatus();
       ensureEngine().setBootstrapSource(message.bootstrap || "");
       ensureEngine().updateModuleSources(message.modules || {});
       ensureEngine().execute(message.script || "");
     }
   });
+
+  // Bridge used by the shared wavelet bootstrap (async-capable, matches desktop host).
+  window._waveletSendCommandString = (command, timeoutMs) =>
+    rpc("sendCommandString", {
+      command: String(command || ""),
+      timeoutMs: Number(timeoutMs || 1500),
+      packets: 1,
+    }).then((res) => {
+      if (!res || !res.bytes_b64) return null;
+      return base64ToBytes(res.bytes_b64);
+    });
+
+  window._waveletWrite = (bytes) => {
+    let payload = new Uint8Array([]);
+    if (bytes instanceof Uint8Array) payload = bytes;
+    else if (Array.isArray(bytes)) payload = new Uint8Array(bytes.map((v) => Number(v) & 0xff));
+
+    return rpc("write", { bytes_b64: bytesToBase64(payload) }).then(() => undefined);
+  };
+
+  window._waveletConnectionStatus = () => cachedConnectionStatus;
 
   appendConsole("Wavelet preview ready.");
   vscode.setState({ ready: true });

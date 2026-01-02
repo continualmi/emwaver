@@ -37,6 +37,20 @@ button.primary:hover {
   background: var(--vscode-button-hoverBackground);
 }
 
+button.secondary {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  cursor: pointer;
+}
+
+button.secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+}
+
 .status {
   padding: 8px 10px;
   border-radius: 6px;
@@ -53,4 +67,3 @@ button.primary:hover {
 code {
   font-family: var(--vscode-editor-font-family);
 }
-

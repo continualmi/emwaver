@@ -15,6 +15,9 @@
     "onView:emwaver.buildFlashView",
     "onCommand:emwaver.build",
     "onCommand:emwaver.flash",
+    "onCommand:emwaver.connectDevice",
+    "onCommand:emwaver.disconnectDevice",
+    "onCommand:emwaver.sendDeviceCommand",
     "onCommand:emwaver.openBuildFlash",
     "onCommand:emwaver.previewWavelet",
     "onLanguage:emw"
@@ -40,6 +43,18 @@
         "title": "EMWaver: Flash"
       },
       {
+        "command": "emwaver.connectDevice",
+        "title": "EMWaver: Connect Device"
+      },
+      {
+        "command": "emwaver.disconnectDevice",
+        "title": "EMWaver: Disconnect Device"
+      },
+      {
+        "command": "emwaver.sendDeviceCommand",
+        "title": "EMWaver: Send Device Command"
+      },
+      {
         "command": "emwaver.previewWavelet",
         "title": "EMWaver: Preview Wavelet"
       }
@@ -58,7 +73,7 @@
       "properties": {
         "emwaver.cliPath": {
           "type": "string",
-          "default": "emwaver",
+          "default": "~/emwaver/cli/target/debug/emwaver",
           "description": "Path to the emwaver CLI executable (or just 'emwaver' if it is on PATH)."
         },
         "emwaver.workingDirectory": {

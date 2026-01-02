@@ -17,6 +17,7 @@
 
 import * as vscode from "vscode";
 import { BuildFlashViewProvider } from "./view";
+import { EmwaverBridgeClient, EmwaverDeviceManager } from "./deviceBridge";
 import { WaveletCodeLensProvider } from "./waveletCodeLens";
 import { WaveletPreviewManager } from "./waveletPreview";
 
@@ -33,7 +34,11 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(status);
 
   const buildFlashProvider = new BuildFlashViewProvider(context, output);
-  const waveletPreview = new WaveletPreviewManager(context, output);
+  const bridge = new EmwaverBridgeClient(output);
+  const deviceManager = new EmwaverDeviceManager(output, bridge);
+  context.subscriptions.push(bridge, deviceManager);
+  buildFlashProvider.setDeviceManager(deviceManager);
+  const waveletPreview = new WaveletPreviewManager(context, output, deviceManager);
 
   try {
     context.subscriptions.push(
@@ -75,6 +80,43 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("emwaver.previewWavelet", async (uri?: vscode.Uri) => {
       output.appendLine(`Command: emwaver.previewWavelet ${uri ? uri.fsPath : ""}`);
       await waveletPreview.preview(uri);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emwaver.connectDevice", async () => {
+      output.appendLine("Command: emwaver.connectDevice");
+      await deviceManager.connectInteractive();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emwaver.disconnectDevice", async () => {
+      output.appendLine("Command: emwaver.disconnectDevice");
+      await deviceManager.disconnect();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emwaver.sendDeviceCommand", async () => {
+      output.appendLine("Command: emwaver.sendDeviceCommand");
+      const text = await vscode.window.showInputBox({
+        title: "EMWaver device command",
+        prompt: "Unix-style device command (sent as a 64-byte packet).",
+        placeHolder: "spi --open --name cc1101 ...",
+      });
+      if (!text) return;
+
+      const bytes = await deviceManager.sendCommand(text);
+      const ascii = Array.from(bytes)
+        .map((b) => (b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : "."))
+        .join("");
+      const hex = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join(" ");
+      output.appendLine(`RX ascii: ${ascii}`);
+      output.appendLine(`RX hex:   ${hex}`);
+      output.show(true);
     })
   );
 
