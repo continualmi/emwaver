@@ -284,6 +284,9 @@ pub enum DaemonCommand {
         /// Number of 64-byte packets to read back.
         #[arg(long, default_value_t = 1)]
         packets: u32,
+        /// Print both ASCII (trimmed) and raw hex bytes.
+        #[arg(long, conflicts_with = "json")]
+        verbose: bool,
         /// Output as JSON (includes base64 bytes).
         #[arg(long)]
         json: bool,
