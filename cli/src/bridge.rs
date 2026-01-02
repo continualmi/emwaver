@@ -28,7 +28,9 @@ use btleplug::api::{
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+#[cfg(any(test, not(unix)))]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(any(test, not(unix)))]
 use tokio::runtime::Runtime;
 use tokio::sync::{broadcast, mpsc};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
@@ -101,11 +103,13 @@ fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+#[cfg(any(test, not(unix)))]
 pub fn run_bridge() -> Result<()> {
     let runtime = Runtime::new().context("failed to create async runtime")?;
     runtime.block_on(async { run_bridge_async().await })
 }
 
+#[cfg(any(test, not(unix)))]
 async fn run_bridge_async() -> Result<()> {
     let state = create_bridge_state().await?;
 

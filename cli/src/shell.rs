@@ -20,23 +20,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use btleplug::api::{
-    Central, CentralEvent, CentralState, Characteristic, Manager as _, Peripheral as _, ScanFilter,
-    WriteType,
-};
-use btleplug::platform::{Adapter, Manager, Peripheral};
+use base64::Engine;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::runtime::Runtime;
-use tokio::time::{sleep, timeout};
-use tokio_stream::StreamExt;
-use uuid::Uuid;
+
+#[cfg(unix)]
+use tokio::net::UnixStream;
 
 use emwaver_buffer_core::packet::make_packet64;
 
-const TARGET_DEVICE_NAME: &str = "EMWaver";
-const SERVICE_UUID: Uuid = uuid::uuid!("45c7158e-0c3b-4e90-a847-452a15b14191");
-const CMD_CHAR_UUID: Uuid = uuid::uuid!("46c7158e-0c3b-4e90-a847-452a15b14191");
-const NOTIF_CHAR_UUID: Uuid = uuid::uuid!("47c7158e-0c3b-4e90-a847-452a15b14191");
+use crate::bridge::BridgeRequest;
+use crate::daemon;
 
 static PROMPT_PENDING: AtomicBool = AtomicBool::new(true);
 
@@ -46,193 +40,108 @@ pub fn run_shell(verbose: bool) -> Result<()> {
 }
 
 async fn run_shell_async(verbose: bool) -> Result<()> {
-    let manager = Manager::new()
-        .await
-        .context("failed to initialize BLE manager")?;
-    let adapters = manager
-        .adapters()
-        .await
-        .context("failed to list BLE adapters")?;
-    let adapter = adapters
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("no BLE adapters found"))?;
-
-    match adapter
-        .adapter_state()
-        .await
-        .context("failed to query Bluetooth power state")?
+    // Prefer the daemon so connections persist across processes (VS Code, app, etc).
+    // On non-unix platforms, the daemon isn't available yet.
+    #[cfg(unix)]
     {
-        CentralState::PoweredOff => {
-            println!("Bluetooth appears to be off. Enable Bluetooth and rerun `emw`.");
-            return Ok(());
-        }
-        CentralState::Unknown => {
-            println!(
-                "Bluetooth adapter state is unknown. Ensure Bluetooth is enabled if discovery fails."
-            );
-        }
-        CentralState::PoweredOn => {}
+        return run_shell_daemon(verbose).await;
     }
 
-    println!("Scanning for EMWaver devices...");
-    let peripheral = discover_target(&adapter).await?;
-    adapter.stop_scan().await.ok();
-
-    let address = peripheral.address();
-    println!("Connecting to EMWaver ({address})...");
-
-    if !peripheral.is_connected().await? {
-        peripheral
-            .connect()
-            .await
-            .context("failed to connect to EMWaver")?;
+    #[cfg(not(unix))]
+    {
+        bail!("shell is not supported on this platform yet without the daemon");
     }
+}
 
-    peripheral
-        .discover_services()
-        .await
-        .context("failed to discover services")?;
+#[cfg(unix)]
+async fn run_shell_daemon(verbose: bool) -> Result<()> {
+    let socket = daemon::ensure_daemon_running(None)?;
 
-    let (cmd_char, notif_char) = locate_characteristics(&peripheral)?;
+    // Connect (scan + pick first matching device) if not already connected.
+    println!("Connecting to EMWaver via daemon...");
+    let _ = daemon::daemon_rpc(
+        &socket,
+        BridgeRequest {
+            id: 1,
+            method: "connect".to_string(),
+            params: serde_json::json!({
+                "address": null,
+                "name": "EMWaver",
+            }),
+        },
+        Duration::from_secs(20),
+    )
+    .await?;
 
-    peripheral
-        .subscribe(&notif_char)
-        .await
-        .context("failed to enable notifications")?;
-
-    let mut notifications = peripheral
-        .notifications()
-        .await
-        .context("failed to listen for notifications")?;
-
+    // Listen for async notifications/events and render them like the old shell.
+    let events_socket = socket.clone();
     let notify_task = tokio::spawn(async move {
-        while let Some(event) = notifications.next().await {
-            if event.uuid == NOTIF_CHAR_UUID {
-                render_notification(&event.value, verbose);
+        let stream = UnixStream::connect(&events_socket).await;
+        let Ok(stream) = stream else {
+            return;
+        };
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let n = match reader.read_line(&mut line).await {
+                Ok(v) => v,
+                Err(_) => break,
+            };
+            if n == 0 {
+                break;
+            }
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let value: serde_json::Value = match serde_json::from_str(trimmed) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let data = value.get("data").cloned().unwrap_or_default();
+            match event {
+                "rx_bytes" => {
+                    if let Some(bytes_b64) = data.get("bytes_b64").and_then(|v| v.as_str()) {
+                        if let Ok(bytes) = base64::engine::general_purpose::STANDARD
+                            .decode(bytes_b64.as_bytes())
+                        {
+                            render_notification(&bytes, verbose);
+                        }
+                    }
+                }
+                "connected" => {
+                    if let Some(addr) = data.get("address").and_then(|v| v.as_str()) {
+                        print!("\r\x1b[K");
+                        let _ = io::stdout().flush();
+                        println!("Connected: {addr}");
+                        let _ = print_prompt();
+                    }
+                }
+                "disconnected" => {
+                    print!("\r\x1b[K");
+                    let _ = io::stdout().flush();
+                    println!("Disconnected.");
+                    let _ = print_prompt();
+                }
+                _ => {}
             }
         }
     });
 
-    let repl_result = run_repl(peripheral.clone(), &cmd_char).await;
+    let repl_result = run_repl_daemon(socket).await;
 
     notify_task.abort();
     let _ = notify_task.await;
 
-    let _ = timeout(Duration::from_secs(2), peripheral.unsubscribe(&notif_char)).await;
-    let _ = timeout(Duration::from_secs(2), peripheral.disconnect()).await;
-
     repl_result
 }
 
-async fn discover_target(adapter: &Adapter) -> Result<Peripheral> {
-    let mut events = adapter
-        .events()
-        .await
-        .context("failed to subscribe to adapter events")?;
-
-    adapter
-        .start_scan(ScanFilter::default())
-        .await
-        .context("failed to start BLE scan")?;
-
-    let timeout = Duration::from_secs(20);
-    let mut elapsed = Duration::from_millis(0);
-
-    loop {
-        tokio::select! {
-            maybe_event = events.next() => {
-                if let Some(event) = maybe_event {
-                    if let Some(peripheral) = handle_event(adapter, event).await? {
-                        println!("Found EMWaver device: {}", peripheral.address());
-                        return Ok(peripheral);
-                    }
-                } else {
-                    bail!("BLE adapter event stream ended unexpectedly");
-                }
-            }
-            _ = sleep(Duration::from_millis(500)) => {
-                elapsed += Duration::from_millis(500);
-                if elapsed >= timeout {
-                    bail!("timed out scanning for EMWaver device");
-                }
-            }
-        }
-    }
-}
-
-async fn handle_event(adapter: &Adapter, event: CentralEvent) -> Result<Option<Peripheral>> {
-    match event {
-        CentralEvent::DeviceDiscovered(id)
-        | CentralEvent::DeviceUpdated(id)
-        | CentralEvent::DeviceConnected(id) => {
-            let peripheral = adapter
-                .peripheral(&id)
-                .await
-                .context("failed to access peripheral")?;
-            if let Some(props) = peripheral
-                .properties()
-                .await
-                .context("failed to read peripheral properties")?
-            {
-                if let Some(name) = props.local_name {
-                    if name == TARGET_DEVICE_NAME {
-                        return Ok(Some(peripheral));
-                    }
-                }
-            }
-            Ok(None)
-        }
-        CentralEvent::DeviceDisconnected(_) => Ok(None),
-        CentralEvent::ManufacturerDataAdvertisement {
-            id,
-            manufacturer_data: _,
-        } => {
-            let peripheral = adapter
-                .peripheral(&id)
-                .await
-                .context("failed to access peripheral")?;
-            if let Some(props) = peripheral
-                .properties()
-                .await
-                .context("failed to read peripheral properties")?
-            {
-                if let Some(name) = props.local_name {
-                    if name == TARGET_DEVICE_NAME {
-                        return Ok(Some(peripheral));
-                    }
-                }
-            }
-            Ok(None)
-        }
-        _ => Ok(None),
-    }
-}
-
-fn locate_characteristics(peripheral: &Peripheral) -> Result<(Characteristic, Characteristic)> {
-    let mut cmd_char = None;
-    let mut notif_char = None;
-
-    for service in peripheral.services() {
-        if service.uuid == SERVICE_UUID {
-            for characteristic in service.characteristics.iter() {
-                if characteristic.uuid == CMD_CHAR_UUID {
-                    cmd_char = Some(characteristic.clone());
-                }
-                if characteristic.uuid == NOTIF_CHAR_UUID {
-                    notif_char = Some(characteristic.clone());
-                }
-            }
-        }
-    }
-
-    let cmd = cmd_char.ok_or_else(|| anyhow!("command characteristic not found"))?;
-    let notif = notif_char.ok_or_else(|| anyhow!("notification characteristic not found"))?;
-
-    Ok((cmd, notif))
-}
-
-async fn run_repl(peripheral: Peripheral, cmd_char: &Characteristic) -> Result<()> {
+#[cfg(unix)]
+async fn run_repl_daemon(socket: std::path::PathBuf) -> Result<()> {
     let stdin = tokio::io::stdin();
     let mut reader = BufReader::new(stdin);
     let mut line = String::new();
@@ -268,7 +177,18 @@ async fn run_repl(peripheral: Peripheral, cmd_char: &Characteristic) -> Result<(
 
                 match parse_command(trimmed) {
                     Ok(payload) => {
-                        if let Err(err) = peripheral.write(cmd_char, &payload, WriteType::WithResponse).await {
+                        let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(payload);
+                        let res = daemon::daemon_rpc(
+                            &socket,
+                            BridgeRequest {
+                                id: 2,
+                                method: "write".to_string(),
+                                params: serde_json::json!({ "bytes_b64": bytes_b64 }),
+                            },
+                            Duration::from_secs(2),
+                        )
+                        .await;
+                        if let Err(err) = res {
                             println!("Write failed: {err}");
                         }
                     }
