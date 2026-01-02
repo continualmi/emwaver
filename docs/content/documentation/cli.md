@@ -62,7 +62,7 @@ emwaver daemon start
 emwaver daemon status
 emwaver daemon list
 emwaver daemon connect
-emwaver daemon cmd version
+emwaver cmd version
 
 # Connect to a nearby EMWaver device and open an interactive shell
 emwaver shell

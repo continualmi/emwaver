@@ -95,14 +95,14 @@ emwaver daemon disconnect
 Send one ASCII command line to the connected device:
 
 ```bash
-emwaver daemon cmd version
-emwaver daemon cmd "gpio read --pin=4"
+emwaver cmd version
+emwaver cmd "gpio read --pin=4"
 ```
 
 Notes:
 
 - The firmware command parser expects `--key=value` for most flags (e.g. `--cs=14`, `--reg=0x31`).
-- `emwaver daemon cmd` reads back `--packets N` **64-byte packets** (defaults to `1`). For fire-and-forget commands, pass `--packets 0`.
+- `emwaver cmd` reads back `--packets N` **64-byte packets** (defaults to `1`). For fire-and-forget commands, pass `--packets 0`.
 - Use `--json` to get `{ bytes_b64, text }` for scripting.
 
 ## Interactive Shell (Uses Daemon)
@@ -120,14 +120,14 @@ The CC1101 `VERSION` register is at address `0x31` (read-only; typical value is 
 
 ```bash
 emwaver daemon connect
-emwaver daemon cmd "cc1101 init --cs=14"
-emwaver daemon cmd "cc1101 read --reg=0x31"
+emwaver cmd "cc1101 init --cs=14"
+emwaver cmd "cc1101 read --reg=0x31"
 ```
 
 If you want raw base64 bytes for automation:
 
 ```bash
-emwaver daemon cmd --json "cc1101 read --reg=0x31"
+emwaver cmd --json "cc1101 read --reg=0x31"
 ```
 
 ## Buffer / Sampler / Retransmit (Daemon-Managed)

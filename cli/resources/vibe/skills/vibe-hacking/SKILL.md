@@ -17,7 +17,7 @@ Probe new modules quickly using EMWaver CLI ASCII commands, validate with known-
    - `emwaver daemon start`
    - `emwaver daemon connect`
 2. Open SPI (keep command under 64 bytes; use `--key=value`):
-   - `emwaver daemon cmd --verbose "spi open --name=x --miso=13 --mosi=11 --sck=12 --cs=<pin>"`
+   - `emwaver cmd --verbose "spi open --name=x --miso=13 --mosi=11 --sck=12 --cs=<pin>"`
 3. Read a known register via `spi xfer`:
    - Most reads need `--tx=<cmd>,0x00 --rx=2` (status + data).
 4. Validate:
@@ -27,4 +27,3 @@ Probe new modules quickly using EMWaver CLI ASCII commands, validate with known-
    - Update `.emwaver/SPI.md` with the exact commands and expected results.
 6. Convert to UI:
    - Add a Wavelet that emits the same ASCII commands (see `.emwaver/WAVELETS.md`).
-

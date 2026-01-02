@@ -11,7 +11,7 @@ This is a practical cheat-sheet for probing SPI modules using EMWaver’s ASCII 
 
 - Commands must fit in a **64-byte** packet on the wire.
 - Prefer `--key=value` (shorter than `--key value`).
-- Use `emwaver daemon cmd --verbose "<cmd>"` to see both `hex:` and `ascii:` output.
+- Use `emwaver cmd --verbose "<cmd>"` to see both `hex:` and `ascii:` output.
 
 ## EMWaver SPI commands
 

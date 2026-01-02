@@ -7,7 +7,7 @@ Repo-local docs live under `.emwaver/` (Markdown-only).
 
 **Golden rules**
 - Commands are ASCII and must fit in the device’s 64-byte packet; prefer `--key=value` to keep commands short.
-- For raw interaction, use `emwaver daemon cmd --verbose "<command>"` to see both hex and ASCII.
+- For raw interaction, use `emwaver cmd --verbose "<command>"` to see both hex and ASCII.
 
 **SPI quickstart (examples)**
 - CC1101 `VERSION` register (expects `0x14`):
@@ -19,4 +19,3 @@ Repo-local docs live under `.emwaver/` (Markdown-only).
 
 See `.emwaver/SPI.md` for more.
 <!-- EMWAVER_VIBE_HACKING_END -->
-
