@@ -150,6 +150,8 @@ pub enum Command {
         #[arg(long)]
         path: Option<PathBuf>,
     },
+    /// JSON-lines sidecar for editor/desktop integrations (stdio protocol).
+    Bridge,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]

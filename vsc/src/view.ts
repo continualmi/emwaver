@@ -16,6 +16,8 @@
  */
 
 import * as vscode from "vscode";
+import { expandCliPath } from "./cliPath";
+import { EmwaverDeviceManager, DeviceInfo } from "./deviceBridge";
 
 type BuildFlashAction = "build" | "flash";
 
@@ -25,11 +27,22 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private terminal: vscode.Terminal | undefined;
   private terminalCwd: string | undefined;
+  private deviceManager: EmwaverDeviceManager | undefined;
+  private deviceStatusDisposable: vscode.Disposable | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly output: vscode.OutputChannel
   ) {}
+
+  setDeviceManager(deviceManager: EmwaverDeviceManager) {
+    this.deviceManager = deviceManager;
+    this.deviceStatusDisposable?.dispose();
+    this.deviceStatusDisposable = deviceManager.onStatusChanged((info) => {
+      void this.view?.webview.postMessage({ type: "deviceStatus", device: this.toDeviceStatusPayload(info) });
+    });
+    this.context.subscriptions.push(this.deviceStatusDisposable);
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -55,11 +68,27 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
         if (message.type === "previewWavelet") {
           await vscode.commands.executeCommand("emwaver.previewWavelet");
         }
+        if (message.type === "connectDevice") {
+          await vscode.commands.executeCommand("emwaver.connectDevice");
+        }
+        if (message.type === "disconnectDevice") {
+          await vscode.commands.executeCommand("emwaver.disconnectDevice");
+        }
+        if (message.type === "requestDeviceStatus") {
+          const snapshot = this.deviceManager?.getStatusSnapshot();
+          void this.view?.webview.postMessage({
+            type: "deviceStatus",
+            device: this.toDeviceStatusPayload(snapshot),
+          });
+        }
       } catch (err) {
         this.output.appendLine(`Webview message handler error: ${String(err)}`);
         throw err;
       }
     });
+
+    const snapshot = this.deviceManager?.getStatusSnapshot();
+    void this.view?.webview.postMessage({ type: "deviceStatus", device: this.toDeviceStatusPayload(snapshot) });
   }
 
   async runAction(action: BuildFlashAction) {
@@ -68,7 +97,7 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     if (!cwd) return;
 
     const config = vscode.workspace.getConfiguration("emwaver");
-    const cliPath = config.get<string>("cliPath", "emwaver");
+    const cliPath = expandCliPath(config.get<string>("cliPath", "emwaver"));
 
     const args =
       action === "build"
@@ -142,6 +171,11 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
         <button class="primary" id="flash">Flash</button>
         <button class="primary" id="previewWavelet">Preview</button>
       </div>
+      <div class="row">
+        <button class="secondary" id="connectDevice">Connect</button>
+        <button class="secondary" id="disconnectDevice">Disconnect</button>
+      </div>
+      <div class="status" id="deviceStatus">Device: Disconnected</div>
       <div class="status" id="status">Idle</div>
       <div class="hint">
         Runs <code>emwaver build</code> / <code>emwaver flash</code>, or previews the active <code>.emw</code> wavelet in an editor tab.
@@ -157,5 +191,15 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     let text = "";
     for (let i = 0; i < 32; i++) text += possible.charAt(Math.floor(Math.random() * possible.length));
     return text;
+  }
+
+  private toDeviceStatusPayload(info: DeviceInfo | undefined): { connected: boolean; label: string; address?: string } {
+    if (!info?.address) return { connected: false, label: "Disconnected" };
+    const name = info.name || "Device";
+    return {
+      connected: true,
+      label: `${name} (${info.transport})`,
+      address: info.address,
+    };
   }
 }
