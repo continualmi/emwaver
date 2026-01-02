@@ -1,0 +1,9 @@
+{
+  "name": "EMWaver Wavelet",
+  "scopeName": "source.emw",
+  "patterns": [
+    {
+      "include": "source.js"
+    }
+  ]
+}
