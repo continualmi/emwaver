@@ -3,7 +3,6 @@ let status = "Ready";
 function initRx() {
     status = "Initializing RX...";
     render();
-    emw.send("cc1101 init");
     emw.send("cc1101 strobe --cmd=0x30");
     emw.send("cc1101 apply_defaults");
     emw.send("cc1101 write --reg=0x08 --val=0x32");
@@ -24,7 +23,6 @@ function initRx() {
 function initTx() {
     status = "Initializing TX...";
     render();
-    emw.send("cc1101 init");
     emw.send("cc1101 strobe --cmd=0x30");
     emw.send("cc1101 apply_defaults");
     emw.send("cc1101 write --reg=0x08 --val=0x32");

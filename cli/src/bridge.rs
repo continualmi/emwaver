@@ -716,11 +716,13 @@ async fn send_packet_command(
 ) -> Result<Vec<u8>> {
     let _in_flight = state.in_flight.lock().await;
 
-    // Drop stale RX so the next N packets correspond to this request.
-    if let Ok(mut guard) = state.buffer.lock() {
-        let count = buffer::rx_packet_count(&*guard);
-        guard.rx_counter = count;
-    }
+    // Use the daemon's broadcasted `rx_bytes` events to collect responses.
+    //
+    // Rationale: the daemon's RX buffer has a single global cursor (`rx_counter`)
+    // which can be consumed by other concurrent clients (desktop app, shell,
+    // sampler). Using `rx_bytes` events gives each request its own copy of the
+    // response packets without fighting over a shared cursor.
+    let mut events = state.event_tx.subscribe();
 
     write_active(state, bytes).await?;
 
@@ -734,26 +736,55 @@ async fn send_packet_command(
 
     let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms.max(1));
     while out.len() < want_bytes {
-        let maybe_packet = (|| {
-            let mut guard = state.buffer.lock().ok()?;
-            buffer::next_rx_packet(&mut *guard)
-        })();
-
-        if let Some(pkt) = maybe_packet {
-            if let Some(value) = status::parse_bs(&pkt.data) {
-                let _ = emit_event(state, "bs", json!({ "value": value }));
-            }
-            out.extend_from_slice(&pkt.data);
-            continue;
-        }
-
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
             bail!("timeout waiting for response");
         }
-        timeout(remaining.min(Duration::from_millis(200)), state.rx_notify.notified())
-            .await
-            .ok();
+
+        let msg = match timeout(remaining, events.recv()).await {
+            Ok(Ok(m)) => m,
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+            Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
+                bail!("daemon events channel closed")
+            }
+            Err(_) => bail!("timeout waiting for response"),
+        };
+
+        let trimmed = std::str::from_utf8(&msg).unwrap_or("").trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let value: serde_json::Value = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if event != "rx_bytes" {
+            continue;
+        }
+
+        let Some(bytes_b64) = value
+            .get("data")
+            .and_then(|v| v.get("bytes_b64"))
+            .and_then(|v| v.as_str())
+        else {
+            continue;
+        };
+        let Ok(pkt) = base64::engine::general_purpose::STANDARD.decode(bytes_b64.as_bytes()) else {
+            continue;
+        };
+        if pkt.is_empty() {
+            continue;
+        }
+        if pkt.len() == PACKET_SIZE {
+            if let Some(bs) = status::parse_bs(&pkt) {
+                let _ = emit_event(state, "bs", json!({ "value": bs }));
+            }
+        }
+        out.extend_from_slice(&pkt);
     }
 
     Ok(out)

@@ -48,7 +48,7 @@ Whether you’re talking over BLE (ESP32) or USB CDC (STM32), the client sends c
 Examples (shape, not an exhaustive list):
 
 - `gpio read --pin 4`
-- `spi xfer --name cc1101 --tx 0x0f02aabbcc --rx 4`
+- `spi xfer --cs 10 --tx 0x0f02aabbcc --rx 4`
 - `cc1101 read --reg 0`
 
 On the client side, every incoming chunk is appended to the receive buffer. The **buffer counter** is then used

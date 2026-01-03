@@ -85,6 +85,7 @@ void emwaver_init(void)
     command_registry_init();
     spi_init();
     sampler_module_init();
+    spi_boot_init_defaults();
 
     spi_register_commands();
     rfm69_register_commands();
