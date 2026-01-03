@@ -18,6 +18,7 @@
 #include "cc1101.h"
 
 #include "command_registry.h"
+#include "spi.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_err.h"
@@ -42,6 +43,18 @@ static int cc1101_cs = 10;
 
 static spi_device_handle_t cc1101_handle = NULL;
 static bool cc1101_initialized = false;
+
+static bool cc1101_refresh_handle(void)
+{
+    spi_device_handle_t handle = spi_get_device_handle("cc1101");
+    if (!handle) {
+        cc1101_handle = NULL;
+        cc1101_initialized = false;
+        return false;
+    }
+    cc1101_handle = handle;
+    return true;
+}
 
 // CC1101 command strobes
 #define CC1101_SRES 0x30
@@ -99,6 +112,7 @@ static bool cc1101_initialized = false;
 #define CC1101_MOD_MSK  7
 
 static void cc1101_cmd_init(int miso, int mosi, int sck, int cs);
+static void cc1101_cmd_deinit(void);
 static void cc1101_cmd_write_reg(int reg, int val);
 static void cc1101_cmd_read_reg(int reg);
 static void cc1101_cmd_strobe(int cmd);
@@ -138,6 +152,10 @@ void cc1101_register_commands(void)
                                {"mosi", CMD_ARG_INT, false},
                                {"sck", CMD_ARG_INT, false},
                                {"cs", CMD_ARG_INT, false},
+                               {NULL, CMD_ARG_DONE, false}
+                           });
+    ok &= register_command("cc1101 deinit", (void *)cc1101_cmd_deinit,
+                           (const cmd_arg_spec_t[]){
                                {NULL, CMD_ARG_DONE, false}
                            });
     ok &= register_command("cc1101 write", (void *)cc1101_cmd_write_reg,
@@ -217,35 +235,28 @@ void cc1101_register_commands(void)
 
 static esp_err_t cc1101_init_device(void)
 {
-    if (cc1101_initialized) {
+    if (cc1101_initialized && cc1101_handle) {
         return ESP_OK;
     }
 
-    spi_bus_config_t buscfg = {
-        .miso_io_num = cc1101_miso,
-        .mosi_io_num = cc1101_mosi,
-        .sclk_io_num = cc1101_sck,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 1024,
-    };
-
-    esp_err_t ret = spi_bus_initialize(CC1101_HOST, &buscfg, SPI_DMA_CH_AUTO);
-    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = CC1101_CLOCK,
-        .mode = 0,
-        .spics_io_num = cc1101_cs,
-        .queue_size = 7,
-    };
-
-    ret = spi_bus_add_device(CC1101_HOST, &devcfg, &cc1101_handle);
+    // Important: share the same SPI device registry used by the "spi open/xfer"
+    // command path so we don't end up with multiple SPI device handles targeting
+    // the same CS line (which can lead to flaky behavior over time).
+    esp_err_t ret = spi_open_device_internal("cc1101",
+                                            2,
+                                            cc1101_miso,
+                                            cc1101_mosi,
+                                            cc1101_sck,
+                                            cc1101_cs,
+                                            0,
+                                            CC1101_CLOCK,
+                                            &cc1101_handle);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to add CC1101 device: %s", esp_err_to_name(ret));
+        if (ret == ESP_ERR_INVALID_STATE) {
+            ESP_LOGE(TAG, "CC1101 SPI CS=%d already in use on host 2", cc1101_cs);
+        } else {
+            ESP_LOGE(TAG, "Failed to open CC1101 SPI device: %s", esp_err_to_name(ret));
+        }
         return ret;
     }
 
@@ -583,9 +594,27 @@ static void cc1101_cmd_init(int miso, int mosi, int sck, int cs)
     }
 }
 
-static void cc1101_cmd_write_reg(int reg, int val)
+static void cc1101_cmd_deinit(void)
 {
     if (!cc1101_initialized) {
+        command_send_ok(NULL, 0);
+        return;
+    }
+
+    esp_err_t ret = spi_close_device_internal("cc1101");
+    if (ret != ESP_OK && ret != ESP_ERR_NOT_FOUND) {
+        command_send_err("cc1101 deinit failed");
+        return;
+    }
+
+    cc1101_handle = NULL;
+    cc1101_initialized = false;
+    command_send_ok(NULL, 0);
+}
+
+static void cc1101_cmd_write_reg(int reg, int val)
+{
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -600,7 +629,7 @@ static void cc1101_cmd_write_reg(int reg, int val)
 
 static void cc1101_cmd_read_reg(int reg)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -615,7 +644,7 @@ static void cc1101_cmd_read_reg(int reg)
 
 static void cc1101_cmd_strobe(int cmd)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -629,7 +658,7 @@ static void cc1101_cmd_strobe(int cmd)
 
 static void cc1101_cmd_read_burst(int reg, int len)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -649,7 +678,7 @@ static void cc1101_cmd_read_burst(int reg, int len)
 
 static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -672,7 +701,7 @@ static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
 
 static void cc1101_cmd_apply_defaults(void)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -682,7 +711,7 @@ static void cc1101_cmd_apply_defaults(void)
 
 static void cc1101_cmd_set_freq(const char *freq_str)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -706,7 +735,7 @@ static void cc1101_cmd_set_freq(const char *freq_str)
 
 static void cc1101_cmd_get_freq(void)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -718,7 +747,7 @@ static void cc1101_cmd_get_freq(void)
 
 static void cc1101_cmd_set_datarate(int bps)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -731,7 +760,7 @@ static void cc1101_cmd_set_datarate(int bps)
 
 static void cc1101_cmd_get_datarate(void)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -764,7 +793,7 @@ static int cc1101_parse_modulation(const char *mod_str)
 
 static void cc1101_cmd_set_mod(const char *mod_str)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -783,7 +812,7 @@ static void cc1101_cmd_set_mod(const char *mod_str)
 
 static void cc1101_cmd_get_mod(void)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -794,7 +823,7 @@ static void cc1101_cmd_get_mod(void)
 
 static void cc1101_cmd_set_mod_power(int modulation, int dbm)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
@@ -811,7 +840,7 @@ static void cc1101_cmd_set_mod_power(int modulation, int dbm)
 
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data)
 {
-    if (!cc1101_initialized) {
+    if (!cc1101_initialized || !cc1101_refresh_handle()) {
         command_send_err("cc1101 not initialized");
         return;
     }
