@@ -24,21 +24,17 @@
 void spi_init(void);
 void spi_register_commands(void);
 void spi_shutdown(void);
+void spi_boot_init_defaults(void);
 
-// Internal helpers for other firmware modules (e.g. cc1101.c) to share the same
-// SPI bus/device bookkeeping as the "spi open/xfer/close" CLI commands.
-esp_err_t spi_open_device_internal(const char *name,
-                                  int host_id,
-                                  int miso,
-                                  int mosi,
-                                  int sck,
-                                  int cs,
-                                  int mode,
-                                  int clock_hz,
-                                  spi_device_handle_t *out_handle);
-
-esp_err_t spi_close_device_internal(const char *name);
-
-spi_device_handle_t spi_get_device_handle(const char *name);
+// Create a temporary SPI device handle for the duration of a single transfer.
+// This supports a "stateless" UX (no spi open/close) while still using ESP-IDF.
+esp_err_t spi_transfer_once(int cs_io,
+                            int mode,
+                            int clock_hz,
+                            bool lsb_first,
+                            const uint8_t *tx,
+                            size_t tx_len,
+                            uint8_t *rx,
+                            size_t rx_len);
 
 #endif /* SPI_H */

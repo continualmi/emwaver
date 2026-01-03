@@ -26,13 +26,21 @@
 #include "esp_log.h"
 
 #define SPI_MAX_TRANSFER 64
-#define SPI_MAX_DEVICES 4
+#define SPI_MAX_PROFILES 8
 #ifdef SPI4_HOST
 #define SPI_HOST_COUNT 4
 #else
 #define SPI_HOST_COUNT 3
 #endif
 #define SPI_DEFAULT_CLOCK_HZ 1000000
+
+// ESP32-S3 default SPI pins (flagship/shield/diy default bus).
+// This is the one-and-only bus we support for the "no init/open/close" workflow.
+#define SPI_DEFAULT_HOST_ID 2
+#define SPI_DEFAULT_MISO 13
+#define SPI_DEFAULT_MOSI 11
+#define SPI_DEFAULT_SCK  12
+#define SPI_DEFAULT_CS   10
 
 typedef struct {
     bool initialized;
@@ -41,43 +49,77 @@ typedef struct {
     int sck;
 } spi_bus_state_t;
 
-typedef struct {
-    bool in_use;
-    char name[CLI_VALUE_MAX];
-    spi_device_handle_t handle;
-    spi_host_device_t host;
-    int cs_io;
-} spi_device_entry_t;
-
 static const char *TAG = "SPI";
 
 static spi_bus_state_t spi_bus_states[SPI_HOST_COUNT];
-static spi_device_entry_t spi_devices[SPI_MAX_DEVICES];
 
-static spi_device_entry_t *spi_find_device(const char *name);
-static bool spi_cs_in_use(spi_host_device_t host, int cs_io);
-static spi_device_entry_t *spi_allocate_device_slot(void);
-static void spi_release_device(spi_device_entry_t *device);
+typedef struct {
+    bool in_use;
+    char name[CLI_VALUE_MAX];
+    int cs_io;
+} spi_profile_t;
+
+static spi_profile_t spi_profiles[SPI_MAX_PROFILES];
+
 static int spi_host_to_index(spi_host_device_t host);
 static spi_host_device_t spi_host_from_id(int host_id);
+static spi_profile_t *spi_find_profile(const char *name);
+static spi_profile_t *spi_alloc_profile(void);
 
-static void spi_open_command(const char *name,
-                             int host_id,
-                             int miso,
-                             int mosi,
-                             int sck,
-                             int cs,
-                             int mode,
-                             int clock_hz);
+static void spi_open_command(const char *name, int cs);
 static void spi_close_command(const char *name);
+
 static void spi_transfer_command(const char *name,
                                  const command_hex_arg_t *tx_arg,
-                                 int rx_len);
+                                 int rx_len,
+                                 int cs,
+                                 int mode,
+                                 int clock_hz,
+                                 bool lsb_first);
 
 void spi_init(void)
 {
     memset(spi_bus_states, 0, sizeof(spi_bus_states));
-    memset(spi_devices, 0, sizeof(spi_devices));
+    memset(spi_profiles, 0, sizeof(spi_profiles));
+}
+
+void spi_boot_init_defaults(void)
+{
+    const int host_id = SPI_DEFAULT_HOST_ID;
+    spi_host_device_t host = spi_host_from_id(host_id);
+    int host_index = spi_host_to_index(host);
+    if (host_index < 0 || host_index >= SPI_HOST_COUNT) {
+        ESP_LOGE(TAG, "spi boot init: invalid host %d", host_id);
+        return;
+    }
+
+    spi_bus_state_t *bus = &spi_bus_states[host_index];
+    if (bus->initialized) {
+        return;
+    }
+
+    spi_bus_config_t buscfg = {
+        .miso_io_num = SPI_DEFAULT_MISO,
+        .mosi_io_num = SPI_DEFAULT_MOSI,
+        .sclk_io_num = SPI_DEFAULT_SCK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 1024,
+    };
+
+    esp_err_t ret = spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "spi boot init: spi_bus_initialize failed: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    bus->initialized = true;
+    bus->miso = SPI_DEFAULT_MISO;
+    bus->mosi = SPI_DEFAULT_MOSI;
+    bus->sck = SPI_DEFAULT_SCK;
+
+    ESP_LOGI(TAG, "SPI default bus ready (host=%d miso=%d mosi=%d sck=%d)",
+             host_id, SPI_DEFAULT_MISO, SPI_DEFAULT_MOSI, SPI_DEFAULT_SCK);
 }
 
 void spi_register_commands(void)
@@ -88,13 +130,7 @@ void spi_register_commands(void)
         (void *)spi_open_command,
         (const cmd_arg_spec_t[]){
             {"name", CMD_ARG_STRING, true},
-            {"host", CMD_ARG_INT, false},
-            {"miso", CMD_ARG_INT, true},
-            {"mosi", CMD_ARG_INT, true},
-            {"sck", CMD_ARG_INT, true},
             {"cs", CMD_ARG_INT, true},
-            {"mode", CMD_ARG_INT, false},
-            {"clock", CMD_ARG_INT, false},
             {NULL, CMD_ARG_DONE, false},
         });
     ok &= register_command(
@@ -108,9 +144,14 @@ void spi_register_commands(void)
         "spi xfer",
         (void *)spi_transfer_command,
         (const cmd_arg_spec_t[]){
-            {"name", CMD_ARG_STRING, true},
+            // Legacy arg (kept optional for older clients). Prefer cs/mode/clock/lsb.
+            {"name", CMD_ARG_STRING, false},
             {"tx", CMD_ARG_HEX, false},
             {"rx", CMD_ARG_INT, false},
+            {"cs", CMD_ARG_INT, false},
+            {"mode", CMD_ARG_INT, false},
+            {"clock", CMD_ARG_INT, false},
+            {"lsb", CMD_ARG_BOOL, false},
             {NULL, CMD_ARG_DONE, false},
         });
     if (!ok) {
@@ -118,69 +159,71 @@ void spi_register_commands(void)
     }
 }
 
-void spi_shutdown(void)
+static spi_profile_t *spi_find_profile(const char *name)
 {
-    for (size_t i = 0; i < SPI_MAX_DEVICES; ++i) {
-        if (spi_devices[i].in_use) {
-            spi_release_device(&spi_devices[i]);
-        }
-    }
-}
-
-static spi_device_entry_t *spi_find_device(const char *name)
-{
-    if (!name) {
+    if (!name || name[0] == '\0') {
         return NULL;
     }
-    for (size_t i = 0; i < SPI_MAX_DEVICES; ++i) {
-        if (spi_devices[i].in_use && strncmp(spi_devices[i].name, name, CLI_VALUE_MAX) == 0) {
-            return &spi_devices[i];
+    for (size_t i = 0; i < SPI_MAX_PROFILES; ++i) {
+        if (spi_profiles[i].in_use && strncmp(spi_profiles[i].name, name, sizeof(spi_profiles[i].name)) == 0) {
+            return &spi_profiles[i];
         }
     }
     return NULL;
 }
 
-spi_device_handle_t spi_get_device_handle(const char *name)
+static spi_profile_t *spi_alloc_profile(void)
 {
-    spi_device_entry_t *device = spi_find_device(name);
-    return device ? device->handle : NULL;
-}
-
-static bool spi_cs_in_use(spi_host_device_t host, int cs_io)
-{
-    for (size_t i = 0; i < SPI_MAX_DEVICES; ++i) {
-        if (spi_devices[i].in_use && spi_devices[i].host == host && spi_devices[i].cs_io == cs_io) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static spi_device_entry_t *spi_allocate_device_slot(void)
-{
-    for (size_t i = 0; i < SPI_MAX_DEVICES; ++i) {
-        if (!spi_devices[i].in_use) {
-            memset(&spi_devices[i], 0, sizeof(spi_devices[i]));
-            return &spi_devices[i];
+    for (size_t i = 0; i < SPI_MAX_PROFILES; ++i) {
+        if (!spi_profiles[i].in_use) {
+            memset(&spi_profiles[i], 0, sizeof(spi_profiles[i]));
+            return &spi_profiles[i];
         }
     }
     return NULL;
 }
 
-static void spi_release_device(spi_device_entry_t *device)
+static void spi_open_command(const char *name, int cs)
 {
-    if (!device || !device->in_use) {
+    if (!name || name[0] == '\0') {
+        command_send_err("spi open: name");
+        return;
+    }
+    if (cs <= 0) {
+        command_send_err("spi open: cs");
         return;
     }
 
-    if (device->handle) {
-        esp_err_t ret = spi_bus_remove_device(device->handle);
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "spi_bus_remove_device failed: %s", esp_err_to_name(ret));
+    spi_profile_t *profile = spi_find_profile(name);
+    if (!profile) {
+        profile = spi_alloc_profile();
+        if (!profile) {
+            command_send_err("spi open: slots");
+            return;
         }
+        strncpy(profile->name, name, sizeof(profile->name) - 1);
+        profile->name[sizeof(profile->name) - 1] = '\0';
     }
 
-    memset(device, 0, sizeof(*device));
+    profile->in_use = true;
+    profile->cs_io = cs;
+    command_send_ok(NULL, 0);
+}
+
+static void spi_close_command(const char *name)
+{
+    spi_profile_t *profile = spi_find_profile(name);
+    if (!profile) {
+        command_send_err("spi close: not open");
+        return;
+    }
+    memset(profile, 0, sizeof(*profile));
+    command_send_ok(NULL, 0);
+}
+
+void spi_shutdown(void)
+{
+    // Stateless SPI surface: transfers allocate/remove a temporary device handle.
 }
 
 static int spi_host_to_index(spi_host_device_t host)
@@ -218,46 +261,19 @@ static spi_host_device_t spi_host_from_id(int host_id)
     }
 }
 
-esp_err_t spi_open_device_internal(const char *name,
-                                  int host_id,
-                                  int miso,
-                                  int mosi,
-                                  int sck,
-                                  int cs,
-                                  int mode,
-                                  int clock_hz,
-                                  spi_device_handle_t *out_handle)
+esp_err_t spi_transfer_once(int cs_io,
+                            int mode,
+                            int clock_hz,
+                            bool lsb_first,
+                            const uint8_t *tx,
+                            size_t tx_len,
+                            uint8_t *rx,
+                            size_t rx_len)
 {
-    if (!name || name[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
-    }
+    spi_boot_init_defaults();
 
-    spi_device_entry_t *existing = spi_find_device(name);
-    if (existing) {
-        if (out_handle) {
-            *out_handle = existing->handle;
-        }
-        return ESP_OK;
-    }
-
-    spi_device_entry_t *slot = spi_allocate_device_slot();
-    if (!slot) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    if (host_id <= 0) {
-        host_id = 2;
-    }
-    spi_host_device_t host = spi_host_from_id(host_id);
-    int host_index = spi_host_to_index(host);
-    if (host_index < 0 || host_index >= SPI_HOST_COUNT) {
-        memset(slot, 0, sizeof(*slot));
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (spi_cs_in_use(host, cs)) {
-        memset(slot, 0, sizeof(*slot));
-        return ESP_ERR_INVALID_STATE;
+    if (cs_io <= 0) {
+        cs_io = SPI_DEFAULT_CS;
     }
 
     if (mode < 0) {
@@ -269,208 +285,66 @@ esp_err_t spi_open_device_internal(const char *name,
         clock_hz = SPI_DEFAULT_CLOCK_HZ;
     }
 
-    spi_bus_state_t *bus = &spi_bus_states[host_index];
-    if (!bus->initialized) {
-        spi_bus_config_t buscfg = {
-            .miso_io_num = miso,
-            .mosi_io_num = mosi,
-            .sclk_io_num = sck,
-            .quadwp_io_num = -1,
-            .quadhd_io_num = -1,
-            .max_transfer_sz = 1024,
-        };
+    const spi_host_device_t host = spi_host_from_id(SPI_DEFAULT_HOST_ID);
 
-        esp_err_t ret = spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO);
-        if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-            memset(slot, 0, sizeof(*slot));
-            return ret;
-        }
-
-        bus->initialized = true;
-        bus->miso = miso;
-        bus->mosi = mosi;
-        bus->sck = sck;
-    } else {
-        if (bus->miso != miso || bus->mosi != mosi || bus->sck != sck) {
-            ESP_LOGW(TAG, "spi open internal: pin mismatch (existing bus pins %d/%d/%d)", bus->miso, bus->mosi, bus->sck);
-        }
-    }
-
+    spi_device_handle_t handle = NULL;
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = clock_hz,
         .mode = (uint8_t)mode,
-        .spics_io_num = cs,
-        .queue_size = 7,
+        .spics_io_num = cs_io,
+        .queue_size = 1,
+        .flags = 0,
     };
+    if (lsb_first) {
+        devcfg.flags |= SPI_DEVICE_TXBIT_LSBFIRST | SPI_DEVICE_RXBIT_LSBFIRST;
+    }
 
-    esp_err_t ret = spi_bus_add_device(host, &devcfg, &slot->handle);
+    esp_err_t ret = spi_bus_add_device(host, &devcfg, &handle);
     if (ret != ESP_OK) {
-        memset(slot, 0, sizeof(*slot));
         return ret;
     }
 
-    slot->in_use = true;
-    slot->host = host;
-    slot->cs_io = cs;
-    strncpy(slot->name, name, sizeof(slot->name) - 1);
-    slot->name[sizeof(slot->name) - 1] = '\0';
-
-    if (out_handle) {
-        *out_handle = slot->handle;
+    size_t total_len = tx_len > rx_len ? tx_len : rx_len;
+    if (total_len == 0) {
+        spi_bus_remove_device(handle);
+        return ESP_ERR_INVALID_ARG;
     }
 
-    return ESP_OK;
-}
-
-esp_err_t spi_close_device_internal(const char *name)
-{
-    spi_device_entry_t *device = spi_find_device(name);
-    if (!device) {
-        return ESP_ERR_NOT_FOUND;
-    }
-    spi_release_device(device);
-    return ESP_OK;
-}
-
-static void spi_open_command(const char *name,
-                             int host_id,
-                             int miso,
-                             int mosi,
-                             int sck,
-                             int cs,
-                             int mode,
-                             int clock_hz)
-{
-    ESP_LOGI(TAG, "spi open: name=%s host=%d miso=%d mosi=%d sck=%d cs=%d mode=%d clock=%d",
-             name ? name : "NULL", host_id, miso, mosi, sck, cs, mode, clock_hz);
-
-    if (!name || name[0] == '\0') {
-        ESP_LOGE(TAG, "spi open: name missing or empty");
-        command_send_err("spi open: name");
-        return;
-    }
-
-    if (spi_find_device(name)) {
-        ESP_LOGE(TAG, "spi open: device '%s' already exists", name);
-        command_send_err("spi open: exists");
-        return;
-    }
-
-    spi_device_entry_t *slot = spi_allocate_device_slot();
-    if (!slot) {
-        command_send_err("spi open: slots");
-        return;
-    }
-
-    if (host_id <= 0) {
-        host_id = 2;
-    }
-    spi_host_device_t host = spi_host_from_id(host_id);
-    int host_index = spi_host_to_index(host);
-    if (host_index < 0 || host_index >= SPI_HOST_COUNT) {
-        command_send_err("spi open: host");
-        return;
-    }
-
-    if (spi_cs_in_use(host, cs)) {
-        command_send_err("spi open: cs busy");
-        return;
-    }
-
-    if (mode < 0) {
-        mode = 0;
-    }
-    mode &= 0x3;
-
-    if (clock_hz <= 0) {
-        clock_hz = SPI_DEFAULT_CLOCK_HZ;
-    }
-
-    spi_bus_state_t *bus = &spi_bus_states[host_index];
-    if (!bus->initialized) {
-        spi_bus_config_t buscfg = {
-            .miso_io_num = miso,
-            .mosi_io_num = mosi,
-            .sclk_io_num = sck,
-            .quadwp_io_num = -1,
-            .quadhd_io_num = -1,
-            .max_transfer_sz = 1024,
-        };
-
-        esp_err_t ret = spi_bus_initialize(host, &buscfg, SPI_DMA_CH_AUTO);
-        if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
-            ESP_LOGE(TAG, "spi_bus_initialize failed: %s", esp_err_to_name(ret));
-            command_send_err("spi open: bus");
-            return;
-        }
-
-        bus->initialized = true;
-        bus->miso = miso;
-        bus->mosi = mosi;
-        bus->sck = sck;
-    } else {
-        if (bus->miso != miso || bus->mosi != mosi || bus->sck != sck) {
-            ESP_LOGW(TAG, "spi open: pin mismatch (existing bus pins %d/%d/%d)", bus->miso, bus->mosi, bus->sck);
-        }
-    }
-
-    spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = clock_hz,
-        .mode = (uint8_t)mode,
-        .spics_io_num = cs,
-        .queue_size = 7,
+    spi_transaction_t t = {
+        .flags = 0,
+        .length = (uint32_t)(total_len * 8),
+        .tx_buffer = total_len ? tx : NULL,
+        .rxlength = rx_len ? (uint32_t)(total_len * 8) : 0,
+        .rx_buffer = rx_len ? rx : NULL,
     };
 
-    esp_err_t ret = spi_bus_add_device(host, &devcfg, &slot->handle);
+    ret = spi_device_transmit(handle, &t);
+    esp_err_t remove_ret = spi_bus_remove_device(handle);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "spi_bus_add_device failed: %s", esp_err_to_name(ret));
-        memset(slot, 0, sizeof(*slot));
-        command_send_err("spi open: add");
-        return;
+        return ret;
     }
-
-    slot->in_use = true;
-    slot->host = host;
-    slot->cs_io = cs;
-    strncpy(slot->name, name, sizeof(slot->name) - 1);
-    slot->name[sizeof(slot->name) - 1] = '\0';
-
-    ESP_LOGI(TAG, "SPI device '%s' opened successfully (host=%d, mode=%d, clock=%d, cs=%d)",
-             name, host_id, mode, clock_hz, cs);
-    command_send_ok(NULL, 0);
-}
-
-static void spi_close_command(const char *name)
-{
-    ESP_LOGI(TAG, "spi close: name=%s", name ? name : "NULL");
-
-    spi_device_entry_t *device = spi_find_device(name);
-    if (!device) {
-        ESP_LOGE(TAG, "spi close: device '%s' not found", name ? name : "NULL");
-        command_send_err("spi close: not open");
-        return;
+    if (remove_ret != ESP_OK) {
+        return remove_ret;
     }
-
-    spi_release_device(device);
-    ESP_LOGI(TAG, "spi close: device '%s' closed successfully", name);
-    command_send_ok(NULL, 0);
+    return ESP_OK;
 }
 
 static void spi_transfer_command(const char *name,
                                  const command_hex_arg_t *tx_arg,
-                                 int rx_len)
+                                 int rx_len,
+                                 int cs,
+                                 int mode,
+                                 int clock_hz,
+                                 bool lsb_first)
 {
-    ESP_LOGI(TAG, "spi xfer: name=%s tx_len=%d rx_len=%d", 
-             name ? name : "NULL", 
-             (tx_arg && tx_arg->data) ? tx_arg->length : 0, 
-             rx_len);
-
-    spi_device_entry_t *device = spi_find_device(name);
-    if (!device) {
-        ESP_LOGE(TAG, "spi xfer: device '%s' not open", name ? name : "NULL");
-        command_send_err("spi xfer: not open");
-        return;
-    }
+    ESP_LOGI(TAG, "spi xfer: name=%s tx_len=%d rx_len=%d cs=%d mode=%d clock=%d lsb=%d",
+             name ? name : "NULL",
+             (tx_arg && tx_arg->data) ? tx_arg->length : 0,
+             rx_len,
+             cs,
+             mode,
+             clock_hz,
+             (int)lsb_first);
 
     uint8_t tx_buffer[SPI_MAX_TRANSFER] = {0};
     uint8_t rx_buffer[SPI_MAX_TRANSFER] = {0};
@@ -506,16 +380,31 @@ static void spi_transfer_command(const char *name,
         return;
     }
 
-    spi_transaction_t t = {
-        .flags = 0,
-        .length = total_len * 8,
-        .tx_buffer = total_len ? tx_buffer : NULL,
-        .rxlength = rx_count ? (total_len * 8) : 0,
-        .rx_buffer = rx_count ? rx_buffer : NULL,
-    };
+    if (cs <= 0) {
+        spi_profile_t *profile = spi_find_profile(name);
+        if (profile) {
+            cs = profile->cs_io;
+        } else {
+            cs = SPI_DEFAULT_CS;
+        }
+    }
+    if (mode < 0) {
+        mode = 0;
+    }
+    mode &= 0x3;
+    if (clock_hz <= 0) {
+        clock_hz = SPI_DEFAULT_CLOCK_HZ;
+    }
 
     ESP_LOGI(TAG, "Starting SPI transfer: %d bytes", total_len);
-    esp_err_t ret = spi_device_transmit(device->handle, &t);
+    esp_err_t ret = spi_transfer_once(cs,
+                                     mode,
+                                     clock_hz,
+                                     lsb_first,
+                                     tx_buffer,
+                                     total_len,
+                                     rx_buffer,
+                                     rx_count);
     ESP_LOGI(TAG, "SPI transfer complete: ret=%d", ret);
 
     if (ret != ESP_OK) {

@@ -19,8 +19,6 @@
 
 #include "command_registry.h"
 #include "spi.h"
-#include "driver/gpio.h"
-#include "driver/spi_master.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -32,7 +30,6 @@
 
 static const char *TAG = "CC1101";
 
-#define CC1101_HOST  SPI2_HOST
 #define CC1101_CLOCK 8000000
 
 // Configurable pins (defaults match wavelet_gpio.js + older ISM wiring)
@@ -41,20 +38,7 @@ static int cc1101_mosi = 11;
 static int cc1101_sck = 12;
 static int cc1101_cs = 10;
 
-static spi_device_handle_t cc1101_handle = NULL;
-static bool cc1101_initialized = false;
-
-static bool cc1101_refresh_handle(void)
-{
-    spi_device_handle_t handle = spi_get_device_handle("cc1101");
-    if (!handle) {
-        cc1101_handle = NULL;
-        cc1101_initialized = false;
-        return false;
-    }
-    cc1101_handle = handle;
-    return true;
-}
+static bool cc1101_did_reset = false;
 
 // CC1101 command strobes
 #define CC1101_SRES 0x30
@@ -111,8 +95,7 @@ static bool cc1101_refresh_handle(void)
 #define CC1101_MOD_4FSK 4
 #define CC1101_MOD_MSK  7
 
-static void cc1101_cmd_init(int miso, int mosi, int sck, int cs);
-static void cc1101_cmd_deinit(void);
+static void cc1101_cmd_init(int ignored0, int ignored1, int ignored2, int ignored3);
 static void cc1101_cmd_write_reg(int reg, int val);
 static void cc1101_cmd_read_reg(int reg);
 static void cc1101_cmd_strobe(int cmd);
@@ -128,7 +111,7 @@ static void cc1101_cmd_get_mod(void);
 static void cc1101_cmd_set_mod_power(int modulation, int dbm);
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data);
 
-static esp_err_t cc1101_init_device(void);
+static bool cc1101_ensure_ready(void);
 static uint8_t cc1101_read_reg(uint8_t addr);
 static void cc1101_write_reg(uint8_t addr, uint8_t value);
 static void cc1101_strobe(uint8_t cmd);
@@ -152,10 +135,6 @@ void cc1101_register_commands(void)
                                {"mosi", CMD_ARG_INT, false},
                                {"sck", CMD_ARG_INT, false},
                                {"cs", CMD_ARG_INT, false},
-                               {NULL, CMD_ARG_DONE, false}
-                           });
-    ok &= register_command("cc1101 deinit", (void *)cc1101_cmd_deinit,
-                           (const cmd_arg_spec_t[]){
                                {NULL, CMD_ARG_DONE, false}
                            });
     ok &= register_command("cc1101 write", (void *)cc1101_cmd_write_reg,
@@ -233,41 +212,18 @@ void cc1101_register_commands(void)
     }
 }
 
-static esp_err_t cc1101_init_device(void)
+static bool cc1101_ensure_ready(void)
 {
-    if (cc1101_initialized && cc1101_handle) {
-        return ESP_OK;
+    // Stateless command surface: SPI bus is initialized at boot; each CC1101
+    // operation performs its own transfer without a persistent device handle.
+    //
+    // Do a one-time reset strobe on first use to make probing deterministic.
+    if (!cc1101_did_reset) {
+        cc1101_strobe(CC1101_SRES);
+        vTaskDelay(pdMS_TO_TICKS(2));
+        cc1101_did_reset = true;
     }
-
-    // Important: share the same SPI device registry used by the "spi open/xfer"
-    // command path so we don't end up with multiple SPI device handles targeting
-    // the same CS line (which can lead to flaky behavior over time).
-    esp_err_t ret = spi_open_device_internal("cc1101",
-                                            2,
-                                            cc1101_miso,
-                                            cc1101_mosi,
-                                            cc1101_sck,
-                                            cc1101_cs,
-                                            0,
-                                            CC1101_CLOCK,
-                                            &cc1101_handle);
-    if (ret != ESP_OK) {
-        if (ret == ESP_ERR_INVALID_STATE) {
-            ESP_LOGE(TAG, "CC1101 SPI CS=%d already in use on host 2", cc1101_cs);
-        } else {
-            ESP_LOGE(TAG, "Failed to open CC1101 SPI device: %s", esp_err_to_name(ret));
-        }
-        return ret;
-    }
-
-    // Basic reset strobe. The TI recommended sequence also includes waiting for SO,
-    // but we keep this minimal and deterministic (same philosophy as rfm69.c).
-    cc1101_strobe(CC1101_SRES);
-    vTaskDelay(pdMS_TO_TICKS(2));
-
-    cc1101_initialized = true;
-    ESP_LOGI(TAG, "CC1101 initialized on host %d (CS=%d)", CC1101_HOST, cc1101_cs);
-    return ESP_OK;
+    return true;
 }
 
 static void cc1101_apply_defaults(void)
@@ -463,26 +419,12 @@ static bool cc1101_set_modulation_and_power(int modulation, int dbm)
 
 static void cc1101_strobe(uint8_t cmd)
 {
-    if (!cc1101_handle) {
-        return;
-    }
-
     uint8_t tx[1] = { cmd };
-    spi_transaction_t t = {
-        .flags = 0,
-        .length = 8,
-        .tx_buffer = tx,
-        .rx_buffer = NULL,
-    };
-    spi_device_transmit(cc1101_handle, &t);
+    (void)spi_transfer_once(cc1101_cs, 0, CC1101_CLOCK, false, tx, sizeof(tx), NULL, 0);
 }
 
 static uint8_t cc1101_read_reg(uint8_t addr)
 {
-    if (!cc1101_handle) {
-        return 0;
-    }
-
     // CC1101 register read:
     // - Config registers (0x00-0x2E): READ_SINGLE (0x80)
     // - Status registers (0x30-0x3D): must use READ_BURST (0xC0) even for single-byte access.
@@ -493,37 +435,24 @@ static uint8_t cc1101_read_reg(uint8_t addr)
 
     uint8_t tx[2] = { cmd, 0x00 };
     uint8_t rx[2] = { 0 };
-    spi_transaction_t t = {
-        .flags = 0,
-        .length = 16,
-        .tx_buffer = tx,
-        .rx_buffer = rx,
-    };
-    spi_device_transmit(cc1101_handle, &t);
+    esp_err_t ret = spi_transfer_once(cc1101_cs, 0, CC1101_CLOCK, false, tx, sizeof(tx), rx, sizeof(rx));
+    if (ret != ESP_OK) {
+        return 0;
+    }
 
     return rx[1];
 }
 
 static void cc1101_write_reg(uint8_t addr, uint8_t value)
 {
-    if (!cc1101_handle) {
-        return;
-    }
-
     // CC1101 single register write: address byte with R/W=0, then value.
     uint8_t tx[2] = { addr, value };
-    spi_transaction_t t = {
-        .flags = 0,
-        .length = 16,
-        .tx_buffer = tx,
-        .rx_buffer = NULL,
-    };
-    spi_device_transmit(cc1101_handle, &t);
+    (void)spi_transfer_once(cc1101_cs, 0, CC1101_CLOCK, false, tx, sizeof(tx), NULL, 0);
 }
 
 static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
 {
-    if (!cc1101_handle || !out || len == 0) {
+    if (!out || len == 0) {
         return;
     }
 
@@ -535,20 +464,14 @@ static void cc1101_read_burst(uint8_t addr, uint8_t *out, size_t len)
     }
     tx[0] = (uint8_t)(addr | 0xC0);
 
-    spi_transaction_t t = {
-        .flags = 0,
-        .length = (uint32_t)((1 + len) * 8),
-        .tx_buffer = tx,
-        .rx_buffer = rx,
-    };
-    spi_device_transmit(cc1101_handle, &t);
+    (void)spi_transfer_once(cc1101_cs, 0, CC1101_CLOCK, false, tx, 1 + len, rx, 1 + len);
 
     memcpy(out, &rx[1], len);
 }
 
 static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
 {
-    if (!cc1101_handle || !data || len == 0) {
+    if (!data || len == 0) {
         return;
     }
 
@@ -560,62 +483,24 @@ static void cc1101_write_burst(uint8_t addr, const uint8_t *data, size_t len)
     tx[0] = (uint8_t)(addr | 0x40);
     memcpy(&tx[1], data, len);
 
-    spi_transaction_t t = {
-        .flags = 0,
-        .length = (uint32_t)((1 + len) * 8),
-        .tx_buffer = tx,
-        .rx_buffer = NULL,
-    };
-    spi_device_transmit(cc1101_handle, &t);
+    (void)spi_transfer_once(cc1101_cs, 0, CC1101_CLOCK, false, tx, 1 + len, NULL, 0);
 }
 
-static void cc1101_cmd_init(int miso, int mosi, int sck, int cs)
+static void cc1101_cmd_init(int ignored0, int ignored1, int ignored2, int ignored3)
 {
-    ESP_LOGI(TAG, "cc1101_cmd_init: miso=%d mosi=%d sck=%d cs=%d", miso, mosi, sck, cs);
+    (void)ignored0;
+    (void)ignored1;
+    (void)ignored2;
+    (void)ignored3;
 
-    if (miso > 0) {
-        cc1101_miso = miso;
-    }
-    if (mosi > 0) {
-        cc1101_mosi = mosi;
-    }
-    if (sck > 0) {
-        cc1101_sck = sck;
-    }
-    if (cs > 0) {
-        cc1101_cs = cs;
-    }
-
-    esp_err_t ret = cc1101_init_device();
-    if (ret == ESP_OK) {
-        command_send_ok(NULL, 0);
-    } else {
-        command_send_err("cc1101 init failed");
-    }
-}
-
-static void cc1101_cmd_deinit(void)
-{
-    if (!cc1101_initialized) {
-        command_send_ok(NULL, 0);
-        return;
-    }
-
-    esp_err_t ret = spi_close_device_internal("cc1101");
-    if (ret != ESP_OK && ret != ESP_ERR_NOT_FOUND) {
-        command_send_err("cc1101 deinit failed");
-        return;
-    }
-
-    cc1101_handle = NULL;
-    cc1101_initialized = false;
+    // Backward-compatibility: the CC1101 helper no longer requires explicit init.
     command_send_ok(NULL, 0);
 }
 
 static void cc1101_cmd_write_reg(int reg, int val)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (reg < 0 || reg > 0x3F) {
@@ -629,8 +514,8 @@ static void cc1101_cmd_write_reg(int reg, int val)
 
 static void cc1101_cmd_read_reg(int reg)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (reg < 0 || reg > 0x3F) {
@@ -644,8 +529,8 @@ static void cc1101_cmd_read_reg(int reg)
 
 static void cc1101_cmd_strobe(int cmd)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (cmd < 0 || cmd > 0x3D) {
@@ -658,8 +543,8 @@ static void cc1101_cmd_strobe(int cmd)
 
 static void cc1101_cmd_read_burst(int reg, int len)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (reg < 0 || reg > 0x3F) {
@@ -678,8 +563,8 @@ static void cc1101_cmd_read_burst(int reg, int len)
 
 static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (reg < 0 || reg > 0x3F) {
@@ -701,8 +586,8 @@ static void cc1101_cmd_write_burst(int reg, const command_hex_arg_t *data)
 
 static void cc1101_cmd_apply_defaults(void)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     cc1101_apply_defaults();
@@ -711,8 +596,8 @@ static void cc1101_cmd_apply_defaults(void)
 
 static void cc1101_cmd_set_freq(const char *freq_str)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (!freq_str || freq_str[0] == '\0') {
@@ -735,8 +620,8 @@ static void cc1101_cmd_set_freq(const char *freq_str)
 
 static void cc1101_cmd_get_freq(void)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     double mhz = cc1101_get_frequency_mhz();
@@ -747,8 +632,8 @@ static void cc1101_cmd_get_freq(void)
 
 static void cc1101_cmd_set_datarate(int bps)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (!cc1101_set_datarate(bps)) {
@@ -760,8 +645,8 @@ static void cc1101_cmd_set_datarate(int bps)
 
 static void cc1101_cmd_get_datarate(void)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
 
@@ -793,8 +678,8 @@ static int cc1101_parse_modulation(const char *mod_str)
 
 static void cc1101_cmd_set_mod(const char *mod_str)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     int mod = cc1101_parse_modulation(mod_str);
@@ -812,8 +697,8 @@ static void cc1101_cmd_set_mod(const char *mod_str)
 
 static void cc1101_cmd_get_mod(void)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     uint8_t mdmcfg2 = cc1101_read_reg(CC1101_REG_MDMCFG2);
@@ -823,8 +708,8 @@ static void cc1101_cmd_get_mod(void)
 
 static void cc1101_cmd_set_mod_power(int modulation, int dbm)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (modulation < 0 || modulation > 7) {
@@ -840,8 +725,8 @@ static void cc1101_cmd_set_mod_power(int modulation, int dbm)
 
 static void cc1101_cmd_set_gdo(const command_hex_arg_t *data)
 {
-    if (!cc1101_initialized || !cc1101_refresh_handle()) {
-        command_send_err("cc1101 not initialized");
+    if (!cc1101_ensure_ready()) {
+        command_send_err("cc1101 not ready");
         return;
     }
     if (!data || data->length < 3) {

@@ -95,8 +95,8 @@ Per-board notes:
 - **EMWaver DIY (ESP32-S3 + external CC1101 module)**: you wire the CC1101 CS yourself; if you wire it to `GPIO10` you can use the flagship defaults (`CS=10`), otherwise override.
 
 If your wiring differs:
-- Use `spi open ... --miso=... --mosi=... --sck=... --cs=...` to match your physical pins.
-- For built-in helpers, many modules allow overriding pins via flags (e.g. `cc1101 init --miso=<pin> --mosi=<pin> --sck=<pin> --cs=<pin>`).
+- The SPI bus pins are fixed (`MISO=13 MOSI=11 SCK=12`); choose the slave with `spi xfer --cs=<pin>` (defaults to `10`).
+- Built-in helpers assume the default SPI bus pins and wiring; prefer `spi xfer --cs=<pin> ...` for anything not on the default CS.
 
 If you’re hacking an external module instead:
 - Pick a free CS pin and wire it.
@@ -149,19 +149,12 @@ emwaver cmd --packets 0 "gpio write --pin=4 --level=1"
 
 EMWaver exposes a minimal SPI surface designed for probing chips/modules quickly.
 
-`spi open` (open a named SPI device):
-- Required flags: `--name=<id> --miso=<pin> --mosi=<pin> --sck=<pin> --cs=<pin>`
+`spi xfer` (full-duplex transfer, no open/close):
 - Optional flags:
-  - `--host=<n>`: SPI host/bus ID (default `2`)
-
-Examples:
-
-```bash
-emwaver cmd "spi open --name=cc --host=2 --miso=<PIN> --mosi=<PIN> --sck=<PIN> --cs=10"
-```
-
-`spi xfer` (full-duplex transfer):
-- Required flags: `--name=<id>`
+  - `--cs=<pin>`: chip select pin (defaults to `10`)
+  - `--mode=<0..3>`: SPI mode (defaults to `0`)
+  - `--clock=<hz>`: clock speed in Hz (defaults to a safe value)
+  - `--lsb=<true|false>`: LSB-first bit order (defaults to `false` / MSB-first)
 - Optional flags:
   - `--tx=<hexbytes>`: bytes to clock out (max 64 bytes)
   - `--rx=<n>`: number of bytes to return (max 64)
@@ -171,46 +164,36 @@ emwaver cmd "spi open --name=cc --host=2 --miso=<PIN> --mosi=<PIN> --sck=<PIN> -
 - If `--tx` is omitted but `--rx>0`, the device clocks out `0x00` bytes to read **rx** bytes.
 - Many chips require a command byte first; for reads, you usually send `cmd,0x00` and set `--rx=2`.
 
-`spi close` (close a named SPI device):
-- Required flags: `--name=<id>`
-
 Examples:
 
 ```bash
-emwaver cmd --verbose "spi xfer --name=cc --tx=0xF1,0x00 --rx=2"
-emwaver cmd "spi close --name=cc"
+emwaver cmd --verbose "spi xfer --cs=10 --tx=0xF1,0x00 --rx=2"
 ```
 
 Tip: most SPI “reads” require a **dummy byte** to clock data out.
-
-SPI guardrail:
-- Do **not** open the same `CS` pin twice on the same SPI host. If you use `cc1101 init` (which reserves the built-in CC1101 on `CS=10`), you should not also `spi open ... --cs=10` under a different name; use `spi xfer --name=cc1101 ...` for raw transfers instead, or run `cc1101 deinit` first.
 
 **CC1101 example: read `VERSION` (expects `0x14`)**
 - `VERSION` register: `0x31`
 - Status-read command byte: `0x31 | 0xC0 = 0xF1`
 
 ```bash
-emwaver cmd "spi open --name=cc --miso=<PIN> --mosi=<PIN> --sck=<PIN> --cs=10"
-emwaver cmd --verbose "spi xfer --name=cc --tx=0xF1,0x00 --rx=2"
-emwaver cmd "spi close --name=cc"
+emwaver cmd --verbose "spi xfer --tx=0xF1,0x00 --rx=2"
 ```
 
-Replace `<PIN>` with your actual SPI pin mapping.
+Defaults assume the ESP32-S3 SPI pins (`MISO=13 MOSI=11 SCK=12`) and `CS=10`. For other modules, pass `--cs=<pin>`.
 
 ### CC1101 helper commands (built-in radio)
 
-EMWaver also exposes higher-level CC1101 commands (e.g. `cc1101 init`, `cc1101 read`, `cc1101 write`, `cc1101 strobe`, etc.).
+EMWaver also exposes higher-level CC1101 commands (e.g. `cc1101 read`, `cc1101 write`, `cc1101 strobe`, etc.). `cc1101 init` exists only for backward compatibility and is not required.
 
 Important limitation:
 - `cc1101 read --reg=<...>` is intended for the **on-board / built-in CC1101 wiring** on supported boards (e.g. EMWaver flagship and ISM Waver).
 - It also applies to **EMWaver DIY** *when* a CC1101 module is physically attached to the DIY’s 2×4 female header wired to match the CC1101 pinout.
-- If you wired a CC1101 (or any other SPI module) arbitrarily to different pins, use the generic `spi open`/`spi xfer` workflow instead (or pass explicit pin overrides to `cc1101 init` when available).
+- If you wired a CC1101 (or any other SPI module) to a different **CS** pin, use `spi xfer --cs=<pin> ...`. If you wired it to different **MISO/MOSI/SCK** pins, rewire to the default bus pins.
 
 Examples:
 
 ```bash
-emwaver cmd "cc1101 init"
 emwaver cmd "cc1101 read --reg=0x31"
 ```
 
