@@ -183,6 +183,9 @@ emwaver cmd "spi close --name=cc"
 
 Tip: most SPI “reads” require a **dummy byte** to clock data out.
 
+SPI guardrail:
+- Do **not** open the same `CS` pin twice on the same SPI host. If you use `cc1101 init` (which reserves the built-in CC1101 on `CS=10`), you should not also `spi open ... --cs=10` under a different name; use `spi xfer --name=cc1101 ...` for raw transfers instead, or run `cc1101 deinit` first.
+
 **CC1101 example: read `VERSION` (expects `0x14`)**
 - `VERSION` register: `0x31`
 - Status-read command byte: `0x31 | 0xC0 = 0xF1`
@@ -194,6 +197,22 @@ emwaver cmd "spi close --name=cc"
 ```
 
 Replace `<PIN>` with your actual SPI pin mapping.
+
+### CC1101 helper commands (built-in radio)
+
+EMWaver also exposes higher-level CC1101 commands (e.g. `cc1101 init`, `cc1101 read`, `cc1101 write`, `cc1101 strobe`, etc.).
+
+Important limitation:
+- `cc1101 read --reg=<...>` is intended for the **on-board / built-in CC1101 wiring** on supported boards (e.g. EMWaver flagship and ISM Waver).
+- It also applies to **EMWaver DIY** *when* a CC1101 module is physically attached to the DIY’s 2×4 female header wired to match the CC1101 pinout.
+- If you wired a CC1101 (or any other SPI module) arbitrarily to different pins, use the generic `spi open`/`spi xfer` workflow instead (or pass explicit pin overrides to `cc1101 init` when available).
+
+Examples:
+
+```bash
+emwaver cmd "cc1101 init"
+emwaver cmd "cc1101 read --reg=0x31"
+```
 
 ### I2C bring-up (pattern)
 
