@@ -19,7 +19,7 @@ import type { DirectoryChildEntry, FirmwareProjectKind, TerminalSession } from "
 
 export const WAVELET_ASSET_ROOT = "/wavelet-assets";
 export const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.emw";
-export const WAVELET_ASSET_SCRIPTS = ["cc1101.emw", "rfm69.emw", "usb.emw", "wavelet_demo.emw", "gpio.emw", "ir_send_saved_signal.emw"];
+export const WAVELET_ASSET_SCRIPTS = ["cc1101.emw", "rfm69.emw", "wavelet_demo.emw", "gpio.emw"];
 
 export function basename(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -137,10 +137,6 @@ export function iconLabelForPath(path: string): { label: string; accentClass: st
 export function detectFirmwareProjectKind(entries: DirectoryChildEntry[]): FirmwareProjectKind {
   const hasFile = (name: string) => entries.some((entry) => entry.kind === "file" && entry.name === name);
   const hasDir = (name: string) => entries.some((entry) => entry.kind === "directory" && entry.name === name);
-
-  if (hasFile("setup.sh") && hasFile("sdkconfig") && hasFile("CMakeLists.txt")) {
-    return "esp32";
-  }
 
   const hasIoc = entries.some((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".ioc"));
   if (hasDir("Release") && hasIoc) {

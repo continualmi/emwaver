@@ -39,7 +39,7 @@ export type DirectoryChildEntry = {
   kind: "file" | "directory";
 };
 
-export type FirmwareProjectKind = "esp32" | "stm32" | "unknown";
+export type FirmwareProjectKind = "stm32" | "unknown";
 
 export type OpenFile = {
   path: string;
@@ -80,9 +80,6 @@ export type GitDiffContents = {
 export type NewProjectPayload = {
   name: string;
   location: string;
-  target: "esp32s3" | "stm32f042";
-  components: Array<"ble" | "command_registry" | "ota" | "gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
-  stm32_firmware?: "gpio" | "ir" | "ism" | "rfid" | null;
 };
 
 export type CreateProjectResponse = {

@@ -32,7 +32,6 @@ pub struct FirmwareBuildPayload {
 pub struct FirmwareFlashPayload {
     pub start_dir: Option<String>,
     pub project: Option<String>,
-    pub port: Option<String>,
     pub codegen: Option<String>,
     pub dfu_alt: Option<u8>,
     pub verbose: Option<bool>,
@@ -126,7 +125,6 @@ pub async fn firmware_flash(app: tauri::AppHandle, payload: FirmwareFlashPayload
         emw::firmware::flash_at_streaming(
             start_dir,
             project,
-            payload.port,
             codegen,
             payload.dfu_alt,
             verbose,

@@ -259,7 +259,7 @@ export default function WorkspaceBottomPanel({
                       onClick={() => void onFirmwareBuild()}
                       disabled={isFirmwareBusy || !rootDir}
                       className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title={firmwareProjectKind === "esp32" ? "Build (idf.py build)" : "Build firmware"}
+                      title="Build firmware"
                     >
                       Build
                     </button>
@@ -268,7 +268,7 @@ export default function WorkspaceBottomPanel({
                       onClick={() => void onFirmwareFlash()}
                       disabled={isFirmwareBusy || !rootDir}
                       className="rounded border border-sky-300/70 bg-sky-500 px-2 py-1 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title={firmwareProjectKind === "esp32" ? "Flash (idf.py flash)" : "Flash firmware"}
+                      title="Flash firmware"
                     >
                       Flash
                     </button>
@@ -277,9 +277,9 @@ export default function WorkspaceBottomPanel({
                       onClick={() => void onFirmwareMonitor()}
                       disabled={!rootDir}
                       className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title={firmwareProjectKind === "esp32" ? "Monitor (idf.py monitor)" : "Monitor (emwaver monitor)"}
+                      title="Open device shell (emwaver shell)"
                     >
-                      Monitor
+                      Shell
                     </button>
 
                     {firmwarePanelTab === "monitor" && isFirmwareMonitorRunning ? (
