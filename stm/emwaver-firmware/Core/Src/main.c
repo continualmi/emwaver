@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "emwaver_usb_io.h"
+#include "cc1101.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,7 +41,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define CDC_TIMEOUT 100
-#define EMWAVER_FIRMWARE_WELCOME "Welcome to IR Waver firmware"
+#define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver firmware"
 #define EMWAVER_FIRMWARE_VERSION "1.0.0"
 /* USER CODE END PD */
 
@@ -71,7 +72,7 @@ volatile uint8_t* transmitBuffer = NULL;
 volatile int bufferIndex = 0;
 volatile uint8_t bufferReady = 0;
 
-volatile CDC_Buffer_Type cdc_buf_type = CDC_BUFFER_PACKET;
+volatile EMW_Buffer_Type emw_buf_type = EMW_BUFFER_PACKET;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -236,13 +237,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim == &htim3) {
         switch (EMW_USB_GetBufferType_FS()) {
-            case CDC_BUFFER_CIRCULAR:
+            case EMW_BUFFER_CIRCULAR:
                 ISR_Sampler_writing();
                 break;
-            case CDC_BUFFER_DOUBLE:
+            case EMW_BUFFER_DOUBLE:
                 ISR_Sampler_raw();
                 break;
-            case CDC_BUFFER_PACKET:
+            case EMW_BUFFER_PACKET:
             default:
                 break;
         }
@@ -302,7 +303,7 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
 static void stop_sampling(void)
 {
     HAL_TIM_Base_Stop_IT(&htim3);
-    EMW_USB_SetBufferType_FS(CDC_BUFFER_PACKET);
+    EMW_USB_SetBufferType_FS(EMW_BUFFER_PACKET);
 
     free((void *)bufferA);
     free((void *)bufferB);
@@ -700,6 +701,127 @@ int main(void)
           continue;
       }
 
+      if (cmd.verb && strcmp(cmd.verb, "cc1101") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+
+          if (strcmp(sub, "init") == 0) {
+              // `--cs` is accepted for parity with other platforms, but STM32 uses a fixed CS pin.
+              // (See `CC1101_CS_*` in `cc1101.c`.)
+              cc1101_init();
+              command_send_ok(NULL, 0);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (!cc1101_is_initialized()) {
+              cc1101_init();
+          }
+
+          if (strcmp(sub, "read") == 0) {
+              int reg_i = -1;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              uint8_t out = cc1101_read_reg((uint8_t)reg_i);
+              command_send_ok(&out, 1);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "write") == 0) {
+              int reg_i = -1;
+              int val_i = -1;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              const char *val_str = cli_get_arg_view(&cmd, "val");
+              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255 ||
+                  !cli_parse_int(val_str, &val_i) || val_i < 0 || val_i > 255) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              cc1101_write_reg((uint8_t)reg_i, (uint8_t)val_i);
+              command_send_ok(NULL, 0);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "strobe") == 0) {
+              int cmd_i = -1;
+              const char *cmd_str = cli_get_arg_view(&cmd, "cmd");
+              if (!cli_parse_int(cmd_str, &cmd_i) || cmd_i < 0 || cmd_i > 255) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              uint8_t status = cc1101_strobe((uint8_t)cmd_i);
+              command_send_ok(&status, 1);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "read_burst") == 0) {
+              int reg_i = -1;
+              int len_i = -1;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              const char *len_str = cli_get_arg_view(&cmd, "len");
+              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255 ||
+                  !cli_parse_int(len_str, &len_i) || len_i <= 0) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              size_t len = (size_t)len_i;
+              if (len > 64u) {
+                  len = 64u;
+              }
+
+              uint8_t out[64] = {0};
+              cc1101_read_burst((uint8_t)reg_i, out, len);
+              command_send_ok(out, len);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "write_burst") == 0) {
+              int reg_i = -1;
+              const char *reg_str = cli_get_arg_view(&cmd, "reg");
+              const char *data_str = cli_get_arg_view(&cmd, "data");
+              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255 || !data_str) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint8_t bytes[64] = {0};
+              size_t bytes_len = 0;
+              if (!cli_parse_hex_bytes(data_str, bytes, sizeof(bytes), &bytes_len) || bytes_len == 0) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              (void)cc1101_write_burst((uint8_t)reg_i, bytes, bytes_len);
+              command_send_ok(NULL, 0);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "defaults") == 0) {
+              cc1101_apply_defaults();
+              command_send_ok(NULL, 0);
+              free_bulk_packet();
+              continue;
+          }
+
+          command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
 	      if (cmd.verb && strcmp(cmd.verb, "sample") == 0 && cmd.positional_count > 0) {
 	          const char *sub = cmd.positional[0];
 	          if (strcmp(sub, "start") == 0) {
@@ -740,7 +862,7 @@ int main(void)
               bufferIndex = 0;
               bufferReady = 0;
 
-              EMW_USB_SetBufferType_FS(CDC_BUFFER_DOUBLE);
+              EMW_USB_SetBufferType_FS(EMW_BUFFER_DOUBLE);
               ism_mode = ISM_MODE_RAW_SAMPLING;
               HAL_TIM_Base_Start_IT(&htim3);
               command_send_ok(NULL, 0);
@@ -976,7 +1098,7 @@ int main(void)
               (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
 
               EMW_USB_InitRxBuffer_FS();
-              EMW_USB_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
+              EMW_USB_SetBufferType_FS(EMW_BUFFER_CIRCULAR);
 
               uint32_t start = HAL_GetTick();
               while (EMW_USB_GetRxBufferBytesAvailable_FS() < 250) {
@@ -990,7 +1112,7 @@ int main(void)
               }
 
               HAL_TIM_Base_Stop_IT(&htim3);
-              EMW_USB_SetBufferType_FS(CDC_BUFFER_PACKET);
+              EMW_USB_SetBufferType_FS(EMW_BUFFER_PACKET);
               stopPWM_TIM2(tim_channel);
               EMW_USB_FlushRxBuffer_FS();
               EMW_USB_FreeRxBuffer_FS();

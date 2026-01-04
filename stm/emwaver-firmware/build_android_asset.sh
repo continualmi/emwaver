@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-ELF="$SCRIPT_DIR/Release/emwaver-ir-firmware.elf"
-BIN="$SCRIPT_DIR/Release/emwaver-ir-firmware.bin"
+ELF="$SCRIPT_DIR/Release/emwaver-firmware.elf"
+BIN="$SCRIPT_DIR/Release/emwaver-firmware.bin"
 ANDROID_ASSET_DIR="$REPO_ROOT/android/app/src/main/assets/dfu"
 ANDROID_ASSET="$ANDROID_ASSET_DIR/ir.dfu"
 

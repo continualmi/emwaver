@@ -19,7 +19,12 @@
 
 #include <stdint.h>
 #include "usbd_midi.h"
-#include "usbd_cdc_if.h" // Reuse CDC_Buffer_Type + status types for now.
+
+typedef enum {
+  EMW_BUFFER_PACKET = 0,
+  EMW_BUFFER_CIRCULAR = 1,
+  EMW_BUFFER_DOUBLE = 2,
+} EMW_Buffer_Type;
 
 extern USBD_MIDI_ItfTypeDef USBD_MIDI_Interface_fops_FS;
 
@@ -32,12 +37,11 @@ void MIDI_SendStatusPacket_FS(uint16_t status);
 void MIDI_Print_FS(const char* str);
 uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeout);
 
-void MIDI_SetBufferType_FS(CDC_Buffer_Type buffer_type);
-uint8_t MIDI_GetBufferType_FS(void);
+void MIDI_SetBufferType_FS(EMW_Buffer_Type buffer_type);
+EMW_Buffer_Type MIDI_GetBufferType_FS(void);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* __USBD_MIDI_IF_H__ */
-

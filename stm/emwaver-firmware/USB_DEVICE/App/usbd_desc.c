@@ -25,7 +25,6 @@
 #include "usbd_core.h"
 #include "usbd_desc.h"
 #include "usbd_conf.h"
-#include "emwaver_usb_mode.h"
 
 /* USER CODE BEGIN INCLUDE */
 
@@ -71,15 +70,9 @@
 #define USBD_MANUFACTURER_STRING     "STMicroelectronics"
 #define USBD_PID_FS     22336
 
-#if EMWAVER_USB_MIDI_ENABLED
 #define USBD_PRODUCT_STRING_FS     "EMWaver USB MIDI"
 #define USBD_CONFIGURATION_STRING_FS     "MIDI Config"
 #define USBD_INTERFACE_STRING_FS     "MIDI Interface"
-#else
-#define USBD_PRODUCT_STRING_FS     "STM32 Virtual ComPort"
-#define USBD_CONFIGURATION_STRING_FS     "CDC Config"
-#define USBD_INTERFACE_STRING_FS     "CDC Interface"
-#endif
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
 

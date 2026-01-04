@@ -1,6 +1,6 @@
-# EMWaver STM32 IR Firmware
+# EMWaver STM32 Firmware
 
-This directory contains the STM32F042G6UX IR firmware implementation using STM32CubeIDE.
+This directory contains the STM32F042G6UX EMWaver firmware implementation using STM32CubeIDE.
 
 ## Structure
 
@@ -13,15 +13,15 @@ This directory contains the STM32F042G6UX IR firmware implementation using STM32
   - `STM32F0xx_HAL_Driver/` - STM32 HAL drivers
 - `Middlewares/` - Middleware libraries
   - `ST/STM32_USB_Device_Library/` - USB Device library
-- `USB_DEVICE/` - USB CDC implementation
+- `USB_DEVICE/` - USB MIDI implementation (class-compliant Audio/MIDI)
   - `App/` - USB application code
   - `Target/` - USB target configuration
-- `emwaver-ir-firmware.ioc` - STM32CubeMX project file
+- `emwaver-firmware.ioc` - STM32CubeMX project file
 - `STM32F042G6UX_FLASH.ld` - Linker script
 
 ## Building
 
-Open `emwaver-ir-firmware.ioc` in STM32CubeIDE and build from there.
+Open `emwaver-firmware.ioc` in STM32CubeIDE and build from there.
 
 Requirements:
 - `arm-none-eabi-gcc` toolchain with a working C library/sysroot (headers like `stdint.h`/`stdio.h`)
@@ -30,18 +30,17 @@ Requirements:
 To export a `.bin` and update the Android DFU asset (`android/app/src/main/assets/dfu.dfu`), run:
 
 ```bash
-bash stm/emwaver-ir-firmware/build_android_asset.sh
+bash stm/emwaver-firmware/build_android_asset.sh
 ```
 
 ## Communication
 
-- **Protocol**: USB CDC (USB Serial)
-- **Baud Rate**: 115200
-- **Interface**: Virtual COM Port
+- **Protocol**: USB MIDI (SysEx tunnel)
+- **Transport**: class-compliant USB MIDI (Audio/MIDI Streaming)
 
 ## Features
 
-- USB CDC communication
+- USB MIDI communication (SysEx tunnel for fixed 64-byte packets)
 - GPIO command protocol (`gpio in/out/read/high/low/pull/info`)
 - Sampler stream (`sample start --pin=<encodedPin>`, `sample stop`)
 - Retransmit stream (`transmit start --pin=<encodedPin>`, `transmit stop`)
