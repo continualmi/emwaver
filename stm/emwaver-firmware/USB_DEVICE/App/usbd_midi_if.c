@@ -131,8 +131,10 @@ static void handle_complete_sysex(void)
     return;
   }
 
-  if (cdc_buf_type != CDC_BUFFER_PACKET) {
-    // For now, only packet mode is supported over MIDI.
+  if (cdc_buf_type == CDC_BUFFER_CIRCULAR) {
+    // Circular RX streaming is a CDC-specific path used by retransmission.
+    // MIDI does not implement the circular RX buffer APIs, so do not accept host
+    // commands while the firmware expects circular streaming semantics.
     sysex_reset();
     return;
   }
@@ -380,4 +382,3 @@ uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeo
 
   return (uint8_t)-1;
 }
-
