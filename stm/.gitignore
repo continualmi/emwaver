@@ -2,6 +2,12 @@
 **/Debug/
 **/Release/
 
+# Keep EMWaver's canonical STM32 make build dirs in-repo (used by `emwaver build`).
+!emwaver-firmware/Debug/
+!emwaver-firmware/Debug/**
+!emwaver-firmware/Release/
+!emwaver-firmware/Release/**
+
 # STM32CubeMX-generated vendor middleware (ST SLA0044; regenerate via .ioc)
 emwaver-*-firmware/Middlewares/ST/STM32_USB_Device_Library/
 
