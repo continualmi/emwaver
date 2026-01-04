@@ -937,16 +937,104 @@ async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()
         None => false,
     };
     if midi_connected {
-        // For now, MIDI only supports fixed 64B packets; treat buffer transmission as a stream of packets.
-        let mut offset = 0usize;
-        while offset < data.len() {
-            let end = (offset + PACKET_SIZE).min(data.len());
-            midi_write_packet(state, data[offset..end].to_vec()).await?;
-            offset = end;
-        }
-        return Ok(());
+        return midi_transmit_buffer(state, data).await;
     }
     bail!("not connected");
+}
+
+async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    if data.is_empty() {
+        bail!("buffer is empty");
+    }
+
+    // Swap out the shared RX buffer while transmitting so BS flow-control packets
+    // don't contaminate sampler data stored in the same buffer.
+    let (saved_rx, saved_rx_ts, saved_counter) = {
+        let mut guard = state
+            .buffer
+            .lock()
+            .map_err(|_| anyhow!("buffer lock poisoned"))?;
+        let saved_rx = std::mem::take(&mut guard.rx_bytes);
+        let saved_rx_ts = std::mem::take(&mut guard.rx_ts_ms);
+        let saved_counter = guard.rx_counter;
+        guard.rx_counter = 0;
+        (saved_rx, saved_rx_ts, saved_counter)
+    };
+
+    let profile = tx::UsbTxProfile::default();
+    let packet_size = PACKET_SIZE;
+    let total_bytes = data.len();
+
+    let mut last_status: u16 = 0;
+    let mut last_emitted_status: Option<u16> = None;
+
+    let start = tokio::time::Instant::now();
+    let mut next_send_at_ns: i64 = 0;
+
+    let mut sent_bytes = 0usize;
+    let mut last_emitted_progress_pct: i32 = -1;
+
+    while sent_bytes < total_bytes {
+        // Drain BS flow-control packets (if any).
+        let mut saw_bs = false;
+        if let Ok(mut guard) = state.buffer.lock() {
+            loop {
+                let pkt = buffer::next_rx_packet(&mut *guard);
+                let Some(pkt) = pkt else { break };
+                if let Some(status) = status::parse_bs(&pkt.data) {
+                    last_status = status;
+                    saw_bs = true;
+                }
+            }
+        }
+
+        if saw_bs && last_emitted_status != Some(last_status) {
+            last_emitted_status = Some(last_status);
+            let _ = emit_event(state, "bs", json!({ "value": last_status }));
+        }
+
+        let end = (sent_bytes + packet_size).min(total_bytes);
+        let chunk = &data[sent_bytes..end];
+        midi_write_packet(state, chunk.to_vec()).await?;
+        sent_bytes = end;
+
+        next_send_at_ns = next_send_at_ns.saturating_add(profile.period_ns);
+        next_send_at_ns = tx::usb_adjust_deadline_ns(profile, next_send_at_ns, last_status as i32);
+
+        let now_ns = start.elapsed().as_nanos() as i64;
+        let sleep_ns = next_send_at_ns.saturating_sub(now_ns);
+        if sleep_ns > 0 {
+            tokio::time::sleep(Duration::from_nanos(sleep_ns as u64)).await;
+        }
+
+        let pct = ((sent_bytes as f64 / total_bytes as f64) * 100.0).floor() as i32;
+        if pct != last_emitted_progress_pct && (pct % 5 == 0 || pct == 100) {
+            last_emitted_progress_pct = pct;
+            let _ = emit_event(
+                state,
+                "tx_progress",
+                json!({
+                    "sent_bytes": sent_bytes,
+                    "total_bytes": total_bytes,
+                    "pct": pct,
+                    "chunk_len": chunk.len(),
+                    "packet_size": packet_size,
+                    "period_ns": profile.period_ns,
+                    "sleep_ns": sleep_ns.max(0),
+                    "bs": last_status
+                }),
+            );
+        }
+    }
+
+    // Restore sampler RX buffer (discarding BS packets accumulated during transmit).
+    if let Ok(mut guard) = state.buffer.lock() {
+        guard.rx_bytes = saved_rx;
+        guard.rx_ts_ms = saved_rx_ts;
+        guard.rx_counter = saved_counter;
+    }
+
+    Ok(())
 }
 
 async fn ble_ota_write_control(state: &BridgeState, data: Vec<u8>) -> Result<()> {
@@ -1981,6 +2069,7 @@ async fn usb_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
     };
 
     let buffer_clone = Arc::clone(&state.buffer);
+    let event_tx = state.event_tx.clone();
     let write_result = tokio::task::spawn_blocking(move || {
         let profile = tx::UsbTxProfile::default();
         let packet_size: usize = profile.packet_size;
@@ -1988,18 +2077,35 @@ async fn usb_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
         std::thread::sleep(Duration::from_millis(20));
 
         let mut last_status: u16 = 0;
+        let mut last_emitted_status: Option<u16> = None;
         let start = std::time::Instant::now();
         let mut next_send_at_ns: i64 = 0;
+        let total_bytes = data.len();
+        let mut sent_bytes = 0usize;
+        let mut last_emitted_progress_pct: i32 = -1;
 
         for chunk in data.chunks(packet_size) {
+            let mut saw_bs = false;
             if let Ok(mut guard) = buffer_clone.lock() {
                 loop {
                     let pkt = buffer::next_rx_packet(&mut *guard);
                     let Some(pkt) = pkt else { break };
                     if let Some(status) = status::parse_bs(&pkt.data) {
                         last_status = status;
+                        saw_bs = true;
                     }
                 }
+            }
+
+            if saw_bs && last_emitted_status != Some(last_status) {
+                last_emitted_status = Some(last_status);
+                let mut buf = serde_json::to_vec(&BridgeEvent {
+                    event: "bs",
+                    data: json!({ "value": last_status }),
+                })
+                .context("failed to encode bs event")?;
+                buf.push(b'\n');
+                let _ = event_tx.send(buf);
             }
 
             write_port
@@ -2019,6 +2125,28 @@ async fn usb_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
             let sleep_ns = next_send_at_ns.saturating_sub(now_ns);
             if sleep_ns > 0 {
                 std::thread::sleep(Duration::from_nanos(sleep_ns as u64));
+            }
+
+            sent_bytes = sent_bytes.saturating_add(chunk.len());
+            let pct = ((sent_bytes as f64 / total_bytes as f64) * 100.0).floor() as i32;
+            if pct != last_emitted_progress_pct && (pct % 5 == 0 || pct == 100) {
+                last_emitted_progress_pct = pct;
+                let mut buf = serde_json::to_vec(&BridgeEvent {
+                    event: "tx_progress",
+                    data: json!({
+                        "sent_bytes": sent_bytes,
+                        "total_bytes": total_bytes,
+                        "pct": pct,
+                        "chunk_len": chunk.len(),
+                        "packet_size": packet_size,
+                        "period_ns": profile.period_ns,
+                        "sleep_ns": sleep_ns.max(0),
+                        "bs": last_status
+                    }),
+                })
+                .context("failed to encode tx_progress event")?;
+                buf.push(b'\n');
+                let _ = event_tx.send(buf);
             }
         }
 
