@@ -19,7 +19,7 @@ import SwiftUI
 
 @main
 struct EMWaverApp: App {
-    @StateObject private var bleManager = BLEManager()
+    @StateObject private var bleManager = USBManager()
     @StateObject private var authManager = AuthenticationManager()
     var body: some Scene {
         WindowGroup {
