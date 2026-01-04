@@ -1007,6 +1007,7 @@ public class SamplerFragment extends Fragment {
             
             Toast.makeText(getContext(), "Retransmitting " + bufferLength + " samples", Toast.LENGTH_SHORT).show();
 
+        }
     }
 
     private int parsePwmIntOrDefault(String raw, int defaultValue) {
