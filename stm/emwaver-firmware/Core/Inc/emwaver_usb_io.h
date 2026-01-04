@@ -1,8 +1,5 @@
 #pragma once
 
-#include "emwaver_usb_mode.h"
-
-#if EMWAVER_USB_MIDI_ENABLED
 #include "usbd_midi_if.h"
 
 #define EMW_USB_SendResponsePkt_FS MIDI_SendResponsePkt_FS
@@ -15,20 +12,3 @@
 #define EMW_USB_Print_FS MIDI_Print_FS
 #define EMW_USB_SetBufferType_FS MIDI_SetBufferType_FS
 #define EMW_USB_GetBufferType_FS MIDI_GetBufferType_FS
-
-#else
-#include "usbd_cdc_if.h"
-
-#define EMW_USB_SendResponsePkt_FS CDC_SendResponsePkt_FS
-#define EMW_USB_ReadRxBuffer_FS CDC_ReadRxBuffer_FS
-#define EMW_USB_GetRxBufferBytesAvailable_FS CDC_GetRxBufferBytesAvailable_FS
-#define EMW_USB_FlushRxBuffer_FS CDC_FlushRxBuffer_FS
-#define EMW_USB_InitRxBuffer_FS CDC_InitRxBuffer_FS
-#define EMW_USB_FreeRxBuffer_FS CDC_FreeRxBuffer_FS
-#define EMW_USB_SendStatusPacket_FS CDC_SendStatusPacket_FS
-#define EMW_USB_Print_FS CDC_Print_FS
-#define EMW_USB_SetBufferType_FS CDC_SetBufferType_FS
-#define EMW_USB_GetBufferType_FS CDC_GetBufferType_FS
-
-#endif
-

@@ -26,15 +26,8 @@
 #include "usb_device.h"
 #include "usbd_core.h"
 #include "usbd_desc.h"
-#include "emwaver_usb_mode.h"
-
-#if EMWAVER_USB_MIDI_ENABLED
 #include "usbd_midi.h"
 #include "usbd_midi_if.h"
-#else
-#include "usbd_cdc.h"
-#include "usbd_cdc_if.h"
-#endif
 
 /* USER CODE BEGIN Includes */
 
@@ -83,7 +76,6 @@ void MX_USB_DEVICE_Init(void)
     Error_Handler();
   }
 
-#if EMWAVER_USB_MIDI_ENABLED
   if (USBD_RegisterClass(&hUsbDeviceFS, &USBD_MIDI) != USBD_OK)
   {
     Error_Handler();
@@ -92,16 +84,6 @@ void MX_USB_DEVICE_Init(void)
   {
     Error_Handler();
   }
-#else
-  if (USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC) != USBD_OK)
-  {
-    Error_Handler();
-  }
-  if (USBD_CDC_RegisterInterface(&hUsbDeviceFS, &USBD_Interface_fops_FS) != USBD_OK)
-  {
-    Error_Handler();
-  }
-#endif
   if (USBD_Start(&hUsbDeviceFS) != USBD_OK)
   {
     Error_Handler();

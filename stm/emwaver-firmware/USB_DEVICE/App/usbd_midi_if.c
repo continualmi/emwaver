@@ -28,7 +28,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 
 extern uint8_t * bulk_packet;
 extern size_t bulk_packet_len;
-extern volatile CDC_Buffer_Type cdc_buf_type;
+extern volatile EMW_Buffer_Type emw_buf_type;
 
 static uint8_t midi_rx_buf[64];
 static uint8_t midi_tx_buf[256];
@@ -136,8 +136,8 @@ static void handle_complete_sysex(void)
     return;
   }
 
-  if (cdc_buf_type == CDC_BUFFER_CIRCULAR) {
-    // Mirror the CDC circular RX buffer behavior for retransmission flow-control.
+  if (emw_buf_type == EMW_BUFFER_CIRCULAR) {
+    // Mirror the previous circular RX buffer behavior for retransmission flow-control.
     if (rxBuffer == NULL) {
       sysex_reset();
       return;
@@ -291,14 +291,14 @@ static uint16_t pack_sysex_to_usb_events(const uint8_t *sysex, uint16_t sysex_le
   return out_pos;
 }
 
-void MIDI_SetBufferType_FS(CDC_Buffer_Type buffer_type)
+void MIDI_SetBufferType_FS(EMW_Buffer_Type buffer_type)
 {
-  cdc_buf_type = buffer_type;
+  emw_buf_type = buffer_type;
 }
 
-uint8_t MIDI_GetBufferType_FS(void)
+EMW_Buffer_Type MIDI_GetBufferType_FS(void)
 {
-  return (uint8_t)cdc_buf_type;
+  return emw_buf_type;
 }
 
 uint16_t MIDI_GetRxBufferBytesAvailable_FS(void)
