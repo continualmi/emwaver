@@ -107,7 +107,7 @@ See the `.sha256` files for verification.
 
 ### Changes
 - Initial release
-- BLE device discovery and connection
+- USB MIDI device discovery and connection (daemon-backed)
 - Interactive shell for device control
 ```
 

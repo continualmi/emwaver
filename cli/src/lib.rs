@@ -16,11 +16,9 @@
  */
 
 mod cli;
-mod ble_cli;
 mod bridge;
 mod midi_sysex;
 mod daemon;
-pub mod ble_ota;
 pub mod dfu;
 pub mod firmware;
 pub mod git;
@@ -33,18 +31,11 @@ use anyhow::Result;
 use clap::Parser;
 
 pub use cli::CodegenMode;
-pub use cli::{Component, Stm32Firmware, Target};
-pub use cli::OtaTransport;
+pub use cli::{Component, Target};
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
     match cli.command {
-        Some(cli::Command::List {
-            timeout_ms,
-            all,
-            name,
-            json,
-        }) => ble_cli::list_devices(timeout_ms, all, name, json),
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
         Some(cli::Command::Cmd {
             socket,
@@ -59,9 +50,8 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Status { socket, json }) => daemon::daemon_status(socket, json),
         Some(cli::Command::Connect {
             socket,
-            address,
-            name,
-        }) => daemon::daemon_connect(socket, address, name),
+            port,
+        }) => daemon::daemon_connect(socket, port),
         Some(cli::Command::Disconnect { socket }) => daemon::daemon_disconnect(socket),
         Some(cli::Command::Connected { socket, json }) => daemon::daemon_connected(socket, json),
         Some(cli::Command::Midi { command }) => match command {
@@ -72,33 +62,6 @@ pub fn run() -> Result<()> {
             cli::MidiCommand::Disconnect { socket } => daemon::daemon_midi_disconnect(socket),
             cli::MidiCommand::Status { socket, json } => daemon::daemon_midi_status(socket, json),
         },
-        Some(cli::Command::Ota {
-            file,
-            stock,
-            device_name,
-            transport,
-            chunk_size,
-            verbose,
-        }) => {
-            match transport {
-                cli::OtaTransport::Ble => {
-                    if stock {
-                        ble_ota::flash_stock(device_name, chunk_size, verbose)
-                    } else {
-                        let file = file.expect("clap should enforce file when --stock is not present");
-                        ble_ota::flash(file, device_name, chunk_size, verbose)
-                    }
-                }
-                cli::OtaTransport::Wifi => {
-                    if stock {
-                        ble_ota::flash_stock_wifi(device_name, verbose)
-                    } else {
-                        let file = file.expect("clap should enforce file when --stock is not present");
-                        ble_ota::flash_wifi(file, device_name, verbose)
-                    }
-                }
-            }
-        }
         Some(cli::Command::Build {
             project,
             codegen,
@@ -106,12 +69,10 @@ pub fn run() -> Result<()> {
         }) => firmware::build(project, codegen, verbose),
         Some(cli::Command::Flash {
             project,
-            port,
             codegen,
             dfu_alt,
             verbose,
-        }) => firmware::flash(project, port, codegen, dfu_alt, verbose),
-        Some(cli::Command::Monitor { project, port }) => firmware::monitor(project, port),
+        }) => firmware::flash(project, codegen, dfu_alt, verbose),
         Some(cli::Command::Dfu {
             file,
             vid,
@@ -123,11 +84,10 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Init {
             target,
             components,
-            stm32_firmware,
             path,
         }) => {
             let destination = path.unwrap_or(std::env::current_dir()?);
-            init::run_init(target, components, stm32_firmware, destination)
+            init::run_init(target, components, destination)
         }
         Some(cli::Command::Vibe { command }) => match command {
             cli::VibeCommand::Init {
@@ -144,18 +104,7 @@ pub fn run() -> Result<()> {
             cli::DaemonCommand::Start { socket } => daemon::daemon_start(socket),
             cli::DaemonCommand::Stop { socket } => daemon::daemon_stop(socket),
             cli::DaemonCommand::Status { socket, json } => daemon::daemon_status(socket, json),
-            cli::DaemonCommand::List {
-                socket,
-                timeout_ms,
-                all,
-                name,
-                json,
-            } => daemon::daemon_list(socket, timeout_ms, all, name, json),
-            cli::DaemonCommand::Connect {
-                socket,
-                address,
-                name,
-            } => daemon::daemon_connect(socket, address, name),
+            cli::DaemonCommand::Connect { socket, port } => daemon::daemon_connect(socket, port),
             cli::DaemonCommand::Disconnect { socket } => daemon::daemon_disconnect(socket),
             cli::DaemonCommand::Connected { socket, json } => daemon::daemon_connected(socket, json),
             cli::DaemonCommand::Cmd {

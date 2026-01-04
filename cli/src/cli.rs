@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -35,31 +35,8 @@ pub enum CodegenMode {
     Never,
 }
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
-pub enum OtaTransport {
-    /// OTA over BLE (works anywhere, slower).
-    Ble,
-    /// OTA over Wi‑Fi SoftAP (faster; requires connecting to EMWaver-OTA Wi‑Fi).
-    Wifi,
-}
-
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// List nearby EMWaver devices (BLE).
-    List {
-        /// Scan timeout in milliseconds.
-        #[arg(long, default_value_t = 6000)]
-        timeout_ms: u64,
-        /// Show all BLE devices (disables EMWaver filtering).
-        #[arg(long)]
-        all: bool,
-        /// Device name to filter for (defaults to EMWaver).
-        #[arg(long, default_value = "EMWaver")]
-        name: String,
-        /// Output as JSON (one array on stdout).
-        #[arg(long)]
-        json: bool,
-    },
     /// Open an interactive shell to a nearby EMWaver device.
     Shell {
         /// Show raw hex payloads alongside ASCII output.
@@ -116,19 +93,16 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Connect the daemon to a device.
+    /// Connect the daemon to a device (USB MIDI).
     ///
     /// This is a shorthand for `emwaver daemon connect ...`.
     Connect {
         /// Override the daemon socket path.
         #[arg(long)]
         socket: Option<PathBuf>,
-        /// BLE address to connect to (if omitted, connects to the first matching device).
+        /// MIDI port name to connect to (if omitted, connects to the first available port).
         #[arg(long)]
-        address: Option<String>,
-        /// Device name to filter for when scanning (defaults to EMWaver).
-        #[arg(long, default_value = "EMWaver")]
-        name: String,
+        port: Option<String>,
     },
     /// Disconnect the daemon from the active device.
     ///
@@ -154,32 +128,7 @@ pub enum Command {
         #[command(subcommand)]
         command: MidiCommand,
     },
-    /// Flash ESP32 firmware over BLE OTA.
-    #[command(group(
-        ArgGroup::new("source")
-            .required(true)
-            .args(["file", "stock"]),
-    ))]
-    Ota {
-        /// Firmware image path (raw `.bin` bytes).
-        file: Option<PathBuf>,
-        /// Flash the bundled stock ESP32 firmware from this repo.
-        #[arg(long)]
-        stock: bool,
-        /// BLE device name to scan for (defaults to EMWaver).
-        #[arg(long, default_value = "EMWaver")]
-        device_name: String,
-        /// OTA transport to use (defaults to BLE).
-        #[arg(long, value_enum, default_value_t = OtaTransport::Ble)]
-        transport: OtaTransport,
-        /// Chunk size in bytes (defaults to 200).
-        #[arg(long, default_value_t = 200)]
-        chunk_size: usize,
-        /// Print extra status notifications.
-        #[arg(long)]
-        verbose: bool,
-    },
-    /// Build the firmware in the current project (auto-detects ESP-IDF or STM32 CubeMX/CubeIDE).
+    /// Build the firmware in the current project (STM32 CubeMX/CubeIDE).
     Build {
         /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
@@ -191,14 +140,11 @@ pub enum Command {
         #[arg(long)]
         verbose: bool,
     },
-    /// Flash the firmware in the current project (ESP-IDF serial flash, or STM32 DFU over USB).
+    /// Flash the firmware in the current project (STM32 DFU over USB).
     Flash {
         /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
         project: Option<PathBuf>,
-        /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
-        #[arg(long)]
-        port: Option<String>,
         /// STM32CubeMX code generation mode (STM32 projects only).
         #[arg(long, value_enum, default_value_t = CodegenMode::Auto)]
         codegen: CodegenMode,
@@ -208,15 +154,6 @@ pub enum Command {
         /// Print additional flash/build details (also enables DFU discovery logging on STM32).
         #[arg(long)]
         verbose: bool,
-    },
-    /// Monitor the ESP-IDF device in the current project (runs `idf.py monitor`).
-    Monitor {
-        /// ESP-IDF project path (defaults to auto-detect).
-        #[arg(long)]
-        project: Option<PathBuf>,
-        /// Serial port (passed as `-p <port>`). If omitted, ESP-IDF decides.
-        #[arg(long)]
-        port: Option<String>,
     },
     /// Flash a firmware image to an STM32 DFU device (standalone).
     Dfu {
@@ -241,14 +178,11 @@ pub enum Command {
     /// Initialize a new firmware project.
     Init {
         /// Target platform template to use.
-        #[arg(long, value_enum, default_value_t = Target::Esp32s3)]
+        #[arg(long, value_enum, default_value_t = Target::Stm32f042)]
         target: Target,
         /// Optional components to include (comma-separated).
         #[arg(long, value_enum, value_delimiter = ',')]
         components: Vec<Component>,
-        /// STM32 starting firmware template to use (defaults to gpio).
-        #[arg(long, value_enum)]
-        stm32_firmware: Option<Stm32Firmware>,
         /// Destination directory (defaults to current directory).
         #[arg(long)]
         path: Option<PathBuf>,
@@ -358,35 +292,14 @@ pub enum DaemonCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Ask the daemon to scan for nearby devices.
-    List {
-        /// Override the daemon socket path.
-        #[arg(long)]
-        socket: Option<PathBuf>,
-        /// Scan timeout in milliseconds.
-        #[arg(long, default_value_t = 6000)]
-        timeout_ms: u64,
-        /// Show all BLE devices (disables EMWaver filtering).
-        #[arg(long)]
-        all: bool,
-        /// Device name to filter for (defaults to EMWaver).
-        #[arg(long, default_value = "EMWaver")]
-        name: String,
-        /// Output as JSON (one array on stdout).
-        #[arg(long)]
-        json: bool,
-    },
-    /// Ask the daemon to connect to a device.
+    /// Ask the daemon to connect to a USB MIDI port.
     Connect {
         /// Override the daemon socket path.
         #[arg(long)]
         socket: Option<PathBuf>,
-        /// BLE address to connect to (if omitted, connects to the first matching device).
+        /// MIDI port name to connect to (if omitted, connects to the first available port).
         #[arg(long)]
-        address: Option<String>,
-        /// Device name to filter for when scanning (defaults to EMWaver).
-        #[arg(long, default_value = "EMWaver")]
-        name: String,
+        port: Option<String>,
     },
     /// Ask the daemon to disconnect from the active device.
     Disconnect {
@@ -513,26 +426,11 @@ pub enum RetransmitCommand {
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum Target {
-    Esp32s3,
     Stm32f042,
-}
-
-#[derive(Copy, Clone, Debug, ValueEnum)]
-pub enum Stm32Firmware {
-    Gpio,
-    Ir,
-    Ism,
-    Rfid,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq, Hash)]
 pub enum Component {
-    /// Enables BLE transport (required for EMWaver app interaction).
-    Ble,
-    /// Enables the ASCII command registry (depends on BLE).
-    CommandRegistry,
-    /// Enables OTA services (BLE + Wi‑Fi) in the ESP32 template.
-    Ota,
     Gpio,
     Sampler,
     Cc1101,
