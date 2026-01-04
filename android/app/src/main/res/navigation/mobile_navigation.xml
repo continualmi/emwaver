@@ -60,10 +60,4 @@
         android:label="Packet Mode"
         tools:layout="@layout/fragment_packet_mode" />
 
-    <fragment
-        android:id="@+id/navigation_template"
-        android:name="com.emwaver.emwaverandroidapp.ui.template.TemplateFragment"
-        android:label="Template"
-        tools:layout="@layout/fragment_template" />
-
 </navigation>
