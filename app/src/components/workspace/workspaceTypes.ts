@@ -17,16 +17,6 @@
 
 export type ThemeMode = "dark" | "light";
 
-export type WorkspaceVariant = "ide" | "wavelets";
-
-export type BottomPanelTab = "terminal" | "firmware";
-
-export type FirmwareProgressPayload = {
-  message: string;
-  stream?: "info" | "stdout" | "stderr" | string;
-  timestamp_ms?: number;
-};
-
 export type TerminalSession = {
   id: string;
   title: string;
@@ -38,8 +28,6 @@ export type DirectoryChildEntry = {
   path: string;
   kind: "file" | "directory";
 };
-
-export type FirmwareProjectKind = "stm32" | "unknown";
 
 export type OpenFile = {
   path: string;
