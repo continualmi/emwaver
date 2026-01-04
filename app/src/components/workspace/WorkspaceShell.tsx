@@ -24,7 +24,6 @@ import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
-import { createBLEServiceWrapper } from "../../utils/BLEServiceWrapper";
 import { useDevice } from "../../utils/DeviceContext";
 import { WaveletEngine, type WaveletTree } from "../../utils/WaveletEngine";
 import { readIdeTabState, writeIdeTabState } from "../ideTabState";
@@ -2107,7 +2106,6 @@ export default function WorkspaceShell({
       let engine = waveletEngineByPathRef.current.get(normalizedPath);
       if (!engine) {
         engine = new WaveletEngine();
-        const bleService = createBLEServiceWrapper();
         const bootstrap = waveletBootstrapRef.current ?? "";
         engine.setBootstrapSource(bootstrap);
         engine.setup(
@@ -2135,7 +2133,6 @@ export default function WorkspaceShell({
             alert(`${title}\n\n${message}`);
           },
           {
-            BLEService: bleService,
             DeviceConnection: waveletDeviceConnection,
             Utils: waveletUtilsBinding,
             createByteArray: waveletCreateByteArray,

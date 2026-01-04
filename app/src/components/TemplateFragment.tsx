@@ -69,7 +69,7 @@ export default function TemplateFragment() {
 
   const runExample = useCallback(async () => {
     if (!status.connected) {
-      setResultText("Not connected. Connect via the EMWaver page (USB/BLE) first, then come back.");
+      setResultText("Not connected. Connect via the EMWaver page (USB/MIDI) first, then come back.");
       return;
     }
 
@@ -117,7 +117,7 @@ export default function TemplateFragment() {
             <div className="text-xs font-semibold text-slate-300">Connection</div>
             <div className="mt-1 text-xs text-slate-400">{connectionLabel}</div>
             <div className="mt-2 text-xs text-slate-500">
-              Connect/disconnect in the EMWaver page (USB/BLE). This Template view only demonstrates simple calls once connected.
+              Connect/disconnect in the EMWaver page (USB/MIDI). This Template view only demonstrates simple calls once connected.
             </div>
           </div>
 

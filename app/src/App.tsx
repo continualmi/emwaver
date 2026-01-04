@@ -26,7 +26,6 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
-import EMWaverFragment from "./components/EMWaverFragment";
 import RfidFragment from "./components/RfidFragment";
 import PacketModeFragment from "./components/PacketModeFragment";
 import SettingsFragment from "./components/SettingsFragment";

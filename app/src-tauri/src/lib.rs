@@ -194,23 +194,15 @@ struct BufferPacket {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BLEStatus {
+pub struct MidiStatus {
     pub connected: bool,
-    pub scanning: bool,
     pub device_name: Option<String>,
-    pub device_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct USBStatus {
     pub connected: bool,
     pub device_path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MidiStatus {
-    pub connected: bool,
-    pub device_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -965,42 +957,9 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-// BLE Commands
+// Device Commands (transport-agnostic once connected)
 #[tauri::command]
-async fn ble_initialize(state: State<'_, DaemonState>) -> Result<(), String> {
-    state.ensure_running()?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn ble_start_scan(state: State<'_, DaemonState>) -> Result<(), String> {
-    // In the daemon world "scan" is request-based; mimic prior UX by connecting.
-    let _ = state
-        .rpc(
-            "connect",
-            serde_json::json!({ "address": null, "name": "EMWaver" }),
-            Duration::from_secs(15),
-        )
-        .await?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn ble_stop_scan(_: State<'_, DaemonState>) -> Result<(), String> {
-    // No-op: daemon does not keep a long-running scan loop.
-    Ok(())
-}
-
-#[tauri::command]
-async fn ble_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
-    state
-        .rpc("disconnect", serde_json::json!({}), Duration::from_secs(5))
-        .await?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn ble_send_packet(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+async fn device_write(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
     state
         .rpc(
             "write",
@@ -1012,7 +971,7 @@ async fn ble_send_packet(state: State<'_, DaemonState>, data: Vec<u8>) -> Result
 }
 
 #[tauri::command]
-async fn ble_send_command(
+async fn device_send_command(
     state: State<'_, DaemonState>,
     data: Vec<u8>,
     timeout_ms: u64,
@@ -1034,35 +993,7 @@ async fn ble_send_command(
 }
 
 #[tauri::command]
-async fn ble_get_status(state: State<'_, DaemonState>) -> Result<BLEStatus, String> {
-    let value = state
-        .rpc("list_connected", serde_json::json!({}), Duration::from_secs(3))
-        .await?;
-    let devices = value.get("devices").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    for dev in devices {
-        let transport = dev.get("transport").and_then(|v| v.as_str()).unwrap_or("");
-        if transport == "ble" {
-            return Ok(BLEStatus {
-                connected: true,
-                scanning: false,
-                device_name: dev.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                device_address: dev
-                    .get("address")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-            });
-        }
-    }
-    Ok(BLEStatus {
-        connected: false,
-        scanning: false,
-        device_name: None,
-        device_address: None,
-    })
-}
-
-#[tauri::command]
-async fn ble_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+async fn device_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
     if data.is_empty() {
         return Err("Buffer is empty".to_string());
     }
@@ -1106,7 +1037,11 @@ async fn usb_list_ports() -> Result<Vec<String>, String> {
     Ok(value
         .get("ports")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<String>>())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect::<Vec<String>>()
+        })
         .unwrap_or_default())
 }
 
@@ -1128,27 +1063,6 @@ async fn usb_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
         .rpc("usb_disconnect", serde_json::json!({}), Duration::from_secs(5))
         .await?;
     Ok(())
-}
-
-#[tauri::command]
-async fn usb_send_packet(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
-    // Transport is selected by the daemon's active connection.
-    ble_send_packet(state, data).await
-}
-
-#[tauri::command]
-async fn usb_send_command(
-    state: State<'_, DaemonState>,
-    data: Vec<u8>,
-    timeout_ms: u64,
-    packets: u32,
-) -> Result<Vec<u8>, String> {
-    ble_send_command(state, data, timeout_ms, packets).await
-}
-
-#[tauri::command]
-async fn usb_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
-    ble_transmit_buffer(state, data).await
 }
 
 #[tauri::command]
@@ -2066,26 +1980,12 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_stop,
-            ble_initialize,
-            ble_start_scan,
-            ble_stop_scan,
-            ble_disconnect,
-            ble_send_packet,
-            ble_send_command,
-            ble_get_status,
-            ble_transmit_buffer,
-            ble_ota_flash_file,
-            ble_ota_flash_stock,
-            ota_wifi_start,
-            ota_wifi_stop,
-            ota_wifi_flash_file,
-            ota_wifi_flash_stock,
+            device_write,
+            device_send_command,
+            device_transmit_buffer,
 	            usb_list_ports,
 	            usb_connect,
 	            usb_disconnect,
-			            usb_send_packet,
-	                    usb_send_command,
-	                    usb_transmit_buffer,
 	                    usb_get_status,
                         midi_list_ports,
                         midi_connect,
