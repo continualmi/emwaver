@@ -224,6 +224,42 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     refreshMidiPorts({ silent: true });
   }, [refreshMidiPorts, refreshPorts]);
 
+  // Hot-plug support: keep port pickers fresh while on Home and disconnected.
+  useEffect(() => {
+    if (!isActive) return;
+    if (status.connected) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      // Keep these silent to avoid user-facing error spam (e.g., transient CoreMIDI init).
+      await refreshPorts({ silent: true });
+      await refreshMidiPorts({ silent: true });
+    };
+
+    void tick();
+    const interval = window.setInterval(() => {
+      void tick();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isActive, refreshMidiPorts, refreshPorts, status.connected]);
+
+  // When the user switches transport, refresh the relevant port list immediately.
+  useEffect(() => {
+    if (!isActive) return;
+    if (status.connected) return;
+    if (selectedTransport === "USB") {
+      void refreshPorts({ silent: true });
+    } else {
+      void refreshMidiPorts({ silent: true });
+    }
+  }, [isActive, refreshMidiPorts, refreshPorts, selectedTransport, status.connected]);
+
   // Auto-connect when Home is active: prefer USB if available, otherwise MIDI.
   useEffect(() => {
     if (!isActive) return;
