@@ -627,16 +627,388 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM3_Init();
   MX_SPI1_Init();
-  /* USER CODE BEGIN 2 */
+	  /* USER CODE BEGIN 2 */
+	  /* USER CODE END 2 */
+
+	/* USER CODE BEGIN 1 */
+	/* USER CODE END 1 */
+/* USER CODE BEGIN 2 */
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
+  while (1) {
+      if (ism_mode == ISM_MODE_RAW_SAMPLING) {
+          if (bufferReady == 1) {
+              while (CDC_Transmit_FS((uint8_t *)transmitBuffer, 64) == USBD_BUSY) {
+              }
+              bufferReady = 0;
+          }
 
-    /* USER CODE BEGIN 3 */
+          if (bulk_packet != NULL) {
+              // `sample stop`
+              if (bulk_packet_len >= 11 && memcmp((const void *)bulk_packet, "sample stop", 11) == 0) {
+                  stop_sampling();
+                  command_send_ok(NULL, 0);
+              }
+              free_bulk_packet();
+          }
+          continue;
+      }
+
+      if (bulk_packet == NULL) {
+          continue;
+      }
+
+      if (bulk_packet_len < 1) {
+          command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
+      static char scratch_line[CLI_COMMAND_BUFFER + 1];
+      size_t line_len = bulk_packet_len;
+      if (line_len > CLI_COMMAND_BUFFER) {
+          line_len = CLI_COMMAND_BUFFER;
+      }
+      size_t effective = 0;
+      for (size_t i = 0; i < line_len; i++) {
+          if (bulk_packet[i] == '\0') {
+              break;
+          }
+          scratch_line[i] = (char)bulk_packet[i];
+          effective++;
+      }
+      scratch_line[effective] = '\0';
+      // Trim trailing whitespace/newlines.
+      while (effective > 0 && is_cli_space(scratch_line[effective - 1])) {
+          scratch_line[effective - 1] = '\0';
+          effective--;
+      }
+
+      cli_command_view_t cmd;
+      if (!parse_cli_command_inplace(scratch_line, &cmd)) {
+          command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
+          static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION;
+          command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
+          free_bulk_packet();
+          continue;
+      }
+
+	      if (cmd.verb && strcmp(cmd.verb, "sample") == 0 && cmd.positional_count > 0) {
+	          const char *sub = cmd.positional[0];
+	          if (strcmp(sub, "start") == 0) {
+              int pin_enc = -1;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              if (!cli_parse_int(pin_str, &pin_enc)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              GPIO_TypeDef *port = NULL;
+              uint16_t pin_mask = 0;
+              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint32_t pull = (port == GPIOA && pin_mask == GPIO_PIN_1) ? GPIO_NOPULL : GPIO_PULLDOWN;
+              configurePin(port, pin_mask, GPIO_MODE_INPUT, pull);
+              samplerPort = port;
+              samplerPin = pin_mask;
+
+              bufferA = (uint8_t *)malloc(64);
+              bufferB = (uint8_t *)malloc(64);
+              if (bufferA == NULL || bufferB == NULL) {
+                  command_send_err(NULL);
+                  free((void *)bufferA);
+                  free((void *)bufferB);
+                  bufferA = NULL;
+                  bufferB = NULL;
+                  free_bulk_packet();
+                  continue;
+              }
+              currentBuffer = bufferA;
+              transmitBuffer = NULL;
+              bufferIndex = 0;
+              bufferReady = 0;
+
+              CDC_SetBufferType_FS(CDC_BUFFER_DOUBLE);
+              ism_mode = ISM_MODE_RAW_SAMPLING;
+              HAL_TIM_Base_Start_IT(&htim3);
+              command_send_ok(NULL, 0);
+          } else if (strcmp(sub, "stop") == 0) {
+              command_send_ok(NULL, 0);
+          } else {
+              command_send_err(NULL);
+          }
+
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "gpio") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+          if (strcmp(sub, "in") == 0 || strcmp(sub, "out") == 0 ||
+              strcmp(sub, "read") == 0 || strcmp(sub, "high") == 0 ||
+              strcmp(sub, "low") == 0 || strcmp(sub, "pull") == 0 ||
+              strcmp(sub, "info") == 0) {
+              int pin_enc = -1;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              if (!cli_parse_int(pin_str, &pin_enc)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              GPIO_TypeDef *port = NULL;
+              uint16_t pin_mask = 0;
+              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint8_t pin_index = 0;
+              if (!pin_mask_to_index(pin_mask, &pin_index)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              disable_tim2_output_if_needed(port, pin_index);
+
+              if (strcmp(sub, "in") == 0) {
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, GPIO_NOPULL);
+                  command_send_ok(NULL, 0);
+              } else if (strcmp(sub, "out") == 0) {
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+                  command_send_ok(NULL, 0);
+              } else if (strcmp(sub, "pull") == 0) {
+                  int pull_mode = 0;
+                  const char *mode_str = cli_get_arg_view(&cmd, "mode");
+                  if (!cli_parse_int(mode_str, &pull_mode)) {
+                      command_send_err(NULL);
+                      free_bulk_packet();
+                      continue;
+                  }
+                  uint32_t pull = GPIO_NOPULL;
+                  if (pull_mode == 1) {
+                      pull = GPIO_PULLUP;
+                  } else if (pull_mode == 2) {
+                      pull = GPIO_PULLDOWN;
+                  } else if (pull_mode != 0) {
+                      command_send_err(NULL);
+                      free_bulk_packet();
+                      continue;
+                  }
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, pull);
+                  command_send_ok(NULL, 0);
+              } else if (strcmp(sub, "read") == 0) {
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, GPIO_NOPULL);
+                  uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
+                  command_send_ok(&out, 1);
+              } else if (strcmp(sub, "high") == 0 || strcmp(sub, "low") == 0) {
+                  bool value = (strcmp(sub, "high") == 0);
+                  gpio_write_latch(port, pin_mask, value);
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+                  HAL_GPIO_WritePin(port, pin_mask, value ? GPIO_PIN_SET : GPIO_PIN_RESET);
+                  uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
+                  command_send_ok(&out, 1);
+              } else if (strcmp(sub, "info") == 0) {
+                  enable_gpio_clock(port);
+                  uint32_t moder = port->MODER;
+                  uint32_t otyper = port->OTYPER;
+                  uint32_t pupdr = port->PUPDR;
+                  uint32_t idr = port->IDR;
+                  uint32_t odr = port->ODR;
+                  uint32_t afr = (pin_index < 8) ? port->AFR[0] : port->AFR[1];
+
+                  uint8_t mode = (uint8_t)((moder >> (pin_index * 2)) & 0x03);
+                  uint8_t otype = (uint8_t)((otyper >> pin_index) & 0x01);
+                  uint8_t pupd = (uint8_t)((pupdr >> (pin_index * 2)) & 0x03);
+                  uint8_t idr_bit = (uint8_t)((idr >> pin_index) & 0x01);
+                  uint8_t odr_bit = (uint8_t)((odr >> pin_index) & 0x01);
+                  uint8_t af = (uint8_t)((afr >> ((pin_index % 8) * 4)) & 0x0F);
+
+                  uint8_t response[6] = {mode, otype, pupd, af, idr_bit, odr_bit};
+                  command_send_ok(response, sizeof(response));
+              } else {
+                  command_send_err(NULL);
+              }
+
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "R") == 0 && cmd.positional_count >= 3) {
+              int port_int = 0;
+              int pin_int = 0;
+              if (!cli_parse_int(cmd.positional[1], &port_int) || !cli_parse_int(cmd.positional[2], &pin_int)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              GPIO_TypeDef *port = (port_int == 0) ? GPIOA : (port_int == 1) ? GPIOB : NULL;
+              if (!port || pin_int < 0 || pin_int > 15) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              uint16_t pin_mask = (uint16_t)(1u << (uint8_t)pin_int);
+              disable_tim2_output_if_needed(port, (uint8_t)pin_int);
+              gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, GPIO_NOPULL);
+              uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
+              command_send_ok(&out, 1);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "W") == 0 && cmd.positional_count >= 4) {
+              int port_int = 0;
+              int pin_int = 0;
+              int value_int = 0;
+              if (!cli_parse_int(cmd.positional[1], &port_int) ||
+                  !cli_parse_int(cmd.positional[2], &pin_int) ||
+                  !cli_parse_int(cmd.positional[3], &value_int)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              GPIO_TypeDef *port = (port_int == 0) ? GPIOA : (port_int == 1) ? GPIOB : NULL;
+              if (!port || pin_int < 0 || pin_int > 15) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              uint16_t pin_mask = (uint16_t)(1u << (uint8_t)pin_int);
+              disable_tim2_output_if_needed(port, (uint8_t)pin_int);
+              bool value = value_int ? true : false;
+              gpio_write_latch(port, pin_mask, value);
+              gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+              HAL_GPIO_WritePin(port, pin_mask, value ? GPIO_PIN_SET : GPIO_PIN_RESET);
+              uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
+              command_send_ok(&out, 1);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "I") == 0 && cmd.positional_count >= 3) {
+              int port_int = 0;
+              int pin_int = 0;
+              if (!cli_parse_int(cmd.positional[1], &port_int) || !cli_parse_int(cmd.positional[2], &pin_int)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              GPIO_TypeDef *port = (port_int == 0) ? GPIOA : (port_int == 1) ? GPIOB : NULL;
+              if (!port || pin_int < 0 || pin_int > 15) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              enable_gpio_clock(port);
+              uint32_t moder = port->MODER;
+              uint32_t otyper = port->OTYPER;
+              uint32_t pupdr = port->PUPDR;
+              uint32_t idr = port->IDR;
+              uint32_t odr = port->ODR;
+              uint32_t afr = (pin_int < 8) ? port->AFR[0] : port->AFR[1];
+
+              uint8_t mode = (uint8_t)((moder >> (pin_int * 2)) & 0x03);
+              uint8_t otype = (uint8_t)((otyper >> pin_int) & 0x01);
+              uint8_t pupd = (uint8_t)((pupdr >> (pin_int * 2)) & 0x03);
+              uint8_t idr_bit = (uint8_t)((idr >> pin_int) & 0x01);
+              uint8_t odr_bit = (uint8_t)((odr >> pin_int) & 0x01);
+              uint8_t af = (uint8_t)((afr >> ((pin_int % 8) * 4)) & 0x0F);
+
+              uint8_t response[6] = {mode, otype, pupd, af, idr_bit, odr_bit};
+              command_send_ok(response, sizeof(response));
+              free_bulk_packet();
+              continue;
+          }
+
+          command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "transmit") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+          if (strcmp(sub, "start") == 0) {
+              int pin_enc = -1;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              if (!cli_parse_int(pin_str, &pin_enc)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              if (pin_enc < 0 || pin_enc > 3) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint32_t tim_channel = 0;
+              uint16_t gpio_pin = 0;
+              switch (pin_enc) {
+                  case 0: tim_channel = TIM_CHANNEL_1; gpio_pin = GPIO_PIN_0; break;
+                  case 1: tim_channel = TIM_CHANNEL_2; gpio_pin = GPIO_PIN_1; break;
+                  case 2: tim_channel = TIM_CHANNEL_3; gpio_pin = GPIO_PIN_2; break;
+                  case 3: tim_channel = TIM_CHANNEL_4; gpio_pin = GPIO_PIN_3; break;
+              }
+
+              // Keep the legacy "tran" flow:
+              // - switch to circular RX buffer
+              // - wait for initial fill (or timeout)
+              // - enable TIM3 ISR which drains RX buffer into PWM gating
+              // - block until RX buffer drains to 0
+              configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
+              setDutyCycle_TIM2(tim_channel, 50);
+              selectedChannel = tim_channel;
+              (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
+
+              CDC_InitRxBuffer_FS();
+              CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
+
+              uint32_t start = HAL_GetTick();
+              while (CDC_GetRxBufferBytesAvailable_FS() < 250) {
+                  if ((HAL_GetTick() - start) > 2000) {
+                      break;
+                  }
+              }
+
+              HAL_TIM_Base_Start_IT(&htim3);
+              while (CDC_GetRxBufferBytesAvailable_FS() != 0) {
+              }
+
+              HAL_TIM_Base_Stop_IT(&htim3);
+              CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+              stopPWM_TIM2(tim_channel);
+              CDC_FlushRxBuffer_FS();
+              CDC_FreeRxBuffer_FS();
+
+              command_send_ok(NULL, 0);
+          } else if (strcmp(sub, "stop") == 0) {
+              command_send_ok(NULL, 0);
+          } else {
+              command_send_err(NULL);
+          }
+
+          free_bulk_packet();
+          continue;
+      }
+
+      command_send_err(NULL);
+      free_bulk_packet();
   }
   /* USER CODE END 3 */
 }
@@ -712,7 +1084,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
   hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();
@@ -911,6 +1283,11 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /* USER CODE BEGIN MX_GPIO_Init_1b */
+  // Drive VCTL low as early as possible (before configuring the pin) to avoid glitches.
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+  /* USER CODE END MX_GPIO_Init_1b */
+
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
 
@@ -927,7 +1304,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = NSS_RFID_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(NSS_RFID_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : RESET_Pin */
