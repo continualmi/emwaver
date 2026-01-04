@@ -191,7 +191,7 @@ struct LineChartViewController: UIViewControllerRepresentable {
 }
 
 struct SamplerView: View {
-    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var bleManager: USBManager
     @StateObject private var viewModel = SamplerViewModel()
 
     @State private var selectedPinIndex = 5 // Default to GPIO6 (IO6) to match Android
