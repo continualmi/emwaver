@@ -312,12 +312,12 @@ uint16_t MIDI_GetRxBufferBytesAvailable_FS(void)
 uint8_t MIDI_ReadRxBuffer_FS(uint8_t* Buf, uint16_t Len)
 {
   if (rxBuffer == NULL) {
-    return USB_CDC_RX_BUFFER_NO_DATA;
+    return EMW_USB_RX_BUFFER_NO_DATA;
   }
 
   uint16_t bytesAvailable = MIDI_GetRxBufferBytesAvailable_FS();
   if (bytesAvailable < Len) {
-    return USB_CDC_RX_BUFFER_NO_DATA;
+    return EMW_USB_RX_BUFFER_NO_DATA;
   }
 
   for (uint16_t i = 0; i < Len; i++) {
@@ -325,7 +325,7 @@ uint8_t MIDI_ReadRxBuffer_FS(uint8_t* Buf, uint16_t Len)
     rxBufferTailPos = (uint16_t)((uint16_t)(rxBufferTailPos + 1) % HL_RX_BUFFER_SIZE);
   }
 
-  return USB_CDC_RX_BUFFER_OK;
+  return EMW_USB_RX_BUFFER_OK;
 }
 
 void MIDI_FlushRxBuffer_FS(void)
