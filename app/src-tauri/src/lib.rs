@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-mod firmware;
 mod git;
 mod daemon_client;
 mod pty;
@@ -39,7 +38,6 @@ use tauri::{
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
 use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
-use firmware::{firmware_build, firmware_flash};
 use git::{
     git_commit, git_diff_contents, git_discard, git_push, git_stage, git_stage_all, git_status,
     git_unstage, git_unstage_all,
@@ -76,17 +74,6 @@ impl EmbeddedFirmware {
     }
 }
 
-#[derive(Deserialize)]
-struct CreateProjectPayload {
-    name: String,
-    location: String,
-}
-
-#[derive(Serialize)]
-struct CreateProjectResponse {
-    path: String,
-}
-
 // ESP-IDF functionality removed - desktop app focuses on hardware interaction and wavelets
 const MENU_CLOSE_FOLDER_EVENT: &str = "menu-close-folder";
 const MENU_NEW_PROJECT_EVENT: &str = "menu-new-project";
@@ -97,15 +84,11 @@ const MENU_SHOW_WAVELETS_EVENT: &str = "menu-show-wavelets";
 const MENU_SHOW_ISM_EVENT: &str = "menu-show-ism";
 const MENU_SHOW_SAMPLER_EVENT: &str = "menu-show-sampler";
 const MENU_SHOW_EMWAVER_EVENT: &str = "menu-show-emwaver";
-const MENU_SHOW_IDE_EVENT: &str = "menu-show-ide";
+const MENU_OPEN_FOLDER_EVENT: &str = "menu-open-folder";
+const MENU_SAVE_FILE_EVENT: &str = "menu-save-file";
 const MENU_INCREASE_LAYOUT_EVENT: &str = "menu-increase-layout";
 const MENU_DECREASE_LAYOUT_EVENT: &str = "menu-decrease-layout";
 const MENU_RESET_LAYOUT_EVENT: &str = "menu-reset-layout";
-const MENU_IDE_OPEN_FOLDER_EVENT: &str = "menu-ide-open-folder";
-const MENU_IDE_SAVE_FILE_EVENT: &str = "menu-ide-save-file";
-const MENU_IDE_FIRMWARE_BUILD_EVENT: &str = "menu-ide-firmware-build";
-const MENU_IDE_FIRMWARE_FLASH_EVENT: &str = "menu-ide-firmware-flash";
-const MENU_IDE_FIRMWARE_BUILD_FLASH_EVENT: &str = "menu-ide-firmware-build-flash";
 
 // ESP-IDF types and managers removed - desktop app doesn't need ESP-IDF toolchain
 
@@ -214,48 +197,6 @@ struct DfuProgressEvent {
 }
 
 // Firmware task types removed - ESP-IDF build/flash functionality removed
-
-#[tauri::command]
-async fn create_project(payload: CreateProjectPayload) -> Result<CreateProjectResponse, String> {
-    let project_name = payload.name.trim();
-    if project_name.is_empty() {
-        return Err("Project name is required".into());
-    }
-
-    let base_path = expand_path(&payload.location);
-    if !base_path.exists() {
-        fs::create_dir_all(&base_path)
-            .map_err(|error| format!("Unable to create base directory: {error}"))?;
-    }
-
-    let project_path = base_path.join(project_name);
-    if project_path.exists() {
-        let mut entries = project_path
-            .read_dir()
-            .map_err(|error| format!("Unable to inspect existing directory: {error}"))?;
-        if entries.next().is_some() {
-            return Err("Project directory already exists and is not empty".into());
-        }
-        fs::remove_dir(&project_path)
-            .map_err(|error| format!("Unable to clear existing empty directory: {error}"))?;
-    }
-
-    let destination = project_path.clone();
-    spawn_blocking(move || {
-        emw::init::run_init(emw::Target::Stm32f042, Vec::new(), destination)
-            .map_err(|error| error.to_string())
-    })
-    .await
-    .map_err(|error| format!("Failed to run init task: {error}"))??;
-
-    Ok(CreateProjectResponse {
-        path: project_path
-            .canonicalize()
-            .unwrap_or(project_path)
-            .to_string_lossy()
-            .to_string()
-    })
-}
 
 #[tauri::command]
 async fn read_directory(payload: ReadDirectoryPayload) -> Result<Vec<DirectoryEntry>, String> {
@@ -1283,40 +1224,19 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+W"),
             )?;
-            let ide_open_folder_item = MenuItem::with_id(
+            let open_folder_item = MenuItem::with_id(
                 app,
-                "menu-ide-open-folder",
+                "menu-open-folder",
                 "Open Folder…",
                 true,
                 Some("CmdOrCtrl+Shift+O"),
             )?;
-            let ide_save_file_item = MenuItem::with_id(
+            let save_file_item = MenuItem::with_id(
                 app,
-                "menu-ide-save-file",
+                "menu-save-file",
                 "Save",
                 true,
                 Some("CmdOrCtrl+S"),
-            )?;
-            let firmware_build_item = MenuItem::with_id(
-                app,
-                "menu-ide-firmware-build",
-                "Build Firmware",
-                true,
-                Some("CmdOrCtrl+Shift+B"),
-            )?;
-            let firmware_flash_item = MenuItem::with_id(
-                app,
-                "menu-ide-firmware-flash",
-                "Flash Firmware",
-                true,
-                Some("CmdOrCtrl+Shift+F"),
-            )?;
-            let firmware_build_flash_item = MenuItem::with_id(
-                app,
-                "menu-ide-firmware-build-flash",
-                "Build && Flash Firmware",
-                true,
-                Some("CmdOrCtrl+Shift+R"),
             )?;
             let toggle_explorer_item = MenuItem::with_id(
                 app,
@@ -1360,13 +1280,6 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let show_ide_item = MenuItem::with_id(
-                app,
-                "menu-show-ide",
-                "Show IDE",
-                true,
-                None::<&str>,
-            )?;
             let increase_layout_item = MenuItem::with_id(
                 app,
                 "menu-increase-layout",
@@ -1400,8 +1313,8 @@ pub fn run() {
                             if label == "File" {
                                 submenu.append(&file_new_item)?;
                                 submenu.append(&file_open_item)?;
-                                submenu.append(&ide_open_folder_item)?;
-                                submenu.append(&ide_save_file_item)?;
+                                submenu.append(&open_folder_item)?;
+                                submenu.append(&save_file_item)?;
                                 submenu.append(&close_item)?;
                                 close_item_added = true;
                             } else if label == "View" {
@@ -1414,7 +1327,6 @@ pub fn run() {
                                 submenu.append(&show_ism_item)?;
                                 submenu.append(&show_sampler_item)?;
                                 submenu.append(&show_emwaver_item)?;
-                                submenu.append(&show_ide_item)?;
                                 view_menu_added = true;
                             }
                         }
@@ -1426,8 +1338,8 @@ pub fn run() {
                 let file_menu = Submenu::new(app, "File", true)?;
                 file_menu.append(&file_new_item)?;
                 file_menu.append(&file_open_item)?;
-                file_menu.append(&ide_open_folder_item)?;
-                file_menu.append(&ide_save_file_item)?;
+                file_menu.append(&open_folder_item)?;
+                file_menu.append(&save_file_item)?;
                 file_menu.append(&close_item)?;
                 menu.append(&file_menu)?;
             }
@@ -1443,7 +1355,6 @@ pub fn run() {
                 view_menu.append(&show_ism_item)?;
                 view_menu.append(&show_sampler_item)?;
                 view_menu.append(&show_emwaver_item)?;
-                view_menu.append(&show_ide_item)?;
                 menu.append(&view_menu)?;
             }
 
@@ -1451,12 +1362,6 @@ pub fn run() {
             projects_menu.append(&new_item)?;
             projects_menu.append(&open_item)?;
             menu.append(&projects_menu)?;
-
-            let firmware_menu = Submenu::new(app, "Firmware", true)?;
-            firmware_menu.append(&firmware_build_item)?;
-            firmware_menu.append(&firmware_flash_item)?;
-            firmware_menu.append(&firmware_build_flash_item)?;
-            menu.append(&firmware_menu)?;
 
             app.set_menu(menu)?;
 
@@ -1528,9 +1433,6 @@ pub fn run() {
                 "menu-show-emwaver" => {
                     let _ = app.emit(MENU_SHOW_EMWAVER_EVENT, ());
                 }
-                "menu-show-ide" => {
-                    let _ = app.emit(MENU_SHOW_IDE_EVENT, ());
-                }
                 "menu-increase-layout" => {
                     let _ = app.emit(MENU_INCREASE_LAYOUT_EVENT, ());
                 }
@@ -1540,20 +1442,11 @@ pub fn run() {
                 "menu-reset-layout" => {
                     let _ = app.emit(MENU_RESET_LAYOUT_EVENT, ());
                 }
-                "menu-ide-open-folder" => {
-                    let _ = app.emit(MENU_IDE_OPEN_FOLDER_EVENT, ());
+                "menu-open-folder" => {
+                    let _ = app.emit(MENU_OPEN_FOLDER_EVENT, ());
                 }
-                "menu-ide-save-file" => {
-                    let _ = app.emit(MENU_IDE_SAVE_FILE_EVENT, ());
-                }
-                "menu-ide-firmware-build" => {
-                    let _ = app.emit(MENU_IDE_FIRMWARE_BUILD_EVENT, ());
-                }
-                "menu-ide-firmware-flash" => {
-                    let _ = app.emit(MENU_IDE_FIRMWARE_FLASH_EVENT, ());
-                }
-                "menu-ide-firmware-build-flash" => {
-                    let _ = app.emit(MENU_IDE_FIRMWARE_BUILD_FLASH_EVENT, ());
+                "menu-save-file" => {
+                    let _ = app.emit(MENU_SAVE_FILE_EVENT, ());
                 }
                 _ => {}
             }
@@ -1570,7 +1463,6 @@ pub fn run() {
         .manage(daemon_state)
         .manage(Arc::new(PtyManager::new()))
 			        .invoke_handler(tauri::generate_handler![
-            create_project,
             read_directory,
             read_directory_children,
             read_file,
@@ -1611,8 +1503,6 @@ pub fn run() {
             dfu_is_connected,
             dfu_flash_embedded,
             dfu_flash_file,
-                firmware_build,
-                firmware_flash,
                 git_status,
                 git_diff_contents,
                 git_stage,

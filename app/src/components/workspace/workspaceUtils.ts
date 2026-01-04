@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { DirectoryChildEntry, FirmwareProjectKind, TerminalSession } from "./workspaceTypes";
+import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 
 export const WAVELET_ASSET_ROOT = "/wavelet-assets";
 export const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.emw";
@@ -134,14 +134,3 @@ export function iconLabelForPath(path: string): { label: string; accentClass: st
   return { label: "•", accentClass: "text-slate-400" };
 }
 
-export function detectFirmwareProjectKind(entries: DirectoryChildEntry[]): FirmwareProjectKind {
-  const hasFile = (name: string) => entries.some((entry) => entry.kind === "file" && entry.name === name);
-  const hasDir = (name: string) => entries.some((entry) => entry.kind === "directory" && entry.name === name);
-
-  const hasIoc = entries.some((entry) => entry.kind === "file" && entry.name.toLowerCase().endsWith(".ioc"));
-  if (hasDir("Release") && hasIoc) {
-    return "stm32";
-  }
-
-  return "unknown";
-}

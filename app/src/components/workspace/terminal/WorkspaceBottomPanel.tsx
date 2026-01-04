@@ -16,14 +16,13 @@
  */
 
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from "react";
-import { ChevronDownIcon, CloseIcon, HammerIcon, MonitorIcon, PlusIcon, TerminalIcon, TrashIcon } from "../WorkspaceIcons";
-import type { FirmwareProjectKind, TerminalSession, ThemeMode, WorkspaceVariant } from "../workspaceTypes";
+import { ChevronDownIcon, CloseIcon, PlusIcon, TerminalIcon, TrashIcon } from "../WorkspaceIcons";
+import type { TerminalSession, ThemeMode } from "../workspaceTypes";
 
 type StartTerminalSession = (options: { makeActive: boolean }) => Promise<string | null> | void;
 
 type WorkspaceBottomPanelProps = {
   theme: ThemeMode;
-  variant: WorkspaceVariant;
   rootDir: string | null;
 
   isTerminalVisible: boolean;
@@ -33,10 +32,6 @@ type WorkspaceBottomPanelProps = {
   terminalPanelRef: RefObject<HTMLDivElement | null>;
   terminalHeight: number;
   onTerminalResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
-
-  effectiveBottomPanelTab: "terminal" | "firmware";
-  onSelectTerminalTab: () => void;
-  onSelectFirmwareTab: () => void;
 
   terminalPickerAnchorRef: RefObject<HTMLDivElement | null>;
   activeTerminalTitle: string;
@@ -54,22 +49,6 @@ type WorkspaceBottomPanelProps = {
 
   terminalContainerBySessionRef: MutableRefObject<Map<string, HTMLDivElement>>;
 
-  firmwareProjectKind: FirmwareProjectKind;
-  isFirmwareBusy: boolean;
-  firmwarePanelTab: "build" | "monitor";
-  firmwareBuildHasOutput: boolean;
-  firmwareMonitorHasOutput: boolean;
-  isFirmwareMonitorRunning: boolean;
-  onFirmwareBuild: () => void;
-  onFirmwareFlash: () => void;
-  onFirmwareMonitor: () => void;
-  onFirmwareStopMonitor: () => void;
-  onFirmwareClearLog: () => void;
-  onSelectFirmwareBuildPanel: () => void;
-  onSelectFirmwareMonitorPanel: () => void;
-  firmwareBuildTerminalContainerRef: RefObject<HTMLDivElement | null>;
-  firmwareMonitorTerminalContainerRef: RefObject<HTMLDivElement | null>;
-
   isTerminalListCollapsed: boolean;
   onExpandTerminalList: () => void;
   onCollapseTerminalList: () => void;
@@ -79,7 +58,6 @@ type WorkspaceBottomPanelProps = {
 
 export default function WorkspaceBottomPanel({
   theme,
-  variant,
   rootDir,
   isTerminalVisible,
   onToggleTerminalVisible,
@@ -87,9 +65,6 @@ export default function WorkspaceBottomPanel({
   terminalPanelRef,
   terminalHeight,
   onTerminalResizeMouseDown,
-  effectiveBottomPanelTab,
-  onSelectTerminalTab,
-  onSelectFirmwareTab,
   terminalPickerAnchorRef,
   activeTerminalTitle,
   isTerminalPickerOpen,
@@ -102,21 +77,6 @@ export default function WorkspaceBottomPanel({
   startTerminalSession,
   closeTerminalSession,
   terminalContainerBySessionRef,
-  firmwareProjectKind,
-  isFirmwareBusy,
-  firmwarePanelTab,
-  firmwareBuildHasOutput,
-  firmwareMonitorHasOutput,
-  isFirmwareMonitorRunning,
-  onFirmwareBuild,
-  onFirmwareFlash,
-  onFirmwareMonitor,
-  onFirmwareStopMonitor,
-  onFirmwareClearLog,
-  onSelectFirmwareBuildPanel,
-  onSelectFirmwareMonitorPanel,
-  firmwareBuildTerminalContainerRef,
-  firmwareMonitorTerminalContainerRef,
   isTerminalListCollapsed,
   onExpandTerminalList,
   onCollapseTerminalList,
@@ -157,153 +117,75 @@ export default function WorkspaceBottomPanel({
         >
           <div className="flex items-center justify-between border-b border-slate-900/70 px-2 py-1 text-xs">
             <div className="flex items-end gap-1">
-              <button
-                type="button"
-                onClick={onSelectTerminalTab}
-                className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                  effectiveBottomPanelTab === "terminal"
-                    ? "border-b-2 border-sky-400 text-slate-100"
-                    : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                TERMINAL
-              </button>
-              {variant === "ide" ? (
-                <button
-                  type="button"
-                  onClick={onSelectFirmwareTab}
-                  className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                    effectiveBottomPanelTab === "firmware"
-                      ? "border-b-2 border-sky-400 text-slate-100"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  DEVICE
-                </button>
-              ) : null}
+              <div className="select-none px-3 py-2 font-semibold tracking-wide text-slate-100">TERMINAL</div>
             </div>
 
             <div ref={terminalPickerAnchorRef as unknown as RefObject<HTMLDivElement>} className="relative flex items-center gap-1">
-              {effectiveBottomPanelTab === "terminal" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setIsTerminalPickerOpen(!isTerminalPickerOpen)}
-                    className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
-                    title="Select terminal"
-                  >
-                    <TerminalIcon className="h-4 w-4 text-slate-500" />
-                    <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
-                    <ChevronDownIcon className="h-4 w-4 text-slate-500" />
-                  </button>
+              <button
+                type="button"
+                onClick={() => setIsTerminalPickerOpen(!isTerminalPickerOpen)}
+                className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
+                title="Select terminal"
+              >
+                <TerminalIcon className="h-4 w-4 text-slate-500" />
+                <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
+                <ChevronDownIcon className="h-4 w-4 text-slate-500" />
+              </button>
 
-                  {isTerminalPickerOpen ? (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
-                      <div className="max-h-64 overflow-auto p-1">
-                        {terminalSessions.map((session) => {
-                          const isActive = session.id === activeTerminalSessionId;
-                          return (
-                            <button
-                              key={session.id}
-                              type="button"
-                              onClick={() => {
-                                setIsTerminalPickerOpen(false);
-                                setActiveTerminalSessionId(session.id);
-                                requestAnimationFrame(() => {
-                                  ensureSessionTerminal(session.id);
-                                  focusActiveTerminal();
-                                });
-                              }}
-                              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-                                isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
-                              }`}
-                            >
-                              <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                              <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    onClick={() => void startTerminalSession({ makeActive: true })}
-                    className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                    title="New terminal"
-                  >
-                    <PlusIcon />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sessionId = activeTerminalSessionId;
-                      if (!sessionId) {
-                        return;
-                      }
-                      void closeTerminalSession(sessionId);
-                    }}
-                    disabled={!activeTerminalSessionId}
-                    className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
-                    title="Kill active terminal"
-                  >
-                    <TrashIcon />
-                  </button>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void onFirmwareBuild()}
-                      disabled={isFirmwareBusy || !rootDir}
-                      className="rounded border border-slate-700 bg-slate-900/60 px-2 py-1 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Build firmware"
-                    >
-                      Build
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onFirmwareFlash()}
-                      disabled={isFirmwareBusy || !rootDir}
-                      className="rounded border border-sky-300/70 bg-sky-500 px-2 py-1 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Flash firmware"
-                    >
-                      Flash
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onFirmwareMonitor()}
-                      disabled={!rootDir}
-                      className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Open device shell (emwaver shell)"
-                    >
-                      Shell
-                    </button>
-
-                    {firmwarePanelTab === "monitor" && isFirmwareMonitorRunning ? (
-                      <button
-                        type="button"
-                        onClick={() => void onFirmwareStopMonitor()}
-                        className="rounded border border-rose-300/70 bg-rose-600 px-2 py-1 text-white shadow-sm hover:bg-rose-500 hover:shadow"
-                        title="Stop monitor"
-                      >
-                        Stop
-                      </button>
-                    ) : null}
-                  </>
-
-                  <button
-                    type="button"
-                    onClick={() => onFirmwareClearLog()}
-                    className="rounded px-2 py-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                    title="Clear firmware log"
-                  >
-                    Clear
-                  </button>
+              {isTerminalPickerOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
+                  <div className="max-h-64 overflow-auto p-1">
+                    {terminalSessions.map((session) => {
+                      const isActive = session.id === activeTerminalSessionId;
+                      return (
+                        <button
+                          key={session.id}
+                          type="button"
+                          onClick={() => {
+                            setIsTerminalPickerOpen(false);
+                            setActiveTerminalSessionId(session.id);
+                            requestAnimationFrame(() => {
+                              ensureSessionTerminal(session.id);
+                              focusActiveTerminal();
+                            });
+                          }}
+                          className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
+                            isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
+                          }`}
+                        >
+                          <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
+                          <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              )}
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => void startTerminalSession({ makeActive: true })}
+                className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                title="New terminal"
+              >
+                <PlusIcon />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const sessionId = activeTerminalSessionId;
+                  if (!sessionId) {
+                    return;
+                  }
+                  void closeTerminalSession(sessionId);
+                }}
+                disabled={!activeTerminalSessionId}
+                className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
+                title="Kill active terminal"
+              >
+                <TrashIcon />
+              </button>
 
               <button
                 type="button"
@@ -318,7 +200,7 @@ export default function WorkspaceBottomPanel({
 
           <div className="flex min-h-0 flex-1">
             <div className="flex min-w-0 flex-1 flex-col">
-              <div className={`relative min-h-0 flex-1 overflow-hidden ${effectiveBottomPanelTab === "terminal" ? "" : "hidden"}`}>
+              <div className="relative min-h-0 flex-1 overflow-hidden">
                 {terminalSessions.map((session) => (
                   <div
                     key={session.id}
@@ -338,23 +220,6 @@ export default function WorkspaceBottomPanel({
                 {terminalSessions.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
                 ) : null}
-              </div>
-
-              <div className={`relative min-h-0 flex-1 ${effectiveBottomPanelTab === "firmware" ? "" : "hidden"}`}>
-                {firmwarePanelTab === "build" && !firmwareBuildHasOutput ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">No firmware activity yet.</div>
-                ) : null}
-                {firmwarePanelTab === "monitor" && !firmwareMonitorHasOutput ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">No firmware activity yet.</div>
-                ) : null}
-                <div
-                  ref={firmwareBuildTerminalContainerRef as unknown as RefObject<HTMLDivElement>}
-                  className={`absolute inset-0 px-2 py-2 ${firmwarePanelTab === "build" ? "" : "hidden"}`}
-                />
-                <div
-                  ref={firmwareMonitorTerminalContainerRef as unknown as RefObject<HTMLDivElement>}
-                  className={`absolute inset-0 px-2 py-2 ${firmwarePanelTab === "monitor" ? "" : "hidden"}`}
-                />
               </div>
             </div>
 
@@ -382,81 +247,51 @@ export default function WorkspaceBottomPanel({
                   className="shrink-0 bg-slate-900/15 shadow-[-10px_0_20px_-20px_rgba(0,0,0,0.9)]"
                   style={{ width: terminalListWidth }}
                 >
-                  {effectiveBottomPanelTab === "terminal" ? (
-                    <div className="h-full min-h-0 overflow-auto p-2 pt-3">
-                      {terminalSessions.length === 0 ? (
-                        <div className="px-2 py-1 text-xs text-slate-500">No terminals yet. Use the + button.</div>
-                      ) : (
-                        terminalSessions.map((session) => {
-                          const isActive = session.id === activeTerminalSessionId;
-                          return (
-                            <div
-                              key={session.id}
-                              className={`group mb-1 flex items-center gap-2 rounded ${
-                                isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
+                  <div className="h-full min-h-0 overflow-auto p-2 pt-3">
+                    {terminalSessions.length === 0 ? (
+                      <div className="px-2 py-1 text-xs text-slate-500">No terminals yet. Use the + button.</div>
+                    ) : (
+                      terminalSessions.map((session) => {
+                        const isActive = session.id === activeTerminalSessionId;
+                        return (
+                          <div
+                            key={session.id}
+                            className={`group mb-1 flex items-center gap-2 rounded ${
+                              isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTerminalSessionId(session.id);
+                                requestAnimationFrame(() => {
+                                  ensureSessionTerminal(session.id);
+                                  focusActiveTerminal();
+                                });
+                              }}
+                              className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
+                                isActive ? "text-sky-200" : "text-slate-300"
                               }`}
+                              title={session.title}
                             >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveTerminalSessionId(session.id);
-                                  requestAnimationFrame(() => {
-                                    ensureSessionTerminal(session.id);
-                                    focusActiveTerminal();
-                                  });
-                                }}
-                                className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
-                                  isActive ? "text-sky-200" : "text-slate-300"
-                                }`}
-                                title={session.title}
-                              >
-                                <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                                <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void closeTerminalSession(session.id)}
-                                className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
-                                  isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                                }`}
-                                title="Close terminal"
-                              >
-                                <CloseIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  ) : (
-                    <div className="h-full min-h-0 overflow-auto p-2 pt-3 text-xs text-slate-300">
-                      <div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-slate-500">DEVICE</div>
-
-                      <button
-                        type="button"
-                        onClick={onSelectFirmwareBuildPanel}
-                        className={`mb-1 flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
-                          firmwarePanelTab === "build" ? "bg-slate-900/70 text-sky-200" : "text-slate-300 hover:bg-slate-900/40"
-                        }`}
-                      >
-                        <HammerIcon className="h-4 w-4 text-slate-500" />
-                        <span>Build/Flash</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={onSelectFirmwareMonitorPanel}
-                        className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors ${
-                          firmwarePanelTab === "monitor"
-                            ? "bg-slate-900/70 text-emerald-200"
-                            : "text-slate-300 hover:bg-slate-900/40"
-                        }`}
-                      >
-                        <MonitorIcon className="h-4 w-4 text-slate-500" />
-                        <span>Monitor</span>
-                      </button>
-                    </div>
-                  )}
+                              <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
+                              <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void closeTerminalSession(session.id)}
+                              className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
+                                isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                              }`}
+                              title="Close terminal"
+                            >
+                              <CloseIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </aside>
               </>
             )}
