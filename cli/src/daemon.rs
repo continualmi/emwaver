@@ -580,61 +580,12 @@ async fn daemon_status_async(socket: PathBuf, json: bool) -> Result<()> {
 }
 
 #[cfg(unix)]
-pub fn daemon_list(
-    socket: Option<PathBuf>,
-    timeout_ms: u64,
-    all: bool,
-    name: String,
-    json: bool,
-) -> Result<()> {
+pub fn daemon_connect(socket: Option<PathBuf>, port: Option<String>) -> Result<()> {
     let socket = socket.unwrap_or(default_socket_path()?);
     let runtime = Runtime::new().context("failed to create async runtime")?;
     runtime.block_on(async move {
         let params = serde_json::json!({
-            "timeout_ms": timeout_ms,
-            "all": all,
-            "name": name
-        });
-        let result = daemon_rpc(
-            &socket,
-            BridgeRequest {
-                id: 1,
-                method: "list_devices".to_string(),
-                params,
-            },
-            Duration::from_millis(timeout_ms.saturating_add(3_000).max(1)),
-        )
-        .await?;
-        let devices = result.get("devices").cloned().unwrap_or_else(|| serde_json::json!([]));
-
-        if json {
-            println!("{devices}");
-            return Ok(());
-        }
-
-        if let Some(arr) = devices.as_array() {
-            if arr.is_empty() {
-                println!("No EMWaver devices found.");
-                return Ok(());
-            }
-            for dev in arr {
-                let name = dev.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                let address = dev.get("address").and_then(|v| v.as_str()).unwrap_or("?");
-                println!("{name}\t{address}");
-            }
-        }
-        Ok(())
-    })
-}
-
-#[cfg(unix)]
-pub fn daemon_connect(socket: Option<PathBuf>, address: Option<String>, name: String) -> Result<()> {
-    let socket = socket.unwrap_or(default_socket_path()?);
-    let runtime = Runtime::new().context("failed to create async runtime")?;
-    runtime.block_on(async move {
-        let params = serde_json::json!({
-            "address": address,
-            "name": name,
+            "port_name": port,
         });
         let result = daemon_rpc(
             &socket,
@@ -1058,12 +1009,7 @@ pub fn daemon_status(_: Option<PathBuf>, _: bool) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-pub fn daemon_list(_: Option<PathBuf>, _: u64, _: bool, _: String, _: bool) -> Result<()> {
-    bail!("daemon is not supported on this platform yet")
-}
-
-#[cfg(not(unix))]
-pub fn daemon_connect(_: Option<PathBuf>, _: Option<String>, _: String) -> Result<()> {
+pub fn daemon_connect(_: Option<PathBuf>, _: Option<String>) -> Result<()> {
     bail!("daemon is not supported on this platform yet")
 }
 

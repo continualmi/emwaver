@@ -79,8 +79,7 @@ async fn run_shell_daemon(verbose: bool) -> Result<()> {
             id: 1,
             method: "connect".to_string(),
             params: serde_json::json!({
-                "address": null,
-                "name": "EMWaver",
+                "port_name": null,
             }),
         },
         Duration::from_secs(20),
