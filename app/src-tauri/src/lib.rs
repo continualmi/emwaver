@@ -1148,6 +1148,7 @@ pub fn run() {
                         let _ = stream.flush().await;
 
                         let mut reader = BufReader::new(stream);
+                        let mut last_bs: u64 = 0;
                         let mut line = String::new();
                         loop {
                             line.clear();
@@ -1176,7 +1177,7 @@ pub fn run() {
                                     .and_then(|d| d.get("value"))
                                     .and_then(|v| v.as_u64())
                                     .unwrap_or(0);
-                                eprintln!("BS={bs}");
+                                last_bs = bs;
                                 continue;
                             }
 
@@ -1207,7 +1208,11 @@ pub fn run() {
                                     .get("sleep_ns")
                                     .and_then(|v| v.as_i64())
                                     .unwrap_or(0);
-                                let bs = data.get("bs").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let bs = data
+                                    .get("bs")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(last_bs);
+                                last_bs = bs;
 
                                 let period_ms = (period_ns as f64) / 1_000_000.0;
                                 let sleep_ms = (sleep_ns as f64) / 1_000_000.0;
