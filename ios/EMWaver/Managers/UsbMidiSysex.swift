@@ -23,12 +23,12 @@ import Foundation
 ///   F0 7D 'E' 'M' 'W' 0x01 <7-bit encoded payload> F7
 /// where the payload decodes to exactly 64 bytes.
 enum UsbMidiSysex {
-    private static let sysexStart: UInt8 = 0xF0
-    private static let sysexEnd: UInt8 = 0xF7
+    fileprivate static let sysexStart: UInt8 = 0xF0
+    fileprivate static let sysexEnd: UInt8 = 0xF7
 
-    private static let manufacturerId: UInt8 = 0x7D // non-commercial
-    private static let magic: [UInt8] = Array("EMW".utf8)
-    private static let version: UInt8 = 0x01
+    fileprivate static let manufacturerId: UInt8 = 0x7D // non-commercial
+    fileprivate static let magic: [UInt8] = Array("EMW".utf8)
+    fileprivate static let version: UInt8 = 0x01
 
     static func encodePacket64(_ packet64: Data) -> Data? {
         guard packet64.count == 64 else { return nil }
@@ -125,5 +125,34 @@ enum UsbMidiSysex {
 
         guard outPos == 64 else { return nil }
         return Data(out)
+    }
+}
+
+/// Accumulates chunked CoreMIDI byte streams into complete SysEx frames.
+struct UsbMidiSysexAccumulator {
+    private var buf = Data(capacity: 256)
+    private var inSysex = false
+
+    mutating func feed(_ data: Data) -> [Data] {
+        var out: [Data] = []
+        out.reserveCapacity(1)
+
+        for b in data {
+            if b == UsbMidiSysex.sysexStart {
+                buf.removeAll(keepingCapacity: true)
+                inSysex = true
+            }
+
+            guard inSysex else { continue }
+            buf.append(b)
+
+            if b == UsbMidiSysex.sysexEnd {
+                out.append(buf)
+                buf.removeAll(keepingCapacity: true)
+                inSysex = false
+            }
+        }
+
+        return out
     }
 }
