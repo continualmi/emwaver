@@ -26,6 +26,9 @@ typedef enum {
   EMW_BUFFER_DOUBLE = 2,
 } EMW_Buffer_Type;
 
+#define EMW_USB_RX_BUFFER_OK 0u
+#define EMW_USB_RX_BUFFER_NO_DATA 1u
+
 extern USBD_MIDI_ItfTypeDef USBD_MIDI_Interface_fops_FS;
 
 uint8_t MIDI_ReadRxBuffer_FS(uint8_t* Buf, uint16_t Len);
