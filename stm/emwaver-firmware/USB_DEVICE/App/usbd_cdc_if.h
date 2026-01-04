@@ -130,7 +130,7 @@ void CDC_Print_FS(const char* str);
 uint8_t CDC_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeout);
 
 void CDC_SetBufferType_FS(CDC_Buffer_Type buffer_type);
-uint8_t CDC_GetBufferType_FS();
+CDC_Buffer_Type CDC_GetBufferType_FS(void);
 /* USER CODE END EXPORTED_FUNCTIONS */
 
 /**
@@ -150,4 +150,3 @@ uint8_t CDC_GetBufferType_FS();
 #endif
 
 #endif /* __USBD_CDC_IF_H__ */
-

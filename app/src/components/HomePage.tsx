@@ -43,9 +43,11 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const { 
     status, 
     connectUSB, 
+    connectMIDI,
     connectBLE, 
     disconnect, 
     listUSBPorts, 
+    listMIDIPorts,
     send,
     sendNoWait,
   } = useDevice();
@@ -63,6 +65,9 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [usbPorts, setUsbPorts] = useState<string[]>([]);
   const [selectedPort, setSelectedPort] = useState<string>("");
   const [isRefreshingPorts, setIsRefreshingPorts] = useState(false);
+  const [midiPorts, setMidiPorts] = useState<string[]>([]);
+  const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
+  const [isRefreshingMidiPorts, setIsRefreshingMidiPorts] = useState(false);
   const [autoConnectEnabled, setAutoConnectEnabled] = useState<boolean>(() => {
     try {
       const raw = localStorage.getItem(AUTO_CONNECT_ENABLED_KEY);
@@ -190,10 +195,34 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
   }, [dialog, listUSBPorts]);
 
+  const refreshMidiPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {
+    const { silent = false } = options;
+    setIsRefreshingMidiPorts(true);
+    try {
+      const ports = await listMIDIPorts();
+      setMidiPorts(ports);
+      setSelectedMidiPort((prev) => {
+        if (ports.length === 0) return "";
+        if (!prev || !ports.includes(prev)) return ports[0];
+        return prev;
+      });
+      return ports;
+    } catch (e) {
+      console.error("Failed to list MIDI ports", e);
+      if (!silent) {
+        await dialog.alert(`Failed to list MIDI ports:\n\n${String(e)}`, { title: "MIDI" });
+      }
+      return [];
+    } finally {
+      setIsRefreshingMidiPorts(false);
+    }
+  }, [dialog, listMIDIPorts]);
+
   // Refresh ports on mount
   useEffect(() => {
     refreshPorts({ silent: true });
-  }, [refreshPorts]);
+    refreshMidiPorts({ silent: true });
+  }, [refreshMidiPorts, refreshPorts]);
 
   // Auto-connect when Home is active: prefer USB if available, otherwise BLE.
   useEffect(() => {
@@ -228,6 +257,20 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
           return;
         }
 
+        const midi = await refreshMidiPorts({ silent: true });
+        if (cancelled) return;
+        if (midi.length > 0) {
+          const portToUse =
+            selectedMidiPort && midi.includes(selectedMidiPort) ? selectedMidiPort : midi[0];
+          setSelectedTransport("MIDI");
+          setSelectedMidiPort(portToUse);
+          if (status.scanning) {
+            await safeInvoke("ble_stop_scan").catch(() => {});
+          }
+          await connectMIDI(portToUse);
+          return;
+        }
+
         if (!status.scanning) {
           setSelectedTransport("BLE");
           await connectBLE();
@@ -249,7 +292,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [autoConnectEnabled, connectBLE, connectUSB, isActive, refreshPorts, selectedPort, status.connected, status.scanning]);
+  }, [autoConnectEnabled, connectBLE, connectMIDI, connectUSB, isActive, refreshMidiPorts, refreshPorts, selectedMidiPort, selectedPort, status.connected, status.scanning]);
 
   // Auto-scroll monitor
   useEffect(() => {
@@ -388,6 +431,16 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       try {
         if (selectedTransport === 'BLE') {
             await connectBLE();
+        } else if (selectedTransport === 'MIDI') {
+            const ports = await refreshMidiPorts();
+            const portToUse =
+              selectedMidiPort && ports.includes(selectedMidiPort) ? selectedMidiPort : (ports[0] ?? "");
+            if (!portToUse) {
+              await dialog.alert("Please select a MIDI port.", { title: "MIDI" });
+              return;
+            }
+            setSelectedMidiPort(portToUse);
+            await connectMIDI(portToUse);
         } else {
             const ports = await refreshPorts();
             const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : (ports[0] ?? "");
@@ -564,66 +617,98 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                       />
                       <span>Auto-connect</span>
                     </label>
-                    {!status.connected && (
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setSelectedTransport('USB')}
-                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'USB' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
-                            >
-                                USB
-                            </button>
-                            <button
-                                onClick={() => setSelectedTransport('BLE')}
-                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'BLE' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
-                            >
-                                BLE
-                            </button>
-                        </div>
-                    )}
+	                    {!status.connected && (
+	                        <div className="flex gap-2">
+	                            <button
+	                                onClick={() => setSelectedTransport('USB')}
+	                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'USB' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
+	                            >
+	                                USB
+	                            </button>
+	                            <button
+	                                onClick={() => setSelectedTransport('MIDI')}
+	                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'MIDI' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
+	                            >
+	                                MIDI
+	                            </button>
+	                            <button
+	                                onClick={() => setSelectedTransport('BLE')}
+	                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'BLE' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
+	                            >
+	                                BLE
+	                            </button>
+	                        </div>
+	                    )}
                 </div>
               </div>
               
               <div className="flex items-center justify-between gap-2">
-                {!status.connected ? (
-                   selectedTransport === 'USB' ? (
-                       <div className="flex flex-1 gap-2 min-w-0">
-                           <select 
-                               value={selectedPort} 
-                               onChange={(e) => setSelectedPort(e.target.value)}
-                               className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                           >
-                               <option value="" disabled>Select Port</option>
-                               {usbPorts.map(port => <option key={port} value={port}>{port}</option>)}
-                           </select>
-                           <button 
-                                onClick={() => { void refreshPorts(); }}
-                                disabled={isRefreshingPorts}
-                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
-                                title="Refresh Ports"
-                           >
-                               ↻
-                           </button>
-                           <button
-                              onClick={handleConnect}
-                              disabled={!selectedPort}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded transition-colors whitespace-nowrap"
-                           >
-                              Connect
-                           </button>
-                       </div>
-                   ) : (
-                       <div className="flex flex-1 items-center justify-between">
-                           <span className="text-xs text-slate-500">Scan for EMWaver devices</span>
-                           <button
-                              onClick={handleConnect}
-                              disabled={status.scanning}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-xs rounded transition-colors"
-                           >
-                              {status.scanning ? "Scanning..." : "Scan & Connect"}
-                           </button>
-                       </div>
-                   )
-                ) : (
+	                {!status.connected ? (
+	                   selectedTransport === 'USB' ? (
+	                       <div className="flex flex-1 gap-2 min-w-0">
+	                           <select 
+	                               value={selectedPort} 
+	                               onChange={(e) => setSelectedPort(e.target.value)}
+	                               className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+	                           >
+	                               <option value="" disabled>Select Port</option>
+	                               {usbPorts.map(port => <option key={port} value={port}>{port}</option>)}
+	                           </select>
+	                           <button 
+	                                onClick={() => { void refreshPorts(); }}
+	                                disabled={isRefreshingPorts}
+	                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
+	                                title="Refresh Ports"
+	                           >
+	                               ↻
+	                           </button>
+	                           <button
+	                              onClick={handleConnect}
+	                              disabled={!selectedPort}
+	                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded transition-colors whitespace-nowrap"
+	                           >
+	                              Connect
+	                           </button>
+	                       </div>
+	                   ) : selectedTransport === 'MIDI' ? (
+	                       <div className="flex flex-1 gap-2 min-w-0">
+	                           <select
+	                               value={selectedMidiPort}
+	                               onChange={(e) => setSelectedMidiPort(e.target.value)}
+	                               className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+	                           >
+	                               <option value="" disabled>Select MIDI Port</option>
+	                               {midiPorts.map(port => <option key={port} value={port}>{port}</option>)}
+	                           </select>
+	                           <button
+	                                onClick={() => { void refreshMidiPorts(); }}
+	                                disabled={isRefreshingMidiPorts}
+	                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
+	                                title="Refresh MIDI Ports"
+	                           >
+	                               ↻
+	                           </button>
+	                           <button
+	                              onClick={handleConnect}
+	                              disabled={!selectedMidiPort}
+	                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded transition-colors whitespace-nowrap"
+	                           >
+	                              Connect
+	                           </button>
+	                       </div>
+	                   ) : (
+	                       <div className="flex flex-1 items-center justify-between">
+	                           <span className="text-xs text-slate-500">Scan for EMWaver devices</span>
+	                           <button
+	                              onClick={handleConnect}
+	                              disabled={status.scanning}
+	                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-xs rounded transition-colors"
+	                           >
+	                              {status.scanning ? "Scanning..." : "Scan & Connect"}
+	                           </button>
+	                       </div>
+	                   )
+	                ) : (
                    <div className="flex flex-1 items-center justify-between">
                        <div className="flex flex-col">
                            <span className="text-xs font-medium text-green-400">Connected ({status.transport})</span>

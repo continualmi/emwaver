@@ -207,6 +207,12 @@ pub struct USBStatus {
     pub device_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MidiStatus {
+    pub connected: bool,
+    pub device_name: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct RemovePathPayload {
     path: String,
@@ -1159,6 +1165,54 @@ async fn usb_get_status(state: State<'_, DaemonState>) -> Result<USBStatus, Stri
     })
 }
 
+// MIDI Commands
+#[tauri::command]
+async fn midi_list_ports() -> Result<Vec<String>, String> {
+    let daemon = DaemonState::new()?;
+    let value = daemon
+        .rpc("midi_list_ports", serde_json::json!({}), Duration::from_secs(5))
+        .await?;
+    Ok(value
+        .get("ports")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<String>>())
+        .unwrap_or_default())
+}
+
+#[tauri::command]
+async fn midi_connect(state: State<'_, DaemonState>, port_name: String) -> Result<(), String> {
+    let _ = state
+        .rpc(
+            "midi_connect",
+            serde_json::json!({ "port_name": port_name }),
+            Duration::from_secs(10),
+        )
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn midi_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
+    state
+        .rpc("midi_disconnect", serde_json::json!({}), Duration::from_secs(5))
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn midi_get_status(state: State<'_, DaemonState>) -> Result<MidiStatus, String> {
+    let value = state
+        .rpc("midi_status", serde_json::json!({}), Duration::from_secs(3))
+        .await?;
+    Ok(MidiStatus {
+        connected: value.get("connected").and_then(|v| v.as_bool()).unwrap_or(false),
+        device_name: value
+            .get("device_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
+}
+
 // DFU Commands
 #[tauri::command]
 async fn dfu_is_connected() -> Result<bool, String> {
@@ -2026,16 +2080,20 @@ pub fn run() {
             ota_wifi_stop,
             ota_wifi_flash_file,
             ota_wifi_flash_stock,
-            usb_list_ports,
-            usb_connect,
-            usb_disconnect,
-		            usb_send_packet,
-                    usb_send_command,
-                    usb_transmit_buffer,
-                    usb_get_status,
-		            dfu_is_connected,
-	            dfu_flash_embedded,
-	            dfu_flash_file,
+	            usb_list_ports,
+	            usb_connect,
+	            usb_disconnect,
+			            usb_send_packet,
+	                    usb_send_command,
+	                    usb_transmit_buffer,
+	                    usb_get_status,
+                        midi_list_ports,
+                        midi_connect,
+                        midi_disconnect,
+                        midi_get_status,
+			            dfu_is_connected,
+		            dfu_flash_embedded,
+		            dfu_flash_file,
                 firmware_build,
                 firmware_flash,
                 git_status,
