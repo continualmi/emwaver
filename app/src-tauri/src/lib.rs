@@ -1589,9 +1589,9 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
-    let daemon_state = DaemonState::new().unwrap_or(DaemonState {
-        socket: std::env::temp_dir().join("emwaver.sock"),
-    });
+    // Desktop and CLI must agree on the daemon socket path; otherwise we can spawn multiple daemons
+    // that contend for the same USB/BLE transport and cause "Resource busy" errors.
+    let daemon_state = DaemonState::new().expect("failed to determine emwaver daemon socket path");
     let (ota_status_tx, _) = tokio::sync::broadcast::channel::<Vec<u8>>(256);
     let daemon_events = DaemonEvents { ota_status_tx };
     let daemon_state_for_setup = daemon_state.clone();

@@ -1168,11 +1168,29 @@ fn spawn_usb_reader(
 }
 
 async fn usb_connect(state: &BridgeState, port_name: Option<String>) -> Result<DeviceInfo> {
+    let requested = port_name.as_deref().map(normalize_port_name_for_platform);
+
+    // If we're already connected on USB, treat connect as idempotent unless the caller asked
+    // for a different port.
+    if let Some(conn) = state.usb.lock().await.clone() {
+        let status = conn.status.lock().await.clone();
+        if status.connected {
+            if requested.is_none() || status.device_path.as_deref() == requested.as_deref() {
+                return Ok(DeviceInfo {
+                    transport: "usb",
+                    name: Some("USB Device".to_string()),
+                    address: status.device_path.unwrap_or_default(),
+                });
+            }
+        }
+    }
+
     // Prefer a single active transport: drop BLE if it's active.
     let _ = ble_disconnect(state).await;
+    let _ = usb_disconnect(state).await;
 
-    let chosen = match port_name {
-        Some(p) => normalize_port_name_for_platform(&p),
+    let chosen = match requested {
+        Some(p) => p,
         None => {
             let ports = usb_list_ports_blocking()?;
             let Some(first) = ports.into_iter().next() else {
