@@ -48,7 +48,6 @@ nav:
   - Flashing Firmware:
       - Overview: flashing-firmware/index.md
       - STM32 (STM32F042): flashing-firmware/stm32.md
-      - ESP32 (ESP32-S3): flashing-firmware/esp32.md
   - Documentation:
       - EMWaver CLI: documentation/cli.md
       - Daemon + CLI: documentation/daemon.md
