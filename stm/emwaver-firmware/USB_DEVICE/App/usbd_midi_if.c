@@ -33,6 +33,11 @@ extern volatile CDC_Buffer_Type cdc_buf_type;
 static uint8_t midi_rx_buf[64];
 static uint8_t midi_tx_buf[256];
 
+#define HL_RX_BUFFER_SIZE 512
+static uint8_t *rxBuffer = NULL;
+static uint16_t rxBufferHeadPos = 0;
+static uint16_t rxBufferTailPos = 0;
+
 static uint8_t sysex_buf[256];
 static uint16_t sysex_len = 0;
 static uint8_t in_sysex = 0;
@@ -132,9 +137,24 @@ static void handle_complete_sysex(void)
   }
 
   if (cdc_buf_type == CDC_BUFFER_CIRCULAR) {
-    // Circular RX streaming is a CDC-specific path used by retransmission.
-    // MIDI does not implement the circular RX buffer APIs, so do not accept host
-    // commands while the firmware expects circular streaming semantics.
+    // Mirror the CDC circular RX buffer behavior for retransmission flow-control.
+    if (rxBuffer == NULL) {
+      sysex_reset();
+      return;
+    }
+
+    uint16_t tempHeadPos = rxBufferHeadPos;
+    for (uint32_t i = 0; i < 64; i++) {
+      rxBuffer[tempHeadPos] = decoded[i];
+      tempHeadPos = (uint16_t)((uint16_t)(tempHeadPos + 1) % HL_RX_BUFFER_SIZE);
+      if (tempHeadPos == rxBufferTailPos) {
+        sysex_reset();
+        return;
+      }
+    }
+    rxBufferHeadPos = tempHeadPos;
+    MIDI_SendStatusPacket_FS(MIDI_GetRxBufferBytesAvailable_FS());
+
     sysex_reset();
     return;
   }
@@ -283,30 +303,69 @@ uint8_t MIDI_GetBufferType_FS(void)
 
 uint16_t MIDI_GetRxBufferBytesAvailable_FS(void)
 {
-  // Not supported over MIDI yet (packet-mode only).
-  return 0;
+  if (rxBuffer == NULL) {
+    return 0;
+  }
+  return (uint16_t)(rxBufferHeadPos - rxBufferTailPos) % HL_RX_BUFFER_SIZE;
 }
 
 uint8_t MIDI_ReadRxBuffer_FS(uint8_t* Buf, uint16_t Len)
 {
-  (void)Buf;
-  (void)Len;
-  return USB_CDC_RX_BUFFER_NO_DATA;
+  if (rxBuffer == NULL) {
+    return USB_CDC_RX_BUFFER_NO_DATA;
+  }
+
+  uint16_t bytesAvailable = MIDI_GetRxBufferBytesAvailable_FS();
+  if (bytesAvailable < Len) {
+    return USB_CDC_RX_BUFFER_NO_DATA;
+  }
+
+  for (uint16_t i = 0; i < Len; i++) {
+    Buf[i] = rxBuffer[rxBufferTailPos];
+    rxBufferTailPos = (uint16_t)((uint16_t)(rxBufferTailPos + 1) % HL_RX_BUFFER_SIZE);
+  }
+
+  return USB_CDC_RX_BUFFER_OK;
 }
 
 void MIDI_FlushRxBuffer_FS(void)
 {
-  // Not supported over MIDI yet.
+  if (rxBuffer == NULL) {
+    rxBufferHeadPos = 0;
+    rxBufferTailPos = 0;
+    return;
+  }
+
+  for (int i = 0; i < HL_RX_BUFFER_SIZE; i++) {
+    rxBuffer[i] = 0;
+  }
+  rxBufferHeadPos = 0;
+  rxBufferTailPos = 0;
 }
 
 void MIDI_InitRxBuffer_FS(void)
 {
-  // Not supported over MIDI yet.
+  if (rxBuffer != NULL) {
+    free(rxBuffer);
+    rxBuffer = NULL;
+  }
+
+  rxBuffer = (uint8_t*)malloc(HL_RX_BUFFER_SIZE * sizeof(uint8_t));
+  if (rxBuffer == NULL) {
+    MIDI_Print_FS("<STR>Circular buffer allocation failed\n</STR>");
+    exit(1);
+  }
+  memset(rxBuffer, 0, HL_RX_BUFFER_SIZE * sizeof(uint8_t));
+  rxBufferHeadPos = 0;
+  rxBufferTailPos = 0;
 }
 
 void MIDI_FreeRxBuffer_FS(void)
 {
-  // Not supported over MIDI yet.
+  free(rxBuffer);
+  rxBuffer = NULL;
+  rxBufferHeadPos = 0;
+  rxBufferTailPos = 0;
 }
 
 void MIDI_SendStatusPacket_FS(uint16_t status)

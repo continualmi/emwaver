@@ -1623,16 +1623,63 @@ pub fn run() {
                             let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
                                 continue;
                             };
-                            if event != "ota_status" {
+
+                            if event == "ota_status" {
+                                let bytes_b64 = value
+                                    .get("data")
+                                    .and_then(|d| d.get("bytes_b64"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+                                if let Ok(bytes) = decode_b64(bytes_b64) {
+                                    let _ = events.ota_status_tx.send(bytes);
+                                }
                                 continue;
                             }
-                            let bytes_b64 = value
-                                .get("data")
-                                .and_then(|d| d.get("bytes_b64"))
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            if let Ok(bytes) = decode_b64(bytes_b64) {
-                                let _ = events.ota_status_tx.send(bytes);
+
+                            if event == "bs" {
+                                let bs = value
+                                    .get("data")
+                                    .and_then(|d| d.get("value"))
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                eprintln!("BS={bs}");
+                                continue;
+                            }
+
+                            if event == "tx_progress" {
+                                let data = value.get("data").cloned().unwrap_or_default();
+                                let pct = data.get("pct").and_then(|v| v.as_u64()).unwrap_or(0);
+                                let sent = data
+                                    .get("sent_bytes")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let total = data
+                                    .get("total_bytes")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let chunk = data
+                                    .get("chunk_len")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let pkt = data
+                                    .get("packet_size")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(0);
+                                let period_ns = data
+                                    .get("period_ns")
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or(0);
+                                let sleep_ns = data
+                                    .get("sleep_ns")
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or(0);
+                                let bs = data.get("bs").and_then(|v| v.as_u64()).unwrap_or(0);
+
+                                let period_ms = (period_ns as f64) / 1_000_000.0;
+                                let sleep_ms = (sleep_ns as f64) / 1_000_000.0;
+                                eprintln!(
+                                    "TX {pct:>3}% {sent}/{total}B chunk={chunk}B pkt={pkt}B period={period_ms:.2}ms sleep={sleep_ms:.2}ms BS={bs}"
+                                );
                             }
                         }
                     }
