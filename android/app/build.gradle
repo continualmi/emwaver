@@ -14,8 +14,6 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        // buildConfigField "String", "BACKEND_BASE_URL", '"https://emwaver-backend.azurewebsites.net"'
-        buildConfigField "String", "BACKEND_BASE_URL", '"http://192.168.1.209:8000"'
     }
 
     buildTypes {

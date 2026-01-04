@@ -117,17 +117,6 @@ public class DeviceConnectionManager {
         return usbService;
     }
 
-    // BLE has been removed from Android; keep stubs so older fragments compile.
-    @Deprecated
-    public BLEService getBleService() {
-        return null;
-    }
-
-    @Deprecated
-    public void startBleScan() {
-        // no-op
-    }
-
     public boolean isConnected() {
         DeviceConnectionService service = getActiveService();
         return service != null && service.checkConnection();
