@@ -68,3 +68,6 @@ stm/emwaver-firmware/Debug/default.size.stdout
 
 # Library crates don't need lockfiles
 cli/crates/**/Cargo.lock
+
+# Git worktrees (local developer checkouts)
+worktrees/
