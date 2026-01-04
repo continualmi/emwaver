@@ -963,6 +963,11 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
     let packet_size = PACKET_SIZE;
     let total_bytes = data.len();
 
+    // Use the event stream for BS parsing; on some platforms the buffer cursor can drift
+    // during long TX bursts, but rx_bytes events remain reliable.
+    let mut events = state.event_tx.subscribe();
+    while events.try_recv().is_ok() {}
+
     let mut last_status: u16 = 0;
     let mut last_emitted_status: Option<u16> = None;
 
@@ -974,11 +979,33 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
 
     while sent_bytes < total_bytes {
         let mut saw_bs = false;
-        if let Ok(mut guard) = state.buffer.lock() {
-            loop {
-                let pkt = buffer::next_rx_packet(&mut *guard);
-                let Some(pkt) = pkt else { break };
-                if let Some(status) = status::parse_bs(&pkt.data) {
+        while let Ok(msg) = events.try_recv() {
+            let trimmed = std::str::from_utf8(&msg).unwrap_or("").trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let value: serde_json::Value = match serde_json::from_str(trimmed) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if event != "rx_bytes" {
+                continue;
+            }
+            let Some(bytes_b64) = value
+                .get("data")
+                .and_then(|v| v.get("bytes_b64"))
+                .and_then(|v| v.as_str())
+            else {
+                continue;
+            };
+            let Ok(pkt) = base64::engine::general_purpose::STANDARD.decode(bytes_b64.as_bytes()) else {
+                continue;
+            };
+            if pkt.len() == PACKET_SIZE {
+                if let Some(status) = status::parse_bs(&pkt) {
                     last_status = status;
                     saw_bs = true;
                 }
