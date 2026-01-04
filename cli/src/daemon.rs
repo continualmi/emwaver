@@ -17,6 +17,10 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -258,14 +262,24 @@ async fn handle_client(
         }
     });
 
-    // Forward broadcast events to this client.
+    // Forward broadcast events to this client only if the client explicitly subscribes.
+    //
+    // Rationale: during sampler streaming, `rx_bytes` events can arrive at a very high rate.
+    // If we forward events to every short-lived RPC connection (like the desktop app's
+    // per-invoke Unix socket), it can delay the RPC response behind the event stream
+    // and appear as a hang (e.g. "sample stop" never completes).
+    let subscribed = Arc::new(AtomicBool::new(false));
+
     let mut events_rx = state.event_tx.subscribe();
     let out_tx_events = out_tx.clone();
+    let subscribed_for_task = Arc::clone(&subscribed);
     let events_task = tokio::spawn(async move {
         loop {
             match events_rx.recv().await {
                 Ok(line) => {
-                    let _ = out_tx_events.send(line);
+                    if subscribed_for_task.load(Ordering::Relaxed) {
+                        let _ = out_tx_events.send(line);
+                    }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -292,6 +306,31 @@ async fn handle_client(
             Ok(v) => v,
             Err(_) => continue,
         };
+
+        // Transport-neutral subscription control for clients that want the async event stream
+        // (rx_bytes / connected / disconnected / ota_status).
+        if req.method == "events_subscribe" {
+            subscribed.store(true, Ordering::Relaxed);
+            let response = BridgeResponse {
+                id: req.id,
+                ok: true,
+                result: Some(serde_json::json!({})),
+                error: None,
+            };
+            let _ = send_json_line(&out_tx, &response);
+            continue;
+        }
+        if req.method == "events_unsubscribe" {
+            subscribed.store(false, Ordering::Relaxed);
+            let response = BridgeResponse {
+                id: req.id,
+                ok: true,
+                result: Some(serde_json::json!({})),
+                error: None,
+            };
+            let _ = send_json_line(&out_tx, &response);
+            continue;
+        }
 
         if req.method == "shutdown" {
             let response = BridgeResponse {

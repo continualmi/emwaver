@@ -1572,6 +1572,7 @@ pub fn run() {
             // Background daemon event pump (OTA status notifications).
             #[cfg(unix)]
             {
+                use tokio::io::AsyncWriteExt;
                 use tokio::net::UnixStream;
                 let daemon = daemon_state_for_setup.clone();
                 let events = daemon_events_for_setup.clone();
@@ -1583,10 +1584,22 @@ pub fn run() {
                         }
 
                         let stream = UnixStream::connect(&daemon.socket).await;
-                        let Ok(stream) = stream else {
+                        let Ok(mut stream) = stream else {
                             tokio::time::sleep(Duration::from_millis(500)).await;
                             continue;
                         };
+
+                        // Enable event forwarding only on this long-lived connection.
+                        // (Normal RPC invocations should not be flooded with rx_bytes.)
+                        let subscribe = serde_json::json!({
+                            "id": 1,
+                            "method": "events_subscribe",
+                            "params": {}
+                        })
+                        .to_string();
+                        let _ = stream.write_all(subscribe.as_bytes()).await;
+                        let _ = stream.write_all(b"\n").await;
+                        let _ = stream.flush().await;
 
                         let mut reader = BufReader::new(stream);
                         let mut line = String::new();

@@ -237,7 +237,10 @@ function SamplerFragment() {
   const { status, send, sendNoWait, transmitBuffer } = useDevice();
   const dialog = useAppDialog();
   const isConnected = status.connected;
-  const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
+  // Desktop transports:
+  // - `USB` (CDC ACM) targets STM32 firmwares
+  // - `MIDI` targets STM32 firmwares (class-compliant iOS path)
+  const deviceType: SamplerDeviceType = status.transport === 'USB' || status.transport === 'MIDI' ? 'stm32' : 'esp32';
   
   const [isRecording, setIsRecording] = useState(false);
   const isRecordingRef = useRef(false);
