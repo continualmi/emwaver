@@ -17,7 +17,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import type { FragmentType } from "../App";
-import { useDevice, TransportType } from "../utils/DeviceContext";
+import { useDevice } from "../utils/DeviceContext";
 import { safeInvoke } from "../utils/tauri";
 import { useAppDialog } from "../utils/AppDialogContext";
 
@@ -42,11 +42,10 @@ type BufferEntry = {
 export default function HomePage({ onNavigateToFragment, isActive }: HomePageProps) {
   const { 
     status, 
-    connectUSB, 
+    connectUSB,
     connectMIDI,
-    connectBLE, 
     disconnect, 
-    listUSBPorts, 
+    listUSBPorts,
     listMIDIPorts,
     send,
     sendNoWait,
@@ -60,11 +59,12 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
   const [deviceIconKey, setDeviceIconKey] = useState<"emwaver" | "ism" | "rfid" | "infrared" | "gpio">("emwaver");
   
-  // Transport selection state
-  const [selectedTransport, setSelectedTransport] = useState<TransportType>('USB');
+  type TransportChoice = "USB" | "MIDI";
+  const [selectedTransport, setSelectedTransport] = useState<TransportChoice>("USB");
   const [usbPorts, setUsbPorts] = useState<string[]>([]);
   const [selectedPort, setSelectedPort] = useState<string>("");
   const [isRefreshingPorts, setIsRefreshingPorts] = useState(false);
+
   const [midiPorts, setMidiPorts] = useState<string[]>([]);
   const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
   const [isRefreshingMidiPorts, setIsRefreshingMidiPorts] = useState(false);
@@ -224,7 +224,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     refreshMidiPorts({ silent: true });
   }, [refreshMidiPorts, refreshPorts]);
 
-  // Auto-connect when Home is active: prefer USB if available, otherwise BLE.
+  // Auto-connect when Home is active: prefer USB if available, otherwise MIDI.
   useEffect(() => {
     if (!isActive) return;
     if (status.connected) return;
@@ -244,15 +244,10 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       try {
         const ports = await refreshPorts({ silent: true });
         if (cancelled) return;
-
         if (ports.length > 0) {
           const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : ports[0];
           setSelectedTransport("USB");
           setSelectedPort(portToUse);
-          // If a BLE scan is running, stop it so USB can take priority.
-          if (status.scanning) {
-            await safeInvoke("ble_stop_scan").catch(() => {});
-          }
           await connectUSB(portToUse);
           return;
         }
@@ -262,18 +257,9 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         if (midi.length > 0) {
           const portToUse =
             selectedMidiPort && midi.includes(selectedMidiPort) ? selectedMidiPort : midi[0];
-          setSelectedTransport("MIDI");
           setSelectedMidiPort(portToUse);
-          if (status.scanning) {
-            await safeInvoke("ble_stop_scan").catch(() => {});
-          }
           await connectMIDI(portToUse);
           return;
-        }
-
-        if (!status.scanning) {
-          setSelectedTransport("BLE");
-          await connectBLE();
         }
       } catch (e) {
         // Don't alert on auto-connect failure; user can use manual controls.
@@ -292,7 +278,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [autoConnectEnabled, connectBLE, connectMIDI, connectUSB, isActive, refreshMidiPorts, refreshPorts, selectedMidiPort, selectedPort, status.connected, status.scanning]);
+  }, [autoConnectEnabled, connectMIDI, connectUSB, isActive, refreshMidiPorts, refreshPorts, selectedMidiPort, selectedPort, status.connected]);
 
   // Auto-scroll monitor
   useEffect(() => {
@@ -429,27 +415,25 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
   const handleConnect = async () => {
       try {
-        if (selectedTransport === 'BLE') {
-            await connectBLE();
-        } else if (selectedTransport === 'MIDI') {
-            const ports = await refreshMidiPorts();
-            const portToUse =
-              selectedMidiPort && ports.includes(selectedMidiPort) ? selectedMidiPort : (ports[0] ?? "");
-            if (!portToUse) {
-              await dialog.alert("Please select a MIDI port.", { title: "MIDI" });
-              return;
-            }
-            setSelectedMidiPort(portToUse);
-            await connectMIDI(portToUse);
+        if (selectedTransport === "USB") {
+          const ports = await refreshPorts();
+          const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : (ports[0] ?? "");
+          if (!portToUse) {
+            await dialog.alert("No USB ports found.", { title: "USB" });
+            return;
+          }
+          setSelectedPort(portToUse);
+          await connectUSB(portToUse);
         } else {
-            const ports = await refreshPorts();
-            const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : (ports[0] ?? "");
-            if (!portToUse) {
-              await dialog.alert("Please select a USB port.", { title: "USB" });
-              return;
-            }
-            setSelectedPort(portToUse);
-            await connectUSB(portToUse);
+          const ports = await refreshMidiPorts();
+          const portToUse =
+            selectedMidiPort && ports.includes(selectedMidiPort) ? selectedMidiPort : (ports[0] ?? "");
+          if (!portToUse) {
+            await dialog.alert("No MIDI ports found.", { title: "MIDI" });
+            return;
+          }
+          setSelectedMidiPort(portToUse);
+          await connectMIDI(portToUse);
         }
       } catch (e) {
         console.error("Connect failed", e);
@@ -461,7 +445,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     persistAutoConnectEnabled(false);
     autoConnectRef.current.inFlight = false;
     autoConnectRef.current.lastAttemptMs = 0;
-    await safeInvoke("ble_stop_scan").catch(() => {});
     await disconnect();
   };
 
@@ -631,12 +614,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 	                            >
 	                                MIDI
 	                            </button>
-	                            <button
-	                                onClick={() => setSelectedTransport('BLE')}
-	                                className={`px-2 py-1 text-xs rounded border ${selectedTransport === 'BLE' ? 'bg-sky-500/20 border-sky-500 text-sky-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}
-	                            >
-	                                BLE
-	                            </button>
 	                        </div>
 	                    )}
                 </div>
@@ -646,15 +623,15 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 	                {!status.connected ? (
 	                   selectedTransport === 'USB' ? (
 	                       <div className="flex flex-1 gap-2 min-w-0">
-	                           <select 
-	                               value={selectedPort} 
+	                           <select
+	                               value={selectedPort}
 	                               onChange={(e) => setSelectedPort(e.target.value)}
 	                               className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
 	                           >
 	                               <option value="" disabled>Select Port</option>
 	                               {usbPorts.map(port => <option key={port} value={port}>{port}</option>)}
 	                           </select>
-	                           <button 
+	                           <button
 	                                onClick={() => { void refreshPorts(); }}
 	                                disabled={isRefreshingPorts}
 	                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
@@ -670,7 +647,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 	                              Connect
 	                           </button>
 	                       </div>
-	                   ) : selectedTransport === 'MIDI' ? (
+	                   ) : (
 	                       <div className="flex flex-1 gap-2 min-w-0">
 	                           <select
 	                               value={selectedMidiPort}
@@ -694,17 +671,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 	                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded transition-colors whitespace-nowrap"
 	                           >
 	                              Connect
-	                           </button>
-	                       </div>
-	                   ) : (
-	                       <div className="flex flex-1 items-center justify-between">
-	                           <span className="text-xs text-slate-500">Scan for EMWaver devices</span>
-	                           <button
-	                              onClick={handleConnect}
-	                              disabled={status.scanning}
-	                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white text-xs rounded transition-colors"
-	                           >
-	                              {status.scanning ? "Scanning..." : "Scan & Connect"}
 	                           </button>
 	                       </div>
 	                   )
