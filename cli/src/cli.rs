@@ -149,6 +149,11 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// USB MIDI transport utilities (daemon-backed).
+    Midi {
+        #[command(subcommand)]
+        command: MidiCommand,
+    },
     /// Flash ESP32 firmware over BLE OTA.
     #[command(group(
         ArgGroup::new("source")
@@ -281,6 +286,46 @@ pub enum Command {
         socket: Option<PathBuf>,
         #[command(subcommand)]
         command: RetransmitCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MidiCommand {
+    /// List available USB MIDI ports.
+    List {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Connect the daemon to a USB MIDI port.
+    Connect {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// MIDI port name to connect to (defaults to the first matching port).
+        #[arg(long)]
+        port: Option<String>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Disconnect the active MIDI connection (if any).
+    Disconnect {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+    },
+    /// Print current MIDI connection status.
+    Status {
+        /// Override the daemon socket path.
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 

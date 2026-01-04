@@ -18,6 +18,7 @@
 mod cli;
 mod ble_cli;
 mod bridge;
+mod midi_sysex;
 mod daemon;
 pub mod ble_ota;
 pub mod dfu;
@@ -63,6 +64,14 @@ pub fn run() -> Result<()> {
         }) => daemon::daemon_connect(socket, address, name),
         Some(cli::Command::Disconnect { socket }) => daemon::daemon_disconnect(socket),
         Some(cli::Command::Connected { socket, json }) => daemon::daemon_connected(socket, json),
+        Some(cli::Command::Midi { command }) => match command {
+            cli::MidiCommand::List { socket, json } => daemon::daemon_midi_list(socket, json),
+            cli::MidiCommand::Connect { socket, port, json } => {
+                daemon::daemon_midi_connect(socket, port, json)
+            }
+            cli::MidiCommand::Disconnect { socket } => daemon::daemon_midi_disconnect(socket),
+            cli::MidiCommand::Status { socket, json } => daemon::daemon_midi_status(socket, json),
+        },
         Some(cli::Command::Ota {
             file,
             stock,

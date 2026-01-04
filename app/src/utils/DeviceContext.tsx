@@ -19,7 +19,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { safeInvoke } from './tauri';
 
 // Types
-export type TransportType = 'BLE' | 'USB';
+export type TransportType = 'BLE' | 'USB' | 'MIDI';
 
 interface DeviceStatus {
   connected: boolean;
@@ -32,9 +32,11 @@ interface DeviceStatus {
 interface DeviceContextType {
   status: DeviceStatus;
   connectUSB: (port: string) => Promise<void>;
+  connectMIDI: (portName: string) => Promise<void>;
   connectBLE: () => Promise<void>;
   disconnect: () => Promise<void>;
   listUSBPorts: () => Promise<string[]>;
+  listMIDIPorts: () => Promise<string[]>;
   sendPacket: (data: Uint8Array, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   send: (commandString: string, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   sendPacketNoWait: (data: Uint8Array) => Promise<void>;
@@ -139,6 +141,24 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return;
         }
 
+        // Check MIDI status
+        const midiStatus = await safeInvoke<{
+          connected: boolean;
+          device_name: string | null;
+        }>('midi_get_status');
+
+        if (midiStatus && midiStatus.connected) {
+          const next: DeviceStatus = {
+            connected: true,
+            transport: 'MIDI',
+            scanning: false,
+            device_name: midiStatus.device_name,
+            device_address: midiStatus.device_name,
+          };
+          setStatus((prev) => (isSameStatus(prev, next) ? prev : next));
+          return;
+        }
+
         // Nothing connected
         const next: DeviceStatus = {
           connected: false,
@@ -191,16 +211,28 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await safeInvoke('usb_connect', { portName: port }, { throwOnError: true });
   }, []);
 
+  const connectMIDI = useCallback(async (portName: string) => {
+    await safeInvoke('buffer_clear').catch(() => {});
+    await safeInvoke('midi_connect', { portName }, { throwOnError: true });
+  }, []);
+
   const disconnect = useCallback(async () => {
     if (status.transport === 'BLE') {
         await safeInvoke('ble_disconnect');
     } else if (status.transport === 'USB') {
         await safeInvoke('usb_disconnect');
+    } else if (status.transport === 'MIDI') {
+        await safeInvoke('midi_disconnect');
     }
   }, [status.transport]);
 
   const listUSBPorts = useCallback(async () => {
       const ports = await safeInvoke<string[]>('usb_list_ports', undefined, { throwOnError: true });
+      return ports || [];
+  }, []);
+
+  const listMIDIPorts = useCallback(async () => {
+      const ports = await safeInvoke<string[]>('midi_list_ports', undefined, { throwOnError: true });
       return ports || [];
   }, []);
 
@@ -212,7 +244,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const resp = await safeInvoke<number[]>('ble_send_command', args, { throwOnError: true });
       return resp ? new Uint8Array(resp) : null;
     }
-    if (status.transport === 'USB') {
+    if (status.transport === 'USB' || status.transport === 'MIDI') {
       const resp = await safeInvoke<number[]>('usb_send_command', args, { throwOnError: true });
       return resp ? new Uint8Array(resp) : null;
     }
@@ -232,7 +264,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await safeInvoke('ble_send_packet', args, { throwOnError: true });
       return;
     }
-    if (status.transport === 'USB') {
+    if (status.transport === 'USB' || status.transport === 'MIDI') {
       await safeInvoke('usb_send_packet', args, { throwOnError: true });
     }
   }, [status.connected, status.transport]);
@@ -245,7 +277,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const transmitBuffer = useCallback(async (data: Uint8Array) => {
     if (status.transport === 'BLE') {
         await safeInvoke('ble_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
-    } else if (status.transport === 'USB') {
+    } else if (status.transport === 'USB' || status.transport === 'MIDI') {
         await safeInvoke('usb_transmit_buffer', { data: Array.from(data) }, { throwOnError: true });
     }
   }, [status.transport]);
@@ -270,9 +302,11 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     <DeviceContext.Provider value={{
       status,
       connectUSB,
+      connectMIDI,
       connectBLE,
       disconnect,
       listUSBPorts,
+      listMIDIPorts,
       sendPacket,
       send,
       sendPacketNoWait,

@@ -29,7 +29,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "usbd_cdc_if.h"
+#include "emwaver_usb_io.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -112,7 +112,7 @@ static void command_send_ok(const uint8_t *data, size_t len)
     if (!data || len == 0) {
         uint8_t packet[64] = {0};
         packet[0] = 0x00;
-        (void)CDC_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+        (void)EMW_USB_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
         return;
     }
 
@@ -124,7 +124,7 @@ static void command_send_ok(const uint8_t *data, size_t len)
             chunk = sizeof(packet);
         }
         memcpy(packet, data + offset, chunk);
-        (void)CDC_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+        (void)EMW_USB_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
         offset += chunk;
     }
 }
@@ -134,7 +134,7 @@ static void command_send_err(const char *msg)
     (void)msg;
     // Match the registry firmware behavior: errors are best-effort no-ops.
     const uint8_t packet[64] = {0};
-    (void)CDC_SendResponsePkt_FS((uint8_t *)packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+    (void)EMW_USB_SendResponsePkt_FS((uint8_t *)packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
 }
 
 static void ISR_Sampler_raw(void)
@@ -212,9 +212,9 @@ static void ISR_Sampler_writing(void)
     static uint8_t bitIndex = 0;
     static uint8_t currentByte = 0;
 
-    if (CDC_GetRxBufferBytesAvailable_FS() > 0) {
+    if (EMW_USB_GetRxBufferBytesAvailable_FS() > 0) {
         if (bitIndex == 0) {
-            (void)CDC_ReadRxBuffer_FS(&currentByte, 1);
+            (void)EMW_USB_ReadRxBuffer_FS(&currentByte, 1);
         }
 
         if (currentByte & (uint8_t)(1u << bitIndex)) {
@@ -235,7 +235,7 @@ static void ISR_Sampler_writing(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim == &htim3) {
-        switch (CDC_GetBufferType_FS()) {
+        switch (EMW_USB_GetBufferType_FS()) {
             case CDC_BUFFER_CIRCULAR:
                 ISR_Sampler_writing();
                 break;
@@ -302,7 +302,7 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
 static void stop_sampling(void)
 {
     HAL_TIM_Base_Stop_IT(&htim3);
-    CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+    EMW_USB_SetBufferType_FS(CDC_BUFFER_PACKET);
 
     free((void *)bufferA);
     free((void *)bufferB);
@@ -641,8 +641,7 @@ int main(void)
   while (1) {
       if (ism_mode == ISM_MODE_RAW_SAMPLING) {
           if (bufferReady == 1) {
-              while (CDC_Transmit_FS((uint8_t *)transmitBuffer, 64) == USBD_BUSY) {
-              }
+              (void)EMW_USB_SendResponsePkt_FS((uint8_t *)transmitBuffer, 64, CDC_TIMEOUT);
               bufferReady = 0;
           }
 
@@ -741,7 +740,7 @@ int main(void)
               bufferIndex = 0;
               bufferReady = 0;
 
-              CDC_SetBufferType_FS(CDC_BUFFER_DOUBLE);
+              EMW_USB_SetBufferType_FS(CDC_BUFFER_DOUBLE);
               ism_mode = ISM_MODE_RAW_SAMPLING;
               HAL_TIM_Base_Start_IT(&htim3);
               command_send_ok(NULL, 0);
@@ -976,25 +975,25 @@ int main(void)
               selectedChannel = tim_channel;
               (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
 
-              CDC_InitRxBuffer_FS();
-              CDC_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
+              EMW_USB_InitRxBuffer_FS();
+              EMW_USB_SetBufferType_FS(CDC_BUFFER_CIRCULAR);
 
               uint32_t start = HAL_GetTick();
-              while (CDC_GetRxBufferBytesAvailable_FS() < 250) {
+              while (EMW_USB_GetRxBufferBytesAvailable_FS() < 250) {
                   if ((HAL_GetTick() - start) > 2000) {
                       break;
                   }
               }
 
               HAL_TIM_Base_Start_IT(&htim3);
-              while (CDC_GetRxBufferBytesAvailable_FS() != 0) {
+              while (EMW_USB_GetRxBufferBytesAvailable_FS() != 0) {
               }
 
               HAL_TIM_Base_Stop_IT(&htim3);
-              CDC_SetBufferType_FS(CDC_BUFFER_PACKET);
+              EMW_USB_SetBufferType_FS(CDC_BUFFER_PACKET);
               stopPWM_TIM2(tim_channel);
-              CDC_FlushRxBuffer_FS();
-              CDC_FreeRxBuffer_FS();
+              EMW_USB_FlushRxBuffer_FS();
+              EMW_USB_FreeRxBuffer_FS();
 
               command_send_ok(NULL, 0);
           } else if (strcmp(sub, "stop") == 0) {

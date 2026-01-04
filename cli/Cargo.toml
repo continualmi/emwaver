@@ -27,6 +27,8 @@ walkdir = "2"
 sha2 = "0.10"
 serialport = "4.2"
 emwaver-buffer-core = { path = "crates/emwaver-buffer-core" }
+midir = "0.10"
+fs2 = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rusb = { version = "0.9", features = ["vendored"] }
