@@ -19,6 +19,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import type { FragmentType } from "../App";
 import { useDevice, TransportType } from "../utils/DeviceContext";
 import { safeInvoke } from "../utils/tauri";
+import { useAppDialog } from "../utils/AppDialogContext";
 
 type HomePageProps = {
   onNavigateToFragment: (fragment: FragmentType) => void;
@@ -48,6 +49,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     send,
     sendNoWait,
   } = useDevice();
+  const dialog = useAppDialog();
 
   const [commandInput, setCommandInput] = useState("");
   const [bufferEntries, setBufferEntries] = useState<BufferEntry[]>([]);
@@ -180,13 +182,13 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     } catch (e) {
       console.error("Failed to list ports", e);
       if (!silent) {
-        alert(`Failed to list USB ports: ${String(e)}`);
+        await dialog.alert(`Failed to list USB ports:\n\n${String(e)}`, { title: "USB" });
       }
       return [];
     } finally {
       setIsRefreshingPorts(false);
     }
-  }, [listUSBPorts]);
+  }, [dialog, listUSBPorts]);
 
   // Refresh ports on mount
   useEffect(() => {
@@ -390,7 +392,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             const ports = await refreshPorts();
             const portToUse = selectedPort && ports.includes(selectedPort) ? selectedPort : (ports[0] ?? "");
             if (!portToUse) {
-              alert("Please select a USB port");
+              await dialog.alert("Please select a USB port.", { title: "USB" });
               return;
             }
             setSelectedPort(portToUse);
@@ -398,7 +400,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         }
       } catch (e) {
         console.error("Connect failed", e);
-        alert(`Connect failed: ${String(e)}`);
+        await dialog.alert(`Connect failed:\n\n${String(e)}`, { title: "Connection" });
       }
   };
 
@@ -416,7 +418,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
 
     if (!status.connected) {
-      alert("Device not connected");
+      await dialog.alert("Device not connected.", { title: "Connection" });
       return;
     }
 
@@ -432,13 +434,13 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       setCommandInput("");
     } catch (error) {
       console.error("Failed to send packet:", error);
-      alert(`Failed to send packet: ${error}`);
+      await dialog.alert(`Failed to send packet:\n\n${String(error)}`, { title: "Send" });
     }
   };
 
   const handleCheckVersion = async () => {
     if (!status.connected) {
-      alert("Device not connected");
+      await dialog.alert("Device not connected.", { title: "Connection" });
       return;
     }
 

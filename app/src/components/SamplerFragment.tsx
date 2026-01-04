@@ -21,6 +21,7 @@ import 'uplot/dist/uPlot.min.css';
 import { appDataDir } from '@tauri-apps/api/path';
 import { isTauriAvailable, safeInvoke, safeJoin } from '../utils/tauri';
 import { useDevice } from '../utils/DeviceContext';
+import { useAppDialog } from '../utils/AppDialogContext';
 
 type SamplerDeviceType = 'esp32' | 'stm32';
 
@@ -234,6 +235,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 function SamplerFragment() {
   // Use Device context instead of polling directly
   const { status, send, sendNoWait, transmitBuffer } = useDevice();
+  const dialog = useAppDialog();
   const isConnected = status.connected;
   const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
   
@@ -1468,7 +1470,11 @@ function SamplerFragment() {
       alert('Signal file not found');
       return;
     }
-    const confirmed = window.confirm(`Delete ${currentSignalName}?`);
+    const confirmed = await dialog.confirm(`Delete ${currentSignalName}?`, {
+      title: 'Delete Signal',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
     if (!confirmed) {
       return;
     }

@@ -21,6 +21,7 @@ import App from "./App";
 import "./index.css";
 import { DeviceProvider } from "./utils/DeviceContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AppDialogProvider } from "./utils/AppDialogContext";
 
 if (typeof window !== "undefined") {
   window.__emwaverSplash?.setProgress?.(25);
@@ -33,7 +34,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
       <DeviceProvider>
-        <App />
+        <AppDialogProvider>
+          <App />
+        </AppDialogProvider>
       </DeviceProvider>
     </ErrorBoundary>
   </React.StrictMode>,
