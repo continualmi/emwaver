@@ -253,6 +253,15 @@ pub(crate) async fn dispatch_request(
 ) -> Result<serde_json::Value> {
     let method = req.method.as_str();
 
+    fn looks_like_usb_port_name(value: &str) -> bool {
+        let trimmed = value.trim();
+        trimmed.starts_with("/dev/")
+            || trimmed.contains("usbmodem")
+            || trimmed.contains("usbserial")
+            || trimmed.contains("tty.usb")
+            || trimmed.contains("cu.usb")
+    }
+
     match method {
         "hello" => Ok(json!({
             "protocol": 1,
@@ -290,6 +299,12 @@ pub(crate) async fn dispatch_request(
             Ok(json!({ "devices": devices }))
         }
         "connect" => {
+            let transport = req
+                .params
+                .get("transport")
+                .and_then(|v| v.as_str())
+                .unwrap_or("auto")
+                .to_ascii_lowercase();
             let address = req
                 .params
                 .get("address")
@@ -300,8 +315,33 @@ pub(crate) async fn dispatch_request(
                 .get("name")
                 .and_then(|v| v.as_str())
                 .map(|v| v.to_string());
-            let info = ble_connect(&state, address, name).await?;
-            Ok(json!({ "device": info }))
+
+            if transport == "usb" {
+                let info = usb_connect(&state, address).await?;
+                return Ok(json!({ "device": info }));
+            }
+            if transport == "ble" {
+                let info = ble_connect(&state, address, name).await?;
+                return Ok(json!({ "device": info }));
+            }
+
+            // Auto:
+            // - If the provided address looks like a serial port path, prefer USB.
+            // - Otherwise try BLE first, then fall back to USB if no BLE device matches.
+            if address.as_deref().is_some_and(looks_like_usb_port_name) {
+                let info = usb_connect(&state, address).await?;
+                return Ok(json!({ "device": info }));
+            }
+
+            match ble_connect(&state, address, name).await {
+                Ok(info) => Ok(json!({ "device": info })),
+                Err(ble_err) => match usb_connect(&state, None).await {
+                    Ok(info) => Ok(json!({ "device": info })),
+                    Err(usb_err) => Err(anyhow!(
+                        "BLE connect failed: {ble_err:#}; USB connect failed: {usb_err:#}"
+                    )),
+                },
+            }
         }
         "list_connected" => {
             if let Some(peripheral) = state.connected.lock().await.as_ref() {
@@ -700,10 +740,12 @@ async fn write_active(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     if state.connected.lock().await.is_some() {
         return ble_write(state, bytes).await;
     }
-    if let Some(conn) = state.usb.lock().await.as_ref() {
-        if conn.status.lock().await.connected {
-            return usb_write_packet(state, bytes).await;
-        }
+    let usb_connected = match state.usb.lock().await.clone() {
+        Some(conn) => conn.status.lock().await.connected,
+        None => false,
+    };
+    if usb_connected {
+        return usb_write_packet(state, bytes).await;
     }
     bail!("not connected");
 }
@@ -805,10 +847,12 @@ async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()
     if state.connected.lock().await.is_some() {
         return ble_transmit_buffer(state, data).await;
     }
-    if let Some(conn) = state.usb.lock().await.as_ref() {
-        if conn.status.lock().await.connected {
-            return usb_transmit_buffer(state, data).await;
-        }
+    let usb_connected = match state.usb.lock().await.clone() {
+        Some(conn) => conn.status.lock().await.connected,
+        None => false,
+    };
+    if usb_connected {
+        return usb_transmit_buffer(state, data).await;
     }
     bail!("not connected");
 }
@@ -1052,6 +1096,7 @@ async fn usb_disconnect(state: &BridgeState) -> Result<()> {
 }
 
 fn spawn_usb_reader(
+    mut read_port: Box<dyn SerialPort + Send>,
     state_events: broadcast::Sender<Vec<u8>>,
     buffer: Arc<Mutex<Buffer>>,
     rx_notify: Arc<Notify>,
@@ -1059,14 +1104,6 @@ fn spawn_usb_reader(
     port_state: Arc<AsyncMutex<Option<Box<dyn SerialPort + Send>>>>,
     status: Arc<AsyncMutex<UsbStatus>>,
 ) -> Result<()> {
-    let mut read_port = {
-        let mut guard = port_state.blocking_lock();
-        let Some(port) = guard.as_mut() else {
-            bail!("port not initialized");
-        };
-        port.try_clone().context("failed to clone serial port")?
-    };
-
     std::thread::spawn(move || {
         let mut buf = [0u8; 1024];
         let mut pending: Vec<u8> = Vec::new();
@@ -1155,7 +1192,16 @@ async fn usb_connect(state: &BridgeState, port_name: Option<String>) -> Result<D
         })),
     };
 
+    let read_port = {
+        let mut guard = conn.port.lock().await;
+        let Some(port) = guard.as_mut() else {
+            bail!("port not initialized");
+        };
+        port.try_clone().context("failed to clone serial port")?
+    };
+
     spawn_usb_reader(
+        read_port,
         state.event_tx.clone(),
         Arc::clone(&state.buffer),
         Arc::clone(&state.rx_notify),
@@ -1186,12 +1232,27 @@ async fn usb_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
 
     let packet = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
 
-    let mut port_guard = conn.port.lock().await;
-    let Some(port) = port_guard.as_mut() else {
-        bail!("not connected");
+    let mut write_port = {
+        let mut port_guard = conn.port.lock().await;
+        let Some(port) = port_guard.as_mut() else {
+            bail!("not connected");
+        };
+        port.try_clone().context("failed to clone serial port")?
     };
-    port.write_all(&packet).context("failed to write serial")?;
-    port.flush().ok();
+
+    timeout(
+        Duration::from_millis(750),
+        tokio::task::spawn_blocking(move || {
+            write_port
+                .write_all(&packet)
+                .context("failed to write serial")?;
+            write_port.flush().ok();
+            Ok::<(), anyhow::Error>(())
+        }),
+    )
+    .await
+    .map_err(|_| anyhow!("timeout writing to USB serial"))?
+    .map_err(|e| anyhow!("task join failed: {e}"))??;
 
     if let Ok(mut guard) = state.buffer.lock() {
         buffer::append_tx_packet(&mut *guard, &packet, now_ms());
