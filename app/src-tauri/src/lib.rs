@@ -46,8 +46,6 @@ use git::{
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 use daemon_client::{RpcRequest, decode_b64, encode_b64};
 
-const ESP32_STOCK_FIRMWARE_BIN: &[u8] = include_bytes!("../resources/ota/emwaveresp.bin");
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EmbeddedFirmware {
     Ism,
@@ -81,9 +79,6 @@ impl EmbeddedFirmware {
 struct CreateProjectPayload {
     name: String,
     location: String,
-    target: String,
-    components: Vec<String>,
-    stm32_firmware: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -199,12 +194,6 @@ pub struct MidiStatus {
     pub device_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct USBStatus {
-    pub connected: bool,
-    pub device_path: Option<String>,
-}
-
 #[derive(Deserialize)]
 struct RemovePathPayload {
     path: String,
@@ -232,10 +221,6 @@ async fn create_project(payload: CreateProjectPayload) -> Result<CreateProjectRe
         return Err("Project name is required".into());
     }
 
-    let target = parse_init_target(&payload.target)?;
-    let components = parse_init_components(&payload.components)?;
-    let stm32_firmware = parse_init_stm32_firmware(payload.stm32_firmware.as_deref())?;
-
     let base_path = expand_path(&payload.location);
     if !base_path.exists() {
         fs::create_dir_all(&base_path)
@@ -256,7 +241,7 @@ async fn create_project(payload: CreateProjectPayload) -> Result<CreateProjectRe
 
     let destination = project_path.clone();
     spawn_blocking(move || {
-        emw::init::run_init(target, components, stm32_firmware, destination)
+        emw::init::run_init(emw::Target::Stm32f042, Vec::new(), destination)
             .map_err(|error| error.to_string())
     })
     .await
@@ -269,52 +254,6 @@ async fn create_project(payload: CreateProjectPayload) -> Result<CreateProjectRe
             .to_string_lossy()
             .to_string()
     })
-}
-
-fn parse_init_target(raw: &str) -> Result<emw::Target, String> {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "esp32s3" | "esp32-s3" | "esp32_s3" => Ok(emw::Target::Esp32s3),
-        "stm32f042" | "stm32-f042" | "stm32_f042" => Ok(emw::Target::Stm32f042),
-        _ => Err("Unknown target (expected esp32s3 or stm32f042)".into()),
-    }
-}
-
-fn parse_init_components(raw: &[String]) -> Result<Vec<emw::Component>, String> {
-    let mut out = Vec::with_capacity(raw.len());
-    for item in raw {
-        let component = match item.trim().to_ascii_lowercase().as_str() {
-            "ble" => emw::Component::Ble,
-            "command_registry" | "command-registry" | "commandregistry" => emw::Component::CommandRegistry,
-            "ota" => emw::Component::Ota,
-            "gpio" => emw::Component::Gpio,
-            "sampler" => emw::Component::Sampler,
-            "cc1101" => emw::Component::Cc1101,
-            "rfm69" => emw::Component::Rfm69,
-            "mfrc522" => emw::Component::Mfrc522,
-            _ => return Err(format!("Unknown component: {item}")),
-        };
-        if !out.contains(&component) {
-            out.push(component);
-        }
-    }
-    Ok(out)
-}
-
-fn parse_init_stm32_firmware(raw: Option<&str>) -> Result<Option<emw::Stm32Firmware>, String> {
-    let Some(raw) = raw else {
-        return Ok(None);
-    };
-    let value = raw.trim();
-    if value.is_empty() {
-        return Ok(None);
-    }
-    match value.to_ascii_lowercase().as_str() {
-        "gpio" => Ok(Some(emw::Stm32Firmware::Gpio)),
-        "ir" => Ok(Some(emw::Stm32Firmware::Ir)),
-        "ism" => Ok(Some(emw::Stm32Firmware::Ism)),
-        "rfid" => Ok(Some(emw::Stm32Firmware::Rfid)),
-        _ => Err("Unknown STM32 firmware (expected gpio/ir/ism/rfid)".into()),
-    }
 }
 
 #[tauri::command]
@@ -1027,58 +966,6 @@ async fn device_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) ->
     Ok(())
 }
 
-// USB Commands
-#[tauri::command]
-async fn usb_list_ports() -> Result<Vec<String>, String> {
-    let daemon = DaemonState::new()?;
-    let value = daemon
-        .rpc("usb_list_ports", serde_json::json!({}), Duration::from_secs(5))
-        .await?;
-    Ok(value
-        .get("ports")
-        .and_then(|v| v.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect::<Vec<String>>()
-        })
-        .unwrap_or_default())
-}
-
-#[tauri::command]
-async fn usb_connect(state: State<'_, DaemonState>, port_name: String) -> Result<(), String> {
-    let _ = state
-        .rpc(
-            "usb_connect",
-            serde_json::json!({ "port_name": port_name }),
-            Duration::from_secs(10),
-        )
-        .await?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn usb_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
-    state
-        .rpc("usb_disconnect", serde_json::json!({}), Duration::from_secs(5))
-        .await?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn usb_get_status(state: State<'_, DaemonState>) -> Result<USBStatus, String> {
-    let value = state
-        .rpc("usb_status", serde_json::json!({}), Duration::from_secs(3))
-        .await?;
-    Ok(USBStatus {
-        connected: value.get("connected").and_then(|v| v.as_bool()).unwrap_or(false),
-        device_path: value
-            .get("device_path")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-    })
-}
-
 // MIDI Commands
 #[tauri::command]
 async fn midi_list_ports() -> Result<Vec<String>, String> {
@@ -1161,344 +1048,7 @@ fn emit_dfu_progress(app: &tauri::AppHandle, message: impl Into<String>) {
     );
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-struct OtaProgressEvent {
-    message: String,
-    sent_bytes: u64,
-    total_bytes: u64,
-    timestamp_ms: u64,
-}
-
-fn emit_ota_progress(app: &tauri::AppHandle, message: impl Into<String>, sent_bytes: u64, total_bytes: u64) {
-    let _ = app.emit(
-        "ota-progress",
-        OtaProgressEvent {
-            message: message.into(),
-            sent_bytes,
-            total_bytes,
-            timestamp_ms: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        },
-    );
-}
-
-fn parse_ota_status(notification: &[u8]) -> Option<(u8, u32, u32, u8)> {
-    if notification.len() != 14 {
-        return None;
-    }
-    if &notification[0..3] != b"OTA" {
-        return None;
-    }
-    if notification[3] != 1 {
-        return None;
-    }
-    let status = notification[4];
-    let received = u32::from_le_bytes([notification[5], notification[6], notification[7], notification[8]]);
-    let total = u32::from_le_bytes([notification[9], notification[10], notification[11], notification[12]]);
-    let err = notification[13];
-    Some((status, received, total, err))
-}
-
-fn bytes_to_hex_lower(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-        out.push(HEX[(b >> 4) as usize] as char);
-        out.push(HEX[(b & 0x0f) as usize] as char);
-    }
-    out
-}
-
-#[derive(Clone)]
-struct DaemonEvents {
-    ota_status_tx: tokio::sync::broadcast::Sender<Vec<u8>>,
-}
-
-async fn wait_for_ota_success(
-    app: &tauri::AppHandle,
-    events: &DaemonEvents,
-    total_bytes: u64,
-    timeout_seconds: u64,
-) -> Result<(), String> {
-    let mut rx = events.ota_status_tx.subscribe();
-    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(timeout_seconds);
-
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            return Err("Timed out waiting for OTA completion status".to_string());
-        }
-
-        let next = tokio::time::timeout(remaining, rx.recv())
-            .await
-            .map_err(|_| "Timed out waiting for OTA completion status".to_string())?;
-
-        let bytes = match next {
-            Ok(v) => v,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                return Err("Lost connection to daemon OTA status stream".to_string());
-            }
-        };
-
-        if let Some((code, received, total, err)) = parse_ota_status(&bytes) {
-            let msg = format!(
-                "Device OTA status: code=0x{code:02x} received={received} total={total} err=0x{err:02x}"
-            );
-            emit_ota_progress(app, msg, total_bytes, total_bytes);
-            match code {
-                0x13 => return Ok(()), // SUCCESS
-                0x14 | 0x15 => return Err(format!("OTA failed (code=0x{code:02x}, err=0x{err:02x})")),
-                _ => {}
-            }
-        }
-    }
-}
-
-async fn wifi_http_post_firmware(
-    app: &tauri::AppHandle,
-    bytes: &[u8],
-    sha256_hex: &str,
-    total_bytes: u64,
-) -> Result<(), String> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpStream;
-
-    let addr = "192.168.4.1:80";
-    let mut stream = tokio::time::timeout(tokio::time::Duration::from_secs(10), TcpStream::connect(addr))
-        .await
-        .map_err(|_| "Timed out connecting to 192.168.4.1 (are you connected to EMWaver-OTA?)".to_string())?
-        .map_err(|e| format!("Failed to connect to {addr}: {e}"))?;
-
-    let request = format!(
-        "POST /ota HTTP/1.1\r\nHost: 192.168.4.1\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nX-Emwaver-Sha256: {}\r\nConnection: close\r\n\r\n",
-        bytes.len(),
-        sha256_hex
-    );
-    stream
-        .write_all(request.as_bytes())
-        .await
-        .map_err(|e| format!("Failed to write HTTP request headers: {e}"))?;
-
-    let mut sent = 0usize;
-    let mut last_progress_emit = 0usize;
-    for chunk in bytes.chunks(16 * 1024) {
-        stream
-            .write_all(chunk)
-            .await
-            .map_err(|e| format!("Failed to write firmware body: {e}"))?;
-        sent += chunk.len();
-        if sent - last_progress_emit >= 64 * 1024 || sent == bytes.len() {
-            last_progress_emit = sent;
-            emit_ota_progress(app, "Uploading over WiFi...", sent as u64, total_bytes);
-        }
-    }
-
-    stream.shutdown().await.ok();
-
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .await
-        .map_err(|e| format!("Failed to read OTA HTTP response: {e}"))?;
-
-    let response_str = String::from_utf8_lossy(&response);
-    let status_line = response_str.lines().next().unwrap_or_default();
-    if !(status_line.starts_with("HTTP/1.1 200") || status_line.starts_with("HTTP/1.0 200")) {
-        return Err(format!("OTA HTTP upload failed: {status_line}"));
-    }
-    Ok(())
-}
-
-async fn ble_ota_flash_bytes(
-    app: &tauri::AppHandle,
-    daemon: &DaemonState,
-    events: &DaemonEvents,
-    bytes: &[u8],
-    label: &str,
-) -> Result<(), String> {
-    let connected = daemon
-        .rpc("connection_status", serde_json::json!({}), Duration::from_secs(3))
-        .await?
-        .get("connected")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if !connected {
-        return Err("Not connected to a device".to_string());
-    }
-
-    if bytes.is_empty() {
-        return Err("Firmware is empty".to_string());
-    }
-
-    let total_bytes = bytes.len() as u64;
-    emit_ota_progress(app, format!("{label} size: {} bytes", total_bytes), 0, total_bytes);
-
-    use sha2::{Digest as _, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    let sha = hasher.finalize();
-
-    let mut start = Vec::with_capacity(1 + 4 + 32);
-    start.push(0x01);
-    start.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
-    start.extend_from_slice(&sha[..]);
-
-    emit_ota_progress(app, "Starting OTA session...", 0, total_bytes);
-    daemon
-        .rpc(
-            "ble_ota_write_control",
-            serde_json::json!({ "bytes_b64": encode_b64(&start) }),
-            Duration::from_secs(5),
-        )
-        .await?;
-
-    let chunk_size = 200usize;
-    let mut sent = 0usize;
-    let mut last_progress_emit = 0usize;
-
-    for chunk in bytes.chunks(chunk_size) {
-        daemon
-            .rpc(
-                "ble_ota_write_data",
-                serde_json::json!({ "bytes_b64": encode_b64(chunk) }),
-                Duration::from_secs(5),
-            )
-            .await?;
-        sent += chunk.len();
-
-        if sent - last_progress_emit >= 16 * 1024 || sent == bytes.len() {
-            last_progress_emit = sent;
-            emit_ota_progress(app, "Uploading...", sent as u64, total_bytes);
-        }
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(3)).await;
-    }
-
-    emit_ota_progress(app, "Finalizing...", total_bytes, total_bytes);
-    daemon
-        .rpc(
-            "ble_ota_write_control",
-            serde_json::json!({ "bytes_b64": encode_b64(&[0x03]) }),
-            Duration::from_secs(5),
-        )
-        .await?;
-
-    wait_for_ota_success(app, events, total_bytes, 30).await
-}
-
-#[tauri::command]
-async fn ble_ota_flash_file(
-    app: tauri::AppHandle,
-    daemon: State<'_, DaemonState>,
-    events: State<'_, DaemonEvents>,
-    path: String,
-) -> Result<(), String> {
-    let firmware_path = expand_path(&path);
-    let bytes = std::fs::read(&firmware_path)
-        .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
-    ble_ota_flash_bytes(&app, &daemon, &events, &bytes, "Firmware").await
-}
-
-#[tauri::command]
-async fn ble_ota_flash_stock(
-    app: tauri::AppHandle,
-    daemon: State<'_, DaemonState>,
-    events: State<'_, DaemonEvents>,
-) -> Result<(), String> {
-    ble_ota_flash_bytes(&app, &daemon, &events, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
-}
-
-#[tauri::command]
-async fn ota_wifi_start(daemon: State<'_, DaemonState>) -> Result<(), String> {
-    daemon
-        .rpc(
-            "ble_ota_write_control",
-            serde_json::json!({ "bytes_b64": encode_b64(&[0x10]) }),
-            Duration::from_secs(5),
-        )
-        .await?;
-    Ok(())
-}
-
-#[tauri::command]
-async fn ota_wifi_stop(daemon: State<'_, DaemonState>) -> Result<(), String> {
-    daemon
-        .rpc(
-            "ble_ota_write_control",
-            serde_json::json!({ "bytes_b64": encode_b64(&[0x11]) }),
-            Duration::from_secs(5),
-        )
-        .await?;
-    Ok(())
-}
-
-async fn wifi_ota_flash_bytes(
-    app: &tauri::AppHandle,
-    daemon: &DaemonState,
-    events: &DaemonEvents,
-    bytes: &[u8],
-    label: &str,
-) -> Result<(), String> {
-    let connected = daemon
-        .rpc("connection_status", serde_json::json!({}), Duration::from_secs(3))
-        .await?
-        .get("connected")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if !connected {
-        return Err("Not connected to a device".to_string());
-    }
-
-    if bytes.is_empty() {
-        return Err("Firmware is empty".to_string());
-    }
-
-    let total_bytes = bytes.len() as u64;
-    emit_ota_progress(app, format!("{label} size: {} bytes", total_bytes), 0, total_bytes);
-    emit_ota_progress(
-        app,
-        "WiFi OTA: connect to Wi-Fi 'EMWaver-OTA' then upload to http://192.168.4.1/ota",
-        0,
-        total_bytes,
-    );
-
-    use sha2::{Digest as _, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    let sha = hasher.finalize();
-    let sha_hex = bytes_to_hex_lower(&sha[..]);
-
-    emit_ota_progress(app, "Uploading over WiFi...", 0, total_bytes);
-    wifi_http_post_firmware(app, bytes, &sha_hex, total_bytes).await?;
-
-    emit_ota_progress(app, "Waiting for device to finalize...", total_bytes, total_bytes);
-    wait_for_ota_success(app, events, total_bytes, 30).await
-}
-
-#[tauri::command]
-async fn ota_wifi_flash_file(
-    app: tauri::AppHandle,
-    daemon: State<'_, DaemonState>,
-    events: State<'_, DaemonEvents>,
-    path: String,
-) -> Result<(), String> {
-    let firmware_path = expand_path(&path);
-    let bytes = std::fs::read(&firmware_path)
-        .map_err(|e| format!("Failed to read firmware file {}: {}", firmware_path.display(), e))?;
-    wifi_ota_flash_bytes(&app, &daemon, &events, &bytes, "Firmware").await
-}
-
-#[tauri::command]
-async fn ota_wifi_flash_stock(
-    app: tauri::AppHandle,
-    daemon: State<'_, DaemonState>,
-    events: State<'_, DaemonEvents>,
-) -> Result<(), String> {
-    wifi_ota_flash_bytes(&app, &daemon, &events, ESP32_STOCK_FIRMWARE_BIN, "Stock firmware").await
-}
+// OTA helpers removed (MIDI-only runtime transport).
 #[tauri::command]
 async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
     let selection = EmbeddedFirmware::from_str(&firmware)
@@ -1558,12 +1108,9 @@ pub fn run() {
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
     // Desktop and CLI must agree on the daemon socket path; otherwise we can spawn multiple daemons
-    // that contend for the same USB/BLE transport and cause "Resource busy" errors.
+    // that contend for the same MIDI/DFU resources and cause "Resource busy" errors.
     let daemon_state = DaemonState::new().expect("failed to determine emwaver daemon socket path");
-    let (ota_status_tx, _) = tokio::sync::broadcast::channel::<Vec<u8>>(256);
-    let daemon_events = DaemonEvents { ota_status_tx };
     let daemon_state_for_setup = daemon_state.clone();
-    let daemon_events_for_setup = daemon_events.clone();
 
     tauri::Builder::default()
         .setup(move |app| {
@@ -1575,7 +1122,6 @@ pub fn run() {
                 use tokio::io::AsyncWriteExt;
                 use tokio::net::UnixStream;
                 let daemon = daemon_state_for_setup.clone();
-                let events = daemon_events_for_setup.clone();
                 tauri::async_runtime::spawn(async move {
                     loop {
                         if daemon.ensure_running().is_err() {
@@ -1623,18 +1169,6 @@ pub fn run() {
                             let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
                                 continue;
                             };
-
-                            if event == "ota_status" {
-                                let bytes_b64 = value
-                                    .get("data")
-                                    .and_then(|d| d.get("bytes_b64"))
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
-                                if let Ok(bytes) = decode_b64(bytes_b64) {
-                                    let _ = events.ota_status_tx.send(bytes);
-                                }
-                                continue;
-                            }
 
                             if event == "bs" {
                                 let bs = value
@@ -2006,7 +1540,6 @@ pub fn run() {
                 .build(),
         )
         .manage(daemon_state)
-        .manage(daemon_events)
         .manage(Arc::new(PtyManager::new()))
 			        .invoke_handler(tauri::generate_handler![
             create_project,
@@ -2043,17 +1576,13 @@ pub fn run() {
             device_write,
             device_send_command,
             device_transmit_buffer,
-	            usb_list_ports,
-	            usb_connect,
-	            usb_disconnect,
-	                    usb_get_status,
-                        midi_list_ports,
-                        midi_connect,
-                        midi_disconnect,
-                        midi_get_status,
-			            dfu_is_connected,
-		            dfu_flash_embedded,
-		            dfu_flash_file,
+            midi_list_ports,
+            midi_connect,
+            midi_disconnect,
+            midi_get_status,
+            dfu_is_connected,
+            dfu_flash_embedded,
+            dfu_flash_file,
                 firmware_build,
                 firmware_flash,
                 git_status,

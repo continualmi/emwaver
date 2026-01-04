@@ -1242,15 +1242,9 @@ export default function WorkspaceShell({
         return;
       }
 
-      if (firmwareProjectKind === "esp32") {
-        await safeInvoke<void>("pty_write", {
-          payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}" && source setup.sh\r` },
-        });
-      } else {
-        await safeInvoke<void>("pty_write", {
-          payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}"\r` },
-        });
-      }
+      await safeInvoke<void>("pty_write", {
+        payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}"\r` },
+      });
 
       envReadyRef.current = true;
       envKeyRef.current = key;
@@ -1262,78 +1256,7 @@ export default function WorkspaceShell({
     void ensureInitialTerminalSession();
   }, [ensureInitialTerminalSession]);
 
-  useEffect(() => {
-    if (!isTauriAvailable() || !rootDir || firmwareProjectKind !== "esp32") {
-      return;
-    }
-
-    const key = `${firmwareProjectKind}:${rootDir}`;
-    if (ideFirmwareWarmupKey === key) {
-      firmwareBuildEnvReadyRef.current = true;
-      firmwareBuildEnvKeyRef.current = key;
-      firmwareMonitorEnvReadyRef.current = true;
-      firmwareMonitorEnvKeyRef.current = key;
-      return;
-    }
-    ideFirmwareWarmupKey = key;
-
-    void (async () => {
-      try {
-        const [buildSessionId, monitorSessionId] = await Promise.all([
-          ensureFirmwareBuildPtySession(),
-          ensureFirmwareMonitorPtySession(),
-        ]);
-
-        const terminalSessionId =
-          activeTerminalSessionId ??
-          sessionsRef.current[sessionsRef.current.length - 1]?.id ??
-          ideCachedTerminalSessionId ??
-          (await startTerminalSession({ makeActive: false }));
-
-        const cwd = rootDir.replace(/\"/g, "\\\"");
-        const source = `cd "${cwd}" && source setup.sh`;
-
-        const writes: Array<Promise<unknown>> = [];
-        if (terminalSessionId) {
-          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: terminalSessionId, data: `${source}\r` } }));
-        }
-        if (buildSessionId) {
-          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: buildSessionId, data: `${source} && clear\r` } }));
-        }
-        if (monitorSessionId) {
-          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: `${source} && clear\r` } }));
-        }
-        await Promise.all(writes);
-
-        firmwareBuildEnvReadyRef.current = true;
-        firmwareBuildEnvKeyRef.current = key;
-        firmwareMonitorEnvReadyRef.current = true;
-        firmwareMonitorEnvKeyRef.current = key;
-
-        try {
-          firmwareBuildTerminalRef.current?.reset();
-          firmwareBuildTerminalRef.current?.clear();
-        } catch {
-          // ignore
-        }
-        try {
-          firmwareMonitorTerminalRef.current?.reset();
-          firmwareMonitorTerminalRef.current?.clear();
-        } catch {
-          // ignore
-        }
-      } catch {
-        // ignore
-      }
-    })();
-  }, [
-    activeTerminalSessionId,
-    ensureFirmwareBuildPtySession,
-    ensureFirmwareMonitorPtySession,
-    firmwareProjectKind,
-    rootDir,
-    startTerminalSession,
-  ]);
+  // ESP32 "source setup.sh" warmup removed (STM32-only workspace).
 
   useEffect(() => {
     firmwareBuildEnvReadyRef.current = false;
@@ -1597,7 +1520,7 @@ export default function WorkspaceShell({
   }, [openRoot]);
 
   const handleCreateProject = useCallback(
-    async ({ name, location, target, components, stm32_firmware }: NewProjectPayload) => {
+    async ({ name, location }: NewProjectPayload) => {
       const trimmedName = name.trim();
       const trimmedLocation = location.trim();
       if (!trimmedName || !trimmedLocation) {
@@ -1615,9 +1538,6 @@ export default function WorkspaceShell({
           payload: {
             name: trimmedName,
             location: trimmedLocation,
-            target,
-            components,
-            stm32_firmware: stm32_firmware ?? null,
           },
         });
         if (!response) {
@@ -1686,24 +1606,12 @@ export default function WorkspaceShell({
     }
 
     try {
-      if (firmwareProjectKind === "esp32") {
-        const sessionId = await ensureFirmwareBuildPtySession();
-        if (!sessionId) {
-          return;
-        }
-        await ensureFirmwareEnv("build", sessionId);
-        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py build\r" } });
-        setFirmwareProgressPct(null);
-        setIsFirmwareBusy(false);
-        return;
-      }
-
       await safeInvoke<void>(
         "firmware_build",
         {
           payload: {
             start_dir: rootDir ?? undefined,
-            codegen: firmwareProjectKind === "stm32" ? firmwareCodegenMode : "auto",
+            codegen: firmwareCodegenMode,
             verbose: true,
           },
         },
@@ -1717,7 +1625,7 @@ export default function WorkspaceShell({
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [firmwareCodegenMode, rootDir, writeFirmwareInfo]);
 
   const handleFirmwareFlash = useCallback(async () => {
     if (!isTauriAvailable()) {
@@ -1729,8 +1637,7 @@ export default function WorkspaceShell({
     const monitorSessionId = firmwareMonitorPtySessionIdRef.current;
     if (monitorSessionId) {
       try {
-        const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
-        await safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: stopSequence } });
+        await safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: "\x03" } });
       } catch {
         // ignore
       } finally {
@@ -1757,24 +1664,12 @@ export default function WorkspaceShell({
     }
 
     try {
-      if (firmwareProjectKind === "esp32") {
-        const sessionId = await ensureFirmwareBuildPtySession();
-        if (!sessionId) {
-          return;
-        }
-        await ensureFirmwareEnv("build", sessionId);
-        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py flash\r" } });
-        setFirmwareProgressPct(null);
-        setIsFirmwareBusy(false);
-        return;
-      }
-
       await safeInvoke<void>(
         "firmware_flash",
         {
           payload: {
             start_dir: rootDir ?? undefined,
-            codegen: firmwareProjectKind === "stm32" ? firmwareCodegenMode : "auto",
+            codegen: firmwareCodegenMode,
             verbose: true,
           },
         },
@@ -1788,7 +1683,7 @@ export default function WorkspaceShell({
     } finally {
       setIsFirmwareBusy(false);
     }
-  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+  }, [firmwareCodegenMode, rootDir, writeFirmwareInfo]);
 
   const handleFirmwareMonitor = useCallback(async () => {
     if (!isTauriAvailable()) {
@@ -1818,8 +1713,7 @@ export default function WorkspaceShell({
 
       await ensureFirmwareEnv("monitor", sessionId);
 
-      const command = firmwareProjectKind === "esp32" ? "idf.py monitor" : "emwaver monitor";
-      await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: `${command}\r` } });
+      await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "emwaver shell\r" } });
       firmwareMonitorRunningRef.current = true;
       firmwareMonitorRunningKeyRef.current = key;
       setIsFirmwareMonitorRunning(true);
@@ -2377,8 +2271,7 @@ export default function WorkspaceShell({
 
     void (async () => {
       try {
-        const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
-        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: stopSequence } });
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "\x03" } });
       } catch {
         // ignore
       } finally {
@@ -2388,7 +2281,7 @@ export default function WorkspaceShell({
         writeFirmwareInfo("monitor", "Monitor stopped.");
       }
     })();
-  }, [firmwareProjectKind, writeFirmwareInfo]);
+  }, [writeFirmwareInfo]);
 
   const handleFirmwareClearLog = useCallback(() => {
     setFirmwareProgressPct(null);
@@ -2896,45 +2789,17 @@ function NewProjectModal({
   onCreate: (payload: NewProjectPayload) => Promise<void> | void;
   isSubmitting: boolean;
 }) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [target, setTarget] = useState<NewProjectPayload["target"]>("esp32s3");
-  const [pendingDisableCoreConfirm, setPendingDisableCoreConfirm] = useState<null | "ble" | "command_registry">(null);
-
-  const [components, setComponents] = useState<Set<NewProjectPayload["components"][number]>>(
-    () => new Set(["ble", "command_registry", "gpio", "ota"]),
-  );
-  const [stm32Firmware, setStm32Firmware] = useState<
-    Exclude<NewProjectPayload["stm32_firmware"], undefined | null>
-  >(() => "gpio");
-
   const [name, setName] = useState("emwaver-firmware");
   const [location, setLocation] = useState("");
-
-  const resetForTarget = useCallback((nextTarget: NewProjectPayload["target"]) => {
-    if (nextTarget === "esp32s3") {
-      setComponents(new Set(["ble", "command_registry", "gpio", "ota"]));
-    } else {
-      setStm32Firmware("gpio");
-      setComponents(new Set());
-    }
-  }, []);
-
-  useEffect(() => {
-    resetForTarget(target);
-  }, [resetForTarget, target]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!name.trim() || !location.trim()) {
       return;
     }
-    const componentList = Array.from(components.values());
     await onCreate({
       name: name.trim(),
       location: location.trim(),
-      target,
-      components: target === "esp32s3" ? componentList : [],
-      stm32_firmware: target === "stm32f042" ? stm32Firmware : null,
     });
   };
 
@@ -2956,375 +2821,61 @@ function NewProjectModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
-      {pendingDisableCoreConfirm ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 px-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
-            <div className="text-sm font-semibold text-slate-100">
-              {pendingDisableCoreConfirm === "ble" ? "Disable BLE?" : "Disable Command Registry?"}
-            </div>
-            {pendingDisableCoreConfirm === "ble" ? (
-              <p className="mt-2 text-sm text-slate-300">
-                Disabling BLE means you won’t be able to interact with EMWaver apps.
-              </p>
-            ) : (
-              <p className="mt-2 text-sm text-slate-300">
-                You can still connect over BLE, but you won’t have any built-in commands (like <span className="font-semibold">version</span>).
-              </p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPendingDisableCoreConfirm(null)}
-                className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const mode = pendingDisableCoreConfirm;
-                  setPendingDisableCoreConfirm(null);
-                  setComponents((prev) => {
-                    const next = new Set(prev);
-                    if (mode === "ble") {
-                      next.delete("ble");
-                      next.delete("command_registry");
-                      next.delete("ota");
-                      next.delete("gpio");
-                      next.delete("sampler");
-                      next.delete("cc1101");
-                      next.delete("rfm69");
-                      next.delete("mfrc522");
-                    } else {
-                      next.delete("command_registry");
-                      next.delete("gpio");
-                      next.delete("sampler");
-                      next.delete("cc1101");
-                      next.delete("rfm69");
-                      next.delete("mfrc522");
-                    }
-                    return next;
-                  });
-                }}
-                className="rounded-md bg-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-rose-400 cursor-pointer"
-              >
-                Disable
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
-          <p className="text-sm text-slate-400">Step {step} of 3</p>
+          <p className="text-sm text-slate-400">STM32F042 template (USB MIDI runtime, DFU flashing)</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          {step === 1 ? (
-            <div className="space-y-3">
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Target</label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setTarget("esp32s3")}
-                    className={[
-                      "rounded-md border px-4 py-3 text-left transition-colors",
-                      target === "esp32s3"
-                        ? "border-sky-500/80 bg-sky-500/10 text-slate-100"
-                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-sky-500/60",
-                    ].join(" ")}
-                  >
-                    <div className="text-sm font-semibold">ESP32-S3</div>
-                    <div className="mt-1 text-xs text-slate-400">Supports: EMWaver Flagship, Shield, DIY.</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTarget("stm32f042")}
-                    className={[
-                      "rounded-md border px-4 py-3 text-left transition-colors",
-                      target === "stm32f042"
-                        ? "border-sky-500/80 bg-sky-500/10 text-slate-100"
-                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-sky-500/60",
-                    ].join(" ")}
-                  >
-                    <div className="text-sm font-semibold">STM32F042</div>
-                    <div className="mt-1 text-xs text-slate-400">Supports: Infrared Waver, ISM Waver, GPIO Waver, RFID Waver.</div>
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
-                >
-                  Next
-                </button>
-              </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Project name
+            </label>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+              placeholder="emwaver-firmware"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Location
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                placeholder="/Users/me/Projects"
+              />
+              <button
+                type="button"
+                onClick={handleBrowse}
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+              >
+                Browse
+              </button>
             </div>
-          ) : null}
+          </div>
 
-	          {step === 2 ? (
-            <div className="space-y-3">
-              {target === "esp32s3" ? (
-                <div>
-                  <div className="mb-2">
-                    <div className="text-sm font-semibold text-slate-100">Components</div>
-                    <div className="text-xs text-slate-400">
-                      Default is BLE + Command Registry + GPIO + OTA; uncheck what you don&apos;t need.
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      {
-                        id: "ble" as const,
-                        label: "BLE",
-                      },
-                      {
-                        id: "command_registry" as const,
-                        label: "Command Registry",
-                      },
-                    ].map((item) => {
-                      const checked = components.has(item.id);
-                      const disabled = false;
-                      return (
-                        <label
-                          key={item.id}
-                          className={[
-                            "flex items-center gap-2 rounded-md border bg-slate-950 px-3 py-2 text-sm text-slate-200",
-                            disabled ? "border-slate-800 opacity-60" : "border-slate-700 hover:border-sky-500/60",
-                          ].join(" ")}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled}
-                            onChange={(event) => {
-                              const nextChecked = event.target.checked;
-                              setComponents((prev) => {
-                                const next = new Set(prev);
-                                if (item.id === "ble" && !nextChecked) {
-                                  setPendingDisableCoreConfirm("ble");
-                                  return prev;
-                                }
-                                if (item.id === "command_registry" && !nextChecked) {
-                                  setPendingDisableCoreConfirm(item.id);
-                                  return prev;
-                                }
-
-                                if (nextChecked) {
-                                  next.add(item.id);
-                                  if (item.id === "command_registry") {
-                                    next.add("ble");
-                                  }
-                                } else {
-                                  next.delete(item.id);
-                                }
-
-                                if (!next.has("ble")) {
-                                  next.delete("command_registry");
-                                  next.delete("ota");
-                                  next.delete("gpio");
-                                  next.delete("sampler");
-                                  next.delete("cc1101");
-                                  next.delete("rfm69");
-                                  next.delete("mfrc522");
-                                }
-
-                                if (!next.has("command_registry")) {
-                                  next.delete("gpio");
-                                  next.delete("sampler");
-                                  next.delete("cc1101");
-                                  next.delete("rfm69");
-                                  next.delete("mfrc522");
-                                }
-
-                                return next;
-                              });
-                            }}
-                          />
-                          <span>{item.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">
-                    Firmware modules
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(
-                      [
-                        { id: "ota", label: "OTA" },
-                        { id: "gpio", label: "GPIO" },
-                        { id: "sampler", label: "Sampler" },
-                        { id: "cc1101", label: "CC1101" },
-                        { id: "rfm69", label: "RFM69" },
-                        { id: "mfrc522", label: "MFRC522" },
-                      ] as const
-                    ).map((item) => {
-                      const checked = components.has(item.id);
-                      const disabled =
-                        item.id === "ota" ? !components.has("ble") : !components.has("command_registry");
-                      return (
-                        <label
-                          key={item.id}
-                          className={[
-                            "flex items-center gap-2 rounded-md border bg-slate-950 px-3 py-2 text-sm text-slate-200",
-                            disabled ? "border-slate-800 opacity-60" : "border-slate-700 hover:border-sky-500/60",
-                          ].join(" ")}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled}
-                            onChange={(event) => {
-                              const nextChecked = event.target.checked;
-                              setComponents((prev) => {
-                                const next = new Set(prev);
-                                if (nextChecked) {
-                                  next.add(item.id);
-                                } else {
-                                  next.delete(item.id);
-                                }
-                                return next;
-                              });
-                            }}
-                          />
-                          <span>{item.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="mb-2">
-                    <div className="text-sm font-semibold text-slate-100">Base firmware</div>
-                    <div className="text-xs text-slate-400">Default is GPIO.</div>
-                  </div>
-                  <select
-                    value={stm32Firmware}
-                    onChange={(event) =>
-                      setStm32Firmware(event.target.value as Exclude<NewProjectPayload["stm32_firmware"], undefined | null>)
-                    }
-                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-                  >
-                    <option value="gpio">GPIO</option>
-                    <option value="ir">IR</option>
-                    <option value="ism">ISM</option>
-                    <option value="rfid">RFID</option>
-                  </select>
-                </div>
-              )}
-
-              <div className="flex justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-                >
-                  Back
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStep(3)}
-                    className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {step === 3 ? (
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Project name
-                </label>
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-                  placeholder="emwaver-firmware"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Location
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    value={location}
-                    onChange={(event) => setLocation(event.target.value)}
-                    className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-                    placeholder="/Users/me/Projects"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleBrowse}
-                    className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-                  >
-                    Browse
-                  </button>
-                </div>
-              </div>
-              <div className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-400">
-                {target === "esp32s3" ? (
-                  <span>
-                    Target: ESP32-S3 • Components: {Array.from(components.values()).join(", ")}
-                  </span>
-                ) : (
-                  <span>Target: STM32F042 • Base firmware: {stm32Firmware}</span>
-                )}
-              </div>
-              <div className="flex justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-                >
-                  Back
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !name.trim() || !location.trim()}
-                    className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isSubmitting ? "Creating..." : "Create"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim() || !location.trim()}
+              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? "Creating..." : "Create"}
+            </button>
+          </div>
         </form>
       </div>
     </div>

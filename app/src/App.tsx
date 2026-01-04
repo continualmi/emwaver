@@ -1509,7 +1509,7 @@ function NewProjectModal({
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
           <p className="text-sm text-slate-400">
-            Creates an ESP32-S3 firmware template (with all built-in components enabled).
+            Creates an STM32F042 firmware template (USB MIDI runtime, DFU flashing).
           </p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
