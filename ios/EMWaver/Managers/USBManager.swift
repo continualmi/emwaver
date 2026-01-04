@@ -58,8 +58,7 @@ final class USBManager: ObservableObject {
     private var virtualDestination: MIDIEndpointRef = 0
 
     // SysEx receive accumulator (CoreMIDI may chunk messages)
-    private var sysexBuf = Data(capacity: 256)
-    private var inSysex = false
+    private var sysexAccumulator = UsbMidiSysexAccumulator()
 
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
@@ -726,23 +725,9 @@ final class USBManager: ObservableObject {
     }
 
     private func feedMidiBytes(_ data: Data) {
-        for b in data {
-            if b == 0xF0 {
-                sysexBuf.removeAll(keepingCapacity: true)
-                inSysex = true
-            }
-
-            guard inSysex else { continue }
-            sysexBuf.append(b)
-
-            if b == 0xF7 {
-                let sysex = sysexBuf
-                sysexBuf.removeAll(keepingCapacity: true)
-                inSysex = false
-
-                guard let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex) else { continue }
-                storeBulkPkt(pkt64)
-            }
+        for sysex in sysexAccumulator.feed(data) {
+            guard let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex) else { continue }
+            storeBulkPkt(pkt64)
         }
     }
 
