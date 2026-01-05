@@ -21,9 +21,8 @@ import 'uplot/dist/uPlot.min.css';
 import { appDataDir } from '@tauri-apps/api/path';
 import { isTauriAvailable, safeInvoke, safeJoin } from '../utils/tauri';
 import { useDevice } from '../utils/DeviceContext';
-import { useAppDialog } from '../utils/AppDialogContext';
 
-type SamplerDeviceType = 'stm32';
+type SamplerDeviceType = 'esp32' | 'stm32';
 
 type SignalEntry = {
   name: string;
@@ -50,13 +49,18 @@ type SamplerCompressViewportResponse = {
   data_values: number[];
 };
 
+type SamplerInvertTargets = 'stm32' | 'esp32' | 'both';
+
+const PIN_INDEX_ESP32_KEY = 'sampler.pinIndex.esp32';
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
+const PIN_IO_ESP32_KEY = 'sampler.pinIo.esp32';
 const LAST_SIGNAL_KEY = 'sampler.lastSignal';
 const PWM_ENABLED_KEY = 'sampler.pwm.enabled';
 const PWM_FREQ_KEY = 'sampler.pwm.freq';
 const PWM_DUTY_KEY = 'sampler.pwm.duty';
 const PWM_PREFS_MIGRATED_KEY = 'sampler.pwm.prefsMigrated.v2';
 const INVERT_CAPTURE_KEY = 'sampler.capture.invert';
+const INVERT_CAPTURE_TARGETS_KEY = 'sampler.capture.invert.targets';
 const LEGACY_INVERT_RECORDING_KEY = 'sampler.settings.invertRecording';
 const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
 const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
@@ -71,8 +75,70 @@ const MIN_CHART_BINS = 100;
 const MIN_CHART_RENDER_INTERVAL_MS = 120;
 const INTERACTION_REFRESH_THROTTLE_MS = 80;
 
+function invertShouldApplyToDevice(deviceType: SamplerDeviceType, targets: SamplerInvertTargets) {
+  if (targets === 'both') {
+    return true;
+  }
+  return targets === deviceType;
+}
 
-// STM32 pins (MIDI sampler)
+const ESP32_PINS = [
+  'IO1 DIO0[S]/GDO0[F]',
+  'IO2 DIO1[S]/GDO2[F]',
+  'IO3 GPIO3',
+  'IO4 IR TX[F/D]',
+  'IO5 IR RX[F/D]',
+  'IO6 GPIO6',
+  'IO7 GPIO7',
+  'IO8 GPIO8',
+  'IO9 GPIO9',
+  'IO10 GPIO10',
+  'IO11 GPIO11',
+  'IO12 GPIO12',
+  'IO13 GPIO13',
+  'IO14 GPIO14',
+  'IO15 GPIO15',
+  'IO16 GPIO16',
+  'IO17 GPIO17',
+  'IO18 GPIO18',
+  'IO37 IR TX[S]',
+  'IO38 IR RX[S]',
+  'IO39 DIO5[S]',
+  'IO40 DIO4[S]',
+  'IO41 DIO3[S]',
+  'IO42 DIO2[S]',
+  'IO46 GPIO46',
+];
+
+const LEGACY_ESP32_PINS = [
+  'RFM69 DIO0 / CC1101 GDO0 (IO1)',
+  'RFM69 DIO1 / CC1101 GDO2 (IO2)',
+  'RFM69 DIO2 (IO42)',
+  'RFM69 DIO3 (IO41)',
+  'RFM69 DIO4 (IO40)',
+  'RFM69 DIO5 (IO39)',
+  'IR RX (IO38)',
+  'IR TX (IO37)',
+  'GPIO4 / IR TX (IO4)',
+  'GPIO5 / IR RX (IO5)',
+  'GPIO6 (IO6)',
+  'GPIO7 (IO7)',
+  'GPIO15 (IO15)',
+  'GPIO16 (IO16)',
+  'GPIO17 (IO17)',
+  'GPIO18 (IO18)',
+  'GPIO8 (IO8)',
+  'GPIO3 (IO3)',
+  'GPIO46 (IO46)',
+  'GPIO9 (IO9)',
+  'GPIO10 / CC1101 NSS (IO10)',
+  'GPIO11 / CC1101 MOSI (IO11)',
+  'GPIO12 / CC1101 SCK (IO12)',
+  'GPIO13 / CC1101 MISO (IO13)',
+  'GPIO14 (IO14)',
+];
+
+// STM32 pins (USB sampler)
 // Encoded pin format matches STM32 firmware gpio aliases:
 // - PA0..PA15 => 0..15
 // - PB0..PB15 => 16..31
@@ -91,6 +157,23 @@ const STM32_PINS = [
   'PB6',
   'PB7',
 ];
+
+function getEsp32PinNumber(pinString: string): number {
+  const match = pinString.match(/\bIO(\d+)\b/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  return -1;
+}
+
+function findEsp32PinIndexByNumber(ioPin: number): number {
+  for (let i = 0; i < ESP32_PINS.length; i++) {
+    if (getEsp32PinNumber(ESP32_PINS[i]) === ioPin) {
+      return i;
+    }
+  }
+  return 0;
+}
 
 function getStm32PinNumber(pinString: string): number {
   const match = pinString.match(/\bP([AB])(\d{1,2})\b/);
@@ -151,15 +234,30 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 function SamplerFragment() {
   // Use Device context instead of polling directly
   const { status, send, sendNoWait, transmitBuffer } = useDevice();
-  const dialog = useAppDialog();
   const isConnected = status.connected;
-  const deviceType: SamplerDeviceType = 'stm32';
+  const deviceType: SamplerDeviceType = status.transport === 'USB' ? 'stm32' : 'esp32';
   
   const [isRecording, setIsRecording] = useState(false);
   const isRecordingRef = useRef(false);
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
+  const [selectedPinIndexEsp32, setSelectedPinIndexEsp32] = useState(() => {
+    const storedIo = Number.parseInt(localStorage.getItem(PIN_IO_ESP32_KEY) || '', 10);
+    if (!Number.isNaN(storedIo) && storedIo >= 0) {
+      return findEsp32PinIndexByNumber(storedIo);
+    }
+
+    const storedIndex = Number.parseInt(localStorage.getItem(PIN_INDEX_ESP32_KEY) || '', 10);
+    if (!Number.isNaN(storedIndex) && storedIndex >= 0 && storedIndex < LEGACY_ESP32_PINS.length) {
+      const legacyIo = getEsp32PinNumber(LEGACY_ESP32_PINS[storedIndex]);
+      if (legacyIo >= 0) {
+        return findEsp32PinIndexByNumber(legacyIo);
+      }
+    }
+
+    return findEsp32PinIndexByNumber(6);
+  });
   const [selectedPinIndexStm32, setSelectedPinIndexStm32] = useState(() => {
     const stored = Number.parseInt(localStorage.getItem(PIN_INDEX_STM32_KEY) || '0', 10);
     return Number.isNaN(stored) ? 0 : stored;
@@ -179,13 +277,32 @@ function SamplerFragment() {
     return legacy === 'true';
   });
   const invertCaptureDuringRecordingRef = useRef(invertCaptureDuringRecording);
+  const [invertCaptureTargets, setInvertCaptureTargets] = useState<SamplerInvertTargets>(() => {
+    const stored = localStorage.getItem(INVERT_CAPTURE_TARGETS_KEY);
+    if (stored === 'esp32' || stored === 'both' || stored === 'stm32') {
+      return stored;
+    }
+    return 'stm32';
+  });
+  const invertCaptureTargetsRef = useRef(invertCaptureTargets);
   useEffect(() => {
     invertCaptureDuringRecordingRef.current = invertCaptureDuringRecording;
     localStorage.setItem(INVERT_CAPTURE_KEY, invertCaptureDuringRecording ? 'true' : 'false');
     if (isRecordingRef.current) {
-      void safeInvoke<void>('buffer_set_invert_rx', { enabled: invertCaptureDuringRecording }).catch(() => {});
+      const shouldInvert =
+        invertCaptureDuringRecording && invertShouldApplyToDevice(deviceType, invertCaptureTargetsRef.current);
+      void safeInvoke<void>('buffer_set_invert_rx', { enabled: shouldInvert }).catch(() => {});
     }
   }, [deviceType, invertCaptureDuringRecording]);
+  useEffect(() => {
+    invertCaptureTargetsRef.current = invertCaptureTargets;
+    localStorage.setItem(INVERT_CAPTURE_TARGETS_KEY, invertCaptureTargets);
+    if (isRecordingRef.current) {
+      const shouldInvert =
+        invertCaptureDuringRecordingRef.current && invertShouldApplyToDevice(deviceType, invertCaptureTargets);
+      void safeInvoke<void>('buffer_set_invert_rx', { enabled: shouldInvert }).catch(() => {});
+    }
+  }, [deviceType, invertCaptureTargets]);
   const [debugViewport, setDebugViewport] = useState<{
     chartReady: boolean;
     scaleMin: number | null;
@@ -258,8 +375,8 @@ function SamplerFragment() {
   const prevVisibleSpanRef = useRef(0);
   const lastInteractionRefreshAtRef = useRef(0);
 
-  const selectedPinIndex = selectedPinIndexStm32;
-  const pinOptions = STM32_PINS;
+  const selectedPinIndex = deviceType === 'stm32' ? selectedPinIndexStm32 : selectedPinIndexEsp32;
+  const pinOptions = deviceType === 'stm32' ? STM32_PINS : ESP32_PINS;
 
   useEffect(() => {
     if (deviceType !== 'stm32') {
@@ -297,8 +414,26 @@ function SamplerFragment() {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem(PIN_INDEX_ESP32_KEY, `${selectedPinIndexEsp32}`);
+  }, [selectedPinIndexEsp32]);
+
+  useEffect(() => {
+    const selected = ESP32_PINS[selectedPinIndexEsp32];
+    const io = selected ? getEsp32PinNumber(selected) : -1;
+    if (io >= 0) {
+      localStorage.setItem(PIN_IO_ESP32_KEY, `${io}`);
+    }
+  }, [selectedPinIndexEsp32]);
+
+  useEffect(() => {
     localStorage.setItem(PIN_INDEX_STM32_KEY, `${selectedPinIndexStm32}`);
   }, [selectedPinIndexStm32]);
+
+  useEffect(() => {
+    if (selectedPinIndexEsp32 >= ESP32_PINS.length) {
+      setSelectedPinIndexEsp32(findEsp32PinIndexByNumber(6));
+    }
+  }, [selectedPinIndexEsp32]);
 
   useEffect(() => {
     if (selectedPinIndexStm32 >= STM32_PINS.length) {
@@ -824,14 +959,19 @@ function SamplerFragment() {
 		    }
 
     const selectedPin = pinOptions[selectedPinIndex];
-    const pinNumber = getStm32PinNumber(selectedPin);
+    const pinNumber = deviceType === 'stm32'
+      ? getStm32PinNumber(selectedPin)
+      : getEsp32PinNumber(selectedPin);
 		    if (pinNumber === -1) {
 		      alert('Invalid pin selected');
 		      return;
 		    }
 
 			    await safeInvoke<void>('buffer_clear').catch(() => {});
-        await safeInvoke<void>('buffer_set_invert_rx', { enabled: invertCaptureDuringRecordingRef.current }).catch(() => {});
+        const shouldInvert =
+          invertCaptureDuringRecordingRef.current &&
+          invertShouldApplyToDevice(deviceType, invertCaptureTargetsRef.current);
+        await safeInvoke<void>('buffer_set_invert_rx', { enabled: shouldInvert }).catch(() => {});
 			    bufferLenBytesRef.current = 0;
 			    setBufferLenBytes(0);
 			    lastBufferSizeRef.current = 0;
@@ -845,7 +985,11 @@ function SamplerFragment() {
           autoFitXRef.current = true;
 
 	    // Send "sample start --pin=<pin>" command (matching Android/iOS)
-	    await sendNoWait(`sample start --pin=${pinNumber}`);
+	    if (deviceType === 'esp32') {
+	      await sendNoWait(`sample start --pin=${pinNumber}`);
+	    } else {
+	      await sendNoWait(`sample start --pin=${pinNumber}`);
+	    }
 
 	    setIsRecording(true);
 	    setHasUnsavedChanges(true);
@@ -855,7 +999,11 @@ function SamplerFragment() {
 		    if (!isConnected) return;
 
 		    // Send "sample stop" command (matching Android/iOS)
-			    await sendNoWait("sample stop");
+			    if (deviceType === 'esp32') {
+			      await sendNoWait("sample stop");
+			    } else {
+			      await sendNoWait("sample stop");
+			    }
         await safeInvoke<void>('buffer_set_invert_rx', { enabled: false }).catch(() => {});
 		    setIsRecording(false);
 		  };
@@ -874,7 +1022,9 @@ function SamplerFragment() {
 				    }
 
     const selectedPin = pinOptions[selectedPinIndex];
-    const pinNumber = getStm32PinNumber(selectedPin);
+    const pinNumber = deviceType === 'stm32'
+      ? getStm32PinNumber(selectedPin)
+      : getEsp32PinNumber(selectedPin);
     if (pinNumber === -1) {
       alert('Invalid pin selected');
       return;
@@ -882,22 +1032,32 @@ function SamplerFragment() {
 
 	    try {
 	      let commandStr = `transmit start --pin=${pinNumber}`;
-	      const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
-	      const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
-	      if (freqHz < 1) {
-	        alert('Invalid PWM frequency');
-	        return;
+	      if ((deviceType === 'esp32' && pwmEnabled) || deviceType === 'stm32') {
+	        const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
+	        const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
+	        if (freqHz < 1) {
+	          alert('Invalid PWM frequency');
+	          return;
+	        }
+	        if (dutyPercent < 1 || dutyPercent > 100) {
+	          alert('Invalid PWM duty (1-100)');
+	          return;
+	        }
+	        setPwmFreqHz(freqHz);
+	        setPwmDutyPercent(dutyPercent);
+	        if (deviceType === 'esp32') {
+	          commandStr += ` --pwm --freq=${freqHz} --duty=${dutyPercent}`;
+	        } else {
+	          commandStr += ` --freq=${freqHz} --duty=${dutyPercent}`;
+	        }
 	      }
-	      if (dutyPercent < 1 || dutyPercent > 100) {
-	        alert('Invalid PWM duty (1-100)');
-	        return;
-	      }
-	      setPwmFreqHz(freqHz);
-	      setPwmDutyPercent(dutyPercent);
-	      commandStr += ` --freq=${freqHz} --duty=${dutyPercent}`;
 
 	      // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-	      await sendNoWait(commandStr);
+	      if (deviceType === 'esp32') {
+	        await sendNoWait(commandStr);
+	      } else {
+	        await sendNoWait(commandStr);
+	      }
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);
@@ -1308,11 +1468,7 @@ function SamplerFragment() {
       alert('Signal file not found');
       return;
     }
-    const confirmed = await dialog.confirm(`Delete ${currentSignalName}?`, {
-      title: 'Delete Signal',
-      confirmLabel: 'Delete',
-      cancelLabel: 'Cancel',
-    });
+    const confirmed = window.confirm(`Delete ${currentSignalName}?`);
     if (!confirmed) {
       return;
     }
@@ -1561,7 +1717,11 @@ function SamplerFragment() {
             value={selectedPinIndex}
             onChange={(e) => {
               const index = Number(e.target.value);
-              setSelectedPinIndexStm32(index);
+              if (deviceType === 'stm32') {
+                setSelectedPinIndexStm32(index);
+              } else {
+                setSelectedPinIndexEsp32(index);
+              }
             }}
             className="px-4 py-2 bg-slate-900 text-slate-200 rounded border border-slate-700"
           >
@@ -1576,7 +1736,7 @@ function SamplerFragment() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-100">TX PWM</p>
-                <p className="text-xs text-slate-500">Used for retransmit carrier settings.</p>
+                <p className="text-xs text-slate-500">Applies to retransmit for ESP32.</p>
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-200">
                 <input
@@ -1694,7 +1854,16 @@ function SamplerFragment() {
               </label>
 
               <label className="flex flex-col gap-1 text-sm text-slate-200">
-                <span className="text-xs text-slate-400">Invert capture applies while recording</span>
+                <span className="text-xs text-slate-400">Invert capture applies to</span>
+                <select
+                  value={invertCaptureTargets}
+                  onChange={(event) => setInvertCaptureTargets(event.target.value as SamplerInvertTargets)}
+                  className="px-3 py-2 bg-slate-800 text-slate-200 rounded border border-slate-700"
+                >
+                  <option value="stm32">STM32 only</option>
+                  <option value="esp32">ESP32 only</option>
+                  <option value="both">STM32 + ESP32</option>
+                </select>
               </label>
             </div>
             

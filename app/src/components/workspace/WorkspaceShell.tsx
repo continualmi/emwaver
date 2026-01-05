@@ -24,8 +24,10 @@ import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
+import { createBLEServiceWrapper } from "../../utils/BLEServiceWrapper";
 import { useDevice } from "../../utils/DeviceContext";
 import { WaveletEngine, type WaveletTree } from "../../utils/WaveletEngine";
+import { readIdeTabState, writeIdeTabState } from "../ideTabState";
 import { readWaveletsTabState, writeWaveletsTabState } from "../waveletsTabState";
 import { useWorkspaceGit } from "./hooks/useWorkspaceGit";
 import ExplorerTree from "./sidebar/ExplorerTree";
@@ -42,21 +44,30 @@ import {
   CloseIcon,
   FolderIcon,
   GitIcon,
+  HammerIcon,
   MinusIcon,
+  MonitorIcon,
   PanelLeftIcon,
   PlayIcon,
   PlusIcon,
   RefreshIcon,
   TerminalIcon,
   TrashIcon,
+  UploadIcon,
 } from "./WorkspaceIcons";
 import type {
+  BottomPanelTab,
+  CreateProjectResponse,
   DirectoryChildEntry,
+  FirmwareProgressPayload,
+  FirmwareProjectKind,
   GitDiffContents,
   GitRepoStatus,
+  NewProjectPayload,
   OpenFile,
   TerminalSession,
   ThemeMode,
+  WorkspaceVariant,
 } from "./workspaceTypes";
 import {
   DEFAULT_TERMINAL_HEIGHT,
@@ -87,6 +98,7 @@ import {
   WAVELET_BOOTSTRAP_FILENAME,
   basename,
   defaultIgnoredName,
+  detectFirmwareProjectKind,
   formatConsoleArgs,
   iconLabelForPath,
   isWaveletAssetPath,
@@ -118,21 +130,28 @@ const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   },
 };
 
-let cachedTerminalSessionId: string | null = null;
+let ideFirmwareWarmupKey: string | null = null;
+let ideCachedTerminalSessionId: string | null = null;
+let ideCachedFirmwareBuildSessionId: string | null = null;
+let ideCachedFirmwareMonitorSessionId: string | null = null;
 
 export default function WorkspaceShell({
+  variant,
   theme = "dark",
   isActive = false,
 }: {
+  variant: WorkspaceVariant;
   theme?: ThemeMode;
   isActive?: boolean;
 }) {
-  const keys = storageKeys();
-  const tabStateFileName = "wavelets-tabs.json";
-  const readTabState = readWaveletsTabState;
-  const writeTabState = writeWaveletsTabState;
+  const keys = storageKeys(variant);
+  const tabStateFileName = variant === "ide" ? "ide-tabs.json" : "wavelets-tabs.json";
+  const readTabState = variant === "ide" ? readIdeTabState : readWaveletsTabState;
+  const writeTabState = variant === "ide" ? writeIdeTabState : writeWaveletsTabState;
 
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot(keys));
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
@@ -179,6 +198,7 @@ export default function WorkspaceShell({
   const explorerResizeStartWidthRef = useRef(0);
 
   const [isTerminalVisible, setIsTerminalVisible] = useState(false);
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelTab>("terminal");
   const [terminalHeight, setTerminalHeight] = useState<number>(() => readStoredTerminalHeight(keys));
   const terminalResizeActiveRef = useRef(false);
   const terminalResizeStartYRef = useRef(0);
@@ -200,6 +220,24 @@ export default function WorkspaceShell({
   const [isTerminalPickerOpen, setIsTerminalPickerOpen] = useState(false);
   const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
 
+  const [firmwareProgressPct, setFirmwareProgressPct] = useState<number | null>(null);
+  const [firmwareBuildHasOutput, setFirmwareBuildHasOutput] = useState(false);
+  const [firmwareMonitorHasOutput, setFirmwareMonitorHasOutput] = useState(false);
+  const [isFirmwareBusy, setIsFirmwareBusy] = useState(false);
+  const [firmwareCodegenMode, setFirmwareCodegenMode] = useState<"auto" | "always" | "never">("auto");
+  const [firmwarePanelTab, setFirmwarePanelTab] = useState<"build" | "monitor">("build");
+
+  const firmwareBuildPtySessionIdRef = useRef<string | null>(null);
+  const firmwareBuildEnvReadyRef = useRef(false);
+  const firmwareBuildEnvKeyRef = useRef<string | null>(null);
+
+  const firmwareMonitorPtySessionIdRef = useRef<string | null>(null);
+  const firmwareMonitorEnvReadyRef = useRef(false);
+  const firmwareMonitorEnvKeyRef = useRef<string | null>(null);
+
+  const firmwareMonitorRunningRef = useRef(false);
+  const firmwareMonitorRunningKeyRef = useRef<string | null>(null);
+  const [isFirmwareMonitorRunning, setIsFirmwareMonitorRunning] = useState(false);
 
   const sessionsRef = useRef<TerminalSession[]>([]);
   const didAutoStartTerminalRef = useRef(false);
@@ -213,17 +251,18 @@ export default function WorkspaceShell({
   const pendingTerminalOutputRef = useRef<Map<string, Uint8Array[]>>(new Map());
   const outputDecoderRef = useRef(new TextDecoder());
 
+  const firmwareBuildTerminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const firmwareBuildTerminalRef = useRef<Terminal | null>(null);
+  const firmwareBuildFitAddonRef = useRef<FitAddon | null>(null);
+  const pendingFirmwareBuildTextRef = useRef<string[]>([]);
+
+  const firmwareMonitorTerminalContainerRef = useRef<HTMLDivElement | null>(null);
+  const firmwareMonitorTerminalRef = useRef<Terminal | null>(null);
+  const firmwareMonitorFitAddonRef = useRef<FitAddon | null>(null);
+  const pendingFirmwareMonitorTextRef = useRef<string[]>([]);
 
   const monaco = useMonaco();
   const device = useDevice();
-
-  useEffect(() => {
-    if (!monaco) {
-      return;
-    }
-    ensureEmwaverMonacoThemes(monaco);
-    monaco.editor.setTheme(getEmwaverMonacoTheme(theme));
-  }, [monaco, theme]);
 
   const [activeMainTabKind, setActiveMainTabKind] = useState<"file" | "preview">("file");
   const [activePreviewPath, setActivePreviewPath] = useState<string | null>(null);
@@ -330,6 +369,16 @@ export default function WorkspaceShell({
   const waveletCreateByteArray = useMemo(() => (bytes: number[]) => new Uint8Array(bytes), []);
 
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
+  const firmwareProjectKind = useMemo((): FirmwareProjectKind => {
+    if (!explorerRoot) {
+      return "unknown";
+    }
+    const entries = dirChildren[explorerRoot] ?? [];
+    if (entries.length === 0) {
+      return "unknown";
+    }
+    return detectFirmwareProjectKind(entries);
+  }, [dirChildren, explorerRoot]);
   const activeTerminalTitle = useMemo(
     () => terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? DEFAULT_TERMINAL_TITLE,
     [activeTerminalSessionId, terminalSessions],
@@ -353,6 +402,9 @@ export default function WorkspaceShell({
 
   const waveletTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
   const canRunWavelet = useMemo(() => {
+    if (variant !== "wavelets") {
+      return false;
+    }
     const candidatePath = (activeMainTabKind === "preview" ? activePreviewPath : waveletTargetPath) ?? null;
     if (!candidatePath) {
       return false;
@@ -365,8 +417,9 @@ export default function WorkspaceShell({
       return true;
     }
     return Boolean(rootDir);
-  }, [activeMainTabKind, activePreviewPath, rootDir, waveletTargetPath]);
+  }, [activeMainTabKind, activePreviewPath, rootDir, variant, waveletTargetPath]);
 
+  const effectiveBottomPanelTab: BottomPanelTab = variant === "ide" ? bottomPanelTab : "terminal";
 
   const openFilesRef = useRef<OpenFile[]>(openFiles);
   useEffect(() => {
@@ -472,7 +525,17 @@ export default function WorkspaceShell({
     sessionsRef.current = terminalSessions;
   }, [terminalSessions]);
 
+  useEffect(() => {
+    if (firmwareProjectKind !== "stm32" && firmwareCodegenMode !== "auto") {
+      setFirmwareCodegenMode("auto");
+    }
+  }, [firmwareCodegenMode, firmwareProjectKind]);
 
+  useEffect(() => {
+    if (variant !== "ide" && bottomPanelTab === "firmware") {
+      setBottomPanelTab("terminal");
+    }
+  }, [bottomPanelTab, variant]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -515,7 +578,856 @@ export default function WorkspaceShell({
     };
   }, [isTerminalPickerOpen]);
 
+  useEffect(() => {
+    setIsTerminalPickerOpen(false);
+  }, [bottomPanelTab]);
 
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      setIsTerminalPickerOpen(false);
+    }
+  }, [isTerminalVisible]);
+
+  const updateFirmwareProgressFromMessage = useCallback((message: string) => {
+    const matches = message.match(/(\d{1,3})%/g);
+    if (!matches || matches.length === 0) {
+      return;
+    }
+    const last = matches[matches.length - 1];
+    const value = Number.parseInt(last.replace("%", ""), 10);
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    setFirmwareProgressPct(Math.max(0, Math.min(100, value)));
+  }, []);
+
+  useEffect(() => {
+    if (!monaco) {
+      return;
+    }
+
+    ensureEmwaverMonacoThemes(monaco);
+
+    monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+      jsx: monaco.languages.typescript.JsxEmit.Preserve,
+      allowNonTsExtensions: true,
+      allowJs: true,
+      moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+      target: monaco.languages.typescript.ScriptTarget.ESNext,
+      module: monaco.languages.typescript.ModuleKind.ESNext,
+      allowSyntheticDefaultImports: true,
+      resolveJsonModule: true,
+    });
+    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: false,
+      noSyntaxValidation: false,
+    });
+    monaco.languages.typescript.typescriptDefaults.setEagerModelSync(true);
+  }, [monaco]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!rootDir) {
+      window.localStorage.removeItem(keys.root);
+      if (keys.legacy?.root) {
+        window.localStorage.removeItem(keys.legacy.root);
+      }
+      return;
+    }
+    window.localStorage.setItem(keys.root, rootDir);
+    if (keys.legacy?.root) {
+      window.localStorage.removeItem(keys.legacy.root);
+    }
+  }, [rootDir]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    if (!rootDir || !isTauriAvailable()) {
+      restoredTabsRootRef.current = null;
+      restoringTabsRef.current = false;
+      tabsHydratedRef.current = false;
+      return;
+    }
+
+    // When the IDE pane becomes active, always hydrate from disk for the current root.
+    restoredTabsRootRef.current = rootDir;
+    tabsHydratedRef.current = false;
+    tabsRestoreSucceededRef.current = false;
+    tabsUserTouchedRef.current = false;
+
+    let canceled = false;
+
+    void (async () => {
+      const state = await readTabState(rootDir);
+      if (canceled || !state || state.open.length === 0) {
+        restoringTabsRef.current = false;
+        tabsHydratedRef.current = true;
+        return;
+      }
+
+      tabsRestoreSucceededRef.current = true;
+
+      restoringTabsRef.current = true;
+      setIsLoadingFile(true);
+      try {
+        const rootPrefix = rootDir.replace(/\\/g, "/").replace(/\/$/, "");
+        const stateFilePath = `${rootPrefix}/.emwaver/${tabStateFileName}`;
+
+        const paths = Array.from(new Set(state.open))
+          .filter((path) => typeof path === "string")
+          .filter((path) => path.replace(/\\/g, "/") !== stateFilePath)
+          .filter((path) => !isWaveletAssetPath(path));
+        if (paths.length === 0) {
+          return;
+        }
+
+        const restored = await Promise.all(
+          paths.map(async (path) => {
+            const [content, diskMtimeMs] = await Promise.all([
+              safeInvoke<string>("read_file", { payload: { path } }),
+              safeInvoke<number>("file_modified_ms", { payload: { path } })
+                .then((value) => value ?? undefined)
+                .catch(() => undefined),
+            ]);
+
+            return {
+              path,
+              name: basename(path),
+              content: content ?? "",
+              language: languageForPath(path),
+              isDirty: false,
+              diskMtimeMs,
+              source: "disk",
+            } satisfies OpenFile;
+          }),
+        );
+
+        if (canceled) {
+          return;
+        }
+
+        setOpenFiles(restored);
+        const active = state.active && paths.includes(state.active) ? state.active : paths[0];
+        setActiveFilePath(active);
+        setSelectedPath(active);
+      } finally {
+        if (!canceled) {
+          setIsLoadingFile(false);
+        }
+        restoringTabsRef.current = false;
+        tabsHydratedRef.current = true;
+      }
+    })();
+
+    return () => {
+      canceled = true;
+    };
+  }, [isActive, rootDir]);
+
+  const openFilesStorageKey = useMemo(() => openFiles.map((file) => file.path).join("\n"), [openFiles]);
+  useEffect(() => {
+    if (restoringTabsRef.current || !tabsHydratedRef.current) {
+      return;
+    }
+
+    const rootPrefix = rootDir ? rootDir.replace(/\\/g, "/").replace(/\/$/, "") : null;
+    const stateFilePath = rootPrefix ? `${rootPrefix}/.emwaver/${tabStateFileName}` : null;
+
+    const open = (openFilesStorageKey ? openFilesStorageKey.split("\n") : [])
+      .filter(Boolean)
+      .filter((path) => !isWaveletAssetPath(path));
+    const filteredOpen = stateFilePath ? open.filter((path) => path.replace(/\\/g, "/") !== stateFilePath) : open;
+
+    const activeNormalized = activeFilePath ? activeFilePath.replace(/\\/g, "/") : null;
+    const active = stateFilePath && activeNormalized === stateFilePath ? (filteredOpen[0] ?? null) : activeFilePath;
+
+    // Avoid clobbering an existing tab-state file with an "empty" state on startup.
+    if (!tabsRestoreSucceededRef.current && !tabsUserTouchedRef.current && filteredOpen.length === 0 && !active) {
+      return;
+    }
+
+    void writeTabState(rootDir, filteredOpen, active);
+  }, [activeFilePath, openFilesStorageKey, rootDir, tabStateFileName, writeTabState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(keys.sidebarWidth, String(Math.round(sidebarWidth)));
+    if (keys.legacy?.sidebarWidth) {
+      window.localStorage.removeItem(keys.legacy.sidebarWidth);
+    }
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (isSidebarCollapsed) {
+      return;
+    }
+    sidebarLastExpandedWidthRef.current = sidebarWidth;
+  }, [isSidebarCollapsed, sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(keys.terminalHeight, String(Math.round(terminalHeight)));
+    if (keys.legacy?.terminalHeight) {
+      window.localStorage.removeItem(keys.legacy.terminalHeight);
+    }
+  }, [terminalHeight]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(keys.terminalListWidth, String(Math.round(terminalListWidth)));
+    if (keys.legacy?.terminalListWidth) {
+      window.localStorage.removeItem(keys.legacy.terminalListWidth);
+    }
+  }, [terminalListWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(keys.terminalListCollapsed, String(isTerminalListCollapsed));
+    if (keys.legacy?.terminalListCollapsed) {
+      window.localStorage.removeItem(keys.legacy.terminalListCollapsed);
+    }
+  }, [isTerminalListCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!keys.assetScriptsCollapsed) {
+      return;
+    }
+    window.localStorage.setItem(keys.assetScriptsCollapsed, String(isAssetScriptsCollapsed));
+  }, [isAssetScriptsCollapsed, keys.assetScriptsCollapsed]);
+
+  useEffect(() => {
+    if (isTerminalListCollapsed) {
+      return;
+    }
+    terminalListLastExpandedWidthRef.current = terminalListWidth;
+  }, [isTerminalListCollapsed, terminalListWidth]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (isTerminalListCollapsed) {
+      return;
+    }
+    const panel = terminalPanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const raf = requestAnimationFrame(() => {
+      const panelWidth = panel.clientWidth;
+      if (!panelWidth) {
+        return;
+      }
+
+      const maxRightWidth = panelWidth - TERMINAL_VIEW_MIN_WIDTH;
+      if (maxRightWidth < TERMINAL_LIST_COLLAPSE_THRESHOLD) {
+        setIsTerminalListCollapsed(true);
+        return;
+      }
+
+      const nextWidth = clamp(terminalListWidth, TERMINAL_LIST_MIN_WIDTH, Math.min(TERMINAL_LIST_MAX_WIDTH, maxRightWidth));
+      if (nextWidth !== terminalListWidth) {
+        setTerminalListWidth(nextWidth);
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [isTerminalListCollapsed, isTerminalVisible, terminalListWidth]);
+
+  const terminalTheme = useMemo(() => {
+    if (theme === "light") {
+      return {
+        background: "#f8fafc",
+        foreground: "#0f172a",
+        cursor: "#0ea5e9",
+        selectionBackground: "rgba(14, 165, 233, 0.22)",
+      };
+    }
+    return {
+      background: "#020617",
+      foreground: "#e2e8f0",
+      cursor: "#38bdf8",
+      selectionBackground: "rgba(56, 189, 248, 0.22)",
+    };
+  }, [theme]);
+
+  useEffect(() => {
+    terminalBySessionRef.current.forEach((terminal) => {
+      terminal.options.theme = terminalTheme;
+    });
+    if (firmwareBuildTerminalRef.current) {
+      firmwareBuildTerminalRef.current.options.theme = terminalTheme;
+    }
+    if (firmwareMonitorTerminalRef.current) {
+      firmwareMonitorTerminalRef.current.options.theme = terminalTheme;
+    }
+  }, [terminalTheme]);
+
+  const ensureFirmwareTerminal = useCallback(
+    (tab: "build" | "monitor") => {
+      const isBuild = tab === "build";
+      const terminalRef = isBuild ? firmwareBuildTerminalRef : firmwareMonitorTerminalRef;
+      if (terminalRef.current) {
+        return;
+      }
+      const container = isBuild ? firmwareBuildTerminalContainerRef.current : firmwareMonitorTerminalContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      const term = new Terminal({
+        convertEol: true,
+        cursorBlink: false,
+        disableStdin: true,
+        fontFamily:
+          '"Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontSize: 12,
+        theme: terminalTheme,
+        scrollback: 8000,
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(container);
+
+      if (isBuild) {
+        firmwareBuildTerminalRef.current = term;
+        firmwareBuildFitAddonRef.current = fitAddon;
+
+        const buffered = pendingFirmwareBuildTextRef.current;
+        if (buffered.length > 0) {
+          buffered.forEach((chunk) => term.write(chunk));
+          pendingFirmwareBuildTextRef.current = [];
+          setFirmwareBuildHasOutput(true);
+        }
+      } else {
+        firmwareMonitorTerminalRef.current = term;
+        firmwareMonitorFitAddonRef.current = fitAddon;
+
+        const buffered = pendingFirmwareMonitorTextRef.current;
+        if (buffered.length > 0) {
+          buffered.forEach((chunk) => term.write(chunk));
+          pendingFirmwareMonitorTextRef.current = [];
+          setFirmwareMonitorHasOutput(true);
+        }
+      }
+
+      requestAnimationFrame(() => {
+        try {
+          fitAddon.fit();
+        } catch {
+          // ignore
+        }
+      });
+    },
+    [terminalTheme],
+  );
+
+  const fitFirmwareTerminal = useCallback((tab: "build" | "monitor") => {
+    const fitAddon = tab === "build" ? firmwareBuildFitAddonRef.current : firmwareMonitorFitAddonRef.current;
+    if (!fitAddon) {
+      return;
+    }
+    try {
+      fitAddon.fit();
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const unlistenPromise = safeListen<FirmwareProgressPayload>("firmware-progress", (event) => {
+      const payload = event.payload;
+      if (!payload?.message) {
+        return;
+      }
+
+      ensureFirmwareTerminal("build");
+      updateFirmwareProgressFromMessage(payload.message);
+
+      const terminal = firmwareBuildTerminalRef.current;
+      const message = payload.message;
+      const stream = payload.stream ? String(payload.stream) : "info";
+
+      const ansiWrapped =
+        stream === "stderr" && !message.includes("\u001b[")
+          ? `\u001b[31m${message}\u001b[0m`
+          : message;
+
+      const formatted =
+        stream === "info" && !ansiWrapped.endsWith("\n") && !ansiWrapped.endsWith("\r")
+          ? `${ansiWrapped}\r\n`
+          : ansiWrapped;
+
+      if (terminal) {
+        terminal.write(formatted);
+      } else {
+        pendingFirmwareBuildTextRef.current.push(formatted);
+      }
+
+      setFirmwareBuildHasOutput(true);
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [ensureFirmwareTerminal, updateFirmwareProgressFromMessage]);
+
+  const ensureSessionTerminal = useCallback(
+    (sessionId: string) => {
+      if (terminalBySessionRef.current.has(sessionId)) {
+        return;
+      }
+      const container = terminalContainerBySessionRef.current.get(sessionId);
+      if (!container) {
+        return;
+      }
+
+      const term = new Terminal({
+        convertEol: true,
+        cursorBlink: true,
+        fontFamily:
+          '"Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontSize: 12,
+        theme: terminalTheme,
+        scrollback: 8000,
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(container);
+
+      term.onData((data) => {
+        void safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data } });
+      });
+      term.onResize((size) => {
+        void safeInvoke<void>("pty_resize", { payload: { session_id: sessionId, cols: size.cols, rows: size.rows } });
+      });
+
+      terminalBySessionRef.current.set(sessionId, term);
+      fitAddonBySessionRef.current.set(sessionId, fitAddon);
+
+      const buffered = pendingTerminalOutputRef.current.get(sessionId);
+      if (buffered && buffered.length > 0) {
+        const decoder = outputDecoderRef.current;
+        buffered.forEach((chunk) => term.write(decoder.decode(chunk, { stream: true })));
+        pendingTerminalOutputRef.current.delete(sessionId);
+      }
+
+      if (activeTerminalSessionId === sessionId) {
+        requestAnimationFrame(() => {
+          try {
+            fitAddon.fit();
+          } catch {
+            // ignore
+          }
+        });
+      }
+    },
+    [activeTerminalSessionId, terminalTheme],
+  );
+
+  const focusActiveTerminal = useCallback(() => {
+    const sessionId = activeTerminalSessionId;
+    if (!sessionId) {
+      return;
+    }
+    const fitAddon = fitAddonBySessionRef.current.get(sessionId);
+    if (fitAddon) {
+      try {
+        fitAddon.fit();
+      } catch {
+        // ignore
+      }
+    }
+    const term = terminalBySessionRef.current.get(sessionId);
+    if (!term) {
+      return;
+    }
+    try {
+      term.focus();
+    } catch {
+      // ignore
+    }
+  }, [activeTerminalSessionId]);
+
+  const startTerminalSession = useCallback(
+    async (options?: { makeActive?: boolean }) => {
+      if (!isTauriAvailable()) {
+        return null;
+      }
+      if (terminalStartInFlightRef.current) {
+        return null;
+      }
+      terminalStartInFlightRef.current = true;
+      const makeActive = options?.makeActive ?? true;
+
+      let cols = 80;
+      let rows = 24;
+      const activeSession = activeTerminalSessionId;
+      if (activeSession) {
+        const terminal = terminalBySessionRef.current.get(activeSession);
+        cols = Math.max(1, terminal?.cols ?? cols);
+        rows = Math.max(1, terminal?.rows ?? rows);
+      }
+
+      try {
+        const response = await safeInvoke<{ session_id: string }>("pty_start", {
+          payload: { cwd: rootDir, cols, rows },
+        });
+        const sessionId = response?.session_id;
+        if (!sessionId) {
+          throw new Error("PTY start returned no session id");
+        }
+
+        const title = nextTerminalTitle(sessionsRef.current, DEFAULT_TERMINAL_TITLE);
+        const session: TerminalSession = {
+          id: sessionId,
+          title,
+          createdAt: Date.now(),
+        };
+        setTerminalSessions((prev) => [...prev, session]);
+        if (makeActive) {
+          setActiveTerminalSessionId(sessionId);
+        }
+        if (!ideCachedTerminalSessionId) {
+          ideCachedTerminalSessionId = sessionId;
+        }
+        return sessionId;
+      } finally {
+        terminalStartInFlightRef.current = false;
+      }
+    },
+    [activeTerminalSessionId, rootDir],
+  );
+
+  const closeTerminalSession = useCallback(async (sessionId: string) => {
+    closingTerminalSessionsRef.current.add(sessionId);
+
+
+    const terminal = terminalBySessionRef.current.get(sessionId);
+    if (terminal) {
+      terminal.dispose();
+      terminalBySessionRef.current.delete(sessionId);
+    }
+    const fitAddon = fitAddonBySessionRef.current.get(sessionId);
+    if (fitAddon) {
+      fitAddon.dispose();
+      fitAddonBySessionRef.current.delete(sessionId);
+    }
+    pendingTerminalOutputRef.current.delete(sessionId);
+    terminalContainerBySessionRef.current.delete(sessionId);
+
+    const remaining = sessionsRef.current.filter((session) => session.id !== sessionId);
+    if (remaining.length === 0) {
+      setIsTerminalVisible(false);
+      setBottomPanelTab("terminal");
+    }
+
+    setTerminalSessions((prev) => prev.filter((session) => session.id !== sessionId));
+    setActiveTerminalSessionId((prev) => {
+      if (prev !== sessionId) {
+        return prev;
+      }
+      return remaining.length > 0 ? remaining[remaining.length - 1].id : null;
+    });
+
+    try {
+      await safeInvoke<void>("pty_stop", { payload: { session_id: sessionId } });
+    } catch {
+      // ignore
+    } finally {
+      if (ideCachedTerminalSessionId === sessionId) {
+        ideCachedTerminalSessionId = null;
+      }
+      window.setTimeout(() => closingTerminalSessionsRef.current.delete(sessionId), 750);
+    }
+  }, []);
+
+  const ensureInitialTerminalSession = useCallback(async () => {
+    if (didAutoStartTerminalRef.current) {
+      return;
+    }
+    didAutoStartTerminalRef.current = true;
+    if (terminalSessions.length > 0) {
+      return;
+    }
+    try {
+      await startTerminalSession({ makeActive: true });
+    } catch {
+      // ignore
+    }
+  }, [startTerminalSession, terminalSessions.length]);
+
+  const ensureFirmwareBuildPtySession = useCallback(async () => {
+    if (!isTauriAvailable() || !rootDir) {
+      return null;
+    }
+
+    const existing = firmwareBuildPtySessionIdRef.current ?? ideCachedFirmwareBuildSessionId;
+    if (existing) {
+      firmwareBuildPtySessionIdRef.current = existing;
+      return existing;
+    }
+
+    const response = await safeInvoke<{ session_id: string }>("pty_start", {
+      payload: { cwd: rootDir, cols: 80, rows: 24 },
+    });
+    const sessionId = response?.session_id;
+    if (!sessionId) {
+      throw new Error("PTY start returned no session id");
+    }
+
+    firmwareBuildPtySessionIdRef.current = sessionId;
+    ideCachedFirmwareBuildSessionId = sessionId;
+    firmwareBuildEnvReadyRef.current = false;
+    firmwareBuildEnvKeyRef.current = null;
+
+    return sessionId;
+  }, [rootDir]);
+
+  const ensureFirmwareMonitorPtySession = useCallback(async () => {
+    if (!isTauriAvailable() || !rootDir) {
+      return null;
+    }
+
+    const existing = firmwareMonitorPtySessionIdRef.current ?? ideCachedFirmwareMonitorSessionId;
+    if (existing) {
+      firmwareMonitorPtySessionIdRef.current = existing;
+      return existing;
+    }
+
+    const response = await safeInvoke<{ session_id: string }>("pty_start", {
+      payload: { cwd: rootDir, cols: 80, rows: 24 },
+    });
+    const sessionId = response?.session_id;
+    if (!sessionId) {
+      throw new Error("PTY start returned no session id");
+    }
+
+    firmwareMonitorPtySessionIdRef.current = sessionId;
+    ideCachedFirmwareMonitorSessionId = sessionId;
+    firmwareMonitorEnvReadyRef.current = false;
+    firmwareMonitorEnvKeyRef.current = null;
+
+    return sessionId;
+  }, [rootDir]);
+
+  const ensureFirmwareEnv = useCallback(
+    async (tab: "build" | "monitor", sessionId: string) => {
+      if (!rootDir) {
+        return;
+      }
+
+      const key = `${firmwareProjectKind}:${rootDir}`;
+      const isBuild = tab === "build";
+      const envReadyRef = isBuild ? firmwareBuildEnvReadyRef : firmwareMonitorEnvReadyRef;
+      const envKeyRef = isBuild ? firmwareBuildEnvKeyRef : firmwareMonitorEnvKeyRef;
+
+      if (envReadyRef.current && envKeyRef.current === key) {
+        return;
+      }
+
+      if (firmwareProjectKind === "esp32") {
+        await safeInvoke<void>("pty_write", {
+          payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}" && source setup.sh\r` },
+        });
+      } else {
+        await safeInvoke<void>("pty_write", {
+          payload: { session_id: sessionId, data: `cd "${rootDir.replace(/\"/g, "\\\"")}"\r` },
+        });
+      }
+
+      envReadyRef.current = true;
+      envKeyRef.current = key;
+    },
+    [firmwareProjectKind, rootDir],
+  );
+
+  useEffect(() => {
+    void ensureInitialTerminalSession();
+  }, [ensureInitialTerminalSession]);
+
+  useEffect(() => {
+    if (!isTauriAvailable() || !rootDir || firmwareProjectKind !== "esp32") {
+      return;
+    }
+
+    const key = `${firmwareProjectKind}:${rootDir}`;
+    if (ideFirmwareWarmupKey === key) {
+      firmwareBuildEnvReadyRef.current = true;
+      firmwareBuildEnvKeyRef.current = key;
+      firmwareMonitorEnvReadyRef.current = true;
+      firmwareMonitorEnvKeyRef.current = key;
+      return;
+    }
+    ideFirmwareWarmupKey = key;
+
+    void (async () => {
+      try {
+        const [buildSessionId, monitorSessionId] = await Promise.all([
+          ensureFirmwareBuildPtySession(),
+          ensureFirmwareMonitorPtySession(),
+        ]);
+
+        const terminalSessionId =
+          activeTerminalSessionId ??
+          sessionsRef.current[sessionsRef.current.length - 1]?.id ??
+          ideCachedTerminalSessionId ??
+          (await startTerminalSession({ makeActive: false }));
+
+        const cwd = rootDir.replace(/\"/g, "\\\"");
+        const source = `cd "${cwd}" && source setup.sh`;
+
+        const writes: Array<Promise<unknown>> = [];
+        if (terminalSessionId) {
+          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: terminalSessionId, data: `${source}\r` } }));
+        }
+        if (buildSessionId) {
+          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: buildSessionId, data: `${source} && clear\r` } }));
+        }
+        if (monitorSessionId) {
+          writes.push(safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: `${source} && clear\r` } }));
+        }
+        await Promise.all(writes);
+
+        firmwareBuildEnvReadyRef.current = true;
+        firmwareBuildEnvKeyRef.current = key;
+        firmwareMonitorEnvReadyRef.current = true;
+        firmwareMonitorEnvKeyRef.current = key;
+
+        try {
+          firmwareBuildTerminalRef.current?.reset();
+          firmwareBuildTerminalRef.current?.clear();
+        } catch {
+          // ignore
+        }
+        try {
+          firmwareMonitorTerminalRef.current?.reset();
+          firmwareMonitorTerminalRef.current?.clear();
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [
+    activeTerminalSessionId,
+    ensureFirmwareBuildPtySession,
+    ensureFirmwareMonitorPtySession,
+    firmwareProjectKind,
+    rootDir,
+    startTerminalSession,
+  ]);
+
+  useEffect(() => {
+    firmwareBuildEnvReadyRef.current = false;
+    firmwareBuildEnvKeyRef.current = null;
+    firmwareMonitorEnvReadyRef.current = false;
+    firmwareMonitorEnvKeyRef.current = null;
+
+    const key = rootDir ? `${firmwareProjectKind}:${rootDir}` : null;
+    const shouldReset = !rootDir || !isTauriAvailable() || (ideFirmwareWarmupKey && key && ideFirmwareWarmupKey !== key);
+
+    if (shouldReset) {
+      ideFirmwareWarmupKey = null;
+
+      const buildSessionId = firmwareBuildPtySessionIdRef.current ?? ideCachedFirmwareBuildSessionId;
+      if (buildSessionId) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: buildSessionId } });
+      }
+      firmwareBuildPtySessionIdRef.current = null;
+      ideCachedFirmwareBuildSessionId = null;
+
+      const monitorSessionId = firmwareMonitorPtySessionIdRef.current ?? ideCachedFirmwareMonitorSessionId;
+      if (monitorSessionId) {
+        void safeInvoke<void>("pty_stop", { payload: { session_id: monitorSessionId } });
+      }
+      firmwareMonitorPtySessionIdRef.current = null;
+      ideCachedFirmwareMonitorSessionId = null;
+    }
+  }, [firmwareProjectKind, rootDir]);
+
+  useEffect(() => {
+    if (!activeTerminalSessionId && terminalSessions.length > 0) {
+      setActiveTerminalSessionId(terminalSessions[terminalSessions.length - 1].id);
+    }
+  }, [activeTerminalSessionId, terminalSessions]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (!activeTerminalSessionId) {
+      return;
+    }
+    ensureSessionTerminal(activeTerminalSessionId);
+    requestAnimationFrame(() => focusActiveTerminal());
+  }, [activeTerminalSessionId, ensureSessionTerminal, focusActiveTerminal, isTerminalVisible]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const panel = terminalPanelRef.current;
+    if (!panel) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (bottomPanelTab === "terminal") {
+        focusActiveTerminal();
+      } else if (bottomPanelTab === "firmware") {
+        ensureFirmwareTerminal(firmwarePanelTab);
+        fitFirmwareTerminal(firmwarePanelTab);
+      }
+      const panelWidth = panel.getBoundingClientRect().width;
+      const computedMax = Math.floor(panelWidth * 0.45);
+      const effectiveMax = Math.max(TERMINAL_LIST_MIN_WIDTH, Math.min(TERMINAL_LIST_MAX_WIDTH, computedMax));
+      setTerminalListWidth((prev) => clamp(prev, TERMINAL_LIST_MIN_WIDTH, effectiveMax));
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, focusActiveTerminal, firmwarePanelTab, isTerminalVisible]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (bottomPanelTab !== "terminal") {
+      return;
+    }
+    requestAnimationFrame(() => focusActiveTerminal());
+  }, [bottomPanelTab, focusActiveTerminal, isTerminalVisible]);
+
+  useEffect(() => {
+    if (!isTerminalVisible) {
+      return;
+    }
+    if (bottomPanelTab !== "firmware") {
+      return;
+    }
+    ensureFirmwareTerminal(firmwarePanelTab);
+    requestAnimationFrame(() => fitFirmwareTerminal(firmwarePanelTab));
+  }, [bottomPanelTab, ensureFirmwareTerminal, fitFirmwareTerminal, firmwarePanelTab, isTerminalVisible]);
 
   useEffect(() => {
     const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
@@ -529,6 +1441,34 @@ export default function WorkspaceShell({
       }
       const bytes = new Uint8Array(payload.data);
       const decoder = outputDecoderRef.current;
+
+      const firmwareBuildSessionId = firmwareBuildPtySessionIdRef.current;
+      if (firmwareBuildSessionId && payload.session_id === firmwareBuildSessionId) {
+        ensureFirmwareTerminal("build");
+        const text = decoder.decode(bytes, { stream: true });
+        const fwTerminal = firmwareBuildTerminalRef.current;
+        if (fwTerminal) {
+          fwTerminal.write(text);
+        } else {
+          pendingFirmwareBuildTextRef.current.push(text);
+        }
+        setFirmwareBuildHasOutput(true);
+        return;
+      }
+
+      const firmwareMonitorSessionId = firmwareMonitorPtySessionIdRef.current;
+      if (firmwareMonitorSessionId && payload.session_id === firmwareMonitorSessionId) {
+        ensureFirmwareTerminal("monitor");
+        const text = decoder.decode(bytes, { stream: true });
+        const fwTerminal = firmwareMonitorTerminalRef.current;
+        if (fwTerminal) {
+          fwTerminal.write(text);
+        } else {
+          pendingFirmwareMonitorTextRef.current.push(text);
+        }
+        setFirmwareMonitorHasOutput(true);
+        return;
+      }
 
       const terminal = terminalBySessionRef.current.get(payload.session_id);
       if (terminal) {
@@ -547,193 +1487,6 @@ export default function WorkspaceShell({
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
-
-  const ensureSessionTerminal = useCallback(
-    (sessionId: string) => {
-      if (!isTauriAvailable()) {
-        return;
-      }
-
-      const container = terminalContainerBySessionRef.current.get(sessionId);
-      if (!container) {
-        return;
-      }
-
-      if (terminalBySessionRef.current.has(sessionId)) {
-        return;
-      }
-
-      const isLight = theme === "light";
-      const terminal = new Terminal({
-        cursorBlink: true,
-        fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
-        fontSize: 13,
-        theme: isLight
-          ? {
-              background: "#f8fafc",
-              foreground: "#0f172a",
-              cursor: "#0ea5e9",
-            }
-          : {
-              background: "#020617",
-              foreground: "#e2e8f0",
-              cursor: "#38bdf8",
-            },
-      });
-
-      const fitAddon = new FitAddon();
-      terminal.loadAddon(fitAddon);
-      terminal.open(container);
-
-      terminal.onData((data) => {
-        void safeInvoke<void>("pty_write", {
-          payload: {
-            session_id: sessionId,
-            data,
-          },
-        });
-      });
-
-      terminalBySessionRef.current.set(sessionId, terminal);
-      fitAddonBySessionRef.current.set(sessionId, fitAddon);
-
-      const pending = pendingTerminalOutputRef.current.get(sessionId);
-      if (pending && pending.length > 0) {
-        pendingTerminalOutputRef.current.delete(sessionId);
-        for (const chunk of pending) {
-          terminal.write(outputDecoderRef.current.decode(chunk, { stream: true }));
-        }
-      }
-
-      requestAnimationFrame(() => {
-        fitAddon.fit();
-        void safeInvoke<void>("pty_resize", {
-          payload: {
-            session_id: sessionId,
-            cols: terminal.cols,
-            rows: terminal.rows,
-          },
-        });
-      });
-    },
-    [theme],
-  );
-
-  const focusActiveTerminal = useCallback(() => {
-    if (!activeTerminalSessionId) {
-      return;
-    }
-    terminalBySessionRef.current.get(activeTerminalSessionId)?.focus();
-  }, [activeTerminalSessionId]);
-
-  const closeTerminalSession = useCallback(
-    async (sessionId: string) => {
-      if (!isTauriAvailable()) {
-        return;
-      }
-
-      closingTerminalSessionsRef.current.add(sessionId);
-      try {
-        await safeInvoke<void>("pty_stop", {
-          payload: {
-            session_id: sessionId,
-          },
-        });
-      } finally {
-        terminalBySessionRef.current.get(sessionId)?.dispose();
-        fitAddonBySessionRef.current.get(sessionId)?.dispose();
-        terminalBySessionRef.current.delete(sessionId);
-        fitAddonBySessionRef.current.delete(sessionId);
-        pendingTerminalOutputRef.current.delete(sessionId);
-        terminalContainerBySessionRef.current.delete(sessionId);
-        closingTerminalSessionsRef.current.delete(sessionId);
-
-        setTerminalSessions((prev) => {
-          const next = prev.filter((session) => session.id !== sessionId);
-          setActiveTerminalSessionId((current) => {
-            if (current !== sessionId) {
-              return current;
-            }
-            return next.length > 0 ? next[next.length - 1].id : null;
-          });
-          return next;
-        });
-      }
-    },
-    [],
-  );
-
-  const startTerminalSession = useCallback(
-    async ({ makeActive }: { makeActive: boolean }) => {
-      if (!isTauriAvailable()) {
-        return null;
-      }
-      if (terminalStartInFlightRef.current) {
-        return null;
-      }
-
-      terminalStartInFlightRef.current = true;
-      try {
-        const response = await safeInvoke<{ session_id: string }>("pty_start", {
-          payload: {
-            cwd: rootDir,
-            cols: 120,
-            rows: 30,
-          },
-        });
-        if (!response?.session_id) {
-          return null;
-        }
-
-        const sessionId = response.session_id;
-        const title = nextTerminalTitle(terminalSessions, DEFAULT_TERMINAL_TITLE);
-
-        setTerminalSessions((prev) => [...prev, { id: sessionId, title, createdAt: Date.now() }]);
-        if (makeActive) {
-          setActiveTerminalSessionId(sessionId);
-          setIsTerminalVisible(true);
-          setIsTerminalPickerOpen(false);
-          requestAnimationFrame(() => {
-            ensureSessionTerminal(sessionId);
-            terminalBySessionRef.current.get(sessionId)?.focus();
-          });
-        }
-
-        return sessionId;
-      } finally {
-        terminalStartInFlightRef.current = false;
-      }
-    },
-    [ensureSessionTerminal, rootDir, terminalSessions],
-  );
-
-  useEffect(() => {
-    if (!isTerminalVisible) {
-      return;
-    }
-    const sessionId = activeTerminalSessionId;
-    if (!sessionId) {
-      return;
-    }
-    ensureSessionTerminal(sessionId);
-
-    const terminal = terminalBySessionRef.current.get(sessionId);
-    const fitAddon = fitAddonBySessionRef.current.get(sessionId);
-    if (!terminal || !fitAddon) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-      void safeInvoke<void>("pty_resize", {
-        payload: {
-          session_id: sessionId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        },
-      });
-    });
-  }, [activeTerminalSessionId, ensureSessionTerminal, isTerminalVisible, terminalHeight, terminalListWidth]);
 
 	  useEffect(() => {
 	    const handler = (event: KeyboardEvent) => {
@@ -844,9 +1597,242 @@ export default function WorkspaceShell({
     openRoot(null);
   }, [openRoot]);
 
+  const handleCreateProject = useCallback(
+    async ({ name, location, target, components, stm32_firmware }: NewProjectPayload) => {
+      const trimmedName = name.trim();
+      const trimmedLocation = location.trim();
+      if (!trimmedName || !trimmedLocation) {
+        return;
+      }
 
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
+      if (!isTauriAvailable()) {
+        window.alert("Tauri not available - cannot create project");
+        return;
+      }
+
+      setIsCreatingProject(true);
+      try {
+        const response = await safeInvoke<CreateProjectResponse>("create_project", {
+          payload: {
+            name: trimmedName,
+            location: trimmedLocation,
+            target,
+            components,
+            stm32_firmware: stm32_firmware ?? null,
+          },
+        });
+        if (!response) {
+          throw new Error("Tauri not available - cannot create project");
+        }
+        setIsNewProjectModalOpen(false);
+        openRoot(response.path);
+      } catch (error) {
+        console.error(error);
+        window.alert(String(error));
+      } finally {
+        setIsCreatingProject(false);
+      }
+    },
+    [openRoot],
+  );
+
+  const writeFirmwareInfo = useCallback(
+    (tab: "build" | "monitor", message: string) => {
+      const formatted = message.endsWith("\n") || message.endsWith("\r") ? message : `${message}\r\n`;
+      const line = `\u001b[90m${formatted}\u001b[0m`;
+
+      ensureFirmwareTerminal(tab);
+
+      if (tab === "build") {
+        const terminal = firmwareBuildTerminalRef.current;
+        if (terminal) {
+          terminal.write(line);
+        } else {
+          pendingFirmwareBuildTextRef.current.push(line);
+        }
+        setFirmwareBuildHasOutput(true);
+      } else {
+        const terminal = firmwareMonitorTerminalRef.current;
+        if (terminal) {
+          terminal.write(line);
+        } else {
+          pendingFirmwareMonitorTextRef.current.push(line);
+        }
+        setFirmwareMonitorHasOutput(true);
+      }
+    },
+    [ensureFirmwareTerminal],
+  );
+
+  const handleFirmwareBuild = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      writeFirmwareInfo("build", "Tauri not available; cannot build firmware.");
+      return;
+    }
+
+    setFirmwareProgressPct(null);
+    setIsTerminalVisible(true);
+    setBottomPanelTab("firmware");
+    setIsFirmwareBusy(true);
+    setFirmwareBuildHasOutput(false);
+    pendingFirmwareBuildTextRef.current = [];
+    ensureFirmwareTerminal("build");
+    if (firmwareBuildTerminalRef.current) {
+      try {
+        firmwareBuildTerminalRef.current.reset();
+        firmwareBuildTerminalRef.current.clear();
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      if (firmwareProjectKind === "esp32") {
+        const sessionId = await ensureFirmwareBuildPtySession();
+        if (!sessionId) {
+          return;
+        }
+        await ensureFirmwareEnv("build", sessionId);
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py build\r" } });
+        setFirmwareProgressPct(null);
+        setIsFirmwareBusy(false);
+        return;
+      }
+
+      await safeInvoke<void>(
+        "firmware_build",
+        {
+          payload: {
+            start_dir: rootDir ?? undefined,
+            codegen: firmwareProjectKind === "stm32" ? firmwareCodegenMode : "auto",
+            verbose: true,
+          },
+        },
+        { throwOnError: true },
+      );
+      writeFirmwareInfo("build", "Build complete.");
+      setFirmwareProgressPct(100);
+    } catch (error) {
+      console.error(error);
+      writeFirmwareInfo("build", `Build failed: ${String(error)}`);
+    } finally {
+      setIsFirmwareBusy(false);
+    }
+  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+
+  const handleFirmwareFlash = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      writeFirmwareInfo("build", "Tauri not available; cannot flash firmware.");
+      return;
+    }
+
+    // Always stop monitor before flashing; monitor typically holds the serial port.
+    const monitorSessionId = firmwareMonitorPtySessionIdRef.current;
+    if (monitorSessionId) {
+      try {
+        const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
+        await safeInvoke<void>("pty_write", { payload: { session_id: monitorSessionId, data: stopSequence } });
+      } catch {
+        // ignore
+      } finally {
+        firmwareMonitorRunningRef.current = false;
+        firmwareMonitorRunningKeyRef.current = null;
+        setIsFirmwareMonitorRunning(false);
+      }
+    }
+
+    setFirmwareProgressPct(null);
+    setIsTerminalVisible(true);
+    setBottomPanelTab("firmware");
+    setIsFirmwareBusy(true);
+    setFirmwareBuildHasOutput(false);
+    pendingFirmwareBuildTextRef.current = [];
+    ensureFirmwareTerminal("build");
+    if (firmwareBuildTerminalRef.current) {
+      try {
+        firmwareBuildTerminalRef.current.reset();
+        firmwareBuildTerminalRef.current.clear();
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      if (firmwareProjectKind === "esp32") {
+        const sessionId = await ensureFirmwareBuildPtySession();
+        if (!sessionId) {
+          return;
+        }
+        await ensureFirmwareEnv("build", sessionId);
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: "idf.py flash\r" } });
+        setFirmwareProgressPct(null);
+        setIsFirmwareBusy(false);
+        return;
+      }
+
+      await safeInvoke<void>(
+        "firmware_flash",
+        {
+          payload: {
+            start_dir: rootDir ?? undefined,
+            codegen: firmwareProjectKind === "stm32" ? firmwareCodegenMode : "auto",
+            verbose: true,
+          },
+        },
+        { throwOnError: true },
+      );
+      writeFirmwareInfo("build", "Flash complete.");
+      setFirmwareProgressPct(100);
+    } catch (error) {
+      console.error(error);
+      writeFirmwareInfo("build", `Flash failed: ${String(error)}`);
+    } finally {
+      setIsFirmwareBusy(false);
+    }
+  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv, firmwareCodegenMode, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+
+  const handleFirmwareMonitor = useCallback(async () => {
+    if (!isTauriAvailable()) {
+      writeFirmwareInfo("monitor", "Tauri not available; cannot monitor firmware.");
+      return;
+    }
+    if (!rootDir) {
+      writeFirmwareInfo("monitor", "No folder open; cannot monitor firmware.");
+      return;
+    }
+
+    setFirmwarePanelTab("monitor");
+    setIsTerminalVisible(true);
+    setBottomPanelTab("firmware");
+
+    try {
+      const key = `${firmwareProjectKind}:${rootDir}`;
+      const sessionId = await ensureFirmwareMonitorPtySession();
+      if (!sessionId) {
+        return;
+      }
+
+      if (firmwareMonitorRunningRef.current && firmwareMonitorRunningKeyRef.current === key) {
+        writeFirmwareInfo("monitor", "Monitor already running.");
+        return;
+      }
+
+      await ensureFirmwareEnv("monitor", sessionId);
+
+      const command = firmwareProjectKind === "esp32" ? "idf.py monitor" : "emwaver monitor";
+      await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: `${command}\r` } });
+      firmwareMonitorRunningRef.current = true;
+      firmwareMonitorRunningKeyRef.current = key;
+      setIsFirmwareMonitorRunning(true);
+    } catch (error) {
+      console.error(error);
+      writeFirmwareInfo("monitor", `Monitor failed: ${String(error)}`);
+    }
+  }, [ensureFirmwareEnv, ensureFirmwareMonitorPtySession, firmwareProjectKind, rootDir, writeFirmwareInfo]);
+
+
+		  useEffect(() => {
+		    const handleMove = (event: MouseEvent) => {
 		      if (!explorerResizeActiveRef.current) {
 		        return;
 		      }
@@ -1022,6 +2008,9 @@ export default function WorkspaceShell({
 
   const openWaveletPreviewTab = useCallback(
     async (path: string, { activate }: { activate: boolean }) => {
+      if (variant !== "wavelets") {
+        return;
+      }
       await handleOpenFile(path);
       setWaveletPreviewTabs((prev) => (prev.includes(path) ? prev : [...prev, path]));
       if (activate) {
@@ -1029,11 +2018,14 @@ export default function WorkspaceShell({
         setActivePreviewPath(path);
       }
     },
-    [handleOpenFile],
+    [handleOpenFile, variant],
   );
 
   const closeWaveletPreviewTab = useCallback(
     (path: string) => {
+      if (variant !== "wavelets") {
+        return;
+      }
       setWaveletPreviewTabs((prev) => prev.filter((entry) => entry !== path));
       setWaveletPreviewState((prev) => {
         const next = { ...prev };
@@ -1056,7 +2048,7 @@ export default function WorkspaceShell({
         return "file";
       });
     },
-    [activePreviewPath],
+    [activePreviewPath, variant],
   );
 
   const closeFile = useCallback((path: string) => {
@@ -1077,11 +2069,16 @@ export default function WorkspaceShell({
       });
       return next;
     });
-    closeWaveletPreviewTab(path);
-  }, [closeWaveletPreviewTab]);
+    if (variant === "wavelets") {
+      closeWaveletPreviewTab(path);
+    }
+  }, [closeWaveletPreviewTab, variant]);
 
   const runWaveletForPath = useCallback(
     async (path: string) => {
+      if (variant !== "wavelets") {
+        return;
+      }
 
       const normalizedPath = path.replace(/\\/g, "/");
       const isAssetPath = isWaveletAssetPath(normalizedPath);
@@ -1110,6 +2107,7 @@ export default function WorkspaceShell({
       let engine = waveletEngineByPathRef.current.get(normalizedPath);
       if (!engine) {
         engine = new WaveletEngine();
+        const bleService = createBLEServiceWrapper();
         const bootstrap = waveletBootstrapRef.current ?? "";
         engine.setBootstrapSource(bootstrap);
         engine.setup(
@@ -1137,6 +2135,7 @@ export default function WorkspaceShell({
             alert(`${title}\n\n${message}`);
           },
           {
+            BLEService: bleService,
             DeviceConnection: waveletDeviceConnection,
             Utils: waveletUtilsBinding,
             createByteArray: waveletCreateByteArray,
@@ -1239,7 +2238,7 @@ export default function WorkspaceShell({
         },
       }));
     },
-    [rootDir, waveletCreateByteArray, waveletDeviceConnection, waveletUtilsBinding],
+    [rootDir, variant, waveletCreateByteArray, waveletDeviceConnection, waveletUtilsBinding],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -1278,21 +2277,40 @@ export default function WorkspaceShell({
     const unlistenCloseFolderPromise = safeListen("menu-close-folder", () => {
       handleCloseFolder();
     });
-    const unlistenOpenFolderPromise = safeListen("menu-open-folder", () => {
+    const unlistenNewProjectPromise = safeListen("menu-new-project", () => {
+      setIsNewProjectModalOpen(true);
+    });
+    const unlistenOpenProjectPromise = safeListen("menu-open-project", () => {
       void handlePickFolder();
     });
-    const unlistenSavePromise = safeListen("menu-save-file", () => {
+    const unlistenOpenFolderPromise = safeListen("menu-ide-open-folder", () => {
+      void handlePickFolder();
+    });
+    const unlistenSavePromise = safeListen("menu-ide-save-file", () => {
       void handleSaveFile();
     });
-
+    const unlistenFirmwareBuildPromise = safeListen("menu-ide-firmware-build", () => {
+      void handleFirmwareBuild();
+    });
+    const unlistenFirmwareFlashPromise = safeListen("menu-ide-firmware-flash", () => {
+      void handleFirmwareFlash();
+    });
+    const unlistenFirmwareBuildFlashPromise = safeListen("menu-ide-firmware-build-flash", () => {
+      void handleFirmwareFlash();
+    });
     return () => {
       void unlistenTogglePromise.then((unlisten) => unlisten());
       void unlistenShowPromise.then((unlisten) => unlisten());
       void unlistenCloseFolderPromise.then((unlisten) => unlisten());
+      void unlistenNewProjectPromise.then((unlisten) => unlisten());
+      void unlistenOpenProjectPromise.then((unlisten) => unlisten());
       void unlistenOpenFolderPromise.then((unlisten) => unlisten());
       void unlistenSavePromise.then((unlisten) => unlisten());
+      void unlistenFirmwareBuildPromise.then((unlisten) => unlisten());
+      void unlistenFirmwareFlashPromise.then((unlisten) => unlisten());
+      void unlistenFirmwareBuildFlashPromise.then((unlisten) => unlisten());
     };
-  }, [handleCloseFolder, handlePickFolder, handleSaveFile]);
+  }, [handleCloseFolder, handleFirmwareBuild, handleFirmwareFlash, handlePickFolder, handleSaveFile]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1354,19 +2372,111 @@ export default function WorkspaceShell({
     setTerminalListWidth(clamp(terminalListLastExpandedWidthRef.current, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH));
   }, []);
 
+  const handleFirmwareStopMonitor = useCallback(() => {
+    const sessionId = firmwareMonitorPtySessionIdRef.current;
+    if (!sessionId || !isTauriAvailable()) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const stopSequence = firmwareProjectKind === "esp32" ? "\x1d" : "\x03";
+        await safeInvoke<void>("pty_write", { payload: { session_id: sessionId, data: stopSequence } });
+      } catch {
+        // ignore
+      } finally {
+        firmwareMonitorRunningRef.current = false;
+        firmwareMonitorRunningKeyRef.current = null;
+        setIsFirmwareMonitorRunning(false);
+        writeFirmwareInfo("monitor", "Monitor stopped.");
+      }
+    })();
+  }, [firmwareProjectKind, writeFirmwareInfo]);
+
+  const handleFirmwareClearLog = useCallback(() => {
+    setFirmwareProgressPct(null);
+    if (firmwarePanelTab === "build") {
+      setFirmwareBuildHasOutput(false);
+      const terminal = firmwareBuildTerminalRef.current;
+      if (terminal) {
+        try {
+          terminal.reset();
+          terminal.clear();
+        } catch {
+          // ignore
+        }
+      } else {
+        pendingFirmwareBuildTextRef.current = [];
+      }
+    } else {
+      setFirmwareMonitorHasOutput(false);
+      const terminal = firmwareMonitorTerminalRef.current;
+      if (terminal) {
+        try {
+          terminal.reset();
+          terminal.clear();
+        } catch {
+          // ignore
+        }
+      } else {
+        pendingFirmwareMonitorTextRef.current = [];
+      }
+    }
+  }, [firmwarePanelTab]);
+
+  const handleSelectFirmwareBuildPanel = useCallback(() => {
+    setFirmwarePanelTab("build");
+    void (async () => {
+      try {
+        const sessionId = await ensureFirmwareBuildPtySession();
+        if (sessionId) {
+          await ensureFirmwareEnv("build", sessionId);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [ensureFirmwareBuildPtySession, ensureFirmwareEnv]);
+
+  const handleSelectFirmwareMonitorPanel = useCallback(() => {
+    setFirmwarePanelTab("monitor");
+    void (async () => {
+      try {
+        const sessionId = await ensureFirmwareMonitorPtySession();
+        if (sessionId) {
+          await ensureFirmwareEnv("monitor", sessionId);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, [ensureFirmwareEnv, ensureFirmwareMonitorPtySession]);
 
   return (
     <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
-      {false ? (
+      {!rootDir && variant === "ide" ? (
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
           <div className="mx-auto mb-6 h-24 w-24 overflow-hidden rounded-full bg-slate-900/60 shadow-2xl shadow-sky-500/20 ring-2 ring-sky-500/40">
             <img src="/emwaver-logo.png" alt="EMWaver" className="h-full w-full object-contain p-4" />
           </div>
           <h2 className="text-2xl font-semibold text-slate-100">
-            Open a wavelet project
+            {variant === "ide" ? "Open or create a project" : "Open a wavelet project"}
           </h2>
-          <p className="mt-2 max-w-lg text-sm text-slate-400">Wavelets needs a folder to browse, edit, run, and preview wavelets.</p>
+          <p className="mt-2 max-w-lg text-sm text-slate-400">
+            {variant === "ide"
+              ? "The IDE needs a firmware folder to browse, edit, build, and flash."
+              : "Wavelets needs a folder to browse, edit, run, and preview wavelets."}
+          </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
+            {variant === "ide" ? (
+              <button
+                type="button"
+                onClick={() => setIsNewProjectModalOpen(true)}
+                className="min-w-[160px] rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
+              >
+                New Project…
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void handlePickFolder()}
@@ -1375,6 +2485,14 @@ export default function WorkspaceShell({
               Open Folder…
             </button>
           </div>
+
+          {variant === "ide" && isNewProjectModalOpen ? (
+            <NewProjectModal
+              onClose={() => setIsNewProjectModalOpen(false)}
+              onCreate={handleCreateProject}
+              isSubmitting={isCreatingProject}
+            />
+          ) : null}
         </div>
       ) : (
 
@@ -1421,14 +2539,16 @@ export default function WorkspaceShell({
                           className="truncate text-sm font-semibold text-slate-200"
                           title={
                             sidebarPanel === "explorer"
-                              ? rootDir ?? "Wavelets"
+                              ? rootDir ?? (variant === "ide" ? "IDE" : "Wavelets")
                               : "Source Control"
                           }
                         >
                           {sidebarPanel === "explorer"
                             ? rootDir
                               ? basename(rootDir)
-                              : "WAVELETS"
+                              : variant === "ide"
+                                ? "IDE"
+                                : "WAVELETS"
                             : "SOURCE CONTROL"}
                         </h2>
                         {sidebarPanel === "git" ? <p className="mt-1 text-[11px] text-slate-500">Git</p> : null}
@@ -1472,26 +2592,14 @@ export default function WorkspaceShell({
 
                   <div className="min-h-0 flex-1 overflow-auto p-2">
                     {sidebarPanel === "explorer" ? (
-                      <div className="space-y-2">
-                        {!rootDir ? (
-                          <button
-                            type="button"
-                            onClick={() => void handlePickFolder()}
-                            className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900"
-                            title="Open Folder"
-                          >
-                            Open Folder…
-                          </button>
-                        ) : null}
-                        <ExplorerTree
-                          root={explorerRoot}
-                          dirChildren={dirChildren}
-                          openDirs={openDirs}
-                          selectedPath={selectedPath}
-                          onToggleDir={handleToggleDir}
-                          onOpenFile={handleOpenFile}
-                        />
-                      </div>
+                      <ExplorerTree
+                        root={explorerRoot}
+                        dirChildren={dirChildren}
+                        openDirs={openDirs}
+                        selectedPath={selectedPath}
+                        onToggleDir={handleToggleDir}
+                        onOpenFile={handleOpenFile}
+                      />
                     ) : (
                       <GitSidebarPanel
                         rootDir={rootDir}
@@ -1517,7 +2625,7 @@ export default function WorkspaceShell({
                     )}
                   </div>
 
-                  {
+                  {variant === "wavelets" ? (
                     <div className="border-t border-slate-900 bg-slate-950 p-2">
                       <WaveletAssetsPanel
                         isCollapsed={isAssetScriptsCollapsed}
@@ -1525,7 +2633,7 @@ export default function WorkspaceShell({
                         onOpenAsset={(filename) => handleOpenFile(waveletAssetPath(filename))}
                       />
                     </div>
-                  }
+                  ) : null}
                 </div>
 	            </aside>
 
@@ -1551,6 +2659,7 @@ export default function WorkspaceShell({
 
 	        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <WorkspaceTopBar
+            variant={variant}
             theme={theme}
             openFiles={openFiles}
             activeFilePath={activeFilePath}
@@ -1573,36 +2682,108 @@ export default function WorkspaceShell({
             }}
             onClosePreview={closeWaveletPreviewTab}
             rightActions={
-              <>
-                {activeMainTabKind !== "preview" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const target = waveletTargetPath;
-                        if (!target) return;
-                        void (async () => {
-                          await openWaveletPreviewTab(target, { activate: true });
-                          await runWaveletForPath(target);
-                        })();
-                      }}
-                      disabled={!canRunWavelet || !waveletTargetPath}
-                      className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Preview wavelet"
+              variant === "ide" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalVisible(true);
+                      setBottomPanelTab("firmware");
+                      setFirmwarePanelTab("build");
+                      void handleFirmwareBuild();
+                    }}
+                    disabled={isFirmwareBusy || !rootDir}
+                    className="rounded border border-slate-700 bg-slate-900/60 px-1.5 py-1.5 text-slate-200 shadow-sm hover:bg-slate-800 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Build"
+                  >
+                    <HammerIcon className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalVisible(true);
+                      setBottomPanelTab("firmware");
+                      setFirmwarePanelTab("build");
+                      void handleFirmwareFlash();
+                    }}
+                    disabled={isFirmwareBusy || !rootDir}
+                    className="rounded border border-sky-300/70 bg-sky-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-sky-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Flash"
+                  >
+                    <UploadIcon className="h-4 w-4 text-sky-50" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalVisible(true);
+                      setBottomPanelTab("firmware");
+                      setFirmwarePanelTab("monitor");
+                      void handleFirmwareMonitor();
+                    }}
+                    disabled={!rootDir}
+                    className="rounded border border-emerald-300/70 bg-emerald-500 px-1.5 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                    title="Monitor"
+                  >
+                    <MonitorIcon className="h-4 w-4 text-emerald-50" />
+                  </button>
+                  {firmwareProjectKind === "stm32" ? (
+                    <select
+                      value={firmwareCodegenMode}
+                      disabled={isFirmwareBusy || !rootDir}
+                      onChange={(event) => setFirmwareCodegenMode(event.target.value as "auto" | "always" | "never")}
+                      className="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-[11px] text-slate-200 disabled:opacity-50"
+                      title="STM32CubeMX code generation mode"
                     >
-                      <span className="flex items-center gap-1.5">
-                        <PlayIcon className="h-4 w-4" />
-                        <span className="text-[11px] font-semibold">Preview</span>
-                      </span>
-                    </button>
-                    {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
-                      <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
-                        <div className="h-full w-full animate-pulse bg-emerald-400/80" />
-                      </div>
-                    ) : null}
-                  </>
-                ) : null}
-              </>
+                      <option value="auto">codegen:auto</option>
+                      <option value="always">codegen:always</option>
+                      <option value="never">codegen:never</option>
+                    </select>
+                  ) : null}
+
+                  {isFirmwareBusy ? (
+                    <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Flashing…" aria-label="Flashing…">
+                      {firmwareProgressPct === null ? (
+                        <div className="h-full w-full animate-pulse bg-sky-400/80" />
+                      ) : (
+                        <div className="h-full bg-sky-400/80" style={{ width: `${firmwareProgressPct}%` }} />
+                      )}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  {activeMainTabKind !== "preview" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = waveletTargetPath;
+                          if (!target) return;
+                          void (async () => {
+                            await openWaveletPreviewTab(target, { activate: true });
+                            await runWaveletForPath(target);
+                          })();
+                        }}
+                        disabled={!canRunWavelet || !waveletTargetPath}
+                        className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                        title="Preview wavelet"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <PlayIcon className="h-4 w-4" />
+                          <span className="text-[11px] font-semibold">Preview</span>
+                        </span>
+                      </button>
+                      {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
+                        <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
+                          <div className="h-full w-full animate-pulse bg-emerald-400/80" />
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </>
+              )
             }
           />
 
@@ -1617,7 +2798,7 @@ export default function WorkspaceShell({
                   diffContents={gitDiffContents}
                   editorOptions={MONACO_EDITOR_OPTIONS as unknown as Record<string, unknown>}
                 />
-              ) : activeMainTabKind === "preview" && activePreviewPath ? (
+              ) : variant === "wavelets" && activeMainTabKind === "preview" && activePreviewPath ? (
                 <WaveletPreviewPanel
                   theme={theme}
                   path={activePreviewPath}
@@ -1654,6 +2835,7 @@ export default function WorkspaceShell({
 
             <WorkspaceBottomPanel
               theme={theme}
+              variant={variant}
               rootDir={rootDir}
               isTerminalVisible={isTerminalVisible}
               onToggleTerminalVisible={handleToggleTerminalVisible}
@@ -1661,6 +2843,9 @@ export default function WorkspaceShell({
               terminalPanelRef={terminalPanelRef}
               terminalHeight={terminalHeight}
               onTerminalResizeMouseDown={handleTerminalResizeMouseDown}
+              effectiveBottomPanelTab={effectiveBottomPanelTab}
+              onSelectTerminalTab={() => setBottomPanelTab("terminal")}
+              onSelectFirmwareTab={() => setBottomPanelTab("firmware")}
               terminalPickerAnchorRef={terminalPickerAnchorRef}
               activeTerminalTitle={activeTerminalTitle}
               isTerminalPickerOpen={isTerminalPickerOpen}
@@ -1673,6 +2858,24 @@ export default function WorkspaceShell({
               startTerminalSession={startTerminalSession}
               closeTerminalSession={closeTerminalSession}
               terminalContainerBySessionRef={terminalContainerBySessionRef}
+              firmwareProjectKind={firmwareProjectKind}
+              isFirmwareBusy={isFirmwareBusy}
+              firmwarePanelTab={firmwarePanelTab}
+              firmwareBuildHasOutput={firmwareBuildHasOutput}
+              firmwareMonitorHasOutput={firmwareMonitorHasOutput}
+              isFirmwareMonitorRunning={isFirmwareMonitorRunning}
+              onFirmwareBuild={() => void handleFirmwareBuild()}
+              onFirmwareFlash={() => void handleFirmwareFlash()}
+              onFirmwareMonitor={() => {
+                setFirmwarePanelTab("monitor");
+                void handleFirmwareMonitor();
+              }}
+              onFirmwareStopMonitor={handleFirmwareStopMonitor}
+              onFirmwareClearLog={handleFirmwareClearLog}
+              onSelectFirmwareBuildPanel={handleSelectFirmwareBuildPanel}
+              onSelectFirmwareMonitorPanel={handleSelectFirmwareMonitorPanel}
+              firmwareBuildTerminalContainerRef={firmwareBuildTerminalContainerRef}
+              firmwareMonitorTerminalContainerRef={firmwareMonitorTerminalContainerRef}
               isTerminalListCollapsed={isTerminalListCollapsed}
               onExpandTerminalList={handleExpandTerminalList}
               onCollapseTerminalList={() => setIsTerminalListCollapsed(true)}
@@ -1687,3 +2890,446 @@ export default function WorkspaceShell({
   );
 }
 
+function NewProjectModal({
+  onClose,
+  onCreate,
+  isSubmitting,
+}: {
+  onClose: () => void;
+  onCreate: (payload: NewProjectPayload) => Promise<void> | void;
+  isSubmitting: boolean;
+}) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [target, setTarget] = useState<NewProjectPayload["target"]>("esp32s3");
+  const [pendingDisableCoreConfirm, setPendingDisableCoreConfirm] = useState<null | "ble" | "command_registry">(null);
+
+  const [components, setComponents] = useState<Set<NewProjectPayload["components"][number]>>(
+    () => new Set(["ble", "command_registry", "gpio", "ota"]),
+  );
+  const [stm32Firmware, setStm32Firmware] = useState<
+    Exclude<NewProjectPayload["stm32_firmware"], undefined | null>
+  >(() => "gpio");
+
+  const [name, setName] = useState("emwaver-firmware");
+  const [location, setLocation] = useState("");
+
+  const resetForTarget = useCallback((nextTarget: NewProjectPayload["target"]) => {
+    if (nextTarget === "esp32s3") {
+      setComponents(new Set(["ble", "command_registry", "gpio", "ota"]));
+    } else {
+      setStm32Firmware("gpio");
+      setComponents(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
+    resetForTarget(target);
+  }, [resetForTarget, target]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || !location.trim()) {
+      return;
+    }
+    const componentList = Array.from(components.values());
+    await onCreate({
+      name: name.trim(),
+      location: location.trim(),
+      target,
+      components: target === "esp32s3" ? componentList : [],
+      stm32_firmware: target === "stm32f042" ? stm32Firmware : null,
+    });
+  };
+
+  const handleBrowse = async () => {
+    if (!isTauriAvailable()) {
+      alert("Tauri not available - file dialogs require Tauri environment");
+      return;
+    }
+    try {
+      const directory = await openDialog({ directory: true });
+      if (typeof directory === "string") {
+        setLocation(directory);
+      }
+    } catch (error) {
+      console.error(error);
+      window.alert(String(error));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+      {pendingDisableCoreConfirm ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+            <div className="text-sm font-semibold text-slate-100">
+              {pendingDisableCoreConfirm === "ble" ? "Disable BLE?" : "Disable Command Registry?"}
+            </div>
+            {pendingDisableCoreConfirm === "ble" ? (
+              <p className="mt-2 text-sm text-slate-300">
+                Disabling BLE means you won’t be able to interact with EMWaver apps.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-slate-300">
+                You can still connect over BLE, but you won’t have any built-in commands (like <span className="font-semibold">version</span>).
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDisableCoreConfirm(null)}
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const mode = pendingDisableCoreConfirm;
+                  setPendingDisableCoreConfirm(null);
+                  setComponents((prev) => {
+                    const next = new Set(prev);
+                    if (mode === "ble") {
+                      next.delete("ble");
+                      next.delete("command_registry");
+                      next.delete("ota");
+                      next.delete("gpio");
+                      next.delete("sampler");
+                      next.delete("cc1101");
+                      next.delete("rfm69");
+                      next.delete("mfrc522");
+                    } else {
+                      next.delete("command_registry");
+                      next.delete("gpio");
+                      next.delete("sampler");
+                      next.delete("cc1101");
+                      next.delete("rfm69");
+                      next.delete("mfrc522");
+                    }
+                    return next;
+                  });
+                }}
+                className="rounded-md bg-rose-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-rose-400 cursor-pointer"
+              >
+                Disable
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
+          <p className="text-sm text-slate-400">Step {step} of 3</p>
+        </div>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          {step === 1 ? (
+            <div className="space-y-3">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">Target</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setTarget("esp32s3")}
+                    className={[
+                      "rounded-md border px-4 py-3 text-left transition-colors",
+                      target === "esp32s3"
+                        ? "border-sky-500/80 bg-sky-500/10 text-slate-100"
+                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-sky-500/60",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold">ESP32-S3</div>
+                    <div className="mt-1 text-xs text-slate-400">Supports: EMWaver Flagship, Shield, DIY.</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTarget("stm32f042")}
+                    className={[
+                      "rounded-md border px-4 py-3 text-left transition-colors",
+                      target === "stm32f042"
+                        ? "border-sky-500/80 bg-sky-500/10 text-slate-100"
+                        : "border-slate-700 bg-slate-950 text-slate-200 hover:border-sky-500/60",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold">STM32F042</div>
+                    <div className="mt-1 text-xs text-slate-400">Supports: Infrared Waver, ISM Waver, GPIO Waver, RFID Waver.</div>
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+	          {step === 2 ? (
+            <div className="space-y-3">
+              {target === "esp32s3" ? (
+                <div>
+                  <div className="mb-2">
+                    <div className="text-sm font-semibold text-slate-100">Components</div>
+                    <div className="text-xs text-slate-400">
+                      Default is BLE + Command Registry + GPIO + OTA; uncheck what you don&apos;t need.
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      {
+                        id: "ble" as const,
+                        label: "BLE",
+                      },
+                      {
+                        id: "command_registry" as const,
+                        label: "Command Registry",
+                      },
+                    ].map((item) => {
+                      const checked = components.has(item.id);
+                      const disabled = false;
+                      return (
+                        <label
+                          key={item.id}
+                          className={[
+                            "flex items-center gap-2 rounded-md border bg-slate-950 px-3 py-2 text-sm text-slate-200",
+                            disabled ? "border-slate-800 opacity-60" : "border-slate-700 hover:border-sky-500/60",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const nextChecked = event.target.checked;
+                              setComponents((prev) => {
+                                const next = new Set(prev);
+                                if (item.id === "ble" && !nextChecked) {
+                                  setPendingDisableCoreConfirm("ble");
+                                  return prev;
+                                }
+                                if (item.id === "command_registry" && !nextChecked) {
+                                  setPendingDisableCoreConfirm(item.id);
+                                  return prev;
+                                }
+
+                                if (nextChecked) {
+                                  next.add(item.id);
+                                  if (item.id === "command_registry") {
+                                    next.add("ble");
+                                  }
+                                } else {
+                                  next.delete(item.id);
+                                }
+
+                                if (!next.has("ble")) {
+                                  next.delete("command_registry");
+                                  next.delete("ota");
+                                  next.delete("gpio");
+                                  next.delete("sampler");
+                                  next.delete("cc1101");
+                                  next.delete("rfm69");
+                                  next.delete("mfrc522");
+                                }
+
+                                if (!next.has("command_registry")) {
+                                  next.delete("gpio");
+                                  next.delete("sampler");
+                                  next.delete("cc1101");
+                                  next.delete("rfm69");
+                                  next.delete("mfrc522");
+                                }
+
+                                return next;
+                              });
+                            }}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2 border-t border-slate-800 pt-2 text-xs text-slate-400">
+                    Firmware modules
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { id: "ota", label: "OTA" },
+                        { id: "gpio", label: "GPIO" },
+                        { id: "sampler", label: "Sampler" },
+                        { id: "cc1101", label: "CC1101" },
+                        { id: "rfm69", label: "RFM69" },
+                        { id: "mfrc522", label: "MFRC522" },
+                      ] as const
+                    ).map((item) => {
+                      const checked = components.has(item.id);
+                      const disabled =
+                        item.id === "ota" ? !components.has("ble") : !components.has("command_registry");
+                      return (
+                        <label
+                          key={item.id}
+                          className={[
+                            "flex items-center gap-2 rounded-md border bg-slate-950 px-3 py-2 text-sm text-slate-200",
+                            disabled ? "border-slate-800 opacity-60" : "border-slate-700 hover:border-sky-500/60",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={(event) => {
+                              const nextChecked = event.target.checked;
+                              setComponents((prev) => {
+                                const next = new Set(prev);
+                                if (nextChecked) {
+                                  next.add(item.id);
+                                } else {
+                                  next.delete(item.id);
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-2">
+                    <div className="text-sm font-semibold text-slate-100">Base firmware</div>
+                    <div className="text-xs text-slate-400">Default is GPIO.</div>
+                  </div>
+                  <select
+                    value={stm32Firmware}
+                    onChange={(event) =>
+                      setStm32Firmware(event.target.value as Exclude<NewProjectPayload["stm32_firmware"], undefined | null>)
+                    }
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                  >
+                    <option value="gpio">GPIO</option>
+                    <option value="ir">IR</option>
+                    <option value="ism">ISM</option>
+                    <option value="rfid">RFID</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                >
+                  Back
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Project name
+                </label>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                  placeholder="emwaver-firmware"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Location
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={location}
+                    onChange={(event) => setLocation(event.target.value)}
+                    className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                    placeholder="/Users/me/Projects"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBrowse}
+                    className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-400">
+                {target === "esp32s3" ? (
+                  <span>
+                    Target: ESP32-S3 • Components: {Array.from(components.values()).join(", ")}
+                  </span>
+                ) : (
+                  <span>Target: STM32F042 • Base firmware: {stm32Firmware}</span>
+                )}
+              </div>
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                >
+                  Back
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !name.trim() || !location.trim()}
+                    className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? "Creating..." : "Create"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+        </form>
+      </div>
+    </div>
+  );
+}

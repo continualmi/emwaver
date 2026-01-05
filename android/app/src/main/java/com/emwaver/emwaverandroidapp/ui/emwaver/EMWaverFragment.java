@@ -54,11 +54,13 @@ import androidx.core.view.MenuHost;
 import androidx.core.view.MenuProvider;
 import androidx.core.content.ContextCompat;
 
+import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.DeviceConnectionService;
 import com.emwaver.emwaverandroidapp.NativeBuffer;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
+import com.emwaver.emwaverandroidapp.BLEReceiver;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
@@ -113,6 +115,7 @@ public class EMWaverFragment extends Fragment {
     private Handler statusUpdateHandler;
     private static final int STATUS_UPDATE_INTERVAL = 1000; // 1 second
 
+    private BLEReceiver bleReceiver;
 
 
 
@@ -211,13 +214,35 @@ public class EMWaverFragment extends Fragment {
         }
         updateConnectionStatus();
         
-        // USB-only: request firmware version after connect.
+        // Register receiver for EMWaver connection status updates
+        bleReceiver = new BLEReceiver(this::updateConnectionUI);
+        IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
+        requireActivity().registerReceiver(bleReceiver, filter);
+        
+        // Update firmware version display from stored version if connected via BLE
+        if (connectionManager != null) {
+            BLEService bleService = connectionManager.getBleService();
+            if (bleService != null && bleService.checkConnection()) {
+                String storedVersion = bleService.getFirmwareVersion();
+                if (!"Unknown".equals(storedVersion)) {
+                    firmwareVersionText.setText(storedVersion);
+                    firmwareVersionText.setTextColor(ContextCompat.getColor(requireContext(), 
+                            android.R.color.holo_blue_dark));
+                }
+                new Handler(Looper.getMainLooper()).postDelayed(this::requestFirmwareVersion, 500);
+            }
+        }
     }
 
     @Override
     public void onPause() {
         super.onPause();
         
+        // Unregister receiver
+        if (bleReceiver != null) {
+            requireActivity().unregisterReceiver(bleReceiver);
+            bleReceiver = null;
+        }
     }
 
     private void updateConnectionStatus() {
@@ -319,8 +344,11 @@ public class EMWaverFragment extends Fragment {
                 emwaverStatusText.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.holo_orange_dark));
                 connectButton.setVisibility(View.GONE); // Hide connect while attempting, updateConnectionUI will fix later
                 
-                // USB MIDI only
+                // Check for USB first, then try BLE
                 connectionManager.checkForUsbDevices();
+                
+                // Also start BLE scan as fallback
+                connectionManager.startBleScan();
             } else {
                 Toast.makeText(getContext(), "Connection manager not initialized. Cannot connect.", Toast.LENGTH_SHORT).show();
             }
@@ -563,6 +591,12 @@ public class EMWaverFragment extends Fragment {
                     String fullMessage = new String(response, StandardCharsets.US_ASCII);
                     String version = extractVersion(fullMessage);
                     updateDeviceIcon(fullMessage);
+                    
+                    // Store the version in BLE service if connected via BLE (for persistence)
+                    BLEService bleService = connectionManager.getBleService();
+                    if (bleService != null && connectionManager.getActiveConnectionType() == DeviceConnectionService.ConnectionType.BLE) {
+                        bleService.setFirmwareVersion(version);
+                    }
                     
                     // Update the version text field with just the version number
                     firmwareVersionText.setText(version);

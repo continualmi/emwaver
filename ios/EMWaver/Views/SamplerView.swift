@@ -191,10 +191,10 @@ struct LineChartViewController: UIViewControllerRepresentable {
 }
 
 struct SamplerView: View {
-    @EnvironmentObject var bleManager: USBManager
+    @EnvironmentObject var bleManager: BLEManager
     @StateObject private var viewModel = SamplerViewModel()
 
-    @State private var selectedPinIndex = 0 // STM32 encoded pin 0 == PA0
+    @State private var selectedPinIndex = 5 // Default to GPIO6 (IO6) to match Android
     @State private var selectedSignalIndex = 0
     @State private var isRecording = false
     @AppStorage("sampler_capture_invert") private var invertCaptureDuringRecording = false
@@ -230,21 +230,32 @@ struct SamplerView: View {
     @State private var renameText = ""
 
 
-    // STM32-only: match Android's Sampler spinner labels.
-    // Encoded pin format (used by firmware): PA0..PA15 => 0..15, PB0..PB15 => 16..31.
-    private let pins: [String] = [
-        "PA0 (TIM2 CH1)",
-        "PA1 (IR_RX)",
-        "PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)",
-        "PA3 (TIM2 CH4)",
-        "PA4",
-        "PA5",
-        "PA6",
-        "PA7",
-        "PA13",
-        "PA14",
-        "PB6",
-        "PB7"
+    private let pins = [
+        "IO1 DIO0[S]/GDO0[F]",
+        "IO2 DIO1[S]/GDO2[F]",
+        "IO3 GPIO3",
+        "IO4 IR TX[F/D]",
+        "IO5 IR RX[F/D]",
+        "IO6 GPIO6",
+        "IO7 GPIO7",
+        "IO8 GPIO8",
+        "IO9 GPIO9",
+        "IO10 GPIO10",
+        "IO11 GPIO11",
+        "IO12 GPIO12",
+        "IO13 GPIO13",
+        "IO14 GPIO14",
+        "IO15 GPIO15",
+        "IO16 GPIO16",
+        "IO17 GPIO17",
+        "IO18 GPIO18",
+        "IO37 IR TX[S]",
+        "IO38 IR RX[S]",
+        "IO39 DIO5[S]",
+        "IO40 DIO4[S]",
+        "IO41 DIO3[S]",
+        "IO42 DIO2[S]",
+        "IO46 GPIO46"
     ]
 
     var body: some View {
@@ -864,18 +875,14 @@ struct SamplerView: View {
 
     private func selectedPinNumber() -> UInt8? {
         guard selectedPinIndex >= 0 && selectedPinIndex < pins.count else { return nil }
-        let selected = pins[selectedPinIndex]
-        guard let token = selected.split(whereSeparator: { $0 == " " || $0 == "(" }).first else { return nil }
-        let t = String(token) // e.g. "PA1"
-        guard t.count >= 3, t.first == "P" else { return nil }
-        let port = t[t.index(after: t.startIndex)]
-        let digits = t.dropFirst(2)
-        guard let pin = Int(digits), (0...15).contains(pin) else { return nil }
-        switch port {
-        case "A": return UInt8(pin)
-        case "B": return UInt8(16 + pin)
-        default: return nil
+        let text = pins[selectedPinIndex]
+        let pattern = "\\bIO(\\d+)\\b"
+        if let range = text.range(of: pattern, options: .regularExpression) {
+            let match = text[range]
+            let digits = match.dropFirst(2)
+            return UInt8(String(digits))
         }
+        return nil
     }
 
     private func parseNumericValue(_ raw: String) -> Int? {

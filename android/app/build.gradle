@@ -14,6 +14,8 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // buildConfigField "String", "BACKEND_BASE_URL", '"https://emwaver-backend.azurewebsites.net"'
+        buildConfigField "String", "BACKEND_BASE_URL", '"http://192.168.1.209:8000"'
     }
 
     buildTypes {
@@ -145,7 +147,8 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'androidx.browser:browser:1.7.0'
     
-    // USB MIDI uses the platform android.media.midi APIs; no external USB-serial dependency.
+    // USB Serial library for USB connection support
+    implementation 'com.github.mik3y:usb-serial-for-android:3.4.6'
  
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
 }

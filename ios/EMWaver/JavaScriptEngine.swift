@@ -39,10 +39,10 @@ typealias JSPrintCallback = (String) -> Void
 
 class JavaScriptEngine {
     private var context: JSContext?
-    private var bleManager: USBManager
+    private var bleManager: BLEManager
     private var printCallback: JSPrintCallback?
     
-    init(bleManager: USBManager) {
+    init(bleManager: BLEManager) {
         self.bleManager = bleManager
     }
     
@@ -125,7 +125,7 @@ class JavaScriptEngine {
             // Check if we have data before sending
             if !byteArray.isEmpty {
                 let data = Data(byteArray)
-                self.printCallback?("Sending packet: \(USBManager.dataToHexString(data))")
+                self.printCallback?("Sending packet: \(BLEManager.dataToHexString(data))")
                 self.bleManager.sendPacket(data)
             } else {
                 self.printCallback?("Error: Could not convert to byte array")

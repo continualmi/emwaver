@@ -159,10 +159,10 @@ class RFM69 {
     private var commandObserver: ((String) -> Void)?
     
     // MARK: - Properties
-    private let bleManager: USBManager
+    private let bleManager: BLEManager
     
     // MARK: - Initialization
-    init(bleManager: USBManager) {
+    init(bleManager: BLEManager) {
         self.bleManager = bleManager
     }
     
@@ -189,7 +189,7 @@ class RFM69 {
         notifyCommandObserver(command.trimmingCharacters(in: .whitespacesAndNewlines))
         
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-            if USBManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
+            if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
                 print("RFM69: SPI open failed (device error)")
                 return false
             }
@@ -215,10 +215,10 @@ class RFM69 {
         guard let response = response, !response.isEmpty else {
             return []
         }
-        if USBManager.isPaddedOkFrame(response) {
+        if BLEManager.isPaddedOkFrame(response) {
             return []
         }
-        if USBManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
+        if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
             print("RFM69: Device returned error")
             return []
         }
@@ -245,7 +245,7 @@ class RFM69 {
         }
         
         if let response = bleManager.sendCommand(Data(command.utf8), timeout: 1000) {
-            if USBManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
+            if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[response.startIndex] == 0xFF) {
                 print("RFM69: Device returned error during register read")
                 return 0
             }

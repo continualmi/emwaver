@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::runtime::Runtime;
 
 #[cfg(unix)]
@@ -33,20 +33,6 @@ use crate::bridge::BridgeRequest;
 use crate::daemon;
 
 static PROMPT_PENDING: AtomicBool = AtomicBool::new(true);
-
-#[cfg(unix)]
-async fn daemon_subscribe_events(stream: &mut UnixStream) -> Result<()> {
-    let req = BridgeRequest {
-        id: 999,
-        method: "events_subscribe".to_string(),
-        params: serde_json::json!({}),
-    };
-    let bytes = serde_json::to_vec(&req).context("failed to encode events_subscribe")?;
-    stream.write_all(&bytes).await.context("failed to write events_subscribe")?;
-    stream.write_all(b"\n").await.context("failed to write newline")?;
-    stream.flush().await.ok();
-    Ok(())
-}
 
 pub fn run_shell(verbose: bool) -> Result<()> {
     let runtime = Runtime::new().context("failed to create async runtime")?;
@@ -79,7 +65,8 @@ async fn run_shell_daemon(verbose: bool) -> Result<()> {
             id: 1,
             method: "connect".to_string(),
             params: serde_json::json!({
-                "port_name": null,
+                "address": null,
+                "name": "EMWaver",
             }),
         },
         Duration::from_secs(20),
@@ -90,13 +77,9 @@ async fn run_shell_daemon(verbose: bool) -> Result<()> {
     let events_socket = socket.clone();
     let notify_task = tokio::spawn(async move {
         let stream = UnixStream::connect(&events_socket).await;
-        let Ok(mut stream) = stream else {
+        let Ok(stream) = stream else {
             return;
         };
-        // This connection is dedicated to events; enable forwarding on it.
-        if daemon_subscribe_events(&mut stream).await.is_err() {
-            return;
-        }
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
         loop {

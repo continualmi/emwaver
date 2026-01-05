@@ -274,6 +274,14 @@ if (typeof emw.sendPacket !== 'function') {
 }
 __waveletGlobal.emw = emw;
 
+// Optional host compatibility: some hosts expose BLEService but can't directly bridge methods.
+// iOS provides `_manualSendCommand` as a JS-callable block.
+if (typeof BLEService !== 'undefined' && typeof BLEService.sendCommand === 'undefined') {
+  if (typeof _manualSendCommand === 'function') {
+    BLEService.sendCommand = _manualSendCommand;
+  }
+}
+
 if (typeof UI === 'undefined') {
   var UI = (function () {
     var idCounter = 0;

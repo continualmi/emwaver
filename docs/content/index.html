@@ -757,10 +757,11 @@
             <p class="tagline">Your hardware hacking development platform.</p>
             <img src="banner.jpeg" alt="EMWaver banner" class="hero-banner">
             <p style="font-size: 1.2rem; max-width: 760px; margin: 0 auto;">
-                Offline-first hardware hacking — designed as a more powerful, cost-effective alternative to platforms like Flipper Zero and Arduino.
+                Fully open-source, offline-first hardware hacking — designed as a more powerful, cost-effective alternative to platforms like Flipper Zero and Arduino.
             </p>
             <p style="font-size: 1.05rem; max-width: 700px; margin: 0.75rem auto 0;">
-                EMWaver now focuses on one board (Pivot) and one transport: USB MIDI. Your phone/PC provides UI + processing (apps + CLI), while Wavelets provide portable scripts + UIs.
+                Devices connect directly over BLE or USB and offload UI + processing to your phone/PC (apps + CLI), so you can build workflows that go way beyond firmware alone.
+                Two hardware families: STM32 (ultra low-cost USB-only) and ESP32-S3 (cross-platform wireless, including iOS). Wavelets (EMWaver DSL) add a middleware layer for portable scripts + UIs.
             </p>
             <div class="cta-buttons">
                 <a href="https://play.google.com/store/apps/details?id=com.emwaver.app" class="store-badge" target="_blank" rel="noopener">
@@ -798,13 +799,47 @@
                 </div>
             </div>
             <div class="device-showcase">
-                <h2>EMWaver Pivot</h2>
-                <div style="max-width: 340px; margin: 0 auto;">
-                    <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=emwaver" target="_blank" rel="noopener">
-                        <img src="EMWAVER.jpg" alt="EMWaver Pivot device" class="device-image">
-                        <h3>Pivot</h3>
-                        <p>STM32 • USB MIDI</p>
-                    </a>
+                <h2>Current Gen Devices</h2>
+                <div class="device-grid">
+                    <div class="device-row">
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=emwaver" target="_blank" rel="noopener">
+                            <img src="EMWAVER.jpg" alt="EMWaver device" class="device-image">
+                            <h3>EMWaver</h3>
+                            <p>ESP32</p>
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=ISM_WAVER" target="_blank" rel="noopener">
+                            <img src="ISM_WAVER.jpg" alt="ISM Waver device" class="device-image">
+                            <h3>ISM Waver</h3>
+                            <p>STM32</p>
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=INFRARED_WAVER" target="_blank" rel="noopener">
+                            <img src="INFRARED_WAVER.jpg" alt="Infrared Waver device" class="device-image">
+                            <h3>Infrared Waver</h3>
+                            <p>STM32</p>
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=GPIO_WAVER" target="_blank" rel="noopener">
+                            <img src="GPIO_WAVER.jpg" alt="GPIO Waver device" class="device-image">
+                            <h3>GPIO Waver</h3>
+                            <p>STM32</p>
+                        </a>
+                    </div>
+                    <div class="device-row center">
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=EMWAVER_DIY" target="_blank" rel="noopener">
+                            <img src="EMWAVER_DIY.jpg" alt="EMWaver DIY device" class="device-image">
+                            <h3>EMWaver DIY</h3>
+                            <p>Module</p>
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=EMWAVER_SHIELD" target="_blank" rel="noopener">
+                            <img src="EMWAVER_SHIELD.jpg" alt="EMWaver Shield device" class="device-image">
+                            <h3>EMWaver Shield</h3>
+                            <p>Module</p>
+                        </a>
+                        <a class="device-card" href="https://luispl77.github.io/emwaver-hardware/device.html?id=RFID_WAVER" target="_blank" rel="noopener">
+                            <img src="RFID_WAVER.jpg" alt="RFID Waver device" class="device-image">
+                            <h3>RFID Waver</h3>
+                            <p>Module</p>
+                        </a>
+                    </div>
                 </div>
             </div>
             <div class="wavelets-section">

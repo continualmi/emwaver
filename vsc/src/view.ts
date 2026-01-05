@@ -16,12 +16,17 @@
  */
 
 import * as vscode from "vscode";
+import { expandCliPath } from "./cliPath";
 import { EmwaverDeviceManager, DeviceInfo, DeviceStatusSnapshot } from "./deviceBridge";
+
+type BuildFlashAction = "build" | "flash";
 
 export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
   static readonly viewType = "emwaver.buildFlashView";
 
   private view: vscode.WebviewView | undefined;
+  private terminal: vscode.Terminal | undefined;
+  private terminalCwd: string | undefined;
   private deviceManager: EmwaverDeviceManager | undefined;
   private deviceStatusDisposable: vscode.Disposable | undefined;
 
@@ -47,7 +52,7 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken
   ) {
-    this.output.appendLine("Resolving Wavelets view…");
+    this.output.appendLine("Resolving Build & Flash view…");
     this.view = webviewView;
 
     webviewView.webview.options = {
@@ -60,6 +65,9 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage(async (message) => {
       try {
         if (!message || typeof message !== "object") return;
+        if (message.type === "run" && (message.action === "build" || message.action === "flash")) {
+          await this.runAction(message.action);
+        }
         if (message.type === "previewWavelet") {
           await vscode.commands.executeCommand("emwaver.previewWavelet");
         }
@@ -89,6 +97,64 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  async runAction(action: BuildFlashAction) {
+    this.output.appendLine(`Action: ${action}`);
+    const cwd = await this.getWorkingDirectory();
+    if (!cwd) return;
+
+    const config = vscode.workspace.getConfiguration("emwaver");
+    const cliPath = expandCliPath(config.get<string>("cliPath", "emwaver"));
+
+    const args =
+      action === "build"
+        ? config.get<string[]>("buildArgs", [])
+        : config.get<string[]>("flashArgs", []);
+
+    const cmd = [cliPath, action, ...args];
+
+    const commandLine = this.toShellCommand(cmd);
+    const terminal = this.getOrCreateTerminal(cwd);
+    terminal.show(true);
+    terminal.sendText(commandLine);
+
+    this.view?.webview.postMessage({ type: "status", status: `Running: ${cmd.join(" ")}` });
+  }
+
+  private async getWorkingDirectory(): Promise<string | undefined> {
+    const config = vscode.workspace.getConfiguration("emwaver");
+    const configured = config.get<string>("workingDirectory", "").trim();
+    if (configured) return configured;
+
+    const activeUri = vscode.window.activeTextEditor?.document.uri;
+    const folder = activeUri ? vscode.workspace.getWorkspaceFolder(activeUri) : undefined;
+    const chosen = folder ?? vscode.workspace.workspaceFolders?.[0];
+
+    if (!chosen) {
+      void vscode.window.showErrorMessage("EMWaver: Open a folder/workspace first.");
+      return undefined;
+    }
+
+    return chosen.uri.fsPath;
+  }
+
+  private getOrCreateTerminal(cwd: string): vscode.Terminal {
+    if (this.terminal && this.terminalCwd === cwd) return this.terminal;
+    this.terminal?.dispose();
+    this.terminal = vscode.window.createTerminal({ name: "EMWaver", cwd });
+    this.terminalCwd = cwd;
+    this.context.subscriptions.push(this.terminal);
+    return this.terminal;
+  }
+
+  private toShellCommand(parts: string[]): string {
+    return parts.map(this.quoteIfNeeded).join(" ");
+  }
+
+  private quoteIfNeeded(part: string): string {
+    if (!part) return "\"\"";
+    if (!/[\\s"]/u.test(part)) return part;
+    return `"${part.replaceAll("\"", "\\\"")}"`;
+  }
 
   private getHtml(webview: vscode.Webview): string {
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", "styles.css"));
@@ -107,6 +173,8 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
   <body>
     <div class="container">
       <div class="row">
+        <button class="primary" id="build">Build</button>
+        <button class="primary" id="flash">Flash</button>
         <button class="primary" id="previewWavelet">Preview</button>
       </div>
       <div class="row">
@@ -116,7 +184,7 @@ export class BuildFlashViewProvider implements vscode.WebviewViewProvider {
       <div class="status" id="deviceStatus">Device: Disconnected</div>
       <div class="status" id="status">Idle</div>
       <div class="hint">
-        Previews the active <code>.emw</code> wavelet in an editor tab, and manages device connection.
+        Runs <code>emwaver build</code> / <code>emwaver flash</code>, or previews the active <code>.emw</code> wavelet in an editor tab.
       </div>
     </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
