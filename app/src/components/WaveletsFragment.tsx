@@ -26,5 +26,5 @@ export default function WaveletsFragment({
   theme?: ThemeMode;
   isActive?: boolean;
 }) {
-  return <WorkspaceShell variant="wavelets" theme={theme} isActive={isActive} />;
+  return <WorkspaceShell theme={theme} isActive={isActive} />;
 }

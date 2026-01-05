@@ -1,7 +1,7 @@
 {
   "name": "emwaver",
   "displayName": "EMWaver",
-  "description": "Build/flash helpers for EMWaver firmware and projects.",
+  "description": "Wavelet preview + device connection helpers for EMWaver.",
   "version": "0.0.1",
   "publisher": "emwaver",
   "icon": "media/emwaver-logo.png",
@@ -13,8 +13,6 @@
   ],
   "activationEvents": [
     "onView:emwaver.buildFlashView",
-    "onCommand:emwaver.build",
-    "onCommand:emwaver.flash",
     "onCommand:emwaver.connectDevice",
     "onCommand:emwaver.disconnectDevice",
     "onCommand:emwaver.sendDeviceCommand",
@@ -32,15 +30,7 @@
     "commands": [
       {
         "command": "emwaver.openBuildFlash",
-        "title": "EMWaver: Open Build & Flash"
-      },
-      {
-        "command": "emwaver.build",
-        "title": "EMWaver: Build"
-      },
-      {
-        "command": "emwaver.flash",
-        "title": "EMWaver: Flash"
+        "title": "EMWaver: Open Wavelets"
       },
       {
         "command": "emwaver.connectDevice",
@@ -75,27 +65,6 @@
           "type": "string",
           "default": "~/emwaver/cli/target/debug/emwaver",
           "description": "Path to the emwaver CLI executable (or just 'emwaver' if it is on PATH)."
-        },
-        "emwaver.workingDirectory": {
-          "type": "string",
-          "default": "",
-          "description": "Working directory for build/flash commands. Leave empty to use the current workspace folder."
-        },
-        "emwaver.buildArgs": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "description": "Extra args appended to `emwaver build`."
-        },
-        "emwaver.flashArgs": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "description": "Extra args appended to `emwaver flash`."
         }
       }
     },
@@ -112,7 +81,7 @@
       "emwaver": [
         {
           "id": "emwaver.buildFlashView",
-          "name": "Build & Flash",
+          "name": "Wavelets",
           "type": "webview"
         }
       ]

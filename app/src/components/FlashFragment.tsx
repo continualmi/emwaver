@@ -31,20 +31,6 @@ type ProgressEventPayload = {
   timestamp_ms?: number;
 };
 
-type OtaProgressEventPayload = {
-  message: string;
-  sent_bytes?: number;
-  total_bytes?: number;
-  timestamp_ms?: number;
-};
-
-type BleStatus = {
-  connected: boolean;
-  scanning: boolean;
-  device_name?: string | null;
-  device_address?: string | null;
-};
-
 const FIRMWARE_OPTIONS: FirmwareOption[] = [
   { id: "ism", label: "ISM" },
   { id: "gpio", label: "GPIO" },
@@ -56,11 +42,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
   const firmwareOptions = useMemo(() => FIRMWARE_OPTIONS, []);
   const [selectedFirmware, setSelectedFirmware] = useState<FirmwareOption["id"]>("ism");
   const [externalFilePath, setExternalFilePath] = useState<string | null>(null);
-  const [otaFilePath, setOtaFilePath] = useState<string | null>(null);
-  const [otaTransport, setOtaTransport] = useState<"ble" | "wifi">("ble");
   const [dfuConnected, setDfuConnected] = useState<boolean>(false);
-  const [bleConnected, setBleConnected] = useState<boolean>(false);
-  const [bleDeviceLabel, setBleDeviceLabel] = useState<string | null>(null);
   const [isFlashing, setIsFlashing] = useState<boolean>(false);
   const [progressLines, setProgressLines] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
@@ -83,7 +65,6 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
-    let unlistenOta: (() => void) | null = null;
     const register = async () => {
       if (!isTauriAvailable()) return;
       const { listen } = await import("@tauri-apps/api/event");
@@ -92,22 +73,10 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
           appendProgress(event.payload.message);
         }
       });
-      unlistenOta = await listen<OtaProgressEventPayload>("ota-progress", (event) => {
-        if (event.payload?.message) {
-          const sent = typeof event.payload.sent_bytes === "number" ? event.payload.sent_bytes : null;
-          const total = typeof event.payload.total_bytes === "number" ? event.payload.total_bytes : null;
-          if (sent != null && total != null && total > 0) {
-            appendProgress(`${event.payload.message} (${sent}/${total})`);
-          } else {
-            appendProgress(event.payload.message);
-          }
-        }
-      });
     };
     void register();
     return () => {
       if (unlisten) unlisten();
-      if (unlistenOta) unlistenOta();
     };
   }, [appendProgress]);
 
@@ -120,40 +89,6 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
       console.error(error);
       appendProgress(`Error checking DFU device: ${String(error)}`);
       setDfuConnected(false);
-    }
-  }, [appendProgress]);
-
-  const refreshBleStatus = useCallback(async () => {
-    try {
-      try {
-        const status = await safeInvoke<BleStatus>("ble_get_status", undefined, { throwOnError: true });
-        setBleConnected(Boolean(status?.connected));
-        if (status?.connected) {
-          const label = [status.device_name, status.device_address].filter(Boolean).join(" ");
-          setBleDeviceLabel(label || "Connected");
-          appendProgress(`BLE connected: ${label || "yes"}`);
-        } else {
-          setBleDeviceLabel(null);
-          appendProgress("BLE not connected.");
-        }
-        return;
-      } catch (error) {
-        const message = String(error);
-        if (!message.toLowerCase().includes("ble not initialized")) {
-          throw error;
-        }
-      }
-
-      await safeInvoke("ble_initialize", undefined, { throwOnError: true });
-      const status = await safeInvoke<BleStatus>("ble_get_status", undefined, { throwOnError: true });
-      setBleConnected(Boolean(status?.connected));
-      setBleDeviceLabel(status?.connected ? [status.device_name, status.device_address].filter(Boolean).join(" ") : null);
-      appendProgress("BLE initialized.");
-    } catch (error) {
-      console.error(error);
-      appendProgress(`Error checking BLE status: ${String(error)}`);
-      setBleConnected(false);
-      setBleDeviceLabel(null);
     }
   }, [appendProgress]);
 
@@ -173,25 +108,6 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
     } catch (error) {
       console.error(error);
       appendProgress(`Failed to select file: ${String(error)}`);
-    }
-  }, [appendProgress]);
-
-  const handleSelectOtaFile = useCallback(async () => {
-    try {
-      const path = await openDialog({
-        title: "Select ESP32 OTA firmware (.bin)",
-        multiple: false,
-        directory: false,
-        filters: [{ name: "ESP32 Firmware", extensions: ["bin"] }],
-      });
-
-      if (typeof path === "string" && path.length > 0) {
-        setOtaFilePath(path);
-        appendProgress(`Selected OTA file: ${path}`);
-      }
-    } catch (error) {
-      console.error(error);
-      appendProgress(`Failed to select OTA file: ${String(error)}`);
     }
   }, [appendProgress]);
 
@@ -227,100 +143,12 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
     }
   }, [appendProgress, dfuConnected, externalFilePath, refreshDfuStatus, selectedFirmware]);
 
-  const handleOtaFlash = useCallback(async () => {
-    if (!bleConnected) {
-      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
-      return;
-    }
-    if (!otaFilePath) {
-      appendProgress("No OTA file selected. Choose a .bin firmware file and retry.");
-      return;
-    }
-
-    setIsFlashing(true);
-    setProgressLines([]);
-
-    try {
-      if (otaTransport === "ble") {
-        appendProgress("Starting ESP32 BLE OTA flash...");
-        await safeInvoke("ble_ota_flash_file", { path: otaFilePath }, { throwOnError: true });
-      } else {
-        appendProgress("Starting ESP32 WiFi OTA flash...");
-        await safeInvoke("ota_wifi_flash_file", { path: otaFilePath }, { throwOnError: true });
-      }
-      appendProgress("OTA completed successfully!");
-    } catch (error) {
-      console.error(error);
-      appendProgress(`OTA failed: ${String(error)}`);
-    } finally {
-      setIsFlashing(false);
-      void refreshBleStatus();
-    }
-  }, [appendProgress, bleConnected, otaFilePath, otaTransport, refreshBleStatus]);
-
-  const handleOtaFlashStock = useCallback(async () => {
-    if (!bleConnected) {
-      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
-      return;
-    }
-
-    setIsFlashing(true);
-    setProgressLines([]);
-
-    try {
-      if (otaTransport === "ble") {
-        appendProgress("Starting ESP32 stock BLE OTA flash...");
-        await safeInvoke("ble_ota_flash_stock", {}, { throwOnError: true });
-      } else {
-        appendProgress("Starting ESP32 stock WiFi OTA flash...");
-        await safeInvoke("ota_wifi_flash_stock", {}, { throwOnError: true });
-      }
-      appendProgress("OTA completed successfully!");
-    } catch (error) {
-      console.error(error);
-      appendProgress(`OTA failed: ${String(error)}`);
-    } finally {
-      setIsFlashing(false);
-      void refreshBleStatus();
-    }
-  }, [appendProgress, bleConnected, otaTransport, refreshBleStatus]);
-
-  const handleOtaWifiStart = useCallback(async () => {
-    if (!bleConnected) {
-      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
-      return;
-    }
-    try {
-      appendProgress("Starting WiFi OTA mode (SoftAP)...");
-      await safeInvoke("ota_wifi_start", {}, { throwOnError: true });
-      appendProgress("WiFi OTA mode started. Connect this computer to Wi‑Fi 'EMWaver-OTA' then flash.");
-    } catch (error) {
-      console.error(error);
-      appendProgress(`Failed to start WiFi OTA mode: ${String(error)}`);
-    }
-  }, [appendProgress, bleConnected]);
-
-  const handleOtaWifiStop = useCallback(async () => {
-    if (!bleConnected) {
-      appendProgress("BLE not connected. Connect to the ESP32 device via BLE first, then retry.");
-      return;
-    }
-    try {
-      appendProgress("Stopping WiFi OTA mode...");
-      await safeInvoke("ota_wifi_stop", {}, { throwOnError: true });
-      appendProgress("WiFi OTA mode stopped.");
-    } catch (error) {
-      console.error(error);
-      appendProgress(`Failed to stop WiFi OTA mode: ${String(error)}`);
-    }
-  }, [appendProgress, bleConnected]);
-
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4 flex-shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">Flash</h2>
-          <p className="text-sm text-slate-400">STM32 DFU over USB, or ESP32 OTA over BLE.</p>
+          <p className="text-sm text-slate-400">STM32 DFU over USB.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
@@ -337,23 +165,6 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
             }`}
           >
             {dfuConnected ? "Connected" : "Not Connected"}
-          </div>
-
-          <button
-            type="button"
-            disabled={isFlashing}
-            onClick={() => void refreshBleStatus()}
-            className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-60"
-          >
-            Check BLE
-          </button>
-          <div
-            className={`rounded px-3 py-2 text-xs font-medium ${
-              bleConnected ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/30" : "bg-rose-500/10 text-rose-300 border border-rose-500/30"
-            }`}
-            title={bleDeviceLabel ?? undefined}
-          >
-            {bleConnected ? bleDeviceLabel || "Connected" : "Not Connected"}
           </div>
         </div>
       </header>
@@ -427,85 +238,6 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
             >
               {isFlashing ? "Flashing…" : "Flash"}
             </button>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">ESP32 OTA</h3>
-          <p className="mt-2 text-sm text-slate-200">
-            Uploads an ESP32 firmware <span className="font-semibold">.bin</span> over BLE (slow) or Wi‑Fi SoftAP (fast).
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <label className="text-sm font-medium text-slate-100">Transport</label>
-            <select
-              value={otaTransport}
-              disabled={isFlashing}
-              onChange={(event) => setOtaTransport(event.target.value as "ble" | "wifi")}
-              className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
-            >
-              <option value="ble">BLE OTA</option>
-              <option value="wifi">Wi‑Fi OTA (SoftAP)</option>
-            </select>
-            {otaTransport === "wifi" ? (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isFlashing || !bleConnected}
-                  onClick={() => void handleOtaWifiStart()}
-                  className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
-                >
-                  Start Wi‑Fi OTA Mode
-                </button>
-                <button
-                  type="button"
-                  disabled={isFlashing || !bleConnected}
-                  onClick={() => void handleOtaWifiStop()}
-                  className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
-                >
-                  Stop
-                </button>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-100">Firmware file</p>
-              <button
-                type="button"
-                disabled={isFlashing}
-                onClick={() => void handleSelectOtaFile()}
-                className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-60"
-              >
-                Choose .bin…
-              </button>
-              <p className="text-xs text-slate-400 truncate">{otaFilePath ? otaFilePath : "No OTA file selected."}</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-medium text-slate-100">Device</p>
-              <p className="text-xs text-slate-400">
-                Requires an active BLE connection. For Wi‑Fi mode, connect BLE first, start SoftAP, then join Wi‑Fi.
-              </p>
-              <div className="mt-auto grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  disabled={isFlashing || !bleConnected}
-                  onClick={() => void handleOtaFlashStock()}
-                  className="rounded border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
-                >
-                  {isFlashing ? "Flashing…" : "Flash Stock OTA"}
-                </button>
-                <button
-                  type="button"
-                  disabled={isFlashing || !bleConnected || !otaFilePath}
-                  onClick={() => void handleOtaFlash()}
-                  className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-sky-500 disabled:opacity-60"
-                >
-                  {isFlashing ? "Flashing…" : "Flash Selected OTA"}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 

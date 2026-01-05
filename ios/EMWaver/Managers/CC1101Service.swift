@@ -18,9 +18,9 @@
 import Foundation
 
 final class CC1101Service {
-    private let bleManager: BLEManager
+    private let bleManager: USBManager
 
-    init(bleManager: BLEManager) {
+    init(bleManager: USBManager) {
         self.bleManager = bleManager
     }
 
@@ -107,11 +107,11 @@ final class CC1101Service {
     private func sendAck(_ command: String, timeoutMs: Int) throws -> UInt8 {
         let data = try sendData(command, timeoutMs: timeoutMs)
 
-        if BLEManager.isPaddedErrFrame(data) || (data.count == 1 && data[0] == 0xFF) {
+        if USBManager.isPaddedErrFrame(data) || (data.count == 1 && data[0] == 0xFF) {
             throw CC1101Error.deviceError
         }
 
-        if BLEManager.isPaddedOkFrame(data) || (data.count == 1 && data[0] == 0x00) {
+        if USBManager.isPaddedOkFrame(data) || (data.count == 1 && data[0] == 0x00) {
             return 0x00
         }
 

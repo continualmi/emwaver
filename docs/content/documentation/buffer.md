@@ -20,7 +20,7 @@ So the architecture is chosen around a few core ideas:
 What we explicitly avoid:
 
 - **Concurrency** as a protocol feature (multiple in-flight commands, out-of-order responses).
-- **Multiple endpoints/characteristics** as a design requirement (on BLE or USB) to emulate richer transports.
+- **Multiple endpoints/characteristics** as a design requirement to emulate richer transports.
 - **Extra protocol abstraction layers** that turn a simple byte stream into a complex messaging system.
 
 The guiding tradeoff is: **simplicity and debuggability over convenience abstractions**.
@@ -42,8 +42,7 @@ The goal is a simple mental model:
 ### Normal commands (request → response)
 
 The default interaction mode is intentionally boring: **one command in, one response out**.
-Whether you’re talking over BLE (ESP32) or USB CDC (STM32), the client sends commands and consumes responses as
-**fixed-size 64-byte frames**.
+Over USB MIDI (SysEx tunnel), the client sends commands and consumes responses as **fixed-size 64-byte frames**.
 
 Examples (shape, not an exhaustive list):
 
@@ -78,8 +77,7 @@ Sampler examples:
 
 Firmware implementations:
 
-- ESP32 sampler dual buffer (`buffer_a`/`buffer_b`): [`esp/main/sampler.c`](https://github.com/luispl77/emwaver/blob/main/esp/main/sampler.c)
-- STM32 sampler dual buffer (`bufferA`/`bufferB`): [`stm/emwaver-ir-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/Core/Src/main.c)
+- STM32 sampler dual buffer (`bufferA`/`bufferB`): [`stm/emwaver-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/Core/Src/main.c)
 
 ### Retransmit (circular RX buffer)
 
@@ -89,12 +87,10 @@ keep arriving while a timer/ISR drains from the tail.
 
 Retransmit examples:
 
-- `transmit start --pin 37 --pwm true --freq 38000 --duty 50`
+- `transmit start --pin 2 --freq 38000 --duty 50`
 - `transmit stop`
 
 Firmware implementations:
 
-- ESP32 BLE “transmitter mode” uses a circular buffer: [`esp/main/libraries/ble_server.c`](https://github.com/luispl77/emwaver/blob/main/esp/main/libraries/ble_server.c)
-- STM32 retransmit switches the CDC RX buffer into circular mode: [`stm/emwaver-ir-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/Core/Src/main.c)
-- STM32 CDC buffer types (`PACKET`/`CIRCULAR`/`DOUBLE`): [`stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.h`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.h)
-- STM32 CDC circular buffer implementation: [`stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-ir-firmware/USB_DEVICE/App/usbd_cdc_if.c)
+- STM32 retransmit switches the USB MIDI RX buffer into circular mode: [`stm/emwaver-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/Core/Src/main.c)
+- STM32 USB MIDI circular buffer implementation: [`stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c)
