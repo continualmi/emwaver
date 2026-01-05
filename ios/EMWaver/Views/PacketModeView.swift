@@ -18,7 +18,7 @@
 import SwiftUI
 
 struct PacketModeView: View {
-    @EnvironmentObject private var bleManager: BLEManager
+    @EnvironmentObject private var bleManager: USBManager
 
     private enum Modulation: String, CaseIterable, Identifiable {
         case ask = "ASK"
@@ -179,8 +179,8 @@ struct PacketModeView: View {
                             .padding(12)
                     }
                     .frame(minHeight: 160, maxHeight: 240)
-                    .background(Color.black)
-                    .foregroundColor(.white)
+                    .background(Color(.secondarySystemBackground))
+                    .foregroundColor(.primary)
                     .cornerRadius(8)
                 }
             }
@@ -347,6 +347,6 @@ struct PacketModeView: View {
 #Preview {
     NavigationView {
         PacketModeView()
-            .environmentObject(BLEManager())
+            .environmentObject(USBManager())
     }
 }

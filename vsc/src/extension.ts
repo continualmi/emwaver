@@ -28,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   status.text = "EMWaver";
-  status.tooltip = "Open EMWaver Build & Flash";
+  status.tooltip = "Open EMWaver Wavelets";
   status.command = "emwaver.openBuildFlash";
   status.show();
   context.subscriptions.push(status);
@@ -62,19 +62,6 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emwaver.build", async () => {
-      output.appendLine("Command: emwaver.build");
-      await buildFlashProvider.runAction("build");
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand("emwaver.flash", async () => {
-      output.appendLine("Command: emwaver.flash");
-      await buildFlashProvider.runAction("flash");
-    })
-  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("emwaver.previewWavelet", async (uri?: vscode.Uri) => {

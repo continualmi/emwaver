@@ -18,7 +18,7 @@
 import SwiftUI
 
 struct EMWaverView: View {
-    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var bleManager: USBManager
     @Binding var selection: String
 
     @State private var commandInput = ""
@@ -49,7 +49,7 @@ struct EMWaverView: View {
             }
             .padding(.vertical, 16)
         }
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .navigationTitle("EMWaver")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -99,8 +99,8 @@ struct EMWaverView: View {
                         }
                     } label: {
                         HStack {
-                            Image(systemName: bleManager.isConnected ? "antenna.radiowaves.left.and.right.slash" : "antenna.radiowaves.left.and.right")
-                            Text(bleManager.isConnected ? "Disconnect" : "Connect")
+                            Image(systemName: bleManager.isConnected ? "cable.connector.slash" : "cable.connector")
+                            Text(bleManager.isConnected ? "Disconnect" : "Connect USB MIDI")
                         }
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
                     }
@@ -188,19 +188,7 @@ struct EMWaverView: View {
                 tint: .indigo
             ) { selection = "PacketMode" }
 
-            FragmentCard(
-                title: "Flash",
-                subtitle: "DFU firmware flashing",
-                systemImage: "arrow.up.circle",
-                tint: .blue
-            ) { selection = "Flash" }
 
-            FragmentCard(
-                title: "Template",
-                subtitle: "Developer playground",
-                systemImage: "square.and.pencil",
-                tint: .gray
-            ) { selection = "Template" }
 
             FragmentCard(
                 title: "Settings",
@@ -301,7 +289,12 @@ struct EMWaverView: View {
 
     private var connectionStatusText: String {
         if bleManager.isScanning { return "Scanning…" }
-        if bleManager.isConnected { return "Connected" }
+        if bleManager.isConnected {
+            if let name = bleManager.connectedPortName, !name.isEmpty {
+                return "Connected: \(name)"
+            }
+            return "Connected"
+        }
         return "Not connected"
     }
 
@@ -319,7 +312,7 @@ struct EMWaverView: View {
 
     private func requestFirmwareVersion() {
         guard bleManager.isConnected else { return }
-        bleManager.sendPacket(BLEManager.frameAsciiCommand("version"))
+        bleManager.sendPacket(USBManager.frameAsciiCommand("version"))
     }
 
     private func sendCommandFromInput() {
@@ -327,7 +320,7 @@ struct EMWaverView: View {
         guard !trimmed.isEmpty else { return }
         guard bleManager.isConnected else { return }
 
-        bleManager.sendPacket(BLEManager.frameAsciiCommand(trimmed))
+        bleManager.sendPacket(USBManager.frameAsciiCommand(trimmed))
         commandInput = ""
     }
 
@@ -443,6 +436,6 @@ private struct FragmentCard: View {
 #Preview {
     NavigationView {
         EMWaverView(selection: .constant("EMWaver"))
-            .environmentObject(BLEManager())
+            .environmentObject(USBManager())
     }
 }

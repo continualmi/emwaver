@@ -18,7 +18,7 @@
 import SwiftUI
 
 struct RFIDView: View {
-    @EnvironmentObject private var bleManager: BLEManager
+    @EnvironmentObject private var bleManager: USBManager
 
     @State private var blockAddress = "00"
     @State private var authMode: AuthMode = .keyA
@@ -243,7 +243,7 @@ struct RFIDView: View {
         guard let response = bleManager.sendCommand(data, timeout: timeoutMs) else {
             throw NSError(domain: "RFID", code: 2, userInfo: [NSLocalizedDescriptionKey: "No response from device."])
         }
-        if BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[0] == 0xFF) {
+        if USBManager.isPaddedErrFrame(response) || (response.count == 1 && response[0] == 0xFF) {
             throw NSError(domain: "RFID", code: 3, userInfo: [NSLocalizedDescriptionKey: "Device returned error (0xFF)."])
         }
         return response
@@ -258,7 +258,7 @@ struct RFIDView: View {
         // Preferred: Android-style ascii command (if firmware supports it)
         let keyCsv = key.map { String(format: "0x%02X", $0) }.joined(separator: ",")
         let ascii = String(format: "rfid read --block=0x%02X --auth=0x%02X --key=%@\n", block, authMode.authByte, keyCsv)
-        if let response = bleManager.sendCommand(Data(ascii.utf8), timeout: 2000), !(BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[0] == 0xFF)) {
+        if let response = bleManager.sendCommand(Data(ascii.utf8), timeout: 2000), !(USBManager.isPaddedErrFrame(response) || (response.count == 1 && response[0] == 0xFF)) {
             return response
         }
 
@@ -282,7 +282,7 @@ struct RFIDView: View {
         let keyCsv = key.map { String(format: "0x%02X", $0) }.joined(separator: ",")
         let dataCsv = data.map { String(format: "0x%02X", $0) }.joined(separator: ",")
         let ascii = String(format: "rfid write --block=0x%02X --auth=0x%02X --key=%@ --data=%@\n", block, authMode.authByte, keyCsv, dataCsv)
-        if let response = bleManager.sendCommand(Data(ascii.utf8), timeout: 2000), !(BLEManager.isPaddedErrFrame(response) || (response.count == 1 && response[0] == 0xFF)) {
+        if let response = bleManager.sendCommand(Data(ascii.utf8), timeout: 2000), !(USBManager.isPaddedErrFrame(response) || (response.count == 1 && response[0] == 0xFF)) {
             return response
         }
 
@@ -365,6 +365,6 @@ struct RFIDView: View {
 #Preview {
     NavigationView {
         RFIDView()
-            .environmentObject(BLEManager())
+            .environmentObject(USBManager())
     }
 }
