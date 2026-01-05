@@ -26,77 +26,38 @@ fn help_displays() {
 #[test]
 fn init_creates_expected_files() {
     let temp = tempfile::tempdir().expect("tempdir");
+    let project_dir = temp.path().join("my-stm32-proj");
 
     let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
-    cmd.args(["init", "--target", "esp32s3", "--path"])
-        .arg(temp.path());
+    cmd.args(["init", "--target", "stm32f042", "--path"])
+        .arg(&project_dir);
     cmd.assert().success();
 
-    assert!(temp.path().join("CMakeLists.txt").exists());
-    assert!(temp.path().join("sdkconfig").exists());
-    assert!(temp.path().join("setup.sh").exists());
-    assert!(temp.path().join("main").join("idf_component.yml").exists());
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("ble_server.c")
-        .exists());
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("command_registry.c")
-        .exists());
-    assert!(temp.path().join("main").join("main.c").exists());
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("init.c")
-        .exists());
+    assert!(project_dir.join(".project").exists());
+    assert!(project_dir.join(".cproject").exists());
+    assert!(project_dir.join("my-stm32-proj.ioc").exists());
+    assert!(project_dir.join("Core/Src/main.c").exists());
+    assert!(project_dir.join("USB_DEVICE/App/usbd_midi_if.c").exists());
 }
 
 #[test]
 fn init_writes_selected_components() {
     let temp = tempfile::tempdir().expect("tempdir");
+    let project_dir = temp.path().join("my-stm32-proj");
 
     let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
     cmd.args([
         "init",
         "--target",
-        "esp32s3",
+        "stm32f042",
         "--path",
-        temp.path().to_str().expect("utf8 path"),
+        project_dir.to_str().expect("utf8 path"),
         "--components",
         "gpio,cc1101",
     ]);
     cmd.assert().success();
 
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("gpio_commands.c")
-        .exists());
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("cc1101.c")
-        .exists());
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("spi.c")
-        .exists());
-    assert!(temp
-        .path()
-        .join("main")
-        .join("libraries")
-        .join("spi.h")
-        .exists());
+    assert!(project_dir.join("Core/Src/cc1101.c").exists());
 }
 
 #[test]
@@ -106,8 +67,7 @@ fn init_stm32f042_creates_project_files() {
 
     let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
     cmd.args(["init", "--target", "stm32f042", "--path"])
-        .arg(&project_dir)
-        .args(["--stm32-firmware", "ism"]);
+        .arg(&project_dir);
     cmd.assert().success();
 
     assert!(project_dir.join(".project").exists());

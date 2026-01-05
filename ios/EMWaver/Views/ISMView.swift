@@ -18,7 +18,7 @@
 import SwiftUI
 
 struct ISMView: View {
-    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var bleManager: USBManager
     @State private var rfm69: RFM69?
     @State private var selectedChip: RadioChip = .none
     @State private var cc1101Initialized = false
@@ -1522,6 +1522,6 @@ struct ISMView: View {
 #Preview {
     NavigationView {
         ISMView()
-            .environmentObject(BLEManager())
+            .environmentObject(USBManager())
     }
 } 

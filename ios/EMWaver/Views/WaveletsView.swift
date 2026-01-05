@@ -18,7 +18,7 @@
 import SwiftUI
 
 struct WaveletsView: View {
-    @EnvironmentObject var bleManager: BLEManager
+    @EnvironmentObject var bleManager: USBManager
     @StateObject private var viewModel = WaveletsViewModel()
     @StateObject private var previewManager = WaveletPreviewManager()
     @State private var showingEditor = false

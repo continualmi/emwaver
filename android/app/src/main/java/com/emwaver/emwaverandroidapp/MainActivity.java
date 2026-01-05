@@ -18,8 +18,6 @@
 package com.emwaver.emwaverandroidapp;
 
 import android.Manifest;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -62,8 +60,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQUEST_CODE = 1;
-    private static final int REQUEST_ENABLE_BT = 1;
-    
+
     private AppBarConfiguration appBarConfiguration;
     private ActivityMainBinding binding;
     private DeviceConnectionManager connectionManager;
@@ -91,8 +88,7 @@ public class MainActivity extends AppCompatActivity {
         appBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.navigation_cc1101, R.id.navigation_emwaver,
                 R.id.navigation_rfid, R.id.navigation_sampler, R.id.navigation_wavelets,
-                R.id.navigation_git, R.id.navigation_flash, R.id.navigation_packet_mode,
-                R.id.navigation_template)
+                R.id.navigation_git, R.id.navigation_flash, R.id.navigation_packet_mode)
                 .setOpenableLayout(drawer)
                 .build();
         
@@ -143,24 +139,6 @@ public class MainActivity extends AppCompatActivity {
         // Storage permissions
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        }
-        
-        // Location permission is REQUIRED for BLE scanning on all Android versions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-        
-        // Bluetooth permissions for Android 12+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.BLUETOOTH_SCAN);
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.BLUETOOTH_CONNECT);
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.BLUETOOTH_ADVERTISE);
-            }
         }
         
         // Notification permission for Android 13+
@@ -225,18 +203,13 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private boolean hasRequiredPermissions() {
-        // Check basic BLE permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        // Keep legacy storage + notification permissions; USB permission is granted per-device.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             return false;
         }
-        
-        // Check Android 12+ BLE permissions
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
-                   ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
-                   ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADVERTISE) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
         }
-        
         return true;
     }
 
@@ -316,9 +289,6 @@ public class MainActivity extends AppCompatActivity {
         // Handle OAuth callback intent (in case app was already running)
         handleOAuthCallback(getIntent());
         
-        // Make sure Bluetooth is enabled
-        checkBluetoothEnabled();
-        
         // Register USB device attachment receiver
         IntentFilter usbFilter = new IntentFilter();
         usbFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
@@ -353,43 +323,4 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     
-    private void checkBluetoothEnabled() {
-        if (hasRequiredPermissions()) {
-            BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-            if (bluetoothManager != null) {
-                BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
-                
-                if (bluetoothAdapter != null && !bluetoothAdapter.isEnabled()) {
-                    Log.d(TAG, "Requesting to enable Bluetooth");
-                    Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-                    
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-                        }
-                    } else {
-                        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-                    }
-                }
-            }
-        }
-    }
-    
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        
-        if (requestCode == REQUEST_ENABLE_BT) {
-            if (resultCode == RESULT_OK) {
-                Log.d(TAG, "Bluetooth enabled by user");
-                // Bluetooth is now enabled, initialize connection manager if needed
-                if (connectionManager != null) {
-                    connectionManager.initialize();
-                }
-            } else {
-                Log.d(TAG, "User declined to enable Bluetooth");
-                Toast.makeText(this, "Bluetooth must be enabled to use BLE functionality", Toast.LENGTH_LONG).show();
-            }
-        }
-    }
 }

@@ -1,6 +1,6 @@
 # EMWaver VSCode Extension (WIP)
 
-Initial scaffold for a simple **Build & Flash** sidebar.
+Initial scaffold for a simple Wavelets sidebar (preview + device connection).
 
 ## Dev run
 
@@ -25,8 +25,8 @@ Initial scaffold for a simple **Build & Flash** sidebar.
 
 ## Commands
 
-- `EMWaver: Build` → runs `emwaver build`
-- `EMWaver: Flash` → runs `emwaver flash`
+- `EMWaver: Preview Wavelet` → opens a preview of the active `.emw`
+- `EMWaver: Connect Device` / `Disconnect Device`
 
 ## `.emw` files (Wavelets)
 
@@ -38,6 +38,3 @@ Initial scaffold for a simple **Build & Flash** sidebar.
 ## Settings
 
 - `emwaver.cliPath`: path to the `emwaver` CLI (default: `emwaver`)
-- `emwaver.workingDirectory`: working dir for commands (default: workspace root)
-- `emwaver.buildArgs`: extra args for `emwaver build`
-- `emwaver.flashArgs`: extra args for `emwaver flash`

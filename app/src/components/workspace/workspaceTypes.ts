@@ -17,16 +17,6 @@
 
 export type ThemeMode = "dark" | "light";
 
-export type WorkspaceVariant = "ide" | "wavelets";
-
-export type BottomPanelTab = "terminal" | "firmware";
-
-export type FirmwareProgressPayload = {
-  message: string;
-  stream?: "info" | "stdout" | "stderr" | string;
-  timestamp_ms?: number;
-};
-
 export type TerminalSession = {
   id: string;
   title: string;
@@ -38,8 +28,6 @@ export type DirectoryChildEntry = {
   path: string;
   kind: "file" | "directory";
 };
-
-export type FirmwareProjectKind = "esp32" | "stm32" | "unknown";
 
 export type OpenFile = {
   path: string;
@@ -80,9 +68,6 @@ export type GitDiffContents = {
 export type NewProjectPayload = {
   name: string;
   location: string;
-  target: "esp32s3" | "stm32f042";
-  components: Array<"ble" | "command_registry" | "ota" | "gpio" | "sampler" | "cc1101" | "rfm69" | "mfrc522">;
-  stm32_firmware?: "gpio" | "ir" | "ism" | "rfid" | null;
 };
 
 export type CreateProjectResponse = {

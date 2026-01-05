@@ -92,8 +92,8 @@ pub struct UsbTxProfile {
 impl UsbTxProfile {
     pub const fn default() -> Self {
         Self {
-            packet_size: 50,
-            period_ns: 4_000_000,
+            packet_size: 64,
+            period_ns: 5_120_000,
             flow_time_delta_ns: 1_000_000,
             buffer_high_threshold: 300,
             buffer_low_threshold: 200,
