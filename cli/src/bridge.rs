@@ -1008,6 +1008,7 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
     while events.try_recv().is_ok() {}
 
     let mut last_status: u16 = 0;
+    let mut have_status = false;
     let mut last_emitted_status: Option<u16> = None;
 
     let start = tokio::time::Instant::now();
@@ -1046,6 +1047,7 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
             if pkt.len() == PACKET_SIZE {
                 if let Some(status) = status::parse_bs(&pkt) {
                     last_status = status;
+                    have_status = true;
                     saw_bs = true;
                 }
             }
@@ -1062,7 +1064,9 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
         sent_bytes = end;
 
         next_send_at_ns = next_send_at_ns.saturating_add(profile.period_ns);
-        next_send_at_ns = tx::usb_adjust_deadline_ns(profile, next_send_at_ns, last_status as i32);
+        if have_status {
+            next_send_at_ns = tx::usb_adjust_deadline_ns(profile, next_send_at_ns, last_status as i32);
+        }
 
         let now_ns = start.elapsed().as_nanos() as i64;
         let sleep_ns = next_send_at_ns.saturating_sub(now_ns);
