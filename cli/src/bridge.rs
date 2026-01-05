@@ -1012,7 +1012,7 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
     let mut last_emitted_status: Option<u16> = None;
 
     let start = tokio::time::Instant::now();
-    let mut next_send_at_ns: i64 = 0;
+    let mut sent_at_packets: i64 = 0;
 
     let mut sent_bytes = 0usize;
     let mut last_emitted_progress_pct: i32 = -1;
@@ -1062,14 +1062,17 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
         let chunk = &data[sent_bytes..end];
         midi_write_packet(state, chunk.to_vec()).await?;
         sent_bytes = end;
+        sent_at_packets = sent_at_packets.saturating_add(1);
 
-        next_send_at_ns = next_send_at_ns.saturating_add(profile.period_ns);
+        // Important: adjust relative to the ideal base schedule (non-cumulative), otherwise
+        // repeated "speed up" nudges can run away and burst-send using stale BS values.
+        let mut send_at_ns = sent_at_packets.saturating_mul(profile.period_ns);
         if have_status {
-            next_send_at_ns = tx::usb_adjust_deadline_ns(profile, next_send_at_ns, last_status as i32);
+            send_at_ns = tx::usb_adjust_deadline_ns(profile, send_at_ns, last_status as i32);
         }
 
         let now_ns = start.elapsed().as_nanos() as i64;
-        let sleep_ns = next_send_at_ns.saturating_sub(now_ns);
+        let sleep_ns = send_at_ns.saturating_sub(now_ns);
         if sleep_ns > 0 {
             tokio::time::sleep(Duration::from_nanos(sleep_ns as u64)).await;
         }
