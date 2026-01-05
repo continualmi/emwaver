@@ -99,14 +99,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       iconClass: "text-sky-400",
     },
     {
-      id: "ide" as FragmentType,
-      name: "IDE",
-      description: "Edit firmware and run commands",
-      icon: <IDEIcon />,
-      borderClass: "hover:border-slate-400/60",
-      iconClass: "text-slate-300",
-    },
-    {
       id: "ism" as FragmentType,
       name: "ISM (RFM69)",
       description: "Sub-GHz radio control and signal capture",
@@ -121,38 +113,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       icon: <SamplerIcon />,
       borderClass: "hover:border-purple-500/60",
       iconClass: "text-purple-400",
-    },
-    {
-      id: "rfid" as FragmentType,
-      name: "RFID",
-      description: "Read/write MIFARE blocks",
-      icon: <RfidIcon />,
-      borderClass: "hover:border-amber-500/60",
-      iconClass: "text-amber-400",
-    },
-    {
-      id: "packetMode" as FragmentType,
-      name: "Packet Mode",
-      description: "CC1101 fixed-length packets",
-      icon: <PacketModeIcon />,
-      borderClass: "hover:border-indigo-500/60",
-      iconClass: "text-indigo-400",
-    },
-    {
-      id: "flash" as FragmentType,
-      name: "Flash",
-      description: "STM32 DFU firmware flashing",
-      icon: <FlashIcon />,
-      borderClass: "hover:border-sky-500/60",
-      iconClass: "text-sky-400",
-    },
-    {
-      id: "settings" as FragmentType,
-      name: "Settings",
-      description: "Sampler and RF defaults",
-      icon: <SettingsIcon />,
-      borderClass: "hover:border-slate-400/60",
-      iconClass: "text-slate-400",
     },
   ];
 
@@ -839,4 +799,3 @@ function FlashIcon() {
     </svg>
   );
 }
-

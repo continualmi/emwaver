@@ -19,7 +19,16 @@ import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 
 export const WAVELET_ASSET_ROOT = "/wavelet-assets";
 export const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.emw";
-export const WAVELET_ASSET_SCRIPTS = ["cc1101.emw", "rfm69.emw", "wavelet_demo.emw", "gpio.emw"];
+export const WAVELET_ASSET_SCRIPTS = [
+  "cc1101.emw",
+  "gpio.emw",
+  "ir_send_saved_signal.emw",
+  "packet_mode.emw",
+  "rfm69.emw",
+  "rfid.emw",
+  "usb.emw",
+  "wavelet_demo.emw",
+];
 
 export function basename(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -133,4 +142,3 @@ export function iconLabelForPath(path: string): { label: string; accentClass: st
   if (ext === "sh") return { label: "$", accentClass: "text-emerald-300" };
   return { label: "•", accentClass: "text-slate-400" };
 }
-

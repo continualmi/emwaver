@@ -153,14 +153,6 @@ struct EMWaverView: View {
             ) { selection = "Wavelets" }
 
             FragmentCard(
-                title: "IDE",
-                subtitle: "Not available on iOS",
-                systemImage: "terminal",
-                tint: .gray,
-                isEnabled: false
-            ) {}
-
-            FragmentCard(
                 title: "ISM (RFM69)",
                 subtitle: "Sub‑GHz radio control",
                 systemImage: "dot.radiowaves.left.and.right",
@@ -175,27 +167,11 @@ struct EMWaverView: View {
             ) { selection = "Sampler" }
 
             FragmentCard(
-                title: "RFID",
-                subtitle: "Read/write tags",
-                systemImage: "radiowaves.right",
-                tint: .orange
-            ) { selection = "RFID" }
-
-            FragmentCard(
-                title: "Packet Mode",
-                subtitle: "CC1101 fixed packets",
-                systemImage: "shippingbox",
-                tint: .indigo
-            ) { selection = "PacketMode" }
-
-
-
-            FragmentCard(
-                title: "Settings",
-                subtitle: "Sampler and RF defaults",
-                systemImage: "gearshape",
+                title: "Git",
+                subtitle: "Sync wavelets with GitHub",
+                systemImage: "arrow.triangle.branch",
                 tint: .secondary
-            ) { selection = "Settings" }
+            ) { selection = "Git" }
         }
         .padding(.horizontal)
     }

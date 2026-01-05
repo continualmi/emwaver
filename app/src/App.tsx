@@ -26,11 +26,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
-import RfidFragment from "./components/RfidFragment";
-import PacketModeFragment from "./components/PacketModeFragment";
-import SettingsFragment from "./components/SettingsFragment";
 import HomePage from "./components/HomePage";
-import FlashFragment from "./components/FlashFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -68,11 +64,7 @@ export type FragmentType =
   | "wavelets"
   | "ism"
   | "sampler"
-  | "emwaver"
-  | "rfid"
-  | "packetMode"
-  | "flash"
-  | "settings";
+  | "emwaver";
 
 type RecentProject = {
   path: string;
@@ -869,10 +861,6 @@ function App() {
   const isISMActive = activePane === "ism";
   const isSamplerActive = activePane === "sampler";
   const isEMWaverActive = activePane === "emwaver";
-  const isRfidActive = activePane === "rfid";
-  const isPacketModeActive = activePane === "packetMode";
-  const isFlashActive = activePane === "flash";
-  const isSettingsActive = activePane === "settings";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -889,10 +877,6 @@ function App() {
         <Pane active={isWaveletsActive}><WaveletsFragment theme={theme} isActive={isWaveletsActive} /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
-        <Pane active={isRfidActive}><RfidFragment /></Pane>
-        <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
-        <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
-        <Pane active={isSettingsActive}><SettingsFragment /></Pane>
       </div>
     </div>
   );
@@ -1077,30 +1061,6 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         isActive={activePane === "sampler"}
         onClick={() => onFragmentClick("sampler")}
         icon={<SamplerIcon />}
-      />
-      <ActivityButton
-        label="RFID"
-        isActive={activePane === "rfid"}
-        onClick={() => onFragmentClick("rfid")}
-        icon={<RfidIcon />}
-      />
-      <ActivityButton
-        label="Packet Mode"
-        isActive={activePane === "packetMode"}
-        onClick={() => onFragmentClick("packetMode")}
-        icon={<PacketModeIcon />}
-      />
-      <ActivityButton
-        label="Flash"
-        isActive={activePane === "flash"}
-        onClick={() => onFragmentClick("flash")}
-        icon={<FlashIcon />}
-      />
-      <ActivityButton
-        label="Settings"
-        isActive={activePane === "settings"}
-        onClick={() => onFragmentClick("settings")}
-        icon={<SettingsIcon />}
       />
       <div className="mt-auto flex flex-col gap-3">
         <ThemeToggleButton theme={theme} onToggle={onToggleTheme} />

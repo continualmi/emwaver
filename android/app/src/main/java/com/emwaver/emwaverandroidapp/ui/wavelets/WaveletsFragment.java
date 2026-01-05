@@ -531,7 +531,7 @@ public class WaveletsFragment extends Fragment {
         }
 
         UserFileMetadata metadata = scriptMetadata.getMetadata();
-        String filename = metadata.getName() + ".js";
+        String filename = metadata.getName() + ASSET_SCRIPT_EXTENSION;
         final String content = readAssetText(filename);
 
         TextView codeView = new TextView(requireContext());
@@ -549,13 +549,13 @@ public class WaveletsFragment extends Fragment {
         bothAxisScroll.addView(verticalScroll);
 
         new AlertDialog.Builder(requireContext())
-            .setTitle(metadata.getName() + ".js")
+            .setTitle(filename)
             .setView(bothAxisScroll)
             .setPositiveButton("Close", null)
             .setNeutralButton("Copy", (dialog, which) -> {
                 ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
                 if (clipboard != null) {
-                    clipboard.setPrimaryClip(ClipData.newPlainText(metadata.getName() + ".js", content));
+                    clipboard.setPrimaryClip(ClipData.newPlainText(filename, content));
                     showToast("Copied");
                 }
             })
@@ -633,7 +633,9 @@ public class WaveletsFragment extends Fragment {
         List<String> names = new ArrayList<>();
         String[] defaultWavelets = {
             "cc1101.emw",
+            "packet_mode.emw",
             "rfm69.emw",
+            "rfid.emw",
             "usb.emw",
             "wavelet_demo.emw",
             "gpio.emw",
@@ -654,7 +656,9 @@ public class WaveletsFragment extends Fragment {
         
         String[] assetScriptFiles = {
             "cc1101.emw",
+            "packet_mode.emw",
             "rfm69.emw",
+            "rfid.emw",
             "usb.emw",
             "wavelet_demo.emw",
             "gpio.emw",
@@ -988,7 +992,7 @@ public class WaveletsFragment extends Fragment {
         
         UserFileMetadata metadata = scriptMetadata.getMetadata();
         String scriptId = metadata.getId();
-        String filename = metadata.getName() + ".js";
+        String filename = metadata.getName() + ASSET_SCRIPT_EXTENSION;
         
         try {
             InputStream is = requireContext().getAssets().open(filename);
@@ -1057,7 +1061,7 @@ public class WaveletsFragment extends Fragment {
             if (content == null || content.trim().isEmpty()) {
                 // Load asset content
                 try {
-                    String filename = currentScriptMetadata.getName() + ".js";
+                    String filename = currentScriptMetadata.getName() + ASSET_SCRIPT_EXTENSION;
                     InputStream is = requireContext().getAssets().open(filename);
                     content = readTextFromInputStream(is);
                     is.close();
@@ -1227,7 +1231,7 @@ public class WaveletsFragment extends Fragment {
         
         // For asset scripts, load directly from assets
         if (scriptMetadata != null && scriptMetadata.isAssetScript()) {
-            String filename = metadata.getName() + ".js";
+            String filename = metadata.getName() + ASSET_SCRIPT_EXTENSION;
             try {
                 InputStream is = requireContext().getAssets().open(filename);
                 content = readTextFromInputStream(is);

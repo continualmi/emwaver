@@ -1686,4 +1686,3 @@ export default function WorkspaceShell({
     </div>
   );
 }
-

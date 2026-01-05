@@ -82,38 +82,6 @@ struct ContentView: View {
                     Text("Git")
                 }
                 .tag("Git")
-
-
-
-                NavigationView {
-                    PacketModeView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Image("TabPacket").renderingMode(.template)
-                    Text("Packet")
-                }
-                .tag("PacketMode")
-
-                NavigationView {
-                    RFIDView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Image("TabRFID").renderingMode(.template)
-                    Text("RFID")
-                }
-                .tag("RFID")
-
-                NavigationView {
-                    SettingsView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Image("TabSettings").renderingMode(.template)
-                    Text("Settings")
-                }
-                .tag("Settings")
             }
             .onAppear {
                 let appearance = UINavigationBarAppearance()
