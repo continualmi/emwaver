@@ -289,7 +289,12 @@ struct EMWaverView: View {
 
     private var connectionStatusText: String {
         if bleManager.isScanning { return "Scanning…" }
-        if bleManager.isConnected { return "Connected" }
+        if bleManager.isConnected {
+            if let name = bleManager.connectedPortName, !name.isEmpty {
+                return "Connected: \(name)"
+            }
+            return "Connected"
+        }
         return "Not connected"
     }
 
