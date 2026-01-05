@@ -16,6 +16,6 @@ EMWaver is now focused on a single current-gen device: **Pivot** — a low-cost 
 - One transport (USB MIDI)
 - One set of apps (Android / iOS / Desktop)
 
-See the project direction notes here:
+See the project direction notes in the repository guidelines:
 
-- [EMWaver Pivot: STM32 + USB MIDI](https://github.com/luispl77/emwaver/blob/main/PIVOT_STM32_USB_MIDI_CLOSED.md)
+- [AGENTS.md (Project Direction)](https://github.com/luispl77/emwaver/blob/main/AGENTS.md)
