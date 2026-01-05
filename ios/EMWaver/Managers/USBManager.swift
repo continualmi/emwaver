@@ -18,11 +18,21 @@
 import Foundation
 import CoreMIDI
 import SwiftUI
+import os
 
 /// NOTE: Despite the historical name, this is now a **USB MIDI (CoreMIDI)** transport.
 /// We keep the `USBManager` API surface to minimize churn across the iOS codebase.
 final class USBManager: ObservableObject {
     private static let packetSizeBytes: Int = 64
+    private static let log = Logger(subsystem: "com.emwaver", category: "usb-midi")
+
+    private func dbg(_ msg: String) {
+        #if DEBUG
+        // Both: `print` always shows in Xcode debug console; Logger integrates with Console.app.
+        print("[USBMIDI] \(msg)")
+        Self.log.info("\(msg, privacy: .public)")
+        #endif
+    }
 
     struct ReadPackets {
         let data: [UInt8]
@@ -69,6 +79,7 @@ final class USBManager: ObservableObject {
 
     init() {
         bufferQueue.setSpecific(key: bufferQueueKey, value: ())
+        dbg("USBManager init")
         midiQueue.async {
             self.ensureClient()
             self.refreshPortsInternal()
@@ -220,6 +231,10 @@ final class USBManager: ObservableObject {
                 return
             }
 
+            let ascii = String(decoding: packet64.prefix { $0 != 0 }, as: UTF8.self)
+            let prefix = packet64.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
+            self.dbg("TX: pkt64 prefix=\(prefix) ascii=\(ascii)")
+
             self.withBufferQueueSync {
                 NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
             }
@@ -229,6 +244,9 @@ final class USBManager: ObservableObject {
                 self.setError("Cannot send packet: SysEx encode failed")
                 return
             }
+
+            let sysexHead = sysex.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
+            self.dbg("TX: sysex len=\(sysex.count) head=\(sysexHead)")
 
             let st = self.sendSysex(sysex, to: self.connectedDestination)
             if st != noErr {
@@ -546,6 +564,7 @@ final class USBManager: ObservableObject {
 
     private func ensureClient() {
         if client != 0 { return }
+        dbg("ensureClient: creating CoreMIDI client/ports")
 
         let stClient = MIDIClientCreate(
             "emwaver-midi" as CFString,
@@ -584,7 +603,9 @@ final class USBManager: ObservableObject {
     }
 
     private func refreshPortsInternal() {
-        let ports = listPortCandidatesInternal().map { $0.name }
+        let candidates = listPortCandidatesInternal()
+        let ports = candidates.map { $0.name }
+        dbg("refreshPorts: candidates=\(ports)")
         DispatchQueue.main.async {
             self.availablePorts = ports
         }
@@ -595,7 +616,11 @@ final class USBManager: ObservableObject {
         let chosen = candidates.first(where: { $0.name.localizedCaseInsensitiveContains("emwaver") })
             ?? candidates.first(where: { !$0.name.localizedCaseInsensitiveContains("network") })
             ?? candidates.first
-        guard let chosen else { return }
+        guard let chosen else {
+            dbg("connect: no port candidates")
+            return
+        }
+        dbg("connect: chosen=\(chosen.name)")
 
         disconnectInternal()
 
@@ -708,36 +733,110 @@ final class USBManager: ObservableObject {
             return MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base) != nil
         }
 
-        guard ok else { return -1 }
-        return MIDISend(outPort, destination, pktList)
+        guard ok else {
+            dbg("sendSysex: MIDIPacketListAdd failed")
+            return -1
+        }
+        let st = MIDISend(outPort, destination, pktList)
+        if st != noErr {
+            dbg("sendSysex: MIDISend failed st=\(st)")
+        }
+        return st
     }
 
-    private func handlePacketList(_ pktList: UnsafePointer<MIDIPacketList>) {
-        var packetPtr: UnsafePointer<MIDIPacket> = withUnsafePointer(to: pktList.pointee.packet) { $0 }
-
-        for _ in 0..<pktList.pointee.numPackets {
-            let len = Int(packetPtr.pointee.length)
-            let data = withUnsafeBytes(of: packetPtr.pointee.data) { raw in
-                Data(raw.prefix(len))
+    private func handlePacketDatas(_ packets: [Data]) {
+        dbg("RX: packets=\(packets.count)")
+        for data in packets {
+            let prefix = data.prefix(min(24, data.count)).map { String(format: "%02X", $0) }.joined(separator: " ")
+            let ascii = data.prefix(min(64, data.count)).map { (32...126).contains(Int($0)) ? String(UnicodeScalar($0)) : "." }.joined()
+            dbg("RX: packet len=\(data.count) bytes prefix=\(prefix)")
+            if !ascii.isEmpty {
+                dbg("RX: ascii(<=64): \(ascii)")
             }
             feedMidiBytes(data)
-            packetPtr = UnsafePointer(MIDIPacketNext(packetPtr))
         }
+    }
+
+    /// CoreMIDI normally delivers raw MIDI bytes (starting with 0xF0 for SysEx),
+    /// but some stacks can surface USB-MIDI 4-byte event packets (header + 3 bytes).
+    /// If the stream looks like USB-MIDI events, unpack it to raw MIDI bytes.
+    private func normalizeIncomingMidiBytes(_ data: Data) -> Data {
+        guard data.count >= 4, data.count % 4 == 0 else { return data }
+
+        // Heuristic: many 4-byte groups with CIN in the SysEx range.
+        let groups = min(data.count / 4, 16)
+        var sysExCinCount = 0
+        var hasSysexByte = false
+
+        for g in 0..<groups {
+            let h = data[g * 4]
+            let cin = h & 0x0F
+            if (cin >= 0x4 && cin <= 0x7) { sysExCinCount += 1 }
+            let b0 = data[g * 4 + 1]
+            let b1 = data[g * 4 + 2]
+            let b2 = data[g * 4 + 3]
+            if b0 == 0xF0 || b0 == 0xF7 || b1 == 0xF0 || b1 == 0xF7 || b2 == 0xF0 || b2 == 0xF7 {
+                hasSysexByte = true
+            }
+        }
+
+        // Require both: looks like SysEx CIN headers and contains SysEx boundary bytes.
+        guard hasSysexByte, sysExCinCount >= max(2, groups / 2) else { return data }
+
+        var out = Data()
+        out.reserveCapacity(data.count) // upper bound
+
+        for i in stride(from: 0, to: data.count, by: 4) {
+            let cin = data[i] & 0x0F
+            let b0 = data[i + 1]
+            let b1 = data[i + 2]
+            let b2 = data[i + 3]
+
+            switch cin {
+            case 0x4, 0x7: // 3 bytes
+                out.append(b0)
+                out.append(b1)
+                out.append(b2)
+            case 0x6: // 2 bytes
+                out.append(b0)
+                out.append(b1)
+            case 0x5: // 1 byte
+                out.append(b0)
+            default:
+                // Not a SysEx event; pass through the 3 data bytes (best-effort).
+                out.append(b0)
+                out.append(b1)
+                out.append(b2)
+            }
+        }
+
+        return out
     }
 
     private func feedMidiBytes(_ data: Data) {
-        var didStore = false
-        for sysex in sysexAccumulator.feed(data) {
-            guard let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex) else { continue }
+        let normalized = normalizeIncomingMidiBytes(data)
+
+        // Debug: if we get complete SysEx frames, log their header.
+        for sysex in sysexAccumulator.feed(normalized) {
+            let head = sysex.prefix(min(16, sysex.count)).map { String(format: "%02X", $0) }.joined(separator: " ")
+            dbg("RX: sysex len=\(sysex.count) head=\(head)")
+
+            guard let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex) else {
+                dbg("RX: sysex did not decode as EMWaver packet")
+                continue
+            }
+            let pktPrefix = pkt64.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
+            let pktAscii = pkt64.prefix { $0 != 0 }.map { (32...126).contains(Int($0)) ? String(UnicodeScalar($0)) : "." }.joined()
+            dbg("RX: decoded pkt64 prefix=\(pktPrefix)")
+            dbg("RX: decoded pkt64 ascii=\(pktAscii)")
+
+            // `storeBulkPkt` already bumps `bufferVersion` for the UI.
             storeBulkPkt(pkt64)
-            didStore = true
-        }
-        if didStore {
-            DispatchQueue.main.async { self.bufferVersion += 1 }
         }
     }
 
     private func setError(_ msg: String) {
+        dbg("ERROR: \(msg)")
         DispatchQueue.main.async {
             self.lastErrorText = msg
         }
@@ -760,8 +859,31 @@ final class USBManager: ObservableObject {
     private static let readProc: MIDIReadProc = { pktList, refCon, _ in
         guard let refCon else { return }
         let mgr = Unmanaged<USBManager>.fromOpaque(refCon).takeUnretainedValue()
+
+        // IMPORTANT: `pktList` is only valid for the duration of this callback.
+        // Copy packet bytes synchronously, then hand off to our queue.
+        let packetCount = Int(pktList.pointee.numPackets)
+        mgr.dbg("readProc: numPackets=\(packetCount)")
+        var packets: [Data] = []
+        packets.reserveCapacity(packetCount)
+
+        // NOTE: Avoid taking the address of `pktList.pointee.packet` directly (can produce a temporary).
+        let pktListMut = UnsafeMutablePointer(mutating: pktList)
+        var packetPtr: UnsafePointer<MIDIPacket> = withUnsafePointer(to: &pktListMut.pointee.packet) { ptr in
+            UnsafePointer(ptr)
+        }
+
+        for _ in 0..<packetCount {
+            let len = Int(packetPtr.pointee.length)
+            let data = withUnsafeBytes(of: packetPtr.pointee.data) { raw in
+                Data(raw.prefix(min(len, raw.count)))
+            }
+            packets.append(data)
+            packetPtr = UnsafePointer(MIDIPacketNext(packetPtr))
+        }
+
         mgr.midiQueue.async {
-            mgr.handlePacketList(pktList)
+            mgr.handlePacketDatas(packets)
         }
     }
 }
