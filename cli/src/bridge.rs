@@ -16,7 +16,10 @@
  */
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -69,6 +72,15 @@ struct BridgeEvent<'a> {
     data: serde_json::Value,
 }
 
+const RX_QUEUE_CAPACITY: usize = 8192;
+
+#[derive(Debug)]
+struct RxQueuedPacket {
+    pkt: [u8; PACKET_SIZE],
+    ts_ms: u64,
+    generation: u64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct DeviceInfo {
     transport: &'static str,
@@ -98,6 +110,10 @@ pub(crate) struct BridgeState {
     midi_system: Arc<AsyncMutex<Option<MidiSystem>>>,
     buffer: Arc<Mutex<Buffer>>,
     rx_notify: Arc<Notify>,
+    rx_queue_tx: mpsc::Sender<RxQueuedPacket>,
+    rx_drop: Arc<AtomicBool>,
+    rx_queue_dropped: Arc<AtomicU64>,
+    rx_gen: Arc<AtomicU64>,
     in_flight: Arc<AsyncMutex<()>>,
     pub(crate) event_tx: broadcast::Sender<Vec<u8>>,
 }
@@ -378,6 +394,8 @@ pub(crate) async fn dispatch_request(
             }
         }
         "buffer_clear" => {
+            // Ensure any late RX packets queued before the clear don't get appended after.
+            state.rx_gen.fetch_add(1, Ordering::SeqCst);
             if let Ok(mut guard) = state.buffer.lock() {
                 buffer::clear(&mut *guard);
             }
@@ -558,11 +576,15 @@ pub(crate) async fn dispatch_request(
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0) as usize;
 
+            // Important: release the buffer lock before doing CPU-heavy compression.
+            // Otherwise the MIDI RX callback can block on the mutex and drop packets / disconnect.
             let snapshot = state
                 .buffer
                 .lock()
                 .map_err(|_| anyhow!("buffer lock poisoned"))?;
             let bytes = buffer::rx_snapshot(&*snapshot);
+            drop(snapshot);
+
             let buffer_len_bytes = bytes.len();
             let (time_values, data_values) =
                 sampler::compress_bits(&bytes, range_start, range_end, number_bins);
@@ -573,11 +595,13 @@ pub(crate) async fn dispatch_request(
             }))
         }
         "buffer_build_signed_raw_timings" => {
+            // Release lock before doing CPU-heavy formatting.
             let snapshot = state
                 .buffer
                 .lock()
                 .map_err(|_| anyhow!("buffer lock poisoned"))?;
             let bytes = buffer::rx_snapshot(&*snapshot);
+            drop(snapshot);
             Ok(json!({ "timings": sampler::build_signed_raw_timings(&bytes, 10) }))
         }
         "buffer_get_rx_counter" => {
@@ -605,14 +629,24 @@ pub(crate) async fn dispatch_request(
 
 pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
     let (event_tx, _) = broadcast::channel::<Vec<u8>>(1024);
-    Ok(Arc::new(BridgeState {
+    let (rx_queue_tx, rx_queue_rx) = mpsc::channel::<RxQueuedPacket>(RX_QUEUE_CAPACITY);
+
+    let state = Arc::new(BridgeState {
         midi: Arc::new(AsyncMutex::new(None)),
         midi_system: Arc::new(AsyncMutex::new(None)),
         buffer: Arc::new(Mutex::new(Buffer::default())),
         rx_notify: Arc::new(Notify::new()),
+        rx_queue_tx,
+        rx_drop: Arc::new(AtomicBool::new(false)),
+        rx_queue_dropped: Arc::new(AtomicU64::new(0)),
+        rx_gen: Arc::new(AtomicU64::new(0)),
         in_flight: Arc::new(AsyncMutex::new(())),
         event_tx,
-    }))
+    });
+
+    tokio::spawn(rx_queue_worker(Arc::clone(&state), rx_queue_rx));
+
+    Ok(state)
 }
 
 fn midi_new_system() -> Result<MidiSystem> {
@@ -693,6 +727,8 @@ fn find_midi_in_port_by_name(midi_in: &MidiInput, name: &str) -> Result<Option<m
 }
 
 async fn midi_disconnect(state: &BridgeState) -> Result<()> {
+    // Drop any in-flight queued RX bytes after disconnect.
+    state.rx_gen.fetch_add(1, Ordering::SeqCst);
     let existing = { state.midi.lock().await.take() };
     if let Some(conn) = existing {
         {
@@ -706,6 +742,8 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
 }
 
 async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<DeviceInfo> {
+    // Drop any queued RX bytes from a previous session.
+    state.rx_gen.fetch_add(1, Ordering::SeqCst);
     let requested = port_name
         .as_deref()
         .map(|s| s.trim().to_string())
@@ -737,9 +775,9 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
         }
     };
 
-    let buffer = Arc::clone(&state.buffer);
-    let rx_notify = Arc::clone(&state.rx_notify);
-    let state_events = state.event_tx.clone();
+    let rx_queue_tx = state.rx_queue_tx.clone();
+    let rx_queue_dropped = Arc::clone(&state.rx_queue_dropped);
+    let rx_gen = Arc::clone(&state.rx_gen);
 
     let MidiSystem { in_: midi_in, out: midi_out } = midi_take_system(state).await?;
 
@@ -761,19 +799,12 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
                 let Ok(Some(pkt)) = midi_sysex::decode_packet64(message) else { return };
 
                 let ts_ms = now_ms();
-                if let Ok(mut guard) = buffer.lock() {
-                    buffer::append_rx_bytes(&mut *guard, &pkt, ts_ms);
-                }
-                rx_notify.notify_waiters();
-
-                let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(pkt);
-                let payload = BridgeEvent {
-                    event: "rx_bytes",
-                    data: json!({ "bytes_b64": bytes_b64, "ts_ms": ts_ms }),
-                };
-                if let Ok(mut out) = serde_json::to_vec(&payload) {
-                    out.push(b'\n');
-                    let _ = state_events.send(out);
+                let generation = rx_gen.load(Ordering::Relaxed);
+                if rx_queue_tx
+                    .try_send(RxQueuedPacket { pkt, ts_ms, generation })
+                    .is_err()
+                {
+                    rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
                 }
             },
             (),
@@ -943,6 +974,14 @@ async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()
 }
 
 async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
+    state.rx_drop.store(true, Ordering::SeqCst);
+    struct RxDropGuard(Arc<AtomicBool>);
+    impl Drop for RxDropGuard {
+        fn drop(&mut self) {
+            self.0.store(false, Ordering::SeqCst);
+        }
+    }
+    let _rx_drop_guard = RxDropGuard(Arc::clone(&state.rx_drop));
     if data.is_empty() {
         bail!("buffer is empty");
     }
@@ -1058,6 +1097,40 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
     }
 
     Ok(())
+}
+
+async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueuedPacket>) {
+    let mut last_dropped: u64 = 0;
+    while let Some(item) = rx.recv().await {
+        let current_gen = state.rx_gen.load(Ordering::Relaxed);
+        if item.generation != current_gen {
+            continue;
+        }
+
+        let dropped = state.rx_queue_dropped.load(Ordering::Relaxed);
+        if dropped != last_dropped {
+            last_dropped = dropped;
+            let _ = emit_event(state.as_ref(), "rx_queue_dropped", json!({ "count": dropped }));
+        }
+
+        // Emit RX event first so command/BS listeners don't get blocked by buffer work.
+        let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(item.pkt);
+        let payload = BridgeEvent {
+            event: "rx_bytes",
+            data: json!({ "bytes_b64": bytes_b64, "ts_ms": item.ts_ms }),
+        };
+        if let Ok(mut out) = serde_json::to_vec(&payload) {
+            out.push(b'\n');
+            let _ = state.event_tx.send(out);
+        }
+
+        if !state.rx_drop.load(Ordering::Relaxed) {
+            if let Ok(mut guard) = state.buffer.lock() {
+                buffer::append_rx_bytes(&mut *guard, &item.pkt, item.ts_ms);
+            }
+        }
+        state.rx_notify.notify_waiters();
+    }
 }
 
 fn parse_command(input: &str) -> Result<[u8; PACKET_SIZE]> {
