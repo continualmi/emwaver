@@ -13,16 +13,6 @@
         tools:layout="@layout/fragment_ism" />
 
     <fragment
-        android:id="@+id/navigation_rfid"
-        android:name="com.emwaver.emwaverandroidapp.ui.rfid.RfidFragment"
-        android:label="RFID"
-        tools:layout="@layout/fragment_rfid" />
-
-
-
-
-
-    <fragment
         android:id="@+id/navigation_git"
         android:name="com.emwaver.emwaverandroidapp.ui.git.GitFragment"
         android:label="Git"
@@ -47,17 +37,5 @@
         android:name="com.emwaver.emwaverandroidapp.ui.emwaver.EMWaverFragment"
         android:label="EMWaver"
         tools:layout="@layout/fragment_emwaver" />
-
-    <fragment
-        android:id="@+id/navigation_flash"
-        android:name="com.emwaver.emwaverandroidapp.ui.flash.FlashFragment"
-        android:label="Flash"
-        tools:layout="@layout/fragment_flash" />
-
-    <fragment
-        android:id="@+id/navigation_packet_mode"
-        android:name="com.emwaver.emwaverandroidapp.ui.packetmode.PacketModeFragment"
-        android:label="Packet Mode"
-        tools:layout="@layout/fragment_packet_mode" />
 
 </navigation>

@@ -70,7 +70,9 @@ final class WaveletsViewModel: ObservableObject {
         "cc1101.emw",
         "gpio.emw",
         "ir_send_saved_signal.emw",
+        "packet_mode.emw",
         "rfm69.emw",
+        "rfid.emw",
         "usb.emw",
         "wavelet_demo.emw"
     ]
