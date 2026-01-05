@@ -189,10 +189,8 @@ final class USBManager: ObservableObject {
 
             self.refreshPortsInternal()
 
-            // Auto-connect to the first available MIDI port (device will be selected explicitly later).
-            if !self.availablePorts.isEmpty {
-                self.connectToFirstPortInternal()
-            }
+            // Auto-connect immediately; `availablePorts` updates on the main queue and may lag.
+            self.connectToFirstPortInternal()
 
             DispatchQueue.main.async { self.isScanning = false }
         }
@@ -594,7 +592,10 @@ final class USBManager: ObservableObject {
 
     private func connectToFirstPortInternal() {
         let candidates = listPortCandidatesInternal()
-        guard let chosen = candidates.first else { return }
+        let chosen = candidates.first(where: { $0.name.localizedCaseInsensitiveContains("emwaver") })
+            ?? candidates.first(where: { !$0.name.localizedCaseInsensitiveContains("network") })
+            ?? candidates.first
+        guard let chosen else { return }
 
         disconnectInternal()
 
@@ -725,9 +726,14 @@ final class USBManager: ObservableObject {
     }
 
     private func feedMidiBytes(_ data: Data) {
+        var didStore = false
         for sysex in sysexAccumulator.feed(data) {
             guard let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex) else { continue }
             storeBulkPkt(pkt64)
+            didStore = true
+        }
+        if didStore {
+            DispatchQueue.main.async { self.bufferVersion += 1 }
         }
     }
 
