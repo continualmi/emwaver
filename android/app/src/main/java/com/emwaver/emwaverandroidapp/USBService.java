@@ -26,8 +26,16 @@ import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.media.midi.MidiDevice;
+import android.media.midi.MidiDeviceInfo;
+import android.media.midi.MidiInputPort;
+import android.media.midi.MidiManager;
+import android.media.midi.MidiOutputPort;
+import android.media.midi.MidiReceiver;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.Log;
 import android.widget.Toast;
@@ -35,26 +43,42 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
-import com.hoho.android.usbserial.driver.UsbSerialDriver;
-import com.hoho.android.usbserial.driver.UsbSerialPort;
-import com.hoho.android.usbserial.driver.UsbSerialProber;
-import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 
-public class USBService extends Service implements DeviceConnectionService, SerialInputOutputManager.Listener {
+public class USBService extends Service implements DeviceConnectionService {
 
     public static final String ACTION_CONNECT_USB = "com.emwaver.ACTION_CONNECT_USB";
     public static final String ACTION_CONNECT_USB_BOOTLOADER = "com.emwaver.GRANT_USB";
+
     private static final String TAG = "USBService";
-    
-    private SerialInputOutputManager ioManager;
-    public UsbSerialPort finalPort = null;
+
+    // STM32 firmware descriptors (stm/emwaver-firmware/USB_DEVICE/App/usbd_desc.c)
+    private static final int EMW_USB_VENDOR_ID = 1155;   // 0x0483
+    private static final int EMW_USB_PRODUCT_ID = 22336; // 0x5740
+
     private final IBinder binder = new LocalBinder();
+
+    // DFU/flash (USB control transfers)
     private UsbDeviceConnection finalConnection;
+
+    // USB MIDI transport
+    private MidiManager midiManager;
+    private HandlerThread midiThread;
+    private Handler midiHandler;
+
+    private MidiDevice midiDevice;
+    private MidiInputPort midiIn;
+    private MidiOutputPort midiOut;
+
+    private final Object midiLock = new Object();
+
+    // SysEx receive accumulator
+    private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(256);
+    private boolean inSysex = false;
 
     // Buffer bridge methods
     public void storeBulkPkt(byte[] data, long tsMs) {
@@ -99,8 +123,6 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         }
     }
 
-    private long lastPacketReceivedTime = 0;
-
     public void setUsbDeviceConnection(UsbDeviceConnection connection) {
         this.finalConnection = connection;
     }
@@ -109,38 +131,46 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         return finalConnection;
     }
 
-    public void checkForConnectedDevices() {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
-        List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
-
-        if (availableDrivers.isEmpty()) {
-            Toast.makeText(this, "No USB device found", Toast.LENGTH_SHORT).show();
-            return;
-        } else {
-            connectUSBSerial();
-        }
-    }
-
     public UsbManager getUsbManager() {
         return (UsbManager) getSystemService(Context.USB_SERVICE);
     }
 
-    public UsbDevice getUsbDevice() {
+    private UsbDevice findUsbMidiDevice() {
         UsbManager manager = getUsbManager();
         HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
         for (UsbDevice device : deviceList.values()) {
-            if (device.getVendorId() == Dfu.USB_VENDOR_ID && device.getProductId() == Dfu.USB_PRODUCT_ID) {
+            if (device.getVendorId() == EMW_USB_VENDOR_ID && device.getProductId() == EMW_USB_PRODUCT_ID) {
                 return device;
             }
         }
         return null;
     }
 
+    public void checkForConnectedDevices() {
+        UsbDevice dev = findUsbMidiDevice();
+        if (dev == null) {
+            Toast.makeText(this, "No EMWaver USB MIDI device found", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        UsbManager manager = getUsbManager();
+        if (!manager.hasPermission(dev)) {
+            PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(
+                    this,
+                    0,
+                    new Intent(ACTION_CONNECT_USB).putExtra(UsbManager.EXTRA_DEVICE, dev),
+                    PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0)
+            );
+            manager.requestPermission(dev, usbPermissionIntent);
+            return;
+        }
+
+        connectUsbMidi(dev);
+    }
+
     public boolean checkConnection() {
-        if (finalPort != null) {
-            return ioManager != null && ioManager.getState() == SerialInputOutputManager.State.RUNNING;
-        } else {
-            return false;
+        synchronized (midiLock) {
+            return midiDevice != null && midiIn != null && midiOut != null;
         }
     }
 
@@ -150,24 +180,142 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         }
     }
 
-    public void write(byte[] bytes) {
-        if (bytes != null && finalPort != null) {
-            try {
-                logTx(bytes);
-                finalPort.write(bytes, 2000);
-            } catch (IOException e) {
-                Log.e(TAG, "Error writing to port: ", e);
+    private MidiReceiver rxReceiver = new MidiReceiver() {
+        @Override
+        public void onSend(byte[] data, int offset, int count, long timestamp) {
+            // Data can arrive chunked; reconstruct SysEx messages.
+            long tsMs = System.currentTimeMillis();
+            for (int i = 0; i < count; i++) {
+                byte b = data[offset + i];
+                if (b == (byte) 0xF0) {
+                    sysexBuf.reset();
+                    inSysex = true;
+                }
+                if (!inSysex) {
+                    continue;
+                }
+                sysexBuf.write(b);
+                if (b == (byte) 0xF7) {
+                    inSysex = false;
+                    byte[] sysex = sysexBuf.toByteArray();
+                    sysexBuf.reset();
+                    byte[] pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex);
+                    if (pkt64 != null) {
+                        storeBulkPkt(pkt64, tsMs);
+                    }
+                }
             }
-        } else {
-            Toast.makeText(this, "No USB device found", Toast.LENGTH_SHORT).show();
+        }
+    };
+
+    private void connectUsbMidi(UsbDevice usbDevice) {
+        if (midiManager == null) {
+            midiManager = (MidiManager) getSystemService(Context.MIDI_SERVICE);
+        }
+        if (midiManager == null) {
+            Toast.makeText(this, "MIDI service unavailable", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        MidiDeviceInfo target = null;
+        for (MidiDeviceInfo info : midiManager.getDevices()) {
+            Object prop = info.getProperties().get(MidiDeviceInfo.PROPERTY_USB_DEVICE);
+            if (prop instanceof UsbDevice) {
+                UsbDevice dev = (UsbDevice) prop;
+                if (dev.getVendorId() == usbDevice.getVendorId() && dev.getProductId() == usbDevice.getProductId()) {
+                    target = info;
+                    break;
+                }
+            }
+        }
+
+        if (target == null) {
+            Toast.makeText(this, "No MIDI interface found for EMWaver device", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final MidiDeviceInfo deviceInfo = target;
+        midiManager.openDevice(deviceInfo, device -> {
+            if (device == null) {
+                Log.e(TAG, "Failed to open MIDI device");
+                return;
+            }
+            synchronized (midiLock) {
+                closeMidiLocked();
+                midiDevice = device;
+                midiIn = midiDevice.openInputPort(0);
+                midiOut = midiDevice.openOutputPort(0);
+                if (midiOut != null) {
+                    midiOut.connect(rxReceiver);
+                }
+            }
+            Toast.makeText(this, "USB MIDI Connected!", Toast.LENGTH_SHORT).show();
+        }, midiHandler);
+    }
+
+    private void closeMidiLocked() {
+        try {
+            if (midiOut != null) {
+                midiOut.close();
+            }
+        } catch (IOException ignored) {
+        }
+        try {
+            if (midiIn != null) {
+                midiIn.close();
+            }
+        } catch (IOException ignored) {
+        }
+        try {
+            if (midiDevice != null) {
+                midiDevice.close();
+            }
+        } catch (IOException ignored) {
+        }
+        midiOut = null;
+        midiIn = null;
+        midiDevice = null;
+    }
+
+    @Override
+    public void write(byte[] bytes) {
+        if (bytes == null) {
+            return;
+        }
+
+        byte[] packet64 = bytes.length == 64 ? bytes : makePacket64(bytes);
+        if (packet64 == null) {
+            Log.e(TAG, "write: payload too large for packet64");
+            return;
+        }
+
+        byte[] sysex = UsbMidiSysex.encodePacket64(packet64);
+        if (sysex == null) {
+            Log.e(TAG, "write: failed to encode SysEx");
+            return;
+        }
+
+        synchronized (midiLock) {
+            if (midiIn == null) {
+                Toast.makeText(this, "No USB MIDI device connected", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            try {
+                midiIn.send(sysex, 0, sysex.length, 0);
+                logTx(packet64);
+            } catch (IOException e) {
+                Log.e(TAG, "Error writing MIDI SysEx", e);
+            }
         }
     }
 
+    @Override
     public void transmitBuffer() {
         byte[] samplerBytes = getBuffer();
         if (samplerBytes == null || samplerBytes.length == 0) {
             return;
         }
+
         // Swap out sampler RX while transmitting so BS flow-control packets
         // don't contaminate sampler data stored in the same buffer.
         Object[] saved = NativeBuffer.takeRxState();
@@ -183,13 +331,13 @@ public class USBService extends Service implements DeviceConnectionService, Seri
 
         int nativeBufferSize = samplerBytes.length;
         int[] txProfile = NativeBuffer.txUsbProfile();
-        int packetSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : 50; // <= 64B endpoint packet
+        int packetSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : 64;
         long startTime = System.nanoTime();
-        final long period = (txProfile != null && txProfile.length > 1 ? txProfile[1] : 4000 * 1000);
+        final long period = (txProfile != null && txProfile.length > 1 ? txProfile[1] : 5_120_000L);
 
         for (int i = 0; i < nativeBufferSize; i += packetSize) {
             int end = Math.min(i + packetSize, nativeBufferSize);
-            byte[] packet = getBufferRange(samplerBytes, i, end);
+            byte[] chunk = Arrays.copyOfRange(samplerBytes, i, end);
 
             startTime += period;
             int lastStatus = 0;
@@ -204,10 +352,11 @@ public class USBService extends Service implements DeviceConnectionService, Seri
                 }
             }
 
-            write(packet);
-
-            // Log TX as padded 64B packets for the home monitor.
-            NativeBuffer.appendTxBytes(packet, System.currentTimeMillis());
+            // Always send packet64 frames on USB MIDI.
+            byte[] pkt64 = makePacket64(chunk);
+            if (pkt64 != null) {
+                write(pkt64);
+            }
 
             startTime = NativeBuffer.txUsbAdjustDeadlineNs(startTime, lastStatus);
 
@@ -226,76 +375,74 @@ public class USBService extends Service implements DeviceConnectionService, Seri
         NativeBuffer.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
     }
 
-    private byte[] getBufferRange(byte[] buffer, int start, int end) {
-        if (start < 0 || end > buffer.length || start >= end) {
-            return new byte[0];
-        }
-        return Arrays.copyOfRange(buffer, start, end);
-    }
-
     @Override
-    public void onNewData(byte[] data) {
-        lastPacketReceivedTime = System.currentTimeMillis();
-        storeBulkPkt(data, lastPacketReceivedTime);
-        Log.i("bulkPacket", "Received " + data.length + " bytes, total buffer length: " + getBufferLength());
-    }
-
-    // Finds the port in which the USB device is connected to. Connects to the driver and returns the port.
-    public void connectUSBSerial() {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
-        List<UsbSerialDriver> availableDrivers = UsbSerialProber.getDefaultProber().findAllDrivers(manager);
-
-        if (availableDrivers.isEmpty()) {
-            Toast.makeText(this, "No USB devices found", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        UsbSerialDriver driver = availableDrivers.get(0);
-        UsbDevice device = driver.getDevice();
-
-        // Check if permission is already granted
-        if (!manager.hasPermission(device)) {
-            PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(
-                    this,
-                    0,
-                    new Intent(ACTION_CONNECT_USB)
-                            .putExtra(UsbManager.EXTRA_DEVICE, device),
-                    PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0)
-            );
-            manager.requestPermission(device, usbPermissionIntent);
-        } else {
-            // Permission is already granted, open the device here or handle as needed
-            Toast.makeText(this, "USB permission already granted", Toast.LENGTH_SHORT).show();
-            try {
-                finalPort = connectUSBSerialDevice(device);
-                Toast.makeText(this, "USB Connected!\nDriver: " + finalPort + "\n max pkt size: " + finalPort.getReadEndpoint().getMaxPacketSize(), Toast.LENGTH_LONG).show();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    private UsbSerialPort connectUSBSerialDevice(UsbDevice device) throws IOException {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
-        UsbDeviceConnection connection = manager.openDevice(device);
-        if (connection == null) {
-            Toast.makeText(this, "USB connection returned null", Toast.LENGTH_SHORT).show();
+    public byte[] sendCommand(byte[] command, int timeout) {
+        if (command == null) {
             return null;
         }
 
-        UsbSerialDriver driver = UsbSerialProber.getDefaultProber().probeDevice(device);
-        UsbSerialPort port = driver.getPorts().get(0); // Assuming there's only one port
-        port.open(connection);
-        port.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE);
+        // Desktop-parity: drop any stale RX packets before sending so the "next packet"
+        // consumed via rx_counter belongs to this command's response.
+        NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
 
-        ioManager = new SerialInputOutputManager(port, this);
-        ioManager.start();
+        byte[] packet = makePacket64(command);
+        if (packet == null) {
+            Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
+            return null;
+        }
 
-        return port;
+        write(packet);
+
+        // Wait for exactly one 64B response packet (desktop convention).
+        long startTime = System.currentTimeMillis();
+        ByteArrayOutputStream collected = new ByteArrayOutputStream(64);
+        while (System.currentTimeMillis() - startTime < timeout && collected.size() < 64) {
+            Object[] next = NativeBuffer.nextRxPacket();
+            if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
+                byte[] pkt = (byte[]) next[0];
+                if (pkt.length >= 64) {
+                    collected.write(pkt, 0, 64);
+                }
+                break;
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException ignored) {
+            }
+        }
+
+        byte[] response = collected.toByteArray();
+        return response.length == 64 ? response : null;
+    }
+
+    @Override
+    public void sendPacket(byte[] data) {
+        if (data == null) {
+            return;
+        }
+        byte[] packet = makePacket64(data);
+        if (packet == null) {
+            Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
+            return;
+        }
+        write(packet);
+    }
+
+    // DFU helpers
+
+    public UsbDevice getUsbDevice() {
+        UsbManager manager = getUsbManager();
+        HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
+        for (UsbDevice device : deviceList.values()) {
+            if (device.getVendorId() == Dfu.USB_VENDOR_ID && device.getProductId() == Dfu.USB_PRODUCT_ID) {
+                return device;
+            }
+        }
+        return null;
     }
 
     public void connectUSBFlash() {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        UsbManager manager = getUsbManager();
         UsbDevice device = getUsbDevice();
         if (device != null && manager.hasPermission(device)) {
             UsbDeviceConnection connection = manager.openDevice(device);
@@ -304,7 +451,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     public boolean hasUsbPermission() {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        UsbManager manager = getUsbManager();
         HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
         for (UsbDevice device : deviceList.values()) {
             if (device.getVendorId() == Dfu.USB_VENDOR_ID && device.getProductId() == Dfu.USB_PRODUCT_ID) {
@@ -315,7 +462,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     public void requestUsbPermission() {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        UsbManager manager = getUsbManager();
         HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
         for (UsbDevice device : deviceList.values()) {
             if (device.getVendorId() == Dfu.USB_VENDOR_ID && device.getProductId() == Dfu.USB_PRODUCT_ID) {
@@ -323,8 +470,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
                     PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(
                             this,
                             0,
-                            new Intent(ACTION_CONNECT_USB_BOOTLOADER)
-                                    .putExtra(UsbManager.EXTRA_DEVICE, device),
+                            new Intent(ACTION_CONNECT_USB_BOOTLOADER).putExtra(UsbManager.EXTRA_DEVICE, device),
                             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0)
                     );
                     manager.requestPermission(device, usbPermissionIntent);
@@ -335,17 +481,15 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     public boolean isFlashDeviceConnected() {
-        UsbManager manager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        UsbManager manager = getUsbManager();
         HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
 
-        boolean deviceFound = false;
         for (UsbDevice device : deviceList.values()) {
             if (device.getVendorId() == Dfu.USB_VENDOR_ID && device.getProductId() == Dfu.USB_PRODUCT_ID) {
-                deviceFound = true;
-                break;
+                return true;
             }
         }
-        return deviceFound;
+        return false;
     }
 
     // Broadcast receiver for USB permission
@@ -357,15 +501,7 @@ public class USBService extends Service implements DeviceConnectionService, Seri
                 UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                 if (device != null && intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                     Log.d(TAG, "USB permission granted for device: " + device.getDeviceName());
-                    try {
-                        finalPort = connectUSBSerialDevice(device);
-                        if (finalPort != null) {
-                            Toast.makeText(USBService.this, "USB Connected!", Toast.LENGTH_SHORT).show();
-                        }
-                    } catch (IOException e) {
-                        Log.e(TAG, "Error connecting USB device", e);
-                        Toast.makeText(USBService.this, "USB connection failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                    }
+                    connectUsbMidi(device);
                 } else {
                     Log.d(TAG, "USB permission denied");
                     Toast.makeText(USBService.this, "USB permission denied", Toast.LENGTH_SHORT).show();
@@ -373,12 +509,17 @@ public class USBService extends Service implements DeviceConnectionService, Seri
             }
         }
     };
-    
+
     @Override
     public void onCreate() {
         super.onCreate();
         Log.d(TAG, "USB Service onCreate() called");
-        
+
+        midiManager = (MidiManager) getSystemService(Context.MIDI_SERVICE);
+        midiThread = new HandlerThread("emw-usb-midi");
+        midiThread.start();
+        midiHandler = new Handler(midiThread.getLooper());
+
         // Register USB permission receiver
         IntentFilter filter = new IntentFilter(ACTION_CONNECT_USB);
         registerReceiver(usbPermissionReceiver, filter);
@@ -387,26 +528,22 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     @Override
     public void onDestroy() {
         super.onDestroy();
-        
-        // Unregister USB permission receiver
+
         try {
             unregisterReceiver(usbPermissionReceiver);
-        } catch (IllegalArgumentException e) {
-            // Receiver was not registered, ignore
+        } catch (IllegalArgumentException ignored) {
         }
-        
-        if (ioManager != null) {
-            ioManager.stop();
-            ioManager = null;
+
+        synchronized (midiLock) {
+            closeMidiLocked();
         }
-        if (finalPort != null) {
-            try {
-                finalPort.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Error closing USB port", e);
-            }
-            finalPort = null;
+
+        if (midiThread != null) {
+            midiThread.quitSafely();
+            midiThread = null;
+            midiHandler = null;
         }
+
         Log.d(TAG, "USB Service destroyed");
     }
 
@@ -417,100 +554,28 @@ public class USBService extends Service implements DeviceConnectionService, Seri
     }
 
     @Override
-    public void onRunError(Exception e) {
-        Log.e(TAG, "USB serial error", e);
-    }
-
-    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         return START_STICKY;
     }
 
-    public byte[] sendCommand(byte[] command, int timeout) {
-        if (command != null && finalPort != null) {
-            try {
-                // Desktop-parity: drop any stale RX packets before sending so the "next packet"
-                // consumed via rx_counter belongs to this command's response.
-                NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
-
-                byte[] packet = makePacket64(command);
-                if (packet == null) {
-                    Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
-                    return null;
-                }
-
-                finalPort.write(packet, timeout);
-                logTx(packet);
-
-                // Wait for exactly one 64B response packet (desktop convention).
-                long startTime = System.currentTimeMillis();
-                java.io.ByteArrayOutputStream collected = new java.io.ByteArrayOutputStream(64);
-                while (System.currentTimeMillis() - startTime < timeout && collected.size() < 64) {
-                    Object[] next = NativeBuffer.nextRxPacket();
-                    if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
-                        collected.write((byte[]) next[0], 0, 64);
-                        break;
-                    }
-                    Thread.sleep(5); // Small delay to prevent busy waiting
-                }
-
-                byte[] response = collected.toByteArray();
-                if (response.length > 0) {
-                    return response;
-                }
-            } catch (IOException | InterruptedException e) {
-                Log.e(TAG, "Error in sendCommand: ", e);
-            }
-        }
-        return null;
-    }
-
-    public void sendPacket(byte[] data) {
-        if (data != null && finalPort != null) {
-            try {
-                byte[] packet = makePacket64(data);
-                if (packet == null) {
-                    Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
-                    return;
-                }
-                logTx(packet);
-                finalPort.write(packet, 2000);
-            } catch (IOException e) {
-                Log.e(TAG, "Error writing packet: ", e);
-            }
-        }
-    }
-
-    // DeviceConnectionService interface methods
-    
     @Override
     public ConnectionType getConnectionType() {
         return checkConnection() ? ConnectionType.USB : ConnectionType.NONE;
     }
-    
+
     @Override
     public String getConnectionStatus() {
         if (checkConnection()) {
-            return "Connected (USB)";
-        } else {
-            return "Not connected";
+            return "Connected (USB MIDI)";
         }
+        return "Not connected";
     }
-    
+
     @Override
     public void disconnect() {
-        if (ioManager != null) {
-            ioManager.stop();
-            ioManager = null;
+        synchronized (midiLock) {
+            closeMidiLocked();
         }
-        if (finalPort != null) {
-            try {
-                finalPort.close();
-            } catch (IOException e) {
-                Log.e(TAG, "Error closing USB port on disconnect", e);
-            }
-            finalPort = null;
-        }
-        Log.d(TAG, "USB disconnected");
+        Log.d(TAG, "USB MIDI disconnected");
     }
 }

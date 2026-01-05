@@ -35,7 +35,7 @@ final class SamplerViewModel: ObservableObject {
     @Published var outputText: String = ""
     @Published var notice: Notice?
 
-    private var bleManager: BLEManager?
+    private var bleManager: USBManager?
     private let settingsManager = SettingsManager.shared
     private let fileManager = FileManager.default
     private let signalsDir: URL
@@ -57,7 +57,7 @@ final class SamplerViewModel: ObservableObject {
     var refreshTime: Int { settingsManager.refreshTime }
     var bufferSizeLimit: Int { settingsManager.bufferSizeLimit }
 
-    func attachBLEManager(_ manager: BLEManager) {
+    func attachBLEManager(_ manager: USBManager) {
         bleManager = manager
     }
 

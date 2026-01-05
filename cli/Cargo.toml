@@ -14,19 +14,17 @@ path = "src/main.rs"
 anyhow = "1"
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
-btleplug = "0.11"
 dialoguer = "0.11"
 include_dir = { version = "0.7", features = ["glob"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "io-util", "io-std", "net"] }
-tokio-stream = "0.1"
-uuid = { version = "1", features = ["macro-diagnostics"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "io-util", "io-std", "net", "sync"] }
 walkdir = "2"
 sha2 = "0.10"
-serialport = "4.2"
 emwaver-buffer-core = { path = "crates/emwaver-buffer-core" }
+midir = "0.10"
+fs2 = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rusb = { version = "0.9", features = ["vendored"] }

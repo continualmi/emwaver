@@ -1,6 +1,6 @@
 # EMWaver Daemon + CLI (Notes)
 
-The EMWaver CLI includes a small **local daemon** that keeps the BLE connection alive and exposes a **local Unix socket** (JSON-RPC-ish) so multiple tools (CLI, desktop app, VS Code) can reuse the same connection.
+The EMWaver CLI includes a small **local daemon** that keeps the USB MIDI connection alive and exposes a **local Unix socket** (JSON-RPC-ish) so multiple tools (CLI, desktop app, VS Code) can reuse the same connection.
 
 This page documents the “connect → command → workflows” flow for day-to-day hacking.
 
@@ -59,22 +59,21 @@ emwaver stop
 
 ## Device Discovery + Connect
 
-Scan for devices via the daemon:
+List available USB MIDI ports via the daemon:
 
 ```bash
-emwaver list
-emwaver list --timeout-ms 8000
-emwaver list --json
+emwaver midi list
+emwaver midi list --json
 ```
 
 Connect:
 
 ```bash
-# Connect to the first matching device name (default name is "EMWaver")
+# Connect to the first available MIDI port
 emwaver connect
 
-# Connect to a specific BLE address
-emwaver connect --address AA:BB:CC:DD:EE:FF
+# Connect to a specific MIDI port name
+emwaver connect --port "EMWaver MIDI"
 ```
 
 See what the daemon thinks is connected:

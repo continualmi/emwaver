@@ -4,8 +4,6 @@
 
   const statusEl = document.getElementById("status");
   const deviceStatusEl = document.getElementById("deviceStatus");
-  const buildBtn = document.getElementById("build");
-  const flashBtn = document.getElementById("flash");
   const previewBtn = document.getElementById("previewWavelet");
   const connectBtn = document.getElementById("connectDevice");
   const disconnectBtn = document.getElementById("disconnectDevice");
@@ -18,19 +16,6 @@
     if (deviceStatusEl) deviceStatusEl.textContent = text;
   }
 
-  if (buildBtn) {
-    buildBtn.addEventListener("click", () => {
-      setStatus("Starting build…");
-      vscode.postMessage({ type: "run", action: "build" });
-    });
-  }
-
-  if (flashBtn) {
-    flashBtn.addEventListener("click", () => {
-      setStatus("Starting flash…");
-      vscode.postMessage({ type: "run", action: "flash" });
-    });
-  }
 
   if (previewBtn) {
     previewBtn.addEventListener("click", () => {

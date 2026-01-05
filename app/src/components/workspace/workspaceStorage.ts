@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { WorkspaceVariant } from "./workspaceTypes";
 
 export type WorkspaceStorageKeys = {
   root: string;
@@ -43,34 +42,15 @@ export const TERMINAL_LIST_MAX_WIDTH = 720;
 export const TERMINAL_LIST_COLLAPSE_THRESHOLD = 90;
 export const TERMINAL_VIEW_MIN_WIDTH = 320;
 
-export function storageKeys(variant: WorkspaceVariant): WorkspaceStorageKeys {
-  if (variant === "wavelets") {
-    return {
-      root: "emwaver.waveletsWorkspace.root",
-      sidebarWidth: "emwaver.waveletsWorkspace.sidebarWidth",
-      sidebarCollapsed: "emwaver.waveletsWorkspace.sidebarCollapsed",
-      terminalHeight: "emwaver.waveletsWorkspace.terminalHeight",
-      terminalListWidth: "emwaver.waveletsWorkspace.terminalListWidth",
-      terminalListCollapsed: "emwaver.waveletsWorkspace.terminalListCollapsed",
-      assetScriptsCollapsed: "emwaver.waveletsWorkspace.assetScriptsCollapsed",
-    };
-  }
-
+export function storageKeys(): WorkspaceStorageKeys {
   return {
-    root: "emwaver.ide.root",
-    sidebarWidth: "emwaver.ide.sidebarWidth",
-    sidebarCollapsed: "emwaver.ide.sidebarCollapsed",
-    terminalHeight: "emwaver.ide.terminalHeight",
-    terminalListWidth: "emwaver.ide.terminalListWidth",
-    terminalListCollapsed: "emwaver.ide.terminalListCollapsed",
-    legacy: {
-      root: "emwaver.devtools.root",
-      sidebarWidth: "emwaver.devtools.sidebarWidth",
-      sidebarCollapsed: "emwaver.devtools.sidebarCollapsed",
-      terminalHeight: "emwaver.devtools.terminalHeight",
-      terminalListWidth: "emwaver.devtools.terminalListWidth",
-      terminalListCollapsed: "emwaver.devtools.terminalListCollapsed",
-    },
+    root: "emwaver.waveletsWorkspace.root",
+    sidebarWidth: "emwaver.waveletsWorkspace.sidebarWidth",
+    sidebarCollapsed: "emwaver.waveletsWorkspace.sidebarCollapsed",
+    terminalHeight: "emwaver.waveletsWorkspace.terminalHeight",
+    terminalListWidth: "emwaver.waveletsWorkspace.terminalListWidth",
+    terminalListCollapsed: "emwaver.waveletsWorkspace.terminalListCollapsed",
+    assetScriptsCollapsed: "emwaver.waveletsWorkspace.assetScriptsCollapsed",
   };
 }
 
