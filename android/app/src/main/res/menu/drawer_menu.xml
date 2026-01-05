@@ -41,6 +41,12 @@
             android:icon="@drawable/ic_packetmode_black_24dp"
             android:title="Packet Mode" />
 
+        <item
+            android:id="@+id/navigation_template"
+            android:icon="@drawable/ic_template_black_24dp"
+            android:title="Template" />
+
+
     </group>
 
     <item

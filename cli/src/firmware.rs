@@ -208,11 +208,26 @@ fn host_platform() -> HostPlatform {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FirmwareKind {
+    EspIdf,
+    Stm32Cube,
+}
+
 pub fn build(project: Option<PathBuf>, codegen: CodegenMode, verbose: bool) -> Result<()> {
-    let project = resolve_firmware_project(project)?;
-    stm32_codegen_if_needed(&project, codegen, verbose)?;
-    let _bin = stm32_build_and_export_bin(&project, verbose)?;
-    Ok(())
+    match resolve_firmware_project(project)? {
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            esp_idf_build(&project)
+        }
+        (FirmwareKind::Stm32Cube, project) => {
+            stm32_codegen_if_needed(&project, codegen, verbose)?;
+            let _bin = stm32_build_and_export_bin(&project, verbose)?;
+            Ok(())
+        }
+    }
 }
 
 pub fn build_at_streaming(
@@ -223,54 +238,115 @@ pub fn build_at_streaming(
     prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
-    let project = resolve_firmware_project_at(&start_dir, project)?;
-    let _ = prefer_pty;
-    stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
-    let _bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
-    Ok(())
+    match resolve_firmware_project_at(&start_dir, project)? {
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            run_idf_streaming(&project, &["build"], prefer_pty, on_event)
+        }
+        (FirmwareKind::Stm32Cube, project) => {
+            stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
+            let _bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
+            Ok(())
+        }
+    }
 }
 
 pub fn flash(
     project: Option<PathBuf>,
+    port: Option<String>,
     codegen: CodegenMode,
     dfu_alt: Option<u8>,
     verbose: bool,
 ) -> Result<()> {
-    let project = resolve_firmware_project(project)?;
-    stm32_codegen_if_needed(&project, codegen, verbose)?;
-    let bin = stm32_build_and_export_bin(&project, verbose)?;
-    dfu_flash_file(
-        bin,
-        DEFAULT_USB_VENDOR_ID,
-        DEFAULT_USB_PRODUCT_ID,
-        0x0800_0000,
-        dfu_alt,
-        verbose,
-    )
+    match resolve_firmware_project(project)? {
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            if dfu_alt.is_some() {
+                bail!("`--dfu-alt` is only supported for STM32 USB DFU flashing");
+            }
+            esp_idf_flash(&project, port)
+        }
+        (FirmwareKind::Stm32Cube, project) => {
+            if port.is_some() {
+                bail!("`--port` is only supported for ESP-IDF serial flashing");
+            }
+            stm32_codegen_if_needed(&project, codegen, verbose)?;
+            let bin = stm32_build_and_export_bin(&project, verbose)?;
+            dfu_flash_file(
+                bin,
+                DEFAULT_USB_VENDOR_ID,
+                DEFAULT_USB_PRODUCT_ID,
+                0x0800_0000,
+                dfu_alt,
+                verbose,
+            )
+        }
+    }
 }
 
 pub fn flash_at_streaming(
     start_dir: PathBuf,
     project: Option<PathBuf>,
+    port: Option<String>,
     codegen: CodegenMode,
     dfu_alt: Option<u8>,
     verbose: bool,
     prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
-    let project = resolve_firmware_project_at(&start_dir, project)?;
-    let _ = prefer_pty;
-    stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
-    let bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
-    dfu_flash_file_streaming(
-        bin,
-        DEFAULT_USB_VENDOR_ID,
-        DEFAULT_USB_PRODUCT_ID,
-        0x0800_0000,
-        dfu_alt,
-        verbose,
-        on_event,
-    )
+    match resolve_firmware_project_at(&start_dir, project)? {
+        (FirmwareKind::EspIdf, project) => {
+            if !matches!(codegen, CodegenMode::Auto) {
+                bail!("`--codegen` is only supported for STM32 CubeMX/CubeIDE projects");
+            }
+            if dfu_alt.is_some() {
+                bail!("`--dfu-alt` is only supported for STM32 USB DFU flashing");
+            }
+
+            let build_dir = project.join("build");
+            if !build_dir.is_dir() {
+                on_event(FirmwareProgress::Info(
+                    "No `build/` folder found; running `idf.py build` first.\n".to_string(),
+                ));
+                run_idf_streaming(&project, &["build"], prefer_pty, on_event)?;
+            }
+
+            let args_owned: Vec<String> = match port {
+                Some(port) => vec!["-p".into(), port, "flash".into()],
+                None => vec!["flash".into()],
+            };
+            let args: Vec<&str> = args_owned.iter().map(|s| s.as_str()).collect();
+            run_idf_streaming(&project, args.as_slice(), prefer_pty, on_event)
+        }
+        (FirmwareKind::Stm32Cube, project) => {
+            if port.is_some() {
+                bail!("`--port` is only supported for ESP-IDF serial flashing");
+            }
+            stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
+            let bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
+            dfu_flash_file_streaming(
+                bin,
+                DEFAULT_USB_VENDOR_ID,
+                DEFAULT_USB_PRODUCT_ID,
+                0x0800_0000,
+                dfu_alt,
+                verbose,
+                on_event,
+            )
+        }
+    }
+}
+
+pub fn monitor(project: Option<PathBuf>, port: Option<String>) -> Result<()> {
+    let (kind, project) = resolve_firmware_project(project)?;
+    match kind {
+        FirmwareKind::EspIdf => esp_idf_monitor(&project, port),
+        FirmwareKind::Stm32Cube => bail!("monitor is only supported for ESP-IDF projects"),
+    }
 }
 
 pub fn dfu_flash_file(
@@ -330,7 +406,7 @@ fn dfu_flash_file_streaming(
     Ok(())
 }
 
-fn resolve_firmware_project(project: Option<PathBuf>) -> Result<PathBuf> {
+fn resolve_firmware_project(project: Option<PathBuf>) -> Result<(FirmwareKind, PathBuf)> {
     let cwd = env::current_dir().context("failed to read current directory")?;
     resolve_firmware_project_at(&cwd, project)
 }
@@ -338,18 +414,21 @@ fn resolve_firmware_project(project: Option<PathBuf>) -> Result<PathBuf> {
 fn resolve_firmware_project_at(
     start_dir: &Path,
     project: Option<PathBuf>,
-) -> Result<PathBuf> {
+) -> Result<(FirmwareKind, PathBuf)> {
     let project = match project {
         Some(path) => path,
         None => autodetect_firmware_project_from(start_dir)?,
     };
 
+    if is_esp_idf_project_dir(&project) {
+        return Ok((FirmwareKind::EspIdf, project));
+    }
     if is_stm32_cube_project_dir(&project)? {
-        return Ok(project);
+        return Ok((FirmwareKind::Stm32Cube, project));
     }
 
     bail!(
-        "firmware project `{}` not found (expected STM32 CubeMX `.ioc` + `Release/makefile`)",
+        "firmware project `{}` not found (expected ESP-IDF `setup.sh`+`sdkconfig`, or STM32 CubeMX `.ioc` + `Release/makefile`)",
         project.display()
     )
 }
@@ -361,13 +440,18 @@ fn autodetect_firmware_project_from(start_dir: &Path) -> Result<PathBuf> {
 
     // Prefer "current tree" projects (ancestor dirs) over subdirs.
     for dir in start_dir.ancestors() {
-        if is_stm32_cube_project_dir(dir)? {
+        if is_esp_idf_project_dir(dir) || is_stm32_cube_project_dir(dir)? {
             return Ok(dir.to_path_buf());
         }
     }
 
-    // Fall back to repo-style subdir: `stm/<project>/`.
+    // Fall back to repo-style subdirs: `esp/` and `stm/<project>/`.
     for dir in start_dir.ancestors() {
+        let esp_subdir = dir.join("esp");
+        if is_esp_idf_project_dir(&esp_subdir) {
+            return Ok(esp_subdir);
+        }
+
         let stm_subdir = dir.join("stm");
         if stm_subdir.is_dir() {
             let mut candidates = Vec::new();
@@ -391,6 +475,100 @@ fn autodetect_firmware_project_from(start_dir: &Path) -> Result<PathBuf> {
     }
 
     bail!("could not auto-detect a firmware project; pass `--project <path>`")
+}
+
+// ---- ESP-IDF ----
+
+fn esp_idf_build(project: &Path) -> Result<()> {
+    run_idf(project, &["build"])
+}
+
+fn esp_idf_flash(project: &Path, port: Option<String>) -> Result<()> {
+    if let Some(port) = port.as_deref() {
+        run_idf(project, &["-p", port, "flash"])
+    } else {
+        run_idf(project, &["flash"])
+    }
+}
+
+fn esp_idf_monitor(project: &Path, port: Option<String>) -> Result<()> {
+    if let Some(port) = port.as_deref() {
+        run_idf(project, &["-p", port, "monitor"])
+    } else {
+        run_idf(project, &["monitor"])
+    }
+}
+
+fn is_esp_idf_project_dir(project: &Path) -> bool {
+    project.exists()
+        && project.join("setup.sh").is_file()
+        && project.join("CMakeLists.txt").is_file()
+        && project.join("sdkconfig").is_file()
+}
+
+fn run_idf(project: &Path, args: &[&str]) -> Result<()> {
+    let mut cmd = Command::new("bash");
+    cmd.arg("-lc")
+        .arg("source ./setup.sh && idf.py \"$@\"")
+        .arg("bash")
+        .args(args)
+        .current_dir(project)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?;
+
+    if !status.success() {
+        bail!("`idf.py {}` exited with {status}", args.join(" "));
+    }
+    Ok(())
+}
+
+fn run_idf_streaming(
+    project: &Path,
+    args: &[&str],
+    prefer_pty: bool,
+    on_event: &mut dyn FnMut(FirmwareProgress),
+) -> Result<()> {
+    let mut cmd = Command::new("bash");
+    cmd.arg("-lc")
+        .arg("source ./setup.sh && idf.py \"$@\"")
+        .arg("bash")
+        .args(args)
+        .current_dir(project)
+        .stdin(Stdio::null());
+
+    let label = Some(format!("idf.py {}", args.join(" ")));
+
+    let status = if prefer_pty && matches!(host_platform(), HostPlatform::Macos) {
+        #[cfg(target_os = "macos")]
+        {
+            let mut pty_args = Vec::with_capacity(3 + args.len());
+            pty_args.push("-lc");
+            pty_args.push("source ./setup.sh && idf.py \"$@\"");
+            pty_args.push("bash");
+            pty_args.extend(args);
+
+            run_command_streaming_pty(project, "bash", &pty_args, on_event, label.clone())
+                .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            run_command_streaming(&mut cmd, on_event, label.clone())
+                .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?
+        }
+    } else {
+        run_command_streaming(&mut cmd, on_event, label.clone())
+            .with_context(|| format!("failed to run `idf.py {}`", args.join(" ")))?
+    };
+
+    if !status.success {
+        bail!("`idf.py {}` exited with {}", args.join(" "), status.description);
+    }
+    Ok(())
 }
 
 // ---- STM32 CubeMX / CubeIDE ----

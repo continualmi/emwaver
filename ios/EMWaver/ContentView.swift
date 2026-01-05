@@ -25,7 +25,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var bleManager: USBManager
+    @EnvironmentObject var bleManager: BLEManager
     @EnvironmentObject var authManager: AuthenticationManager
     @State private var selection: String = "EMWaver"
     @State private var showWelcome: Bool = false
@@ -83,7 +83,25 @@ struct ContentView: View {
                 }
                 .tag("Git")
 
+                NavigationView {
+                    FlashView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Image("TabFlash").renderingMode(.template)
+                    Text("Flash")
+                }
+                .tag("Flash")
 
+                NavigationView {
+                    TemplateView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Image("TabTemplate").renderingMode(.template)
+                    Text("Template")
+                }
+                .tag("Template")
 
                 NavigationView {
                     PacketModeView()
@@ -147,6 +165,6 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(USBManager())
+        .environmentObject(BLEManager())
         .environmentObject(AuthenticationManager())
 }

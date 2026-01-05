@@ -57,20 +57,40 @@ cargo install --path cli --bin emwaver --force
 # Launch the interactive menu
 emwaver
 
-# Connect to a nearby EMWaver device (USB MIDI) and open an interactive shell
+# Connect to a nearby EMWaver device and open an interactive shell
 emwaver shell
 
 # Show raw hex payloads alongside ASCII output
 emwaver shell --verbose
 
-# Initialize an STM32F042 CubeIDE/CubeMX project
-emwaver init --target stm32f042 --path ./my-stm32-proj
+# Initialize a new ESP32-S3 firmware project in the current folder
+emwaver init --target esp32s3
 
-# Build firmware (STM32 CubeMX/CubeIDE)
+# Initialize in a specific folder (created if missing)
+emwaver init --target esp32s3 --path ./my-firmware
+
+# Initialize with optional components
+emwaver init --target esp32s3 --components gpio,sampler,cc1101
+
+# Initialize with optional components into a specific folder
+emwaver init --target esp32s3 --path ./my-firmware --components gpio,cc1101
+
+# Initialize an STM32F042 CubeIDE/CubeMX project
+emwaver init --target stm32f042 --path ./my-stm32-proj --components gpio,cc1101
+
+# Build firmware (auto-detects ESP-IDF or STM32 based on CWD)
 emwaver build
 
-# Flash firmware (runs CubeMX codegen, builds with `make`, exports `.bin`, then flashes over USB DFU)
+# Flash firmware
+# - ESP-IDF: runs `idf.py flash` (optionally specifying a serial port)
+emwaver flash --port /dev/ttyACM0
+
+# - STM32: runs CubeMX codegen, builds with `make`, exports `.bin`, then flashes over USB DFU
+#   (run this from inside a specific STM firmware project folder, e.g. `stm/emwaver-gpio-firmware`)
 emwaver flash
+
+# Monitor (ESP-IDF only)
+emwaver monitor --port /dev/ttyACM0
 
 # Standalone STM32 DFU flashing (raw `.bin` or `.dfu` bytes)
 emwaver dfu ./firmware.bin
@@ -103,7 +123,7 @@ cargo build --release --target x86_64-pc-windows-msvc
 ## Requirements
 
 - Rust 1.78+ (for Cargo.lock v4 support)
-- Linux: `pkg-config` + `libusb` headers may be required (DFU flashing)
+- Linux: `libbluetooth-dev` and `pkg-config` for BLE support
 - macOS: No additional dependencies
 - Windows: No additional dependencies
 

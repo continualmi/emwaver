@@ -26,11 +26,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
+import EMWaverFragment from "./components/EMWaverFragment";
 import RfidFragment from "./components/RfidFragment";
 import PacketModeFragment from "./components/PacketModeFragment";
 import SettingsFragment from "./components/SettingsFragment";
 import HomePage from "./components/HomePage";
 import FlashFragment from "./components/FlashFragment";
+import IDEFragment from "./components/IDEFragment";
+import TemplateFragment from "./components/TemplateFragment";
 
 type DirectoryEntry = {
   name: string;
@@ -54,6 +57,15 @@ type Project = {
   tree: TreeNode[];
 };
 
+type NewProjectPayload = {
+  name: string;
+  location: string;
+};
+
+type CreateProjectResponse = {
+  path: string;
+};
+
 type OpenFile = {
   id: string;
   name: string;
@@ -72,7 +84,9 @@ export type FragmentType =
   | "rfid"
   | "packetMode"
   | "flash"
-  | "settings";
+  | "template"
+  | "settings"
+  | "ide";
 
 type RecentProject = {
   path: string;
@@ -154,6 +168,8 @@ function App() {
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [activePane, setActivePane] = useState<FragmentType>("emwaver");
   const sidebarResizeActive = useRef(false);
@@ -655,6 +671,37 @@ function App() {
     [writeContent],
   );
 
+  const handleCreateProject = useCallback(
+    async ({ name, location }: NewProjectPayload) => {
+      if (!name.trim()) {
+        return;
+      }
+      setIsCreatingProject(true);
+      try {
+        await commitPendingSave();
+        const response = await safeInvoke<CreateProjectResponse>("create_project", {
+          payload: {
+            name: name.trim(),
+            location: location.trim(),
+          },
+        });
+        if (response === null) {
+          throw new Error("Tauri not available - cannot create project");
+        }
+
+        const projectPath = response.path;
+        setIsModalOpen(false);
+        await openProjectAtPath(projectPath, { initialName: name.trim() });
+      } catch (error) {
+        console.error(error);
+        window.alert(String(error));
+      } finally {
+        setIsCreatingProject(false);
+      }
+    },
+    [commitPendingSave, openProjectAtPath],
+  );
+
   const handleOpenProject = useCallback(async () => {
     if (!isTauriAvailable()) {
       alert("Tauri not available - file dialogs require Tauri environment");
@@ -826,6 +873,12 @@ function App() {
         );
 
         disposers.push(
+          await safeListen("menu-show-ide", () => {
+            handleFragmentClick("ide");
+          }),
+        );
+
+        disposers.push(
           await safeListen("menu-increase-layout", () => {
             increaseLayoutSize();
           }),
@@ -872,7 +925,9 @@ function App() {
   const isRfidActive = activePane === "rfid";
   const isPacketModeActive = activePane === "packetMode";
   const isFlashActive = activePane === "flash";
+  const isTemplateActive = activePane === "template";
   const isSettingsActive = activePane === "settings";
+  const isIDEActive = activePane === "ide";
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -892,8 +947,17 @@ function App() {
         <Pane active={isRfidActive}><RfidFragment /></Pane>
         <Pane active={isPacketModeActive}><PacketModeFragment /></Pane>
         <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
+        <Pane active={isTemplateActive}><TemplateFragment /></Pane>
         <Pane active={isSettingsActive}><SettingsFragment /></Pane>
+        <Pane active={isIDEActive}><IDEFragment theme={theme} isActive={isIDEActive} /></Pane>
       </div>
+      {isModalOpen && (
+        <NewProjectModal
+          onClose={() => setIsModalOpen(false)}
+          onCreate={handleCreateProject}
+          isSubmitting={isCreatingProject}
+        />
+      )}
     </div>
   );
 }
@@ -1097,6 +1161,18 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<FlashIcon />}
       />
       <ActivityButton
+        label="Template"
+        isActive={activePane === "template"}
+        onClick={() => onFragmentClick("template")}
+        icon={<TemplateIcon />}
+      />
+      <ActivityButton
+        label="IDE"
+        isActive={activePane === "ide"}
+        onClick={() => onFragmentClick("ide")}
+        icon={<IDEIcon />}
+      />
+      <ActivityButton
         label="Settings"
         isActive={activePane === "settings"}
         onClick={() => onFragmentClick("settings")}
@@ -1113,6 +1189,28 @@ function FlashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full" aria-hidden="true">
       <path d="M12.7071 2.29289C12.3166 1.90237 11.6834 1.90237 11.2929 2.29289L6.29289 7.29289C5.90237 7.68342 5.90237 8.31658 6.29289 8.70711C6.68342 9.09763 7.31658 9.09763 7.70711 8.70711L11 5.41421V18C11 18.5523 11.4477 19 12 19C12.5523 19 13 18.5523 13 18V5.41421L16.2929 8.70711C16.6834 9.09763 17.3166 9.09763 17.7071 8.70711C18.0976 8.31658 18.0976 7.68342 17.7071 7.29289L12.7071 2.29289ZM5.25 20.5C4.83579 20.5 4.5 20.8358 4.5 21.25C4.5 21.6642 4.83579 22 5.25 22H18.75C19.1642 22 19.5 21.6642 19.5 21.25C19.5 20.8358 19.1642 20.5 18.75 20.5H5.25Z" />
+    </svg>
+  );
+}
+
+function TemplateIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full" aria-hidden="true">
+      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0L15.13 5.12l3.75 3.75 1.83-1.83z" />
+    </svg>
+  );
+}
+
+function IDEIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-full w-full" aria-hidden="true">
+      <path
+        d="M7 8l-3 4 3 4M17 8l3 4-3 4M14 6l-4 12"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -1366,6 +1464,109 @@ function FileIcon() {
 }
 
 // ToolchainModal removed - ESP-IDF functionality removed
+
+function NewProjectModal({
+  onClose,
+  onCreate,
+  isSubmitting,
+}: {
+  onClose: () => void;
+  onCreate: (payload: NewProjectPayload) => Promise<void> | void;
+  isSubmitting: boolean;
+}) {
+  const [name, setName] = useState("emwaver-firmware");
+  const [location, setLocation] = useState("");
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!name.trim() || !location.trim()) {
+      return;
+    }
+    await onCreate({
+      name: name.trim(),
+      location: location.trim(),
+    });
+  };
+
+  const handleBrowse = async () => {
+    if (!isTauriAvailable()) {
+      alert("Tauri not available - file dialogs require Tauri environment");
+      return;
+    }
+    try {
+      const directory = await openDialog({ directory: true });
+      if (typeof directory === "string") {
+        setLocation(directory);
+      }
+    } catch (error) {
+      console.error(error);
+      window.alert(String(error));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+      <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-100">Create project</h2>
+          <p className="text-sm text-slate-400">
+            Creates an ESP32-S3 firmware template (with all built-in components enabled).
+          </p>
+        </div>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Project name
+            </label>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+              placeholder="My Wavelet"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Location
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                placeholder="/Users/me/Projects"
+              />
+              <button
+                type="button"
+                onClick={handleBrowse}
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+              >
+                Browse
+              </button>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-200 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim() || !location.trim()}
+              className="rounded-md bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:bg-sky-400 cursor-pointer disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? "Creating..." : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default App;
 

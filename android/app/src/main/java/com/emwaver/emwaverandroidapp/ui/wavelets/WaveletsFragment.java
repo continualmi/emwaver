@@ -68,6 +68,7 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 
+import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentWaveletsBinding;
@@ -117,6 +118,8 @@ public class WaveletsFragment extends Fragment {
     private WaveletsViewModel viewModel;
     private FileRepositoryLocal fileRepository;
 
+    private BLEService bleService;
+    private boolean isServiceBound;
     private Utils utils;
     private WaveletDeviceConnection waveletDeviceConnection;
     private WaveletSignalStore waveletSignalStore;
@@ -174,6 +177,22 @@ public class WaveletsFragment extends Fragment {
         return viewModel.isDirty(getCurrentRecordId());
     }
 
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            BLEService.LocalBinder binder = (BLEService.LocalBinder) service;
+            bleService = binder.getService();
+            isServiceBound = true;
+            ensureWaveletEngineBindings();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            isServiceBound = false;
+            bleService = null;
+            ensureWaveletEngineBindings();
+        }
+    };
 
     private OnBackPressedCallback backPressedCallback;
 
@@ -222,6 +241,23 @@ public class WaveletsFragment extends Fragment {
         return root;
     }
 
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (!isServiceBound && getActivity() != null) {
+            Intent intent = new Intent(getActivity(), BLEService.class);
+            getActivity().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (isServiceBound && getActivity() != null) {
+            getActivity().unbindService(serviceConnection);
+            isServiceBound = false;
+        }
+    }
 
     @Override
     public void onDestroyView() {
@@ -1605,6 +1641,9 @@ public class WaveletsFragment extends Fragment {
         }
         if (waveletSignalStore != null) {
             bindings.put("SamplerSignals", waveletSignalStore);
+        }
+        if (bleService != null) {
+            bindings.put("BLEService", bleService);
         }
         return bindings;
     }

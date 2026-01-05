@@ -35,6 +35,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -57,26 +58,38 @@ import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
 
+import com.emwaver.emwaverandroidapp.BLEReceiver;
+import com.emwaver.emwaverandroidapp.BLEService;
 import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.USBService;
 import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentFlashBinding;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
 
 public class FlashFragment extends Fragment {
     private FragmentFlashBinding binding;
     private Dfu dfu;
     private DeviceConnectionManager connectionManager;
     private USBService usbService;
+    private BLEService bleService;
     private ActivityResultLauncher<String[]> openDfuFileLauncher;
+    private ActivityResultLauncher<String[]> openOtaFileLauncher;
     private Uri selectedFileUri = null;
+    private Uri selectedOtaFileUri = null;
     private AlertDialog progressDialog;
     private TextView progressTextView;
     private Button okButton;
     private ProgressBar progressBar;
     private String selectedAssetPath = "dfu/ism.dfu";
+    private String selectedOtaLabel = "ota/emwaveresp.bin";
+    private BLEReceiver bleReceiver;
 
     private static final String TAG = "FlashFragment";
     private static final String[] FIRMWARE_LABELS = new String[]{
@@ -97,10 +110,12 @@ public class FlashFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         openDfuFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::onDfuFileSelected);
-
+        openOtaFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::onOtaFileSelected);
+        
         // Get connection manager
         connectionManager = DeviceConnectionManager.getInstance(requireContext());
         usbService = connectionManager.getUsbService();
+        bleService = connectionManager.getBleService();
     }
 
     @Override
@@ -118,6 +133,12 @@ public class FlashFragment extends Fragment {
         // Set up click listeners for the buttons
         binding.buttonConnect.setOnClickListener(v -> requestOrConnectDFU());
         binding.buttonFlashFile.setOnClickListener(v -> flashFile());
+        binding.buttonOtaFlashStock.setOnClickListener(v -> flashOtaStock());
+        binding.buttonOtaSelectBin.setOnClickListener(v -> selectOtaExternalFile());
+        binding.buttonOtaFlashSelected.setOnClickListener(v -> flashOtaSelected());
+        binding.buttonOtaWifiStart.setOnClickListener(v -> startWifiOtaMode());
+        binding.buttonOtaWifiSettings.setOnClickListener(v -> openWifiSettings());
+        binding.radioGroupOtaTransport.setOnCheckedChangeListener((group, checkedId) -> updateOtaUiState());
 
         ArrayAdapter<String> firmwareAdapter = new ArrayAdapter<>(
             requireContext(),
@@ -162,6 +183,7 @@ public class FlashFragment extends Fragment {
 
         updateStatusText("Not ready", Color.RED);
         binding.buttonFlashFile.setEnabled(false);
+        updateOtaUiState();
 
         return binding.getRoot();
     }
@@ -227,6 +249,18 @@ public class FlashFragment extends Fragment {
         }
     }
 
+    private void selectOtaExternalFile() {
+        openOtaFileLauncher.launch(new String[]{"*/*"});
+    }
+
+    private void onOtaFileSelected(Uri uri) {
+        if (uri != null) {
+            selectedOtaFileUri = uri;
+            String fileName = getFileName(uri);
+            binding.textViewOtaFileName.setText(fileName);
+            binding.buttonOtaFlashSelected.setEnabled(true);
+        }
+    }
 
     @SuppressLint("Range")
     private String getFileName(Uri uri) {
@@ -479,6 +513,7 @@ public class FlashFragment extends Fragment {
         // Refresh USB service reference
         if (connectionManager != null) {
             usbService = connectionManager.getUsbService();
+            bleService = connectionManager.getBleService();
             if (usbService != null && dfu == null) {
                 dfu = new Dfu(usbService);
             }
@@ -545,7 +580,9 @@ public class FlashFragment extends Fragment {
             getActivity().runOnUiThread(() -> {
                 progressTextView.setText(message);
                 if (message.contains("completed") ||
-                        message.contains("Error")) {
+                        message.contains("Error") ||
+                        message.startsWith("OK:") ||
+                        message.contains("Connect to Wi‑Fi")) {
                     progressBar.setVisibility(View.GONE);
                     okButton.setVisibility(View.VISIBLE);
                 } else {
@@ -596,15 +633,224 @@ public class FlashFragment extends Fragment {
         updateProgressDialog("Flash write completed successfully.");
     }
 
+    private void updateOtaUiState() {
+        boolean connected = bleService != null && bleService.checkConnection();
+        boolean wifi = binding != null && binding.radioOtaWifi.isChecked();
+        String transportLabel = wifi ? "Wi‑Fi OTA" : "BLE OTA";
+        binding.textViewOtaStatus.setText(connected ? "BLE connected (" + transportLabel + ")" : "BLE not connected");
+        binding.textViewOtaStatus.setTextColor(connected ? Color.GREEN : Color.RED);
+        binding.buttonOtaFlashStock.setEnabled(connected);
+        binding.buttonOtaSelectBin.setEnabled(connected);
+        binding.buttonOtaFlashSelected.setEnabled(connected && selectedOtaFileUri != null);
+        binding.buttonOtaWifiStart.setEnabled(connected && wifi);
+        binding.buttonOtaWifiSettings.setEnabled(wifi);
+        binding.textViewOtaFileName.setText(selectedOtaFileUri != null ? getFileName(selectedOtaFileUri) : selectedOtaLabel);
+    }
+
+    private void startWifiOtaMode() {
+        if (bleService == null || !bleService.checkConnection()) {
+            Toast.makeText(getContext(), "BLE not connected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showProgressDialog();
+        updateProgressDialog("Starting Wi‑Fi OTA mode...");
+        bleService.otaWifiStart((success, message) -> requireActivity().runOnUiThread(() -> {
+            updateProgressDialog((success ? "OK: " : "Error: ") + message);
+            if (success) {
+                updateProgressDialog("Connect to Wi‑Fi 'EMWaver-OTA' then flash.");
+            }
+        }));
+    }
+
+    private void openWifiSettings() {
+        dismissProgressDialog();
+        try {
+            startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS));
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "Unable to open Wi‑Fi settings", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void flashOtaStock() {
+        if (bleService == null || !bleService.checkConnection()) {
+            Toast.makeText(getContext(), "BLE not connected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showFlashConfirmationDialog(() -> {
+            showProgressDialog();
+            new Thread(() -> {
+                try {
+                    updateProgressDialog("Loading stock OTA firmware...");
+                    byte[] firmware = readAllBytesFromAssets("ota/emwaveresp.bin");
+                    otaFlashBytes(firmware);
+                } catch (Exception e) {
+                    updateProgressDialog("Error: " + e.getMessage());
+                }
+            }).start();
+        });
+    }
+
+    private void flashOtaSelected() {
+        if (selectedOtaFileUri == null) {
+            Toast.makeText(getContext(), "No OTA file selected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (bleService == null || !bleService.checkConnection()) {
+            Toast.makeText(getContext(), "BLE not connected", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        showFlashConfirmationDialog(() -> {
+            showProgressDialog();
+            new Thread(() -> {
+                try {
+                    updateProgressDialog("Loading OTA file...");
+                    InputStream inputStream = getContext().getContentResolver().openInputStream(selectedOtaFileUri);
+                    if (inputStream == null) {
+                        updateProgressDialog("Error: Unable to open selected file");
+                        return;
+                    }
+                    byte[] firmware = readAllBytes(inputStream);
+                    otaFlashBytes(firmware);
+                } catch (Exception e) {
+                    updateProgressDialog("Error: " + e.getMessage());
+                }
+            }).start();
+        });
+    }
+
+    private void otaFlashBytes(byte[] firmware) {
+        boolean wifi = binding != null && binding.radioOtaWifi.isChecked();
+        if (!wifi) {
+            bleService.otaFlash(firmware, new BLEService.OtaProgressCallback() {
+                @Override
+                public void onProgress(String message, int sentBytes, int totalBytes) {
+                    updateProgressDialog(message + " (" + sentBytes + "/" + totalBytes + ")");
+                }
+
+                @Override
+                public void onComplete(boolean success, String message) {
+                    updateProgressDialog((success ? "completed: " : "Error: ") + message);
+                }
+            });
+            return;
+        }
+
+        otaWifiFlashBytes(firmware);
+    }
+
+    private void otaWifiFlashBytes(byte[] firmware) {
+        try {
+            updateProgressDialog("Computing SHA‑256...");
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] sha = digest.digest(firmware);
+            String shaHex = toHexLower(sha);
+
+            updateProgressDialog("Uploading over Wi‑Fi... (ensure you're connected to EMWaver-OTA)");
+            HttpURLConnection conn = (HttpURLConnection) new URL("http://192.168.4.1/ota").openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(30000);
+            conn.setRequestProperty("Content-Type", "application/octet-stream");
+            conn.setRequestProperty("X-Emwaver-Sha256", shaHex);
+            conn.setFixedLengthStreamingMode(firmware.length);
+
+            int sent = 0;
+            try (OutputStream out = conn.getOutputStream()) {
+                int offset = 0;
+                byte[] buf = new byte[16 * 1024];
+                while (offset < firmware.length) {
+                    int n = Math.min(buf.length, firmware.length - offset);
+                    System.arraycopy(firmware, offset, buf, 0, n);
+                    out.write(buf, 0, n);
+                    offset += n;
+                    sent += n;
+
+                    int finalSent = sent;
+                    requireActivity().runOnUiThread(() -> updateProgressDialog("Uploading... (" + finalSent + "/" + firmware.length + ")"));
+                }
+                out.flush();
+            }
+
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                updateProgressDialog("Error: HTTP " + code);
+                return;
+            }
+
+            updateProgressDialog("Waiting for device to finalize...");
+            bleService.otaClearStatusQueue();
+            boolean ok = bleService.waitForOtaTerminalStatus(new BLEService.OtaProgressCallback() {
+                @Override
+                public void onProgress(String message, int sentBytes, int totalBytes) {
+                    updateProgressDialog(message + " (" + sentBytes + "/" + totalBytes + ")");
+                }
+
+                @Override
+                public void onComplete(boolean success, String message) {
+                }
+            }, firmware.length, 30000);
+
+            updateProgressDialog(ok ? "completed: OTA successful" : "Error: OTA failed or timed out");
+        } catch (Exception e) {
+            updateProgressDialog("Error: " + e.getMessage());
+        }
+    }
+
+    private String toHexLower(byte[] bytes) {
+        final char[] hex = "0123456789abcdef".toCharArray();
+        char[] out = new char[bytes.length * 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int v = bytes[i] & 0xFF;
+            out[i * 2] = hex[v >>> 4];
+            out[i * 2 + 1] = hex[v & 0x0F];
+        }
+        return new String(out);
+    }
+
+    private byte[] readAllBytesFromAssets(String assetPath) throws Exception {
+        AssetManager assetManager = getContext().getAssets();
+        try (InputStream inputStream = assetManager.open(assetPath)) {
+            return readAllBytes(inputStream);
+        }
+    }
+
+    private byte[] readAllBytes(InputStream inputStream) throws Exception {
+        try (InputStream in = inputStream; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[8192];
+            int read;
+            while ((read = in.read(buf)) > 0) {
+                out.write(buf, 0, read);
+            }
+            return out.toByteArray();
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         Utils.updateActionBarStatus(this, "");
+        updateOtaUiState();
+
+        bleReceiver = new BLEReceiver(connected -> {
+            if (connectionManager != null) {
+                bleService = connectionManager.getBleService();
+            }
+            if (binding != null) {
+                requireActivity().runOnUiThread(this::updateOtaUiState);
+            }
+        });
+        IntentFilter filter = new IntentFilter(BLEReceiver.ACTION_BLE_CONNECTION_STATUS);
+        requireActivity().registerReceiver(bleReceiver, filter);
     }
 
     @Override
     public void onPause() {
         super.onPause();
         Utils.updateActionBarStatus(this, "");
+        if (bleReceiver != null) {
+            requireActivity().unregisterReceiver(bleReceiver);
+            bleReceiver = null;
+        }
     }
 }

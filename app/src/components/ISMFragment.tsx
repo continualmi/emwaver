@@ -403,7 +403,7 @@ export default function ISMFragment() {
       setStatusMessage("Invalid RFM69 CS pin.");
       return false;
     }
-    // Keep commands <=64 bytes for the desktop transport. Firmware already has sane defaults
+    // Keep commands <=64 bytes for the desktop BLE transport. Firmware already has sane defaults
     // for MISO/MOSI/SCK; only override CS pin here.
     const command = `rfm69 init --cs=${cs}`;
     const response = await sendCommandString(command, 2000);
@@ -421,7 +421,7 @@ export default function ISMFragment() {
     if (probe && probe.length > 0) {
       return true;
     }
-    // Keep commands <=64 bytes for the desktop transport. Firmware defaults cover pinout.
+    // Keep commands <=64 bytes for the desktop BLE transport. Firmware defaults cover pinout.
     const command = `cc1101 init --cs=${DEFAULT_CC1101_CS}`;
     const response = await sendCommandString(command, 1500);
     if (isOkAck(response)) return true;

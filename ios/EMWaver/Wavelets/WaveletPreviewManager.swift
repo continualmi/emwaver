@@ -29,9 +29,9 @@ import SwiftUI
 }
 
 @objc final class BLEServiceWrapper: NSObject, BLEManagerJSExport {
-    private let bleManager: USBManager
+    private let bleManager: BLEManager
 
-    init(bleManager: USBManager) {
+    init(bleManager: BLEManager) {
         self.bleManager = bleManager
         super.init()
     }
@@ -76,11 +76,11 @@ final class WaveletPreviewManager: ObservableObject {
     @Published var dialog: Dialog?
     @Published var activeScriptName: String?
 
-    private weak var bleManager: USBManager?
+    private weak var bleManager: BLEManager?
     private var waveletEngine: WaveletEngine?
     private let consoleLimit = 500
 
-    func attach(bleManager: USBManager) {
+    func attach(bleManager: BLEManager) {
         self.bleManager = bleManager
         registerBindings()
     }
