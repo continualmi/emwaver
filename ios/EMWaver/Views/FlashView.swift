@@ -17,7 +17,7 @@
 
 import SwiftUI
 
-/// Firmware flashing is intentionally disabled on iOS for the USB-only pivot.
+/// Firmware flashing is intentionally disabled on iOS for the USB-only platform.
 /// Use Desktop/CLI DFU flows for STM32 devices.
 struct FlashView: View {
     @EnvironmentObject var bleManager: USBManager

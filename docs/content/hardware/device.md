@@ -1,10 +1,10 @@
 ---
-title: EMWaver Pivot
+title: Current Hardware
 ---
 
-# EMWaver Pivot
+# Current Hardware
 
-EMWaver is now focused on a single current-gen device: **Pivot** — a low-cost **STM32** board that connects over **USB**.
+EMWaver is now focused on a single current-gen **STM32** board that connects over **USB**.
 
 [PCB (PDF)](../hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf){ .md-button }
 [Build Guide](build-reproduce.md){ .md-button }
@@ -12,7 +12,7 @@ EMWaver is now focused on a single current-gen device: **Pivot** — a low-cost 
 
 ## What you get
 
-- One board (Pivot)
+- One board
 - One transport (USB)
 - One set of apps (Android / iOS / Desktop)
 

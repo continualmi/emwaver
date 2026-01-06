@@ -1,11 +1,11 @@
 # EMWaver Repository Guidelines
 
-## Current Product Direction (Pivot)
+## Current Product Direction
 
 EMWaver is now focused on shipping a **single, solid platform**:
 
 - **Transport:** USB only (class-compliant **USB MIDI SysEx**, fixed 64‑byte frames)
-- **Hardware:** **STM32 only** (one current-gen board: **EMWaver Pivot**)
+- **Hardware:** **STM32 only** (one current-gen board)
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
 - **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
 - **Core UX:** **Wavelet-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
@@ -15,7 +15,7 @@ EMWaver is now focused on shipping a **single, solid platform**:
 
 ---
 
-## Pivot Thesis
+## Platform Thesis
 
 ### The Core Thesis
 
