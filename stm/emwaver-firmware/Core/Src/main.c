@@ -628,18 +628,16 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM3_Init();
   MX_SPI1_Init();
-	  /* USER CODE BEGIN 2 */
-	  /* USER CODE END 2 */
-
-	/* USER CODE BEGIN 1 */
-	/* USER CODE END 1 */
-/* USER CODE BEGIN 2 */
-
+  /* USER CODE BEGIN 2 */
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1) {
+  while (1)
+  {
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
       if (ism_mode == ISM_MODE_RAW_SAMPLING) {
           if (bufferReady == 1) {
               (void)EMW_USB_SendResponsePkt_FS((uint8_t *)transmitBuffer, 64, CDC_TIMEOUT);
