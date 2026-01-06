@@ -114,6 +114,14 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       borderClass: "hover:border-purple-500/60",
       iconClass: "text-purple-400",
     },
+    {
+      id: "flash" as FragmentType,
+      name: "Flash",
+      description: "STM32 DFU firmware flashing",
+      icon: <FlashIcon />,
+      borderClass: "hover:border-sky-500/60",
+      iconClass: "text-sky-400",
+    },
   ];
 
   const refreshMidiPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {

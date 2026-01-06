@@ -90,7 +90,8 @@ public class MainActivity extends AppCompatActivity {
                 R.id.navigation_emwaver,
                 R.id.navigation_sampler,
                 R.id.navigation_wavelets,
-                R.id.navigation_git)
+                R.id.navigation_git,
+                R.id.navigation_flash)
                 .setOpenableLayout(drawer)
                 .build();
         
