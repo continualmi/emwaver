@@ -60,9 +60,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [midiPorts, setMidiPorts] = useState<string[]>([]);
   const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
   const [isRefreshingMidiPorts, setIsRefreshingMidiPorts] = useState(false);
-  const [lastMidiRefreshMs, setLastMidiRefreshMs] = useState<number | null>(null);
-  const [lastMidiRefreshCount, setLastMidiRefreshCount] = useState<number | null>(null);
-  const [lastMidiRefreshError, setLastMidiRefreshError] = useState<string | null>(null);
   const midiRefreshSeqRef = useRef(0);
 
   const [daemonStatus, setDaemonStatus] = useState<{ running: boolean; socket: string } | null>(null);
@@ -135,7 +132,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     const { silent = false } = options;
     const seq = ++midiRefreshSeqRef.current;
     setIsRefreshingMidiPorts(true);
-    setLastMidiRefreshError(null);
     try {
       const ports = await listMIDIPorts();
       if (seq !== midiRefreshSeqRef.current) return ports;
@@ -145,18 +141,10 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         if (!prev || !ports.includes(prev)) return ports[0];
         return prev;
       });
-      setLastMidiRefreshMs(Date.now());
-      setLastMidiRefreshCount(ports.length);
-      if (ports.length > 0) {
-        setLastMidiRefreshError(null);
-      }
       return ports;
     } catch (e) {
       if (seq !== midiRefreshSeqRef.current) return [];
       console.error("Failed to list USB devices", e);
-      setLastMidiRefreshMs(Date.now());
-      setLastMidiRefreshCount(0);
-      setLastMidiRefreshError(String(e));
       if (!silent) {
         await dialog.alert(`Failed to list USB devices:\n\n${String(e)}`, { title: "USB" });
       }
@@ -641,21 +629,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                 )}
               </div>
 
-              {!status.connected ? (
-                <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span title={lastMidiRefreshError ?? ""}>
-                    {isRefreshingMidiPorts
-                      ? "Scanning for USB devices…"
-                      : midiPorts.length === 0
-                        ? "No USB devices connected"
-                        : `${midiPorts.length} USB device${midiPorts.length === 1 ? "" : "s"} found`}
-                    {lastMidiRefreshError ? " (scan error)" : ""}
-                  </span>
-                  <span title={lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toISOString() : ""}>
-                    {lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toLocaleTimeString() : ""}
-                  </span>
-                </div>
-              ) : null}
             </div>
           </div>
 
