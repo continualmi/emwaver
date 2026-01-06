@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-use std::collections::HashMap;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -93,11 +92,6 @@ struct DeviceInfo {
     address: String,
 }
 
-struct MidiSystem {
-    in_: MidiInput,
-    out: MidiOutput,
-}
-
 #[derive(Debug, Clone, Serialize)]
 struct MidiStatus {
     connected: bool,
@@ -112,7 +106,6 @@ struct MidiConnection {
 
 pub(crate) struct BridgeState {
     midi: Arc<AsyncMutex<Option<MidiConnection>>>,
-    midi_system: Arc<AsyncMutex<Option<MidiSystem>>>,
     buffer: Arc<Mutex<Buffer>>,
     rx_notify: Arc<Notify>,
     rx_queue_tx: mpsc::Sender<RxQueuedPacket>,
@@ -121,6 +114,12 @@ pub(crate) struct BridgeState {
     rx_gen: Arc<AtomicU64>,
     in_flight: Arc<AsyncMutex<()>>,
     pub(crate) event_tx: broadcast::Sender<Vec<u8>>,
+}
+
+impl BridgeState {
+    pub(crate) async fn has_midi_connection(&self) -> bool {
+        self.midi.lock().await.is_some()
+    }
 }
 
 fn now_ms() -> u64 {
@@ -638,7 +637,6 @@ pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
 
     let state = Arc::new(BridgeState {
         midi: Arc::new(AsyncMutex::new(None)),
-        midi_system: Arc::new(AsyncMutex::new(None)),
         buffer: Arc::new(Mutex::new(Buffer::default())),
         rx_notify: Arc::new(Notify::new()),
         rx_queue_tx,
@@ -654,67 +652,48 @@ pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
     Ok(state)
 }
 
-fn midi_new_system() -> Result<MidiSystem> {
+fn midi_new_in_out() -> Result<(MidiInput, MidiOutput)> {
     let mut in_ = MidiInput::new("emwaver-usb-in").context("failed to init USB input")?;
     in_.ignore(Ignore::None);
     let out = MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
-    Ok(MidiSystem { in_, out })
+    Ok((in_, out))
 }
 
-async fn midi_ensure_system(state: &BridgeState) -> Result<()> {
-    let mut guard = state.midi_system.lock().await;
-    if guard.is_none() {
-        *guard = Some(midi_new_system()?);
-    }
-    Ok(())
-}
-
-async fn midi_take_system(state: &BridgeState) -> Result<MidiSystem> {
-    let mut guard = state.midi_system.lock().await;
-    if let Some(system) = guard.take() {
-        return Ok(system);
-    }
-    drop(guard);
-    midi_new_system()
-}
-
-fn emwaver_usb_midi_present() -> bool {
-    let Ok(ctx) = rusb::Context::new() else {
-        return false;
-    };
-    let Ok(devices) = ctx.devices() else {
-        return false;
-    };
-    devices.iter().any(|device| {
+pub(crate) fn emwaver_usb_midi_present() -> Result<bool> {
+    let ctx = rusb::Context::new().context("failed to init libusb context")?;
+    let devices = ctx.devices().context("failed to list libusb devices")?;
+    Ok(devices.iter().any(|device| {
         device
             .device_descriptor()
             .is_ok_and(|desc| desc.vendor_id() == EMWAVER_USB_MIDI_VID && desc.product_id() == EMWAVER_USB_MIDI_PID)
-    })
+    }))
 }
 
-async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
-    // Keep one long-lived MIDI client per daemon to avoid transient init failures.
-    midi_ensure_system(state).await?;
-    let guard = state.midi_system.lock().await;
-    let Some(system) = guard.as_ref() else {
-        bail!("USB transport not initialized");
+async fn midi_list_ports(_state: &BridgeState) -> Result<Vec<String>> {
+    // Always re-enumerate via a fresh MIDI client so hot-plugged devices appear without
+    // restarting the daemon (CoreMIDI/midir can otherwise keep a stale port view).
+    //
+    // Also: treat MIDI backend init failures as "no devices" so the UI doesn't surface
+    // scary errors when the user simply has nothing plugged in yet.
+    let (midi_in, midi_out) = match midi_new_in_out() {
+        Ok(v) => v,
+        Err(_) => return Ok(Vec::new()),
     };
 
-    let midi_in = &system.in_;
-    let midi_out = &system.out;
-
-    let mut in_names = HashMap::<String, usize>::new();
-    for (idx, port) in midi_in.ports().iter().enumerate() {
-        if let Ok(name) = midi_in.port_name(port) {
-            in_names.entry(name).or_insert(idx);
-        }
-    }
-
     let mut names = Vec::new();
-    for port in midi_out.ports().iter() {
-        let Ok(name) = midi_out.port_name(port) else { continue };
-        if in_names.contains_key(&name) {
-            names.push(name);
+    let in_names = midi_in
+        .ports()
+        .iter()
+        .filter_map(|port| midi_in.port_name(port).ok())
+        .collect::<Vec<_>>();
+
+    for port in midi_out.ports() {
+        let Ok(out_name) = midi_out.port_name(&port) else { continue };
+        let has_matching_in = in_names.iter().any(|in_name| {
+            in_name == &out_name || in_name.contains(&out_name) || out_name.contains(in_name)
+        });
+        if has_matching_in {
+            names.push(out_name);
         }
     }
 
@@ -725,7 +704,10 @@ async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
 
     // CoreMIDI can keep endpoint objects around even after USB unplug. Filter EMWaver's
     // device name by checking USB presence so "Refresh devices" reflects physical reality.
-    if !emwaver_usb_midi_present() {
+    //
+    // Important: the libusb check is best-effort; if it fails (permissions/sandboxing),
+    // do not hide the device from users.
+    if let Ok(false) = emwaver_usb_midi_present() {
         names.retain(|name| !EMWAVER_USB_DEVICE_NAMES.iter().any(|n| name.contains(n)));
     }
 
@@ -817,7 +799,7 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     let rx_queue_dropped = Arc::clone(&state.rx_queue_dropped);
     let rx_gen = Arc::clone(&state.rx_gen);
 
-    let MidiSystem { in_: midi_in, out: midi_out } = midi_take_system(state).await?;
+    let (midi_in, midi_out) = midi_new_in_out()?;
 
     let out_port = find_midi_out_port_by_name(&midi_out, &chosen)?
         .ok_or_else(|| anyhow!("USB output port not found: {chosen}"))?;

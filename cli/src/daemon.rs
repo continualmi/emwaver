@@ -31,7 +31,8 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 use crate::bridge::{
-    BridgeError, BridgeRequest, BridgeResponse, create_bridge_state, dispatch_request, send_json_line,
+    BridgeError, BridgeRequest, BridgeResponse, create_bridge_state, dispatch_request,
+    emwaver_usb_midi_present, send_json_line,
 };
 
 #[cfg(unix)]
@@ -221,6 +222,39 @@ async fn daemon_run_async(socket: PathBuf) -> Result<()> {
 
     let state = create_bridge_state().await?;
     let shutdown = std::sync::Arc::new(tokio::sync::Notify::new());
+
+    // Workaround for a real-world hotplug issue: on some platforms/backends, the MIDI port
+    // enumeration only works reliably if the device is already present when the daemon starts.
+    // If the daemon starts with the device unplugged, then the device is plugged in later,
+    // `midir` may keep returning an empty list until the process restarts.
+    //
+    // To keep UX sane, detect the device appearing (VID/PID) and gracefully restart the daemon,
+    // but only if we're not currently connected (avoid disrupting active sessions).
+    let state_for_hotplug = state.clone();
+    let shutdown_for_hotplug = shutdown.clone();
+    tokio::spawn(async move {
+        let mut last_present = emwaver_usb_midi_present().unwrap_or(false);
+        loop {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            let present = match emwaver_usb_midi_present() {
+                Ok(v) => v,
+                Err(_) => {
+                    // If we can't query presence, don't force restarts.
+                    continue;
+                }
+            };
+
+            if !last_present && present {
+                let connected = state_for_hotplug.has_midi_connection().await;
+                if !connected {
+                    shutdown_for_hotplug.notify_waiters();
+                    break;
+                }
+            }
+            last_present = present;
+        }
+    });
 
     eprintln!("emwaver daemon listening on {}", socket.display());
     loop {
