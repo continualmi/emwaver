@@ -47,21 +47,6 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="ISM Settings"
-        app:iconSpaceReserved="false">
-
-        <EditTextPreference
-            android:key="rfm69_cs_pin"
-            android:title="RFM69 CS Pin"
-            android:summary="Chip Select pin for RFM69 SPI communication"
-            android:defaultValue="36"
-            android:inputType="number"
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
         android:title="Support &amp; Information"
         app:iconSpaceReserved="false">
 

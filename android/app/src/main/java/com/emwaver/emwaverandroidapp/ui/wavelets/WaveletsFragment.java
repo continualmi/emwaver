@@ -634,7 +634,6 @@ public class WaveletsFragment extends Fragment {
         String[] defaultWavelets = {
             "cc1101.emw",
             "packet_mode.emw",
-            "rfm69.emw",
             "rfid.emw",
             "usb.emw",
             "wavelet_demo.emw",
@@ -657,7 +656,6 @@ public class WaveletsFragment extends Fragment {
         String[] assetScriptFiles = {
             "cc1101.emw",
             "packet_mode.emw",
-            "rfm69.emw",
             "rfid.emw",
             "usb.emw",
             "wavelet_demo.emw",
