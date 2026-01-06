@@ -44,7 +44,7 @@ struct WelcomeView: View {
                         .font(.title3)
                         .multilineTextAlignment(.center)
                     
-                    Text("You'll need an EMWaver hardware device that connects via USB (MIDI).")
+                    Text("You'll need an EMWaver hardware device that connects via USB.")
                         .font(.body)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.secondary)

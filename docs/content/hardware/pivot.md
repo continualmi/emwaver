@@ -4,7 +4,7 @@ title: EMWaver Pivot
 
 # EMWaver Pivot
 
-EMWaver is now focused on a single current-gen device: **Pivot** — a low-cost **STM32** board that connects over **USB MIDI**.
+EMWaver is now focused on a single current-gen device: **Pivot** — a low-cost **STM32** board that connects over **USB**.
 
 [PCB (PDF)](../hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf){ .md-button }
 [Build Guide](build-reproduce.md){ .md-button }
@@ -13,7 +13,7 @@ EMWaver is now focused on a single current-gen device: **Pivot** — a low-cost 
 ## What you get
 
 - One board (Pivot)
-- One transport (USB MIDI)
+- One transport (USB)
 - One set of apps (Android / iOS / Desktop)
 
 See the project direction notes in the repository guidelines:

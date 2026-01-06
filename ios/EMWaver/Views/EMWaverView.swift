@@ -100,7 +100,7 @@ struct EMWaverView: View {
                     } label: {
                         HStack {
                             Image(systemName: bleManager.isConnected ? "cable.connector.slash" : "cable.connector")
-                            Text(bleManager.isConnected ? "Disconnect" : "Connect USB MIDI")
+                            Text(bleManager.isConnected ? "Disconnect" : "Connect USB")
                         }
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
                     }

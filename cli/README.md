@@ -57,7 +57,7 @@ cargo install --path cli --bin emwaver --force
 # Launch the interactive menu
 emwaver
 
-# Connect to a nearby EMWaver device (USB MIDI) and open an interactive shell
+# Connect to a nearby EMWaver device (USB) and open an interactive shell
 emwaver shell
 
 # Show raw hex payloads alongside ASCII output

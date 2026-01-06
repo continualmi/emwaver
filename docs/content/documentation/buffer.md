@@ -42,7 +42,7 @@ The goal is a simple mental model:
 ### Normal commands (request → response)
 
 The default interaction mode is intentionally boring: **one command in, one response out**.
-Over USB MIDI (SysEx tunnel), the client sends commands and consumes responses as **fixed-size 64-byte frames**.
+Over USB (SysEx tunnel), the client sends commands and consumes responses as **fixed-size 64-byte frames**.
 
 Examples (shape, not an exhaustive list):
 
@@ -92,5 +92,5 @@ Retransmit examples:
 
 Firmware implementations:
 
-- STM32 retransmit switches the USB MIDI RX buffer into circular mode: [`stm/emwaver-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/Core/Src/main.c)
-- STM32 USB MIDI circular buffer implementation: [`stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c)
+- STM32 retransmit switches the USB RX buffer into circular mode: [`stm/emwaver-firmware/Core/Src/main.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/Core/Src/main.c)
+- STM32 USB circular buffer implementation: [`stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c`](https://github.com/luispl77/emwaver/blob/main/stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c)

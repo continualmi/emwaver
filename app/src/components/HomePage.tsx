@@ -146,12 +146,12 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       setLastMidiRefreshCount(ports.length);
       return ports;
     } catch (e) {
-      console.error("Failed to list MIDI ports", e);
+      console.error("Failed to list USB devices", e);
       setLastMidiRefreshMs(Date.now());
       setLastMidiRefreshCount(0);
       setLastMidiRefreshError(String(e));
       if (!silent) {
-        await dialog.alert(`Failed to list MIDI ports:\n\n${String(e)}`, { title: "MIDI" });
+        await dialog.alert(`Failed to list USB devices:\n\n${String(e)}`, { title: "USB" });
       }
       return [];
     } finally {
@@ -218,7 +218,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     };
   }, [isActive, refreshMidiPorts, status.connected]);
 
-  // Auto-connect when Home is active (MIDI).
+  // Auto-connect when Home is active (USB).
   useEffect(() => {
     if (!isActive) return;
     if (status.connected) return;
@@ -403,7 +403,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         const portToUse =
           selectedMidiPort && ports.includes(selectedMidiPort) ? selectedMidiPort : (ports[0] ?? "");
         if (!portToUse) {
-          await dialog.alert("No MIDI ports found.", { title: "MIDI" });
+          await dialog.alert("No USB devices found.", { title: "USB" });
           return;
         }
         setSelectedMidiPort(portToUse);
@@ -595,14 +595,14 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 	                      onChange={(e) => setSelectedMidiPort(e.target.value)}
 	                      className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
 	                    >
-	                      <option value="" disabled>Select MIDI Port</option>
+	                      <option value="" disabled>Select USB Device</option>
 	                      {midiPorts.map((port) => <option key={port} value={port}>{port}</option>)}
 	                    </select>
 	                    <button
 	                      onClick={() => { void refreshMidiPorts(); }}
 	                      disabled={isRefreshingMidiPorts}
 	                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
-	                      title={isRefreshingMidiPorts ? "Refreshing..." : "Refresh MIDI Ports"}
+	                      title={isRefreshingMidiPorts ? "Refreshing..." : "Refresh USB Devices"}
 	                    >
 	                      <span className={isRefreshingMidiPorts ? "inline-block animate-spin" : "inline-block"}>
 	                        ↻
@@ -637,7 +637,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                   <span>
                     {lastMidiRefreshError
                       ? "Last refresh failed"
-                      : `Last refresh: ${lastMidiRefreshCount ?? 0} port${(lastMidiRefreshCount ?? 0) === 1 ? "" : "s"}`}
+                      : `Last refresh: ${lastMidiRefreshCount ?? 0} device${(lastMidiRefreshCount ?? 0) === 1 ? "" : "s"}`}
                   </span>
                   <span title={lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toISOString() : ""}>
                     {lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toLocaleTimeString() : ""}

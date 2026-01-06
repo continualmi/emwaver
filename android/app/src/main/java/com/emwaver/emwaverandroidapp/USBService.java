@@ -149,7 +149,7 @@ public class USBService extends Service implements DeviceConnectionService {
     public void checkForConnectedDevices() {
         UsbDevice dev = findUsbMidiDevice();
         if (dev == null) {
-            Toast.makeText(this, "No EMWaver USB MIDI device found", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "No EMWaver USB device found", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -213,7 +213,7 @@ public class USBService extends Service implements DeviceConnectionService {
             midiManager = (MidiManager) getSystemService(Context.MIDI_SERVICE);
         }
         if (midiManager == null) {
-            Toast.makeText(this, "MIDI service unavailable", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "USB service unavailable", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -230,14 +230,14 @@ public class USBService extends Service implements DeviceConnectionService {
         }
 
         if (target == null) {
-            Toast.makeText(this, "No MIDI interface found for EMWaver device", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "No USB interface found for EMWaver device", Toast.LENGTH_SHORT).show();
             return;
         }
 
         final MidiDeviceInfo deviceInfo = target;
         midiManager.openDevice(deviceInfo, device -> {
             if (device == null) {
-                Log.e(TAG, "Failed to open MIDI device");
+                Log.e(TAG, "Failed to open USB device");
                 return;
             }
             synchronized (midiLock) {
@@ -249,7 +249,7 @@ public class USBService extends Service implements DeviceConnectionService {
                     midiOut.connect(rxReceiver);
                 }
             }
-            Toast.makeText(this, "USB MIDI Connected!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
         }, midiHandler);
     }
 
@@ -297,14 +297,14 @@ public class USBService extends Service implements DeviceConnectionService {
 
         synchronized (midiLock) {
             if (midiIn == null) {
-                Toast.makeText(this, "No USB MIDI device connected", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "No USB device connected", Toast.LENGTH_SHORT).show();
                 return;
             }
             try {
                 midiIn.send(sysex, 0, sysex.length, 0);
                 logTx(packet64);
             } catch (IOException e) {
-                Log.e(TAG, "Error writing MIDI SysEx", e);
+                Log.e(TAG, "Error writing USB packet", e);
             }
         }
     }
@@ -566,7 +566,7 @@ public class USBService extends Service implements DeviceConnectionService {
     @Override
     public String getConnectionStatus() {
         if (checkConnection()) {
-            return "Connected (USB MIDI)";
+            return "Connected (USB)";
         }
         return "Not connected";
     }
@@ -576,6 +576,6 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (midiLock) {
             closeMidiLocked();
         }
-        Log.d(TAG, "USB MIDI disconnected");
+        Log.d(TAG, "USB disconnected");
     }
 }

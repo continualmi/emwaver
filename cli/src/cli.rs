@@ -93,14 +93,14 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Connect the daemon to a device (USB MIDI).
+    /// Connect the daemon to a device (USB).
     ///
     /// This is a shorthand for `emwaver daemon connect ...`.
     Connect {
         /// Override the daemon socket path.
         #[arg(long)]
         socket: Option<PathBuf>,
-        /// MIDI port name to connect to (if omitted, connects to the first available port).
+        /// USB device name to connect to (if omitted, connects to the first available device).
         #[arg(long)]
         port: Option<String>,
     },
@@ -123,8 +123,9 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// USB MIDI transport utilities (daemon-backed).
-    Midi {
+    /// USB transport utilities (daemon-backed).
+    #[command(name = "usb", alias = "midi")]
+    Usb {
         #[command(subcommand)]
         command: MidiCommand,
     },
@@ -225,7 +226,7 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum MidiCommand {
-    /// List available USB MIDI ports.
+    /// List available USB devices.
     List {
         /// Override the daemon socket path.
         #[arg(long)]
@@ -234,25 +235,25 @@ pub enum MidiCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Connect the daemon to a USB MIDI port.
+    /// Connect the daemon to a USB device.
     Connect {
         /// Override the daemon socket path.
         #[arg(long)]
         socket: Option<PathBuf>,
-        /// MIDI port name to connect to (defaults to the first matching port).
+        /// USB device name to connect to (defaults to the first matching device).
         #[arg(long)]
         port: Option<String>,
         /// Output as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Disconnect the active MIDI connection (if any).
+    /// Disconnect the active USB connection (if any).
     Disconnect {
         /// Override the daemon socket path.
         #[arg(long)]
         socket: Option<PathBuf>,
     },
-    /// Print current MIDI connection status.
+    /// Print current USB connection status.
     Status {
         /// Override the daemon socket path.
         #[arg(long)]
@@ -292,12 +293,12 @@ pub enum DaemonCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Ask the daemon to connect to a USB MIDI port.
+    /// Ask the daemon to connect to a USB device.
     Connect {
         /// Override the daemon socket path.
         #[arg(long)]
         socket: Option<PathBuf>,
-        /// MIDI port name to connect to (if omitted, connects to the first available port).
+        /// USB device name to connect to (if omitted, connects to the first available device).
         #[arg(long)]
         port: Option<String>,
     },

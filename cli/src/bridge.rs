@@ -245,7 +245,7 @@ pub(crate) async fn dispatch_request(
             "protocol": 2,
             "event_schema": 2,
             "cli": env!("CARGO_PKG_VERSION"),
-            "transports": ["midi"],
+            "transports": ["usb"],
             "features": {
                 "buffer": true,
                 "send_command": true,
@@ -270,7 +270,7 @@ pub(crate) async fn dispatch_request(
                     if let Some(name) = status.device_name {
                         return Ok(json!({
                             "devices": [{
-                                "transport": "midi",
+                                "transport": "usb",
                                 "name": name,
                                 "address": name
                             }]
@@ -655,9 +655,9 @@ pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
 }
 
 fn midi_new_system() -> Result<MidiSystem> {
-    let mut in_ = MidiInput::new("emwaver-midi-in").context("failed to init MIDI input")?;
+    let mut in_ = MidiInput::new("emwaver-usb-in").context("failed to init USB input")?;
     in_.ignore(Ignore::None);
-    let out = MidiOutput::new("emwaver-midi-out").context("failed to init MIDI output")?;
+    let out = MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
     Ok(MidiSystem { in_, out })
 }
 
@@ -697,7 +697,7 @@ async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
     midi_ensure_system(state).await?;
     let guard = state.midi_system.lock().await;
     let Some(system) = guard.as_ref() else {
-        bail!("MIDI not initialized");
+        bail!("USB transport not initialized");
     };
 
     let midi_in = &system.in_;
@@ -721,11 +721,23 @@ async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
     names.sort();
     names.dedup();
 
+    const EMWAVER_USB_DEVICE_NAMES: [&str; 2] = ["EMWaver USB", "EMWaver USB MIDI"];
+
     // CoreMIDI can keep endpoint objects around even after USB unplug. Filter EMWaver's
-    // port name by checking USB presence so "Refresh ports" reflects physical reality.
+    // device name by checking USB presence so "Refresh devices" reflects physical reality.
     if !emwaver_usb_midi_present() {
-        names.retain(|name| !name.contains("EMWaver USB MIDI"));
+        names.retain(|name| !EMWAVER_USB_DEVICE_NAMES.iter().any(|n| name.contains(n)));
     }
+
+    // Normalize EMWaver's transport name for end users (we call it "USB" everywhere, even
+    // though the underlying transport is class-compliant USB MIDI).
+    for name in &mut names {
+        if EMWAVER_USB_DEVICE_NAMES.iter().any(|n| name.contains(n)) {
+            *name = EMWAVER_USB_DEVICE_NAMES[0].to_string();
+        }
+    }
+    names.sort();
+    names.dedup();
     Ok(names)
 }
 
@@ -762,7 +774,7 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
             s.connected = false;
             s.device_name = None;
         }
-        let _ = emit_event(state, "disconnected", json!({ "transport": "midi" }));
+        let _ = emit_event(state, "disconnected", json!({ "transport": "usb" }));
     }
     Ok(())
 }
@@ -780,7 +792,7 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
         if status.connected {
             if requested.is_none() || status.device_name.as_deref() == requested.as_deref() {
                 return Ok(DeviceInfo {
-                    transport: "midi",
+                    transport: "usb",
                     name: status.device_name.clone(),
                     address: status.device_name.clone().unwrap_or_default(),
                 });
@@ -795,7 +807,7 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
         None => {
             let ports = midi_list_ports(state).await?;
             let Some(first) = ports.into_iter().next() else {
-                bail!("no USB MIDI ports found");
+                bail!("no USB devices found");
             };
             first
         }
@@ -808,19 +820,19 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     let MidiSystem { in_: midi_in, out: midi_out } = midi_take_system(state).await?;
 
     let out_port = find_midi_out_port_by_name(&midi_out, &chosen)?
-        .ok_or_else(|| anyhow!("MIDI output port not found: {chosen}"))?;
+        .ok_or_else(|| anyhow!("USB output port not found: {chosen}"))?;
     let in_port =
-        find_midi_in_port_by_name(&midi_in, &chosen)?.ok_or_else(|| anyhow!("MIDI input port not found: {chosen}"))?;
+        find_midi_in_port_by_name(&midi_in, &chosen)?.ok_or_else(|| anyhow!("USB input port not found: {chosen}"))?;
 
     let out_conn = midi_out
-        .connect(&out_port, "emwaver-midi-out-conn")
-        .context("failed to connect MIDI output")?;
+        .connect(&out_port, "emwaver-usb-out-conn")
+        .context("failed to connect USB output")?;
     let out = Arc::new(Mutex::new(out_conn));
 
     let in_conn = midi_in
         .connect(
             &in_port,
-            "emwaver-midi-in-conn",
+            "emwaver-usb-in-conn",
             move |_stamp, message, _| {
                 let Ok(Some(pkt)) = midi_sysex::decode_packet64(message) else { return };
 
@@ -835,7 +847,7 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
             },
             (),
         )
-        .context("failed to connect MIDI input")?;
+        .context("failed to connect USB input")?;
 
     let status = Arc::new(AsyncMutex::new(MidiStatus {
         connected: true,
@@ -851,11 +863,11 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     let _ = emit_event(
         state,
         "connected",
-        json!({ "transport": "midi", "address": chosen, "name": chosen }),
+        json!({ "transport": "usb", "address": chosen, "name": chosen }),
     );
 
     Ok(DeviceInfo {
-        transport: "midi",
+        transport: "usb",
         name: Some(chosen.clone()),
         address: chosen,
     })
@@ -876,13 +888,13 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     timeout(
         Duration::from_millis(750),
         tokio::task::spawn_blocking(move || {
-            let mut conn = out.lock().map_err(|_| anyhow!("midi output lock poisoned"))?;
-            conn.send(&sysex).context("failed to send MIDI SysEx")?;
+            let mut conn = out.lock().map_err(|_| anyhow!("usb output lock poisoned"))?;
+            conn.send(&sysex).context("failed to send USB packet")?;
             Ok::<(), anyhow::Error>(())
         }),
     )
     .await
-    .map_err(|_| anyhow!("timeout writing to MIDI"))?
+    .map_err(|_| anyhow!("timeout writing to USB"))?
     .map_err(|e| anyhow!("task join failed: {e}"))??;
 
     if let Ok(mut guard) = state.buffer.lock() {

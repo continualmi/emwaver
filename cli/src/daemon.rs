@@ -680,7 +680,7 @@ pub fn daemon_midi_list(socket: Option<PathBuf>, json: bool) -> Result<()> {
         }
         if let Some(arr) = ports.as_array() {
             if arr.is_empty() {
-                println!("No USB MIDI ports found.");
+                println!("No USB devices found.");
                 return Ok(());
             }
             for port in arr {

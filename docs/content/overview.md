@@ -4,7 +4,7 @@
 
 EMWaver is an offline-first hardware hacking and development platform — designed to be a more powerful and cost-effective alternative to platforms like [Flipper Zero](https://en.wikipedia.org/wiki/Flipper_Zero) and [Arduino](https://en.wikipedia.org/wiki/Arduino) by treating your phone and PC as part of the “device”.
 
-Instead of cramming everything into firmware, EMWaver devices connect directly over **USB MIDI** and lean on the resources you already have (CPU, memory, storage, UI). That lets you build workflows that are hard or impossible with firmware alone: richer interfaces, bigger captures, faster iteration loops, and scripted procedures that can evolve without reflashing.
+Instead of cramming everything into firmware, EMWaver devices connect directly over **USB** and lean on the resources you already have (CPU, memory, storage, UI). That lets you build workflows that are hard or impossible with firmware alone: richer interfaces, bigger captures, faster iteration loops, and scripted procedures that can evolve without reflashing.
 
 Because boards can plug straight into your phone over USB‑C for power + communication, the form factor stays compact and cable-free—targeting Flipper Zero-style portability without shipping batteries, storage, buttons, or a display on-device, which is what makes EMWaver hardware an order of magnitude cheaper, while the combined EMWaver + phone package often far exceeds dedicated handheld capabilities (which are usually constrained by CPU, memory, and especially UI—small screens + few buttons—whereas EMWaver can leverage iOS/Android for rich interfaces plus the phone’s compute + storage for processing signals and captured data).
 
@@ -12,7 +12,7 @@ EMWaver ships first-class apps on iOS, Android, and desktop. All three can conne
 
 EMWaver also targets rapid iteration: the desktop app includes an IDE + Wavelets tooling so you can iterate quickly without reflashing firmware for most workflows.
 
-Hardware is now centered around a single current-gen device: **EMWaver Pivot** (STM32 + USB MIDI).
+Hardware is now centered around a single current-gen device: **EMWaver Pivot** (STM32 + USB).
 
 Wavelets are small JavaScript scripts that render real, native-feeling UI (via the Wavelet UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Wavelet, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
 
