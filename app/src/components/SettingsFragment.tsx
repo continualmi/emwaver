@@ -20,7 +20,6 @@ import { isTauriAvailable } from "../utils/tauri";
 
 const SETTINGS_REFRESH_KEY = "sampler.settings.refreshRate";
 const SETTINGS_MAX_SAMPLES_KEY = "sampler.settings.maxSamples";
-const CS_PIN_STORAGE_KEY = "rfm69_cs_pin";
 const SETTINGS_EVENT = "emwaver-settings-change";
 
 const REFRESH_OPTIONS = [
@@ -56,7 +55,7 @@ async function openExternal(url: string) {
   }
 }
 
-function emitSettingsChange(scope: "sampler" | "ism") {
+function emitSettingsChange(scope: "sampler") {
   if (typeof window === "undefined") {
     return;
   }
@@ -72,9 +71,6 @@ export default function SettingsFragment() {
     const stored = Number.parseInt(localStorage.getItem(SETTINGS_MAX_SAMPLES_KEY) || "393216", 10);
     return Number.isNaN(stored) ? 393_216 : stored;
   });
-  const [rfm69CsPin, setRfm69CsPin] = useState<string>(() => {
-    return localStorage.getItem(CS_PIN_STORAGE_KEY) || "36";
-  });
 
   const refreshOptions = useMemo(() => REFRESH_OPTIONS, []);
   const bufferOptions = useMemo(() => BUFFER_OPTIONS, []);
@@ -87,10 +83,6 @@ export default function SettingsFragment() {
     localStorage.setItem(SETTINGS_MAX_SAMPLES_KEY, `${maxSamples}`);
   }, [maxSamples]);
 
-  useEffect(() => {
-    localStorage.setItem(CS_PIN_STORAGE_KEY, rfm69CsPin);
-  }, [rfm69CsPin]);
-
   const handleRefreshChange = useCallback((value: number) => {
     setRefreshRate(value);
     emitSettingsChange("sampler");
@@ -99,12 +91,6 @@ export default function SettingsFragment() {
   const handleBufferChange = useCallback((value: number) => {
     setMaxSamples(value);
     emitSettingsChange("sampler");
-  }, []);
-
-  const handleRfm69PinChange = useCallback((value: string) => {
-    const trimmed = value.trim();
-    setRfm69CsPin(trimmed);
-    emitSettingsChange("ism");
   }, []);
 
   return (
@@ -153,24 +139,6 @@ export default function SettingsFragment() {
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">ISM Settings</h3>
-          <div className="mt-4 flex flex-col gap-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-100">RFM69 CS Pin</p>
-                <p className="text-xs text-slate-400">Chip select pin for RFM69 SPI communication.</p>
-              </div>
-              <input
-                type="number"
-                value={rfm69CsPin}
-                onChange={(event) => handleRfm69PinChange(event.target.value)}
-                className="w-full md:w-32 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-              />
             </div>
           </div>
         </div>

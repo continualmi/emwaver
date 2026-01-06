@@ -15,32 +15,11 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useDevice } from "../utils/DeviceContext";
-import {
-  CONFIG_REGISTERS as RFM69_CONFIG_REGISTERS,
-  STATUS_REGISTERS as RFM69_STATUS_REGISTERS,
-  REGISTER_MAP as RFM69_REGISTER_MAP,
-  MOD_FSK,
-  MOD_OOK,
-} from "../utils/RFM69";
-
-type RadioChip = "UNKNOWN" | "CC1101" | "RFM69";
-
-const CHIP_STORAGE_KEY = "ism_selected_chip";
-const CS_PIN_STORAGE_KEY = "rfm69_cs_pin";
-const SETTINGS_EVENT = "emwaver-settings-change";
 
 const RF_PARAMETER_STEPS = 6;
 
-const DEFAULT_RFM69_MISO = 13;
-const DEFAULT_RFM69_MOSI = 11;
-const DEFAULT_RFM69_SCK = 12;
-const DEFAULT_RFM69_CS = 36;
-
-const DEFAULT_CC1101_MISO = 13;
-const DEFAULT_CC1101_MOSI = 11;
-const DEFAULT_CC1101_SCK = 12;
 const DEFAULT_CC1101_CS = 10;
 
 const CC1101_PA_TABLE_SIZE = 8;
@@ -199,23 +178,12 @@ const CC1101_REGISTER_MAP: Record<string, number> = {
   RCCTRL0_STATUS: 0x3d,
 };
 
-const CHIP_OPTIONS: { label: string; value: RadioChip }[] = [
-  { label: "Select chip...", value: "UNKNOWN" },
-  { label: "CC1101", value: "CC1101" },
-  { label: "RFM69", value: "RFM69" },
-];
-
 const CC1101_MODULATION_OPTIONS = [
   { label: "2-FSK", value: CC1101_MOD_2FSK },
   { label: "GFSK", value: CC1101_MOD_GFSK },
   { label: "ASK/OOK", value: CC1101_MOD_ASK },
   { label: "4-FSK", value: CC1101_MOD_4FSK },
   { label: "MSK", value: CC1101_MOD_MSK },
-];
-
-const RFM69_MODULATION_OPTIONS = [
-  { label: "FSK", value: MOD_FSK },
-  { label: "OOK", value: MOD_OOK },
 ];
 
 interface RfParameters {
@@ -236,18 +204,44 @@ interface EditDialogState {
   onSave: (val: string) => Promise<void>;
 }
 
-function getInitialChip(): RadioChip {
-  const stored = localStorage.getItem(CHIP_STORAGE_KEY);
-  if (stored === "CC1101" || stored === "RFM69") {
-    return stored;
+function isPaddedPacket(response: Uint8Array | null, first: number) {
+  if (!response || response.length !== 64) return false;
+  if (response[0] !== first) return false;
+  for (let i = 1; i < response.length; i++) {
+    if (response[i] !== 0) return false;
   }
-  return "UNKNOWN";
+  return true;
+}
+
+function isOkAck(response: Uint8Array | null) {
+  return isPaddedPacket(response, 0x00);
+}
+
+function parseRawPayload(response: Uint8Array | null) {
+  if (!response || response.length === 0) return new Uint8Array(0);
+  if (isOkAck(response)) return new Uint8Array(0);
+  return response;
+}
+
+function parseRawString(response: Uint8Array | null) {
+  if (!response || response.length === 0) return "";
+  if (isOkAck(response)) return "";
+  const firstZero = response.indexOf(0);
+  const end = firstZero >= 0 ? firstZero : response.length;
+  return new TextDecoder().decode(response.slice(0, end)).trim();
+}
+
+function formatHexByte(value: number) {
+  return `0x${(value & 0xff).toString(16).padStart(2, "0").toUpperCase()}`;
+}
+
+function formatHexByteList(values: number[]) {
+  return values.map(formatHexByte).join(",");
 }
 
 export default function ISMFragment() {
   const { status, send } = useDevice();
 
-  const [selectedChip, setSelectedChip] = useState<RadioChip>(() => getInitialChip());
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [totalLoadSteps, setTotalLoadSteps] = useState(0);
@@ -255,13 +249,6 @@ export default function ISMFragment() {
   const [registers, setRegisters] = useState<Record<string, string>>({});
   const [rfParams, setRfParams] = useState<RfParameters | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
-
-  const [csPin, setCsPin] = useState<string>(() => {
-    const stored = localStorage.getItem(CS_PIN_STORAGE_KEY);
-    return stored || String(DEFAULT_RFM69_CS);
-  });
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [tempCsPin, setTempCsPin] = useState(csPin);
 
   const [editDialog, setEditDialog] = useState<EditDialogState>({
     isOpen: false,
@@ -273,24 +260,6 @@ export default function ISMFragment() {
   });
 
   const abortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ scope?: string }>).detail;
-      if (detail?.scope && detail.scope !== "ism") {
-        return;
-      }
-      const storedPin = localStorage.getItem(CS_PIN_STORAGE_KEY);
-      const nextPin = storedPin || String(DEFAULT_RFM69_CS);
-      setCsPin(nextPin);
-      setTempCsPin(nextPin);
-    };
-
-    window.addEventListener(SETTINGS_EVENT, handler);
-    return () => {
-      window.removeEventListener(SETTINGS_EVENT, handler);
-    };
-  }, []);
 
   const isConnected = status.connected;
 
@@ -305,149 +274,80 @@ export default function ISMFragment() {
     [send, status.connected],
   );
 
-  const isPaddedPacket = (response: Uint8Array | null, first: number) => {
-    if (!response || response.length !== 64) return false;
-    if (response[0] !== first) return false;
-    for (let i = 1; i < response.length; i++) {
-      if (response[i] !== 0) return false;
-    }
-    return true;
-  };
-
-  const isOkAck = (response: Uint8Array | null) => isPaddedPacket(response, 0x00);
-
-  const parseRawPayload = (response: Uint8Array | null) => {
-    if (!response || response.length === 0) return new Uint8Array(0);
-    if (isOkAck(response)) return new Uint8Array(0);
-    return response;
-  };
-
-  const parseRawString = (response: Uint8Array | null) => {
-    if (!response || response.length === 0) return "";
-    if (isOkAck(response)) return "";
-    const firstZero = response.indexOf(0);
-    const end = firstZero >= 0 ? firstZero : response.length;
-    return new TextDecoder().decode(response.slice(0, end)).trim();
-  };
-
-  const getConfigRegisters = useMemo(() => {
-    if (selectedChip === "CC1101") return CC1101_CONFIG_REGISTERS;
-    if (selectedChip === "RFM69") return RFM69_CONFIG_REGISTERS;
-    return [];
-  }, [selectedChip]);
-
-  const getStatusRegisters = useMemo(() => {
-    if (selectedChip === "CC1101") return CC1101_STATUS_REGISTERS;
-    if (selectedChip === "RFM69") return RFM69_STATUS_REGISTERS;
-    return [];
-  }, [selectedChip]);
-
-  const getRegisterAddress = useCallback(
-    (name: string) => {
-      if (selectedChip === "CC1101") {
-        return CC1101_REGISTER_MAP[name] ?? 0;
-      }
-      return RFM69_REGISTER_MAP[name] ?? 0;
+  const cc1101SpiXfer = useCallback(
+    async (tx: number[], rx?: number, timeoutMs = 1000) => {
+      const txArg = formatHexByteList(tx);
+      const rxArg = typeof rx === "number" ? ` --rx=${rx}` : "";
+      const command = `spi xfer --cs=${DEFAULT_CC1101_CS} --tx=${txArg}${rxArg}`;
+      return await sendCommandString(command, timeoutMs);
     },
-    [selectedChip],
+    [sendCommandString],
   );
+
+  const getRegisterAddress = useCallback((name: string) => CC1101_REGISTER_MAP[name] ?? 0, []);
 
   const readReg = useCallback(
     async (addr: number) => {
-      const verb = selectedChip === "CC1101" ? "cc1101" : "rfm69";
-      const response = await sendCommandString(`${verb} read --reg=${addr}`, 1000);
+      const isStatusRegister = addr >= 0x30 && addr <= 0x3d;
+      const cmd = ((addr & 0x3f) | (isStatusRegister ? 0xc0 : 0x80)) & 0xff;
+      const response = await cc1101SpiXfer([cmd, 0x00], 2, 1000);
       const payload = parseRawPayload(response);
-      return payload.length > 0 ? payload[0] : 0;
+      return payload.length >= 2 ? payload[1] & 0xff : 0;
     },
-    [parseRawPayload, selectedChip, sendCommandString],
+    [cc1101SpiXfer],
   );
 
   const writeReg = useCallback(
     async (addr: number, value: number) => {
-      const verb = selectedChip === "CC1101" ? "cc1101" : "rfm69";
-      await sendCommandString(`${verb} write --reg=${addr} --val=${value}`, 1000);
+      await cc1101SpiXfer([addr & 0x3f, value & 0xff], undefined, 1000);
     },
-    [selectedChip, sendCommandString],
+    [cc1101SpiXfer],
   );
 
   const cc1101ReadBurstReg = useCallback(
     async (addr: number, len: number) => {
-      if (selectedChip !== "CC1101") return new Uint8Array(0);
-      const packets = Math.max(1, Math.ceil(len / 64));
-      const response = await sendCommandString(
-        `cc1101 read_burst --reg=${addr} --len=${len}`,
-        1500,
-        packets,
-      );
+      const requested = Math.max(0, Math.min(63, len));
+      const cmd = ((addr & 0x3f) | 0xc0) & 0xff;
+      const tx = [cmd, ...new Array(requested).fill(0x00)];
+      const response = await cc1101SpiXfer(tx, undefined, 1500);
       const payload = parseRawPayload(response);
-      return payload.slice(0, len);
+      if (payload.length < 1) return new Uint8Array(0);
+      return payload.slice(1, 1 + requested);
     },
-    [parseRawPayload, selectedChip, sendCommandString],
+    [cc1101SpiXfer],
   );
 
   const cc1101WriteBurstReg = useCallback(
     async (addr: number, data: number[]) => {
-      if (selectedChip !== "CC1101") return false;
-      const payload = data
-        .map((value) => `0x${value.toString(16).padStart(2, "0").toUpperCase()}`)
-        .join(",");
-      const response = await sendCommandString(`cc1101 write_burst --reg=${addr} --data=${payload}`, 1500);
-      return isOkAck(response);
+      const bytes = data.slice(0, 63).map((value) => value & 0xff);
+      const cmd = ((addr & 0x3f) | 0x40) & 0xff;
+      const tx = [cmd, ...bytes];
+      const response = await cc1101SpiXfer(tx, undefined, 1500);
+      const payload = parseRawPayload(response);
+      return isOkAck(response) || payload.length >= tx.length;
     },
-    [selectedChip, sendCommandString],
+    [cc1101SpiXfer],
   );
 
-  const ensureRfm69Init = useCallback(async () => {
-    const cs = Number.parseInt(csPin.trim(), 10);
-    if (!Number.isFinite(cs)) {
-      setStatusMessage("Invalid RFM69 CS pin.");
-      return false;
-    }
-    // Keep commands <=64 bytes for the desktop transport. Firmware already has sane defaults
-    // for MISO/MOSI/SCK; only override CS pin here.
-    const command = `rfm69 init --cs=${cs}`;
-    const response = await sendCommandString(command, 2000);
-    if (isOkAck(response)) return true;
-    if (!response || response.length === 0) {
-      setStatusMessage("RFM69 init failed: no response.");
-      return false;
-    }
-    setStatusMessage("RFM69 init failed: unexpected response.");
-    return false;
-  }, [csPin, sendCommandString]);
-
   const ensureCc1101Init = useCallback(async () => {
-    const probe = await sendCommandString("cc1101 read --reg=49", 1000);
-    if (probe && probe.length > 0) {
+    const response = await cc1101SpiXfer([0xf1, 0x00], 2, 1000);
+    const payload = parseRawPayload(response);
+    if (payload.length >= 2) {
       return true;
     }
-    // Keep commands <=64 bytes for the desktop transport. Firmware defaults cover pinout.
-    const command = `cc1101 init --cs=${DEFAULT_CC1101_CS}`;
-    const response = await sendCommandString(command, 1500);
-    if (isOkAck(response)) return true;
     if (!response || response.length === 0) {
-      setStatusMessage("CC1101 init failed: no response.");
+      setStatusMessage("CC1101 probe failed: no response.");
       return false;
     }
-    setStatusMessage("CC1101 init failed: unexpected response.");
+    setStatusMessage("CC1101 probe failed: unexpected response.");
     return false;
-  }, [sendCommandString]);
-
-  const ensureSelectedChipInit = useCallback(async () => {
-    if (selectedChip === "RFM69") {
-      return ensureRfm69Init();
-    }
-    if (selectedChip === "CC1101") {
-      return ensureCc1101Init();
-    }
-    return false;
-  }, [ensureCc1101Init, ensureRfm69Init, selectedChip]);
+  }, [cc1101SpiXfer]);
 
   const cc1101Strobe = useCallback(
     async (cmd: number) => {
-      await sendCommandString(`cc1101 strobe --cmd=${cmd}`, 1000);
+      await cc1101SpiXfer([cmd & 0xff], undefined, 1000);
     },
-    [sendCommandString],
+    [cc1101SpiXfer],
   );
 
   const cc1101GetFrequencyMHz = useCallback(async () => {
@@ -655,77 +555,9 @@ export default function ISMFragment() {
     [cc1101GetFrequencyMHz, cc1101WriteBurstReg, readReg, writeReg],
   );
 
-  const rfm69GetFrequency = useCallback(async () => {
-    const response = await sendCommandString("rfm69 get_freq", 1000);
-    const str = parseRawString(response);
-    const value = Number.parseFloat(str);
-    return Number.isFinite(value) ? value : 0;
-  }, [parseRawString, sendCommandString]);
-
-  const rfm69SetFrequency = useCallback(
-    async (frequencyMHz: number) => {
-      await sendCommandString(`rfm69 set_freq --mhz=${frequencyMHz.toFixed(6)}`, 1000);
-    },
-    [sendCommandString],
-  );
-
-  const rfm69GetDataRate = useCallback(async () => {
-    const response = await sendCommandString("rfm69 get_bitrate", 1000);
-    const value = Number.parseInt(parseRawString(response), 10);
-    return Number.isFinite(value) ? value : 0;
-  }, [parseRawString, sendCommandString]);
-
-  const rfm69SetDataRate = useCallback(
-    async (bitRate: number) => {
-      await sendCommandString(`rfm69 set_bitrate --bps=${bitRate}`, 1000);
-    },
-    [sendCommandString],
-  );
-
-  const rfm69GetBandwidth = useCallback(async () => {
-    const response = await sendCommandString("rfm69 get_bw", 1000);
-    const value = Number.parseFloat(parseRawString(response));
-    return Number.isFinite(value) ? value : 0;
-  }, [parseRawString, sendCommandString]);
-
-  const rfm69SetBandwidth = useCallback(
-    async (bw: number) => {
-      await sendCommandString(`rfm69 set_bw --val=${bw}`, 1000);
-    },
-    [sendCommandString],
-  );
-
-  const rfm69GetDeviation = useCallback(async () => {
-    const response = await sendCommandString("rfm69 get_dev", 1000);
-    const value = Number.parseInt(parseRawString(response), 10);
-    return Number.isFinite(value) ? value : 0;
-  }, [parseRawString, sendCommandString]);
-
-  const rfm69SetDeviation = useCallback(
-    async (hz: number) => {
-      await sendCommandString(`rfm69 set_dev --hz=${hz}`, 1000);
-    },
-    [sendCommandString],
-  );
-
-  const rfm69GetModulation = useCallback(async () => {
-    const response = await sendCommandString("rfm69 get_mod", 1000);
-    return parseRawString(response).toLowerCase() === "ook" ? MOD_OOK : MOD_FSK;
-  }, [parseRawString, sendCommandString]);
-
-  const rfm69GetPower = useCallback(async () => {
-    const response = await sendCommandString("rfm69 get_power", 1000);
-    const value = Number.parseInt(parseRawString(response), 10);
-    return Number.isFinite(value) ? value : 0;
-  }, [parseRawString, sendCommandString]);
-
   const refreshData = useCallback(async () => {
     if (!isConnected) {
       setStatusMessage("Device not connected.");
-      return;
-    }
-    if (selectedChip === "UNKNOWN") {
-      setStatusMessage("Select a radio chip first.");
       return;
     }
 
@@ -734,17 +566,13 @@ export default function ISMFragment() {
     setIsLoading(true);
     setLoadingProgress(0);
 
-    const configRegisters = getConfigRegisters;
-    const statusRegisters = getStatusRegisters;
-    let steps = configRegisters.length + statusRegisters.length;
-    if (selectedChip === "CC1101") {
-      steps += CC1101_PA_TABLE_SIZE;
-    }
-    steps += RF_PARAMETER_STEPS;
+    const configRegisters = CC1101_CONFIG_REGISTERS;
+    const statusRegisters = CC1101_STATUS_REGISTERS;
+    const steps = configRegisters.length + statusRegisters.length + CC1101_PA_TABLE_SIZE + RF_PARAMETER_STEPS;
     setTotalLoadSteps(steps);
 
     try {
-      const initOk = await ensureSelectedChipInit();
+      const initOk = await ensureCc1101Init();
       if (!initOk) {
         setIsLoading(false);
         return;
@@ -777,48 +605,44 @@ export default function ISMFragment() {
         setLoadingProgress(completed);
       }
 
-      if (selectedChip === "CC1101") {
-        const paTable = await cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
-        for (let i = 0; i < Math.min(paTable.length, CC1101_PA_TABLE_SIZE); i += 1) {
-          if (abortRef.current.cancelled) break;
-          const key = `PA_TABLE${i}`;
-          newRegisters[key] = paTable[i].toString(16).toUpperCase().padStart(2, "0");
-          completed += 1;
-          setLoadingProgress(completed);
-        }
+      const paTable = await cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+      for (let i = 0; i < Math.min(paTable.length, CC1101_PA_TABLE_SIZE); i += 1) {
+        if (abortRef.current.cancelled) break;
+        const key = `PA_TABLE${i}`;
+        newRegisters[key] = paTable[i].toString(16).toUpperCase().padStart(2, "0");
+        completed += 1;
+        setLoadingProgress(completed);
       }
 
       let rfParamsData: RfParameters | null = null;
       if (!abortRef.current.cancelled) {
         setCurrentCommand("Reading frequency...");
-        const frequencyMHz =
-          selectedChip === "CC1101" ? await cc1101GetFrequencyMHz() : await rfm69GetFrequency();
+        const frequencyMHz = await cc1101GetFrequencyMHz();
         completed += 1;
         setLoadingProgress(completed);
 
         setCurrentCommand("Reading data rate...");
-        const dataRate = selectedChip === "CC1101" ? await cc1101GetDataRate() : await rfm69GetDataRate();
+        const dataRate = await cc1101GetDataRate();
         completed += 1;
         setLoadingProgress(completed);
 
         setCurrentCommand("Reading bandwidth...");
-        const bandwidth =
-          selectedChip === "CC1101" ? await cc1101GetBandwidthKHz() : await rfm69GetBandwidth();
+        const bandwidth = await cc1101GetBandwidthKHz();
         completed += 1;
         setLoadingProgress(completed);
 
         setCurrentCommand("Reading deviation...");
-        const deviation = selectedChip === "CC1101" ? await cc1101GetDeviation() : await rfm69GetDeviation();
+        const deviation = await cc1101GetDeviation();
         completed += 1;
         setLoadingProgress(completed);
 
         setCurrentCommand("Reading modulation...");
-        const modulation = selectedChip === "CC1101" ? await cc1101GetModulation() : await rfm69GetModulation();
+        const modulation = await cc1101GetModulation();
         completed += 1;
         setLoadingProgress(completed);
 
         setCurrentCommand("Reading TX power...");
-        const txPower = selectedChip === "CC1101" ? await cc1101GetPowerLevel() : await rfm69GetPower();
+        const txPower = await cc1101GetPowerLevel();
         completed += 1;
         setLoadingProgress(completed);
 
@@ -850,19 +674,10 @@ export default function ISMFragment() {
     cc1101GetModulation,
     cc1101GetPowerLevel,
     cc1101ReadBurstReg,
-    ensureSelectedChipInit,
-    getConfigRegisters,
+    ensureCc1101Init,
     getRegisterAddress,
-    getStatusRegisters,
     isConnected,
     readReg,
-    rfm69GetBandwidth,
-    rfm69GetDataRate,
-    rfm69GetDeviation,
-    rfm69GetFrequency,
-    rfm69GetModulation,
-    rfm69GetPower,
-    selectedChip,
   ]);
 
   const openHexEditDialog = (title: string, value: string, onSave: (val: string) => Promise<void>) => {
@@ -900,7 +715,7 @@ export default function ISMFragment() {
         setStatusMessage("Invalid hexadecimal value.");
         return;
       }
-      if (selectedChip === "CC1101" && name.startsWith("PA_TABLE")) {
+      if (name.startsWith("PA_TABLE")) {
         const index = Number.parseInt(name.replace("PA_TABLE", ""), 10);
         if (!Number.isFinite(index) || index < 0 || index >= CC1101_PA_TABLE_SIZE) {
           setStatusMessage("Invalid PA table index.");
@@ -940,7 +755,7 @@ export default function ISMFragment() {
   const handleEditRfParam = (param: keyof RfParameters, title: string) => {
     if (!rfParams) return;
     const value = rfParams[param];
-    const allowDecimal = param === "frequencyMHz" || (selectedChip === "CC1101" && param === "bandwidth");
+    const allowDecimal = param === "frequencyMHz" || param === "bandwidth";
     openNumberEditDialog(title, String(value), allowDecimal, async (newVal) => {
       const numeric = Number.parseFloat(newVal);
       if (!Number.isFinite(numeric)) {
@@ -948,113 +763,53 @@ export default function ISMFragment() {
         return;
       }
       let appliedValue = numeric;
-      if (selectedChip === "CC1101") {
-        let ok = true;
-        if (param === "frequencyMHz") {
-          ok = await cc1101SetFrequencyMHz(numeric);
-        } else if (param === "dataRate") {
-          appliedValue = Math.round(numeric);
-          ok = await cc1101SetDataRate(appliedValue);
-        } else if (param === "bandwidth") {
-          ok = await cc1101SetBandwidth(numeric);
-        } else if (param === "deviation") {
-          appliedValue = Math.round(numeric);
-          ok = await cc1101SetDeviation(appliedValue);
-        }
-        if (!ok) {
-          setStatusMessage(`Failed to set ${title.toLowerCase()}.`);
-          return;
-        }
-      } else {
-        if (param === "frequencyMHz") {
-          await rfm69SetFrequency(numeric);
-        } else if (param === "dataRate") {
-          appliedValue = Math.round(numeric);
-          await rfm69SetDataRate(appliedValue);
-        } else if (param === "bandwidth") {
-          appliedValue = Math.round(numeric);
-          await rfm69SetBandwidth(appliedValue);
-        } else if (param === "deviation") {
-          appliedValue = Math.round(numeric);
-          await rfm69SetDeviation(appliedValue);
-        }
+      let ok = true;
+      if (param === "frequencyMHz") {
+        ok = await cc1101SetFrequencyMHz(numeric);
+      } else if (param === "dataRate") {
+        appliedValue = Math.round(numeric);
+        ok = await cc1101SetDataRate(appliedValue);
+      } else if (param === "bandwidth") {
+        ok = await cc1101SetBandwidth(numeric);
+      } else if (param === "deviation") {
+        appliedValue = Math.round(numeric);
+        ok = await cc1101SetDeviation(appliedValue);
+      }
+      if (!ok) {
+        setStatusMessage(`Failed to set ${title.toLowerCase()}.`);
+        return;
       }
       setRfParams((prev) => (prev ? { ...prev, [param]: appliedValue } : prev));
     });
   };
 
-  const handleChipChange = (value: RadioChip) => {
-    setSelectedChip(value);
-    localStorage.setItem(CHIP_STORAGE_KEY, value);
-    setRegisters({});
-    setRfParams(null);
-    setStatusMessage("");
-  };
-
-  const handleSaveSettings = async () => {
-    const pinNum = Number.parseInt(tempCsPin.trim(), 10);
-    if (!Number.isFinite(pinNum) || pinNum <= 0) {
-      setStatusMessage("Invalid CS pin value.");
-      return;
-    }
-    setCsPin(tempCsPin);
-    localStorage.setItem(CS_PIN_STORAGE_KEY, tempCsPin);
-    setShowSettingsDialog(false);
-  };
-
-  const modulationOptions = selectedChip === "CC1101" ? CC1101_MODULATION_OPTIONS : RFM69_MODULATION_OPTIONS;
-  const powerOptions = selectedChip === "CC1101" ? CC1101_POWER_LEVELS_DBM : [-30, -20, -15, -10, 0, 5, 7, 10];
+  const modulationOptions = useMemo(() => CC1101_MODULATION_OPTIONS, []);
+  const powerOptions = useMemo(() => CC1101_POWER_LEVELS_DBM, []);
 
   return (
     <section className="flex flex-1 flex-col bg-slate-950 overflow-hidden">
       <header className="flex items-center justify-between border-b border-slate-900 px-6 py-4 flex-shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-slate-100">ISM</h2>
-          <p className="text-sm text-slate-400">RFM69 + CC1101 control and registers</p>
+          <p className="text-sm text-slate-400">CC1101 control and registers</p>
         </div>
-        <button
-          onClick={() => {
-            setTempCsPin(csPin);
-            setShowSettingsDialog(true);
-          }}
-          className="px-3 py-1.5 text-sm bg-slate-800 text-white rounded hover:bg-slate-700"
-        >
-          Settings
-        </button>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-          <div className="space-y-4">
+      <div className="flex-1 overflow-auto p-6">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-6">
             <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 space-y-4">
-              <div>
-                <label className="text-xs uppercase text-slate-400">Chip</label>
-                <select
-                  className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                  value={selectedChip}
-                  onChange={(event) => handleChipChange(event.target.value as RadioChip)}
-                >
-                  {CHIP_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <h3 className="text-sm font-semibold text-slate-200">Device</h3>
 
               <button
                 onClick={refreshData}
-                disabled={!isConnected || selectedChip === "UNKNOWN" || isLoading}
+                disabled={!isConnected || isLoading}
                 className="w-full rounded bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
               >
                 Initialize & Read
               </button>
 
-              {selectedChip === "CC1101" && (
-                <p className="text-xs text-slate-400">
-                  CC1101 note: TX Power updates PATABLE[0] and PATABLE[1] for ASK/OOK.
-                </p>
-              )}
+              <p className="text-xs text-slate-400">TX power updates PATABLE[0] and PATABLE[1] for ASK/OOK.</p>
 
               {statusMessage && <p className="text-xs text-amber-300">{statusMessage}</p>}
             </div>
@@ -1110,14 +865,10 @@ export default function ISMFragment() {
                     onChange={async (event) => {
                       if (!rfParams) return;
                       const value = Number.parseInt(event.target.value, 10);
-                      if (selectedChip === "CC1101") {
-                        const ok = await cc1101SetModulationAndPower(value, rfParams.txPower);
-                        if (!ok) {
-                          setStatusMessage("Failed to update CC1101 modulation/power.");
-                          return;
-                        }
-                      } else {
-                        await sendCommandString(`rfm69 set_mod --mod=${value === MOD_OOK ? "ook" : "fsk"}`, 1000);
+                      const ok = await cc1101SetModulationAndPower(value, rfParams.txPower);
+                      if (!ok) {
+                        setStatusMessage("Failed to update CC1101 modulation/power.");
+                        return;
                       }
                       setRfParams((prev) => (prev ? { ...prev, modulation: value } : prev));
                     }}
@@ -1138,14 +889,10 @@ export default function ISMFragment() {
                     onChange={async (event) => {
                       if (!rfParams) return;
                       const value = Number.parseInt(event.target.value, 10);
-                      if (selectedChip === "CC1101") {
-                        const ok = await cc1101SetModulationAndPower(rfParams.modulation, value);
-                        if (!ok) {
-                          setStatusMessage("Failed to update CC1101 modulation/power.");
-                          return;
-                        }
-                      } else {
-                        await sendCommandString(`rfm69 set_power --dbm=${value}`, 1000);
+                      const ok = await cc1101SetModulationAndPower(rfParams.modulation, value);
+                      if (!ok) {
+                        setStatusMessage("Failed to update CC1101 modulation/power.");
+                        return;
                       }
                       setRfParams((prev) => (prev ? { ...prev, txPower: value } : prev));
                     }}
@@ -1164,67 +911,59 @@ export default function ISMFragment() {
 
           <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 space-y-4">
             <h3 className="text-sm font-semibold text-slate-200">Registers</h3>
-            {selectedChip === "UNKNOWN" ? (
-              <p className="text-sm text-slate-400">Select a chip, then tap Initialize & Read.</p>
-            ) : (
-              <>
-                <div>
-                  <h4 className="text-xs uppercase text-slate-500 mb-2">Configuration</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {getConfigRegisters.map((name) => (
+
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Config</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                  {CC1101_CONFIG_REGISTERS.map((name) => (
+                    <button
+                      key={name}
+                      className="flex flex-col items-start rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-left hover:border-slate-600"
+                      onClick={() => handleEditRegister(name)}
+                    >
+                      <span className="text-[10px] uppercase text-slate-500">{name}</span>
+                      <span className="font-mono text-sm text-slate-200">{registers[name] ?? "--"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Status</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                  {CC1101_STATUS_REGISTERS.map((name) => (
+                    <button
+                      key={name}
+                      className="flex flex-col items-start rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-left hover:border-slate-600"
+                      onClick={() => handleEditRegister(name)}
+                    >
+                      <span className="text-[10px] uppercase text-slate-500">{name}</span>
+                      <span className="font-mono text-sm text-slate-200">{registers[name] ?? "--"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">PA Table</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                  {Array.from({ length: CC1101_PA_TABLE_SIZE }, (_, index) => {
+                    const name = `PA_TABLE${index}`;
+                    return (
                       <button
                         key={name}
                         className="flex flex-col items-start rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-left hover:border-slate-600"
                         onClick={() => handleEditRegister(name)}
                       >
                         <span className="text-[10px] uppercase text-slate-500">{name}</span>
-                        <span className="font-mono text-sm text-slate-200">
-                          {registers[name] ?? "--"}
-                        </span>
+                        <span className="font-mono text-sm text-slate-200">{registers[name] ?? "--"}</span>
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-                <div>
-                  <h4 className="text-xs uppercase text-slate-500 mb-2">Status</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {getStatusRegisters.map((name) => (
-                      <div
-                        key={name}
-                        className="flex flex-col items-start rounded border border-slate-800 bg-slate-950 px-2 py-1.5"
-                      >
-                        <span className="text-[10px] uppercase text-slate-500">{name}</span>
-                        <span className="font-mono text-sm text-slate-200">
-                          {registers[name] ?? "--"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                {selectedChip === "CC1101" && (
-                  <div>
-                    <h4 className="text-xs uppercase text-slate-500 mb-2">PA Table</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {Array.from({ length: CC1101_PA_TABLE_SIZE }, (_, index) => {
-                        const name = `PA_TABLE${index}`;
-                        return (
-                          <button
-                            key={name}
-                            className="flex flex-col items-start rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-left hover:border-slate-600"
-                            onClick={() => handleEditRegister(name)}
-                          >
-                            <span className="text-[10px] uppercase text-slate-500">{name}</span>
-                            <span className="font-mono text-sm text-slate-200">
-                              {registers[name] ?? "--"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1232,9 +971,7 @@ export default function ISMFragment() {
       {isLoading && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-slate-900 p-6 rounded-lg w-96 border border-slate-700 shadow-xl">
-            <h3 className="text-lg font-medium text-slate-100 mb-4">
-              Initializing {selectedChip === "CC1101" ? "CC1101" : "RFM69"}
-            </h3>
+            <h3 className="text-lg font-medium text-slate-100 mb-4">Initializing CC1101</h3>
             <div className="w-full bg-slate-800 rounded-full h-3 mb-3 overflow-hidden">
               <div
                 className="bg-blue-600 h-3 rounded-full transition-all duration-100 ease-linear"
@@ -1284,7 +1021,9 @@ export default function ISMFragment() {
                 onClick={() => {
                   const value = editDialog.value.trim();
                   const hexOk = /^[0-9a-fA-F]+$/.test(value);
-                  const numberOk = editDialog.allowDecimal ? /^[0-9]+(\.[0-9]+)?$/.test(value) : /^[0-9]+$/.test(value);
+                  const numberOk = editDialog.allowDecimal
+                    ? /^[0-9]+(\\.[0-9]+)?$/.test(value)
+                    : /^[0-9]+$/.test(value);
                   if (editDialog.mode === "hex" && !hexOk) {
                     setStatusMessage("Invalid hexadecimal value.");
                     return;
@@ -1304,41 +1043,7 @@ export default function ISMFragment() {
           </div>
         </div>
       )}
-
-      {showSettingsDialog && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-slate-900 p-6 rounded-lg w-96 border border-slate-700 shadow-xl">
-            <h3 className="text-lg font-medium text-slate-100 mb-4">ISM Settings</h3>
-            <div className="space-y-4 mb-6">
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-slate-300">RFM69 CS Pin</label>
-                <input
-                  type="number"
-                  value={tempCsPin}
-                  onChange={(e) => setTempCsPin(e.target.value)}
-                  className="w-24 bg-slate-950 border border-slate-700 text-slate-100 rounded px-3 py-2 text-sm"
-                  min="1"
-                  max="48"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowSettingsDialog(false)}
-                className="px-4 py-2 text-slate-300 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveSettings}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
+
