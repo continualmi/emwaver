@@ -48,6 +48,7 @@ stm/emwaver-firmware/Release/**/*.o
 stm/emwaver-firmware/Release/**/*.d
 stm/emwaver-firmware/Release/**/*.su
 stm/emwaver-firmware/Release/**/*.cyclo
+stm/emwaver-firmware/Release/**/*.su
 stm/emwaver-firmware/Release/*.elf
 stm/emwaver-firmware/Release/*.bin
 stm/emwaver-firmware/Release/*.hex
@@ -65,10 +66,6 @@ stm/emwaver-firmware/Debug/*.hex
 stm/emwaver-firmware/Debug/*.map
 stm/emwaver-firmware/Debug/emwaver-firmware.list
 stm/emwaver-firmware/Debug/default.size.stdout
-
-# STM32CubeMX-generated HAL/CMSIS/vendor code (generated; keep custom code under Core/ and USB_DEVICE/)
-stm/emwaver-firmware/Drivers/
-stm/emwaver-firmware/Middlewares/
 
 # Library crates don't need lockfiles
 cli/crates/**/Cargo.lock

@@ -4,12 +4,17 @@
 
 # Keep EMWaver's canonical STM32 make build dirs in-repo (used by `emwaver build`).
 !emwaver-firmware/Debug/
-!emwaver-firmware/Debug/**
 !emwaver-firmware/Release/
-!emwaver-firmware/Release/**
 
-# STM32CubeMX-generated vendor middleware (ST SLA0044; regenerate via .ioc)
-emwaver-*-firmware/Middlewares/ST/STM32_USB_Device_Library/
+# Keep makefile metadata, ignore build artifacts.
+!emwaver-firmware/Debug/makefile
+!emwaver-firmware/Debug/*.mk
+!emwaver-firmware/Debug/objects.list
+!emwaver-firmware/Debug/**/subdir.mk
+!emwaver-firmware/Release/makefile
+!emwaver-firmware/Release/*.mk
+!emwaver-firmware/Release/objects.list
+!emwaver-firmware/Release/**/subdir.mk
 
 # Eclipse / CubeIDE metadata
 **/.settings/
