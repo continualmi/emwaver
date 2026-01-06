@@ -86,30 +86,6 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
             }
             
-            Section("ISM Settings") {
-                // RFM69 CS Pin Setting
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("RFM69 CS Pin")
-                            .font(.body)
-                        Text("Chip Select pin for RFM69 SPI communication")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    TextField("36", text: Binding(
-                        get: { settingsManager.rfm69CsPin },
-                        set: { settingsManager.updateRfm69CsPin($0) }
-                    ))
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 60)
-                }
-                .padding(.vertical, 4)
-            }
-            
             Section("Support & Information") {
                 // Help Documentation
                 Button(action: {
