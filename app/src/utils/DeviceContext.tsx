@@ -19,7 +19,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { safeInvoke } from './tauri';
 
 // Types
-export type TransportType = 'MIDI';
+export type TransportType = 'USB';
 
 interface DeviceStatus {
   connected: boolean;
@@ -87,7 +87,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        // Check MIDI status
+        // Check USB status
         const midiStatus = await safeInvoke<{
           connected: boolean;
           device_name: string | null;
@@ -96,7 +96,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (midiStatus && midiStatus.connected) {
           const next: DeviceStatus = {
             connected: true,
-            transport: 'MIDI',
+            transport: 'USB',
             device_name: midiStatus.device_name,
             device_address: midiStatus.device_name,
           };
@@ -140,7 +140,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const disconnect = useCallback(async () => {
-    if (status.transport === 'MIDI') {
+    if (status.transport === 'USB') {
       await safeInvoke('midi_disconnect');
     }
   }, [status.transport]);

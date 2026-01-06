@@ -54,7 +54,7 @@ pub fn run() -> Result<()> {
         }) => daemon::daemon_connect(socket, port),
         Some(cli::Command::Disconnect { socket }) => daemon::daemon_disconnect(socket),
         Some(cli::Command::Connected { socket, json }) => daemon::daemon_connected(socket, json),
-        Some(cli::Command::Midi { command }) => match command {
+        Some(cli::Command::Usb { command }) => match command {
             cli::MidiCommand::List { socket, json } => daemon::daemon_midi_list(socket, json),
             cli::MidiCommand::Connect { socket, port, json } => {
                 daemon::daemon_midi_connect(socket, port, json)

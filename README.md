@@ -13,7 +13,7 @@
 
 EMWaver is an offline-first hardware hacking platform that treats your phone and PC as part of the “device”.
 
-**Current direction:** EMWaver is now centered around a single current-gen device (**STM32 Pivot**) using **USB MIDI** as the one transport across iOS/Android/Desktop. The product is intentionally **Wavelet-first**: scripts + UI evolve without reflashing.
+**Current direction:** EMWaver is now centered around a single current-gen device (**STM32 Pivot**) using **USB** as the one transport across iOS/Android/Desktop. The product is intentionally **Wavelet-first**: scripts + UI evolve without reflashing.
 
 > Distribution is **binary-first** (apps + firmware shipped as binaries). End users should not need to build or flash from source to use EMWaver.
 

@@ -63,7 +63,7 @@ emwaver status
 emwaver connect
 emwaver cmd version
 
-# Connect to a nearby EMWaver device (USB MIDI) and open an interactive shell
+# Connect to a nearby EMWaver device (USB) and open an interactive shell
 emwaver shell
 
 # Show raw hex payloads alongside ASCII output
@@ -84,7 +84,7 @@ emwaver dfu ./firmware.bin
 
 ## Daemon Notes
 
-The CLI includes a Unix-only local daemon that keeps the USB MIDI connection alive and exposes a local Unix socket for `emwaver shell`, `emwaver daemon ...`, and higher-level workflows (`emwaver buffer/sampler/retransmit`).
+The CLI includes a Unix-only local daemon that keeps the USB connection alive and exposes a local Unix socket for `emwaver shell`, `emwaver daemon ...`, and higher-level workflows (`emwaver buffer/sampler/retransmit`).
 
 See [EMWaver Daemon + CLI](daemon.md) for the full “connect → cmd → workflows” flow.
 

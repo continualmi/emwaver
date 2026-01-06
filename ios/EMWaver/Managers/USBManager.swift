@@ -702,9 +702,13 @@ final class USBManager: ObservableObject {
     }
 
     private func endpointDisplayName(_ ep: MIDIEndpointRef) -> String {
-        if let s = getStringProperty(MIDIObjectRef(ep), kMIDIPropertyDisplayName) { return s }
-        if let s = getStringProperty(MIDIObjectRef(ep), kMIDIPropertyName) { return s }
-        return "MIDI \(ep)"
+        if let s = getStringProperty(MIDIObjectRef(ep), kMIDIPropertyDisplayName) {
+            return s.replacingOccurrences(of: "USB MIDI", with: "USB")
+        }
+        if let s = getStringProperty(MIDIObjectRef(ep), kMIDIPropertyName) {
+            return s.replacingOccurrences(of: "USB MIDI", with: "USB")
+        }
+        return "USB \(ep)"
     }
 
     private func entityName(for ep: MIDIEndpointRef) -> String? {

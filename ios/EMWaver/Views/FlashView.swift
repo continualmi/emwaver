@@ -17,7 +17,7 @@
 
 import SwiftUI
 
-/// Firmware flashing is intentionally disabled on iOS for the MIDI-only pivot.
+/// Firmware flashing is intentionally disabled on iOS for the USB-only pivot.
 /// Use Desktop/CLI DFU flows for STM32 devices.
 struct FlashView: View {
     @EnvironmentObject var bleManager: USBManager
@@ -29,7 +29,7 @@ struct FlashView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Not available on iOS in MIDI-only mode. Use Desktop/CLI DFU flows to flash supported devices.")
+                Text("Not available on iOS in USB-only mode. Use Desktop/CLI DFU flows to flash supported devices.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -53,7 +53,7 @@ struct FlashView: View {
                 } label: {
                     HStack {
                         Image(systemName: bleManager.isConnected ? "cable.connector.slash" : "cable.connector")
-                        Text(bleManager.isConnected ? "Disconnect" : "Connect USB MIDI")
+                        Text(bleManager.isConnected ? "Disconnect" : "Connect USB")
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
                 }
