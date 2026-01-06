@@ -685,7 +685,7 @@ final class USBManager: ObservableObject {
         out.reserveCapacity(Int(n))
         for i in 0..<n {
             let ep = MIDIGetSource(i)
-            if ep != 0 { out.append((endpointDisplayName(ep), ep)) }
+            if ep != 0, !isOffline(MIDIObjectRef(ep)) { out.append((endpointDisplayName(ep), ep)) }
         }
         return out
     }
@@ -696,7 +696,7 @@ final class USBManager: ObservableObject {
         out.reserveCapacity(Int(n))
         for i in 0..<n {
             let ep = MIDIGetDestination(i)
-            if ep != 0 { out.append((endpointDisplayName(ep), ep)) }
+            if ep != 0, !isOffline(MIDIObjectRef(ep)) { out.append((endpointDisplayName(ep), ep)) }
         }
         return out
     }
@@ -718,6 +718,12 @@ final class USBManager: ObservableObject {
         let st = MIDIObjectGetStringProperty(obj, key, &unmanaged)
         guard st == noErr, let unmanaged else { return nil }
         return unmanaged.takeRetainedValue() as String
+    }
+
+    private func isOffline(_ obj: MIDIObjectRef) -> Bool {
+        var value: Int32 = 0
+        let st = MIDIObjectGetIntegerProperty(obj, kMIDIPropertyOffline, &value)
+        return st == noErr && value != 0
     }
 
     private func sendSysex(_ sysex: Data, to destination: MIDIEndpointRef) -> OSStatus {
