@@ -77,11 +77,11 @@ struct LoadingDialogView: View {
 
 #Preview {
     LoadingDialogView(
-        title: "Initializing RFM69",
+        title: "Initializing CC1101",
         progress: 0.5,
         completedSteps: 25,
         totalSteps: 50,
-        currentCommand: "spi xfer --name=rfm69 --tx=0x01,0x00 --rx=2",
+        currentCommand: "spi xfer --cs=10 --tx=0xF1,0x00 --rx=2",
         onCancel: {}
     )
 }

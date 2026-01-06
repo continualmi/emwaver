@@ -22,14 +22,12 @@ class SettingsManager: ObservableObject {
     
     @Published var refreshTime: Int = 50
     @Published var bufferSizeLimit: Int = 393216
-    @Published var rfm69CsPin: String = "36"
     
     private let userDefaults = UserDefaults.standard
     
     // Keys for UserDefaults
     private let refreshTimeKey = "refresh_time"
     private let bufferSizeLimitKey = "buffer_size_limit"
-    private let rfm69CsPinKey = "rfm69_cs_pin"
     
     // Available options for refresh time (in milliseconds)
     let refreshTimeOptions = [
@@ -75,13 +73,6 @@ class SettingsManager: ObservableObject {
             userDefaults.set(bufferSizeLimit, forKey: bufferSizeLimitKey)
         }
         
-        // Load RFM69 CS pin with default of 36
-        if let csPin = userDefaults.string(forKey: rfm69CsPinKey) {
-            rfm69CsPin = csPin
-        } else {
-            rfm69CsPin = "36"
-            userDefaults.set(rfm69CsPin, forKey: rfm69CsPinKey)
-        }
     }
     
     func updateRefreshTime(_ newValue: Int) {
@@ -102,10 +93,6 @@ class SettingsManager: ObservableObject {
         return bufferSizeLimitOptions.first { $0.value == bufferSizeLimit }?.display ?? "384 KB (~30 seconds)"
     }
     
-    func updateRfm69CsPin(_ newValue: String) {
-        rfm69CsPin = newValue
-        userDefaults.set(newValue, forKey: rfm69CsPinKey)
-    }
 }
 
 // Helper structs for setting options

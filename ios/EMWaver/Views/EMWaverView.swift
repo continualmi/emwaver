@@ -153,7 +153,7 @@ struct EMWaverView: View {
             ) { selection = "Wavelets" }
 
             FragmentCard(
-                title: "ISM (RFM69)",
+                title: "ISM",
                 subtitle: "Sub‑GHz radio control",
                 systemImage: "dot.radiowaves.left.and.right",
                 tint: .green
