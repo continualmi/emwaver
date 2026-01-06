@@ -1,43 +1,227 @@
 let status = "Ready";
 
-function initRx() {
+const CC1101_CS = 10;
+
+const CC1101_REG_IOCFG2 = 0x00;
+const CC1101_REG_IOCFG1 = 0x01;
+const CC1101_REG_IOCFG0 = 0x02;
+const CC1101_REG_PKTLEN = 0x06;
+const CC1101_REG_PKTCTRL1 = 0x07;
+const CC1101_REG_PKTCTRL0 = 0x08;
+const CC1101_REG_ADDR = 0x09;
+const CC1101_REG_CHANNR = 0x0a;
+const CC1101_REG_FSCTRL1 = 0x0b;
+const CC1101_REG_FREQ2 = 0x0d;
+const CC1101_REG_FREQ1 = 0x0e;
+const CC1101_REG_FREQ0 = 0x0f;
+const CC1101_REG_MDMCFG4 = 0x10;
+const CC1101_REG_MDMCFG3 = 0x11;
+const CC1101_REG_MDMCFG2 = 0x12;
+const CC1101_REG_MDMCFG1 = 0x13;
+const CC1101_REG_MDMCFG0 = 0x14;
+const CC1101_REG_DEVIATN = 0x15;
+const CC1101_REG_MCSM0 = 0x18;
+const CC1101_REG_FOCCFG = 0x19;
+const CC1101_REG_BSCFG = 0x1a;
+const CC1101_REG_AGCCTRL2 = 0x1b;
+const CC1101_REG_AGCCTRL1 = 0x1c;
+const CC1101_REG_AGCCTRL0 = 0x1d;
+const CC1101_REG_FREND1 = 0x21;
+const CC1101_REG_FREND0 = 0x22;
+const CC1101_REG_FSCAL3 = 0x23;
+const CC1101_REG_FSCAL2 = 0x24;
+const CC1101_REG_FSCAL1 = 0x25;
+const CC1101_REG_FSCAL0 = 0x26;
+const CC1101_REG_FSTEST = 0x29;
+const CC1101_REG_TEST2 = 0x2c;
+const CC1101_REG_TEST1 = 0x2d;
+const CC1101_REG_TEST0 = 0x2e;
+const CC1101_REG_PATABLE = 0x3e;
+
+const CC1101_SRES = 0x30;
+const CC1101_SRX = 0x34;
+const CC1101_STX = 0x35;
+
+const CC1101_F_XTAL_HZ = 26_000_000.0;
+const CC1101_PA_TABLE_SIZE = 8;
+const CC1101_MOD_ASK = 3;
+
+const CC1101_POWER_LEVELS_DBM = [-30, -20, -15, -10, 0, 5, 7, 10];
+const CC1101_POWER_SETTING_433MHZ = [0x12, 0x0e, 0x1d, 0x34, 0x60, 0x84, 0xc8, 0xc0];
+
+function isOkAck(response) {
+    if (!response || response.length !== 64) return false;
+    if (response[0] !== 0x00) return false;
+    for (let i = 1; i < response.length; i += 1) {
+        if (response[i] !== 0) return false;
+    }
+    return true;
+}
+
+function parseRawPayload(response) {
+    if (!response || response.length === 0) return new Uint8Array(0);
+    if (isOkAck(response)) return new Uint8Array(0);
+    return response;
+}
+
+function hexByte(value) {
+    return `0x${(value & 0xff).toString(16).padStart(2, "0").toUpperCase()}`;
+}
+
+function hexBytes(values) {
+    return values.map(hexByte).join(",");
+}
+
+async function spiXfer(txBytes, rxLen) {
+    const txArg = hexBytes(txBytes);
+    const rxArg = typeof rxLen === "number" ? ` --rx=${rxLen}` : "";
+    const cmd = `spi xfer --cs=${CC1101_CS} --tx=${txArg}${rxArg}`;
+    return await emw.send(cmd, 1500);
+}
+
+async function cc1101Strobe(cmd) {
+    await spiXfer([cmd], undefined);
+}
+
+async function cc1101WriteReg(addr, value) {
+    await spiXfer([addr & 0x3f, value & 0xff], undefined);
+}
+
+async function cc1101ReadReg(addr) {
+    const isStatus = addr >= 0x30 && addr <= 0x3d;
+    const cmd = isStatus ? ((addr & 0x3f) | 0xc0) : ((addr & 0x3f) | 0x80);
+    const response = parseRawPayload(await spiXfer([cmd, 0x00], 2));
+    return response.length >= 2 ? response[1] & 0xff : 0;
+}
+
+async function cc1101WriteBurst(addr, data) {
+    const tx = [((addr & 0x3f) | 0x40)].concat(data.map((v) => v & 0xff));
+    const response = parseRawPayload(await spiXfer(tx, undefined));
+    return response.length >= tx.length;
+}
+
+async function cc1101ApplyDefaults() {
+    await cc1101WriteReg(CC1101_REG_FSCTRL1, 0x06);
+    await cc1101WriteReg(CC1101_REG_MDMCFG1, 0x02);
+    await cc1101WriteReg(CC1101_REG_MDMCFG0, 0xf8);
+    await cc1101WriteReg(CC1101_REG_CHANNR, 0x00);
+    await cc1101WriteReg(CC1101_REG_DEVIATN, 0x47);
+    await cc1101WriteReg(CC1101_REG_MCSM0, 0x18);
+    await cc1101WriteReg(CC1101_REG_FOCCFG, 0x16);
+    await cc1101WriteReg(CC1101_REG_BSCFG, 0x1c);
+    await cc1101WriteReg(CC1101_REG_AGCCTRL2, 0xc7);
+    await cc1101WriteReg(CC1101_REG_AGCCTRL1, 0x00);
+    await cc1101WriteReg(CC1101_REG_AGCCTRL0, 0xb2);
+    await cc1101WriteReg(CC1101_REG_FREND1, 0x56);
+    await cc1101WriteReg(CC1101_REG_FSCAL3, 0xe9);
+    await cc1101WriteReg(CC1101_REG_FSCAL2, 0x2a);
+    await cc1101WriteReg(CC1101_REG_FSCAL1, 0x00);
+    await cc1101WriteReg(CC1101_REG_FSCAL0, 0x1f);
+    await cc1101WriteReg(CC1101_REG_FSTEST, 0x59);
+    await cc1101WriteReg(CC1101_REG_TEST2, 0x81);
+    await cc1101WriteReg(CC1101_REG_TEST1, 0x35);
+    await cc1101WriteReg(CC1101_REG_TEST0, 0x09);
+    await cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x00);
+    await cc1101WriteReg(CC1101_REG_PKTCTRL1, 0x04);
+    await cc1101WriteReg(CC1101_REG_ADDR, 0x00);
+    await cc1101WriteReg(CC1101_REG_PKTLEN, 0xff);
+}
+
+async function cc1101SetGdo(gdo2, gdo1, gdo0) {
+    await cc1101WriteReg(CC1101_REG_IOCFG2, gdo2);
+    await cc1101WriteReg(CC1101_REG_IOCFG1, gdo1);
+    await cc1101WriteReg(CC1101_REG_IOCFG0, gdo0);
+}
+
+async function cc1101SetFrequencyMHz(frequencyMHz) {
+    const word = Math.round((frequencyMHz * 1e6 * Math.pow(2, 16)) / CC1101_F_XTAL_HZ);
+    await cc1101WriteReg(CC1101_REG_FREQ2, (word >> 16) & 0xff);
+    await cc1101WriteReg(CC1101_REG_FREQ1, (word >> 8) & 0xff);
+    await cc1101WriteReg(CC1101_REG_FREQ0, word & 0xff);
+}
+
+async function cc1101SetDataRate(bitRate) {
+    if (!bitRate || bitRate <= 0) return;
+    const target = (bitRate * Math.pow(2, 28)) / CC1101_F_XTAL_HZ;
+    let bestM = 0;
+    let bestE = 0;
+    let bestDiff = Number.MAX_VALUE;
+    for (let e = 0; e <= 15; e += 1) {
+        for (let m = 0; m <= 255; m += 1) {
+            const current = (256 + m) * Math.pow(2, e);
+            const diff = Math.abs(current - target);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                bestM = m;
+                bestE = e;
+            }
+        }
+    }
+    const current = await cc1101ReadReg(CC1101_REG_MDMCFG4);
+    const bandwidthPart = current & 0xf0;
+    const newMdmcfg4 = (bandwidthPart | (bestE & 0x0f)) & 0xff;
+    const newMdmcfg3 = bestM & 0xff;
+    await cc1101WriteReg(CC1101_REG_MDMCFG4, newMdmcfg4);
+    await cc1101WriteReg(CC1101_REG_MDMCFG3, newMdmcfg3);
+}
+
+async function cc1101SetModulationAndPower(modulation, dbm) {
+    const powerIndex = CC1101_POWER_LEVELS_DBM.indexOf(dbm);
+    if (powerIndex < 0) return;
+    const powerSetting = CC1101_POWER_SETTING_433MHZ[powerIndex] & 0xff;
+
+    const currentMdmcfg2 = await cc1101ReadReg(CC1101_REG_MDMCFG2);
+    const newMdmcfg2 = ((currentMdmcfg2 & 0x0f) | ((modulation & 0x07) << 4)) & 0xff;
+    const frend0 = modulation === CC1101_MOD_ASK ? 0x11 : 0x10;
+    await cc1101WriteReg(CC1101_REG_MDMCFG2, newMdmcfg2);
+    await cc1101WriteReg(CC1101_REG_FREND0, frend0);
+    const paTable = new Array(CC1101_PA_TABLE_SIZE).fill(0);
+    if (modulation === CC1101_MOD_ASK) {
+        paTable[1] = powerSetting;
+    } else {
+        paTable[0] = powerSetting;
+    }
+    await cc1101WriteBurst(CC1101_REG_PATABLE, paTable);
+}
+
+async function initRx() {
     status = "Initializing RX...";
     render();
-    emw.send("cc1101 strobe --cmd=0x30");
-    emw.send("cc1101 apply_defaults");
-    emw.send("cc1101 write --reg=0x08 --val=0x32");
-    emw.send("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
+    await cc1101Strobe(CC1101_SRES);
+    await cc1101ApplyDefaults();
+    await cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x32);
+    await cc1101SetGdo(0x2E, 0x2E, 0x0D);
     // Ensure the MCU pins connected to CC1101 GDO0 are configured as input.
     // - ESP32-S3 wiring uses IO1.
     // - STM32F042 wiring uses PA2 (encoded as pin 2 in `gpio --pin`).
-    emw.send("gpio in --pin=1");
-    emw.send("gpio in --pin=2");
-    emw.send("cc1101 set_freq --mhz=433.92");
-    emw.send("cc1101 set_datarate --bps=100000");
-    emw.send("cc1101 set_mod_power --mod=3 --dbm=10");
-    emw.send("cc1101 strobe --cmd=0x34");
+    await emw.send("gpio in --pin=1");
+    await emw.send("gpio in --pin=2");
+    await cc1101SetFrequencyMHz(433.92);
+    await cc1101SetDataRate(100000);
+    await cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
+    await cc1101Strobe(CC1101_SRX);
     status = "RX init complete";
     render();
 }
 
-function initTx() {
+async function initTx() {
     status = "Initializing TX...";
     render();
-    emw.send("cc1101 strobe --cmd=0x30");
-    emw.send("cc1101 apply_defaults");
-    emw.send("cc1101 write --reg=0x08 --val=0x32");
-    emw.send("cc1101 set_gdo --data=0x2E,0x2E,0x0D");
+    await cc1101Strobe(CC1101_SRES);
+    await cc1101ApplyDefaults();
+    await cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x32);
+    await cc1101SetGdo(0x2E, 0x2E, 0x0D);
     // Hold the CC1101 OOK / data line low so the radio doesn't output a continuous carrier after STX.
     // - ESP32-S3 wiring uses IO1.
     // - STM32F042 wiring uses PA2 (encoded as pin 2 in `gpio --pin`).
-    emw.send("gpio out --pin=1");
-    emw.send("gpio low --pin=1");
-    emw.send("gpio out --pin=2");
-    emw.send("gpio low --pin=2");
-    emw.send("cc1101 set_freq --mhz=433.92");
-    emw.send("cc1101 set_datarate --bps=100000");
-    emw.send("cc1101 set_mod_power --mod=3 --dbm=10");
-    emw.send("cc1101 strobe --cmd=0x35");
+    await emw.send("gpio out --pin=1");
+    await emw.send("gpio low --pin=1");
+    await emw.send("gpio out --pin=2");
+    await emw.send("gpio low --pin=2");
+    await cc1101SetFrequencyMHz(433.92);
+    await cc1101SetDataRate(100000);
+    await cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
+    await cc1101Strobe(CC1101_STX);
     status = "TX init complete";
     render();
 }

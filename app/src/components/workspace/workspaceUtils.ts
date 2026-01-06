@@ -24,7 +24,6 @@ export const WAVELET_ASSET_SCRIPTS = [
   "gpio.emw",
   "ir_send_saved_signal.emw",
   "packet_mode.emw",
-  "rfm69.emw",
   "rfid.emw",
   "usb.emw",
   "wavelet_demo.emw",
