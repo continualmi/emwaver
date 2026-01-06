@@ -25,6 +25,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 use midir::{Ignore, MidiInput, MidiOutput};
+use rusb::UsbContext;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 #[cfg(any(test, not(unix)))]
@@ -73,6 +74,10 @@ struct BridgeEvent<'a> {
 }
 
 const RX_QUEUE_CAPACITY: usize = 8192;
+
+// From `stm/emwaver-firmware/USB_DEVICE/App/usbd_desc.c` (USBD_VID / USBD_PID_FS).
+const EMWAVER_USB_MIDI_VID: u16 = 0x0483;
+const EMWAVER_USB_MIDI_PID: u16 = 0x5740;
 
 #[derive(Debug)]
 struct RxQueuedPacket {
@@ -673,7 +678,22 @@ async fn midi_take_system(state: &BridgeState) -> Result<MidiSystem> {
     midi_new_system()
 }
 
+fn emwaver_usb_midi_present() -> bool {
+    let Ok(ctx) = rusb::Context::new() else {
+        return false;
+    };
+    let Ok(devices) = ctx.devices() else {
+        return false;
+    };
+    devices.iter().any(|device| {
+        device
+            .device_descriptor()
+            .is_ok_and(|desc| desc.vendor_id() == EMWAVER_USB_MIDI_VID && desc.product_id() == EMWAVER_USB_MIDI_PID)
+    })
+}
+
 async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
+    // Keep one long-lived MIDI client per daemon to avoid transient init failures.
     midi_ensure_system(state).await?;
     let guard = state.midi_system.lock().await;
     let Some(system) = guard.as_ref() else {
@@ -700,6 +720,12 @@ async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
 
     names.sort();
     names.dedup();
+
+    // CoreMIDI can keep endpoint objects around even after USB unplug. Filter EMWaver's
+    // port name by checking USB presence so "Refresh ports" reflects physical reality.
+    if !emwaver_usb_midi_present() {
+        names.retain(|name| !name.contains("EMWaver USB MIDI"));
+    }
     Ok(names)
 }
 
@@ -1186,4 +1212,3 @@ fn parse_bracket_value(content: &str) -> Result<u8> {
 
     Ok(value)
 }
-
