@@ -91,7 +91,6 @@ EMWaver has multiple ESP32-S3 boards (flagship, Shield, DIY). The device-side fi
 
 Per-board notes:
 - **EMWaver flagship (ESP32-S3)**: built-in **CC1101** uses `CS=10` (chip select GPIO 10).
-- **EMWaver Shield (ESP32-S3 carrier)**: designed for an **RFM69** module; the firmware helper defaults to `CS=36` (override if your shield revision uses a different CS).
 - **EMWaver DIY (ESP32-S3 + external CC1101 module)**: you wire the CC1101 CS yourself; if you wire it to `GPIO10` you can use the flagship defaults (`CS=10`), otherwise override.
 
 If your wiring differs:
