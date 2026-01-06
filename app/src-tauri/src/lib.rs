@@ -829,6 +829,11 @@ fn expand_path(path: &str) -> PathBuf {
 // Device Commands (transport-agnostic once connected)
 #[tauri::command]
 async fn device_write(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+    eprintln!(
+        "[io] TX(write) {}B: {}",
+        data.len(),
+        String::from_utf8_lossy(&data).trim_end_matches('\0')
+    );
     state
         .rpc(
             "write",
@@ -846,6 +851,13 @@ async fn device_send_command(
     timeout_ms: u64,
     packets: u32,
 ) -> Result<Vec<u8>, String> {
+    eprintln!(
+        "[io] TX(cmd) {}B timeout={}ms packets={}: {}",
+        data.len(),
+        timeout_ms,
+        packets,
+        String::from_utf8_lossy(&data).trim_end_matches('\0')
+    );
     let value = state
         .rpc(
             "send_packet_command",
@@ -858,7 +870,15 @@ async fn device_send_command(
         )
         .await?;
     let bytes_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
-    decode_b64(bytes_b64)
+    let resp = decode_b64(bytes_b64)?;
+    let preview_ascii = String::from_utf8_lossy(&resp);
+    let mut hex = String::new();
+    for (i, b) in resp.iter().enumerate().take(32) {
+        use std::fmt::Write;
+        let _ = write!(&mut hex, "{:02X}{}", b, if i + 1 == 32 { "" } else { " " });
+    }
+    eprintln!("[io] RX {}B hex[0..32]={} ascii={}", resp.len(), hex, preview_ascii.trim());
+    Ok(resp)
 }
 
 #[tauri::command]
