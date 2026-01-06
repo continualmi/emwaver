@@ -303,6 +303,21 @@ impl DaemonState {
     }
 }
 
+#[derive(Serialize)]
+struct DaemonStatus {
+    running: bool,
+    socket: String,
+}
+
+#[tauri::command]
+async fn daemon_get_status() -> Result<DaemonStatus, String> {
+    let socket = daemon_client::default_socket_path()?;
+    Ok(DaemonStatus {
+        running: daemon_client::is_socket_alive(&socket),
+        socket: socket.display().to_string(),
+    })
+}
+
 #[tauri::command]
 async fn run_shell_command(payload: RunShellCommandPayload) -> Result<RunShellCommandResult, String> {
     let command = payload.command;
@@ -1500,6 +1515,7 @@ pub fn run() {
             midi_connect,
             midi_disconnect,
             midi_get_status,
+            daemon_get_status,
             dfu_is_connected,
             dfu_flash_embedded,
             dfu_flash_file,

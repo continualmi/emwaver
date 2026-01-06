@@ -60,6 +60,12 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [midiPorts, setMidiPorts] = useState<string[]>([]);
   const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
   const [isRefreshingMidiPorts, setIsRefreshingMidiPorts] = useState(false);
+  const [lastMidiRefreshMs, setLastMidiRefreshMs] = useState<number | null>(null);
+  const [lastMidiRefreshCount, setLastMidiRefreshCount] = useState<number | null>(null);
+  const [lastMidiRefreshError, setLastMidiRefreshError] = useState<string | null>(null);
+
+  const [daemonStatus, setDaemonStatus] = useState<{ running: boolean; socket: string } | null>(null);
+  const [daemonStatusError, setDaemonStatusError] = useState<string | null>(null);
   const [autoConnectEnabled, setAutoConnectEnabled] = useState<boolean>(() => {
     try {
       const raw = localStorage.getItem(AUTO_CONNECT_ENABLED_KEY);
@@ -127,6 +133,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const refreshMidiPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {
     const { silent = false } = options;
     setIsRefreshingMidiPorts(true);
+    setLastMidiRefreshError(null);
     try {
       const ports = await listMIDIPorts();
       setMidiPorts(ports);
@@ -135,9 +142,14 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
         if (!prev || !ports.includes(prev)) return ports[0];
         return prev;
       });
+      setLastMidiRefreshMs(Date.now());
+      setLastMidiRefreshCount(ports.length);
       return ports;
     } catch (e) {
       console.error("Failed to list MIDI ports", e);
+      setLastMidiRefreshMs(Date.now());
+      setLastMidiRefreshCount(0);
+      setLastMidiRefreshError(String(e));
       if (!silent) {
         await dialog.alert(`Failed to list MIDI ports:\n\n${String(e)}`, { title: "MIDI" });
       }
@@ -151,6 +163,36 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   useEffect(() => {
     refreshMidiPorts({ silent: true });
   }, [refreshMidiPorts]);
+
+  // Daemon status (for debugging/reload feedback).
+  useEffect(() => {
+    if (!isActive) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const status = await safeInvoke<{ running: boolean; socket: string }>("daemon_get_status");
+        if (cancelled) return;
+        setDaemonStatus(status ?? null);
+        setDaemonStatusError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setDaemonStatus(null);
+        setDaemonStatusError(String(e));
+      }
+    };
+
+    void tick();
+    const interval = window.setInterval(() => {
+      void tick();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isActive]);
 
   // Hot-plug support: keep port pickers fresh while on Home and disconnected.
   useEffect(() => {
@@ -522,6 +564,17 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-400">Connection</span>
                 <div className="flex items-center gap-3">
+                    <span
+                      className="text-[10px] text-slate-500 select-none"
+                      title={daemonStatusError ? daemonStatusError : (daemonStatus?.socket ?? "")}
+                    >
+                      Daemon:{" "}
+                      {daemonStatusError
+                        ? "error"
+                        : daemonStatus?.running
+                          ? "running"
+                          : "not running"}
+                    </span>
                     <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
                       <input
                         type="checkbox"
@@ -549,9 +602,11 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 	                      onClick={() => { void refreshMidiPorts(); }}
 	                      disabled={isRefreshingMidiPorts}
 	                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
-	                      title="Refresh MIDI Ports"
+	                      title={isRefreshingMidiPorts ? "Refreshing..." : "Refresh MIDI Ports"}
 	                    >
-	                      ↻
+	                      <span className={isRefreshingMidiPorts ? "inline-block animate-spin" : "inline-block"}>
+	                        ↻
+	                      </span>
 	                    </button>
 	                    <button
 	                      onClick={handleConnect}
@@ -576,6 +631,19 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                    </div>
                 )}
               </div>
+
+              {!status.connected && (lastMidiRefreshMs || lastMidiRefreshError) ? (
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span>
+                    {lastMidiRefreshError
+                      ? "Last refresh failed"
+                      : `Last refresh: ${lastMidiRefreshCount ?? 0} port${(lastMidiRefreshCount ?? 0) === 1 ? "" : "s"}`}
+                  </span>
+                  <span title={lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toISOString() : ""}>
+                    {lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toLocaleTimeString() : ""}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
 

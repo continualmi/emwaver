@@ -95,12 +95,17 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(unix)]
-fn is_socket_alive(socket: &Path) -> bool {
+pub fn is_socket_alive(socket: &Path) -> bool {
     use std::os::unix::net::UnixStream as StdUnixStream;
     if !socket.exists() {
         return false;
     }
     StdUnixStream::connect(socket).is_ok()
+}
+
+#[cfg(not(unix))]
+pub fn is_socket_alive(_: &Path) -> bool {
+    false
 }
 
 fn find_emwaver_exe() -> Option<PathBuf> {
