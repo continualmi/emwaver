@@ -1,6 +1,7 @@
 let status = "Ready";
 
-const CC1101_CS = 10;
+// STM32 firmware uses fixed CC1101 wiring on PA4 (encoded as `4`).
+const CC1101_CS = 4;
 
 const CC1101_REG_IOCFG2 = 0x00;
 const CC1101_REG_IOCFG1 = 0x01;

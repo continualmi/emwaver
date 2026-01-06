@@ -617,9 +617,6 @@ public class IsmFragment extends Fragment {
             if (binding.modulationFormatSpinner.getAdapter() instanceof Cc1101ModulationAdapter) {
                 Cc1101ModulationAdapter adapter = (Cc1101ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
                 binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(params.getModulation()));
-            } else if (binding.modulationFormatSpinner.getAdapter() instanceof ModulationAdapter) {
-                ModulationAdapter adapter = (ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
-                binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(params.getModulation()));
             }
             if (binding.txPowerSpinner.getAdapter() instanceof PowerAdapter) {
                 PowerAdapter powerAdapter = (PowerAdapter) binding.txPowerSpinner.getAdapter();
@@ -1168,7 +1165,7 @@ public class IsmFragment extends Fragment {
         if (!isConnected()) return false;
 
         try {
-            double frequency = selectedChip == RadioChip.CC1101 ? cc1101GetFrequencyMHz() : getFrequency();
+            double frequency = cc1101GetFrequencyMHz();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -1179,7 +1176,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int dataRate = selectedChip == RadioChip.CC1101 ? cc1101GetDataRate() : getDataRate();
+            int dataRate = cc1101GetDataRate();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -1190,7 +1187,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            double bandwidth = selectedChip == RadioChip.CC1101 ? cc1101GetBandwidthKHz() : getBandwidth();
+            double bandwidth = cc1101GetBandwidthKHz();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -1201,7 +1198,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int deviation = selectedChip == RadioChip.CC1101 ? cc1101GetDeviation() : getDeviation();
+            int deviation = cc1101GetDeviation();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -1212,7 +1209,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int modulation = selectedChip == RadioChip.CC1101 ? cc1101GetModulation() : getModulation();
+            int modulation = cc1101GetModulation();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }
@@ -1223,9 +1220,6 @@ public class IsmFragment extends Fragment {
                         if (binding.modulationFormatSpinner.getAdapter() instanceof Cc1101ModulationAdapter) {
                             Cc1101ModulationAdapter adapter = (Cc1101ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
                             binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(modulation));
-                        } else if (binding.modulationFormatSpinner.getAdapter() instanceof ModulationAdapter) {
-                            ModulationAdapter adapter = (ModulationAdapter) binding.modulationFormatSpinner.getAdapter();
-                            binding.modulationFormatSpinner.setSelection(adapter.getPositionForModValue(modulation));
                         }
                     } finally {
                         suppressRfControlCallbacks = false;
@@ -1234,7 +1228,7 @@ public class IsmFragment extends Fragment {
             });
             incrementProgress();
 
-            int txPower = selectedChip == RadioChip.CC1101 ? cc1101GetPowerLevel() : getPowerLevel();
+            int txPower = cc1101GetPowerLevel();
             if (loadingCancelled || Thread.currentThread().isInterrupted()) {
                 return false;
             }

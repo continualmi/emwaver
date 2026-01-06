@@ -699,6 +699,111 @@ int main(void)
           continue;
       }
 
+      if (cmd.verb && strcmp(cmd.verb, "spi") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+
+          if (strcmp(sub, "xfer") == 0) {
+              int cs_i = 4; // Default CS pin: PA4 (NSS_RFID / CC1101 CS).
+              int rx_i = 0;
+              const char *cs_str = cli_get_arg_view(&cmd, "cs");
+              const char *rx_str = cli_get_arg_view(&cmd, "rx");
+              const char *tx_str = cli_get_arg_view(&cmd, "tx");
+
+              if (cs_str && !cli_parse_int(cs_str, &cs_i)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              if (rx_str && !cli_parse_int(rx_str, &rx_i)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              if (cs_i < 0 || cs_i > 31 || rx_i < 0) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              GPIO_TypeDef *cs_port = NULL;
+              uint16_t cs_pin_mask = 0;
+              if (!decode_encoded_pin(cs_i, &cs_port, &cs_pin_mask)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint8_t tx_buf[64] = {0};
+              size_t tx_len = 0;
+              if (tx_str && tx_str[0] != '\0') {
+                  if (!cli_parse_hex_bytes(tx_str, tx_buf, sizeof(tx_buf), &tx_len)) {
+                      command_send_err(NULL);
+                      free_bulk_packet();
+                      continue;
+                  }
+              }
+
+              size_t requested_rx = 0;
+              if (rx_i > 0) {
+                  requested_rx = (size_t)rx_i;
+                  if (requested_rx > 64u) {
+                      requested_rx = 64u;
+                  }
+              }
+
+              size_t xfer_len = 0;
+              if (requested_rx == 0) {
+                  // If `--rx` is omitted or 0, return tx_len bytes.
+                  xfer_len = tx_len;
+                  requested_rx = tx_len;
+              } else {
+                  // If `--tx` is omitted, clock out 0x00 bytes to read rx bytes.
+                  xfer_len = tx_len > requested_rx ? tx_len : requested_rx;
+              }
+
+              if (xfer_len == 0 || requested_rx == 0) {
+                  command_send_ok(NULL, 0);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint8_t tx_xfer[64] = {0};
+              if (tx_len > 0) {
+                  memcpy(tx_xfer, tx_buf, tx_len);
+              }
+              uint8_t rx_buf[64] = {0};
+
+              // Ensure CS is configured and idle-high.
+              //
+              // Important: preload the output latch HIGH before switching the pin to output mode.
+              // Otherwise, HAL_GPIO_Init() can briefly drive the default output state (often LOW),
+              // creating a short CS pulse that can break some slaves (including CC1101).
+              enable_gpio_clock(cs_port);
+              gpio_write_latch(cs_port, cs_pin_mask, true);
+              configurePin(cs_port, cs_pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
+
+              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_RESET);
+              HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(&hspi1, tx_xfer, rx_buf, (uint16_t)xfer_len, 100u);
+              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
+
+              if (st != HAL_OK) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              command_send_ok(rx_buf, requested_rx);
+              free_bulk_packet();
+              continue;
+          }
+
+          command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
       if (cmd.verb && strcmp(cmd.verb, "cc1101") == 0 && cmd.positional_count > 0) {
           const char *sub = cmd.positional[0];
 

@@ -20,7 +20,8 @@ import { useDevice } from "../utils/DeviceContext";
 
 const RF_PARAMETER_STEPS = 6;
 
-const DEFAULT_CC1101_CS = 10;
+// STM32 firmware uses fixed CC1101 wiring on PA4 (encoded as `4` in `gpio --pin` and `spi xfer --cs`).
+const DEFAULT_CC1101_CS = 4;
 
 const CC1101_PA_TABLE_SIZE = 8;
 const CC1101_PATABLE_ADDR = 0x3e;
@@ -332,7 +333,7 @@ export default function ISMFragment() {
   const ensureCc1101Init = useCallback(async () => {
     const response = await cc1101SpiXfer([0xf1, 0x00], 2, 1000);
     const payload = parseRawPayload(response);
-    if (payload.length >= 2) {
+    if (payload.length >= 2 && (payload[1] & 0xff) === 0x14) {
       return true;
     }
     if (!response || response.length === 0) {
@@ -1046,4 +1047,3 @@ export default function ISMFragment() {
     </section>
   );
 }
-
