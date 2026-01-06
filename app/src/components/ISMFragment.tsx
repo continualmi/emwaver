@@ -237,7 +237,9 @@ function formatHexByte(value: number) {
 }
 
 function formatHexByteList(values: number[]) {
-  return values.map(formatHexByte).join(",");
+  // Keep commands under the 64-byte USB framing limit.
+  // The STM32 firmware accepts "F100" style hex without separators.
+  return values.map((value) => (value & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
 }
 
 export default function ISMFragment() {
