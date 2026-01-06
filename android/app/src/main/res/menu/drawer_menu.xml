@@ -26,5 +26,10 @@
             android:icon="@drawable/ic_console_black_24dp"
             android:title="Wavelets" />
 
+        <item
+            android:id="@+id/navigation_flash"
+            android:icon="@drawable/ic_flash_black_24dp"
+            android:title="Flash" />
+
     </group>
 </menu>

@@ -26,6 +26,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import WaveletsFragment from "./components/WaveletsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
+import FlashFragment from "./components/FlashFragment";
 import HomePage from "./components/HomePage";
 
 type DirectoryEntry = {
@@ -64,6 +65,7 @@ export type FragmentType =
   | "wavelets"
   | "ism"
   | "sampler"
+  | "flash"
   | "emwaver";
 
 type RecentProject = {
@@ -860,6 +862,7 @@ function App() {
   const isWaveletsActive = activePane === "wavelets";
   const isISMActive = activePane === "ism";
   const isSamplerActive = activePane === "sampler";
+  const isFlashActive = activePane === "flash";
   const isEMWaverActive = activePane === "emwaver";
 
   return (
@@ -877,6 +880,7 @@ function App() {
         <Pane active={isWaveletsActive}><WaveletsFragment theme={theme} isActive={isWaveletsActive} /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
+        <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
       </div>
     </div>
   );
@@ -1061,6 +1065,12 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         isActive={activePane === "sampler"}
         onClick={() => onFragmentClick("sampler")}
         icon={<SamplerIcon />}
+      />
+      <ActivityButton
+        label="Flash"
+        isActive={activePane === "flash"}
+        onClick={() => onFragmentClick("flash")}
+        icon={<FlashIcon />}
       />
       <div className="mt-auto flex flex-col gap-3">
         <ThemeToggleButton theme={theme} onToggle={onToggleTheme} />
