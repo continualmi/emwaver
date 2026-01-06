@@ -44,8 +44,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ProgressBar;
-import android.widget.ArrayAdapter;
-import android.widget.AdapterView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -76,21 +74,10 @@ public class FlashFragment extends Fragment {
     private TextView progressTextView;
     private Button okButton;
     private ProgressBar progressBar;
-    private String selectedAssetPath = "dfu/ism.dfu";
+    private static final String BUNDLED_FIRMWARE_ASSET_PATH = "dfu/emwaver.bin";
+    private String selectedAssetPath = BUNDLED_FIRMWARE_ASSET_PATH;
 
     private static final String TAG = "FlashFragment";
-    private static final String[] FIRMWARE_LABELS = new String[]{
-        "ISM",
-        "GPIO",
-        "IR",
-        "RFID"
-    };
-    private static final String[] FIRMWARE_ASSETS = new String[]{
-        "dfu/ism.dfu",
-        "dfu/gpio.dfu",
-        "dfu/ir.dfu",
-        "dfu/rfid.dfu"
-    };
 
 
     @Override
@@ -118,30 +105,7 @@ public class FlashFragment extends Fragment {
         // Set up click listeners for the buttons
         binding.buttonConnect.setOnClickListener(v -> requestOrConnectDFU());
         binding.buttonFlashFile.setOnClickListener(v -> flashFile());
-
-        ArrayAdapter<String> firmwareAdapter = new ArrayAdapter<>(
-            requireContext(),
-            android.R.layout.simple_spinner_item,
-            FIRMWARE_LABELS
-        );
-        firmwareAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        binding.spinnerFirmware.setAdapter(firmwareAdapter);
-        binding.spinnerFirmware.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position < 0 || position >= FIRMWARE_ASSETS.length) {
-                    return;
-                }
-                selectedAssetPath = FIRMWARE_ASSETS[position];
-                selectedFileUri = null;
-                binding.textViewFileName.setText(selectedAssetPath);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // Keep existing selection.
-            }
-        });
+        binding.textViewFileName.setText(selectedAssetPath);
 
         // Set up the options menu
         requireActivity().addMenuProvider(new MenuProvider() {

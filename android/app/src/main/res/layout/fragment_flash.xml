@@ -51,19 +51,11 @@
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"/>
 
-        <Spinner
-            android:id="@+id/spinnerFirmware"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginStart="16dp"
-            android:layout_marginEnd="16dp"/>
-
         <TextView
             android:id="@+id/textViewFileName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="dfu/ism.dfu"
+            android:text="dfu/emwaver.bin"
             android:gravity="center"
             android:layout_marginTop="8dp"
             android:layout_marginStart="16dp"
