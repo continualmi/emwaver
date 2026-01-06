@@ -653,10 +653,27 @@ pub(crate) async fn create_bridge_state() -> Result<Arc<BridgeState>> {
 }
 
 fn midi_new_in_out() -> Result<(MidiInput, MidiOutput)> {
-    let mut in_ = MidiInput::new("emwaver-usb-in").context("failed to init USB input")?;
-    in_.ignore(Ignore::None);
-    let out = MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
-    Ok((in_, out))
+    // CoreMIDI/midir can occasionally fail to initialize if it is queried right as the
+    // system is handling device (un)plug events. Treat this as transient and retry briefly.
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 0..5 {
+        match MidiInput::new("emwaver-usb-in") {
+            Ok(mut in_) => {
+                in_.ignore(Ignore::None);
+                let out = MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
+                return Ok((in_, out));
+            }
+            Err(err) => {
+                last_err = Some(err.into());
+                if attempt < 4 {
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                }
+            }
+        }
+    }
+    Err(last_err
+        .unwrap_or_else(|| anyhow!("unknown MIDI init error"))
+        .context("failed to init USB input"))
 }
 
 pub(crate) fn emwaver_usb_midi_present() -> Result<bool> {
