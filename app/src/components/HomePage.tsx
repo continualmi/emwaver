@@ -632,12 +632,15 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                 )}
               </div>
 
-              {!status.connected && (lastMidiRefreshMs || lastMidiRefreshError) ? (
+              {!status.connected ? (
                 <div className="flex items-center justify-between text-[10px] text-slate-500">
-                  <span>
-                    {lastMidiRefreshError
-                      ? "Last refresh failed"
-                      : `Last refresh: ${lastMidiRefreshCount ?? 0} device${(lastMidiRefreshCount ?? 0) === 1 ? "" : "s"}`}
+                  <span title={lastMidiRefreshError ?? ""}>
+                    {isRefreshingMidiPorts
+                      ? "Scanning for USB devices…"
+                      : midiPorts.length === 0
+                        ? "No USB devices connected"
+                        : `${midiPorts.length} USB device${midiPorts.length === 1 ? "" : "s"} found`}
+                    {lastMidiRefreshError ? " (scan error)" : ""}
                   </span>
                   <span title={lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toISOString() : ""}>
                     {lastMidiRefreshMs ? new Date(lastMidiRefreshMs).toLocaleTimeString() : ""}
