@@ -435,7 +435,6 @@ pub enum Component {
     Gpio,
     Sampler,
     Cc1101,
-    Rfm69,
     Mfrc522,
 }
 
