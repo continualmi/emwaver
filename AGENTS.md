@@ -107,6 +107,20 @@ Wavelets are user-authored extension bundles (manifest + JavaScript) that plug i
 - **End users**: do not document “build from source” as a required workflow.
 - **Internal/dev**: DFU may still be used for development/manufacturing, but keep that out of the core product narrative.
 
+#### CubeMX (Optional)
+
+The repo is set up to be **self-contained for firmware builds** (no STM32CubeMX required) by vendoring:
+- `stm/emwaver-firmware/Drivers/` (HAL/CMSIS)
+- `stm/emwaver-firmware/Middlewares/` (USB Device library)
+- `stm/emwaver-firmware/USB_DEVICE/Target/usbd_conf.c/.h` (tracked; not generated on-demand)
+
+Use CubeMX only when you intentionally need to change clocks/pins/peripheral config and regenerate scaffolding.
+
+**Important caveat:** the STM32F0 CubeMX firmware packs don’t expose a “USB MIDI” device class in the UI. Regeneration will typically target classes like CDC/HID and can overwrite USB scaffolding. If you regenerate:
+- Expect `USB_DEVICE/*` and `Core/Src/main.c` generated sections to churn.
+- You may need to re-apply EMWaver-specific USB MIDI pieces (`USB_DEVICE/App/usbd_midi.*`, registration in `USB_DEVICE/App/usb_device.c`, and MIDI-oriented config in `USB_DEVICE/Target/usbd_conf.*`).
+- Keep handwritten logic inside `/* USER CODE BEGIN/END */` blocks; CubeMX will rewrite outside those regions.
+
 ### Android (`/android`)
 
 - Native Android app.
