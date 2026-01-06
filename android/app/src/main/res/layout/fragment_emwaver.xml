@@ -166,6 +166,7 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:layout_marginTop="8dp"
+            android:fillViewport="true"
             android:background="@color/bufferMonitorInnerBg">
 
             <TextView

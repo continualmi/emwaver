@@ -36,6 +36,7 @@ android {
     sourceSets {
         main {
             assets.srcDirs += ["${buildDir}/generated/emwaver-wavelets/assets"]
+            assets.srcDirs += ["${buildDir}/generated/emwaver-firmware/assets"]
         }
     }
 }
@@ -56,6 +57,24 @@ tasks.register("syncWaveletAssets", Copy) {
     doFirst {
         if (!emwaverSharedWaveletAssetsDir.exists()) {
             throw new GradleException("Missing canonical wavelet assets dir at: ${emwaverSharedWaveletAssetsDir}")
+        }
+    }
+}
+
+def emwaverStmFirmwareBin = new File(emwaverRepoRootDir, "stm/emwaver-firmware/Release/emwaver-firmware.bin")
+def emwaverGeneratedFirmwareAssetsDir = new File(buildDir, "generated/emwaver-firmware/assets")
+
+tasks.register("syncBundledFirmware", Copy) {
+    group = "emwaver"
+    description = "Copies the bundled STM32 firmware binary into generated Android assets."
+
+    from(emwaverStmFirmwareBin)
+    into(new File(emwaverGeneratedFirmwareAssetsDir, "dfu"))
+    rename { "emwaver.bin" }
+
+    doFirst {
+        if (!emwaverStmFirmwareBin.exists()) {
+            throw new GradleException("Missing STM32 firmware binary at: ${emwaverStmFirmwareBin} (build it in stm/emwaver-firmware first)")
         }
     }
 }
@@ -116,6 +135,7 @@ tasks.register("rustAndroidBuild", Exec) {
 // Ensure Rust native library exists before Java compilation packages jniLibs.
 // This will fail fast with a clear message if Rust/NDK tooling isn't installed.
 preBuild.dependsOn("syncWaveletAssets")
+preBuild.dependsOn("syncBundledFirmware")
 preBuild.dependsOn("rustAndroidBuild")
 
 dependencies {
