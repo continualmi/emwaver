@@ -12,13 +12,13 @@ EMWaver ships first-class apps on iOS, Android, and desktop. All three can conne
 
 EMWaver also targets rapid iteration: the desktop app includes an IDE + Wavelets tooling so you can iterate quickly without reflashing firmware for most workflows.
 
-Hardware is now centered around a single current-gen device: **EMWaver Pivot** (STM32 + USB).
+Hardware is now centered around a single current-gen **STM32** device (USB).
 
 Wavelets are small JavaScript scripts that render real, native-feeling UI (via the Wavelet UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Wavelet, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
 
 The goal behind EMWaver IDE is simple: how fast can you fully exploit a new sensor/module/chip—not just “read a register” on a 1D serial monitor, but ship a complete UI for the chip’s functionality? With EMWaver, Wavelets let you build that UI in minutes with zero reflashing, while the EMWaver IDE and ecosystem let you iterate on firmware when needed alongside the Wavelet UI. Instead of parsing logs, you get real controls (buttons, lists, pickers) that make it practical to explore and operate hardware features across common embedded protocols like SPI and I2C.
 
-See the current device here: [EMWaver Pivot](hardware/pivot.md). Legacy boards are archived under the [hardware history](hardware-catalog/).
+See the current device here: [Current Hardware](hardware/device.md). Legacy boards are archived under the [hardware history](hardware-catalog/).
 
 ## Next steps
 
@@ -32,19 +32,19 @@ See the current device here: [EMWaver Pivot](hardware/pivot.md). Legacy boards a
 
     [:octicons-arrow-right-24: Open Installing & Using](installing-using.md)
 
--   :material-hammer-wrench:{ .lg .middle } **Hardware (Pivot)**
+-   :material-hammer-wrench:{ .lg .middle } **Hardware**
 
     ---
 
-    Build the current EMWaver Pivot board (legacy designs are archived).
+    Build the current EMWaver board (legacy designs are archived).
 
-    [:octicons-arrow-right-24: Open Pivot](hardware/pivot.md)
+    [:octicons-arrow-right-24: Open Hardware](hardware/device.md)
 
 -   :material-flash:{ .lg .middle } **Flashing Firmware**
 
     ---
 
-    Step-by-step flashing guides for the STM32 Pivot device.
+    Step-by-step flashing guides for the current STM32 device.
 
     [:octicons-arrow-right-24: Open Flashing Guides](flashing-firmware/index.md)
 

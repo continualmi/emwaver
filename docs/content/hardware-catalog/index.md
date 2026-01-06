@@ -4,7 +4,7 @@ title: Hardware History
 
 # Hardware History
 
-EMWaver is now focused on a single current-gen device (see **Hardware → EMWaver Pivot**).
+EMWaver is now focused on a single current-gen device (see **Hardware → Current Hardware**).
 
 This section is kept as an archive of previous boards/modules and their reproduction links.
 
