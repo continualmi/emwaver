@@ -15,32 +15,18 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type ThemeMode = "dark" | "light";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isTauriAvailable, safeInvoke } from "../utils/tauri";
-
-type FirmwareOption = {
-  id: "ism" | "gpio" | "ir" | "rfid";
-  label: string;
-};
 
 type ProgressEventPayload = {
   message: string;
   timestamp_ms?: number;
 };
 
-const FIRMWARE_OPTIONS: FirmwareOption[] = [
-  { id: "ism", label: "ISM" },
-  { id: "gpio", label: "GPIO" },
-  { id: "ir", label: "IR" },
-  { id: "rfid", label: "RFID" },
-];
-
 export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode }) {
-  const firmwareOptions = useMemo(() => FIRMWARE_OPTIONS, []);
-  const [selectedFirmware, setSelectedFirmware] = useState<FirmwareOption["id"]>("ism");
   const [externalFilePath, setExternalFilePath] = useState<string | null>(null);
   const [dfuConnected, setDfuConnected] = useState<boolean>(false);
   const [isFlashing, setIsFlashing] = useState<boolean>(false);
@@ -111,11 +97,6 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
     }
   }, [appendProgress]);
 
-  const handleFirmwareChange = useCallback((value: FirmwareOption["id"]) => {
-    setSelectedFirmware(value);
-    setExternalFilePath(null);
-  }, []);
-
   const handleFlash = useCallback(async () => {
     if (!dfuConnected) {
       appendProgress("No DFU device detected. Connect the device in DFU mode and retry.");
@@ -130,8 +111,8 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
         appendProgress("Starting DFU flash (external file)...");
         await safeInvoke("dfu_flash_file", { path: externalFilePath }, { throwOnError: true });
       } else {
-        appendProgress(`Starting DFU flash (embedded ${selectedFirmware.toUpperCase()})...`);
-        await safeInvoke("dfu_flash_embedded", { firmware: selectedFirmware }, { throwOnError: true });
+        appendProgress("Starting DFU flash (bundled firmware)...");
+        await safeInvoke("dfu_flash_embedded", undefined, { throwOnError: true });
       }
       appendProgress("Flash write completed successfully!");
     } catch (error) {
@@ -141,7 +122,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
       setIsFlashing(false);
       void refreshDfuStatus();
     }
-  }, [appendProgress, dfuConnected, externalFilePath, refreshDfuStatus, selectedFirmware]);
+  }, [appendProgress, dfuConnected, externalFilePath, refreshDfuStatus]);
 
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950 overflow-hidden">
@@ -171,43 +152,14 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
 
       <div className="flex flex-1 min-h-0 flex-col gap-6 overflow-y-auto px-6 py-6">
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">DFU Mode</h3>
-              <p className="mt-2 text-sm text-slate-200">
-                Set <span className="font-semibold">BOOT0</span> to <span className="font-semibold">FLASH (DFU)</span>, then reconnect USB.
-              </p>
-              <p className="mt-1 text-xs text-slate-400">Use this diagram to confirm the switch position before flashing.</p>
-            </div>
-            <div className="flex justify-center md:justify-end">
-              <img
-                src={theme === "light" ? "/flash-mode-light.png" : "/flash-mode.png"}
-                alt="BOOT0 switch positions for Flash (DFU) vs Run mode"
-                className="max-h-[220px] w-auto select-none opacity-95"
-                draggable={false}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Firmware</h3>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-slate-100">Bundled firmware</p>
-              <select
-                value={selectedFirmware}
-                disabled={isFlashing}
-                onChange={(event) => handleFirmwareChange(event.target.value as FirmwareOption["id"])}
-                className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
-              >
-                {firmwareOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-400">Selecting a bundled firmware clears any external file selection.</p>
+              <div className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+                emwaver.bin
+              </div>
+              <p className="text-xs text-slate-400">Uses the single bundled STM32 firmware.</p>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -241,7 +193,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
           </div>
         </div>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 flex flex-col min-h-0">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 flex h-[40vh] min-h-[14rem] flex-col">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Progress</h3>
           <div
             ref={logRef}
@@ -256,6 +208,26 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
                 </div>
               ))
             )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">DFU Mode</h3>
+              <p className="mt-2 text-sm text-slate-200">
+                Set <span className="font-semibold">BOOT0</span> to <span className="font-semibold">FLASH (DFU)</span>, then reconnect USB.
+              </p>
+              <p className="mt-1 text-xs text-slate-400">Use this diagram to confirm the switch position before flashing.</p>
+            </div>
+            <div className="flex justify-center md:justify-end">
+              <img
+                src={theme === "light" ? "/flash-mode-light.png" : "/flash-mode.png"}
+                alt="BOOT0 switch positions for Flash (DFU) vs Run mode"
+                className="max-h-[220px] w-auto select-none opacity-95"
+                draggable={false}
+              />
+            </div>
           </div>
         </div>
       </div>

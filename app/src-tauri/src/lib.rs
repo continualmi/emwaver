@@ -45,34 +45,7 @@ use git::{
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 use daemon_client::{RpcRequest, decode_b64, encode_b64};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EmbeddedFirmware {
-    Ism,
-    Gpio,
-    Ir,
-    Rfid,
-}
-
-impl EmbeddedFirmware {
-    fn from_str(value: &str) -> Option<Self> {
-        match value {
-            "ism" => Some(Self::Ism),
-            "gpio" => Some(Self::Gpio),
-            "ir" => Some(Self::Ir),
-            "rfid" => Some(Self::Rfid),
-            _ => None,
-        }
-    }
-
-    fn bytes(self) -> &'static [u8] {
-        match self {
-            Self::Ism => include_bytes!("../resources/dfu/ism.dfu"),
-            Self::Gpio => include_bytes!("../resources/dfu/gpio.dfu"),
-            Self::Ir => include_bytes!("../resources/dfu/ir.dfu"),
-            Self::Rfid => include_bytes!("../resources/dfu/rfid.dfu"),
-        }
-    }
-}
+static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
 
 // ESP-IDF functionality removed - desktop app focuses on hardware interaction and wavelets
 const MENU_CLOSE_FOLDER_EVENT: &str = "menu-close-folder";
@@ -1007,10 +980,8 @@ fn emit_dfu_progress(app: &tauri::AppHandle, message: impl Into<String>) {
 
 // OTA helpers removed (MIDI-only runtime transport).
 #[tauri::command]
-async fn dfu_flash_embedded(app: tauri::AppHandle, firmware: String) -> Result<(), String> {
-    let selection = EmbeddedFirmware::from_str(&firmware)
-        .ok_or_else(|| format!("Unknown embedded firmware: {firmware}"))?;
-    let bytes = selection.bytes();
+async fn dfu_flash_embedded(app: tauri::AppHandle) -> Result<(), String> {
+    let bytes = BUNDLED_FIRMWARE_BYTES;
     let app_handle = app.clone();
 
     spawn_blocking(move || {

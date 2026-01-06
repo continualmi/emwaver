@@ -529,13 +529,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
       const isBareSemver = /^\d+\.\d+\.\d+$/.test(stripped);
       if (stripped.includes("Welcome to")) {
-        const iconKey =
-          stripped.includes("Welcome to ISM Waver firmware") ? "ism" :
-          stripped.includes("Welcome to RFID Waver firmware") ? "rfid" :
-          stripped.includes("Welcome to IR Waver firmware") ? "infrared" :
-          stripped.includes("Welcome to GPIO Waver firmware") ? "gpio" :
-          "emwaver";
-        setDeviceIconKey(iconKey);
+        setDeviceIconKey("emwaver");
       } else if (isBareSemver) {
         setDeviceIconKey("emwaver");
       }
@@ -709,7 +703,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
               </button>
             </div>
           </div>
-          <div ref={monitorContainerRef} className="overflow-y-auto font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
+          <div ref={monitorContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
             {bufferEntries.length === 0 ? (
               <div className="text-slate-500">No data received yet...</div>
             ) : (
@@ -718,7 +712,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                   const content = entry.isTx ? (showTxHex ? entry.hex : entry.ascii) : (showRxHex ? entry.hex : entry.ascii);
 
                   return (
-                    <div key={entry.seq} className="mb-1">
+                    <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
                       <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
                       <span className={entry.isTx ? "text-slate-100" : "text-sky-400"}>{content}</span>
                     </div>
