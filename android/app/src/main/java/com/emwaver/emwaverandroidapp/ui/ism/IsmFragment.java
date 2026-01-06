@@ -94,8 +94,7 @@ public class IsmFragment extends Fragment {
 
     private enum RadioChip {
         UNKNOWN,
-        CC1101,
-        RFM69
+        CC1101
     }
 
     private RadioChip selectedChip = RadioChip.UNKNOWN;
@@ -113,63 +112,6 @@ public class IsmFragment extends Fragment {
     private static RegisterSpec reg(String name, int addr) {
         return new RegisterSpec(name, addr);
     }
-
-    private static final List<RegisterSpec> RFM69_CONFIG_REGISTERS = Arrays.asList(
-            reg("OPMODE", 0x01),
-            reg("DATAMODUL", 0x02),
-            reg("BITRATEMSB", 0x03),
-            reg("BITRATELSB", 0x04),
-            reg("FDEVMSB", 0x05),
-            reg("FDEVLSB", 0x06),
-            reg("FRFMSB", 0x07),
-            reg("FRFMID", 0x08),
-            reg("FRFLSB", 0x09),
-            reg("OSC1", 0x0A),
-            reg("AFCCTRL", 0x0B),
-            reg("LOWBAT", 0x0C),
-            reg("LISTEN1", 0x0D),
-            reg("LISTEN2", 0x0E),
-            reg("LISTEN3", 0x0F),
-            reg("PALEVEL", 0x11),
-            reg("PARAMP", 0x12),
-            reg("OCP", 0x13),
-            reg("LNA", 0x18),
-            reg("RXBW", 0x19),
-            reg("AFCBW", 0x1A),
-            reg("OOKPEAK", 0x1B),
-            reg("OOKAVG", 0x1C),
-            reg("OOKFIX", 0x1D),
-            reg("AFCFEI", 0x1E),
-            reg("AFCMSB", 0x1F),
-            reg("AFCLSB", 0x20),
-            reg("FEIMSB", 0x21),
-            reg("FEILSB", 0x22),
-            reg("RSSICONFIG", 0x23),
-            reg("DIOMAPPING1", 0x25),
-            reg("DIOMAPPING2", 0x26),
-            reg("IRQFLAGS1", 0x27),
-            reg("IRQFLAGS2", 0x28),
-            reg("RSSITHRESH", 0x29),
-            reg("RXTIMEOUT1", 0x2A),
-            reg("RXTIMEOUT2", 0x2B),
-            reg("PREAMBLEMSB", 0x2C),
-            reg("PREAMBLELSB", 0x2D),
-            reg("SYNCCONFIG", 0x2E),
-            reg("PACKETCONFIG1", 0x37),
-            reg("PAYLOADLENGTH", 0x38),
-            reg("NODEADRS", 0x39),
-            reg("BROADCASTADRS", 0x3A),
-            reg("AUTOMODES", 0x3B),
-            reg("FIFOTHRESH", 0x3C),
-            reg("PACKETCONFIG2", 0x3D)
-    );
-
-    private static final List<RegisterSpec> RFM69_STATUS_REGISTERS = Arrays.asList(
-            reg("VERSION", 0x10),
-            reg("RSSIVALUE", 0x24),
-            reg("TEMP1", 0x4E),
-            reg("TEMP2", 0x4F)
-    );
 
     private static final List<RegisterSpec> CC1101_CONFIG_REGISTERS = Arrays.asList(
             reg("IOCFG2", 0x00),
@@ -242,21 +184,11 @@ public class IsmFragment extends Fragment {
     private static final int CC1101_PA_TABLE_SIZE = 8;
     private static final byte CC1101_PATABLE_ADDR = (byte) 0x3E;
 
-    // Defaults aligned with `esp/main/main.c` quick-check wiring.
-    private static final int DEFAULT_RFM69_MISO = 13;
-    private static final int DEFAULT_RFM69_MOSI = 11;
-    private static final int DEFAULT_RFM69_SCK = 12;
-    private static final int DEFAULT_RFM69_CS = 36;
-
     // Defaults aligned with CC1101 wiring used elsewhere in the repo (IO10 for NSS).
     private static final int DEFAULT_CC1101_MISO = 13;
     private static final int DEFAULT_CC1101_MOSI = 11;
     private static final int DEFAULT_CC1101_SCK = 12;
     private static final int DEFAULT_CC1101_CS = 10;
-
-    // Modulation values (must match firmware expectations)
-    private static final int MOD_FSK = 0;
-    private static final int MOD_OOK = 1;
 
     // CC1101 modulation values (MDMCFG2.MOD_FORMAT)
     private static final int CC1101_MOD_2FSK = 0;
@@ -361,40 +293,6 @@ public class IsmFragment extends Fragment {
                 root.setPadding(root.getPaddingLeft(), root.getPaddingTop(), root.getPaddingRight(), bottomNavHeight);
             }
         });
-    }
-
-    private class ModulationAdapter extends ArrayAdapter<String> {
-        private final int[] MOD_VALUES = {
-            MOD_FSK,  // FSK
-            MOD_OOK   // ASK/OOK
-        };
-
-        public ModulationAdapter(Context context, int resource) {
-            super(context, resource);
-        }
-
-        @Override
-        public int getPosition(String item) {
-            for (int i = 0; i < MOD_VALUES.length; i++) {
-                if (item.equals(getItem(i))) {
-                    return i;
-                }
-            }
-            return 0;
-        }
-
-        public int getModValue(int position) {
-            return MOD_VALUES[position];
-        }
-
-        public int getPositionForModValue(int modValue) {
-            for (int i = 0; i < MOD_VALUES.length; i++) {
-                if (MOD_VALUES[i] == modValue) {
-                    return i;
-                }
-            }
-            return 0;
-        }
     }
 
     private class Cc1101ModulationAdapter extends ArrayAdapter<String> {
@@ -503,25 +401,14 @@ public class IsmFragment extends Fragment {
     private void applyRfControlAdaptersForChip() {
         if (binding == null) return;
         withRfControlsSuppressed(() -> {
-            if (selectedChip == RadioChip.CC1101) {
-                String[] modulationFormats = getResources().getStringArray(R.array.cc1101_modulation_formats);
-                Cc1101ModulationAdapter modulationAdapter = new Cc1101ModulationAdapter(requireContext(),
-                        android.R.layout.simple_spinner_item);
-                for (String format : modulationFormats) {
-                    modulationAdapter.add(format);
-                }
-                modulationAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                binding.modulationFormatSpinner.setAdapter(modulationAdapter);
-            } else {
-                String[] modulationFormats = getResources().getStringArray(R.array.modulation_formats);
-                ModulationAdapter modulationAdapter = new ModulationAdapter(requireContext(),
-                        android.R.layout.simple_spinner_item);
-                for (String format : modulationFormats) {
-                    modulationAdapter.add(format);
-                }
-                modulationAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                binding.modulationFormatSpinner.setAdapter(modulationAdapter);
+            String[] modulationFormats = getResources().getStringArray(R.array.cc1101_modulation_formats);
+            Cc1101ModulationAdapter modulationAdapter = new Cc1101ModulationAdapter(requireContext(),
+                    android.R.layout.simple_spinner_item);
+            for (String format : modulationFormats) {
+                modulationAdapter.add(format);
             }
+            modulationAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            binding.modulationFormatSpinner.setAdapter(modulationAdapter);
         });
     }
 
@@ -535,7 +422,7 @@ public class IsmFragment extends Fragment {
                 // Only act on user-driven changes (avoid programmatic adapter/selection updates).
                 if (parent != null && !parent.isPressed()) return;
                 if (!ensureConnected()) return;
-                if (!ensureSelectedChipOpen()) {
+                if (!ensureCc1101Open()) {
                     return;
                 }
                 applyModulationAndPowerFromUi();
@@ -553,7 +440,7 @@ public class IsmFragment extends Fragment {
                 // Only act on user-driven changes (avoid programmatic adapter/selection updates).
                 if (parent != null && !parent.isPressed()) return;
                 if (!ensureConnected()) return;
-                if (!ensureSelectedChipOpen()) {
+                if (!ensureCc1101Open()) {
                     return;
                 }
                 applyModulationAndPowerFromUi();
@@ -571,27 +458,12 @@ public class IsmFragment extends Fragment {
         PowerAdapter powerAdapter = (PowerAdapter) binding.txPowerSpinner.getAdapter();
         int dbm = powerAdapter.getPowerValue(binding.txPowerSpinner.getSelectedItemPosition());
 
-        int modulation;
-        if (binding.modulationFormatSpinner.getAdapter() instanceof Cc1101ModulationAdapter) {
-            modulation = ((Cc1101ModulationAdapter) binding.modulationFormatSpinner.getAdapter())
-                    .getModValue(binding.modulationFormatSpinner.getSelectedItemPosition());
-        } else if (binding.modulationFormatSpinner.getAdapter() instanceof ModulationAdapter) {
-            modulation = ((ModulationAdapter) binding.modulationFormatSpinner.getAdapter())
-                    .getModValue(binding.modulationFormatSpinner.getSelectedItemPosition());
-        } else {
-            return;
-        }
+        if (!(binding.modulationFormatSpinner.getAdapter() instanceof Cc1101ModulationAdapter)) return;
+        int modulation = ((Cc1101ModulationAdapter) binding.modulationFormatSpinner.getAdapter())
+                .getModValue(binding.modulationFormatSpinner.getSelectedItemPosition());
 
-        if (selectedChip == RadioChip.RFM69) {
-            sendCommand("rfm69 set_mod --mod=" + (modulation == MOD_OOK ? "ook" : "fsk"), 1000);
-            sendCommand("rfm69 set_power --dbm=" + dbm, 1000);
-            return;
-        }
-
-        if (selectedChip == RadioChip.CC1101) {
-            if (!cc1101SetModulationAndPower(modulation, dbm)) {
-                showToast("Failed to update CC1101 modulation/power");
-            }
+        if (!cc1101SetModulationAndPower(modulation, dbm)) {
+            showToast("Failed to update CC1101 modulation/power");
         }
     }
 
@@ -823,8 +695,7 @@ public class IsmFragment extends Fragment {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
-        String chipName = selectedChip == RadioChip.RFM69 ? "RFM69"
-                : (selectedChip == RadioChip.CC1101 ? "CC1101" : "Radio");
+        String chipName = selectedChip == RadioChip.CC1101 ? "CC1101" : "Radio";
         builder.setTitle("Initializing " + chipName);
         builder.setView(container);
         builder.setNegativeButton("Cancel", null);
@@ -865,7 +736,7 @@ public class IsmFragment extends Fragment {
         if (selectedChip == RadioChip.CC1101) {
             steps += CC1101_PA_TABLE_SIZE;
         }
-        if (selectedChip == RadioChip.RFM69 || selectedChip == RadioChip.CC1101) {
+        if (selectedChip == RadioChip.CC1101) {
             steps += RF_PARAMETER_STEPS;
         }
         return steps;
@@ -959,7 +830,7 @@ public class IsmFragment extends Fragment {
         }
 
         // Ensure radio is initialized before any operations (and show command in the dialog while doing so).
-        if (!ensureSelectedChipOpen()) {
+        if (!ensureCc1101Open()) {
             Log.e("IsmFragment", "Failed to initialize radio: " + selectedChip);
             this.commandObserver = null;
             handler.post(this::showDisconnectedState);
@@ -992,13 +863,11 @@ public class IsmFragment extends Fragment {
     }
 
     private List<RegisterSpec> getConfigRegisters() {
-        if (selectedChip == RadioChip.RFM69) return RFM69_CONFIG_REGISTERS;
         if (selectedChip == RadioChip.CC1101) return CC1101_CONFIG_REGISTERS;
         return java.util.Collections.emptyList();
     }
 
     private List<RegisterSpec> getStatusRegisters() {
-        if (selectedChip == RadioChip.RFM69) return RFM69_STATUS_REGISTERS;
         if (selectedChip == RadioChip.CC1101) return CC1101_STATUS_REGISTERS;
         return java.util.Collections.emptyList();
     }
@@ -1495,16 +1364,12 @@ public class IsmFragment extends Fragment {
         if (!ensureConnected()) return;
         try {
             double frequency = Double.parseDouble(newValue);
-            if (!ensureSelectedChipOpen()) {
+            if (!ensureCc1101Open()) {
                 return;
             }
-            if (selectedChip == RadioChip.CC1101) {
-                if (!cc1101SetFrequencyMHz(frequency)) {
-                    showToast("Failed to set CC1101 frequency");
-                    return;
-                }
-            } else {
-                setFrequencyMHz((float) frequency);
+            if (!cc1101SetFrequencyMHz(frequency)) {
+                showToast("Failed to set CC1101 frequency");
+                return;
             }
             reloadCardViews();
         } catch (NumberFormatException e) {
@@ -1516,16 +1381,12 @@ public class IsmFragment extends Fragment {
         if (!ensureConnected()) return;
         try {
             int dataRate = Integer.parseInt(newValue);
-            if (!ensureSelectedChipOpen()) {
+            if (!ensureCc1101Open()) {
                 return;
             }
-            if (selectedChip == RadioChip.CC1101) {
-                if (!cc1101SetDataRate(dataRate)) {
-                    showToast("Failed to set CC1101 data rate");
-                    return;
-                }
-            } else {
-                setDataRate(dataRate);
+            if (!cc1101SetDataRate(dataRate)) {
+                showToast("Failed to set CC1101 data rate");
+                return;
             }
             reloadCardViews();
         } catch (NumberFormatException e) {
@@ -1536,18 +1397,13 @@ public class IsmFragment extends Fragment {
     private void updateBandwidth(String newValue) {
         if (!ensureConnected()) return;
         try {
-            if (!ensureSelectedChipOpen()) {
+            if (!ensureCc1101Open()) {
                 return;
             }
-            if (selectedChip == RadioChip.CC1101) {
-                double bwKHz = Double.parseDouble(newValue);
-                if (!cc1101SetBandwidth(bwKHz)) {
-                    showToast("Failed to set CC1101 bandwidth");
-                    return;
-                }
-            } else {
-                byte bandwidth = (byte) Integer.parseInt(newValue);
-                setBandwidth(bandwidth);
+            double bwKHz = Double.parseDouble(newValue);
+            if (!cc1101SetBandwidth(bwKHz)) {
+                showToast("Failed to set CC1101 bandwidth");
+                return;
             }
             reloadCardViews();
         } catch (NumberFormatException e) {
@@ -1559,16 +1415,12 @@ public class IsmFragment extends Fragment {
         if (!ensureConnected()) return;
         try {
             int deviation = Integer.parseInt(newValue);
-            if (!ensureSelectedChipOpen()) {
+            if (!ensureCc1101Open()) {
                 return;
             }
-            if (selectedChip == RadioChip.CC1101) {
-                if (!cc1101SetDeviation(deviation)) {
-                    showToast("Failed to set CC1101 deviation");
-                    return;
-                }
-            } else {
-                setDeviation(deviation);
+            if (!cc1101SetDeviation(deviation)) {
+                showToast("Failed to set CC1101 deviation");
+                return;
             }
             reloadCardViews();
         } catch (NumberFormatException e) {
@@ -1576,7 +1428,7 @@ public class IsmFragment extends Fragment {
         }
     }
 
-    // ===== Firmware command helpers (no RFM69.java wrapper) =====
+    // ===== Firmware command helpers =====
 
     private void notifyCommandObserver(String command) {
         Consumer<String> obs = this.commandObserver;
@@ -1615,73 +1467,6 @@ public class IsmFragment extends Fragment {
         return new String(response, java.nio.charset.StandardCharsets.UTF_8).trim();
     }
 
-    private boolean ensureRfm69Open() {
-        if (!ensureConnected()) return false;
-
-        android.content.SharedPreferences preferences =
-                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
-        String csPin = preferences.getString("rfm69_cs_pin", String.valueOf(DEFAULT_RFM69_CS));
-
-        int cs = DEFAULT_RFM69_CS;
-        try {
-            if (csPin != null) {
-                cs = Integer.parseInt(csPin.trim());
-            }
-        } catch (NumberFormatException e) {
-            Log.w("IsmFragment", "Invalid RFM69 CS pin in settings: '" + csPin + "', using default " + DEFAULT_RFM69_CS);
-            cs = DEFAULT_RFM69_CS;
-        }
-
-        String cmd = String.format(
-                Locale.US,
-                "rfm69 init --miso=%d --mosi=%d --sck=%d --cs=%d",
-                DEFAULT_RFM69_MISO,
-                DEFAULT_RFM69_MOSI,
-                DEFAULT_RFM69_SCK,
-                cs
-        );
-        // First init right after connect can be slow; use a longer timeout and retry once.
-        byte[] resp = sendCommand(cmd, 2000);
-        if (resp == null || resp.length == 0) {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException ignored) {
-            }
-            resp = sendCommand(cmd, 2000);
-        }
-
-        if (resp == null || resp.length == 0) {
-            Log.e("IsmFragment", "rfm69 init failed: empty response (timeout?)");
-            showToast("RFM69 init failed: no response");
-            return false;
-        }
-
-        // Accept ACK even if extra bytes are present (we'll warn).
-        if ((resp[0] & 0xFF) == 0x00) {
-            if (resp.length != 1) {
-                Log.w("IsmFragment", "rfm69 init: ACK with extra bytes (" + resp.length + "): " + bytesToHex(resp));
-            }
-            return true;
-        }
-
-        if (isErr(resp)) {
-            Log.e("IsmFragment", "rfm69 init failed: device returned ERR (0xFF)");
-            showToast("RFM69 init failed: device returned error (0xFF)");
-            return false;
-        }
-
-        // Helpful hint if we're still on legacy ASCII protocol.
-        if (resp.length >= 2 && (resp[0] == 'o' || resp[0] == 'O') && (resp[1] == 'k' || resp[1] == 'K')) {
-            Log.e("IsmFragment", "rfm69 init failed: device returned legacy ASCII ok/err format: " + bytesToHex(resp));
-            showToast("RFM69 init failed: firmware still on ASCII protocol");
-            return false;
-        }
-
-        Log.e("IsmFragment", "rfm69 init failed: unexpected response (" + resp.length + "): " + bytesToHex(resp));
-        showToast("RFM69 init failed: unexpected response");
-        return false;
-    }
-
     private static String bytesToHex(byte[] bytes) {
         if (bytes == null) return "";
         StringBuilder sb = new StringBuilder();
@@ -1692,8 +1477,7 @@ public class IsmFragment extends Fragment {
     }
 
     private byte readReg(byte addr) {
-        String verb = selectedChip == RadioChip.RFM69 ? "rfm69" : "cc1101";
-        byte[] resp = sendCommand(String.format(Locale.US, "%s read --reg=%d", verb, addr & 0xFF), 1000);
+        byte[] resp = sendCommand(String.format(Locale.US, "cc1101 read --reg=%d", addr & 0xFF), 1000);
         if (isErr(resp)) {
             return 0;
         }
@@ -1701,8 +1485,7 @@ public class IsmFragment extends Fragment {
     }
 
     private void writeReg(byte addr, byte value) {
-        String verb = selectedChip == RadioChip.RFM69 ? "rfm69" : "cc1101";
-        sendCommand(String.format(Locale.US, "%s write --reg=%d --val=%d", verb, addr & 0xFF, value & 0xFF), 1000);
+        sendCommand(String.format(Locale.US, "cc1101 write --reg=%d --val=%d", addr & 0xFF, value & 0xFF), 1000);
     }
 
     private byte[] cc1101ReadBurstReg(byte addr, int len) {
@@ -1972,102 +1755,6 @@ public class IsmFragment extends Fragment {
         return readReg(CC1101_REG_MDMCFG2) == newMdmcfg2 && readReg(CC1101_REG_FREND0) == frend0;
     }
 
-    private double getFrequency() {
-        if (selectedChip != RadioChip.RFM69) {
-            return 0.0;
-        }
-        String s = parseRawString(sendCommand("rfm69 get_freq", 1000));
-        try {
-            return Double.parseDouble(s);
-        } catch (NumberFormatException e) {
-            return 0.0;
-        }
-    }
-
-    private void setFrequencyMHz(float freqMHz) {
-        if (selectedChip != RadioChip.RFM69) {
-            return;
-        }
-        sendCommand(String.format(Locale.US, "rfm69 set_freq --mhz=%.6f", freqMHz), 1000);
-    }
-
-    private int getDataRate() {
-        if (selectedChip != RadioChip.RFM69) {
-            return 0;
-        }
-        String s = parseRawString(sendCommand("rfm69 get_bitrate", 1000));
-        try {
-            return Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private void setDataRate(int bps) {
-        if (selectedChip != RadioChip.RFM69) {
-            return;
-        }
-        sendCommand("rfm69 set_bitrate --bps=" + bps, 1000);
-    }
-
-    private double getBandwidth() {
-        if (selectedChip != RadioChip.RFM69) {
-            return 0.0;
-        }
-        String s = parseRawString(sendCommand("rfm69 get_bw", 1000));
-        try {
-            return Double.parseDouble(s);
-        } catch (NumberFormatException e) {
-            return 0.0;
-        }
-    }
-
-    private void setBandwidth(byte bw) {
-        if (selectedChip != RadioChip.RFM69) {
-            return;
-        }
-        sendCommand("rfm69 set_bw --val=" + (bw & 0xFF), 1000);
-    }
-
-    private int getDeviation() {
-        if (selectedChip != RadioChip.RFM69) {
-            return 0;
-        }
-        String s = parseRawString(sendCommand("rfm69 get_dev", 1000));
-        try {
-            return Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private void setDeviation(int hz) {
-        if (selectedChip != RadioChip.RFM69) {
-            return;
-        }
-        sendCommand("rfm69 set_dev --hz=" + hz, 1000);
-    }
-
-    private int getModulation() {
-        if (selectedChip != RadioChip.RFM69) {
-            return MOD_FSK;
-        }
-        String s = parseRawString(sendCommand("rfm69 get_mod", 1000));
-        return "ook".equalsIgnoreCase(s) ? MOD_OOK : MOD_FSK;
-    }
-
-    private int getPowerLevel() {
-        if (selectedChip != RadioChip.RFM69) {
-            return 0;
-        }
-        String s = parseRawString(sendCommand("rfm69 get_power", 1000));
-        try {
-            return Integer.parseInt(s);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
     private void reloadCardViews() {
         refreshData(false);
     }
@@ -2120,20 +1807,18 @@ public class IsmFragment extends Fragment {
                     androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
             String saved = preferences.getString("ism_selected_chip", "");
             if ("CC1101".equalsIgnoreCase(saved)) selectedChip = RadioChip.CC1101;
-            else if ("RFM69".equalsIgnoreCase(saved)) selectedChip = RadioChip.RFM69;
         }
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
                 requireContext(),
                 android.R.layout.simple_spinner_item,
-                new String[]{"Select chip…", "CC1101", "RFM69"}
+                new String[]{"Select chip…", "CC1101"}
         );
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         binding.chipSpinner.setAdapter(adapter);
 
         int initialSelection;
         if (selectedChip == RadioChip.CC1101) initialSelection = 1;
-        else if (selectedChip == RadioChip.RFM69) initialSelection = 2;
         else initialSelection = 0;
         binding.chipSpinner.setSelection(initialSelection, false);
 
@@ -2141,8 +1826,7 @@ public class IsmFragment extends Fragment {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
                 RadioChip newChip;
-                if (position == 2) newChip = RadioChip.RFM69;
-                else if (position == 1) newChip = RadioChip.CC1101;
+                if (position == 1) newChip = RadioChip.CC1101;
                 else newChip = RadioChip.UNKNOWN;
                 if (newChip == selectedChip) {
                     return;
@@ -2152,7 +1836,7 @@ public class IsmFragment extends Fragment {
                         androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext());
                 preferences.edit().putString(
                         "ism_selected_chip",
-                        selectedChip == RadioChip.RFM69 ? "RFM69" : (selectedChip == RadioChip.CC1101 ? "CC1101" : "")
+                        selectedChip == RadioChip.CC1101 ? "CC1101" : ""
                 ).apply();
                 if (viewModel != null) {
                     viewModel.clearRegisterValues();
@@ -2171,9 +1855,9 @@ public class IsmFragment extends Fragment {
 
     private void updateChipDependentVisibility() {
         if (binding == null) return;
-        binding.rfm69ParametersContainer.setVisibility(selectedChip == RadioChip.UNKNOWN ? View.GONE : View.VISIBLE);
+        binding.rfm69ParametersContainer.setVisibility(selectedChip == RadioChip.CC1101 ? View.VISIBLE : View.GONE);
         binding.cc1101HintTextView.setVisibility(selectedChip == RadioChip.CC1101 ? View.VISIBLE : View.GONE);
-        binding.loadButton.setEnabled(selectedChip != RadioChip.UNKNOWN);
+        binding.loadButton.setEnabled(selectedChip == RadioChip.CC1101);
         if (rfControlsChip != selectedChip) {
             applyRfControlAdaptersForChip();
             rfControlsChip = selectedChip;
@@ -2194,10 +1878,6 @@ public class IsmFragment extends Fragment {
                 }
             });
         }
-    }
-
-    private boolean ensureSelectedChipOpen() {
-        return selectedChip == RadioChip.RFM69 ? ensureRfm69Open() : ensureCc1101Open();
     }
 
     private boolean ensureCc1101Open() {
