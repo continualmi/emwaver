@@ -43,6 +43,10 @@ docs/docs/
 target/
 **/target/
 
+# STM32 USB device target sources (not Rust build output)
+!stm/emwaver-firmware/USB_DEVICE/Target/
+!stm/emwaver-firmware/USB_DEVICE/Target/**
+
 # STM32CubeIDE Makefile build outputs (generated)
 stm/emwaver-firmware/Release/**/*.o
 stm/emwaver-firmware/Release/**/*.d
