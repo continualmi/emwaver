@@ -63,6 +63,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [lastMidiRefreshMs, setLastMidiRefreshMs] = useState<number | null>(null);
   const [lastMidiRefreshCount, setLastMidiRefreshCount] = useState<number | null>(null);
   const [lastMidiRefreshError, setLastMidiRefreshError] = useState<string | null>(null);
+  const midiRefreshSeqRef = useRef(0);
 
   const [daemonStatus, setDaemonStatus] = useState<{ running: boolean; socket: string } | null>(null);
   const [daemonStatusError, setDaemonStatusError] = useState<string | null>(null);
@@ -132,10 +133,12 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
   const refreshMidiPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {
     const { silent = false } = options;
+    const seq = ++midiRefreshSeqRef.current;
     setIsRefreshingMidiPorts(true);
     setLastMidiRefreshError(null);
     try {
       const ports = await listMIDIPorts();
+      if (seq !== midiRefreshSeqRef.current) return ports;
       setMidiPorts(ports);
       setSelectedMidiPort((prev) => {
         if (ports.length === 0) return "";
@@ -144,8 +147,12 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       });
       setLastMidiRefreshMs(Date.now());
       setLastMidiRefreshCount(ports.length);
+      if (ports.length > 0) {
+        setLastMidiRefreshError(null);
+      }
       return ports;
     } catch (e) {
+      if (seq !== midiRefreshSeqRef.current) return [];
       console.error("Failed to list USB devices", e);
       setLastMidiRefreshMs(Date.now());
       setLastMidiRefreshCount(0);
@@ -155,7 +162,9 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       }
       return [];
     } finally {
-      setIsRefreshingMidiPorts(false);
+      if (seq === midiRefreshSeqRef.current) {
+        setIsRefreshingMidiPorts(false);
+      }
     }
   }, [dialog, listMIDIPorts]);
 
