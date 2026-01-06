@@ -152,6 +152,18 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 - Also includes the long-lived **daemon** (`cli/src/daemon.rs`) used by Desktop to keep a single stable device connection.
 - Keep UX aligned with the 64B command protocol and on-wire framing.
 
+#### Debugging With `emwaver cmd`
+
+The `emwaver` CLI is a fast way to debug device ↔ firmware issues without the desktop UI.
+
+- Connection sanity check: `emwaver cmd version` (expects `Welcome to EMWaver firmware ...`).
+- Raw SPI debug (CS is manual GPIO; `--cs` uses encoded pins: `PA0..PA15 => 0..15`, `PB0..PB15 => 16..31`):
+  - CC1101 VERSION (returns 2 bytes: status + data): `emwaver cmd --verbose "spi xfer --cs=4 --tx=F100 --rx=2"` (look at `rx[1]`).
+  - CC1101 helper path: `emwaver cmd --verbose "cc1101 read --reg=0x31"`.
+- GPIO inspection can confirm pin mux/state while debugging: `emwaver cmd --verbose "gpio info --pin=4"`.
+- The transport is fixed 64-byte frames: the command string must be ≤ 64 bytes or you’ll hit `Command too large`.
+  - Prefer compact hex like `--tx=F100` over verbose `--tx=0xF1,0x00` when sending many bytes.
+
 ### VS Code Extension (`/vsc`)
 
 - VS Code integration for Wavelet authoring and device interaction.
