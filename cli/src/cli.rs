@@ -25,7 +25,7 @@ pub struct Cli {
     pub command: Option<Command>,
 }
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum CodegenMode {
     /// Run STM32CubeMX code generation only when the `.ioc` appears newer than generated sources.
     Auto,
@@ -135,7 +135,7 @@ pub enum Command {
         #[arg(long)]
         project: Option<PathBuf>,
         /// STM32CubeMX code generation mode (STM32 projects only).
-        #[arg(long, value_enum, default_value_t = CodegenMode::Auto)]
+        #[arg(long, value_enum, default_value_t = CodegenMode::Never)]
         codegen: CodegenMode,
         /// Print additional build/codegen details.
         #[arg(long)]

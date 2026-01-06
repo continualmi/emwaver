@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-use crate::dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice, DfuOpenOptions};
 use crate::cli::CodegenMode;
+use crate::dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice, DfuOpenOptions};
 use anyhow::{Context, Result, bail};
+use std::env;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::env;
 use std::io::Write;
 use std::io::{self, BufRead, BufReader, IsTerminal};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 #[cfg(target_os = "macos")]
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 #[cfg(target_os = "macos")]
 use std::io::Read;
 use std::sync::mpsc;
@@ -37,8 +37,7 @@ use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
 const STM32_CUBEMX_DOWNLOAD_URL: &str = "https://www.st.com/en/development-tools/stm32cubemx.html";
-const ARM_GNU_TOOLCHAIN_DOWNLOAD_URL: &str =
-    "https://developer.arm.com/downloads/-/gnu-rm";
+const ARM_GNU_TOOLCHAIN_DOWNLOAD_URL: &str = "https://developer.arm.com/downloads/-/gnu-rm";
 
 #[derive(Clone, Debug)]
 pub enum FirmwareProgress {
@@ -209,7 +208,7 @@ fn host_platform() -> HostPlatform {
 }
 
 pub fn build(project: Option<PathBuf>, codegen: CodegenMode, verbose: bool) -> Result<()> {
-    let project = resolve_firmware_project(project)?;
+    let project = resolve_firmware_project(project, codegen != CodegenMode::Never)?;
     stm32_codegen_if_needed(&project, codegen, verbose)?;
     let _bin = stm32_build_and_export_bin(&project, verbose)?;
     Ok(())
@@ -223,7 +222,7 @@ pub fn build_at_streaming(
     prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
-    let project = resolve_firmware_project_at(&start_dir, project)?;
+    let project = resolve_firmware_project_at(&start_dir, project, codegen != CodegenMode::Never)?;
     let _ = prefer_pty;
     stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
     let _bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
@@ -236,7 +235,7 @@ pub fn flash(
     dfu_alt: Option<u8>,
     verbose: bool,
 ) -> Result<()> {
-    let project = resolve_firmware_project(project)?;
+    let project = resolve_firmware_project(project, codegen != CodegenMode::Never)?;
     stm32_codegen_if_needed(&project, codegen, verbose)?;
     let bin = stm32_build_and_export_bin(&project, verbose)?;
     dfu_flash_file(
@@ -258,7 +257,7 @@ pub fn flash_at_streaming(
     prefer_pty: bool,
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<()> {
-    let project = resolve_firmware_project_at(&start_dir, project)?;
+    let project = resolve_firmware_project_at(&start_dir, project, codegen != CodegenMode::Never)?;
     let _ = prefer_pty;
     stm32_codegen_if_needed_streaming(&project, codegen, verbose, on_event)?;
     let bin = stm32_build_and_export_bin_streaming(&project, verbose, on_event)?;
@@ -281,9 +280,17 @@ pub fn dfu_flash_file(
     alt: Option<u8>,
     verbose: bool,
 ) -> Result<()> {
-    let firmware = fs::read(&file).with_context(|| format!("failed to read firmware file `{}`", file.display()))?;
-    let (mut device, discovery) = DfuDevice::open_with_options(vid, pid, DfuOpenOptions { alt_setting: alt, verbose })
-        .map_err(anyhow::Error::msg)?;
+    let firmware = fs::read(&file)
+        .with_context(|| format!("failed to read firmware file `{}`", file.display()))?;
+    let (mut device, discovery) = DfuDevice::open_with_options(
+        vid,
+        pid,
+        DfuOpenOptions {
+            alt_setting: alt,
+            verbose,
+        },
+    )
+    .map_err(anyhow::Error::msg)?;
     if verbose {
         eprintln!(
             "DFU using interface {}{}",
@@ -311,9 +318,15 @@ fn dfu_flash_file_streaming(
 ) -> Result<()> {
     let firmware = fs::read(&file)
         .with_context(|| format!("failed to read firmware file `{}`", file.display()))?;
-    let (mut device, discovery) =
-        DfuDevice::open_with_options(vid, pid, DfuOpenOptions { alt_setting: alt, verbose })
-            .map_err(anyhow::Error::msg)?;
+    let (mut device, discovery) = DfuDevice::open_with_options(
+        vid,
+        pid,
+        DfuOpenOptions {
+            alt_setting: alt,
+            verbose,
+        },
+    )
+    .map_err(anyhow::Error::msg)?;
     if verbose {
         on_event(FirmwareProgress::Info(format!(
             "DFU using interface {}{}",
@@ -325,43 +338,51 @@ fn dfu_flash_file_streaming(
         )));
     }
     device
-        .flash(&firmware, address, |msg| on_event(FirmwareProgress::Info(msg)))
+        .flash(&firmware, address, |msg| {
+            on_event(FirmwareProgress::Info(msg))
+        })
         .map_err(anyhow::Error::msg)?;
     Ok(())
 }
 
-fn resolve_firmware_project(project: Option<PathBuf>) -> Result<PathBuf> {
+fn resolve_firmware_project(project: Option<PathBuf>, require_ioc: bool) -> Result<PathBuf> {
     let cwd = env::current_dir().context("failed to read current directory")?;
-    resolve_firmware_project_at(&cwd, project)
+    resolve_firmware_project_at(&cwd, project, require_ioc)
 }
 
 fn resolve_firmware_project_at(
     start_dir: &Path,
     project: Option<PathBuf>,
+    require_ioc: bool,
 ) -> Result<PathBuf> {
     let project = match project {
         Some(path) => path,
-        None => autodetect_firmware_project_from(start_dir)?,
+        None => autodetect_firmware_project_from(start_dir, require_ioc)?,
     };
 
-    if is_stm32_cube_project_dir(&project)? {
+    if is_stm32_cube_project_dir(&project, require_ioc)? {
         return Ok(project);
     }
 
     bail!(
-        "firmware project `{}` not found (expected STM32 CubeMX `.ioc` + `Release/makefile`)",
-        project.display()
+        "firmware project `{}` not found (expected `Release/makefile`{})",
+        project.display(),
+        if require_ioc {
+            " + STM32 CubeMX `.ioc`"
+        } else {
+            ""
+        }
     )
 }
 
-fn autodetect_firmware_project_from(start_dir: &Path) -> Result<PathBuf> {
+fn autodetect_firmware_project_from(start_dir: &Path, require_ioc: bool) -> Result<PathBuf> {
     if !start_dir.exists() {
         bail!("start directory `{}` does not exist", start_dir.display());
     }
 
     // Prefer "current tree" projects (ancestor dirs) over subdirs.
     for dir in start_dir.ancestors() {
-        if is_stm32_cube_project_dir(dir)? {
+        if is_stm32_cube_project_dir(dir, require_ioc)? {
             return Ok(dir.to_path_buf());
         }
     }
@@ -371,10 +392,12 @@ fn autodetect_firmware_project_from(start_dir: &Path) -> Result<PathBuf> {
         let stm_subdir = dir.join("stm");
         if stm_subdir.is_dir() {
             let mut candidates = Vec::new();
-            for entry in fs::read_dir(&stm_subdir).with_context(|| format!("failed to read `{}`", stm_subdir.display()))? {
+            for entry in fs::read_dir(&stm_subdir)
+                .with_context(|| format!("failed to read `{}`", stm_subdir.display()))?
+            {
                 let entry = entry?;
                 let path = entry.path();
-                if path.is_dir() && is_stm32_cube_project_dir(&path)? {
+                if path.is_dir() && is_stm32_cube_project_dir(&path, require_ioc)? {
                     candidates.push(path);
                 }
             }
@@ -395,19 +418,25 @@ fn autodetect_firmware_project_from(start_dir: &Path) -> Result<PathBuf> {
 
 // ---- STM32 CubeMX / CubeIDE ----
 
-fn is_stm32_cube_project_dir(project: &Path) -> Result<bool> {
+fn is_stm32_cube_project_dir(project: &Path, require_ioc: bool) -> Result<bool> {
     if !project.is_dir() {
         return Ok(false);
     }
     if !project.join("Release").join("makefile").is_file() {
         return Ok(false);
     }
-    Ok(find_single_ioc(project).is_ok())
+    if require_ioc {
+        Ok(find_single_ioc(project).is_ok())
+    } else {
+        Ok(true)
+    }
 }
 
 fn find_single_ioc(project: &Path) -> Result<PathBuf> {
     let mut iocs = Vec::new();
-    for entry in fs::read_dir(project).with_context(|| format!("failed to read `{}`", project.display()))? {
+    for entry in
+        fs::read_dir(project).with_context(|| format!("failed to read `{}`", project.display()))?
+    {
         let entry = entry?;
         let path = entry.path();
         if path.extension() == Some(OsStr::new("ioc")) {
@@ -428,21 +457,14 @@ fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> 
     if verbose {
         match find_cubemx_optional()? {
             Some(path) => eprintln!("STM32CubeMX: {}", path.display()),
-            None => eprintln!(
-                "STM32CubeMX: not found (download: {STM32_CUBEMX_DOWNLOAD_URL})"
-            ),
+            None => eprintln!("STM32CubeMX: not found (download: {STM32_CUBEMX_DOWNLOAD_URL})"),
         }
     }
 
     match mode {
         CodegenMode::Never => {
             if verbose {
-                let needed = stm32_codegen_needed(project)?;
-                if needed {
-                    eprintln!("Skipping STM32CubeMX code generation (`--codegen never`).");
-                } else {
-                    eprintln!("Skipping STM32CubeMX code generation (`--codegen never`, not needed).");
-                }
+                eprintln!("Skipping STM32CubeMX code generation (`--codegen never`).");
             }
             Ok(())
         }
@@ -478,7 +500,9 @@ fn stm32_codegen_if_needed(project: &Path, mode: CodegenMode, verbose: bool) -> 
                 }
             } else {
                 if verbose {
-                    eprintln!("Skipping STM32CubeMX code generation (generated sources appear up-to-date).");
+                    eprintln!(
+                        "Skipping STM32CubeMX code generation (generated sources appear up-to-date)."
+                    );
                 }
                 Ok(())
             }
@@ -494,7 +518,10 @@ fn stm32_codegen_if_needed_streaming(
 ) -> Result<()> {
     if verbose {
         match find_cubemx_optional()? {
-            Some(path) => on_event(FirmwareProgress::Info(format!("STM32CubeMX: {}", path.display()))),
+            Some(path) => on_event(FirmwareProgress::Info(format!(
+                "STM32CubeMX: {}",
+                path.display()
+            ))),
             None => on_event(FirmwareProgress::Info(format!(
                 "STM32CubeMX: not found (download: {STM32_CUBEMX_DOWNLOAD_URL})"
             ))),
@@ -504,16 +531,9 @@ fn stm32_codegen_if_needed_streaming(
     match mode {
         CodegenMode::Never => {
             if verbose {
-                let needed = stm32_codegen_needed(project)?;
-                if needed {
-                    on_event(FirmwareProgress::Info(
-                        "Skipping STM32CubeMX code generation (`--codegen never`).".into(),
-                    ));
-                } else {
-                    on_event(FirmwareProgress::Info(
-                        "Skipping STM32CubeMX code generation (`--codegen never`, not needed).".into(),
-                    ));
-                }
+                on_event(FirmwareProgress::Info(
+                    "Skipping STM32CubeMX code generation (`--codegen never`).".into(),
+                ));
             }
             Ok(())
         }
@@ -572,7 +592,10 @@ fn stm32_codegen_needed(project: &Path) -> Result<bool> {
         project.join("Core").join("Src").join("main.c"),
         project.join("Core").join("Inc").join("main.h"),
         project.join("USB_DEVICE").join("App").join("usb_device.c"),
-        project.join("USB_DEVICE").join("Target").join("usbd_conf.c"),
+        project
+            .join("USB_DEVICE")
+            .join("Target")
+            .join("usbd_conf.c"),
     ];
 
     let mut newest_generated: Option<std::time::SystemTime> = None;
@@ -597,13 +620,21 @@ fn stm32_codegen_needed(project: &Path) -> Result<bool> {
 }
 
 fn stm32_codegen_with(cubemx: &Path, project: &Path) -> Result<()> {
-    let ioc = find_single_ioc(project)?.canonicalize().with_context(|| "failed to resolve `.ioc` path")?;
+    let ioc = find_single_ioc(project)?
+        .canonicalize()
+        .with_context(|| "failed to resolve `.ioc` path")?;
 
     // CubeMX on macOS is a GUI app; script mode still may open a window. We run it
     // in quiet mode to avoid requiring the user to navigate to the project.
     let mut script = NamedTempFile::new().context("failed to create CubeMX script file")?;
     script
-        .write_all(format!("config load {ioc}\nproject generate\nexit\n", ioc = ioc.display()).as_bytes())
+        .write_all(
+            format!(
+                "config load {ioc}\nproject generate\nexit\n",
+                ioc = ioc.display()
+            )
+            .as_bytes(),
+        )
         .context("failed to write CubeMX script")?;
     let _ = script.flush();
 
@@ -649,9 +680,8 @@ fn stm32_codegen_with_streaming(
         .current_dir(project)
         .stdin(Stdio::null());
 
-    let status =
-        run_command_streaming(&mut cmd, on_event, Some("STM32CubeMX".into()))
-            .context("failed to run STM32CubeMX")?;
+    let status = run_command_streaming(&mut cmd, on_event, Some("STM32CubeMX".into()))
+        .context("failed to run STM32CubeMX")?;
     if !status.success {
         bail!("STM32CubeMX exited with {}", status.description);
     }
@@ -660,7 +690,9 @@ fn stm32_codegen_with_streaming(
 
 fn stm32_build_and_export_bin(project: &Path, verbose: bool) -> Result<PathBuf> {
     let env = stm32_build_env()?;
-    let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let jobs = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
     let release = project.join("Release");
 
     if verbose {
@@ -726,12 +758,17 @@ fn stm32_build_and_export_bin_streaming(
     on_event: &mut dyn FnMut(FirmwareProgress),
 ) -> Result<PathBuf> {
     let env = stm32_build_env()?;
-    let jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let jobs = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
     let release = project.join("Release");
 
     if verbose {
         if let Some(gcc) = resolve_in_env_path("arm-none-eabi-gcc", &env) {
-            on_event(FirmwareProgress::Info(format!("Using ARM toolchain: {}", gcc.display())));
+            on_event(FirmwareProgress::Info(format!(
+                "Using ARM toolchain: {}",
+                gcc.display()
+            )));
         }
         if let Ok(spec_path) = Command::new("arm-none-eabi-gcc")
             .arg("-print-file-name=nano.specs")
@@ -761,7 +798,11 @@ fn stm32_build_and_export_bin_streaming(
     )
     .with_context(|| format!("failed to run `make -C {}`", release.display()))?;
     if !status.success {
-        bail!("`make -C {}` exited with {}", release.display(), status.description);
+        bail!(
+            "`make -C {}` exited with {}",
+            release.display(),
+            status.description
+        );
     }
 
     let elf = find_single_elf(&release)?;
@@ -775,13 +816,17 @@ fn stm32_build_and_export_bin_streaming(
         .arg(&bin)
         .envs(env)
         .stdin(Stdio::null());
-    let status = run_command_streaming(&mut objcopy, on_event, Some("arm-none-eabi-objcopy".into()))
-        .context("failed to run `arm-none-eabi-objcopy`")?;
+    let status =
+        run_command_streaming(&mut objcopy, on_event, Some("arm-none-eabi-objcopy".into()))
+            .context("failed to run `arm-none-eabi-objcopy`")?;
     if !status.success {
         bail!("`arm-none-eabi-objcopy` exited with {}", status.description);
     }
 
-    on_event(FirmwareProgress::Info(format!("Exported: {}", bin.display())));
+    on_event(FirmwareProgress::Info(format!(
+        "Exported: {}",
+        bin.display()
+    )));
     Ok(bin)
 }
 
@@ -810,7 +855,9 @@ fn resolve_in_env_path(binary: &str, env: &[(String, String)]) -> Option<PathBuf
 
 fn find_single_elf(release_dir: &Path) -> Result<PathBuf> {
     let mut elfs = Vec::new();
-    for entry in fs::read_dir(release_dir).with_context(|| format!("failed to read `{}`", release_dir.display()))? {
+    for entry in fs::read_dir(release_dir)
+        .with_context(|| format!("failed to read `{}`", release_dir.display()))?
+    {
         let entry = entry?;
         let path = entry.path();
         if path.extension() == Some(OsStr::new("elf")) {
@@ -820,7 +867,10 @@ fn find_single_elf(release_dir: &Path) -> Result<PathBuf> {
     match elfs.len() {
         0 => bail!("no `.elf` output found in `{}`", release_dir.display()),
         1 => Ok(elfs.remove(0)),
-        _ => bail!("multiple `.elf` outputs found in `{}`", release_dir.display()),
+        _ => bail!(
+            "multiple `.elf` outputs found in `{}`",
+            release_dir.display()
+        ),
     }
 }
 
@@ -837,7 +887,10 @@ fn stm32_build_env() -> Result<Vec<(String, String)>> {
         let mut new_path = std::ffi::OsString::from(bin_dir);
         new_path.push(":");
         new_path.push(current);
-        return Ok(vec![("PATH".to_string(), new_path.to_string_lossy().into_owned())]);
+        return Ok(vec![(
+            "PATH".to_string(),
+            new_path.to_string_lossy().into_owned(),
+        )]);
     }
 
     if toolchain_ok().unwrap_or(false) {
@@ -849,7 +902,10 @@ fn stm32_build_env() -> Result<Vec<(String, String)>> {
         let mut new_path = std::ffi::OsString::from(bin_dir);
         new_path.push(":");
         new_path.push(current);
-        return Ok(vec![("PATH".to_string(), new_path.to_string_lossy().into_owned())]);
+        return Ok(vec![(
+            "PATH".to_string(),
+            new_path.to_string_lossy().into_owned(),
+        )]);
     }
 
     if try_install_arm_toolchain_interactive()? {
@@ -893,7 +949,9 @@ Install it now?"
         HostPlatform::Linux => try_install_arm_toolchain_linux(),
         HostPlatform::Windows => try_install_arm_toolchain_windows(),
         HostPlatform::Other => {
-            eprintln!("Automatic installation is not supported on this platform. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL}");
+            eprintln!(
+                "Automatic installation is not supported on this platform. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL}"
+            );
             Ok(false)
         }
     }
@@ -906,17 +964,30 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<std::process::ExitStatus> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .with_context(|| format!("failed to run `{}`", std::iter::once(program).chain(args.iter().copied()).collect::<Vec<_>>().join(" ")))
+        .with_context(|| {
+            format!(
+                "failed to run `{}`",
+                std::iter::once(program)
+                    .chain(args.iter().copied())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        })
 }
 
 fn try_install_arm_toolchain_macos() -> Result<bool> {
     if which("brew").is_err() {
-        eprintln!("Homebrew not found. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE).");
+        eprintln!(
+            "Homebrew not found. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE)."
+        );
         return Ok(false);
     }
 
     let attempts: &[(&[&str], &str)] = &[
-        (&["install", "arm-none-eabi-gcc"], "brew install arm-none-eabi-gcc"),
+        (
+            &["install", "arm-none-eabi-gcc"],
+            "brew install arm-none-eabi-gcc",
+        ),
         (
             &["install", "--cask", "gcc-arm-embedded"],
             "brew install --cask gcc-arm-embedded",
@@ -932,7 +1003,9 @@ fn try_install_arm_toolchain_macos() -> Result<bool> {
         }
     }
 
-    eprintln!("Toolchain install via Homebrew failed. Install manually from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} or install STM32CubeIDE.");
+    eprintln!(
+        "Toolchain install via Homebrew failed. Install manually from {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} or install STM32CubeIDE."
+    );
     Ok(false)
 }
 
@@ -964,7 +1037,9 @@ Install manually (download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL}) or install STM32Cu
 
     if which("pacman").is_ok() {
         if has_sudo {
-            eprintln!("Running `sudo pacman -Sy --noconfirm arm-none-eabi-gcc arm-none-eabi-binutils`...");
+            eprintln!(
+                "Running `sudo pacman -Sy --noconfirm arm-none-eabi-gcc arm-none-eabi-binutils`..."
+            );
             let status = run_cmd(
                 "sudo",
                 &[
@@ -1022,7 +1097,9 @@ fn try_install_arm_toolchain_windows() -> Result<bool> {
         }
     }
 
-    eprintln!("No supported Windows package manager found. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE).");
+    eprintln!(
+        "No supported Windows package manager found. Download: {ARM_GNU_TOOLCHAIN_DOWNLOAD_URL} (or install STM32CubeIDE)."
+    );
     Ok(false)
 }
 
@@ -1083,16 +1160,16 @@ fn toolchain_ok() -> Result<bool> {
     if !nano_specs.status.success() {
         return Ok(false);
     }
-    let nano_specs = String::from_utf8_lossy(&nano_specs.stdout).trim().to_string();
+    let nano_specs = String::from_utf8_lossy(&nano_specs.stdout)
+        .trim()
+        .to_string();
     if nano_specs.is_empty() || nano_specs == "nano.specs" || !Path::new(&nano_specs).is_file() {
         return Ok(false);
     }
 
     let mut test_c = NamedTempFile::new().context("failed to create toolchain test source")?;
     test_c
-        .write_all(
-            b"#include <stdint.h>\n#include <stdio.h>\nint main(void) { return 0; }\n",
-        )
+        .write_all(b"#include <stdint.h>\n#include <stdio.h>\nint main(void) { return 0; }\n")
         .context("failed to write toolchain test source")?;
     let test_o = NamedTempFile::new().context("failed to create toolchain test output")?;
 
@@ -1128,10 +1205,17 @@ fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
             continue;
         }
 
-        for entry in WalkDir::new(&ide_root).max_depth(8).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&ide_root)
+            .max_depth(8)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if entry.file_type().is_file() && entry.file_name() == "arm-none-eabi-gcc" {
                 let path = entry.path();
-                if path.parent().is_some_and(|p| p.file_name() == Some(OsStr::new("bin"))) {
+                if path
+                    .parent()
+                    .is_some_and(|p| p.file_name() == Some(OsStr::new("bin")))
+                {
                     return Ok(path.parent().map(|p| p.to_path_buf()));
                 }
             }
@@ -1151,7 +1235,9 @@ fn find_cubemx_optional() -> Result<Option<PathBuf>> {
     }
 
     let candidates = [
-        PathBuf::from("/Applications/STMicroelectronics/STM32CubeMX.app/Contents/MacOS/STM32CubeMX"),
+        PathBuf::from(
+            "/Applications/STMicroelectronics/STM32CubeMX.app/Contents/MacOS/STM32CubeMX",
+        ),
         PathBuf::from("/Applications/STM32CubeMX.app/Contents/MacOS/STM32CubeMX"),
         env::var_os("HOME")
             .map(PathBuf::from)
