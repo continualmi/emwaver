@@ -109,6 +109,26 @@ pub fn is_socket_alive(_: &Path) -> bool {
 }
 
 fn find_emwaver_exe() -> Option<PathBuf> {
+    // Dev preference: when running the desktop app in debug (e.g. `npm run tauri dev`),
+    // prefer the repo's own `cli/target/debug/emwaver` binary so local CLI changes are
+    // picked up automatically.
+    //
+    // (Env vars remain available to override, but in debug builds we want the mono-repo
+    // checkout to "just work" without extra setup.)
+    if cfg!(debug_assertions) {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf());
+        if let Some(root) = repo_root {
+            let candidate = root.join("cli").join("target").join("debug").join("emwaver");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
     if let Ok(value) = std::env::var("EMWAVER_CLI_PATH") {
         let v = value.trim();
         if !v.is_empty() {
@@ -146,21 +166,22 @@ pub fn ensure_daemon_running(socket: &Path) -> Result<(), String> {
     }
 
     ensure_parent_dir(socket)?;
-    let _ = std::fs::remove_file(socket);
 
     let Some(exe) = find_emwaver_exe() else {
         return Err("Could not locate `emwaver` CLI binary; set EMWAVER_CLI_PATH".to_string());
     };
 
     let mut cmd = std::process::Command::new(exe);
-    cmd.arg("daemon").arg("run").arg("--socket").arg(socket);
+    // Spawn via `daemon start` so the CLI handles backgrounding/locking/logging, and so
+    // the desktop app doesn't depend on foreground-mode `daemon run`.
+    cmd.arg("daemon").arg("start").arg("--socket").arg(socket);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::null());
     cmd.spawn().map_err(|e| format!("failed to start emwaver daemon: {e}"))?;
 
     // Wait briefly for the socket to come up.
-    for _ in 0..30 {
+    for _ in 0..40 {
         if is_socket_alive(socket) {
             return Ok(());
         }
