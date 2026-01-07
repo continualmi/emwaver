@@ -107,7 +107,7 @@ See the `.sha256` files for verification.
 
 ### Changes
 - Initial release
-- USB device discovery and connection (daemon-backed)
+- USB device discovery and connection (Desktop-backed)
 - Interactive shell for device control
 ```
 

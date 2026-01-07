@@ -41,7 +41,6 @@ EMWaver is an offline-first hardware hacking platform that treats your phone and
 - iOS app: `ios/`
 - Desktop app: `app/`
 - CLI: `cli/`
-- VS Code extension: `vsc/`
 
 ## Firmware
 

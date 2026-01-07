@@ -57,13 +57,13 @@ cargo install --path cli --bin emwaver --force
 # Launch the interactive menu
 emwaver
 
-# Daemon: keep a persistent device connection (recommended for shell/workflows)
-emwaver start
-emwaver status
-emwaver connect
+# Desktop-backed device workflow
+# 1) Open the Desktop app
+# 2) Connect the device in the Desktop UI
+# 3) Use the CLI to run commands
 emwaver cmd version
 
-# Connect to a nearby EMWaver device (USB) and open an interactive shell
+# Open an interactive shell (Desktop-backed)
 emwaver shell
 
 # Show raw hex payloads alongside ASCII output
@@ -82,11 +82,11 @@ emwaver flash
 emwaver dfu ./firmware.bin
 ```
 
-## Daemon Notes
+## Desktop Notes
 
-The CLI includes a Unix-only local daemon that keeps the USB connection alive and exposes a local Unix socket for `emwaver shell`, `emwaver daemon ...`, and higher-level workflows (`emwaver buffer/sampler/retransmit`).
+The CLI is a helper client; hardware I/O and wavelet execution run inside the Desktop app.
 
-See [EMWaver Daemon + CLI](daemon.md) for the full “connect → cmd → workflows” flow.
+See [Desktop + CLI](desktop-cli.md) for details.
 
 ## Development
 
