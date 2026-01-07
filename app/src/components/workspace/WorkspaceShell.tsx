@@ -256,9 +256,7 @@ export default function WorkspaceShell({
             if (!status.connected) {
               return null;
             }
-            const response = await send(command, timeoutMs, 1);
-            await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
-            return response;
+            return await send(command, timeoutMs, 1);
           })
           .catch(async () => null);
 
@@ -275,9 +273,7 @@ export default function WorkspaceShell({
             if (!status.connected) {
               return null;
             }
-            const response = await sendPacket(data, timeoutMs, 1);
-            await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
-            return response;
+            return await sendPacket(data, timeoutMs, 1);
           })
           .catch(async () => null);
 
