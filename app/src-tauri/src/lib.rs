@@ -18,6 +18,7 @@
 mod git;
 mod daemon_client;
 mod pty;
+mod wavelet_runtime;
 
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -1035,6 +1036,121 @@ async fn dfu_flash_file(app: tauri::AppHandle, path: String) -> Result<(), Strin
     .map_err(|e| format!("Task failed: {e}"))?
 }
 
+// ============================================================================
+// Wavelet Runtime Commands (embedded JS engine with direct USB access)
+// ============================================================================
+
+use wavelet_runtime::{WaveletRuntime, WaveletEvent, WaveletCommand};
+use std::sync::Mutex as StdMutex;
+use tokio::sync::mpsc;
+
+/// Global state for the active wavelet runtime.
+struct WaveletState {
+    command_tx: StdMutex<Option<mpsc::UnboundedSender<WaveletCommand>>>,
+}
+
+impl Default for WaveletState {
+    fn default() -> Self {
+        Self {
+            command_tx: StdMutex::new(None),
+        }
+    }
+}
+
+/// Execute a wavelet script using the embedded JS engine (fast path - no IPC per command).
+#[tauri::command]
+async fn wavelet_execute(
+    app: tauri::AppHandle,
+    daemon_state: tauri::State<'_, DaemonState>,
+    wavelet_state: tauri::State<'_, WaveletState>,
+    script: String,
+    bootstrap: String,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    
+    // Stop any existing wavelet first
+    {
+        let mut tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+        if let Some(tx) = tx_guard.take() {
+            let _ = tx.send(WaveletCommand::Stop);
+        }
+    }
+    
+    let daemon = daemon_state.conn.clone();
+    
+    // Create the runtime
+    let (runtime, command_tx, mut event_rx) = WaveletRuntime::new(daemon, bootstrap);
+    
+    // Store command channel for callbacks
+    {
+        let mut tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+        *tx_guard = Some(command_tx);
+    }
+    
+    // Spawn the runtime in a blocking thread (Boa isn't async)
+    let script_clone = script.clone();
+    let _handle = tauri::async_runtime::spawn_blocking(move || {
+        runtime.execute(&script_clone)
+    });
+    
+    // Forward events to frontend
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            match &event {
+                WaveletEvent::Render { ui } => {
+                    let _ = app_clone.emit("wavelet:render", ui);
+                }
+                WaveletEvent::Print { message } => {
+                    let _ = app_clone.emit("wavelet:print", message);
+                }
+                WaveletEvent::Error { message } => {
+                    let _ = app_clone.emit("wavelet:error", message);
+                }
+                WaveletEvent::Stopped => {
+                    let _ = app_clone.emit("wavelet:stopped", ());
+                    break;
+                }
+            }
+        }
+    });
+    
+    // Wait briefly to catch immediate errors
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    
+    Ok(())
+}
+
+/// Stop the currently running wavelet.
+#[tauri::command]
+async fn wavelet_stop(wavelet_state: tauri::State<'_, WaveletState>) -> Result<(), String> {
+    let tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+    if let Some(tx) = tx_guard.as_ref() {
+        let _ = tx.send(WaveletCommand::Stop);
+    }
+    Ok(())
+}
+
+/// Send a callback event to the running wavelet (e.g., button click).
+#[tauri::command]
+async fn wavelet_callback(
+    wavelet_state: tauri::State<'_, WaveletState>,
+    token: String,
+    data: serde_json::Value,
+) -> Result<(), String> {
+    eprintln!("[wavelet_callback] Received callback: token={}, data={:?}", token, data);
+    let tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+    if let Some(tx) = tx_guard.as_ref() {
+        eprintln!("[wavelet_callback] Sending to runtime channel");
+        tx.send(WaveletCommand::Callback { token: token.clone(), data: data.clone() })
+            .map_err(|e| format!("Failed to send callback: {}", e))?;
+        eprintln!("[wavelet_callback] Sent successfully");
+    } else {
+        eprintln!("[wavelet_callback] ERROR: No command_tx channel available!");
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::Manager;
@@ -1454,6 +1570,7 @@ pub fn run() {
                 .build(),
         )
         .manage(daemon_state)
+        .manage(WaveletState::default())
         .manage(Arc::new(PtyManager::new()))
 			        .invoke_handler(tauri::generate_handler![
             read_directory,
@@ -1505,7 +1622,10 @@ pub fn run() {
                 git_unstage_all,
                 git_discard,
                 git_commit,
-                git_push
+                git_push,
+                wavelet_execute,
+                wavelet_stop,
+                wavelet_callback
 	        ])
 	        .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -39,3 +39,5 @@ rusb = "0.9"
 portable-pty = "0.9"
 sha2 = "0.10"
 emw = { path = "../../cli" }
+boa_engine = "0.20"
+boa_gc = "0.20"
