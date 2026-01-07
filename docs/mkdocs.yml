@@ -51,7 +51,7 @@ nav:
       - STM32 (STM32F042): flashing-firmware/stm32.md
   - Documentation:
       - EMWaver CLI: documentation/cli.md
-      - Daemon + CLI: documentation/daemon.md
+      - Desktop + CLI: documentation/desktop-cli.md
       - Buffer: documentation/buffer.md
       - Wavelets: wavelets.md
 

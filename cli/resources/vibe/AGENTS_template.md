@@ -103,28 +103,14 @@ If you’re hacking an external module instead:
 
 ### Device discovery + connection management (CLI)
 
-You typically use the daemon-backed CLI for fast iteration (it keeps the connection alive).
+EMWaver uses a Desktop-owned device connection.
 
-Scan for devices (BLE):
-
-```bash
-emwaver list
-```
-
-Start / connect:
+1) Open the Desktop app
+2) Connect the device from the Desktop UI
+3) Use the CLI to run commands:
 
 ```bash
-emwaver start
-emwaver status
-emwaver connect
-emwaver connected
-```
-
-Disconnect / stop:
-
-```bash
-emwaver disconnect
-emwaver stop
+emwaver cmd version
 ```
 
 ### Sending raw commands (CLI)

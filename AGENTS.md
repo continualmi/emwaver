@@ -9,7 +9,7 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
 - **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
 - **Core UX:** **Wavelet-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
-- **Surface area shipped:** Android app, iOS app, Desktop app, CLI, VS Code extension
+- **Surface area shipped:** Android app, iOS app, Desktop app, CLI
 
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
@@ -65,7 +65,6 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Desktop App:** `app/` (Tauri)
 - **CLI:** `cli/` (device shell + internal tooling)
-- **VS Code Extension:** `vsc/` (Wavelet authoring + device shell integration)
 - **Docs:** `docs/` (MkDocs)
 
 ## Project Structure & Module Organization
@@ -138,36 +137,31 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 ### Desktop App (`/app`)
 
 - Cross-platform Tauri app.
-- Uses the **`emwaver` daemon** (implemented in `cli/`) for device I/O: the app speaks JSON-RPC over a Unix socket (see `app/src-tauri/src/daemon_client.rs`), and the daemon owns the USB MIDI connection + command execution.
+- Owns device I/O directly (in-process USB MIDI + framing) and runs wavelets locally for lowest latency.
+- Exposes a simple local Desktop↔CLI bridge (file-based mailbox) so the CLI can request actions without owning the USB connection.
 - Focus is Wavelets authoring + device interaction.
 - Avoid expanding/centering an IDE-style firmware build/flash workflow.
 
 ### CLI (`/cli`)
 
-- Rust crate/binary (`emw` → `emwaver`) that hosts the **canonical shared Rust core**.
-- Shared core lives in `cli/crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression).
-- Mobile bindings are built from that core:
-  - iOS: `cli/crates/emwaver-buffer-ios-ffi`
-  - Android: `cli/crates/emwaver-buffer-android-jni`
-- Also includes the long-lived **daemon** (`cli/src/daemon.rs`) used by Desktop to keep a single stable device connection.
-- Keep UX aligned with the 64B command protocol and on-wire framing.
+- Rust crate/binary (`emw` → `emwaver`) that acts as a helper client for the Desktop app.
+- Shared Rust core lives under `app/crates/`:
+  - `app/crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
+  - `app/crates/emwaver-buffer-ios-ffi` (iOS)
+  - `app/crates/emwaver-buffer-android-jni` (Android)
+- The CLI does not own the USB MIDI connection; it asks the Desktop app to execute device commands and wavelets.
 
 #### Debugging With `emwaver cmd`
 
 The `emwaver` CLI is a fast way to debug device ↔ firmware issues without the desktop UI.
 
-- Connection sanity check: `emwaver cmd version` (expects `Welcome to EMWaver firmware ...`).
+- Connection sanity check: open Desktop app, connect device, then run `emwaver cmd version` (expects `Welcome to EMWaver firmware ...`).
 - Raw SPI debug (CS is manual GPIO; `--cs` uses encoded pins: `PA0..PA15 => 0..15`, `PB0..PB15 => 16..31`):
   - CC1101 VERSION (returns 2 bytes: status + data): `emwaver cmd --verbose "spi xfer --cs=4 --tx=F100 --rx=2"` (look at `rx[1]`).
   - CC1101 helper path: `emwaver cmd --verbose "cc1101 read --reg=0x31"`.
 - GPIO inspection can confirm pin mux/state while debugging: `emwaver cmd --verbose "gpio info --pin=4"`.
 - The transport is fixed 64-byte frames: the command string must be ≤ 64 bytes or you’ll hit `Command too large`.
   - Prefer compact hex like `--tx=F100` over verbose `--tx=0xF1,0x00` when sending many bytes.
-
-### VS Code Extension (`/vsc`)
-
-- VS Code integration for Wavelet authoring and device interaction.
-- Do not position the extension as a required build/flash tool.
 
 ### Docs (`/docs`)
 
