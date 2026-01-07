@@ -16,7 +16,7 @@
  */
 
 use crate::cli::CodegenMode;
-use crate::dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice, DfuOpenOptions};
+use emwaver_dfu::{DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID, DfuDevice, DfuOpenOptions};
 use anyhow::{Context, Result, bail};
 use std::env;
 use std::ffi::OsStr;
