@@ -26,6 +26,7 @@ import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/mo
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
 import { useDevice } from "../../utils/DeviceContext";
 import { WaveletEngine, type WaveletTree } from "../../utils/WaveletEngine";
+import { useBackendWavelet } from "../../utils/useBackendWavelet";
 import { readWaveletsTabState, writeWaveletsTabState } from "../waveletsTabState";
 import { useWorkspaceGit } from "./hooks/useWorkspaceGit";
 import ExplorerTree from "./sidebar/ExplorerTree";
@@ -240,6 +241,26 @@ export default function WorkspaceShell({
   >({});
   const waveletEngineByPathRef = useRef<Map<string, WaveletEngine>>(new Map());
   const waveletBootstrapRef = useRef<string | null>(null);
+  
+  // Backend wavelet execution (fast mode - ~2ms per command instead of ~6-8ms)
+  const [useBackendEngine, setUseBackendEngine] = useState(true);
+  const backendWavelet = useBackendWavelet();
+  const activeBackendPathRef = useRef<string | null>(null);
+  
+  // Sync backend wavelet state to preview state
+  useEffect(() => {
+    const path = activeBackendPathRef.current;
+    if (!path || !useBackendEngine) return;
+    
+    setWaveletPreviewState((prev) => ({
+      ...prev,
+      [path]: {
+        tree: backendWavelet.state.tree,
+        console: backendWavelet.state.logs,
+        isRunning: backendWavelet.state.isRunning,
+      },
+    }));
+  }, [backendWavelet.state, useBackendEngine]);
   const waveletDeviceRef = useRef(device);
   const waveletCommandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -1102,7 +1123,28 @@ export default function WorkspaceShell({
       if (!waveletBootstrapRef.current) {
         waveletBootstrapRef.current = await readWaveletAssetScript(WAVELET_BOOTSTRAP_FILENAME);
       }
-
+      
+      // Get the script source
+      const openFileSnapshot = openFilesRef.current;
+      const openFileByPath = new Map(openFileSnapshot.map((file) => [file.path, file] as const));
+      const entryFile = openFileByPath.get(normalizedPath);
+      const entrySource =
+        entryFile?.content ??
+        (isAssetPath
+          ? await readWaveletAssetScript(basename(normalizedPath))
+          : !isTauriAvailable()
+            ? ""
+            : (await safeInvoke<string>("read_file", { payload: { path: normalizedPath } })) ?? "");
+      
+      // Use backend engine for fast execution (direct USB access, ~2ms per command)
+      if (useBackendEngine && isTauriAvailable()) {
+        activeBackendPathRef.current = normalizedPath;
+        backendWavelet.clearLogs();
+        await backendWavelet.execute(entrySource, waveletBootstrapRef.current ?? "");
+        return;
+      }
+      
+      // Fallback to frontend engine (slower, ~6-8ms per command via Tauri IPC)
       let engine = waveletEngineByPathRef.current.get(normalizedPath);
       if (!engine) {
         engine = new WaveletEngine();
@@ -1149,8 +1191,7 @@ export default function WorkspaceShell({
         }
       });
 
-      const openFileSnapshot = openFilesRef.current;
-      const openFileByPath = new Map(openFileSnapshot.map((file) => [file.path, file] as const));
+      // openFileSnapshot and openFileByPath already declared above
 
       const maxFiles = 200;
       const filePaths: string[] = [];
@@ -1207,14 +1248,6 @@ export default function WorkspaceShell({
 
       engine.updateModuleSources(moduleSources);
 
-      const entryFile = openFileByPath.get(normalizedPath);
-      const entrySource =
-        entryFile?.content ??
-        (isAssetPath
-          ? await readWaveletAssetScript(basename(normalizedPath))
-          : !isTauriAvailable()
-            ? ""
-            : (await safeInvoke<string>("read_file", { payload: { path: normalizedPath } })) ?? "");
       engine.execute(entrySource, () => {
         setWaveletPreviewState((prev) => ({
           ...prev,
@@ -1620,7 +1653,11 @@ export default function WorkspaceShell({
                   state={waveletPreviewState[activePreviewPath]}
                   deviceStatus={waveletDeviceConnection.connectionStatus()}
                   onInvokeCallback={(token, args) => {
-                    waveletEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
+                    if (useBackendEngine && activeBackendPathRef.current === activePreviewPath) {
+                      backendWavelet.invokeCallback(token, args);
+                    } else {
+                      waveletEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
+                    }
                   }}
                 />
               ) : activeFile ? (
