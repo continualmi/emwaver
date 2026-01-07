@@ -20,6 +20,7 @@
  * In Tauri v2, we check by attempting to access the API
  */
 let _tauriAvailable: boolean | null = null;
+let _invokeFunc: ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null = null;
 
 export function isTauriAvailable(): boolean {
   if (typeof window === "undefined") {
@@ -69,8 +70,12 @@ export async function safeInvoke<T>(
   }
   
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return await invoke<T>(cmd, args);
+    // Cache the invoke function to avoid dynamic import overhead on every call
+    if (!_invokeFunc) {
+      const { invoke } = await import("@tauri-apps/api/core");
+      _invokeFunc = invoke;
+    }
+    return await _invokeFunc(cmd, args) as T;
   } catch (error) {
     if (options?.throwOnError) throw error;
     console.error(`Failed to invoke ${cmd}:`, error);
