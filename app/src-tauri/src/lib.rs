@@ -16,35 +16,34 @@
  */
 
 mod git;
-mod daemon_client;
 mod pty;
 mod wavelet_runtime;
+mod desktop_ipc;
 
-use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::{
     env,
     fs,
     io,
-    io::Write as _,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    time::Duration,
 };
 use tauri::{
     async_runtime::spawn_blocking,
     menu::{Menu, MenuItem, MenuItemKind, Submenu},
     Emitter, State,
 };
-use tokio::io::{AsyncBufReadExt, BufReader};
-use emw::dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
+use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use git::{
     git_commit, git_diff_contents, git_discard, git_push, git_stage, git_stage_all, git_status,
     git_unstage, git_unstage_all,
 };
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
-use daemon_client::{DaemonConnection, decode_b64, encode_b64};
+use emwaver_device_core::bridge::{
+    BridgeRequest, BridgeState, dispatch_request, send_packet_command_bytes, transmit_buffer_bytes,
+    write_bytes,
+};
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
 
@@ -247,35 +246,51 @@ struct RunShellCommandResult {
 }
 
 #[derive(Clone)]
-struct DaemonState {
-    conn: Arc<DaemonConnection>,
+struct DeviceState {
+    bridge: Arc<BridgeState>,
+    next_id: Arc<std::sync::atomic::AtomicU64>,
 }
 
-impl DaemonState {
-    fn new() -> Result<Self, String> {
-        let socket = daemon_client::default_socket_path()?;
-        Ok(Self {
-            conn: Arc::new(DaemonConnection::new(socket)),
-        })
-    }
-
-    async fn rpc(&self, method: &str, params: serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
-        self.conn.rpc(method, params, timeout).await
+impl DeviceState {
+    async fn rpc(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let req = BridgeRequest {
+            id,
+            method: method.to_string(),
+            params,
+        };
+        dispatch_request(self.bridge.clone(), req)
+            .await
+            .map_err(|e| format!("{e:#}"))
     }
 }
 
 #[derive(Serialize)]
-struct DaemonStatus {
-    running: bool,
-    socket: String,
+struct DeviceStatus {
+    connected: bool,
+    device_name: Option<String>,
 }
 
 #[tauri::command]
-async fn daemon_get_status() -> Result<DaemonStatus, String> {
-    let socket = daemon_client::default_socket_path()?;
-    Ok(DaemonStatus {
-        running: daemon_client::is_socket_alive(&socket),
-        socket: socket.display().to_string(),
+async fn device_get_status(state: State<'_, DeviceState>) -> Result<DeviceStatus, String> {
+    let value = state
+        .rpc("midi_status", serde_json::json!({}))
+        .await?;
+    Ok(DeviceStatus {
+        connected: value
+            .get("connected")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        device_name: value
+            .get("device_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
     })
 }
 
@@ -375,52 +390,51 @@ async fn ensure_dir(payload: EnsureDirPayload) -> Result<(), String> {
 // Sampler bitstream utilities are implemented in the shared buffer core.
 
 #[tauri::command]
-async fn buffer_clear(state: State<'_, DaemonState>) -> Result<(), String> {
+async fn buffer_clear(state: State<'_, DeviceState>) -> Result<(), String> {
     state
-        .rpc("buffer_clear", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("buffer_clear", serde_json::json!({}))
         .await?;
     Ok(())
 }
 
 #[tauri::command]
-async fn buffer_get_counter(state: State<'_, DaemonState>) -> Result<u64, String> {
+async fn buffer_get_counter(state: State<'_, DeviceState>) -> Result<u64, String> {
     let value = state
-        .rpc("buffer_get_rx_counter", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("buffer_get_rx_counter", serde_json::json!({}))
         .await?;
     Ok(value.get("rx_counter").and_then(|v| v.as_u64()).unwrap_or(0))
 }
 
 #[tauri::command]
-async fn buffer_set_counter(state: State<'_, DaemonState>, value: u64) -> Result<(), String> {
+async fn buffer_set_counter(state: State<'_, DeviceState>, value: u64) -> Result<(), String> {
     state
         .rpc(
             "buffer_set_rx_counter",
             serde_json::json!({ "value": value }),
-            Duration::from_secs(3),
         )
         .await?;
     Ok(())
 }
 
 	#[tauri::command]
-	async fn buffer_get_packet_count(state: State<'_, DaemonState>) -> Result<u64, String> {
+	async fn buffer_get_packet_count(state: State<'_, DeviceState>) -> Result<u64, String> {
 	    let value = state
-            .rpc("buffer_get_packet_count", serde_json::json!({}), Duration::from_secs(3))
+            .rpc("buffer_get_packet_count", serde_json::json!({}))
             .await?;
         Ok(value.get("packet_count").and_then(|v| v.as_u64()).unwrap_or(0))
 	}
 
 	#[tauri::command]
-	async fn buffer_get_len_bytes(state: State<'_, DaemonState>) -> Result<usize, String> {
+	async fn buffer_get_len_bytes(state: State<'_, DeviceState>) -> Result<usize, String> {
 	    let value = state
-            .rpc("buffer_get_len_bytes", serde_json::json!({}), Duration::from_secs(3))
+            .rpc("buffer_get_len_bytes", serde_json::json!({}))
             .await?;
         Ok(value.get("len_bytes").and_then(|v| v.as_u64()).unwrap_or(0) as usize)
 	}
 
 #[tauri::command]
 async fn buffer_read_packets_since(
-    state: State<'_, DaemonState>,
+    state: State<'_, DeviceState>,
     packet_index: u64,
     max_packets: usize,
 ) -> Result<ReadPacketsResponse, String> {
@@ -428,7 +442,6 @@ async fn buffer_read_packets_since(
         .rpc(
             "buffer_read_packets_since",
             serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
-            Duration::from_secs(3),
         )
         .await?;
 
@@ -451,9 +464,9 @@ async fn buffer_read_packets_since(
 }
 
 #[tauri::command]
-async fn buffer_next_packet(state: State<'_, DaemonState>) -> Result<Option<BufferPacket>, String> {
+async fn buffer_next_packet(state: State<'_, DeviceState>) -> Result<Option<BufferPacket>, String> {
     let value = state
-        .rpc("buffer_next_packet", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("buffer_next_packet", serde_json::json!({}))
         .await?;
     let pkt = value.get("packet");
     if pkt.is_none() || pkt.is_some_and(|v| v.is_null()) {
@@ -468,7 +481,7 @@ async fn buffer_next_packet(state: State<'_, DaemonState>) -> Result<Option<Buff
 
 #[tauri::command]
 async fn buffer_read_tx_since(
-    state: State<'_, DaemonState>,
+    state: State<'_, DeviceState>,
     packet_index: u64,
     max_packets: usize,
 ) -> Result<ReadPacketsResponse, String> {
@@ -476,7 +489,6 @@ async fn buffer_read_tx_since(
         .rpc(
             "buffer_read_tx_since",
             serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
-            Duration::from_secs(3),
         )
         .await?;
 
@@ -499,33 +511,31 @@ async fn buffer_read_tx_since(
 }
 
 #[tauri::command]
-async fn buffer_get_bytes(state: State<'_, DaemonState>) -> Result<Vec<u8>, String> {
+async fn buffer_get_bytes(state: State<'_, DeviceState>) -> Result<Vec<u8>, String> {
     let value = state
-        .rpc("buffer_get_bytes", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("buffer_get_bytes", serde_json::json!({}))
         .await?;
     let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
     decode_b64(data_b64)
 }
 
 #[tauri::command]
-async fn buffer_set_bytes(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<usize, String> {
+async fn buffer_set_bytes(state: State<'_, DeviceState>, data: Vec<u8>) -> Result<usize, String> {
     let value = state
         .rpc(
             "buffer_set_bytes",
             serde_json::json!({ "data_b64": encode_b64(&data) }),
-            Duration::from_secs(3),
         )
         .await?;
     Ok(value.get("len_bytes").and_then(|v| v.as_u64()).unwrap_or(0) as usize)
 }
 
 #[tauri::command]
-async fn buffer_set_invert_rx(state: State<'_, DaemonState>, enabled: bool) -> Result<(), String> {
+async fn buffer_set_invert_rx(state: State<'_, DeviceState>, enabled: bool) -> Result<(), String> {
     state
         .rpc(
             "buffer_set_invert_rx",
             serde_json::json!({ "enabled": enabled }),
-            Duration::from_secs(3),
         )
         .await?;
     Ok(())
@@ -533,7 +543,7 @@ async fn buffer_set_invert_rx(state: State<'_, DaemonState>, enabled: bool) -> R
 
 #[tauri::command]
 async fn buffer_compress_viewport(
-    state: State<'_, DaemonState>,
+    state: State<'_, DeviceState>,
     range_start: usize,
     range_end: usize,
     number_bins: usize,
@@ -546,7 +556,6 @@ async fn buffer_compress_viewport(
                 "range_end": range_end,
                 "number_bins": number_bins
             }),
-            Duration::from_secs(3),
         )
         .await?;
 
@@ -567,12 +576,12 @@ async fn buffer_compress_viewport(
 
 #[tauri::command]
 async fn buffer_write_file(
-    state: State<'_, DaemonState>,
+    state: State<'_, DeviceState>,
     path: String,
 ) -> Result<(), String> {
     let path = expand_path(&path);
     let value = state
-        .rpc("buffer_get_bytes", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("buffer_get_bytes", serde_json::json!({}))
         .await?;
     let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
     let bytes = decode_b64(data_b64)?;
@@ -587,10 +596,10 @@ async fn buffer_write_file(
 
 #[tauri::command]
 async fn buffer_build_signed_raw_timings(
-    state: State<'_, DaemonState>,
+    state: State<'_, DeviceState>,
 ) -> Result<String, String> {
     let value = state
-        .rpc("buffer_build_signed_raw_timings", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("buffer_build_signed_raw_timings", serde_json::json!({}))
         .await?;
     Ok(value.get("timings").and_then(|v| v.as_str()).unwrap_or("").to_string())
 }
@@ -814,27 +823,32 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+fn encode_b64(bytes: &[u8]) -> String {
+    base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)
+}
+
+fn decode_b64(s: &str) -> Result<Vec<u8>, String> {
+    base64::Engine::decode(&base64::engine::general_purpose::STANDARD, s.as_bytes())
+        .map_err(|e| format!("invalid base64: {e}"))
+}
+
 // Device Commands (transport-agnostic once connected)
 #[tauri::command]
-async fn device_write(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+async fn device_write(state: State<'_, DeviceState>, data: Vec<u8>) -> Result<(), String> {
     eprintln!(
         "[io] TX(write) {}B: {}",
         data.len(),
         String::from_utf8_lossy(&data).trim_end_matches('\0')
     );
-    state
-        .rpc(
-            "write",
-            serde_json::json!({ "bytes_b64": encode_b64(&data) }),
-            Duration::from_secs(5),
-        )
-        .await?;
+    write_bytes(&state.bridge, data)
+        .await
+        .map_err(|e| format!("{e:#}"))?;
     Ok(())
 }
 
 #[tauri::command]
 async fn device_send_command(
-    state: State<'_, DaemonState>,
+    state: State<'_, DeviceState>,
     data: Vec<u8>,
     timeout_ms: u64,
     packets: u32,
@@ -846,19 +860,9 @@ async fn device_send_command(
         packets,
         String::from_utf8_lossy(&data).trim_end_matches('\0')
     );
-    let value = state
-        .rpc(
-            "send_packet_command",
-            serde_json::json!({
-                "bytes_b64": encode_b64(&data),
-                "timeout_ms": timeout_ms,
-                "packets": packets
-            }),
-            Duration::from_millis(timeout_ms.saturating_add(5_000).max(1)),
-        )
-        .await?;
-    let bytes_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
-    let resp = decode_b64(bytes_b64)?;
+    let resp = send_packet_command_bytes(&state.bridge, data, timeout_ms, packets)
+        .await
+        .map_err(|e| format!("{e:#}"))?;
     let preview_ascii = String::from_utf8_lossy(&resp);
     let mut hex = String::new();
     for (i, b) in resp.iter().enumerate().take(32) {
@@ -870,47 +874,20 @@ async fn device_send_command(
 }
 
 #[tauri::command]
-async fn device_transmit_buffer(state: State<'_, DaemonState>, data: Vec<u8>) -> Result<(), String> {
+async fn device_transmit_buffer(state: State<'_, DeviceState>, data: Vec<u8>) -> Result<(), String> {
     if data.is_empty() {
         return Err("Buffer is empty".to_string());
     }
-
-    let path = spawn_blocking(move || {
-        let mut file = tempfile::NamedTempFile::new()
-            .map_err(|e| format!("Failed to create temp file: {e}"))?;
-        file.write_all(&data)
-            .map_err(|e| format!("Failed to write temp file: {e}"))?;
-        let (_file, path) = file.keep().map_err(|e| format!("Failed to persist temp file: {e}"))?;
-        Ok::<PathBuf, String>(path)
-    })
-    .await
-    .map_err(|e| format!("Task failed: {e}"))??;
-
-    let result = state
-        .rpc(
-            "transmit_buffer_file",
-            serde_json::json!({ "path": path }),
-            Duration::from_secs(120),
-        )
-        .await;
-
-    // Best-effort cleanup.
-    let _ = spawn_blocking(move || {
-        let _ = std::fs::remove_file(&path);
-    })
-    .await;
-
-    result?;
+    transmit_buffer_bytes(&state.bridge, data)
+        .await
+        .map_err(|e| format!("{e:#}"))?;
     Ok(())
 }
 
 // MIDI Commands
 #[tauri::command]
-async fn midi_list_ports() -> Result<Vec<String>, String> {
-    let daemon = DaemonState::new()?;
-    let value = daemon
-        .rpc("midi_list_ports", serde_json::json!({}), Duration::from_secs(5))
-        .await?;
+async fn midi_list_ports(state: State<'_, DeviceState>) -> Result<Vec<String>, String> {
+    let value = state.rpc("midi_list_ports", serde_json::json!({})).await?;
     Ok(value
         .get("ports")
         .and_then(|v| v.as_array())
@@ -919,29 +896,28 @@ async fn midi_list_ports() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-async fn midi_connect(state: State<'_, DaemonState>, port_name: String) -> Result<(), String> {
+async fn midi_connect(state: State<'_, DeviceState>, port_name: String) -> Result<(), String> {
     let _ = state
         .rpc(
             "midi_connect",
             serde_json::json!({ "port_name": port_name }),
-            Duration::from_secs(10),
         )
         .await?;
     Ok(())
 }
 
 #[tauri::command]
-async fn midi_disconnect(state: State<'_, DaemonState>) -> Result<(), String> {
+async fn midi_disconnect(state: State<'_, DeviceState>) -> Result<(), String> {
     state
-        .rpc("midi_disconnect", serde_json::json!({}), Duration::from_secs(5))
+        .rpc("midi_disconnect", serde_json::json!({}))
         .await?;
     Ok(())
 }
 
 #[tauri::command]
-async fn midi_get_status(state: State<'_, DaemonState>) -> Result<MidiStatus, String> {
+async fn midi_get_status(state: State<'_, DeviceState>) -> Result<MidiStatus, String> {
     let value = state
-        .rpc("midi_status", serde_json::json!({}), Duration::from_secs(3))
+        .rpc("midi_status", serde_json::json!({}))
         .await?;
     Ok(MidiStatus {
         connected: value.get("connected").and_then(|v| v.as_bool()).unwrap_or(false),
@@ -1061,13 +1037,30 @@ impl Default for WaveletState {
 #[tauri::command]
 async fn wavelet_execute(
     app: tauri::AppHandle,
-    daemon_state: tauri::State<'_, DaemonState>,
-    wavelet_state: tauri::State<'_, WaveletState>,
+    device_state: tauri::State<'_, DeviceState>,
+    wavelet_state: tauri::State<'_, Arc<WaveletState>>,
+    script: String,
+    bootstrap: String,
+) -> Result<(), String> {
+    wavelet_execute_impl(
+        app,
+        device_state.bridge.clone(),
+        wavelet_state.inner().clone(),
+        script,
+        bootstrap,
+    )
+    .await
+}
+
+async fn wavelet_execute_impl(
+    app: tauri::AppHandle,
+    device: Arc<BridgeState>,
+    wavelet_state: Arc<WaveletState>,
     script: String,
     bootstrap: String,
 ) -> Result<(), String> {
     use tauri::Emitter;
-    
+
     // Stop any existing wavelet first
     {
         let mut tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
@@ -1075,24 +1068,20 @@ async fn wavelet_execute(
             let _ = tx.send(WaveletCommand::Stop);
         }
     }
-    
-    let daemon = daemon_state.conn.clone();
-    
+
     // Create the runtime
-    let (runtime, command_tx, mut event_rx) = WaveletRuntime::new(daemon, bootstrap);
-    
+    let (runtime, command_tx, mut event_rx) = WaveletRuntime::new(device, bootstrap);
+
     // Store command channel for callbacks
     {
         let mut tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
         *tx_guard = Some(command_tx);
     }
-    
+
     // Spawn the runtime in a blocking thread (Boa isn't async)
     let script_clone = script.clone();
-    let _handle = tauri::async_runtime::spawn_blocking(move || {
-        runtime.execute(&script_clone)
-    });
-    
+    let _handle = tauri::async_runtime::spawn_blocking(move || runtime.execute(&script_clone));
+
     // Forward events to frontend
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -1114,16 +1103,21 @@ async fn wavelet_execute(
             }
         }
     });
-    
+
     // Wait briefly to catch immediate errors
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    
+
     Ok(())
 }
 
 /// Stop the currently running wavelet.
 #[tauri::command]
-async fn wavelet_stop(wavelet_state: tauri::State<'_, WaveletState>) -> Result<(), String> {
+async fn wavelet_stop(wavelet_state: tauri::State<'_, Arc<WaveletState>>) -> Result<(), String> {
+    wavelet_stop_impl(wavelet_state.inner().clone())?;
+    Ok(())
+}
+
+fn wavelet_stop_impl(wavelet_state: Arc<WaveletState>) -> Result<(), String> {
     let tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
     if let Some(tx) = tx_guard.as_ref() {
         let _ = tx.send(WaveletCommand::Stop);
@@ -1134,19 +1128,24 @@ async fn wavelet_stop(wavelet_state: tauri::State<'_, WaveletState>) -> Result<(
 /// Send a callback event to the running wavelet (e.g., button click).
 #[tauri::command]
 async fn wavelet_callback(
-    wavelet_state: tauri::State<'_, WaveletState>,
+    wavelet_state: tauri::State<'_, Arc<WaveletState>>,
     token: String,
     data: serde_json::Value,
 ) -> Result<(), String> {
-    eprintln!("[wavelet_callback] Received callback: token={}, data={:?}", token, data);
+    wavelet_callback_impl(wavelet_state.inner().clone(), token, data)
+}
+
+fn wavelet_callback_impl(
+    wavelet_state: Arc<WaveletState>,
+    token: String,
+    data: serde_json::Value,
+) -> Result<(), String> {
     let tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
     if let Some(tx) = tx_guard.as_ref() {
-        eprintln!("[wavelet_callback] Sending to runtime channel");
-        tx.send(WaveletCommand::Callback { token: token.clone(), data: data.clone() })
-            .map_err(|e| format!("Failed to send callback: {}", e))?;
-        eprintln!("[wavelet_callback] Sent successfully");
+        tx.send(WaveletCommand::Callback { token, data })
+            .map_err(|e| format!("Failed to send callback: {e}"))?;
     } else {
-        eprintln!("[wavelet_callback] ERROR: No command_tx channel available!");
+        return Err("No running wavelet".to_string());
     }
     Ok(())
 }
@@ -1158,145 +1157,99 @@ pub fn run() {
 
     let window_state_flags = StateFlags::SIZE | StateFlags::POSITION;
 
-    // Desktop and CLI must agree on the daemon socket path; otherwise we can spawn multiple daemons
-    // that contend for the same MIDI/DFU resources and cause "Resource busy" errors.
-    let daemon_state = DaemonState::new().expect("failed to determine emwaver daemon socket path");
-    let daemon_state_for_setup = daemon_state.clone();
+    let bridge = tauri::async_runtime::block_on(emwaver_device_core::bridge::create_bridge_state())
+        .expect("failed to initialize device bridge");
+    let device_state = DeviceState {
+        bridge,
+        next_id: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+    };
+    let device_state_for_setup = device_state.clone();
+    let wavelet_state = Arc::new(WaveletState::default());
+    let wavelet_state_for_setup = wavelet_state.clone();
 
     tauri::Builder::default()
         .setup(move |app| {
             let handle = app.handle();
 
-            // Background daemon event pump (OTA status notifications).
-            #[cfg(unix)]
-            {
-                use tokio::io::AsyncWriteExt;
-                use tokio::net::UnixStream;
-                let daemon = daemon_state_for_setup.clone();
-                tauri::async_runtime::spawn(async move {
-                    loop {
-                        if daemon.conn.ensure_daemon_running().is_err() {
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            continue;
-                        }
+            // Background device event pump (TX progress, flow control, etc.).
+            let mut events_rx = device_state_for_setup.bridge.event_tx.subscribe();
+            tauri::async_runtime::spawn(async move {
+                let mut last_bs: u64 = 0;
+                loop {
+                    let line = match events_rx.recv().await {
+                        Ok(bytes) => bytes,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    };
 
-                        let stream = UnixStream::connect(daemon.conn.socket_path()).await;
-                        let Ok(mut stream) = stream else {
-                            tokio::time::sleep(Duration::from_millis(500)).await;
+                    let trimmed = std::str::from_utf8(&line).unwrap_or("").trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    let value: serde_json::Value = match serde_json::from_str(trimmed) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
+                        continue;
+                    };
+
+                    if event == "rx_bytes" {
+                        let Some(bytes_b64) = value
+                            .get("data")
+                            .and_then(|d| d.get("bytes_b64"))
+                            .and_then(|v| v.as_str())
+                        else {
                             continue;
                         };
-
-                        // Enable event forwarding only on this long-lived connection.
-                        // (Normal RPC invocations should not be flooded with rx_bytes.)
-                        let subscribe = serde_json::json!({
-                            "id": 1,
-                            "method": "events_subscribe",
-                            "params": {}
-                        })
-                        .to_string();
-                        let _ = stream.write_all(subscribe.as_bytes()).await;
-                        let _ = stream.write_all(b"\n").await;
-                        let _ = stream.flush().await;
-
-                        let mut reader = BufReader::new(stream);
-                        let mut last_bs: u64 = 0;
-                        let mut line = String::new();
-                        loop {
-                            line.clear();
-                            let n = match reader.read_line(&mut line).await {
-                                Ok(v) => v,
-                                Err(_) => break,
-                            };
-                            if n == 0 {
-                                break;
-                            }
-                            let trimmed = line.trim();
-                            if trimmed.is_empty() {
-                                continue;
-                            }
-                            let value: serde_json::Value = match serde_json::from_str(trimmed) {
-                                Ok(v) => v,
-                                Err(_) => continue,
-                            };
-                            let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
-                                continue;
-                            };
-
-                            if event == "rx_bytes" {
-                                let Some(bytes_b64) = value
-                                    .get("data")
-                                    .and_then(|d| d.get("bytes_b64"))
-                                    .and_then(|v| v.as_str())
-                                else {
-                                    continue;
-                                };
-                                let Ok(pkt) = base64::engine::general_purpose::STANDARD
-                                    .decode(bytes_b64.as_bytes())
-                                else {
-                                    continue;
-                                };
-                                if pkt.len() >= 4 && pkt[0] == b'B' && pkt[1] == b'S' {
-                                    let bs = u16::from_be_bytes([pkt[2], pkt[3]]) as u64;
-                                    last_bs = bs;
-                                    eprintln!("BS={bs}");
-                                }
-                                continue;
-                            }
-
-                            if event == "bs" {
-                                let bs = value
-                                    .get("data")
-                                    .and_then(|d| d.get("value"))
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0);
-                                last_bs = bs;
-                                eprintln!("BS={bs}");
-                                continue;
-                            }
-
-                            if event == "tx_progress" {
-                                let data = value.get("data").cloned().unwrap_or_default();
-                                let pct = data.get("pct").and_then(|v| v.as_u64()).unwrap_or(0);
-                                let sent = data
-                                    .get("sent_bytes")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0);
-                                let total = data
-                                    .get("total_bytes")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0);
-                                let chunk = data
-                                    .get("chunk_len")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0);
-                                let pkt = data
-                                    .get("packet_size")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(0);
-                                let period_ns = data
-                                    .get("period_ns")
-                                    .and_then(|v| v.as_i64())
-                                    .unwrap_or(0);
-                                let sleep_ns = data
-                                    .get("sleep_ns")
-                                    .and_then(|v| v.as_i64())
-                                    .unwrap_or(0);
-                                let bs = data
-                                    .get("bs")
-                                    .and_then(|v| v.as_u64())
-                                    .unwrap_or(last_bs);
-                                last_bs = bs;
-
-                                let period_ms = (period_ns as f64) / 1_000_000.0;
-                                let sleep_ms = (sleep_ns as f64) / 1_000_000.0;
-                                eprintln!(
-                                    "TX {pct:>3}% {sent}/{total}B chunk={chunk}B pkt={pkt}B period={period_ms:.2}ms sleep={sleep_ms:.2}ms BS={bs}"
-                                );
-                            }
+                        let Ok(pkt) = base64::Engine::decode(
+                            &base64::engine::general_purpose::STANDARD,
+                            bytes_b64.as_bytes(),
+                        )
+                        else {
+                            continue;
+                        };
+                        if pkt.len() >= 4 && pkt[0] == b'B' && pkt[1] == b'S' {
+                            let bs = u16::from_be_bytes([pkt[2], pkt[3]]) as u64;
+                            last_bs = bs;
+                            eprintln!("BS={bs}");
                         }
+                        continue;
                     }
-                });
-            }
+
+                    if event == "bs" {
+                        let bs = value
+                            .get("data")
+                            .and_then(|d| d.get("value"))
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        last_bs = bs;
+                        eprintln!("BS={bs}");
+                        continue;
+                    }
+
+                    if event == "tx_progress" {
+                        let data = value.get("data").cloned().unwrap_or_default();
+                        let pct = data.get("pct").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let sent = data.get("sent_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let total = data.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let chunk = data.get("chunk_len").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let pkt = data.get("packet_size").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let period_ns = data.get("period_ns").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let sleep_ns = data.get("sleep_ns").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let bs = data.get("bs").and_then(|v| v.as_u64()).unwrap_or(last_bs);
+                        last_bs = bs;
+
+                        let period_ms = (period_ns as f64) / 1_000_000.0;
+                        let sleep_ms = (sleep_ns as f64) / 1_000_000.0;
+                        eprintln!(
+                            "TX {pct:>3}% {sent}/{total}B chunk={chunk}B pkt={pkt}B period={period_ms:.2}ms sleep={sleep_ms:.2}ms BS={bs}"
+                        );
+                    }
+                }
+            });
+
+            desktop_ipc::spawn(handle.clone(), device_state_for_setup.clone(), wavelet_state_for_setup.clone());
 
             let new_item = MenuItem::with_id(
                 app,
@@ -1569,8 +1522,8 @@ pub fn run() {
                 .with_state_flags(window_state_flags)
                 .build(),
         )
-        .manage(daemon_state)
-        .manage(WaveletState::default())
+        .manage(device_state)
+        .manage(wavelet_state)
         .manage(Arc::new(PtyManager::new()))
 			        .invoke_handler(tauri::generate_handler![
             read_directory,
@@ -1610,7 +1563,7 @@ pub fn run() {
             midi_connect,
             midi_disconnect,
             midi_get_status,
-            daemon_get_status,
+            device_get_status,
             dfu_is_connected,
             dfu_flash_embedded,
             dfu_flash_file,

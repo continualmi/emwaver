@@ -62,8 +62,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [isRefreshingMidiPorts, setIsRefreshingMidiPorts] = useState(false);
   const midiRefreshSeqRef = useRef(0);
 
-  const [daemonStatus, setDaemonStatus] = useState<{ running: boolean; socket: string } | null>(null);
-  const [daemonStatusError, setDaemonStatusError] = useState<string | null>(null);
   const [autoConnectEnabled, setAutoConnectEnabled] = useState<boolean>(() => {
     try {
       const raw = localStorage.getItem(AUTO_CONNECT_ENABLED_KEY);
@@ -160,36 +158,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   useEffect(() => {
     refreshMidiPorts({ silent: true });
   }, [refreshMidiPorts]);
-
-  // Daemon status (for debugging/reload feedback).
-  useEffect(() => {
-    if (!isActive) return;
-
-    let cancelled = false;
-
-    const tick = async () => {
-      try {
-        const status = await safeInvoke<{ running: boolean; socket: string }>("daemon_get_status");
-        if (cancelled) return;
-        setDaemonStatus(status ?? null);
-        setDaemonStatusError(null);
-      } catch (e) {
-        if (cancelled) return;
-        setDaemonStatus(null);
-        setDaemonStatusError(String(e));
-      }
-    };
-
-    void tick();
-    const interval = window.setInterval(() => {
-      void tick();
-    }, 1500);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [isActive]);
 
   // Hot-plug support: keep port pickers fresh while on Home and disconnected.
   useEffect(() => {
@@ -555,17 +523,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-slate-400">Connection</span>
                 <div className="flex items-center gap-3">
-                    <span
-                      className="text-[10px] text-slate-500 select-none"
-                      title={daemonStatusError ? daemonStatusError : (daemonStatus?.socket ?? "")}
-                    >
-                      Daemon:{" "}
-                      {daemonStatusError
-                        ? "error"
-                        : daemonStatus?.running
-                          ? "running"
-                          : "not running"}
-                    </span>
                     <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
                       <input
                         type="checkbox"

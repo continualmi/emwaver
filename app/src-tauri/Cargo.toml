@@ -38,6 +38,14 @@ futures = "0.3"
 rusb = "0.9"
 portable-pty = "0.9"
 sha2 = "0.10"
-emw = { path = "../../cli" }
 boa_engine = "0.20"
 boa_gc = "0.20"
+emwaver-buffer-core = { path = "../crates/emwaver-buffer-core" }
+emwaver-device-core = { path = "../crates/emwaver-device-core" }
+emwaver-dfu = { path = "../crates/emwaver-dfu" }
+emwaver-git = { path = "../crates/emwaver-git" }
+emwaver-desktop-ipc = { path = "../crates/emwaver-desktop-ipc" }
+
+[patch.crates-io]
+regress = { path = "../crates/regress" }
+coremidi = { path = "../crates/coremidi" }

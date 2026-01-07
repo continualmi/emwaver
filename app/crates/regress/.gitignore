@@ -1,0 +1,20 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.vscode
+.vscode/*
+.DS_Store
+regexp-pcre.js
+
+.claude/
+CLAUDE.md
+
+# Unicode Database Files
+DerivedCoreProperties.txt
+DerivedBinaryProperties.txt
+DerivedGeneralCategory.txt
+DerivedNormalizationProps.txt
+CaseFolding.txt
+emoji-data.txt
+PropList.txt
+Scripts.txt
