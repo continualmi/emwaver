@@ -860,9 +860,13 @@ async fn device_send_command(
         packets,
         String::from_utf8_lossy(&data).trim_end_matches('\0')
     );
-    let resp = send_packet_command_bytes(&state.bridge, data, timeout_ms, packets)
-        .await
-        .map_err(|e| format!("{e:#}"))?;
+    let resp = match send_packet_command_bytes(&state.bridge, data, timeout_ms, packets).await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[io] RX ERROR: {e:#}");
+            return Err(format!("{e:#}"));
+        }
+    };
     let preview_ascii = String::from_utf8_lossy(&resp);
     let mut hex = String::new();
     for (i, b) in resp.iter().enumerate().take(32) {
