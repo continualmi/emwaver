@@ -33,7 +33,7 @@ use boa_engine::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::daemon_client::DaemonConnection;
+use emwaver_device_core::bridge::{BridgeState, send_packet_command_bytes};
 
 /// Events sent from the wavelet runtime to the frontend.
 #[derive(Debug, Clone, Serialize)]
@@ -63,8 +63,8 @@ pub enum WaveletCommand {
 struct RuntimeState {
     /// Channel to send events to frontend.
     event_tx: mpsc::UnboundedSender<WaveletEvent>,
-    /// Daemon connection for direct USB access.
-    daemon: Arc<DaemonConnection>,
+    /// In-process device bridge for direct USB access.
+    device: Arc<BridgeState>,
     /// Registered callback functions (token -> JS function source).
     callbacks: HashMap<String, String>,
     /// Tokio runtime handle for async operations.
@@ -75,13 +75,13 @@ struct RuntimeState {
 pub struct WaveletRuntime {
     event_tx: mpsc::UnboundedSender<WaveletEvent>,
     command_rx: mpsc::UnboundedReceiver<WaveletCommand>,
-    daemon: Arc<DaemonConnection>,
+    device: Arc<BridgeState>,
     bootstrap_source: String,
 }
 
 impl WaveletRuntime {
     pub fn new(
-        daemon: Arc<DaemonConnection>,
+        device: Arc<BridgeState>,
         bootstrap_source: String,
     ) -> (Self, mpsc::UnboundedSender<WaveletCommand>, mpsc::UnboundedReceiver<WaveletEvent>) {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
@@ -90,7 +90,7 @@ impl WaveletRuntime {
         let runtime = Self {
             event_tx,
             command_rx,
-            daemon,
+            device,
             bootstrap_source,
         };
 
@@ -104,7 +104,7 @@ impl WaveletRuntime {
         // Create shared state
         let state = Rc::new(RefCell::new(RuntimeState {
             event_tx: self.event_tx.clone(),
-            daemon: self.daemon.clone(),
+            device: self.device.clone(),
             callbacks: HashMap::new(),
             rt_handle: rt_handle.clone(),
         }));
@@ -292,39 +292,17 @@ impl WaveletRuntime {
                 let cmd_str = command.to_std_string_escaped();
                 eprintln!("[_waveletSendCommandString] CALLED: cmd={}, timeout={}ms", cmd_str.trim(), timeout_ms);
                 let st = state_send.borrow();
-                let daemon = st.daemon.clone();
+                let device = st.device.clone();
                 let rt = st.rt_handle.clone();
 
                 // Execute synchronously using the tokio runtime
                 let result = rt.block_on(async {
-                    daemon
-                        .rpc(
-                            "send_packet_command",
-                            serde_json::json!({
-                                "bytes_b64": base64::Engine::encode(
-                                    &base64::engine::general_purpose::STANDARD,
-                                    cmd_str.as_bytes()
-                                ),
-                                "timeout_ms": timeout_ms,
-                                "packets": 1
-                            }),
-                            Duration::from_millis(timeout_ms + 5000),
-                        )
+                    send_packet_command_bytes(&device, cmd_str.as_bytes().to_vec(), timeout_ms, 1)
                         .await
                 });
 
                 match result {
-                    Ok(value) => {
-                        // Decode response
-                        let bytes_b64 = value
-                            .get("bytes_b64")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        let bytes = base64::Engine::decode(
-                            &base64::engine::general_purpose::STANDARD,
-                            bytes_b64,
-                        )
-                        .unwrap_or_default();
+                    Ok(bytes) => {
 
                         // Return as Uint8Array
                         let array = boa_engine::object::builtins::JsUint8Array::from_iter(
@@ -443,4 +421,3 @@ fn js_value_to_json(value: &JsValue, ctx: &mut Context) -> JsResult<serde_json::
         _ => Ok(serde_json::Value::Null),
     }
 }
-

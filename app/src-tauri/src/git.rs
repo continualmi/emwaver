@@ -85,7 +85,7 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-fn to_entry(entry: emw::git::GitStatusEntry) -> GitStatusEntry {
+fn to_entry(entry: emwaver_git::GitStatusEntry) -> GitStatusEntry {
     GitStatusEntry {
         path: entry.path,
         orig_path: entry.orig_path,
@@ -96,16 +96,16 @@ fn to_entry(entry: emw::git::GitStatusEntry) -> GitStatusEntry {
     }
 }
 
-fn status_bucket(entry: &emw::git::GitStatusEntry) -> (bool, bool) {
+fn status_bucket(entry: &emwaver_git::GitStatusEntry) -> (bool, bool) {
     let staged = entry.index_status != ' ' && entry.index_status != '?' && entry.index_status != '!';
     let changed = entry.worktree_status != ' ' && !entry.is_ignored;
     (staged, changed)
 }
 
-fn parse_view(view: &str) -> Result<emw::git::DiffView, String> {
+fn parse_view(view: &str) -> Result<emwaver_git::DiffView, String> {
     match view {
-        "staged" => Ok(emw::git::DiffView::Staged),
-        "unstaged" => Ok(emw::git::DiffView::Unstaged),
+        "staged" => Ok(emwaver_git::DiffView::Staged),
+        "unstaged" => Ok(emwaver_git::DiffView::Unstaged),
         other => Err(format!("Unknown diff view `{other}` (expected staged|unstaged)")),
     }
 }
@@ -114,7 +114,7 @@ fn parse_view(view: &str) -> Result<emw::git::DiffView, String> {
 pub async fn git_status(payload: GitStatusPayload) -> Result<GitRepoStatus, String> {
     let start = expand_path(&payload.path);
     tauri::async_runtime::spawn_blocking(move || {
-        let status = emw::git::repo_status(start).map_err(|error| error.to_string())?;
+        let status = emwaver_git::repo_status(start).map_err(|error| error.to_string())?;
 
         let mut staged = Vec::new();
         let mut changes = Vec::new();
@@ -152,8 +152,8 @@ pub async fn git_stage(payload: GitPathsPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     let paths = payload.paths;
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::stage_paths(repo_root, &paths).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::stage_paths(repo_root, &paths).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -163,8 +163,8 @@ pub async fn git_stage(payload: GitPathsPayload) -> Result<(), String> {
 pub async fn git_stage_all(payload: GitStatusPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::stage_all(repo_root).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::stage_all(repo_root).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -175,8 +175,8 @@ pub async fn git_unstage(payload: GitPathsPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     let paths = payload.paths;
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::unstage_paths(repo_root, &paths).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::unstage_paths(repo_root, &paths).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -186,8 +186,8 @@ pub async fn git_unstage(payload: GitPathsPayload) -> Result<(), String> {
 pub async fn git_unstage_all(payload: GitStatusPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::unstage_all(repo_root).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::unstage_all(repo_root).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -198,8 +198,8 @@ pub async fn git_discard(payload: GitPathsPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     let paths = payload.paths;
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::discard_worktree_changes(repo_root, &paths).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::discard_worktree_changes(repo_root, &paths).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -210,8 +210,8 @@ pub async fn git_commit(payload: GitCommitPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     let message = payload.message;
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::commit(repo_root, &message).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::commit(repo_root, &message).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -221,8 +221,8 @@ pub async fn git_commit(payload: GitCommitPayload) -> Result<(), String> {
 pub async fn git_push(payload: GitStatusPayload) -> Result<(), String> {
     let start = expand_path(&payload.path);
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        emw::git::push(repo_root).map_err(|error| error.to_string())
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        emwaver_git::push(repo_root).map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| format!("Task failed: {error}"))?
@@ -235,8 +235,8 @@ pub async fn git_diff_contents(payload: GitDiffPayload) -> Result<GitDiffContent
     let file_path = payload.file_path;
     let orig_path = payload.orig_path;
     tauri::async_runtime::spawn_blocking(move || {
-        let repo_root = emw::git::resolve_repo_root(start).map_err(|error| error.to_string())?;
-        let contents = emw::git::diff_contents(
+        let repo_root = emwaver_git::resolve_repo_root(start).map_err(|error| error.to_string())?;
+        let contents = emwaver_git::diff_contents(
             repo_root,
             view,
             &file_path,
@@ -252,4 +252,3 @@ pub async fn git_diff_contents(payload: GitDiffPayload) -> Result<GitDiffContent
     .await
     .map_err(|error| format!("Task failed: {error}"))?
 }
-
