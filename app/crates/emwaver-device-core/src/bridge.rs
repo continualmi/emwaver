@@ -23,6 +23,9 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
+#[cfg(target_os = "macos")]
+use coremidi::{Client as CoreMidiClient, Destination, Destinations, InputPort, OutputPort, PacketBuffer, Source, Sources};
+#[cfg(not(target_os = "macos"))]
 use midir::{Ignore, MidiInput, MidiOutput};
 use rusb::UsbContext;
 use serde::{Deserialize, Serialize};
@@ -99,13 +102,29 @@ struct MidiStatus {
 }
 
 struct MidiConnection {
+    #[cfg(target_os = "macos")]
+    out: Arc<OutputPort>,
+    #[cfg(target_os = "macos")]
+    destination: Destination,
+    #[cfg(target_os = "macos")]
+    source: Source,
+    #[cfg(not(target_os = "macos"))]
     out: Arc<Mutex<Option<midir::MidiOutputConnection>>>,
+    #[cfg(not(target_os = "macos"))]
     in_conn: Option<midir::MidiInputConnection<()>>,
     status: Arc<AsyncMutex<MidiStatus>>,
 }
 
 struct MidiIo {
+    #[cfg(target_os = "macos")]
+    _client: CoreMidiClient,
+    #[cfg(target_os = "macos")]
+    input: InputPort,
+    #[cfg(target_os = "macos")]
+    output: Arc<OutputPort>,
+    #[cfg(not(target_os = "macos"))]
     midi_in: MidiInput,
+    #[cfg(not(target_os = "macos"))]
     midi_out: MidiOutput,
 }
 
@@ -642,17 +661,9 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
     let (event_tx, _) = broadcast::channel::<Vec<u8>>(1024);
     let (rx_queue_tx, rx_queue_rx) = mpsc::channel::<RxQueuedPacket>(RX_QUEUE_CAPACITY);
 
-    let midi_io = match midi_new_in_out() {
-        Ok((midi_in, midi_out)) => Some(MidiIo { midi_in, midi_out }),
-        Err(err) => {
-            eprintln!("[midi] init failed during startup: {err:#}");
-            None
-        }
-    };
-
     let state = Arc::new(BridgeState {
         midi: Arc::new(AsyncMutex::new(None)),
-        midi_io: Arc::new(AsyncMutex::new(midi_io)),
+        midi_io: Arc::new(AsyncMutex::new(None)),
         midi_last_ports: Arc::new(AsyncMutex::new(Vec::new())),
         buffer: Arc::new(Mutex::new(Buffer::default())),
         rx_notify: Arc::new(Notify::new()),
@@ -666,10 +677,82 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
 
     tokio::spawn(rx_queue_worker(Arc::clone(&state), rx_queue_rx));
 
+    let midi_io = match midi_io_init_for_state(state.as_ref()) {
+        Ok(v) => Some(v),
+        Err(err) => {
+            eprintln!("[midi] init failed during startup: {err:#}");
+            None
+        }
+    };
+    *state.midi_io.lock().await = midi_io;
+
     Ok(state)
 }
 
-fn midi_new_in_out() -> Result<(MidiInput, MidiOutput)> {
+#[cfg(target_os = "macos")]
+fn midi_io_init_for_state(state: &BridgeState) -> Result<MidiIo> {
+    let client =
+        CoreMidiClient::new("emwaver-desktop").map_err(|status| anyhow!("CoreMIDI client init failed: {status}"))?;
+    let output = client
+        .output_port("emwaver-usb-out")
+        .map_err(|status| anyhow!("CoreMIDI output port init failed: {status}"))?;
+
+    let rx_queue_tx = state.rx_queue_tx.clone();
+    let rx_queue_dropped = Arc::clone(&state.rx_queue_dropped);
+    let rx_gen = Arc::clone(&state.rx_gen);
+
+    // CoreMIDI may split SysEx across packets; reassemble before handing to our 64B decoder.
+    let mut in_sysex = false;
+    let mut sysex_buf: Vec<u8> = Vec::with_capacity(256);
+    let input = client
+        .input_port("emwaver-usb-in", move |packet_list| {
+            for packet in packet_list.iter() {
+                for &b in packet.data() {
+                    if !in_sysex {
+                        if b == 0xF0 {
+                            in_sysex = true;
+                            sysex_buf.clear();
+                            sysex_buf.push(b);
+                        }
+                        continue;
+                    }
+
+                    sysex_buf.push(b);
+                    if b != 0xF7 {
+                        if sysex_buf.len() > 1024 {
+                            in_sysex = false;
+                            sysex_buf.clear();
+                        }
+                        continue;
+                    }
+
+                    if let Ok(Some(pkt)) = midi_sysex::decode_packet64(&sysex_buf) {
+                        let ts_ms = now_ms();
+                        let generation = rx_gen.load(Ordering::Relaxed);
+                        if rx_queue_tx
+                            .try_send(RxQueuedPacket { pkt, ts_ms, generation })
+                            .is_err()
+                        {
+                            rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+
+                    in_sysex = false;
+                    sysex_buf.clear();
+                }
+            }
+        })
+        .map_err(|status| anyhow!("CoreMIDI input port init failed: {status}"))?;
+
+    Ok(MidiIo {
+        _client: client,
+        input,
+        output: Arc::new(output),
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn midi_io_init_for_state(_state: &BridgeState) -> Result<MidiIo> {
     // CoreMIDI/midir can occasionally fail to initialize if it is queried right as the
     // system is handling device (un)plug events. Treat this as transient and retry briefly.
     let mut last_err: Option<anyhow::Error> = None;
@@ -678,7 +761,7 @@ fn midi_new_in_out() -> Result<(MidiInput, MidiOutput)> {
             Ok(mut in_) => {
                 in_.ignore(Ignore::None);
                 let out = MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
-                return Ok((in_, out));
+                return Ok(MidiIo { midi_in: in_, midi_out: out });
             }
             Err(err) => {
                 last_err = Some(err.into());
@@ -703,14 +786,11 @@ pub fn emwaver_usb_midi_present() -> Result<bool> {
     }))
 }
 
-async fn midi_list_ports(_state: &BridgeState) -> Result<Vec<String>> {
-    // Important: CoreMIDI initialization can be fragile if repeated very frequently inside a
-    // long-lived GUI app. We initialize the MIDI client once during bridge startup (on the main
-    // thread) and reuse it for enumeration/connection.
-    let cached = _state.midi_last_ports.lock().await.clone();
+#[cfg(target_os = "macos")]
+async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
+    let cached = state.midi_last_ports.lock().await.clone();
 
-    // If we're connected, return the cached list (and at least the connected device name).
-    if let Some(conn) = _state.midi.lock().await.as_ref() {
+    if let Some(conn) = state.midi.lock().await.as_ref() {
         let status = conn.status.lock().await.clone();
         if cached.is_empty() {
             if let Some(name) = status.device_name {
@@ -720,7 +800,70 @@ async fn midi_list_ports(_state: &BridgeState) -> Result<Vec<String>> {
         return Ok(cached);
     }
 
-    let io_guard = _state.midi_io.lock().await;
+    let mut source_names = Vec::new();
+    for source in Sources {
+        let name = source.display_name().or_else(|| source.name());
+        if let Some(name) = name {
+            if !name.trim().is_empty() {
+                source_names.push(name);
+            }
+        }
+    }
+
+    let mut names = Vec::new();
+    for destination in Destinations {
+        let Some(out_name) = destination.display_name().or_else(|| destination.name()) else {
+            continue;
+        };
+        let out_name = out_name.trim();
+        if out_name.is_empty() {
+            continue;
+        }
+
+        let has_matching_in = source_names.iter().any(|in_name| {
+            in_name == out_name || in_name.contains(out_name) || out_name.contains(in_name)
+        });
+        if has_matching_in {
+            names.push(out_name.to_string());
+        }
+    }
+
+    names.sort();
+    names.dedup();
+
+    const EMWAVER_USB_DEVICE_NAMES: [&str; 2] = ["EMWaver USB", "EMWaver USB MIDI"];
+    for name in &mut names {
+        if EMWAVER_USB_DEVICE_NAMES.iter().any(|n| name.contains(n)) {
+            *name = EMWAVER_USB_DEVICE_NAMES[0].to_string();
+        }
+    }
+
+    names.sort();
+    names.dedup();
+
+    *(state.midi_last_ports.lock().await) = names.clone();
+    Ok(names)
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
+    // Important: CoreMIDI initialization can be fragile if repeated very frequently inside a
+    // long-lived GUI app. We initialize the MIDI client once during bridge startup (on the main
+    // thread) and reuse it for enumeration/connection.
+    let cached = state.midi_last_ports.lock().await.clone();
+
+    // If we're connected, return the cached list (and at least the connected device name).
+    if let Some(conn) = state.midi.lock().await.as_ref() {
+        let status = conn.status.lock().await.clone();
+        if cached.is_empty() {
+            if let Some(name) = status.device_name {
+                return Ok(vec![name]);
+            }
+        }
+        return Ok(cached);
+    }
+
+    let io_guard = state.midi_io.lock().await;
     let Some(io) = io_guard.as_ref() else {
         return Ok(cached);
     };
@@ -759,10 +902,50 @@ async fn midi_list_ports(_state: &BridgeState) -> Result<Vec<String>> {
     names.sort();
     names.dedup();
 
-    *(_state.midi_last_ports.lock().await) = names.clone();
+    *(state.midi_last_ports.lock().await) = names.clone();
     Ok(names)
 }
 
+#[cfg(target_os = "macos")]
+fn coremidi_matches(chosen: &str, candidate: &str) -> bool {
+    candidate == chosen || candidate.contains(chosen) || chosen.contains(candidate)
+}
+
+#[cfg(target_os = "macos")]
+fn find_coremidi_destination_by_name(name: &str) -> Option<Destination> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    for destination in Destinations {
+        let Some(candidate) = destination.display_name().or_else(|| destination.name()) else {
+            continue;
+        };
+        if coremidi_matches(name, candidate.trim()) {
+            return Some(destination);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn find_coremidi_source_by_name(name: &str) -> Option<Source> {
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    for source in Sources {
+        let Some(candidate) = source.display_name().or_else(|| source.name()) else {
+            continue;
+        };
+        if coremidi_matches(name, candidate.trim()) {
+            return Some(source);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
 fn find_midi_out_port_by_name(
     midi_out: &MidiOutput,
     name: &str,
@@ -776,6 +959,7 @@ fn find_midi_out_port_by_name(
     Ok(None)
 }
 
+#[cfg(not(target_os = "macos"))]
 fn find_midi_in_port_by_name(midi_in: &MidiInput, name: &str) -> Result<Option<midir::MidiInputPort>> {
     for port in midi_in.ports() {
         let Ok(port_name) = midi_in.port_name(&port) else { continue };
@@ -786,6 +970,27 @@ fn find_midi_in_port_by_name(midi_in: &MidiInput, name: &str) -> Result<Option<m
     Ok(None)
 }
 
+#[cfg(target_os = "macos")]
+async fn midi_disconnect(state: &BridgeState) -> Result<()> {
+    state.rx_gen.fetch_add(1, Ordering::SeqCst);
+    let existing = { state.midi.lock().await.take() };
+    if let Some(conn) = existing {
+        if let Some(io) = state.midi_io.lock().await.as_ref() {
+            let _ = io.input.disconnect_source(&conn.source);
+        }
+        let _ = conn.destination.flush();
+
+        {
+            let mut s = conn.status.lock().await;
+            s.connected = false;
+            s.device_name = None;
+        }
+        let _ = emit_event(state, "disconnected", json!({ "transport": "usb" }));
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
 async fn midi_disconnect(state: &BridgeState) -> Result<()> {
     // Drop any in-flight queued RX bytes after disconnect.
     state.rx_gen.fetch_add(1, Ordering::SeqCst);
@@ -819,6 +1024,79 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<DeviceInfo> {
+    state.rx_gen.fetch_add(1, Ordering::SeqCst);
+    let requested = port_name
+        .as_deref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    if let Some(conn) = state.midi.lock().await.as_ref() {
+        let status = conn.status.lock().await.clone();
+        if status.connected {
+            if requested.is_none() || status.device_name.as_deref() == requested.as_deref() {
+                return Ok(DeviceInfo {
+                    transport: "usb",
+                    name: status.device_name.clone(),
+                    address: status.device_name.clone().unwrap_or_default(),
+                });
+            }
+        }
+    }
+
+    let _ = midi_disconnect(state).await;
+
+    let chosen = match requested {
+        Some(p) => p,
+        None => {
+            let ports = midi_list_ports(state).await?;
+            let Some(first) = ports.into_iter().next() else {
+                bail!("no USB devices found");
+            };
+            first
+        }
+    };
+
+    let io_guard = state.midi_io.lock().await;
+    let Some(io) = io_guard.as_ref() else {
+        bail!("MIDI subsystem is not initialized (restart Desktop app)");
+    };
+
+    let destination = find_coremidi_destination_by_name(&chosen)
+        .ok_or_else(|| anyhow!("USB output port not found: {chosen}"))?;
+    let source = find_coremidi_source_by_name(&chosen).ok_or_else(|| anyhow!("USB input port not found: {chosen}"))?;
+
+    io.input
+        .connect_source(&source)
+        .map_err(|status| anyhow!("failed to connect USB input: {status}"))?;
+
+    let status = Arc::new(AsyncMutex::new(MidiStatus {
+        connected: true,
+        device_name: Some(chosen.clone()),
+    }));
+
+    *state.midi.lock().await = Some(MidiConnection {
+        out: Arc::clone(&io.output),
+        destination: destination.clone(),
+        source: source.clone(),
+        status: Arc::clone(&status),
+    });
+
+    let _ = emit_event(
+        state,
+        "connected",
+        json!({ "transport": "usb", "address": chosen, "name": chosen }),
+    );
+
+    Ok(DeviceInfo {
+        transport: "usb",
+        name: Some(chosen.clone()),
+        address: chosen,
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
 async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<DeviceInfo> {
     // Drop any queued RX bytes from a previous session.
     state.rx_gen.fetch_add(1, Ordering::SeqCst);
@@ -944,6 +1222,28 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     })
 }
 
+#[cfg(target_os = "macos")]
+async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
+    let (out, destination) = {
+        let guard = state.midi.lock().await;
+        let conn = guard.as_ref().ok_or_else(|| anyhow!("not connected"))?;
+        (Arc::clone(&conn.out), conn.destination.clone())
+    };
+
+    let packet = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+    let sysex = midi_sysex::encode_packet64(&packet);
+    let packet_list = PacketBuffer::new(0, &sysex);
+
+    out.send(&destination, &packet_list)
+        .map_err(|status| anyhow!("failed to send USB packet: {status}"))?;
+
+    if let Ok(mut guard) = state.buffer.lock() {
+        buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
 async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     let out = {
         let guard = state.midi.lock().await;
