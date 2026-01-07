@@ -138,6 +138,15 @@ pub struct BridgeState {
     rx_drop: Arc<AtomicBool>,
     rx_queue_dropped: Arc<AtomicU64>,
     rx_gen: Arc<AtomicU64>,
+    rx_last_ts_ms: Arc<AtomicU64>,
+    rx_raw_last_ts_ms: Arc<AtomicU64>,
+    rx_raw_packets: Arc<AtomicU64>,
+    rx_raw_bytes: Arc<AtomicU64>,
+    rx_sysex_in_progress_since_ms: Arc<AtomicU64>,
+    rx_sysex_in_progress_len: Arc<AtomicU64>,
+    rx_sysex_decode_errors: Arc<AtomicU64>,
+    rx_sysex_overflows: Arc<AtomicU64>,
+    rx_sysex_restarts: Arc<AtomicU64>,
     in_flight: Arc<AsyncMutex<()>>,
     pub event_tx: broadcast::Sender<Vec<u8>>,
 }
@@ -153,6 +162,30 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+fn timeout_diag(state: &BridgeState) -> String {
+    let now = now_ms();
+    let last_rx = state.rx_last_ts_ms.load(Ordering::Relaxed);
+    let last_rx_age_ms = now.saturating_sub(last_rx);
+    let last_raw_rx = state.rx_raw_last_ts_ms.load(Ordering::Relaxed);
+    let last_raw_rx_age_ms = now.saturating_sub(last_raw_rx);
+    let raw_packets = state.rx_raw_packets.load(Ordering::Relaxed);
+    let raw_bytes = state.rx_raw_bytes.load(Ordering::Relaxed);
+    let sysex_since = state.rx_sysex_in_progress_since_ms.load(Ordering::Relaxed);
+    let sysex_age_ms = if sysex_since == 0 {
+        0
+    } else {
+        now.saturating_sub(sysex_since)
+    };
+    let sysex_len = state.rx_sysex_in_progress_len.load(Ordering::Relaxed);
+    let dropped = state.rx_queue_dropped.load(Ordering::Relaxed);
+    let decode_errors = state.rx_sysex_decode_errors.load(Ordering::Relaxed);
+    let overflows = state.rx_sysex_overflows.load(Ordering::Relaxed);
+    let restarts = state.rx_sysex_restarts.load(Ordering::Relaxed);
+    format!(
+        "last_rx_age_ms={last_rx_age_ms}, last_raw_rx_age_ms={last_raw_rx_age_ms}, raw_packets={raw_packets}, raw_bytes={raw_bytes}, sysex_in_progress_age_ms={sysex_age_ms}, sysex_in_progress_len={sysex_len}, rx_queue_dropped={dropped}, sysex_decode_errors={decode_errors}, sysex_overflows={overflows}, sysex_restarts={restarts}"
+    )
 }
 
 #[cfg(any(test, not(unix)))]
@@ -671,6 +704,15 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         rx_drop: Arc::new(AtomicBool::new(false)),
         rx_queue_dropped: Arc::new(AtomicU64::new(0)),
         rx_gen: Arc::new(AtomicU64::new(0)),
+        rx_last_ts_ms: Arc::new(AtomicU64::new(0)),
+        rx_raw_last_ts_ms: Arc::new(AtomicU64::new(0)),
+        rx_raw_packets: Arc::new(AtomicU64::new(0)),
+        rx_raw_bytes: Arc::new(AtomicU64::new(0)),
+        rx_sysex_in_progress_since_ms: Arc::new(AtomicU64::new(0)),
+        rx_sysex_in_progress_len: Arc::new(AtomicU64::new(0)),
+        rx_sysex_decode_errors: Arc::new(AtomicU64::new(0)),
+        rx_sysex_overflows: Arc::new(AtomicU64::new(0)),
+        rx_sysex_restarts: Arc::new(AtomicU64::new(0)),
         in_flight: Arc::new(AsyncMutex::new(())),
         event_tx,
     });
@@ -700,45 +742,84 @@ fn midi_io_init_for_state(state: &BridgeState) -> Result<MidiIo> {
     let rx_queue_tx = state.rx_queue_tx.clone();
     let rx_queue_dropped = Arc::clone(&state.rx_queue_dropped);
     let rx_gen = Arc::clone(&state.rx_gen);
+    let rx_raw_last_ts_ms = Arc::clone(&state.rx_raw_last_ts_ms);
+    let rx_raw_packets = Arc::clone(&state.rx_raw_packets);
+    let rx_raw_bytes = Arc::clone(&state.rx_raw_bytes);
+    let rx_sysex_in_progress_since_ms = Arc::clone(&state.rx_sysex_in_progress_since_ms);
+    let rx_sysex_in_progress_len = Arc::clone(&state.rx_sysex_in_progress_len);
+    let rx_sysex_decode_errors = Arc::clone(&state.rx_sysex_decode_errors);
+    let rx_sysex_overflows = Arc::clone(&state.rx_sysex_overflows);
+    let rx_sysex_restarts = Arc::clone(&state.rx_sysex_restarts);
 
     // CoreMIDI may split SysEx across packets; reassemble before handing to our 64B decoder.
     let mut in_sysex = false;
     let mut sysex_buf: Vec<u8> = Vec::with_capacity(256);
     let input = client
         .input_port("emwaver-usb-in", move |packet_list| {
+            let ts_ms = now_ms();
+            rx_raw_last_ts_ms.store(ts_ms, Ordering::Relaxed);
             for packet in packet_list.iter() {
-                for &b in packet.data() {
+                let bytes = packet.data();
+                rx_raw_packets.fetch_add(1, Ordering::Relaxed);
+                rx_raw_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                for &b in bytes {
                     if !in_sysex {
                         if b == 0xF0 {
                             in_sysex = true;
                             sysex_buf.clear();
                             sysex_buf.push(b);
+                            rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
+                            rx_sysex_in_progress_len.store(1, Ordering::Relaxed);
                         }
+                        continue;
+                    }
+
+                    // If we see a new SysEx start while still assembling one, treat it as a
+                    // resync event and restart the buffer rather than passing garbage to decode.
+                    if b == 0xF0 {
+                        rx_sysex_restarts.fetch_add(1, Ordering::Relaxed);
+                        sysex_buf.clear();
+                        sysex_buf.push(b);
+                        rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
+                        rx_sysex_in_progress_len.store(1, Ordering::Relaxed);
                         continue;
                     }
 
                     sysex_buf.push(b);
+                    rx_sysex_in_progress_len.store(sysex_buf.len() as u64, Ordering::Relaxed);
                     if b != 0xF7 {
                         if sysex_buf.len() > 1024 {
+                            rx_sysex_overflows.fetch_add(1, Ordering::Relaxed);
                             in_sysex = false;
                             sysex_buf.clear();
+                            rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
+                            rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
                         }
                         continue;
                     }
 
-                    if let Ok(Some(pkt)) = midi_sysex::decode_packet64(&sysex_buf) {
-                        let ts_ms = now_ms();
-                        let generation = rx_gen.load(Ordering::Relaxed);
-                        if rx_queue_tx
-                            .try_send(RxQueuedPacket { pkt, ts_ms, generation })
-                            .is_err()
-                        {
-                            rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                    match midi_sysex::decode_packet64(&sysex_buf) {
+                        Ok(Some(pkt)) => {
+                            let generation = rx_gen.load(Ordering::Relaxed);
+                            if rx_queue_tx
+                                .try_send(RxQueuedPacket { pkt, ts_ms, generation })
+                                .is_err()
+                            {
+                                rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(_err) => {
+                            // Keep this extremely cheap: increment a counter only. We surface these
+                            // counters in timeout errors and via periodic event emission.
+                            rx_sysex_decode_errors.fetch_add(1, Ordering::Relaxed);
                         }
                     }
 
                     in_sysex = false;
                     sysex_buf.clear();
+                    rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
+                    rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
                 }
             }
         })
@@ -1166,6 +1247,9 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
             &in_port,
             "emwaver-usb-in-conn",
             move |_stamp, message, _| {
+                rx_raw_last_ts_ms.store(now_ms(), Ordering::Relaxed);
+                rx_raw_packets.fetch_add(1, Ordering::Relaxed);
+                rx_raw_bytes.fetch_add(message.len() as u64, Ordering::Relaxed);
                 let Ok(Some(pkt)) = midi_sysex::decode_packet64(message) else { return };
 
                 let ts_ms = now_ms();
@@ -1313,7 +1397,10 @@ async fn send_packet_command(
     while out.len() < want_bytes {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
-            bail!("timeout waiting for response");
+            bail!(
+                "timeout waiting for response ({})",
+                timeout_diag(state)
+            );
         }
 
         let msg = match timeout(remaining, events.recv()).await {
@@ -1322,7 +1409,7 @@ async fn send_packet_command(
             Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
                 bail!("device events channel closed")
             }
-            Err(_) => bail!("timeout waiting for response"),
+            Err(_) => bail!("timeout waiting for response ({})", timeout_diag(state)),
         };
 
         let trimmed = std::str::from_utf8(&msg).unwrap_or("").trim();
@@ -1535,16 +1622,45 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
 
 async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueuedPacket>) {
     let mut last_dropped: u64 = 0;
+    let mut last_sysex_decode_errors: u64 = 0;
+    let mut last_sysex_overflows: u64 = 0;
+    let mut last_sysex_restarts: u64 = 0;
     while let Some(item) = rx.recv().await {
         let current_gen = state.rx_gen.load(Ordering::Relaxed);
         if item.generation != current_gen {
             continue;
         }
 
+        state.rx_last_ts_ms.store(item.ts_ms, Ordering::Relaxed);
+
         let dropped = state.rx_queue_dropped.load(Ordering::Relaxed);
         if dropped != last_dropped {
             last_dropped = dropped;
             let _ = emit_event(state.as_ref(), "rx_queue_dropped", json!({ "count": dropped }));
+        }
+
+        let sysex_decode_errors = state.rx_sysex_decode_errors.load(Ordering::Relaxed);
+        if sysex_decode_errors != last_sysex_decode_errors {
+            last_sysex_decode_errors = sysex_decode_errors;
+            let _ = emit_event(
+                state.as_ref(),
+                "rx_sysex_decode_errors",
+                json!({ "count": sysex_decode_errors }),
+            );
+        }
+
+        let sysex_overflows = state.rx_sysex_overflows.load(Ordering::Relaxed);
+        if sysex_overflows != last_sysex_overflows {
+            last_sysex_overflows = sysex_overflows;
+            let _ =
+                emit_event(state.as_ref(), "rx_sysex_overflows", json!({ "count": sysex_overflows }));
+        }
+
+        let sysex_restarts = state.rx_sysex_restarts.load(Ordering::Relaxed);
+        if sysex_restarts != last_sysex_restarts {
+            last_sysex_restarts = sysex_restarts;
+            let _ =
+                emit_event(state.as_ref(), "rx_sysex_restarts", json!({ "count": sysex_restarts }));
         }
 
         // Emit RX event first so command/BS listeners don't get blocked by buffer work.
