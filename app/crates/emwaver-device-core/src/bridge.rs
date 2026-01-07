@@ -75,7 +75,7 @@ struct BridgeEvent<'a> {
     data: serde_json::Value,
 }
 
-const RX_QUEUE_CAPACITY: usize = 8192;
+const RX_QUEUE_CAPACITY: usize = 65_536;
 
 // From `stm/emwaver-firmware/USB_DEVICE/App/usbd_desc.c` (USBD_VID / USBD_PID_FS).
 const EMWAVER_USB_MIDI_VID: u16 = 0x0483;
@@ -658,7 +658,7 @@ pub async fn dispatch_request(
 }
 
 pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
-    let (event_tx, _) = broadcast::channel::<Vec<u8>>(1024);
+    let (event_tx, _) = broadcast::channel::<Vec<u8>>(65_536);
     let (rx_queue_tx, rx_queue_rx) = mpsc::channel::<RxQueuedPacket>(RX_QUEUE_CAPACITY);
 
     let state = Arc::new(BridgeState {
