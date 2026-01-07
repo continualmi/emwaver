@@ -16,12 +16,8 @@
  */
 
 mod cli;
-mod bridge;
-mod midi_sysex;
-mod daemon;
-pub mod dfu;
+mod desktop_ipc;
 pub mod firmware;
-pub mod git;
 pub mod init;
 mod vibe;
 mod interactive;
@@ -38,29 +34,21 @@ pub fn run() -> Result<()> {
     match cli.command {
         Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
         Some(cli::Command::Cmd {
-            socket,
             text,
             timeout_ms,
             packets,
             verbose,
             json,
-        }) => daemon::daemon_cmd(socket, text, timeout_ms, packets, verbose, json),
-        Some(cli::Command::Start { socket }) => daemon::daemon_start(socket),
-        Some(cli::Command::Stop { socket }) => daemon::daemon_stop(socket),
-        Some(cli::Command::Status { socket, json }) => daemon::daemon_status(socket, json),
-        Some(cli::Command::Connect {
-            socket,
-            port,
-        }) => daemon::daemon_connect(socket, port),
-        Some(cli::Command::Disconnect { socket }) => daemon::daemon_disconnect(socket),
-        Some(cli::Command::Connected { socket, json }) => daemon::daemon_connected(socket, json),
+        }) => cmd_desktop(text, timeout_ms, packets, verbose, json),
         Some(cli::Command::Usb { command }) => match command {
-            cli::MidiCommand::List { socket, json } => daemon::daemon_midi_list(socket, json),
-            cli::MidiCommand::Connect { socket, port, json } => {
-                daemon::daemon_midi_connect(socket, port, json)
-            }
-            cli::MidiCommand::Disconnect { socket } => daemon::daemon_midi_disconnect(socket),
-            cli::MidiCommand::Status { socket, json } => daemon::daemon_midi_status(socket, json),
+            cli::MidiCommand::List { json } => usb_list(json),
+            cli::MidiCommand::Connect { port, json } => usb_connect(port, json),
+            cli::MidiCommand::Disconnect => usb_disconnect(),
+            cli::MidiCommand::Status { json } => usb_status(json),
+        },
+        Some(cli::Command::Wavelet { command }) => match command {
+            cli::WaveletCommand::Run { path, bootstrap } => wavelet_run(path, bootstrap),
+            cli::WaveletCommand::Stop => wavelet_stop(),
         },
         Some(cli::Command::Build {
             project,
@@ -99,82 +87,132 @@ pub fn run() -> Result<()> {
                 vibe::init_repo(destination, force, !no_agents)
             }
         },
-        Some(cli::Command::Daemon { command }) => match command {
-            cli::DaemonCommand::Run { socket } => daemon::daemon_run(socket),
-            cli::DaemonCommand::Start { socket } => daemon::daemon_start(socket),
-            cli::DaemonCommand::Stop { socket } => daemon::daemon_stop(socket),
-            cli::DaemonCommand::Status { socket, json } => daemon::daemon_status(socket, json),
-            cli::DaemonCommand::Connect { socket, port } => daemon::daemon_connect(socket, port),
-            cli::DaemonCommand::Disconnect { socket } => daemon::daemon_disconnect(socket),
-            cli::DaemonCommand::Connected { socket, json } => daemon::daemon_connected(socket, json),
-            cli::DaemonCommand::Cmd {
-                socket,
-                text,
-                timeout_ms,
-                packets,
-                verbose,
-                json,
-            } => daemon::daemon_cmd(socket, text, timeout_ms, packets, verbose, json),
-        },
-        Some(cli::Command::Buffer { socket, command }) => match command {
-            cli::BufferCommand::Clear => daemon::buffer_clear(socket),
-            cli::BufferCommand::Len { json } => daemon::buffer_len(socket, json),
-            cli::BufferCommand::Load { path, no_upload } => {
-                let socket_clone = socket.clone();
-                daemon::buffer_load_file(socket_clone, path)?;
-                if !no_upload {
-                    // Upload to device so it's ready for retransmission immediately.
-                    daemon::buffer_transmit(socket)?;
-                }
-                Ok(())
-            }
-            cli::BufferCommand::Save { path } => daemon::buffer_save_file(socket, path),
-            cli::BufferCommand::Transmit => daemon::buffer_transmit(socket),
-        },
-        Some(cli::Command::Sampler { socket, command }) => match command {
-            cli::SamplerCommand::Start {
-                duration_ms,
-                pin,
-            } => {
-                daemon::sampler_start(socket.clone(), pin)?;
-                if let Some(ms) = duration_ms {
-                    if ms > 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(ms));
-                        daemon::sampler_stop(socket)?;
-                    }
-                }
-                Ok(())
-            }
-            cli::SamplerCommand::Stop => daemon::sampler_stop(socket),
-        },
-        Some(cli::Command::Retransmit { socket, command }) => match command {
-            cli::RetransmitCommand::Start {
-                pin,
-                pwm,
-                freq,
-                duty,
-                no_upload,
-                duration_ms,
-            } => {
-                daemon::retransmit_start(socket.clone(), pin, pwm, freq, duty)?;
-                if !no_upload {
-                    // Match desktop behavior: enter transmit mode first, then upload
-                    // the capture (the device monitors RX fill level before draining).
-                    std::thread::sleep(std::time::Duration::from_millis(25));
-                    daemon::buffer_transmit(socket.clone())?;
-                }
-                if let Some(ms) = duration_ms {
-                    if ms > 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(ms));
-                        daemon::retransmit_stop(socket)?;
-                    }
-                }
-                Ok(())
-            }
-            cli::RetransmitCommand::Stop => daemon::retransmit_stop(socket),
-        },
         None => interactive::run_menu(),
     }
+}
+
+fn cmd_desktop(
+    text: Vec<String>,
+    timeout_ms: u64,
+    packets: u32,
+    verbose: bool,
+    json: bool,
+) -> Result<()> {
+    let text = text.join(" ");
+    let value = desktop_ipc::rpc_ok(
+        "send_command",
+        serde_json::json!({
+            "text": text,
+            "timeout_ms": timeout_ms,
+            "packets": packets
+        }),
+        std::time::Duration::from_millis(timeout_ms.saturating_add(5_000).max(1)),
+    )?;
+
+    let bytes_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let bytes = desktop_ipc::decode_b64(bytes_b64)?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "bytes_b64": bytes_b64,
+                "bytes_len": bytes.len()
+            })
+        );
+        return Ok(());
+    }
+
+    if verbose {
+        let mut hex = String::new();
+        for (i, b) in bytes.iter().enumerate() {
+            use std::fmt::Write;
+            let _ = write!(&mut hex, "{:02X}{}", b, if i + 1 == bytes.len() { "" } else { " " });
+        }
+        println!("hex: {hex}");
+    }
+    println!("{}", String::from_utf8_lossy(&bytes).trim_matches(['\0', '\n', '\r']));
+    Ok(())
+}
+
+fn usb_list(json: bool) -> Result<()> {
+    let value = desktop_ipc::rpc_ok("midi_list_ports", serde_json::json!({}), std::time::Duration::from_secs(5))?;
+    if json {
+        println!("{value}");
+        return Ok(());
+    }
+    let ports = value
+        .get("ports")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
+        .collect::<Vec<_>>();
+    for p in ports {
+        println!("{p}");
+    }
+    Ok(())
+}
+
+fn usb_connect(port: Option<String>, json: bool) -> Result<()> {
+    let value = desktop_ipc::rpc_ok(
+        "midi_connect",
+        serde_json::json!({ "port_name": port }),
+        std::time::Duration::from_secs(10),
+    )?;
+    if json {
+        println!("{value}");
+        return Ok(());
+    }
+    println!("ok");
+    Ok(())
+}
+
+fn usb_disconnect() -> Result<()> {
+    let _ = desktop_ipc::rpc_ok("midi_disconnect", serde_json::json!({}), std::time::Duration::from_secs(5))?;
+    println!("ok");
+    Ok(())
+}
+
+fn usb_status(json: bool) -> Result<()> {
+    let value = desktop_ipc::rpc_ok("midi_status", serde_json::json!({}), std::time::Duration::from_secs(3))?;
+    if json {
+        println!("{value}");
+        return Ok(());
+    }
+    let connected = value.get("connected").and_then(|v| v.as_bool()).unwrap_or(false);
+    let name = value.get("device_name").and_then(|v| v.as_str()).unwrap_or("");
+    if connected {
+        if name.is_empty() {
+            println!("connected");
+        } else {
+            println!("connected: {name}");
+        }
+    } else {
+        println!("disconnected");
+    }
+    Ok(())
+}
+
+fn wavelet_run(path: std::path::PathBuf, bootstrap: Option<std::path::PathBuf>) -> Result<()> {
+    let script = std::fs::read_to_string(&path)?;
+    let bootstrap = match bootstrap {
+        Some(p) => std::fs::read_to_string(p)?,
+        None => String::new(),
+    };
+    desktop_ipc::rpc_ok(
+        "wavelet_execute",
+        serde_json::json!({ "script": script, "bootstrap": bootstrap }),
+        std::time::Duration::from_secs(5),
+    )?;
+    println!("ok");
+    Ok(())
+}
+
+fn wavelet_stop() -> Result<()> {
+    desktop_ipc::rpc_ok("wavelet_stop", serde_json::json!({}), std::time::Duration::from_secs(3))?;
+    println!("ok");
+    Ok(())
 }
 
 #[cfg(test)]
