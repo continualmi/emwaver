@@ -17,11 +17,13 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
+use tokio::sync::Mutex;
 
 #[cfg(unix)]
 use tokio::net::UnixStream;
@@ -196,7 +198,197 @@ pub fn ensure_daemon_running(_: &Path) -> Result<(), String> {
     Err("EMWaver daemon is not supported on this platform yet".to_string())
 }
 
+// ============================================================================
+// Persistent Connection
+// ============================================================================
+
 #[cfg(unix)]
+type ConnectionInner = (WriteHalf<UnixStream>, BufReader<ReadHalf<UnixStream>>);
+
+/// A persistent connection to the daemon that reuses a single Unix socket.
+#[cfg(unix)]
+pub struct DaemonConnection {
+    socket: PathBuf,
+    conn: Mutex<Option<ConnectionInner>>,
+    next_id: AtomicU64,
+}
+
+#[cfg(unix)]
+impl DaemonConnection {
+    pub fn new(socket: PathBuf) -> Self {
+        Self {
+            socket,
+            conn: Mutex::new(None),
+            next_id: AtomicU64::new(1),
+        }
+    }
+
+    /// Get the socket path.
+    pub fn socket_path(&self) -> &Path {
+        &self.socket
+    }
+
+    /// Ensure the daemon process is running (does not establish connection).
+    pub fn ensure_daemon_running(&self) -> Result<(), String> {
+        ensure_daemon_running(&self.socket)
+    }
+
+    /// Ensures daemon is running and we have a connection.
+    async fn ensure_connected(&self, guard: &mut Option<ConnectionInner>) -> Result<(), String> {
+        if guard.is_some() {
+            return Ok(());
+        }
+
+        ensure_daemon_running(&self.socket)?;
+
+        let stream = UnixStream::connect(&self.socket)
+            .await
+            .map_err(|e| format!("failed to connect to daemon: {e}"))?;
+
+        let (read_half, write_half) = tokio::io::split(stream);
+        let reader = BufReader::new(read_half);
+        *guard = Some((write_half, reader));
+        Ok(())
+    }
+
+    /// Execute an RPC call over the persistent connection.
+    pub async fn rpc(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+        timeout: Duration,
+    ) -> Result<serde_json::Value, String> {
+        let mut guard = self.conn.lock().await;
+
+        // Try to connect if needed
+        self.ensure_connected(&mut guard).await?;
+
+        let (writer, reader) = guard.as_mut().ok_or("connection not established")?;
+
+        let req_id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let req = RpcRequest {
+            id: req_id,
+            method: method.to_string(),
+            params,
+        };
+
+        // Send request
+        let request_bytes = serde_json::to_vec(&req).map_err(|e| format!("rpc encode failed: {e}"))?;
+        
+        let write_result = async {
+            writer.write_all(&request_bytes).await?;
+            writer.write_all(b"\n").await?;
+            writer.flush().await?;
+            Ok::<_, std::io::Error>(())
+        }.await;
+
+        if let Err(e) = write_result {
+            // Connection broken, drop it so next call reconnects
+            *guard = None;
+            return Err(format!("rpc write failed: {e}"));
+        }
+
+        // Read response
+        let mut line = String::new();
+        let deadline = tokio::time::Instant::now() + timeout;
+        
+        loop {
+            line.clear();
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Err("timeout waiting for daemon response".to_string());
+            }
+
+            let read_result = tokio::time::timeout(remaining, reader.read_line(&mut line)).await;
+
+            let n = match read_result {
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => {
+                    // Connection broken
+                    *guard = None;
+                    return Err(format!("rpc read failed: {e}"));
+                }
+                Err(_) => {
+                    return Err("timeout waiting for daemon response".to_string());
+                }
+            };
+
+            if n == 0 {
+                // Connection closed
+                *guard = None;
+                return Err("daemon closed connection unexpectedly".to_string());
+            }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let value: RpcResponse = match serde_json::from_str(trimmed) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            // Skip events
+            if value.event.is_some() {
+                continue;
+            }
+
+            // Skip responses for other requests (shouldn't happen with serial access)
+            if value.id != req_id {
+                continue;
+            }
+
+            if !value.ok {
+                let msg = value
+                    .error
+                    .as_ref()
+                    .map(|e| e.message.clone())
+                    .unwrap_or_else(|| "unknown error".to_string());
+                return Err(msg);
+            }
+
+            return Ok(value.result);
+        }
+    }
+
+    /// Force reconnection on next RPC call.
+    #[allow(dead_code)]
+    pub async fn disconnect(&self) {
+        let mut guard = self.conn.lock().await;
+        *guard = None;
+    }
+}
+
+#[cfg(not(unix))]
+pub struct DaemonConnection {
+    _socket: PathBuf,
+}
+
+#[cfg(not(unix))]
+impl DaemonConnection {
+    pub fn new(socket: PathBuf) -> Self {
+        Self { _socket: socket }
+    }
+
+    pub async fn rpc(
+        &self,
+        _method: &str,
+        _params: serde_json::Value,
+        _timeout: Duration,
+    ) -> Result<serde_json::Value, String> {
+        Err("EMWaver daemon is not supported on this platform yet".to_string())
+    }
+
+    pub async fn disconnect(&self) {}
+}
+
+// ============================================================================
+// Legacy single-shot RPC (kept for compatibility but prefer DaemonConnection)
+// ============================================================================
+
+#[cfg(unix)]
+#[allow(dead_code)]
 pub async fn rpc(
     socket: &Path,
     req: RpcRequest,

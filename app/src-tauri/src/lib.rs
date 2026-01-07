@@ -43,7 +43,7 @@ use git::{
     git_unstage, git_unstage_all,
 };
 use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
-use daemon_client::{RpcRequest, decode_b64, encode_b64};
+use daemon_client::{DaemonConnection, decode_b64, encode_b64};
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
 
@@ -247,32 +247,19 @@ struct RunShellCommandResult {
 
 #[derive(Clone)]
 struct DaemonState {
-    socket: PathBuf,
+    conn: Arc<DaemonConnection>,
 }
 
 impl DaemonState {
     fn new() -> Result<Self, String> {
+        let socket = daemon_client::default_socket_path()?;
         Ok(Self {
-            socket: daemon_client::default_socket_path()?,
+            conn: Arc::new(DaemonConnection::new(socket)),
         })
     }
 
-    fn ensure_running(&self) -> Result<(), String> {
-        daemon_client::ensure_daemon_running(&self.socket)
-    }
-
     async fn rpc(&self, method: &str, params: serde_json::Value, timeout: Duration) -> Result<serde_json::Value, String> {
-        self.ensure_running()?;
-        daemon_client::rpc(
-            &self.socket,
-            RpcRequest {
-                id: 1,
-                method: method.to_string(),
-                params,
-            },
-            timeout,
-        )
-        .await
+        self.conn.rpc(method, params, timeout).await
     }
 }
 
@@ -1072,12 +1059,12 @@ pub fn run() {
                 let daemon = daemon_state_for_setup.clone();
                 tauri::async_runtime::spawn(async move {
                     loop {
-                        if daemon.ensure_running().is_err() {
+                        if daemon.conn.ensure_daemon_running().is_err() {
                             tokio::time::sleep(Duration::from_millis(500)).await;
                             continue;
                         }
 
-                        let stream = UnixStream::connect(&daemon.socket).await;
+                        let stream = UnixStream::connect(daemon.conn.socket_path()).await;
                         let Ok(mut stream) = stream else {
                             tokio::time::sleep(Duration::from_millis(500)).await;
                             continue;
