@@ -218,6 +218,10 @@ pub struct BridgeState {
     rx_sysex_overflows: Arc<AtomicU64>,
     rx_sysex_restarts: Arc<AtomicU64>,
     stream_capture: Arc<AtomicBool>,
+    // During long host->device TX bursts, commands are injected into the next stream superframe.
+    tx_streaming: Arc<AtomicBool>,
+    tx_pending_cmd: Arc<Mutex<Option<[u8; LANE_SIZE]>>>,
+    tx_burst_in_flight: Arc<AsyncMutex<()>>,
     in_flight: Arc<AsyncMutex<()>>,
     pub event_tx: broadcast::Sender<Vec<u8>>,
 }
@@ -889,6 +893,9 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         rx_sysex_overflows: Arc::new(AtomicU64::new(0)),
         rx_sysex_restarts: Arc::new(AtomicU64::new(0)),
         stream_capture: Arc::new(AtomicBool::new(false)),
+        tx_streaming: Arc::new(AtomicBool::new(false)),
+        tx_pending_cmd: Arc::new(Mutex::new(None)),
+        tx_burst_in_flight: Arc::new(AsyncMutex::new(())),
         in_flight: Arc::new(AsyncMutex::new(())),
         event_tx,
     });
@@ -1642,7 +1649,11 @@ async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result
     };
 
     let stream_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
-    let cmd_lane = [0u8; PACKET_SIZE];
+    let cmd_lane = if let Ok(mut guard) = state.tx_pending_cmd.lock() {
+        guard.take().unwrap_or([0u8; PACKET_SIZE])
+    } else {
+        [0u8; PACKET_SIZE]
+    };
     let sf = midi_sysex::build_superframe(cmd_lane, stream_lane);
     let sysex = midi_sysex::encode_superframe(&sf);
     let packet_list = PacketBuffer::new(0, &sysex);
@@ -1679,7 +1690,11 @@ async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result
     };
 
     let stream_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
-    let cmd_lane = [0u8; PACKET_SIZE];
+    let cmd_lane = if let Ok(mut guard) = state.tx_pending_cmd.lock() {
+        guard.take().unwrap_or([0u8; PACKET_SIZE])
+    } else {
+        [0u8; PACKET_SIZE]
+    };
     let sf = midi_sysex::build_superframe(cmd_lane, stream_lane);
     let sysex = midi_sysex::encode_superframe(&sf);
 
@@ -1722,6 +1737,16 @@ async fn write_active(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     if midi_connected {
         // `sendNoWait` paths use `write`, so update the sampler capture flag here too.
         maybe_update_stream_capture(state, &bytes);
+
+        // During long TX bursts (retransmit), inject commands into the next stream superframe.
+        if state.tx_streaming.load(Ordering::Relaxed) {
+            let cmd_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+            if let Ok(mut guard) = state.tx_pending_cmd.lock() {
+                *guard = Some(cmd_lane);
+            }
+            return Ok(());
+        }
+
         return midi_write_packet(state, bytes).await;
     }
     bail!("not connected");
@@ -1836,7 +1861,7 @@ async fn send_command_text(
 }
 
 async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()> {
-    let _in_flight = state.in_flight.lock().await;
+    let _tx_burst = state.tx_burst_in_flight.lock().await;
     let midi_connected = match state.midi.lock().await.as_ref() {
         Some(conn) => conn.status.lock().await.connected,
         None => false,
@@ -1853,6 +1878,8 @@ pub async fn transmit_buffer_bytes(state: &BridgeState, data: Vec<u8>) -> Result
 
 async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
     state.rx_drop.store(true, Ordering::SeqCst);
+    state.tx_streaming.store(true, Ordering::SeqCst);
+
     struct RxDropGuard(Arc<AtomicBool>);
     impl Drop for RxDropGuard {
         fn drop(&mut self) {
@@ -1860,6 +1887,14 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
         }
     }
     let _rx_drop_guard = RxDropGuard(Arc::clone(&state.rx_drop));
+
+    struct TxStreamingGuard(Arc<AtomicBool>);
+    impl Drop for TxStreamingGuard {
+        fn drop(&mut self) {
+            self.0.store(false, Ordering::SeqCst);
+        }
+    }
+    let _tx_streaming_guard = TxStreamingGuard(Arc::clone(&state.tx_streaming));
     if data.is_empty() {
         bail!("buffer is empty");
     }

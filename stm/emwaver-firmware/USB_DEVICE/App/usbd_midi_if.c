@@ -169,23 +169,33 @@ static void handle_complete_sysex(void)
       }
     }
     rxBufferHeadPos = tempHeadPos;
-    MIDI_SendStatusPacket_FS(MIDI_GetRxBufferBytesAvailable_FS());
-
-    sysex_reset();
-    return;
+    // Don't send from within the USB RX path; queue BS and flush from main.
+    MIDI_QueueStatusPacket_FS(MIDI_GetRxBufferBytesAvailable_FS());
   }
 
-  if (bulk_packet != NULL) {
-    free(bulk_packet);
-    bulk_packet = NULL;
-    bulk_packet_len = 0;
+  // Always accept the cmd lane too (needed for commands during retransmit).
+  // Avoid allocating for the common case where cmd_lane is all zeros.
+  uint8_t cmd_any = 0;
+  for (uint32_t i = 0; i < EMW_LANE_SIZE; i++) {
+    if (cmd_lane[i] != 0) {
+      cmd_any = 1;
+      break;
+    }
   }
-  bulk_packet_len = EMW_LANE_SIZE;
-  bulk_packet = (uint8_t*)malloc(EMW_LANE_SIZE);
-  if (bulk_packet != NULL) {
-    memcpy(bulk_packet, cmd_lane, EMW_LANE_SIZE);
-  } else {
-    bulk_packet_len = 0;
+
+  if (cmd_any) {
+    if (bulk_packet != NULL) {
+      free(bulk_packet);
+      bulk_packet = NULL;
+      bulk_packet_len = 0;
+    }
+    bulk_packet_len = EMW_LANE_SIZE;
+    bulk_packet = (uint8_t*)malloc(EMW_LANE_SIZE);
+    if (bulk_packet != NULL) {
+      memcpy(bulk_packet, cmd_lane, EMW_LANE_SIZE);
+    } else {
+      bulk_packet_len = 0;
+    }
   }
 
   sysex_reset();
@@ -384,6 +394,31 @@ void MIDI_FreeRxBuffer_FS(void)
   rxBufferTailPos = 0;
 }
 
+extern volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
+extern volatile uint8_t pending_cmd_ready;
+
+static volatile uint16_t pending_bs_status = 0;
+static volatile uint8_t pending_bs_ready = 0;
+
+void MIDI_QueueStatusPacket_FS(uint16_t status)
+{
+  pending_bs_status = status;
+  pending_bs_ready = 1;
+}
+
+void MIDI_PollTx_FS(void)
+{
+  if (!pending_bs_ready) {
+    return;
+  }
+  // Only attempt when USB isn't busy; otherwise wait until the next poll.
+  if (USBD_MIDI_IsTxBusy(&hUsbDeviceFS)) {
+    return;
+  }
+  pending_bs_ready = 0;
+  MIDI_SendStatusPacket_FS(pending_bs_status);
+}
+
 void MIDI_SendStatusPacket_FS(uint16_t status)
 {
   uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
@@ -392,6 +427,12 @@ void MIDI_SendStatusPacket_FS(uint16_t status)
   stream_lane[1] = 'S';
   stream_lane[2] = (uint8_t)(status >> 8);
   stream_lane[3] = (uint8_t)(status & 0xFF);
+
+  if (pending_cmd_ready) {
+    memcpy(&superframe[0], (const void *)pending_cmd_lane, EMW_LANE_SIZE);
+    pending_cmd_ready = 0;
+  }
+
   (void)MIDI_SendResponsePkt_FS(superframe, EMW_SUPERFRAME_SIZE, 100);
 }
 
