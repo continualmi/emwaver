@@ -103,6 +103,11 @@ static volatile ism_mode_t ism_mode = ISM_MODE_IDLE;
 static volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
 static volatile uint8_t pending_cmd_ready = 0;
 
+// While sampling, command responses may be sent when no new 64B sampler chunk is ready.
+// In that case, reuse the last valid stream lane to avoid injecting all-zero packets.
+static volatile uint8_t last_stream_lane[EMW_LANE_SIZE];
+static volatile uint8_t last_stream_valid = 0;
+
 static void free_bulk_packet(void)
 {
     if (bulk_packet != NULL) {
@@ -348,6 +353,7 @@ static void stop_sampling(void)
     bufferIndex = 0;
     bufferReady = 0;
     ism_mode = ISM_MODE_IDLE;
+    last_stream_valid = 0;
 }
 
 static void send_sampling_superframe(const uint8_t *stream_lane)
@@ -356,9 +362,15 @@ static void send_sampling_superframe(const uint8_t *stream_lane)
     if (pending_cmd_ready) {
         memcpy(&superframe[0], (const void *)pending_cmd_lane, EMW_LANE_SIZE);
     }
+
     if (stream_lane != NULL) {
         memcpy(&superframe[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
+        memcpy((void *)last_stream_lane, stream_lane, EMW_LANE_SIZE);
+        last_stream_valid = 1;
+    } else if (last_stream_valid) {
+        memcpy(&superframe[EMW_LANE_SIZE], (const void *)last_stream_lane, EMW_LANE_SIZE);
     }
+
     (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
     pending_cmd_ready = 0;
 }
@@ -1029,6 +1041,7 @@ int main(void)
               transmitBuffer = NULL;
               bufferIndex = 0;
               bufferReady = 0;
+              last_stream_valid = 0;
 
               EMW_USB_SetBufferType_FS(EMW_BUFFER_DOUBLE);
               ism_mode = ISM_MODE_RAW_SAMPLING;
