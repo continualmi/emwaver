@@ -42,18 +42,15 @@ nav:
       - EMWaver: overview.md
       - Installing & Using: installing-using.md
       - Infrared + Sub‑GHz Walkthrough: infrared-ism-walkthrough.md
-  - Hardware:
-      - Current Hardware: hardware/device.md
+  - Device:
+      - Pinout: hardware/pinout.md
+      - Current Device: hardware/device.md
+      - Order on JLCPCB: hardware/build-reproduce.md
       - Hardware History: hardware-catalog/index.md
-      - Written Guide: hardware/build-reproduce.md
-  - Flashing Firmware:
-      - Overview: flashing-firmware/index.md
-      - STM32 (STM32F042): flashing-firmware/stm32.md
   - Documentation:
-      - EMWaver CLI: documentation/cli.md
-      - Desktop + CLI: documentation/desktop-cli.md
       - Buffer: documentation/buffer.md
       - Wavelets: wavelets.md
+      - Firmware Update: documentation/firmware-update.md
 
 extra_css:
   - styles/theme.css
