@@ -39,12 +39,8 @@ Mobile apps are the primary UI for connecting to devices and running workflows.
   </a>
 </div>
 
-## Install The CLI
+## Firmware updates
 
-Install the EMWaver CLI tool with a single command:
+Firmware is updated directly from the EMWaver app (Desktop or Android).
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
-```
-
-The installer automatically detects your platform (macOS, Linux, or Windows) and installs the appropriate binary.
+See: [Firmware Update](documentation/firmware-update.md)

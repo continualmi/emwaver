@@ -1,14 +1,15 @@
 ---
-title: Current Hardware
+title: Current Device
 ---
 
-# Current Hardware
+# Current Device
 
-EMWaver is now focused on a single current-gen **STM32** board that connects over **USB**.
+EMWaver is focused on a single current-gen **STM32** device that connects over **USB**.
 
 [PCB (PDF)](../hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf){ .md-button }
-[Build Guide](build-reproduce.md){ .md-button }
-[Flashing (STM32)](../flashing-firmware/stm32.md){ .md-button }
+[Pinout](pinout.md){ .md-button }
+[Order on JLCPCB](build-reproduce.md){ .md-button }
+[Firmware Update](../documentation/firmware-update.md){ .md-button }
 
 ## What you get
 

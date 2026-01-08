@@ -4,7 +4,7 @@ title: Hardware History
 
 # Hardware History
 
-EMWaver is now focused on a single current-gen device (see **Hardware → Current Hardware**).
+EMWaver is now focused on a single current-gen device (see **Device → Current Device**).
 
 This section is kept as an archive of previous boards/modules and their reproduction links.
 
@@ -12,4 +12,4 @@ This section is kept as an archive of previous boards/modules and their reproduc
 
 ## Written Guide
 
-- [Build & Reproduce Guide](hardware/build-reproduce.md)
+- [Order on JLCPCB](../hardware/build-reproduce.md)
