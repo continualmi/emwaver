@@ -100,8 +100,8 @@ typedef enum {
 } ism_mode_t;
 
 static volatile ism_mode_t ism_mode = ISM_MODE_IDLE;
-static volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
-static volatile uint8_t pending_cmd_ready = 0;
+volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
+volatile uint8_t pending_cmd_ready = 0;
 
 
 static void free_bulk_packet(void)
@@ -122,7 +122,7 @@ static void command_send_ok(const uint8_t *data, size_t len)
         uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
         superframe[0] = 0x00;
         superframe[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-        if (ism_mode == ISM_MODE_RAW_SAMPLING) {
+        if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
             memcpy((void *)pending_cmd_lane, superframe, EMW_LANE_SIZE);
             pending_cmd_ready = 1;
             return;
@@ -131,8 +131,8 @@ static void command_send_ok(const uint8_t *data, size_t len)
         return;
     }
 
-    if (ism_mode == ISM_MODE_RAW_SAMPLING) {
-        // Sampling mode: keep command semantics simple (single response lane).
+    if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
+        // Sampling / retransmit mode: keep command semantics simple (single response lane).
         // Anything beyond the first 64 bytes is dropped.
         uint8_t lane[EMW_LANE_SIZE] = {0};
         size_t chunk = len > (EMW_LANE_SIZE - 1u) ? (EMW_LANE_SIZE - 1u) : len;
@@ -163,7 +163,7 @@ static void command_send_err(const char *msg)
     // Match the registry firmware behavior: errors are best-effort no-ops.
     uint8_t lane[EMW_LANE_SIZE] = {0};
     lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-    if (ism_mode == ISM_MODE_RAW_SAMPLING) {
+    if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
         memcpy((void *)pending_cmd_lane, lane, EMW_LANE_SIZE);
         pending_cmd_ready = 1;
         return;
@@ -1272,6 +1272,7 @@ int main(void)
 
               uint32_t start = HAL_GetTick();
               while (EMW_USB_GetRxBufferBytesAvailable_FS() < 250) {
+                  MIDI_PollTx_FS();
                   if ((HAL_GetTick() - start) > 2000) {
                       break;
                   }
@@ -1279,6 +1280,7 @@ int main(void)
 
               HAL_TIM_Base_Start_IT(&htim3);
               while (EMW_USB_GetRxBufferBytesAvailable_FS() != 0) {
+                  MIDI_PollTx_FS();
               }
 
               HAL_TIM_Base_Stop_IT(&htim3);
