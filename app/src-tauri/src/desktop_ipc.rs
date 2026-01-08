@@ -1,8 +1,15 @@
-use std::fs;
-use std::path::Path;
 use std::sync::Arc;
 
 use emwaver_desktop_ipc::{IpcReady, IpcRequest, IpcResponse};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+#[cfg(unix)]
+use tokio::net::UnixListener;
+#[cfg(unix)]
+use tokio::net::UnixStream;
+
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
 pub fn spawn(app: tauri::AppHandle, device: super::DeviceState, wavelet_state: Arc<super::WaveletState>) {
     tauri::async_runtime::spawn(async move {
@@ -17,67 +24,107 @@ async fn run(
     device: super::DeviceState,
     wavelet_state: Arc<super::WaveletState>,
 ) -> Result<(), String> {
-    let inbox = emwaver_desktop_ipc::inbox_dir()?;
-    let outbox = emwaver_desktop_ipc::outbox_dir()?;
-    let ready = emwaver_desktop_ipc::ready_path()?;
-
-    ensure_dir(&inbox)?;
-    ensure_dir(&outbox)?;
-
-    let mut ticker = tokio::time::interval(std::time::Duration::from_millis(100));
-    let mut last_ready_ms: u64 = 0;
-
-    loop {
-        ticker.tick().await;
-
-        let now = emwaver_desktop_ipc::now_ms();
-        if now.saturating_sub(last_ready_ms) >= 500 {
-            write_json_atomic(
-                &ready,
-                &IpcReady {
-                    pid: std::process::id(),
-                    version: env!("CARGO_PKG_VERSION").to_string(),
-                    ts_ms: now,
-                },
-            )?;
-            last_ready_ms = now;
+    #[cfg(unix)]
+    {
+        let sock = emwaver_desktop_ipc::socket_path()?;
+        if let Some(parent) = sock.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
         }
+        let _ = std::fs::remove_file(&sock);
 
-        let entries = match fs::read_dir(&inbox) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+        let listener = UnixListener::bind(&sock)
+            .map_err(|e| format!("failed to bind {}: {e}", sock.display()))?;
 
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) != Some("json") {
-                continue;
-            }
-            let req_bytes = match fs::read(&path) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let req: IpcRequest = match serde_json::from_slice(&req_bytes) {
-                Ok(v) => v,
-                Err(_) => {
-                    let _ = fs::remove_file(&path);
-                    continue;
-                }
-            };
-            let _ = fs::remove_file(&path);
+        loop {
+            let (stream, _addr) = listener
+                .accept()
+                .await
+                .map_err(|e| format!("ipc accept failed: {e}"))?;
 
-            let (ok, result, error) = handle_request(app.clone(), device.clone(), wavelet_state.clone(), req.clone()).await;
-            let resp = IpcResponse {
-                id: req.id,
-                ok,
-                result,
-                error,
-            };
-
-            let resp_path = emwaver_desktop_ipc::response_path(req.id)?;
-            write_json_atomic(&resp_path, &resp)?;
+            tokio::spawn(handle_conn_unix(
+                stream,
+                app.clone(),
+                device.clone(),
+                wavelet_state.clone(),
+            ));
         }
     }
+
+    #[cfg(windows)]
+    {
+        loop {
+            let server = ServerOptions::new()
+                .first_pipe_instance(false)
+                .create(emwaver_desktop_ipc::pipe_name())
+                .map_err(|e| format!("failed to create named pipe server: {e}"))?;
+
+            let app = app.clone();
+            let device = device.clone();
+            let wavelet_state = wavelet_state.clone();
+            tokio::spawn(async move {
+                if let Err(e) = handle_conn_pipe(server, app, device, wavelet_state).await {
+                    eprintln!("[desktop_ipc] conn error: {e}");
+                }
+            });
+
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    }
+}
+
+#[cfg(unix)]
+async fn handle_conn_unix(
+    mut stream: UnixStream,
+    app: tauri::AppHandle,
+    device: super::DeviceState,
+    wavelet_state: Arc<super::WaveletState>,
+) {
+    if let Err(e) = handle_conn(&mut stream, app, device, wavelet_state).await {
+        eprintln!("[desktop_ipc] conn error: {e}");
+    }
+}
+
+#[cfg(windows)]
+async fn handle_conn_pipe(
+    mut server: NamedPipeServer,
+    app: tauri::AppHandle,
+    device: super::DeviceState,
+    wavelet_state: Arc<super::WaveletState>,
+) -> Result<(), String> {
+    server
+        .connect()
+        .await
+        .map_err(|e| format!("pipe connect failed: {e}"))?;
+    handle_conn(&mut server, app, device, wavelet_state).await
+}
+
+async fn handle_conn<RW>(
+    stream: &mut RW,
+    app: tauri::AppHandle,
+    device: super::DeviceState,
+    wavelet_state: Arc<super::WaveletState>,
+) -> Result<(), String>
+where
+    RW: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    let req_bytes = read_frame(stream).await?;
+    let req: IpcRequest =
+        serde_json::from_slice(&req_bytes).map_err(|e| format!("invalid request json: {e}"))?;
+
+    let (ok, result, error) =
+        handle_request(app, device, wavelet_state, req.clone()).await;
+    let resp = IpcResponse {
+        id: req.id,
+        ok,
+        result,
+        error,
+    };
+    let resp_bytes =
+        serde_json::to_vec(&resp).map_err(|e| format!("failed to encode response: {e}"))?;
+    write_frame(stream, &resp_bytes).await?;
+    let _ = stream.flush().await;
+    Ok(())
 }
 
 async fn handle_request(
@@ -87,7 +134,15 @@ async fn handle_request(
     req: IpcRequest,
 ) -> (bool, serde_json::Value, Option<String>) {
     match req.method.as_str() {
-        "ping" => (true, serde_json::json!({}), None),
+        "ping" => {
+            let now = emwaver_desktop_ipc::now_ms();
+            let ready = IpcReady {
+                pid: std::process::id(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                ts_ms: now,
+            };
+            (true, serde_json::to_value(ready).unwrap_or(serde_json::json!({})), None)
+        }
         "wavelet_execute" => {
             let script = req
                 .params
@@ -131,14 +186,31 @@ async fn handle_request(
     }
 }
 
-fn ensure_dir(path: &Path) -> Result<(), String> {
-    fs::create_dir_all(path).map_err(|e| format!("failed to create {}: {e}", path.display()))
+async fn read_frame<R: AsyncReadExt + Unpin>(r: &mut R) -> Result<Vec<u8>, String> {
+    let len = r
+        .read_u32_le()
+        .await
+        .map_err(|e| format!("ipc read length failed: {e}"))? as usize;
+    if len > 8 * 1024 * 1024 {
+        return Err(format!("ipc frame too large: {len}"));
+    }
+    let mut buf = vec![0u8; len];
+    r.read_exact(&mut buf)
+        .await
+        .map_err(|e| format!("ipc read body failed: {e}"))?;
+    Ok(buf)
 }
 
-fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
-    let bytes = serde_json::to_vec(value).map_err(|e| format!("failed to encode json: {e}"))?;
-    fs::write(&tmp, bytes).map_err(|e| format!("failed to write {}: {e}", tmp.display()))?;
-    fs::rename(&tmp, path).map_err(|e| format!("failed to rename {}: {e}", path.display()))?;
+async fn write_frame<W: AsyncWriteExt + Unpin>(w: &mut W, bytes: &[u8]) -> Result<(), String> {
+    let len: u32 = bytes
+        .len()
+        .try_into()
+        .map_err(|_| "ipc frame too large".to_string())?;
+    w.write_u32_le(len)
+        .await
+        .map_err(|e| format!("ipc write length failed: {e}"))?;
+    w.write_all(bytes)
+        .await
+        .map_err(|e| format!("ipc write body failed: {e}"))?;
     Ok(())
 }

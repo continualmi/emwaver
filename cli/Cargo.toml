@@ -23,7 +23,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "tim
 walkdir = "2"
 sha2 = "0.10"
 emwaver-desktop-ipc = { path = "../app/crates/emwaver-desktop-ipc" }
-emwaver-dfu = { path = "../app/crates/emwaver-dfu" }
+emwaver-dfu = { path = "../app/crates/emwaver-dfu", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 portable-pty = "0.9"
@@ -32,3 +32,9 @@ portable-pty = "0.9"
 
 [dev-dependencies]
 assert_cmd = "2"
+
+[features]
+# Default CLI is Desktop-backed (no direct USB access / no libusb dependency).
+default = []
+# Enables firmware build/flash/dfu subcommands (pulls in libusb via `rusb`).
+firmware-tools = ["dep:emwaver-dfu"]

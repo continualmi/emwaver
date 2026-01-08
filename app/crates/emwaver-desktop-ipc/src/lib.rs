@@ -3,6 +3,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 const IPC_DIRNAME: &str = "desktop-ipc";
+const IPC_SOCK_NAME: &str = "ipc.sock";
+#[cfg(windows)]
+const IPC_PIPE_NAME: &str = r"\\.\pipe\emwaver-desktop-ipc";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpcRequest {
@@ -52,24 +55,14 @@ pub fn ipc_root_dir() -> Result<PathBuf, String> {
     }
 }
 
-pub fn inbox_dir() -> Result<PathBuf, String> {
-    Ok(ipc_root_dir()?.join("inbox"))
+#[cfg(unix)]
+pub fn socket_path() -> Result<PathBuf, String> {
+    Ok(ipc_root_dir()?.join(IPC_SOCK_NAME))
 }
 
-pub fn outbox_dir() -> Result<PathBuf, String> {
-    Ok(ipc_root_dir()?.join("outbox"))
-}
-
-pub fn ready_path() -> Result<PathBuf, String> {
-    Ok(ipc_root_dir()?.join("ready.json"))
-}
-
-pub fn request_path(id: u64) -> Result<PathBuf, String> {
-    Ok(inbox_dir()?.join(format!("{id}.json")))
-}
-
-pub fn response_path(id: u64) -> Result<PathBuf, String> {
-    Ok(outbox_dir()?.join(format!("{id}.json")))
+#[cfg(windows)]
+pub fn pipe_name() -> &'static str {
+    IPC_PIPE_NAME
 }
 
 pub fn now_ms() -> u64 {
@@ -78,4 +71,3 @@ pub fn now_ms() -> u64 {
         .unwrap_or_default()
         .as_millis() as u64
 }
-

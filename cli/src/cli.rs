@@ -73,6 +73,7 @@ pub enum Command {
         command: WaveletCommand,
     },
     /// Build the firmware in the current project (STM32 CubeMX/CubeIDE).
+    #[cfg(feature = "firmware-tools")]
     Build {
         /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
@@ -85,6 +86,7 @@ pub enum Command {
         verbose: bool,
     },
     /// Flash the firmware in the current project (STM32 DFU over USB).
+    #[cfg(feature = "firmware-tools")]
     Flash {
         /// Firmware project path (defaults to auto-detect).
         #[arg(long)]
@@ -100,6 +102,7 @@ pub enum Command {
         verbose: bool,
     },
     /// Flash a firmware image to an STM32 DFU device (standalone).
+    #[cfg(feature = "firmware-tools")]
     Dfu {
         /// Firmware file path (raw `.bin` or `.dfu` bytes).
         file: PathBuf,
@@ -225,4 +228,3 @@ fn parse_u32_hex(value: &str) -> Result<u32, String> {
         raw.parse::<u32>().map_err(|e| e.to_string())
     }
 }
-
