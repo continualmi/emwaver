@@ -89,41 +89,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     lastAttemptMs: 0,
   });
   const lastVersionQueryKeyRef = useRef<string>("");
-  
-  const fragments = [
-    {
-      id: "wavelets" as FragmentType,
-      name: "Wavelets",
-      description: "Wavelet workspace with preview tabs",
-      icon: <WaveletIcon />,
-      borderClass: "hover:border-sky-500/60",
-      iconClass: "text-sky-400",
-    },
-    {
-      id: "ism" as FragmentType,
-      name: "ISM",
-      description: "Sub-GHz radio control and signal capture",
-      icon: <ISMIcon />,
-      borderClass: "hover:border-emerald-500/60",
-      iconClass: "text-emerald-400",
-    },
-    {
-      id: "sampler" as FragmentType,
-      name: "Sampler",
-      description: "Signal sampling and analysis",
-      icon: <SamplerIcon />,
-      borderClass: "hover:border-purple-500/60",
-      iconClass: "text-purple-400",
-    },
-    {
-      id: "flash" as FragmentType,
-      name: "Flash",
-      description: "STM32 DFU firmware flashing",
-      icon: <FlashIcon />,
-      borderClass: "hover:border-sky-500/60",
-      iconClass: "text-sky-400",
-    },
-  ];
 
   const refreshMidiPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {
     const { silent = false } = options;
@@ -696,46 +661,8 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             </div>
           </div>
         </div>
-
-        {/* Navigation */}
-        <div className="border-t border-slate-800 my-2 flex-shrink-0"></div>
-        <div className="flex-shrink-0">
-          <div className="grid grid-cols-2 gap-3">
-            {fragments.map((fragment) => (
-              <button
-                key={fragment.id}
-                onClick={() => onNavigateToFragment(fragment.id)}
-                className={`group rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-left transition-all ${fragment.borderClass} hover:bg-slate-900 hover:shadow-lg`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 ${fragment.iconClass} transition-colors group-hover:bg-slate-800`}
-                  >
-                    <span className="h-5 w-5">{fragment.icon}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-slate-100 truncate">{fragment.name}</h4>
-                    <p className="mt-1 text-xs text-slate-400 line-clamp-2">{fragment.description}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
-  );
-}
-
-function WaveletIcon() {
-  // Converted from Android ic_console_black_24dp.xml (terminal/console icon)
-  // Adjusted viewBox to zoom in and center the icon for better visibility
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full">
-      <g transform="translate(12, 12) scale(1.3) translate(-10.5, -12)">
-        <path d="M5.64645 9.14645C5.84171 8.95118 6.15829 8.95118 6.35355 9.14645L8.35355 11.1464C8.44732 11.2402 8.5 11.3674 8.5 11.5C8.5 11.6326 8.44732 11.7598 8.35355 11.8536L6.35355 13.8536C6.15829 14.0488 5.84171 14.0488 5.64645 13.8536C5.45118 13.6583 5.45118 13.3417 5.64645 13.1464L7.29289 11.5L5.64645 9.85355C5.45118 9.65829 5.45118 9.34171 5.64645 9.14645ZM14.5 13H9.5C9.22386 13 9 13.2239 9 13.5C9 13.7761 9.22386 14 9.5 14H14.5C14.7761 14 15 13.7761 15 13.5C15 13.2239 14.7761 13 14.5 13ZM2.99609 5.5C2.99609 4.11929 4.11538 3 5.49609 3H14.4961C15.8768 3 16.9961 4.11929 16.9961 5.5V6H16.999V7H16.9961V14.5C16.9961 15.8807 15.8768 17 14.4961 17H5.49609C4.11538 17 2.99609 15.8807 2.99609 14.5V5.5ZM15.9961 6V5.5C15.9961 4.67157 15.3245 4 14.4961 4H5.49609C4.66767 4 3.99609 4.67157 3.99609 5.5V6H15.9961ZM3.99609 7V14.5C3.99609 15.3284 4.66767 16 5.49609 16H14.4961C15.3245 16 15.9961 15.3284 15.9961 14.5V7H3.99609Z" />
-      </g>
-    </svg>
   );
 }
 
