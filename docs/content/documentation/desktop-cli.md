@@ -14,13 +14,16 @@ This avoids multi-process USB contention and removes the need for a separate bac
 
 If the Desktop app is not running, CLI commands that require hardware access will fail with a message asking you to open the Desktop app.
 
+## Installing the CLI (developer)
+
+- Desktop-backed CLI (no direct USB / no DFU): `cargo install --path cli --bin emwaver --force`
+- Include firmware/DFU tools (macOS): `PKG_CONFIG_PATH="$(brew --prefix libusb)/lib/pkgconfig" cargo install --path cli --bin emwaver --features firmware-tools --force`
+
 ## How the CLI talks to Desktop
 
-The CLI and Desktop app communicate through a local, file-based mailbox:
+The CLI and Desktop app communicate through a local RPC channel:
 
-- Desktop writes a heartbeat file (`ready.json`)
-- CLI writes request files to an inbox directory
-- Desktop writes response files to an outbox directory
+- On macOS/Linux: a Unix domain socket
+- On Windows: a named pipe
 
-This keeps the mechanism simple and debuggable (you can inspect the JSON files on disk if needed).
-
+Requests and responses are JSON messages sent over the local channel (no network required).

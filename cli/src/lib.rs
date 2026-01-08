@@ -17,6 +17,7 @@
 
 mod cli;
 mod desktop_ipc;
+#[cfg(feature = "firmware-tools")]
 pub mod firmware;
 pub mod init;
 mod vibe;
@@ -50,17 +51,20 @@ pub fn run() -> Result<()> {
             cli::WaveletCommand::Run { path, bootstrap } => wavelet_run(path, bootstrap),
             cli::WaveletCommand::Stop => wavelet_stop(),
         },
+        #[cfg(feature = "firmware-tools")]
         Some(cli::Command::Build {
             project,
             codegen,
             verbose,
         }) => firmware::build(project, codegen, verbose),
+        #[cfg(feature = "firmware-tools")]
         Some(cli::Command::Flash {
             project,
             codegen,
             dfu_alt,
             verbose,
         }) => firmware::flash(project, codegen, dfu_alt, verbose),
+        #[cfg(feature = "firmware-tools")]
         Some(cli::Command::Dfu {
             file,
             vid,
