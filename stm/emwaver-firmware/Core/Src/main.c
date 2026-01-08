@@ -103,10 +103,6 @@ static volatile ism_mode_t ism_mode = ISM_MODE_IDLE;
 static volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
 static volatile uint8_t pending_cmd_ready = 0;
 
-// While sampling, command responses may be sent when no new 64B sampler chunk is ready.
-// In that case, reuse the last valid stream lane to avoid injecting all-zero packets.
-static volatile uint8_t last_stream_lane[EMW_LANE_SIZE];
-static volatile uint8_t last_stream_valid = 0;
 
 static void free_bulk_packet(void)
 {
@@ -353,7 +349,6 @@ static void stop_sampling(void)
     bufferIndex = 0;
     bufferReady = 0;
     ism_mode = ISM_MODE_IDLE;
-    last_stream_valid = 0;
 }
 
 static void send_sampling_superframe(const uint8_t *stream_lane)
@@ -365,10 +360,6 @@ static void send_sampling_superframe(const uint8_t *stream_lane)
 
     if (stream_lane != NULL) {
         memcpy(&superframe[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
-        memcpy((void *)last_stream_lane, stream_lane, EMW_LANE_SIZE);
-        last_stream_valid = 1;
-    } else if (last_stream_valid) {
-        memcpy(&superframe[EMW_LANE_SIZE], (const void *)last_stream_lane, EMW_LANE_SIZE);
     }
 
     (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
@@ -699,12 +690,10 @@ int main(void)
     /* USER CODE BEGIN 3 */
       if (ism_mode == ISM_MODE_RAW_SAMPLING) {
           if (bufferReady == 1) {
+              // Only transmit when we have a fresh 64B sampler chunk.
+              // Any pending command response is piggybacked in lane0.
               send_sampling_superframe((const uint8_t *)transmitBuffer);
               bufferReady = 0;
-          } else if (pending_cmd_ready) {
-              // Keep command response latency reasonable even if the next sampler chunk
-              // isn't ready yet.
-              send_sampling_superframe(NULL);
           }
       }
 
@@ -1041,7 +1030,6 @@ int main(void)
               transmitBuffer = NULL;
               bufferIndex = 0;
               bufferReady = 0;
-              last_stream_valid = 0;
 
               EMW_USB_SetBufferType_FS(EMW_BUFFER_DOUBLE);
               ism_mode = ISM_MODE_RAW_SAMPLING;
