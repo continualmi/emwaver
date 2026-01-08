@@ -1720,6 +1720,8 @@ async fn write_active(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
         None => false,
     };
     if midi_connected {
+        // `sendNoWait` paths use `write`, so update the sampler capture flag here too.
+        maybe_update_stream_capture(state, &bytes);
         return midi_write_packet(state, bytes).await;
     }
     bail!("not connected");
