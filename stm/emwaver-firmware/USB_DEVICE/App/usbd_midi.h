@@ -46,6 +46,8 @@ uint8_t USBD_MIDI_RegisterInterface(USBD_HandleTypeDef *pdev, USBD_MIDI_ItfTypeD
 
 uint8_t USBD_MIDI_SetTxBuffer(USBD_HandleTypeDef *pdev, uint8_t *pbuff, uint16_t length);
 uint8_t USBD_MIDI_TransmitPacket(USBD_HandleTypeDef *pdev);
+uint8_t USBD_MIDI_IsTxBusy(USBD_HandleTypeDef *pdev);
+uint32_t USBD_MIDI_GetDataInCount(void);
 
 uint8_t USBD_MIDI_SetRxBuffer(USBD_HandleTypeDef *pdev, uint8_t *pbuff);
 uint8_t USBD_MIDI_ReceivePacket(USBD_HandleTypeDef *pdev);
