@@ -42,6 +42,11 @@ static uint8_t sysex_buf[256];
 static uint16_t sysex_len = 0;
 static uint8_t in_sysex = 0;
 
+// EMWaver multiplexed superframe: 2 lanes of 64 bytes.
+#define EMW_LANE_SIZE 64u
+#define EMW_SUPERFRAME_SIZE 128u
+#define EMW_CMD_MARKER 0xA5u
+
 // USB TX statistics for debugging.
 static volatile uint32_t usb_tx_ok = 0;
 static volatile uint32_t usb_tx_busy = 0;
@@ -56,8 +61,8 @@ static void sysex_reset(void)
 }
 
 static void sysex_feed_byte(uint8_t b);
-static int decode_payload_7bit(const uint8_t *in, uint16_t in_len, uint8_t out[64]);
-static uint16_t encode_payload_7bit(const uint8_t in[64], uint8_t *out, uint16_t out_max);
+static int decode_payload_7bit(const uint8_t *in, uint16_t in_len, uint8_t out[EMW_SUPERFRAME_SIZE]);
+static uint16_t encode_payload_7bit(const uint8_t in[EMW_SUPERFRAME_SIZE], uint8_t *out, uint16_t out_max);
 static uint16_t pack_sysex_to_usb_events(const uint8_t *sysex, uint16_t sysex_len, uint8_t *out, uint16_t out_max);
 
 static int8_t MIDI_Init_FS(void)
@@ -138,11 +143,14 @@ static void handle_complete_sysex(void)
   const uint8_t *encoded = &sysex_buf[6];
   uint16_t encoded_len = (uint16_t)(sysex_len - 7);
 
-  uint8_t decoded[64];
+  uint8_t decoded[EMW_SUPERFRAME_SIZE];
   if (decode_payload_7bit(encoded, encoded_len, decoded) != 0) {
     sysex_reset();
     return;
   }
+
+  const uint8_t *cmd_lane = &decoded[0];
+  const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
 
   if (emw_buf_type == EMW_BUFFER_CIRCULAR) {
     // Mirror the previous circular RX buffer behavior for retransmission flow-control.
@@ -152,8 +160,8 @@ static void handle_complete_sysex(void)
     }
 
     uint16_t tempHeadPos = rxBufferHeadPos;
-    for (uint32_t i = 0; i < 64; i++) {
-      rxBuffer[tempHeadPos] = decoded[i];
+    for (uint32_t i = 0; i < EMW_LANE_SIZE; i++) {
+      rxBuffer[tempHeadPos] = stream_lane[i];
       tempHeadPos = (uint16_t)((uint16_t)(tempHeadPos + 1) % HL_RX_BUFFER_SIZE);
       if (tempHeadPos == rxBufferTailPos) {
         sysex_reset();
@@ -172,10 +180,10 @@ static void handle_complete_sysex(void)
     bulk_packet = NULL;
     bulk_packet_len = 0;
   }
-  bulk_packet_len = 64;
-  bulk_packet = (uint8_t*)malloc(64);
+  bulk_packet_len = EMW_LANE_SIZE;
+  bulk_packet = (uint8_t*)malloc(EMW_LANE_SIZE);
   if (bulk_packet != NULL) {
-    memcpy(bulk_packet, decoded, 64);
+    memcpy(bulk_packet, cmd_lane, EMW_LANE_SIZE);
   } else {
     bulk_packet_len = 0;
   }
@@ -207,14 +215,14 @@ static void sysex_feed_byte(uint8_t b)
   }
 }
 
-static int decode_payload_7bit(const uint8_t *in, uint16_t in_len, uint8_t out[64])
+static int decode_payload_7bit(const uint8_t *in, uint16_t in_len, uint8_t out[EMW_SUPERFRAME_SIZE])
 {
   uint16_t in_pos = 0;
   uint16_t out_pos = 0;
 
-  while (in_pos < in_len && out_pos < 64) {
+  while (in_pos < in_len && out_pos < EMW_SUPERFRAME_SIZE) {
     uint8_t prefix = in[in_pos++];
-    for (uint8_t j = 0; j < 7 && out_pos < 64; j++) {
+    for (uint8_t j = 0; j < 7 && out_pos < EMW_SUPERFRAME_SIZE; j++) {
       if (in_pos >= in_len) {
         return -1;
       }
@@ -226,20 +234,20 @@ static int decode_payload_7bit(const uint8_t *in, uint16_t in_len, uint8_t out[6
     }
   }
 
-  return (out_pos == 64) ? 0 : -1;
+  return (out_pos == EMW_SUPERFRAME_SIZE) ? 0 : -1;
 }
 
-static uint16_t encode_payload_7bit(const uint8_t in[64], uint8_t *out, uint16_t out_max)
+static uint16_t encode_payload_7bit(const uint8_t in[EMW_SUPERFRAME_SIZE], uint8_t *out, uint16_t out_max)
 {
   uint16_t out_pos = 0;
   uint16_t in_pos = 0;
 
-  while (in_pos < 64) {
+  while (in_pos < EMW_SUPERFRAME_SIZE) {
     uint8_t prefix = 0;
     uint8_t chunk[7] = {0};
     uint8_t chunk_len = 0;
 
-    for (uint8_t j = 0; j < 7 && in_pos < 64; j++) {
+    for (uint8_t j = 0; j < 7 && in_pos < EMW_SUPERFRAME_SIZE; j++) {
       uint8_t b = in[in_pos++];
       if (b & 0x80) {
         prefix |= (uint8_t)(1u << j);
@@ -378,46 +386,50 @@ void MIDI_FreeRxBuffer_FS(void)
 
 void MIDI_SendStatusPacket_FS(uint16_t status)
 {
-  uint8_t packet[64] = {0};
-  packet[0] = 'B';
-  packet[1] = 'S';
-  packet[2] = (uint8_t)(status >> 8);
-  packet[3] = (uint8_t)(status & 0xFF);
-  (void)MIDI_SendResponsePkt_FS(packet, 64, 100);
+  uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+  uint8_t *stream_lane = &superframe[EMW_LANE_SIZE];
+  stream_lane[0] = 'B';
+  stream_lane[1] = 'S';
+  stream_lane[2] = (uint8_t)(status >> 8);
+  stream_lane[3] = (uint8_t)(status & 0xFF);
+  (void)MIDI_SendResponsePkt_FS(superframe, EMW_SUPERFRAME_SIZE, 100);
 }
 
 void MIDI_Print_FS(const char* str)
 {
   if (str == NULL) return;
   // Best-effort: print as packets with '\0' termination.
-  uint8_t packet[64] = {0};
+  uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+  uint8_t *cmd_lane = &superframe[0];
   size_t len = strlen(str);
   size_t offset = 0;
   while (offset < len) {
-    memset(packet, 0, sizeof(packet));
+    memset(superframe, 0, sizeof(superframe));
     size_t chunk = len - offset;
-    if (chunk > sizeof(packet)) chunk = sizeof(packet);
-    memcpy(packet, str + offset, chunk);
-    (void)MIDI_SendResponsePkt_FS(packet, 64, 100);
+    if (chunk > (EMW_LANE_SIZE - 1u)) chunk = EMW_LANE_SIZE - 1u;
+    memcpy(cmd_lane, str + offset, chunk);
+    // Mark as a command/response payload (used to distinguish from empty lane).
+    cmd_lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
+    (void)MIDI_SendResponsePkt_FS(superframe, EMW_SUPERFRAME_SIZE, 100);
     offset += chunk;
   }
 }
 
 uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeout)
 {
-  if (length != 64 || packet == NULL) {
+  if (length != EMW_SUPERFRAME_SIZE || packet == NULL) {
     usb_tx_fail++;
     return (uint8_t)-1;
   }
 
-  uint8_t encoded[96];
+  uint8_t encoded[192];
   uint16_t encoded_len = encode_payload_7bit(packet, encoded, sizeof(encoded));
   if (encoded_len == 0) {
     usb_tx_fail++;
     return (uint8_t)-1;
   }
 
-  uint8_t sysex[128];
+  uint8_t sysex[256];
   uint16_t sysex_pos = 0;
   sysex[sysex_pos++] = 0xF0;
   sysex[sysex_pos++] = 0x7D;
@@ -479,4 +491,3 @@ void MIDI_GetUsbStats_FS(uint32_t *tx_ok, uint32_t *tx_busy, uint32_t *tx_timeou
   if (tx_fail) *tx_fail = usb_tx_fail;
   if (rx_in) *rx_in = usb_rx_in;
 }
-

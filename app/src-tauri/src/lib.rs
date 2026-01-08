@@ -1198,29 +1198,6 @@ pub fn run() {
                         continue;
                     };
 
-                    if event == "rx_bytes" {
-                        let Some(bytes_b64) = value
-                            .get("data")
-                            .and_then(|d| d.get("bytes_b64"))
-                            .and_then(|v| v.as_str())
-                        else {
-                            continue;
-                        };
-                        let Ok(pkt) = base64::Engine::decode(
-                            &base64::engine::general_purpose::STANDARD,
-                            bytes_b64.as_bytes(),
-                        )
-                        else {
-                            continue;
-                        };
-                        if pkt.len() >= 4 && pkt[0] == b'B' && pkt[1] == b'S' {
-                            let bs = u16::from_be_bytes([pkt[2], pkt[3]]) as u64;
-                            last_bs = bs;
-                            eprintln!("BS={bs}");
-                        }
-                        continue;
-                    }
-
                     if event == "bs" {
                         let bs = value
                             .get("data")
