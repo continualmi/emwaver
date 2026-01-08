@@ -42,6 +42,8 @@ docs/docs/
 # Rust build output (generated)
 target/
 **/target/
+target-*/
+**/target-*/
 
 # STM32 USB device target sources (not Rust build output)
 !stm/emwaver-firmware/USB_DEVICE/Target/

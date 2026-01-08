@@ -27,6 +27,7 @@ type HomePageProps = {
 };
 
 const MAX_MONITOR_ENTRIES = 1500;
+const MAX_COMMAND_ENTRIES = 200;
 const AUTO_CONNECT_ENABLED_KEY = "emwaver:autoConnectEnabled";
 
 type BufferEntry = {
@@ -37,6 +38,16 @@ type BufferEntry = {
   seq: number;
   ascii: string;
   hex: string;
+};
+
+type CommandLogEntry = {
+  timestamp: number;
+  timeStr: string;
+  seq: number;
+  command: string;
+  ok: boolean;
+  responseAscii: string;
+  responseHex: string;
 };
 
 export default function HomePage({ onNavigateToFragment, isActive }: HomePageProps) {
@@ -52,6 +63,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
   const [commandInput, setCommandInput] = useState("");
   const [bufferEntries, setBufferEntries] = useState<BufferEntry[]>([]);
+  const [commandEntries, setCommandEntries] = useState<CommandLogEntry[]>([]);
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
@@ -82,6 +94,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
   const monitorContainerRef = useRef<HTMLDivElement>(null);
   const entrySeqRef = useRef(0);
+  const cmdSeqRef = useRef(0);
   const rxIndexRef = useRef(0);
   const txIndexRef = useRef(0);
   const autoConnectRef = useRef<{ inFlight: boolean; lastAttemptMs: number }>({
@@ -350,31 +363,85 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     await disconnect();
   };
 
-  const handleSendCommand = async () => {
-    if (!commandInput.trim()) {
-      return;
-    }
+	  const handleSendCommand = async () => {
+	    if (!commandInput.trim()) {
+	      return;
+	    }
 
     if (!status.connected) {
       await dialog.alert("Device not connected.", { title: "Connection" });
       return;
     }
 
-    try {
-      const trimmed = commandInput.trim();
-      const response = await send(trimmed, 2000, 1);
-      if (!response) {
-        setCommandInput("");
-        return;
-      }
+	    try {
+	      const trimmed = commandInput.trim();
+	      const response = await send(trimmed, 2000, 1);
 
-      // Clear input
-      setCommandInput("");
-    } catch (error) {
-      console.error("Failed to send packet:", error);
-      await dialog.alert(`Failed to send packet:\n\n${String(error)}`, { title: "Send" });
-    }
-  };
+	      const now = Date.now();
+	      const timeStr = new Date(now).toLocaleTimeString("en-US", {
+	        hour12: false,
+	        hour: "2-digit",
+	        minute: "2-digit",
+	        second: "2-digit",
+	        fractionalSecondDigits: 3,
+	      });
+
+	      const resp = response ?? new Uint8Array(0);
+	      const bytes = Array.from(resp);
+	      const responseHex = bytes.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+	      const firstZero = resp.indexOf(0);
+	      const end = firstZero >= 0 ? firstZero : resp.length;
+	      const responseAscii = new TextDecoder().decode(resp.slice(0, end)).trim();
+
+	      const entry: CommandLogEntry = {
+	        timestamp: now,
+	        timeStr,
+	        seq: cmdSeqRef.current++,
+	        command: trimmed,
+	        ok: response != null,
+	        responseAscii: response != null ? responseAscii : "(no response)",
+	        responseHex,
+	      };
+
+	      setCommandEntries((prev) => {
+	        const next = [...prev, entry];
+	        if (next.length > MAX_COMMAND_ENTRIES) {
+	          return next.slice(next.length - MAX_COMMAND_ENTRIES);
+	        }
+	        return next;
+	      });
+
+	      // Clear input
+	      setCommandInput("");
+	    } catch (error) {
+	      console.error("Failed to send packet:", error);
+	      const now = Date.now();
+	      const timeStr = new Date(now).toLocaleTimeString("en-US", {
+	        hour12: false,
+	        hour: "2-digit",
+	        minute: "2-digit",
+	        second: "2-digit",
+	        fractionalSecondDigits: 3,
+	      });
+	      const entry: CommandLogEntry = {
+	        timestamp: now,
+	        timeStr,
+	        seq: cmdSeqRef.current++,
+	        command: commandInput.trim(),
+	        ok: false,
+	        responseAscii: String(error),
+	        responseHex: "",
+	      };
+	      setCommandEntries((prev) => {
+	        const next = [...prev, entry];
+	        if (next.length > MAX_COMMAND_ENTRIES) {
+	          return next.slice(next.length - MAX_COMMAND_ENTRIES);
+	        }
+	        return next;
+	      });
+	      await dialog.alert(`Failed to send packet:\n\n${String(error)}`, { title: "Send" });
+	    }
+	  };
 
   const handleCheckVersion = async () => {
     if (!status.connected) {
@@ -439,6 +506,11 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       rxIndexRef.current = 0;
       txIndexRef.current = 0;
     }
+  };
+
+  const clearCommandMonitor = () => {
+    setCommandEntries([]);
+    cmdSeqRef.current = 0;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -618,10 +690,10 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
               </button>
             </div>
           </div>
-          <div ref={monitorContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
-            {bufferEntries.length === 0 ? (
-              <div className="text-slate-500">No data received yet...</div>
-            ) : (
+	          <div ref={monitorContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
+	            {bufferEntries.length === 0 ? (
+	              <div className="text-slate-500">No data received yet...</div>
+	            ) : (
               <>
                 {bufferEntries.map((entry, index) => {
                   const content = entry.isTx ? (showTxHex ? entry.hex : entry.ascii) : (showRxHex ? entry.hex : entry.ascii);
@@ -634,11 +706,42 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                   );
                 })}
               </>
-            )}
-          </div>
-          <div className="mt-3 flex-shrink-0">
-            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
-            <div className="flex gap-2">
+	            )}
+	          </div>
+
+	          {/* Command Monitor (single-response log) */}
+	          <div className="mt-3 flex-shrink-0">
+	            <div className="flex items-center justify-between mb-2">
+	              <div className="text-sm font-semibold text-slate-400">Command Monitor</div>
+	              <button
+	                onClick={clearCommandMonitor}
+	                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+	              >
+	                Clear
+	              </button>
+	            </div>
+	            <div className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
+	              {commandEntries.length === 0 ? (
+	                <div className="text-slate-500">No commands yet...</div>
+	              ) : (
+	                commandEntries.map((entry) => (
+	                  <div key={entry.seq} className="mb-2 whitespace-pre-wrap break-words">
+	                    <div>
+	                      <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+	                      <span className="text-slate-100">{`> ${entry.command}`}</span>
+	                    </div>
+	                    <div className={entry.ok ? "text-sky-400" : "text-red-400"}>
+	                      {entry.responseAscii}
+	                    </div>
+	                  </div>
+	                ))
+	              )}
+	            </div>
+	          </div>
+
+	          <div className="mt-3 flex-shrink-0">
+	            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
+	            <div className="flex gap-2">
               <input
                 type="text"
                 value={commandInput}

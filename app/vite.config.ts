@@ -16,7 +16,9 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Force IPv4 loopback so WKWebView/Tauri consistently loads the dev server.
+    // (Some setups resolve `localhost` differently between browsers and the WebView.)
+    host: host || "127.0.0.1",
     hmr: host
       ? {
           protocol: "ws",
