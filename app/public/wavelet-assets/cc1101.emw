@@ -1,8 +1,3 @@
-let status = "Ready";
-
-// STM32 firmware uses fixed CC1101 wiring on PA4 (encoded as `4`).
-const CC1101_CS = 4;
-
 const CC1101_REG_IOCFG2 = 0x00;
 const CC1101_REG_IOCFG1 = 0x01;
 const CC1101_REG_IOCFG0 = 0x02;
@@ -65,41 +60,28 @@ function parseRawPayload(response) {
     return response;
 }
 
-function hexByte(value) {
-    return `0x${(value & 0xff).toString(16).padStart(2, "0").toUpperCase()}`;
+async function cc1101Strobe(cmdByte) {
+    await SPI.transfer([cmdByte & 0xff], { cs: CC1101_CS });
 }
 
-function hexBytes(values) {
-    // Keep commands under the 64-byte USB framing limit.
-    // The STM32 firmware accepts "F100" style hex without separators.
-    return values.map((value) => (value & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
-}
-
-async function spiXfer(txBytes, rxLen) {
-    const txArg = hexBytes(txBytes);
-    const rxArg = typeof rxLen === "number" ? ` --rx=${rxLen}` : "";
-    const cmd = `spi xfer --cs=${CC1101_CS} --tx=${txArg}${rxArg}`;
-    return await emw.send(cmd, 1500);
-}
-
-async function cc1101Strobe(cmd) {
-    await spiXfer([cmd], undefined);
+async function cc1101Reset() {
+    await cc1101Strobe(CC1101_SRES);
 }
 
 async function cc1101WriteReg(addr, value) {
-    await spiXfer([addr & 0x3f, value & 0xff], undefined);
+    await SPI.transfer([addr & 0x3f, value & 0xff], { cs: CC1101_CS });
 }
 
 async function cc1101ReadReg(addr) {
     const isStatus = addr >= 0x30 && addr <= 0x3d;
     const cmd = isStatus ? ((addr & 0x3f) | 0xc0) : ((addr & 0x3f) | 0x80);
-    const response = parseRawPayload(await spiXfer([cmd, 0x00], 2));
+    const response = parseRawPayload(await SPI.transfer([cmd, 0x00], { cs: CC1101_CS, rxLength: 2 }));
     return response.length >= 2 ? response[1] & 0xff : 0;
 }
 
 async function cc1101WriteBurst(addr, data) {
     const tx = [((addr & 0x3f) | 0x40)].concat(data.map((v) => v & 0xff));
-    const response = parseRawPayload(await spiXfer(tx, undefined));
+    const response = parseRawPayload(await SPI.transfer(tx, { cs: CC1101_CS }));
     return response.length >= tx.length;
 }
 
@@ -190,15 +172,11 @@ async function cc1101SetModulationAndPower(modulation, dbm) {
 async function initRx() {
     status = "Initializing RX...";
     render();
-    await cc1101Strobe(CC1101_SRES);
+    await cc1101Reset();
     await cc1101ApplyDefaults();
     await cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x32);
     await cc1101SetGdo(0x2E, 0x2E, 0x0D);
-    // Ensure the MCU pins connected to CC1101 GDO0 are configured as input.
-    // - ESP32-S3 wiring uses IO1.
-    // - STM32F042 wiring uses PA2 (encoded as pin 2 in `gpio --pin`).
-    await emw.send("gpio in --pin=1");
-    await emw.send("gpio in --pin=2");
+    await pinMode(GDO0, INPUT);
     await cc1101SetFrequencyMHz(433.92);
     await cc1101SetDataRate(100000);
     await cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
@@ -210,17 +188,13 @@ async function initRx() {
 async function initTx() {
     status = "Initializing TX...";
     render();
-    await cc1101Strobe(CC1101_SRES);
+    await cc1101Reset();
     await cc1101ApplyDefaults();
     await cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x32);
     await cc1101SetGdo(0x2E, 0x2E, 0x0D);
-    // Hold the CC1101 OOK / data line low so the radio doesn't output a continuous carrier after STX.
-    // - ESP32-S3 wiring uses IO1.
-    // - STM32F042 wiring uses PA2 (encoded as pin 2 in `gpio --pin`).
-    await emw.send("gpio out --pin=1");
-    await emw.send("gpio low --pin=1");
-    await emw.send("gpio out --pin=2");
-    await emw.send("gpio low --pin=2");
+    // Hold the OOK/data line low so the radio doesn't output a continuous carrier after STX.
+    await pinMode(GDO0, OUTPUT);
+    await digitalWrite(GDO0, LOW);
     await cc1101SetFrequencyMHz(433.92);
     await cc1101SetDataRate(100000);
     await cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
@@ -228,6 +202,8 @@ async function initTx() {
     status = "TX init complete";
     render();
 }
+
+var status = "Ready";
 
 function render() {
     UI.render(UI.column({

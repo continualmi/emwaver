@@ -274,6 +274,128 @@ if (typeof emw.sendPacket !== 'function') {
 }
 __waveletGlobal.emw = emw;
 
+// -----------------------------------------------------------------------------
+// Arduino-ish API surface (GPIO + SPI), implemented as thin wrappers over the
+// canonical, observable ASCII command protocol (e.g. `gpio ...`, `spi xfer ...`).
+// -----------------------------------------------------------------------------
+
+if (typeof LOW === 'undefined') {
+  var LOW = 0;
+  __waveletGlobal.LOW = LOW;
+}
+if (typeof HIGH === 'undefined') {
+  var HIGH = 1;
+  __waveletGlobal.HIGH = HIGH;
+}
+
+if (typeof INPUT === 'undefined') {
+  var INPUT = 'INPUT';
+  __waveletGlobal.INPUT = INPUT;
+}
+if (typeof OUTPUT === 'undefined') {
+  var OUTPUT = 'OUTPUT';
+  __waveletGlobal.OUTPUT = OUTPUT;
+}
+
+// Logical board pins (avoid leaking MCU pin names into wavelets).
+var __waveletBoardPins = __waveletGlobal.__waveletBoardPins || {
+  CC1101_CS: 4,
+  GDO0: 2,
+};
+__waveletGlobal.__waveletBoardPins = __waveletBoardPins;
+
+function __waveletResolvePin(pin) {
+  if (typeof pin === 'number') return pin;
+  var key = String(pin || '').trim();
+  if (Object.prototype.hasOwnProperty.call(__waveletBoardPins, key)) {
+    return __waveletBoardPins[key];
+  }
+  var n = Number(key);
+  if (isFinite(n)) return n;
+  throw new Error('Invalid pin: ' + String(pin));
+}
+
+if (typeof CC1101_CS === 'undefined') {
+  var CC1101_CS = 'CC1101_CS';
+  __waveletGlobal.CC1101_CS = CC1101_CS;
+}
+if (typeof GDO0 === 'undefined') {
+  var GDO0 = 'GDO0';
+  __waveletGlobal.GDO0 = GDO0;
+}
+
+function __waveletHexBytes(values) {
+  if (typeof values === 'string') {
+    return values.replace(/^0x/i, '').replace(/[^0-9a-f]/gi, '').toUpperCase();
+  }
+  var hex = '';
+  var len = values && typeof values.length === 'number' ? values.length : 0;
+  for (var i = 0; i < len; i += 1) {
+    var v = Number(values[i]) & 0xff;
+    var part = v.toString(16).toUpperCase();
+    if (part.length < 2) part = '0' + part;
+    hex += part;
+  }
+  return hex;
+}
+
+if (typeof pinMode !== 'function') {
+  var pinMode = function (pin, mode) {
+    var pinNumber = __waveletResolvePin(pin);
+    if (String(mode) === INPUT) {
+      return emw.send('gpio in --pin=' + pinNumber);
+    }
+    if (String(mode) === OUTPUT) {
+      return emw.send('gpio out --pin=' + pinNumber);
+    }
+    throw new Error('pinMode: unsupported mode ' + String(mode));
+  };
+  __waveletGlobal.pinMode = pinMode;
+}
+
+if (typeof digitalWrite !== 'function') {
+  var digitalWrite = function (pin, value) {
+    var pinNumber = __waveletResolvePin(pin);
+    var level = Number(value) ? 1 : 0;
+    return emw.send(level ? 'gpio high --pin=' + pinNumber : 'gpio low --pin=' + pinNumber);
+  };
+  __waveletGlobal.digitalWrite = digitalWrite;
+}
+
+if (typeof digitalRead !== 'function') {
+  var digitalRead = function (pin) {
+    var pinNumber = __waveletResolvePin(pin);
+    var resp = emw.send('gpio read --pin=' + pinNumber);
+    if (resp && typeof resp.then === 'function') {
+      return resp.then(function (bytes) {
+        return bytes && bytes.length ? (bytes[0] ? HIGH : LOW) : LOW;
+      });
+    }
+    return resp && resp.length ? (resp[0] ? HIGH : LOW) : LOW;
+  };
+  __waveletGlobal.digitalRead = digitalRead;
+}
+
+if (typeof SPI === 'undefined') {
+  var SPI = {
+    transfer: function (txBytes, opts) {
+      var cs = opts && typeof opts.cs !== 'undefined' ? __waveletResolvePin(opts.cs) : undefined;
+      var rxLength = opts && typeof opts.rxLength === 'number' ? opts.rxLength : undefined;
+
+      var cmd = 'spi xfer';
+      if (typeof cs === 'number') cmd += ' --cs=' + cs;
+
+      var txHex = __waveletHexBytes(txBytes);
+      if (txHex) cmd += ' --tx=' + txHex;
+      if (typeof rxLength === 'number') cmd += ' --rx=' + rxLength;
+
+      return emw.send(cmd, 1500);
+    },
+  };
+
+  __waveletGlobal.SPI = SPI;
+}
+
 if (typeof UI === 'undefined') {
   var UI = (function () {
     var idCounter = 0;
