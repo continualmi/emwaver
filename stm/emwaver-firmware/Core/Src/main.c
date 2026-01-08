@@ -90,6 +90,9 @@ static void MX_SPI1_Init(void);
 /* USER CODE BEGIN 0 */
 
 #define ISM_BURST_MAX 64u
+#define EMW_LANE_SIZE 64u
+#define EMW_SUPERFRAME_SIZE 128u
+#define EMW_CMD_MARKER 0xA5u
 
 typedef enum {
     ISM_MODE_IDLE = 0,
@@ -97,6 +100,8 @@ typedef enum {
 } ism_mode_t;
 
 static volatile ism_mode_t ism_mode = ISM_MODE_IDLE;
+static volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
+static volatile uint8_t pending_cmd_ready = 0;
 
 static void free_bulk_packet(void)
 {
@@ -109,24 +114,44 @@ static void free_bulk_packet(void)
 
 static void command_send_ok(const uint8_t *data, size_t len)
 {
-    // Match stm/emwaver-ism-firmware framing: always send 64-byte packets.
-    // The desktop/mobile buffer logic treats USB as fixed 64B framing.
+    // Always send fixed-size 128B superframes:
+    // - lane0[0..63]: command/response
+    // - lane1[64..127]: stream/BS (zero-filled for normal commands)
     if (!data || len == 0) {
-        uint8_t packet[64] = {0};
-        packet[0] = 0x00;
-        (void)EMW_USB_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+        uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+        superframe[0] = 0x00;
+        superframe[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
+        if (ism_mode == ISM_MODE_RAW_SAMPLING) {
+            memcpy((void *)pending_cmd_lane, superframe, EMW_LANE_SIZE);
+            pending_cmd_ready = 1;
+            return;
+        }
+        (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
+        return;
+    }
+
+    if (ism_mode == ISM_MODE_RAW_SAMPLING) {
+        // Sampling mode: keep command semantics simple (single response lane).
+        // Anything beyond the first 64 bytes is dropped.
+        uint8_t lane[EMW_LANE_SIZE] = {0};
+        size_t chunk = len > (EMW_LANE_SIZE - 1u) ? (EMW_LANE_SIZE - 1u) : len;
+        memcpy(lane, data, chunk);
+        lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
+        memcpy((void *)pending_cmd_lane, lane, EMW_LANE_SIZE);
+        pending_cmd_ready = 1;
         return;
     }
 
     size_t offset = 0;
     while (offset < len) {
-        uint8_t packet[64] = {0};
+        uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
         size_t chunk = len - offset;
-        if (chunk > sizeof(packet)) {
-            chunk = sizeof(packet);
+        if (chunk > (EMW_LANE_SIZE - 1u)) {
+            chunk = EMW_LANE_SIZE - 1u;
         }
-        memcpy(packet, data + offset, chunk);
-        (void)EMW_USB_SendResponsePkt_FS(packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+        memcpy(&superframe[0], data + offset, chunk);
+        superframe[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
+        (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
         offset += chunk;
     }
 }
@@ -135,8 +160,16 @@ static void command_send_err(const char *msg)
 {
     (void)msg;
     // Match the registry firmware behavior: errors are best-effort no-ops.
-    const uint8_t packet[64] = {0};
-    (void)EMW_USB_SendResponsePkt_FS((uint8_t *)packet, (uint16_t)sizeof(packet), CDC_TIMEOUT);
+    uint8_t lane[EMW_LANE_SIZE] = {0};
+    lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
+    if (ism_mode == ISM_MODE_RAW_SAMPLING) {
+        memcpy((void *)pending_cmd_lane, lane, EMW_LANE_SIZE);
+        pending_cmd_ready = 1;
+        return;
+    }
+    uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+    memcpy(&superframe[0], lane, EMW_LANE_SIZE);
+    (void)EMW_USB_SendResponsePkt_FS((uint8_t *)superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
 }
 
 static void ISR_Sampler_raw(void)
@@ -315,6 +348,19 @@ static void stop_sampling(void)
     bufferIndex = 0;
     bufferReady = 0;
     ism_mode = ISM_MODE_IDLE;
+}
+
+static void send_sampling_superframe(const uint8_t *stream_lane)
+{
+    uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+    if (pending_cmd_ready) {
+        memcpy(&superframe[0], (const void *)pending_cmd_lane, EMW_LANE_SIZE);
+    }
+    if (stream_lane != NULL) {
+        memcpy(&superframe[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
+    }
+    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
+    pending_cmd_ready = 0;
 }
 
 static bool decode_encoded_pin(int encoded, GPIO_TypeDef **out_port, uint16_t *out_pin)
@@ -641,19 +687,13 @@ int main(void)
     /* USER CODE BEGIN 3 */
       if (ism_mode == ISM_MODE_RAW_SAMPLING) {
           if (bufferReady == 1) {
-              (void)EMW_USB_SendResponsePkt_FS((uint8_t *)transmitBuffer, 64, CDC_TIMEOUT);
+              send_sampling_superframe((const uint8_t *)transmitBuffer);
               bufferReady = 0;
+          } else if (pending_cmd_ready) {
+              // Keep command response latency reasonable even if the next sampler chunk
+              // isn't ready yet.
+              send_sampling_superframe(NULL);
           }
-
-          if (bulk_packet != NULL) {
-              // `sample stop`
-              if (bulk_packet_len >= 11 && memcmp((const void *)bulk_packet, "sample stop", 11) == 0) {
-                  stop_sampling();
-                  command_send_ok(NULL, 0);
-              }
-              free_bulk_packet();
-          }
-          continue;
       }
 
       if (bulk_packet == NULL) {
@@ -772,8 +812,8 @@ int main(void)
               size_t requested_rx = 0;
               if (rx_i > 0) {
                   requested_rx = (size_t)rx_i;
-                  if (requested_rx > 64u) {
-                      requested_rx = 64u;
+                  if (requested_rx > 63u) {
+                      requested_rx = 63u;
                   }
               }
 
@@ -903,8 +943,8 @@ int main(void)
               }
 
               size_t len = (size_t)len_i;
-              if (len > 64u) {
-                  len = 64u;
+              if (len > 63u) {
+                  len = 63u;
               }
 
               uint8_t out[64] = {0};
@@ -995,6 +1035,7 @@ int main(void)
               HAL_TIM_Base_Start_IT(&htim3);
               command_send_ok(NULL, 0);
           } else if (strcmp(sub, "stop") == 0) {
+              stop_sampling();
               command_send_ok(NULL, 0);
           } else {
               command_send_err(NULL);
