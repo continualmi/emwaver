@@ -140,6 +140,16 @@ struct ReadPacketsResponse {
 }
 
 #[derive(Clone, Serialize)]
+struct ReadMonitorResponse {
+    data: Vec<u8>,
+    ts_ms: Vec<u64>,
+    kinds: Vec<u8>,
+    next_packet_index: u64,
+    available_packets: u64,
+    packet_size: usize,
+}
+
+#[derive(Clone, Serialize)]
 struct BufferPacket {
     data: Vec<u8>,
     ts_ms: u64,
@@ -507,6 +517,123 @@ async fn buffer_read_tx_since(
         ts_ms,
         next_packet_index,
         available_packets,
+    })
+}
+
+#[tauri::command]
+async fn transport_read_rx_since(
+    state: State<'_, DeviceState>,
+    packet_index: u64,
+    max_packets: usize,
+) -> Result<ReadMonitorResponse, String> {
+    let value = state
+        .rpc(
+            "transport_read_rx_since",
+            serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
+        )
+        .await?;
+
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let data = decode_b64(data_b64)?;
+    let ts_ms = value
+        .get("ts_ms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).collect::<Vec<u64>>())
+        .unwrap_or_default();
+    let kinds = value
+        .get("kinds")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|x| x as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+    let next_packet_index = value.get("next_packet_index").and_then(|v| v.as_u64()).unwrap_or(packet_index);
+    let available_packets = value.get("available_packets").and_then(|v| v.as_u64()).unwrap_or(0);
+    let packet_size = value.get("packet_size").and_then(|v| v.as_u64()).unwrap_or(128) as usize;
+
+    Ok(ReadMonitorResponse {
+        data,
+        ts_ms,
+        kinds,
+        next_packet_index,
+        available_packets,
+        packet_size,
+    })
+}
+
+#[tauri::command]
+async fn transport_read_tx_since(
+    state: State<'_, DeviceState>,
+    packet_index: u64,
+    max_packets: usize,
+) -> Result<ReadMonitorResponse, String> {
+    let value = state
+        .rpc(
+            "transport_read_tx_since",
+            serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
+        )
+        .await?;
+
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let data = decode_b64(data_b64)?;
+    let ts_ms = value
+        .get("ts_ms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).collect::<Vec<u64>>())
+        .unwrap_or_default();
+    let kinds = value
+        .get("kinds")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|x| x as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+    let next_packet_index = value.get("next_packet_index").and_then(|v| v.as_u64()).unwrap_or(packet_index);
+    let available_packets = value.get("available_packets").and_then(|v| v.as_u64()).unwrap_or(0);
+    let packet_size = value.get("packet_size").and_then(|v| v.as_u64()).unwrap_or(128) as usize;
+
+    Ok(ReadMonitorResponse {
+        data,
+        ts_ms,
+        kinds,
+        next_packet_index,
+        available_packets,
+        packet_size,
+    })
+}
+
+#[tauri::command]
+async fn command_read_since(
+    state: State<'_, DeviceState>,
+    packet_index: u64,
+    max_packets: usize,
+) -> Result<ReadMonitorResponse, String> {
+    let value = state
+        .rpc(
+            "command_read_since",
+            serde_json::json!({ "packet_index": packet_index, "max_packets": max_packets }),
+        )
+        .await?;
+
+    let data_b64 = value.get("data_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let data = decode_b64(data_b64)?;
+    let ts_ms = value
+        .get("ts_ms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).collect::<Vec<u64>>())
+        .unwrap_or_default();
+    let kinds = value
+        .get("kinds")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_u64().map(|x| x as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+    let next_packet_index = value.get("next_packet_index").and_then(|v| v.as_u64()).unwrap_or(packet_index);
+    let available_packets = value.get("available_packets").and_then(|v| v.as_u64()).unwrap_or(0);
+    let packet_size = value.get("packet_size").and_then(|v| v.as_u64()).unwrap_or(64) as usize;
+
+    Ok(ReadMonitorResponse {
+        data,
+        ts_ms,
+        kinds,
+        next_packet_index,
+        available_packets,
+        packet_size,
     })
 }
 
@@ -1523,6 +1650,9 @@ pub fn run() {
             buffer_read_packets_since,
             buffer_next_packet,
             buffer_read_tx_since,
+            transport_read_rx_since,
+            transport_read_tx_since,
+            command_read_since,
             buffer_get_bytes,
             buffer_set_bytes,
             buffer_set_invert_rx,
