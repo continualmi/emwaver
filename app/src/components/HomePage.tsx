@@ -55,7 +55,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
-  const [deviceIconKey, setDeviceIconKey] = useState<"emwaver" | "ism" | "rfid" | "infrared" | "gpio">("emwaver");
   
   const [midiPorts, setMidiPorts] = useState<string[]>([]);
   const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
@@ -496,11 +495,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       const stripped = new TextDecoder().decode(bytes.slice(0, end)).trim();
 
       const isBareSemver = /^\d+\.\d+\.\d+$/.test(stripped);
-      if (stripped.includes("Welcome to")) {
-        setDeviceIconKey("emwaver");
-      } else if (isBareSemver) {
-        setDeviceIconKey("emwaver");
-      }
 
       const versionMatch = stripped.match(/(\d+\.\d+\.\d+)/);
       if (versionMatch) {
@@ -508,7 +502,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       }
     } else if (!status.connected) {
       setFirmwareVersion("Unknown");
-      setDeviceIconKey("emwaver");
     }
   }, [bufferEntries, status.connected]);
 
@@ -588,8 +581,8 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
             <div className="flex items-center justify-between h-full">
               <div className="flex items-center gap-3">
                 <img
-                  src={`/device-icons/${deviceIconKey}-icon.png`}
-                  alt={`${deviceIconKey} icon`}
+                  src="/device-icons/emwaver-icon.png"
+                  alt="EMWaver icon"
                   className="h-20 w-20 rounded-2xl bg-slate-950/30 p-1"
                   draggable={false}
                 />
