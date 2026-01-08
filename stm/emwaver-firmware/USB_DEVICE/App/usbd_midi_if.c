@@ -42,6 +42,13 @@ static uint8_t sysex_buf[256];
 static uint16_t sysex_len = 0;
 static uint8_t in_sysex = 0;
 
+// USB TX statistics for debugging.
+static volatile uint32_t usb_tx_ok = 0;
+static volatile uint32_t usb_tx_busy = 0;
+static volatile uint32_t usb_tx_timeout = 0;
+static volatile uint32_t usb_tx_fail = 0;
+static volatile uint32_t usb_rx_in = 0;
+
 static void sysex_reset(void)
 {
   sysex_len = 0;
@@ -69,6 +76,7 @@ static int8_t MIDI_DeInit_FS(void)
 static int8_t MIDI_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   uint32_t len = *Len;
+  usb_rx_in++;
   // USB-MIDI event packets are 4 bytes. Parse and feed MIDI bytes.
   for (uint32_t i = 0; i + 3 < len; i += 4) {
     uint8_t cin = (uint8_t)(Buf[i] & 0x0F);
@@ -398,12 +406,14 @@ void MIDI_Print_FS(const char* str)
 uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeout)
 {
   if (length != 64 || packet == NULL) {
+    usb_tx_fail++;
     return (uint8_t)-1;
   }
 
   uint8_t encoded[96];
   uint16_t encoded_len = encode_payload_7bit(packet, encoded, sizeof(encoded));
   if (encoded_len == 0) {
+    usb_tx_fail++;
     return (uint8_t)-1;
   }
 
@@ -416,6 +426,7 @@ uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeo
   sysex[sysex_pos++] = 'W';
   sysex[sysex_pos++] = 0x01;
   if ((uint16_t)(sysex_pos + encoded_len + 1) > sizeof(sysex)) {
+    usb_tx_fail++;
     return (uint8_t)-1;
   }
   memcpy(&sysex[sysex_pos], encoded, encoded_len);
@@ -424,20 +435,48 @@ uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeo
 
   uint16_t usb_len = pack_sysex_to_usb_events(sysex, sysex_pos, midi_tx_buf, sizeof(midi_tx_buf));
   if (usb_len == 0) {
+    usb_tx_fail++;
     return (uint8_t)-1;
   }
 
   uint32_t start = HAL_GetTick();
-  while ((HAL_GetTick() - start) < timeout) {
-    USBD_MIDI_SetTxBuffer(&hUsbDeviceFS, midi_tx_buf, usb_len);
-    uint8_t res = USBD_MIDI_TransmitPacket(&hUsbDeviceFS);
-    if (res == USBD_OK) {
-      return 0;
-    }
-    if (res != USBD_BUSY) {
-      break;
+
+  // Phase 1: Wait for any previous TX to complete (TxState cleared by DataIn callback).
+  while (USBD_MIDI_IsTxBusy(&hUsbDeviceFS)) {
+    usb_tx_busy++;
+    if ((HAL_GetTick() - start) >= timeout) {
+      usb_tx_timeout++;
+      return (uint8_t)-1;
     }
   }
 
-  return (uint8_t)-1;
+  // Phase 2: Queue the new transmission.
+  USBD_MIDI_SetTxBuffer(&hUsbDeviceFS, midi_tx_buf, usb_len);
+  uint8_t res = USBD_MIDI_TransmitPacket(&hUsbDeviceFS);
+  if (res != USBD_OK) {
+    usb_tx_fail++;
+    return (uint8_t)-1;
+  }
+
+  // Phase 3: Wait for this TX to complete. This ensures the data actually left the device
+  // before we return, preventing the next command from overwriting the buffer.
+  while (USBD_MIDI_IsTxBusy(&hUsbDeviceFS)) {
+    if ((HAL_GetTick() - start) >= timeout) {
+      usb_tx_timeout++;
+      return (uint8_t)-1;
+    }
+  }
+
+  usb_tx_ok++;
+  return 0;
 }
+
+void MIDI_GetUsbStats_FS(uint32_t *tx_ok, uint32_t *tx_busy, uint32_t *tx_timeout, uint32_t *tx_fail, uint32_t *rx_in)
+{
+  if (tx_ok) *tx_ok = usb_tx_ok;
+  if (tx_busy) *tx_busy = usb_tx_busy;
+  if (tx_timeout) *tx_timeout = usb_tx_timeout;
+  if (tx_fail) *tx_fail = usb_tx_fail;
+  if (rx_in) *rx_in = usb_rx_in;
+}
+

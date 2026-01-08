@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include "emwaver_usb_io.h"
 #include "cc1101.h"
 /* USER CODE END Includes */
@@ -695,6 +696,30 @@ int main(void)
       if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
           static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION;
           command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "usb") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+          if (strcmp(sub, "stats") == 0) {
+              uint32_t tx_ok = 0, tx_busy = 0, tx_timeout = 0, tx_fail = 0, rx_in = 0;
+              MIDI_GetUsbStats_FS(&tx_ok, &tx_busy, &tx_timeout, &tx_fail, &rx_in);
+              uint32_t data_in = USBD_MIDI_GetDataInCount();
+              char stats_buf[64];
+              int len = snprintf(stats_buf, sizeof(stats_buf),
+                  "tx=%lu di=%lu busy=%lu to=%lu fail=%lu in=%lu",
+                  (unsigned long)tx_ok, (unsigned long)data_in,
+                  (unsigned long)tx_busy, (unsigned long)tx_timeout,
+                  (unsigned long)tx_fail, (unsigned long)rx_in);
+              if (len > 0 && (size_t)len < sizeof(stats_buf)) {
+                  command_send_ok((const uint8_t *)stats_buf, (size_t)len);
+              } else {
+                  command_send_ok(NULL, 0);
+              }
+          } else {
+              command_send_err(NULL);
+          }
           free_bulk_packet();
           continue;
       }

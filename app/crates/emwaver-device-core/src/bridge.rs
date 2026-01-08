@@ -24,7 +24,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine as _;
 #[cfg(target_os = "macos")]
-use coremidi::{Client as CoreMidiClient, Destination, Destinations, InputPort, OutputPort, PacketBuffer, Source, Sources};
+use coremidi::{Client as CoreMidiClient, Destination, Destinations, InputPortWithContext, OutputPort, PacketBuffer, Protocol, Source, Sources};
 #[cfg(not(target_os = "macos"))]
 use midir::{Ignore, MidiInput, MidiOutput};
 use rusb::UsbContext;
@@ -119,7 +119,7 @@ struct MidiIo {
     #[cfg(target_os = "macos")]
     _client: CoreMidiClient,
     #[cfg(target_os = "macos")]
-    input: InputPort,
+    input: InputPortWithContext<()>,
     #[cfg(target_os = "macos")]
     output: Arc<OutputPort>,
     #[cfg(not(target_os = "macos"))]
@@ -145,6 +145,7 @@ pub struct BridgeState {
     rx_sysex_in_progress_since_ms: Arc<AtomicU64>,
     rx_sysex_in_progress_len: Arc<AtomicU64>,
     rx_sysex_decode_errors: Arc<AtomicU64>,
+    rx_sysex_decode_skipped: Arc<AtomicU64>,
     rx_sysex_overflows: Arc<AtomicU64>,
     rx_sysex_restarts: Arc<AtomicU64>,
     in_flight: Arc<AsyncMutex<()>>,
@@ -181,10 +182,11 @@ fn timeout_diag(state: &BridgeState) -> String {
     let sysex_len = state.rx_sysex_in_progress_len.load(Ordering::Relaxed);
     let dropped = state.rx_queue_dropped.load(Ordering::Relaxed);
     let decode_errors = state.rx_sysex_decode_errors.load(Ordering::Relaxed);
+    let decode_skipped = state.rx_sysex_decode_skipped.load(Ordering::Relaxed);
     let overflows = state.rx_sysex_overflows.load(Ordering::Relaxed);
     let restarts = state.rx_sysex_restarts.load(Ordering::Relaxed);
     format!(
-        "last_rx_age_ms={last_rx_age_ms}, last_raw_rx_age_ms={last_raw_rx_age_ms}, raw_packets={raw_packets}, raw_bytes={raw_bytes}, sysex_in_progress_age_ms={sysex_age_ms}, sysex_in_progress_len={sysex_len}, rx_queue_dropped={dropped}, sysex_decode_errors={decode_errors}, sysex_overflows={overflows}, sysex_restarts={restarts}"
+        "last_rx_age_ms={last_rx_age_ms}, last_raw_rx_age_ms={last_raw_rx_age_ms}, raw_packets={raw_packets}, raw_bytes={raw_bytes}, sysex_in_progress_age_ms={sysex_age_ms}, sysex_in_progress_len={sysex_len}, rx_queue_dropped={dropped}, sysex_decode_errors={decode_errors}, sysex_decode_skipped={decode_skipped}, sysex_overflows={overflows}, sysex_restarts={restarts}"
     )
 }
 
@@ -711,6 +713,7 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         rx_sysex_in_progress_since_ms: Arc::new(AtomicU64::new(0)),
         rx_sysex_in_progress_len: Arc::new(AtomicU64::new(0)),
         rx_sysex_decode_errors: Arc::new(AtomicU64::new(0)),
+        rx_sysex_decode_skipped: Arc::new(AtomicU64::new(0)),
         rx_sysex_overflows: Arc::new(AtomicU64::new(0)),
         rx_sysex_restarts: Arc::new(AtomicU64::new(0)),
         in_flight: Arc::new(AsyncMutex::new(())),
@@ -748,78 +751,122 @@ fn midi_io_init_for_state(state: &BridgeState) -> Result<MidiIo> {
     let rx_sysex_in_progress_since_ms = Arc::clone(&state.rx_sysex_in_progress_since_ms);
     let rx_sysex_in_progress_len = Arc::clone(&state.rx_sysex_in_progress_len);
     let rx_sysex_decode_errors = Arc::clone(&state.rx_sysex_decode_errors);
+    let rx_sysex_decode_skipped = Arc::clone(&state.rx_sysex_decode_skipped);
     let rx_sysex_overflows = Arc::clone(&state.rx_sysex_overflows);
-    let rx_sysex_restarts = Arc::clone(&state.rx_sysex_restarts);
+    let _rx_sysex_restarts = Arc::clone(&state.rx_sysex_restarts);
 
-    // CoreMIDI may split SysEx across packets; reassemble before handing to our 64B decoder.
-    let mut in_sysex = false;
+    // Using MIDI 2.0 API (MIDIInputPortCreateWithProtocol) with Protocol::Midi10.
+    // This uses a different CoreMIDI code path that may be more reliable on Intel Macs.
+    // Data arrives as UMP (Universal MIDI Packets) which we parse to extract SysEx bytes.
     let mut sysex_buf: Vec<u8> = Vec::with_capacity(256);
     let input = client
-        .input_port("emwaver-usb-in", move |packet_list| {
+        .input_port_with_protocol("emwaver-usb-in", Protocol::Midi10, move |event_list, _ctx: &mut ()| {
             let ts_ms = now_ms();
             rx_raw_last_ts_ms.store(ts_ms, Ordering::Relaxed);
-            for packet in packet_list.iter() {
-                let bytes = packet.data();
+
+            for event_packet in event_list.iter() {
+                let words = event_packet.data();
                 rx_raw_packets.fetch_add(1, Ordering::Relaxed);
-                rx_raw_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
-                for &b in bytes {
-                    if !in_sysex {
-                        if b == 0xF0 {
-                            in_sysex = true;
-                            sysex_buf.clear();
-                            sysex_buf.push(b);
-                            rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
-                            rx_sysex_in_progress_len.store(1, Ordering::Relaxed);
-                        }
-                        continue;
-                    }
+                rx_raw_bytes.fetch_add((words.len() * 4) as u64, Ordering::Relaxed);
 
-                    // If we see a new SysEx start while still assembling one, treat it as a
-                    // resync event and restart the buffer rather than passing garbage to decode.
-                    if b == 0xF0 {
-                        rx_sysex_restarts.fetch_add(1, Ordering::Relaxed);
-                        sysex_buf.clear();
-                        sysex_buf.push(b);
-                        rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
-                        rx_sysex_in_progress_len.store(1, Ordering::Relaxed);
-                        continue;
-                    }
+                // Parse UMP words. For MIDI 1.0 protocol, SysEx uses Message Type 0x3 (Data Messages).
+                // Each 64-bit message (2 words) carries status + up to 6 data bytes.
+                let mut i = 0;
+                while i < words.len() {
+                    let w0 = words[i];
+                    let msg_type = (w0 >> 28) & 0xF;
 
-                    sysex_buf.push(b);
-                    rx_sysex_in_progress_len.store(sysex_buf.len() as u64, Ordering::Relaxed);
-                    if b != 0xF7 {
-                        if sysex_buf.len() > 1024 {
-                            rx_sysex_overflows.fetch_add(1, Ordering::Relaxed);
-                            in_sysex = false;
-                            sysex_buf.clear();
-                            rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
-                            rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
-                        }
-                        continue;
-                    }
+                    if msg_type == 0x3 {
+                        // Data Message (SysEx7) - 64-bit, consumes 2 words
+                        let status = (w0 >> 20) & 0xF;
+                        let num_bytes = ((w0 >> 16) & 0xF) as usize;
+                        let w1 = if i + 1 < words.len() { words[i + 1] } else { 0 };
+                        i += 2;
 
-                    match midi_sysex::decode_packet64(&sysex_buf) {
-                        Ok(Some(pkt)) => {
-                            let generation = rx_gen.load(Ordering::Relaxed);
-                            if rx_queue_tx
-                                .try_send(RxQueuedPacket { pkt, ts_ms, generation })
-                                .is_err()
-                            {
-                                rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                        // Extract up to 6 bytes from the two words
+                        let bytes: [u8; 6] = [
+                            ((w0 >> 8) & 0xFF) as u8,
+                            (w0 & 0xFF) as u8,
+                            ((w1 >> 24) & 0xFF) as u8,
+                            ((w1 >> 16) & 0xFF) as u8,
+                            ((w1 >> 8) & 0xFF) as u8,
+                            (w1 & 0xFF) as u8,
+                        ];
+
+                        let data_bytes = &bytes[..num_bytes.min(6)];
+
+                        match status {
+                            0x0 => {
+                                // Complete SysEx in one message (1-6 bytes)
+                                sysex_buf.clear();
+                                sysex_buf.push(0xF0);
+                                sysex_buf.extend_from_slice(data_bytes);
+                                sysex_buf.push(0xF7);
+                            }
+                            0x1 => {
+                                // SysEx starts
+                                sysex_buf.clear();
+                                sysex_buf.push(0xF0);
+                                sysex_buf.extend_from_slice(data_bytes);
+                                rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
+                                rx_sysex_in_progress_len.store(sysex_buf.len() as u64, Ordering::Relaxed);
+                                continue;
+                            }
+                            0x2 => {
+                                // SysEx continues
+                                sysex_buf.extend_from_slice(data_bytes);
+                                rx_sysex_in_progress_len.store(sysex_buf.len() as u64, Ordering::Relaxed);
+                                if sysex_buf.len() > 1024 {
+                                    rx_sysex_overflows.fetch_add(1, Ordering::Relaxed);
+                                    sysex_buf.clear();
+                                    rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
+                                    rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
+                                }
+                                continue;
+                            }
+                            0x3 => {
+                                // SysEx ends
+                                sysex_buf.extend_from_slice(data_bytes);
+                                sysex_buf.push(0xF7);
+                            }
+                            _ => {
+                                i += 1;
+                                continue;
                             }
                         }
-                        Ok(None) => {}
-                        Err(_err) => {
-                            // Keep this extremely cheap: increment a counter only. We surface these
-                            // counters in timeout errors and via periodic event emission.
-                            rx_sysex_decode_errors.fetch_add(1, Ordering::Relaxed);
-                        }
-                    }
 
-                    in_sysex = false;
-                    sysex_buf.clear();
-                    rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
-                    rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
+                        // We have a complete SysEx message - decode it
+                        match midi_sysex::decode_packet64(&sysex_buf) {
+                            Ok(Some(pkt)) => {
+                                let generation = rx_gen.load(Ordering::Relaxed);
+                                if rx_queue_tx
+                                    .try_send(RxQueuedPacket { pkt, ts_ms, generation })
+                                    .is_err()
+                                {
+                                    rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                            Ok(None) => {
+                                rx_sysex_decode_skipped.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(_err) => {
+                                rx_sysex_decode_errors.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+
+                        sysex_buf.clear();
+                        rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
+                        rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
+                    } else {
+                        // Skip non-SysEx messages (determine word count by message type)
+                        let word_count = match msg_type {
+                            0x0 | 0x1 | 0x2 | 0x6 | 0x7 => 1, // 32-bit messages
+                            0x3 | 0x4 | 0x8 | 0x9 | 0xA => 2, // 64-bit messages
+                            0x5 | 0xB | 0xC => 4,             // 128-bit messages
+                            _ => 1,
+                        };
+                        i += word_count;
+                    }
                 }
             }
         })
@@ -1056,7 +1103,7 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
     state.rx_gen.fetch_add(1, Ordering::SeqCst);
     let existing = { state.midi.lock().await.take() };
     if let Some(conn) = existing {
-        if let Some(io) = state.midi_io.lock().await.as_ref() {
+        if let Some(io) = state.midi_io.lock().await.as_mut() {
             let _ = io.input.disconnect_source(&conn.source);
         }
         let _ = conn.destination.flush();
@@ -1139,8 +1186,8 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
         }
     };
 
-    let io_guard = state.midi_io.lock().await;
-    let Some(io) = io_guard.as_ref() else {
+    let mut io_guard = state.midi_io.lock().await;
+    let Some(io) = io_guard.as_mut() else {
         bail!("MIDI subsystem is not initialized (restart Desktop app)");
     };
 
@@ -1149,7 +1196,7 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     let source = find_coremidi_source_by_name(&chosen).ok_or_else(|| anyhow!("USB input port not found: {chosen}"))?;
 
     io.input
-        .connect_source(&source)
+        .connect_source(&source, ())
         .map_err(|status| anyhow!("failed to connect USB input: {status}"))?;
 
     let status = Arc::new(AsyncMutex::new(MidiStatus {
@@ -1375,6 +1422,42 @@ pub async fn write_bytes(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
 }
 
 async fn send_packet_command(
+    state: &BridgeState,
+    bytes: Vec<u8>,
+    timeout_ms: u64,
+    packets: u32,
+) -> Result<Vec<u8>> {
+    // Retry logic: use shorter per-attempt timeout, retry up to 3 times.
+    // This handles occasional CoreMIDI packet drops on Intel Macs.
+    const MAX_RETRIES: u32 = 3;
+    const RETRY_TIMEOUT_MS: u64 = 150;
+
+    let per_attempt_timeout = timeout_ms.min(RETRY_TIMEOUT_MS);
+    let mut last_err = None;
+
+    for attempt in 0..MAX_RETRIES {
+        match send_packet_command_inner(state, bytes.clone(), per_attempt_timeout, packets).await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("timeout waiting for response") {
+                    // Timeout - retry
+                    last_err = Some(e);
+                    if attempt + 1 < MAX_RETRIES {
+                        continue;
+                    }
+                } else {
+                    // Non-timeout error - don't retry
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow!("send_packet_command failed after retries")))
+}
+
+async fn send_packet_command_inner(
     state: &BridgeState,
     bytes: Vec<u8>,
     timeout_ms: u64,

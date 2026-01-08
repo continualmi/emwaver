@@ -268,12 +268,21 @@ static uint8_t USBD_MIDI_Setup(USBD_HandleTypeDef *pdev, USBD_SetupReqTypedef *r
   return USBD_OK;
 }
 
+// Counter for DataIn callbacks (TX completion confirmations from USB hardware).
+static volatile uint32_t usbd_midi_data_in_count = 0;
+
 static uint8_t USBD_MIDI_DataIn(USBD_HandleTypeDef *pdev, uint8_t epnum)
 {
   (void)epnum;
   USBD_MIDI_ClassDataTypeDef *hmidi = (USBD_MIDI_ClassDataTypeDef *)pdev->pClassData;
   hmidi->TxState = 0U;
+  usbd_midi_data_in_count++;
   return USBD_OK;
+}
+
+uint32_t USBD_MIDI_GetDataInCount(void)
+{
+  return usbd_midi_data_in_count;
 }
 
 static uint8_t USBD_MIDI_DataOut(USBD_HandleTypeDef *pdev, uint8_t epnum)
@@ -322,6 +331,15 @@ uint8_t USBD_MIDI_TransmitPacket(USBD_HandleTypeDef *pdev)
   }
   hmidi->TxState = 1U;
   return (uint8_t)USBD_LL_Transmit(pdev, MIDI_IN_EP, hmidi->TxBuffer, (uint16_t)hmidi->TxLength);
+}
+
+uint8_t USBD_MIDI_IsTxBusy(USBD_HandleTypeDef *pdev)
+{
+  if (pdev == NULL || pdev->pClassData == NULL) {
+    return 0U;
+  }
+  USBD_MIDI_ClassDataTypeDef *hmidi = (USBD_MIDI_ClassDataTypeDef *)pdev->pClassData;
+  return (hmidi->TxState != 0U) ? 1U : 0U;
 }
 
 uint8_t USBD_MIDI_SetRxBuffer(USBD_HandleTypeDef *pdev, uint8_t *pbuff)
