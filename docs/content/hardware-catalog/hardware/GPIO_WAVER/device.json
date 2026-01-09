@@ -11,7 +11,6 @@
     "GPIO_WAVER.png"
   ],
   "casingImage": "GPIO_WAVER_CASING.png",
-  "onshapeUrl": "https://cad.onshape.com/documents/94a5667dd7caa820010f4ddf/w/4de1f9ff6bdea96f22f54a11/e/1e68b12ac2d17a6984f9c7e8",
   "description": "GPIO Waver is a low-cost STM32F042 (48 MHz) board focused on expansion: it exposes two GPIO headers and little else. It’s ideal for prototyping new EMWaver add-on hardware, and it’s also the base board for modules like RFID Waver. It communicates over USB (no BLE) for Android (USB OTG) and the desktop EMWaver app. Bonus: the native USB stack also enables USB device emulation.",
   "tags": ["GPIO", "STM32F042", "USB"],
   "appSupport": ["android", "desktop"],
