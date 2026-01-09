@@ -22,9 +22,9 @@
             android:title="Git" />
 
         <item
-            android:id="@+id/navigation_wavelets"
+            android:id="@+id/navigation_scripts"
             android:icon="@drawable/ic_console_black_24dp"
-            android:title="Wavelets" />
+            android:title="Scripts" />
 
         <item
             android:id="@+id/navigation_flash"

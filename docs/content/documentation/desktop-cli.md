@@ -2,7 +2,7 @@
 
 EMWaver uses a **single device owner** model:
 
-- The **Desktop app** owns the USB MIDI connection and runs hardware commands and wavelets.
+- The **Desktop app** owns the USB MIDI connection and runs hardware commands and scripts.
 - The **CLI** is a helper client that asks the Desktop app to perform actions.
 
 This avoids multi-process USB contention and removes the need for a separate background daemon/service.

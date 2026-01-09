@@ -146,11 +146,11 @@ struct EMWaverView: View {
 
         return LazyVGrid(columns: columns, spacing: 12) {
             FragmentCard(
-                title: "Wavelets",
-                subtitle: "Manage and run wavelets",
+                title: "Scripts",
+                subtitle: "Manage and run scripts",
                 systemImage: "puzzlepiece.extension",
                 tint: .cyan
-            ) { selection = "Wavelets" }
+            ) { selection = "Scripts" }
 
             FragmentCard(
                 title: "ISM",
@@ -168,7 +168,7 @@ struct EMWaverView: View {
 
             FragmentCard(
                 title: "Git",
-                subtitle: "Sync wavelets with GitHub",
+                subtitle: "Sync scripts with GitHub",
                 systemImage: "arrow.triangle.branch",
                 tint: .secondary
             ) { selection = "Git" }

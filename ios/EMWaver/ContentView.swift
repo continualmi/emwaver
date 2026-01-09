@@ -64,14 +64,14 @@ struct ContentView: View {
                 .tag("Sampler")
 
                 NavigationView {
-                    WaveletsView()
+                    ScriptsView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {
-                    Image("TabWavelets").renderingMode(.template)
-                    Text("Wavelets")
+                    Image("TabScripts").renderingMode(.template)
+                    Text("Scripts")
                 }
-                .tag("Wavelets")
+                .tag("Scripts")
 
                 NavigationView {
                     GitView()

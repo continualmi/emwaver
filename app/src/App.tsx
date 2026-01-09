@@ -23,7 +23,7 @@ import { Tree, type NodeRendererProps, type TreeApi } from "react-arborist";
 import { safeInvoke, safeListen, safeJoin, isTauriAvailable } from "./utils/tauri";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import WaveletsFragment from "./components/WaveletsFragment";
+import ScriptsFragment from "./components/ScriptsFragment";
 import ISMFragment from "./components/ISMFragment";
 import SamplerFragment from "./components/SamplerFragment";
 import FlashFragment from "./components/FlashFragment";
@@ -62,7 +62,7 @@ type OpenFile = {
   isSaving: boolean;
 };
 export type FragmentType =
-  | "wavelets"
+  | "scripts"
   | "ism"
   | "sampler"
   | "flash"
@@ -404,7 +404,7 @@ function App() {
         setOpenFiles([]);
         setActiveFileId(null);
         setShouldRestoreProject(false);
-        setActivePane("wavelets");
+        setActivePane("scripts");
         updateRecentProjects((prev) => {
           const filtered = prev.filter((entry) => entry.path !== directory);
           return [
@@ -557,7 +557,7 @@ function App() {
         return;
       }
       if (activeFileId === node.id) {
-        setActivePane("wavelets");
+        setActivePane("scripts");
         return;
       }
       await commitPendingSave();
@@ -565,7 +565,7 @@ function App() {
       if (existing) {
         setSelectedFileId(node.id);
         setActiveFileId(existing.id);
-        setActivePane("wavelets");
+        setActivePane("scripts");
         return;
       }
       setIsLoadingFile(true);
@@ -596,7 +596,7 @@ function App() {
           return [...prev, file];
         });
         setActiveFileId(file.id);
-        setActivePane("wavelets");
+        setActivePane("scripts");
       } catch (error) {
         console.error(error);
         window.alert(String(error));
@@ -760,7 +760,7 @@ function App() {
   const handleSelectTab = useCallback((fileId: string) => {
     setActiveFileId(fileId);
     setSelectedFileId(fileId);
-    setActivePane("wavelets");
+    setActivePane("scripts");
   }, []);
 
   const handleCloseTab = useCallback(
@@ -796,8 +796,8 @@ function App() {
     const register = async () => {
       try {
         disposers.push(
-          await safeListen("menu-show-wavelets", () => {
-            handleFragmentClick("wavelets");
+          await safeListen("menu-show-scripts", () => {
+            handleFragmentClick("scripts");
           }),
         );
 
@@ -859,7 +859,7 @@ function App() {
     resetLayoutSizes,
   ]);
 
-  const isWaveletsActive = activePane === "wavelets";
+  const isScriptsActive = activePane === "scripts";
   const isISMActive = activePane === "ism";
   const isSamplerActive = activePane === "sampler";
   const isFlashActive = activePane === "flash";
@@ -877,7 +877,7 @@ function App() {
         <Pane active={isEMWaverActive}>
           <HomePage onNavigateToFragment={handleFragmentClick} isActive={isEMWaverActive} />
         </Pane>
-        <Pane active={isWaveletsActive}><WaveletsFragment theme={theme} isActive={isWaveletsActive} /></Pane>
+        <Pane active={isScriptsActive}><ScriptsFragment theme={theme} isActive={isScriptsActive} /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
         <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
@@ -1049,10 +1049,10 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         icon={<EMWaverIcon />}
       />
       <ActivityButton
-        label="Wavelets"
-        isActive={activePane === "wavelets"}
-        onClick={() => onFragmentClick("wavelets")}
-        icon={<WaveletIcon />}
+        label="Scripts"
+        isActive={activePane === "scripts"}
+        onClick={() => onFragmentClick("scripts")}
+        icon={<ScriptIcon />}
       />
       <ActivityButton
         label="ISM"
@@ -1160,7 +1160,7 @@ function MoonIcon() {
   );
 }
 
-// WaveletsPanel removed - using WaveletsFragment component instead
+// ScriptsPanel removed - using ScriptsFragment component instead
 
 function FileTreeNode({ node, style }: NodeRendererProps<TreeNode>) {
   const isSelected = node.isSelected;
@@ -1287,7 +1287,7 @@ function IconButton({ onClick, label, icon, disabled = false, isActive = false }
 }
 
 
-function WaveletIcon() {
+function ScriptIcon() {
   // Converted from Android ic_console_black_24dp.xml (terminal/console icon)
   // Adjusted viewBox to zoom in and center the icon for better visibility
   return (

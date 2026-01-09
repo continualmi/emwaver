@@ -47,7 +47,7 @@ public final class FileRepositoryLocal {
         this.appContext = context.getApplicationContext();
         this.executor = Executors.newSingleThreadExecutor();
         this.mainHandler = new Handler(Looper.getMainLooper());
-        this.storageDir = new File(appContext.getFilesDir(), "wavelets");
+        this.storageDir = new File(appContext.getFilesDir(), "scripts");
         if (!storageDir.exists()) {
             storageDir.mkdirs();
         }

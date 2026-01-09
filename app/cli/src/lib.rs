@@ -47,9 +47,9 @@ pub fn run() -> Result<()> {
             cli::MidiCommand::Disconnect => usb_disconnect(),
             cli::MidiCommand::Status { json } => usb_status(json),
         },
-        Some(cli::Command::Wavelet { command }) => match command {
-            cli::WaveletCommand::Run { path, bootstrap } => wavelet_run(path, bootstrap),
-            cli::WaveletCommand::Stop => wavelet_stop(),
+        Some(cli::Command::Script { command }) => match command {
+            cli::ScriptCommand::Run { path, bootstrap } => script_run(path, bootstrap),
+            cli::ScriptCommand::Stop => script_stop(),
         },
         #[cfg(feature = "firmware-tools")]
         Some(cli::Command::Build {
@@ -198,14 +198,14 @@ fn usb_status(json: bool) -> Result<()> {
     Ok(())
 }
 
-fn wavelet_run(path: std::path::PathBuf, bootstrap: Option<std::path::PathBuf>) -> Result<()> {
+fn script_run(path: std::path::PathBuf, bootstrap: Option<std::path::PathBuf>) -> Result<()> {
     let script = std::fs::read_to_string(&path)?;
     let bootstrap = match bootstrap {
         Some(p) => std::fs::read_to_string(p)?,
         None => String::new(),
     };
     desktop_ipc::rpc_ok(
-        "wavelet_execute",
+        "script_execute",
         serde_json::json!({ "script": script, "bootstrap": bootstrap }),
         std::time::Duration::from_secs(5),
     )?;
@@ -213,8 +213,8 @@ fn wavelet_run(path: std::path::PathBuf, bootstrap: Option<std::path::PathBuf>) 
     Ok(())
 }
 
-fn wavelet_stop() -> Result<()> {
-    desktop_ipc::rpc_ok("wavelet_stop", serde_json::json!({}), std::time::Duration::from_secs(3))?;
+fn script_stop() -> Result<()> {
+    desktop_ipc::rpc_ok("script_stop", serde_json::json!({}), std::time::Duration::from_secs(3))?;
     println!("ok");
     Ok(())
 }

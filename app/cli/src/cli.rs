@@ -67,10 +67,10 @@ pub enum Command {
         #[command(subcommand)]
         command: MidiCommand,
     },
-    /// Run or control wavelets via the Desktop app.
-    Wavelet {
+    /// Run or control scripts via the Desktop app.
+    Script {
         #[command(subcommand)]
-        command: WaveletCommand,
+        command: ScriptCommand,
     },
     /// Build the firmware in the current project (STM32 CubeMX/CubeIDE).
     #[cfg(feature = "firmware-tools")]
@@ -169,16 +169,16 @@ pub enum MidiCommand {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum WaveletCommand {
-    /// Run a wavelet script file (Desktop executes and renders UI).
+pub enum ScriptCommand {
+    /// Run a script script file (Desktop executes and renders UI).
     Run {
-        /// Path to the wavelet script file.
+        /// Path to the script script file.
         path: PathBuf,
         /// Optional bootstrap script to prepend (defaults to empty).
         #[arg(long)]
         bootstrap: Option<PathBuf>,
     },
-    /// Stop the currently running wavelet.
+    /// Stop the currently running script.
     Stop,
 }
 
