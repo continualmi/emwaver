@@ -232,6 +232,86 @@ impl BridgeState {
     }
 }
 
+pub fn sampler_buffer_clear_only(state: &BridgeState) -> Result<()> {
+    // Ensure any late RX packets queued before the clear don't get appended after.
+    state.rx_gen.fetch_add(1, Ordering::SeqCst);
+
+    let mut guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    guard.rx_bytes.clear();
+    guard.rx_ts_ms.clear();
+    guard.rx_counter = 0;
+    guard.invert_rx = false;
+    Ok(())
+}
+
+pub fn sampler_buffer_set_invert_rx(state: &BridgeState, enabled: bool) -> Result<()> {
+    let mut guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    buffer::set_invert_rx(&mut *guard, enabled);
+    Ok(())
+}
+
+pub fn sampler_buffer_len_bytes(state: &BridgeState) -> Result<usize> {
+    let guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    Ok(buffer::rx_len_bytes(&*guard))
+}
+
+pub fn sampler_buffer_packet_count(state: &BridgeState) -> Result<u64> {
+    let guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    Ok(buffer::rx_packet_count(&*guard))
+}
+
+pub fn sampler_buffer_get_bytes(state: &BridgeState) -> Result<Vec<u8>> {
+    let guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    Ok(buffer::rx_snapshot(&*guard))
+}
+
+pub fn sampler_buffer_read_packets_since(
+    state: &BridgeState,
+    packet_index: u64,
+    max_packets: usize,
+) -> Result<buffer::ReadPackets> {
+    let guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    Ok(buffer::read_rx_since(&*guard, packet_index, max_packets))
+}
+
+pub fn sampler_buffer_compress_viewport(
+    state: &BridgeState,
+    range_start: usize,
+    range_end: usize,
+    number_bins: usize,
+) -> Result<(usize, Vec<f32>, Vec<f32>)> {
+    // Important: release lock before doing CPU-heavy compression.
+    let guard = state
+        .buffer
+        .lock()
+        .map_err(|_| anyhow!("buffer lock poisoned"))?;
+    let bytes = buffer::rx_snapshot(&*guard);
+    drop(guard);
+
+    let buffer_len_bytes = bytes.len();
+    let (time_values, data_values) =
+        sampler::compress_bits(&bytes, range_start, range_end, number_bins);
+    Ok((buffer_len_bytes, time_values, data_values))
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -552,6 +632,21 @@ pub async fn dispatch_request(
             }
             state.command_last_ts_ms.store(0, Ordering::Relaxed);
             state.command_gen.fetch_add(1, Ordering::SeqCst);
+            Ok(json!({}))
+        }
+        "sampler_buffer_clear" => {
+            // Clear only the main RX sampler/bitstream buffer (used by the Sampler UI),
+            // without resetting transport logs or command logs.
+            //
+            // Important: bump rx_gen so any queued packets from before the clear don't get
+            // appended after.
+            state.rx_gen.fetch_add(1, Ordering::SeqCst);
+            if let Ok(mut guard) = state.buffer.lock() {
+                guard.rx_bytes.clear();
+                guard.rx_ts_ms.clear();
+                guard.rx_counter = 0;
+                guard.invert_rx = false;
+            }
             Ok(json!({}))
         }
         "transport_read_rx_since" => {
