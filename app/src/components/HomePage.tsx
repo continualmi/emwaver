@@ -27,6 +27,7 @@ type HomePageProps = {
 };
 
 const MAX_MONITOR_ENTRIES = 1500;
+const MAX_COMMAND_ENTRIES = 600;
 const AUTO_CONNECT_ENABLED_KEY = "emwaver:autoConnectEnabled";
 
 type BufferEntry = {
@@ -37,6 +38,17 @@ type BufferEntry = {
   seq: number;
   ascii: string;
   hex: string;
+  kind?: number;
+};
+
+type CommandPacketEntry = {
+  timestamp: number;
+  timeStr: string;
+  seq: number;
+  isTx: boolean;
+  ascii: string;
+  hex: string;
+  kind: number;
 };
 
 export default function HomePage({ onNavigateToFragment, isActive }: HomePageProps) {
@@ -51,7 +63,9 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const dialog = useAppDialog();
 
   const [commandInput, setCommandInput] = useState("");
-  const [bufferEntries, setBufferEntries] = useState<BufferEntry[]>([]);
+  const [transportEntries, setTransportEntries] = useState<BufferEntry[]>([]);
+  const [streamEntries, setStreamEntries] = useState<BufferEntry[]>([]);
+  const [commandEntries, setCommandEntries] = useState<CommandPacketEntry[]>([]);
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
@@ -80,10 +94,18 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
   }, []);
 
-  const monitorContainerRef = useRef<HTMLDivElement>(null);
-  const entrySeqRef = useRef(0);
-  const rxIndexRef = useRef(0);
-  const txIndexRef = useRef(0);
+  const transportContainerRef = useRef<HTMLDivElement>(null);
+  const streamContainerRef = useRef<HTMLDivElement>(null);
+  const commandContainerRef = useRef<HTMLDivElement>(null);
+
+  const transportSeqRef = useRef(0);
+  const streamSeqRef = useRef(0);
+  const commandSeqRef = useRef(0);
+
+  const transportRxIndexRef = useRef(0);
+  const transportTxIndexRef = useRef(0);
+  const streamRxIndexRef = useRef(0);
+  const commandIndexRef = useRef(0);
   const autoConnectRef = useRef<{ inFlight: boolean; lastAttemptMs: number }>({
     inFlight: false,
     lastAttemptMs: 0,
@@ -193,18 +215,27 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     };
   }, [autoConnectEnabled, connectMIDI, isActive, refreshMidiPorts, selectedMidiPort, status.connected]);
 
-  // Auto-scroll monitor
+  // Auto-scroll monitors
   useEffect(() => {
-    if (monitorContainerRef.current) {
-      monitorContainerRef.current.scrollTop = monitorContainerRef.current.scrollHeight;
+    if (transportContainerRef.current) {
+      transportContainerRef.current.scrollTop = transportContainerRef.current.scrollHeight;
     }
-  }, [bufferEntries]);
+  }, [transportEntries]);
 
-  const appendBatchToMonitor = useCallback((batch: Array<{ data: Uint8Array; timestamp: number; isTx: boolean }>) => {
-    if (batch.length === 0) return;
+  useEffect(() => {
+    if (streamContainerRef.current) {
+      streamContainerRef.current.scrollTop = streamContainerRef.current.scrollHeight;
+    }
+  }, [streamEntries]);
 
-    const built: BufferEntry[] = batch.map(({ data, timestamp, isTx }) => {
-      const seq = entrySeqRef.current++;
+  useEffect(() => {
+    if (commandContainerRef.current) {
+      commandContainerRef.current.scrollTop = commandContainerRef.current.scrollHeight;
+    }
+  }, [commandEntries]);
+
+  const buildLogEntry = useCallback(
+    (data: Uint8Array, timestamp: number, isTx: boolean, seq: number, kind?: number): BufferEntry => {
       const timeStr = new Date(timestamp).toLocaleTimeString("en-US", {
         hour12: false,
         hour: "2-digit",
@@ -215,95 +246,134 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       const bytes = Array.from(data);
       const hex = bytes.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
       const ascii = bytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : ".")).join("");
-      return { data, timestamp, timeStr, isTx, seq, ascii, hex };
-    });
+      return { data, timestamp, timeStr, isTx, seq, ascii, hex, kind };
+    },
+    [],
+  );
 
-    setBufferEntries((prev) => {
-      const next = [...prev, ...built];
-      next.sort((a, b) => {
-        if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
-        if (a.isTx !== b.isTx) return a.isTx ? -1 : 1;
-        return a.seq - b.seq;
+  const appendBatchToTransport = useCallback(
+    (batch: Array<{ data: Uint8Array; timestamp: number; isTx: boolean; kind?: number }>) => {
+      if (batch.length === 0) return;
+      const built: BufferEntry[] = batch.map(({ data, timestamp, isTx, kind }) =>
+        buildLogEntry(data, timestamp, isTx, transportSeqRef.current++, kind),
+      );
+      setTransportEntries((prev) => {
+        const next = [...prev, ...built];
+        next.sort((a, b) => {
+          if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+          if (a.isTx !== b.isTx) return a.isTx ? -1 : 1;
+          return a.seq - b.seq;
+        });
+        if (next.length > MAX_MONITOR_ENTRIES) {
+          return next.slice(next.length - MAX_MONITOR_ENTRIES);
+        }
+        return next;
       });
-      if (next.length > MAX_MONITOR_ENTRIES) {
-        return next.slice(next.length - MAX_MONITOR_ENTRIES);
+    },
+    [buildLogEntry],
+  );
+
+  const appendBatchToStream = useCallback(
+    (batch: Array<{ data: Uint8Array; timestamp: number }>) => {
+      if (batch.length === 0) return;
+      const built: BufferEntry[] = batch.map(({ data, timestamp }) =>
+        buildLogEntry(data, timestamp, false, streamSeqRef.current++),
+      );
+      setStreamEntries((prev) => {
+        const next = [...prev, ...built];
+        next.sort((a, b) => (a.timestamp !== b.timestamp ? a.timestamp - b.timestamp : a.seq - b.seq));
+        if (next.length > MAX_MONITOR_ENTRIES) {
+          return next.slice(next.length - MAX_MONITOR_ENTRIES);
+        }
+        return next;
+      });
+    },
+    [buildLogEntry],
+  );
+
+  const appendBatchToCommandMonitor = useCallback((batch: CommandPacketEntry[]) => {
+    if (batch.length === 0) return;
+    setCommandEntries((prev) => {
+      const next = [...prev, ...batch];
+      next.sort((a, b) => (a.timestamp !== b.timestamp ? a.timestamp - b.timestamp : a.seq - b.seq));
+      if (next.length > MAX_COMMAND_ENTRIES) {
+        return next.slice(next.length - MAX_COMMAND_ENTRIES);
       }
       return next;
     });
   }, []);
 
-  // Load global buffer logs (TX + RX) from backend.
+  // Transport Monitor: global RX/TX (128B superframes).
   useEffect(() => {
     let cancelled = false;
     let interval: number | null = null;
 
     const resetLocal = () => {
-      setBufferEntries([]);
-      entrySeqRef.current = 0;
-      rxIndexRef.current = 0;
-      txIndexRef.current = 0;
+      setTransportEntries([]);
+      transportSeqRef.current = 0;
+      transportRxIndexRef.current = 0;
+      transportTxIndexRef.current = 0;
     };
 
     const poll = async () => {
       if (cancelled || !status.connected) return;
 
       try {
-        const batch: Array<{ data: Uint8Array; timestamp: number; isTx: boolean }> = [];
+        const batch: Array<{ data: Uint8Array; timestamp: number; isTx: boolean; kind?: number }> = [];
 
         // TX
-        for (let i = 0; i < 10; i++) {
-          const txResp = await safeInvoke<{
-            data: number[];
-            ts_ms: number[];
-            next_packet_index: number;
-            available_packets: number;
-          }>(
-            "buffer_read_tx_since",
-            { packetIndex: txIndexRef.current, maxPackets: 64 },
-            { throwOnError: true },
-          );
-          if (!txResp?.ts_ms?.length || !txResp?.data?.length) break;
+        const txResp = await safeInvoke<{
+          data: number[];
+          ts_ms: number[];
+          kinds: number[];
+          next_packet_index: number;
+          packet_size: number;
+        }>(
+          "transport_read_tx_since",
+          { packetIndex: transportTxIndexRef.current, maxPackets: 64 },
+          { throwOnError: true },
+        );
+        if (txResp?.ts_ms?.length && txResp?.data?.length) {
+          const packetSize = txResp.packet_size ?? 128;
           const count = txResp.ts_ms.length;
           for (let p = 0; p < count; p++) {
-            const start = p * 64;
-            const end = start + 64;
+            const start = p * packetSize;
+            const end = start + packetSize;
             const pkt = new Uint8Array(txResp.data.slice(start, end));
             const ts = txResp.ts_ms[p];
-            batch.push({ data: pkt, timestamp: ts, isTx: true });
+            batch.push({ data: pkt, timestamp: ts, isTx: true, kind: txResp.kinds?.[p] ?? 0 });
           }
-          txIndexRef.current = txResp.next_packet_index ?? txIndexRef.current + count;
-          break;
+          transportTxIndexRef.current = txResp.next_packet_index ?? transportTxIndexRef.current + count;
         }
 
-        // RX (read-only; does not change buffer_counter)
-        for (let i = 0; i < 10; i++) {
-          const rxResp = await safeInvoke<{
-            data: number[];
-            ts_ms: number[];
-            next_packet_index: number;
-            available_packets: number;
-          }>(
-            "buffer_read_packets_since",
-            { packetIndex: rxIndexRef.current, maxPackets: 64 },
-            { throwOnError: true },
-          );
-          if (!rxResp?.ts_ms?.length || !rxResp?.data?.length) break;
+        // RX
+        const rxResp = await safeInvoke<{
+          data: number[];
+          ts_ms: number[];
+          kinds: number[];
+          next_packet_index: number;
+          packet_size: number;
+        }>(
+          "transport_read_rx_since",
+          { packetIndex: transportRxIndexRef.current, maxPackets: 64 },
+          { throwOnError: true },
+        );
+        if (rxResp?.ts_ms?.length && rxResp?.data?.length) {
+          const packetSize = rxResp.packet_size ?? 128;
           const count = rxResp.ts_ms.length;
           for (let p = 0; p < count; p++) {
-            const start = p * 64;
-            const end = start + 64;
+            const start = p * packetSize;
+            const end = start + packetSize;
             const pkt = new Uint8Array(rxResp.data.slice(start, end));
             const ts = rxResp.ts_ms[p];
-            batch.push({ data: pkt, timestamp: ts, isTx: false });
+            batch.push({ data: pkt, timestamp: ts, isTx: false, kind: rxResp.kinds?.[p] ?? 0 });
           }
-          rxIndexRef.current = rxResp.next_packet_index ?? rxIndexRef.current + count;
-          break;
+          transportRxIndexRef.current = rxResp.next_packet_index ?? transportRxIndexRef.current + count;
         }
 
-        appendBatchToMonitor(batch);
+        appendBatchToTransport(batch);
       } catch (e) {
-        // No alert spam during polling; just log.
-        console.error("Buffer Monitor poll failed", e);
+        console.error("Transport Monitor poll failed", e);
       }
     };
 
@@ -311,10 +381,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       resetLocal();
       return;
     }
-
-    if (!isActive) {
-      return;
-    }
+    if (!isActive) return;
 
     resetLocal();
     void poll();
@@ -324,7 +391,141 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       if (interval) window.clearInterval(interval);
     };
-  }, [appendBatchToMonitor, isActive, status.connected]);
+  }, [appendBatchToTransport, isActive, status.connected]);
+
+  // Command Monitor: TX/RX cmd lane packets (64B).
+  useEffect(() => {
+    let cancelled = false;
+    let interval: number | null = null;
+
+    const resetLocal = () => {
+      setCommandEntries([]);
+      commandSeqRef.current = 0;
+      commandIndexRef.current = 0;
+    };
+
+    const poll = async () => {
+      if (cancelled || !status.connected) return;
+
+      try {
+        const resp = await safeInvoke<{
+          data: number[];
+          ts_ms: number[];
+          kinds: number[];
+          next_packet_index: number;
+          packet_size: number;
+        }>(
+          "command_read_since",
+          { packetIndex: commandIndexRef.current, maxPackets: 256 },
+          { throwOnError: true },
+        );
+        if (!resp?.ts_ms?.length || !resp?.data?.length) return;
+
+        const packetSize = resp.packet_size ?? 64;
+        const count = resp.ts_ms.length;
+        const batch: CommandPacketEntry[] = [];
+        for (let p = 0; p < count; p++) {
+          const start = p * packetSize;
+          const end = start + packetSize;
+          const pkt = new Uint8Array(resp.data.slice(start, end));
+          const ts = resp.ts_ms[p];
+          const kind = resp.kinds?.[p] ?? 0;
+          const isTx = kind === 1;
+          const timeStr = new Date(ts).toLocaleTimeString("en-US", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            fractionalSecondDigits: 3,
+          });
+          const bytes = Array.from(pkt);
+          const hex = bytes.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(" ");
+          const firstZero = pkt.indexOf(0);
+          const endText = firstZero >= 0 ? firstZero : pkt.length;
+          const ascii = new TextDecoder().decode(pkt.slice(0, endText)).trim();
+          batch.push({ timestamp: ts, timeStr, seq: commandSeqRef.current++, isTx, ascii, hex, kind });
+        }
+
+        commandIndexRef.current = resp.next_packet_index ?? commandIndexRef.current + count;
+        appendBatchToCommandMonitor(batch);
+      } catch (e) {
+        console.error("Command Monitor poll failed", e);
+      }
+    };
+
+    if (!status.connected) {
+      resetLocal();
+      return;
+    }
+    if (!isActive) return;
+
+    resetLocal();
+    void poll();
+    interval = window.setInterval(poll, 250);
+
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+    };
+  }, [appendBatchToCommandMonitor, isActive, status.connected]);
+
+  // Stream Monitor: sampler stream bytes (64B packets) from the shared RX buffer.
+  useEffect(() => {
+    let cancelled = false;
+    let interval: number | null = null;
+
+    const resetLocal = () => {
+      setStreamEntries([]);
+      streamSeqRef.current = 0;
+      streamRxIndexRef.current = 0;
+    };
+
+    const poll = async () => {
+      if (cancelled || !status.connected) return;
+
+      try {
+        const rxResp = await safeInvoke<{
+          data: number[];
+          ts_ms: number[];
+          next_packet_index: number;
+        }>(
+          "buffer_read_packets_since",
+          { packetIndex: streamRxIndexRef.current, maxPackets: 256 },
+          { throwOnError: true },
+        );
+        if (!rxResp?.ts_ms?.length || !rxResp?.data?.length) return;
+
+        const count = rxResp.ts_ms.length;
+        const batch: Array<{ data: Uint8Array; timestamp: number }> = [];
+        for (let p = 0; p < count; p++) {
+          const start = p * 64;
+          const end = start + 64;
+          const pkt = new Uint8Array(rxResp.data.slice(start, end));
+          const ts = rxResp.ts_ms[p];
+          batch.push({ data: pkt, timestamp: ts });
+        }
+        streamRxIndexRef.current = rxResp.next_packet_index ?? streamRxIndexRef.current + count;
+        appendBatchToStream(batch);
+      } catch (e) {
+        console.error("Stream Monitor poll failed", e);
+      }
+    };
+
+    if (!status.connected) {
+      resetLocal();
+      return;
+    }
+    if (!isActive) return;
+
+    resetLocal();
+    void poll();
+    interval = window.setInterval(poll, 500);
+
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+    };
+  }, [appendBatchToStream, isActive, status.connected]);
 
   const handleConnect = async () => {
       try {
@@ -351,10 +552,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   };
 
   const handleSendCommand = async () => {
-    if (!commandInput.trim()) {
-      return;
-    }
-
+    if (!commandInput.trim()) return;
     if (!status.connected) {
       await dialog.alert("Device not connected.", { title: "Connection" });
       return;
@@ -362,17 +560,11 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
     try {
       const trimmed = commandInput.trim();
-      const response = await send(trimmed, 2000, 1);
-      if (!response) {
-        setCommandInput("");
-        return;
-      }
-
-      // Clear input
+      await send(trimmed, 2000, 1);
       setCommandInput("");
     } catch (error) {
-      console.error("Failed to send packet:", error);
-      await dialog.alert(`Failed to send packet:\n\n${String(error)}`, { title: "Send" });
+      console.error("Failed to send command:", error);
+      await dialog.alert(`Failed to send command:\n\n${String(error)}`, { title: "Send" });
     }
   };
 
@@ -434,41 +626,40 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     } catch (e) {
       console.error("Failed to clear buffer", e);
     } finally {
-      setBufferEntries([]);
-      entrySeqRef.current = 0;
-      rxIndexRef.current = 0;
-      txIndexRef.current = 0;
-    }
-  };
+      setTransportEntries([]);
+      setStreamEntries([]);
+      setCommandEntries([]);
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      handleSendCommand();
+      transportSeqRef.current = 0;
+      streamSeqRef.current = 0;
+      commandSeqRef.current = 0;
+
+      transportRxIndexRef.current = 0;
+      transportTxIndexRef.current = 0;
+      streamRxIndexRef.current = 0;
+      commandIndexRef.current = 0;
     }
   };
 
   // Extract version from notification when connected
   useEffect(() => {
-    if (status.connected && bufferEntries.length > 0) {
-      const last = bufferEntries[bufferEntries.length - 1];
-      if (last.isTx) {
-        return;
-      }
-      const bytes = new Uint8Array(last.data);
-      const firstZero = bytes.indexOf(0);
-      const end = firstZero >= 0 ? firstZero : bytes.length;
-      const stripped = new TextDecoder().decode(bytes.slice(0, end)).trim();
+    if (!status.connected) {
+      setFirmwareVersion("Unknown");
+      return;
+    }
 
-      const isBareSemver = /^\d+\.\d+\.\d+$/.test(stripped);
-
+    // The firmware version comes back on the command lane (RX entries in Command Monitor).
+    for (let i = commandEntries.length - 1; i >= 0; i--) {
+      const entry = commandEntries[i];
+      if (entry.isTx) continue;
+      const stripped = entry.ascii.replace(/\.+$/, "").trim();
       const versionMatch = stripped.match(/(\d+\.\d+\.\d+)/);
       if (versionMatch) {
         setFirmwareVersion(versionMatch[1]);
+        return;
       }
-    } else if (!status.connected) {
-      setFirmwareVersion("Unknown");
     }
-  }, [bufferEntries, status.connected]);
+  }, [commandEntries, status.connected]);
 
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
@@ -587,10 +778,10 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
           </div>
         </div>
 
-        {/* Buffer Monitor */}
+        {/* Transport Monitor */}
         <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">
           <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <div className="text-sm font-semibold text-slate-400">Buffer Monitor</div>
+            <div className="text-sm font-semibold text-slate-400">Transport Monitor</div>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
                 <input
@@ -618,27 +809,96 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
               </button>
             </div>
           </div>
-          <div ref={monitorContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
-            {bufferEntries.length === 0 ? (
-              <div className="text-slate-500">No data received yet...</div>
-            ) : (
+	          <div ref={transportContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
+	            {transportEntries.length === 0 ? (
+	              <div className="text-slate-500">No transport packets yet...</div>
+	            ) : (
               <>
-                {bufferEntries.map((entry, index) => {
+                {transportEntries.map((entry) => {
                   const content = entry.isTx ? (showTxHex ? entry.hex : entry.ascii) : (showRxHex ? entry.hex : entry.ascii);
+                  const kind = entry.kind ?? 0;
+                  const flags = [
+                    (kind & 0x01) !== 0 ? "C" : "",
+                    (kind & 0x02) !== 0 ? "M" : "",
+                    (kind & 0x04) !== 0 ? "S" : "",
+                    (kind & 0x08) !== 0 ? "B" : "",
+                  ].filter(Boolean).join("");
 
                   return (
                     <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
                       <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+                      {flags ? <span className="text-slate-500">{`[${flags}] `}</span> : null}
                       <span className={entry.isTx ? "text-slate-100" : "text-sky-400"}>{content}</span>
                     </div>
                   );
                 })}
               </>
-            )}
-          </div>
-          <div className="mt-3 flex-shrink-0">
-            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
-            <div className="flex gap-2">
+	            )}
+	          </div>
+
+	          {/* Command Monitor */}
+	          <div className="mt-3 flex-shrink-0">
+	            <div className="flex items-center justify-between mb-2">
+	              <div className="text-sm font-semibold text-slate-400">Command Monitor</div>
+	              <button
+	                onClick={clearMonitor}
+	                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+	              >
+	                Clear
+	              </button>
+	            </div>
+	            <div ref={commandContainerRef} className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
+	              {commandEntries.length === 0 ? (
+	                <div className="text-slate-500">No commands yet...</div>
+	              ) : (
+	                commandEntries.map((entry) => {
+                    const dir = entry.isTx ? ">" : "<";
+                    const color = entry.isTx ? "text-slate-100" : "text-sky-400";
+                    return (
+                      <div key={entry.seq} className="mb-2 whitespace-pre-wrap break-words">
+                        <div>
+                          <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+                          <span className={color}>{`${dir} ${entry.ascii || "(empty)"}`}</span>
+                        </div>
+                        <div className="text-slate-600">{entry.hex}</div>
+                      </div>
+                    );
+                  })
+	              )}
+	            </div>
+	          </div>
+
+            {/* Stream Monitor */}
+            <div className="mt-3 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-slate-400">Stream Monitor</div>
+                <button
+                  onClick={clearMonitor}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+              <div ref={streamContainerRef} className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
+                {streamEntries.length === 0 ? (
+                  <div className="text-slate-500">No stream packets yet...</div>
+                ) : (
+                  streamEntries.map((entry) => {
+                    const content = showRxHex ? entry.hex : entry.ascii;
+                    return (
+                      <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
+                        <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+                        <span className="text-sky-400">{content}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+	          <div className="mt-3 flex-shrink-0">
+	            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
+	            <div className="flex gap-2">
               <input
                 type="text"
                 value={commandInput}

@@ -46,6 +46,9 @@ use emwaver_buffer_core::tx;
 
 use crate::midi_sysex;
 
+const LANE_SIZE: usize = midi_sysex::LANE_SIZE;
+const SUPERFRAME_SIZE: usize = midi_sysex::SUPERFRAME_SIZE;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BridgeRequest {
     pub id: u64,
@@ -81,9 +84,68 @@ const RX_QUEUE_CAPACITY: usize = 65_536;
 const EMWAVER_USB_MIDI_VID: u16 = 0x0483;
 const EMWAVER_USB_MIDI_PID: u16 = 0x5740;
 
+#[derive(Default)]
+struct PacketLog<const N: usize> {
+    bytes: Vec<u8>,
+    ts_ms: Vec<u64>,
+    kinds: Vec<u8>,
+}
+
+impl<const N: usize> PacketLog<N> {
+    fn clear(&mut self) {
+        self.bytes.clear();
+        self.ts_ms.clear();
+        self.kinds.clear();
+    }
+
+    fn packet_count(&self) -> u64 {
+        self.ts_ms.len() as u64
+    }
+
+    fn append(&mut self, pkt: &[u8; N], ts_ms: u64, kind: u8) {
+        self.bytes.extend_from_slice(pkt);
+        self.ts_ms.push(ts_ms);
+        self.kinds.push(kind);
+    }
+
+    fn read_since(&self, packet_index: u64, max_packets: usize) -> (Vec<u8>, Vec<u64>, Vec<u8>, u64, u64) {
+        let available_packets = self.packet_count();
+        if available_packets == 0 || max_packets == 0 || packet_index >= available_packets {
+            return (
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                packet_index.min(available_packets),
+                available_packets,
+            );
+        }
+
+        let take_packets = (available_packets - packet_index) as usize;
+        let take_packets = take_packets.min(max_packets);
+
+        let start = packet_index as usize * N;
+        let end = start + take_packets * N;
+        let data = self.bytes.get(start..end).unwrap_or_default().to_vec();
+
+        let ts_start = packet_index as usize;
+        let ts_end = ts_start + take_packets;
+        let ts_ms = self.ts_ms.get(ts_start..ts_end).unwrap_or_default().to_vec();
+        let kinds = self.kinds.get(ts_start..ts_end).unwrap_or_default().to_vec();
+
+        (
+            data,
+            ts_ms,
+            kinds,
+            packet_index + take_packets as u64,
+            available_packets,
+        )
+    }
+}
+
 #[derive(Debug)]
 struct RxQueuedPacket {
-    pkt: [u8; PACKET_SIZE],
+    cmd: [u8; PACKET_SIZE],
+    stream: [u8; PACKET_SIZE],
     ts_ms: u64,
     generation: u64,
 }
@@ -133,6 +195,13 @@ pub struct BridgeState {
     midi_io: Arc<AsyncMutex<Option<MidiIo>>>,
     midi_last_ports: Arc<AsyncMutex<Vec<String>>>,
     buffer: Arc<Mutex<Buffer>>,
+    transport_rx: Arc<Mutex<PacketLog<SUPERFRAME_SIZE>>>,
+    transport_tx: Arc<Mutex<PacketLog<SUPERFRAME_SIZE>>>,
+    command_log: Arc<Mutex<PacketLog<LANE_SIZE>>>,
+    command_last: Arc<Mutex<[u8; LANE_SIZE]>>,
+    command_last_ts_ms: Arc<AtomicU64>,
+    command_gen: Arc<AtomicU64>,
+    command_notify: Arc<Notify>,
     rx_notify: Arc<Notify>,
     rx_queue_tx: mpsc::Sender<RxQueuedPacket>,
     rx_drop: Arc<AtomicBool>,
@@ -148,6 +217,11 @@ pub struct BridgeState {
     rx_sysex_decode_skipped: Arc<AtomicU64>,
     rx_sysex_overflows: Arc<AtomicU64>,
     rx_sysex_restarts: Arc<AtomicU64>,
+    stream_capture: Arc<AtomicBool>,
+    // During long host->device TX bursts, commands are injected into the next stream superframe.
+    tx_streaming: Arc<AtomicBool>,
+    tx_pending_cmd: Arc<Mutex<Option<[u8; LANE_SIZE]>>>,
+    tx_burst_in_flight: Arc<AsyncMutex<()>>,
     in_flight: Arc<AsyncMutex<()>>,
     pub event_tx: broadcast::Sender<Vec<u8>>,
 }
@@ -464,7 +538,102 @@ pub async fn dispatch_request(
             if let Ok(mut guard) = state.buffer.lock() {
                 buffer::clear(&mut *guard);
             }
+            if let Ok(mut guard) = state.transport_rx.lock() {
+                guard.clear();
+            }
+            if let Ok(mut guard) = state.transport_tx.lock() {
+                guard.clear();
+            }
+            if let Ok(mut guard) = state.command_log.lock() {
+                guard.clear();
+            }
+            if let Ok(mut guard) = state.command_last.lock() {
+                *guard = [0u8; LANE_SIZE];
+            }
+            state.command_last_ts_ms.store(0, Ordering::Relaxed);
+            state.command_gen.fetch_add(1, Ordering::SeqCst);
             Ok(json!({}))
+        }
+        "transport_read_rx_since" => {
+            let index = req
+                .params
+                .get("packet_index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let max_packets = req
+                .params
+                .get("max_packets")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(256) as usize;
+            let snapshot = state
+                .transport_rx
+                .lock()
+                .map_err(|_| anyhow!("transport_rx lock poisoned"))?;
+            let (data, ts_ms, kinds, next_packet_index, available_packets) =
+                snapshot.read_since(index, max_packets);
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(data);
+            Ok(json!({
+                "data_b64": bytes_b64,
+                "ts_ms": ts_ms,
+                "kinds": kinds,
+                "next_packet_index": next_packet_index,
+                "available_packets": available_packets,
+                "packet_size": SUPERFRAME_SIZE
+            }))
+        }
+        "transport_read_tx_since" => {
+            let index = req
+                .params
+                .get("packet_index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let max_packets = req
+                .params
+                .get("max_packets")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(256) as usize;
+            let snapshot = state
+                .transport_tx
+                .lock()
+                .map_err(|_| anyhow!("transport_tx lock poisoned"))?;
+            let (data, ts_ms, kinds, next_packet_index, available_packets) =
+                snapshot.read_since(index, max_packets);
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(data);
+            Ok(json!({
+                "data_b64": bytes_b64,
+                "ts_ms": ts_ms,
+                "kinds": kinds,
+                "next_packet_index": next_packet_index,
+                "available_packets": available_packets,
+                "packet_size": SUPERFRAME_SIZE
+            }))
+        }
+        "command_read_since" => {
+            let index = req
+                .params
+                .get("packet_index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let max_packets = req
+                .params
+                .get("max_packets")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(256) as usize;
+            let snapshot = state
+                .command_log
+                .lock()
+                .map_err(|_| anyhow!("command_log lock poisoned"))?;
+            let (data, ts_ms, kinds, next_packet_index, available_packets) =
+                snapshot.read_since(index, max_packets);
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(data);
+            Ok(json!({
+                "data_b64": bytes_b64,
+                "ts_ms": ts_ms,
+                "kinds": kinds,
+                "next_packet_index": next_packet_index,
+                "available_packets": available_packets,
+                "packet_size": LANE_SIZE
+            }))
         }
         "buffer_read_packets_since" | "buffer_read_rx_since" => {
             let index = req
@@ -701,6 +870,13 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         midi_io: Arc::new(AsyncMutex::new(None)),
         midi_last_ports: Arc::new(AsyncMutex::new(Vec::new())),
         buffer: Arc::new(Mutex::new(Buffer::default())),
+        transport_rx: Arc::new(Mutex::new(PacketLog::default())),
+        transport_tx: Arc::new(Mutex::new(PacketLog::default())),
+        command_log: Arc::new(Mutex::new(PacketLog::default())),
+        command_last: Arc::new(Mutex::new([0u8; LANE_SIZE])),
+        command_last_ts_ms: Arc::new(AtomicU64::new(0)),
+        command_gen: Arc::new(AtomicU64::new(0)),
+        command_notify: Arc::new(Notify::new()),
         rx_notify: Arc::new(Notify::new()),
         rx_queue_tx,
         rx_drop: Arc::new(AtomicBool::new(false)),
@@ -716,6 +892,10 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         rx_sysex_decode_skipped: Arc::new(AtomicU64::new(0)),
         rx_sysex_overflows: Arc::new(AtomicU64::new(0)),
         rx_sysex_restarts: Arc::new(AtomicU64::new(0)),
+        stream_capture: Arc::new(AtomicBool::new(false)),
+        tx_streaming: Arc::new(AtomicBool::new(false)),
+        tx_pending_cmd: Arc::new(Mutex::new(None)),
+        tx_burst_in_flight: Arc::new(AsyncMutex::new(())),
         in_flight: Arc::new(AsyncMutex::new(())),
         event_tx,
     });
@@ -836,11 +1016,12 @@ fn midi_io_init_for_state(state: &BridgeState) -> Result<MidiIo> {
                         }
 
                         // We have a complete SysEx message - decode it
-                        match midi_sysex::decode_packet64(&sysex_buf) {
-                            Ok(Some(pkt)) => {
+                        match midi_sysex::decode_superframe(&sysex_buf) {
+                            Ok(Some(sf)) => {
+                                let (cmd, stream) = midi_sysex::split_superframe(&sf);
                                 let generation = rx_gen.load(Ordering::Relaxed);
                                 if rx_queue_tx
-                                    .try_send(RxQueuedPacket { pkt, ts_ms, generation })
+                                    .try_send(RxQueuedPacket { cmd, stream, ts_ms, generation })
                                     .is_err()
                                 {
                                     rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
@@ -1113,6 +1294,7 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
             s.connected = false;
             s.device_name = None;
         }
+        state.stream_capture.store(false, Ordering::Relaxed);
         let _ = emit_event(state, "disconnected", json!({ "transport": "usb" }));
     }
     Ok(())
@@ -1147,9 +1329,26 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
             s.connected = false;
             s.device_name = None;
         }
+        state.stream_capture.store(false, Ordering::Relaxed);
         let _ = emit_event(state, "disconnected", json!({ "transport": "usb" }));
     }
     Ok(())
+}
+
+fn maybe_update_stream_capture(state: &BridgeState, bytes: &[u8]) {
+    let Ok(mut s) = std::str::from_utf8(bytes).map(|v| v.to_string()) else {
+        return;
+    };
+    // Best-effort: treat embedded NULs as terminators (transport pads with zeros).
+    if let Some(idx) = s.find('\0') {
+        s.truncate(idx);
+    }
+    let trimmed = s.trim();
+    if trimmed.starts_with("sample start") {
+        state.stream_capture.store(true, Ordering::Relaxed);
+    } else if trimmed.starts_with("sample stop") {
+        state.stream_capture.store(false, Ordering::Relaxed);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -1297,12 +1496,13 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
                 rx_raw_last_ts_ms.store(now_ms(), Ordering::Relaxed);
                 rx_raw_packets.fetch_add(1, Ordering::Relaxed);
                 rx_raw_bytes.fetch_add(message.len() as u64, Ordering::Relaxed);
-                let Ok(Some(pkt)) = midi_sysex::decode_packet64(message) else { return };
+                let Ok(Some(sf)) = midi_sysex::decode_superframe(message) else { return };
 
                 let ts_ms = now_ms();
                 let generation = rx_gen.load(Ordering::Relaxed);
+                let (cmd, stream) = midi_sysex::split_superframe(&sf);
                 if rx_queue_tx
-                    .try_send(RxQueuedPacket { pkt, ts_ms, generation })
+                    .try_send(RxQueuedPacket { cmd, stream, ts_ms, generation })
                     .is_err()
                 {
                     rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
@@ -1361,15 +1561,32 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
         (Arc::clone(&conn.out), conn.destination.clone())
     };
 
-    let packet = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
-    let sysex = midi_sysex::encode_packet64(&packet);
+    let cmd_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+    let stream_lane = [0u8; PACKET_SIZE];
+    let sf = midi_sysex::build_superframe(cmd_lane, stream_lane);
+    let sysex = midi_sysex::encode_superframe(&sf);
     let packet_list = PacketBuffer::new(0, &sysex);
 
     out.send(&destination, &packet_list)
         .map_err(|status| anyhow!("failed to send USB packet: {status}"))?;
 
+    let ts_ms = now_ms();
+    if let Ok(mut guard) = state.transport_tx.lock() {
+        let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
+        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let stream_has_any = stream_lane.iter().any(|&b| b != 0);
+        let stream_is_bs = status::parse_bs(&stream_lane).is_some();
+        let kind = (cmd_has_any as u8)
+            | ((cmd_has_marker as u8) << 1)
+            | ((stream_has_any as u8) << 2)
+            | ((stream_is_bs as u8) << 3);
+        guard.append(&sf, ts_ms, kind);
+    }
+    if let Ok(mut guard) = state.command_log.lock() {
+        guard.append(&cmd_lane, ts_ms, 1u8); // 1 = TX cmd
+    }
     if let Ok(mut guard) = state.buffer.lock() {
-        buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+        buffer::append_tx_packet(&mut *guard, &cmd_lane, ts_ms);
     }
     Ok(())
 }
@@ -1384,8 +1601,10 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
             .ok_or_else(|| anyhow!("not connected"))?
     };
 
-    let packet = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
-    let sysex = midi_sysex::encode_packet64(&packet);
+    let cmd_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+    let stream_lane = [0u8; PACKET_SIZE];
+    let sf = midi_sysex::build_superframe(cmd_lane, stream_lane);
+    let sysex = midi_sysex::encode_superframe(&sf);
 
     timeout(
         Duration::from_millis(750),
@@ -1400,8 +1619,112 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     .map_err(|_| anyhow!("timeout writing to USB"))?
     .map_err(|e| anyhow!("task join failed: {e}"))??;
 
+    let ts_ms = now_ms();
+    if let Ok(mut guard) = state.transport_tx.lock() {
+        let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
+        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let stream_has_any = stream_lane.iter().any(|&b| b != 0);
+        let stream_is_bs = status::parse_bs(&stream_lane).is_some();
+        let kind = (cmd_has_any as u8)
+            | ((cmd_has_marker as u8) << 1)
+            | ((stream_has_any as u8) << 2)
+            | ((stream_is_bs as u8) << 3);
+        guard.append(&sf, ts_ms, kind);
+    }
+    if let Ok(mut guard) = state.command_log.lock() {
+        guard.append(&cmd_lane, ts_ms, 1u8); // 1 = TX cmd
+    }
     if let Ok(mut guard) = state.buffer.lock() {
-        buffer::append_tx_packet(&mut *guard, &packet, now_ms());
+        buffer::append_tx_packet(&mut *guard, &cmd_lane, ts_ms);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
+    let (out, destination) = {
+        let guard = state.midi.lock().await;
+        let conn = guard.as_ref().ok_or_else(|| anyhow!("not connected"))?;
+        (Arc::clone(&conn.out), conn.destination.clone())
+    };
+
+    let stream_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+    let cmd_lane = if let Ok(mut guard) = state.tx_pending_cmd.lock() {
+        guard.take().unwrap_or([0u8; PACKET_SIZE])
+    } else {
+        [0u8; PACKET_SIZE]
+    };
+    let sf = midi_sysex::build_superframe(cmd_lane, stream_lane);
+    let sysex = midi_sysex::encode_superframe(&sf);
+    let packet_list = PacketBuffer::new(0, &sysex);
+
+    out.send(&destination, &packet_list)
+        .map_err(|status| anyhow!("failed to send USB packet: {status}"))?;
+
+    let ts_ms = now_ms();
+    if let Ok(mut guard) = state.transport_tx.lock() {
+        let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
+        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let stream_has_any = stream_lane.iter().any(|&b| b != 0);
+        let stream_is_bs = status::parse_bs(&stream_lane).is_some();
+        let kind = (cmd_has_any as u8)
+            | ((cmd_has_marker as u8) << 1)
+            | ((stream_has_any as u8) << 2)
+            | ((stream_is_bs as u8) << 3);
+        guard.append(&sf, ts_ms, kind);
+    }
+    if let Ok(mut guard) = state.buffer.lock() {
+        buffer::append_tx_packet(&mut *guard, &stream_lane, ts_ms);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
+    let out = {
+        let guard = state.midi.lock().await;
+        guard
+            .as_ref()
+            .map(|c| Arc::clone(&c.out))
+            .ok_or_else(|| anyhow!("not connected"))?
+    };
+
+    let stream_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+    let cmd_lane = if let Ok(mut guard) = state.tx_pending_cmd.lock() {
+        guard.take().unwrap_or([0u8; PACKET_SIZE])
+    } else {
+        [0u8; PACKET_SIZE]
+    };
+    let sf = midi_sysex::build_superframe(cmd_lane, stream_lane);
+    let sysex = midi_sysex::encode_superframe(&sf);
+
+    timeout(
+        Duration::from_millis(750),
+        tokio::task::spawn_blocking(move || {
+            let mut conn = out.lock().map_err(|_| anyhow!("usb output lock poisoned"))?;
+            let conn = conn.as_mut().ok_or_else(|| anyhow!("not connected"))?;
+            conn.send(&sysex).context("failed to send USB packet")?;
+            Ok::<(), anyhow::Error>(())
+        }),
+    )
+    .await
+    .map_err(|_| anyhow!("timeout writing to USB"))?
+    .map_err(|e| anyhow!("task join failed: {e}"))??;
+
+    let ts_ms = now_ms();
+    if let Ok(mut guard) = state.transport_tx.lock() {
+        let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
+        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let stream_has_any = stream_lane.iter().any(|&b| b != 0);
+        let stream_is_bs = status::parse_bs(&stream_lane).is_some();
+        let kind = (cmd_has_any as u8)
+            | ((cmd_has_marker as u8) << 1)
+            | ((stream_has_any as u8) << 2)
+            | ((stream_is_bs as u8) << 3);
+        guard.append(&sf, ts_ms, kind);
+    }
+    if let Ok(mut guard) = state.buffer.lock() {
+        buffer::append_tx_packet(&mut *guard, &stream_lane, ts_ms);
     }
     Ok(())
 }
@@ -1412,6 +1735,18 @@ async fn write_active(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
         None => false,
     };
     if midi_connected {
+        // `sendNoWait` paths use `write`, so update the sampler capture flag here too.
+        maybe_update_stream_capture(state, &bytes);
+
+        // During long TX bursts (retransmit), inject commands into the next stream superframe.
+        if state.tx_streaming.load(Ordering::Relaxed) {
+            let cmd_lane = make_packet64(&bytes).map_err(|e| anyhow!(e))?;
+            if let Ok(mut guard) = state.tx_pending_cmd.lock() {
+                *guard = Some(cmd_lane);
+            }
+            return Ok(());
+        }
+
         return midi_write_packet(state, bytes).await;
     }
     bail!("not connected");
@@ -1464,8 +1799,9 @@ async fn send_packet_command_inner(
     packets: u32,
 ) -> Result<Vec<u8>> {
     let _in_flight = state.in_flight.lock().await;
-    let mut events = state.event_tx.subscribe();
+    let mut seen_gen = state.command_gen.load(Ordering::Relaxed);
 
+    maybe_update_stream_capture(state, &bytes);
     write_active(state, bytes).await?;
 
     if packets == 0 {
@@ -1486,50 +1822,20 @@ async fn send_packet_command_inner(
             );
         }
 
-        let msg = match timeout(remaining, events.recv()).await {
-            Ok(Ok(m)) => m,
-            Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
-            Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
-                bail!("device events channel closed")
-            }
-            Err(_) => bail!("timeout waiting for response ({})", timeout_diag(state)),
-        };
-
-        let trimmed = std::str::from_utf8(&msg).unwrap_or("").trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        let value: serde_json::Value = match serde_json::from_str(trimmed) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        if event != "rx_bytes" {
-            continue;
-        }
-
-        let Some(bytes_b64) = value
-            .get("data")
-            .and_then(|v| v.get("bytes_b64"))
-            .and_then(|v| v.as_str())
-        else {
-            continue;
-        };
-        let Ok(pkt) = base64::engine::general_purpose::STANDARD.decode(bytes_b64.as_bytes()) else {
-            continue;
-        };
-        if pkt.is_empty() {
-            continue;
-        }
-        if pkt.len() == PACKET_SIZE {
-            if let Some(bs) = status::parse_bs(&pkt) {
-                let _ = emit_event(state, "bs", json!({ "value": bs }));
+        // Fast path: response already arrived.
+        let gen = state.command_gen.load(Ordering::Relaxed);
+        if gen != seen_gen {
+            if let Ok(guard) = state.command_last.lock() {
+                out.extend_from_slice(&*guard);
+                seen_gen = gen;
+                continue;
             }
         }
-        out.extend_from_slice(&pkt);
+
+        // Wait for a new response generation.
+        let _ = timeout(remaining, state.command_notify.notified())
+            .await
+            .map_err(|_| anyhow!("timeout waiting for response ({})", timeout_diag(state)))?;
     }
 
     Ok(out)
@@ -1555,7 +1861,7 @@ async fn send_command_text(
 }
 
 async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()> {
-    let _in_flight = state.in_flight.lock().await;
+    let _tx_burst = state.tx_burst_in_flight.lock().await;
     let midi_connected = match state.midi.lock().await.as_ref() {
         Some(conn) => conn.status.lock().await.connected,
         None => false,
@@ -1572,6 +1878,8 @@ pub async fn transmit_buffer_bytes(state: &BridgeState, data: Vec<u8>) -> Result
 
 async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> {
     state.rx_drop.store(true, Ordering::SeqCst);
+    state.tx_streaming.store(true, Ordering::SeqCst);
+
     struct RxDropGuard(Arc<AtomicBool>);
     impl Drop for RxDropGuard {
         fn drop(&mut self) {
@@ -1579,6 +1887,14 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
         }
     }
     let _rx_drop_guard = RxDropGuard(Arc::clone(&state.rx_drop));
+
+    struct TxStreamingGuard(Arc<AtomicBool>);
+    impl Drop for TxStreamingGuard {
+        fn drop(&mut self) {
+            self.0.store(false, Ordering::SeqCst);
+        }
+    }
+    let _tx_streaming_guard = TxStreamingGuard(Arc::clone(&state.tx_streaming));
     if data.is_empty() {
         bail!("buffer is empty");
     }
@@ -1600,7 +1916,7 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
     let total_bytes = data.len();
 
     // Use the event stream for BS parsing; on some platforms the buffer cursor can drift
-    // during long TX bursts, but rx_bytes events remain reliable.
+    // during long TX bursts, but BS events remain reliable.
     let mut events = state.event_tx.subscribe();
     while events.try_recv().is_ok() {}
 
@@ -1628,26 +1944,17 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
             let Some(event) = value.get("event").and_then(|v| v.as_str()) else {
                 continue;
             };
-            if event != "rx_bytes" {
+            if event != "bs" {
                 continue;
             }
-            let Some(bytes_b64) = value
+            let bs = value
                 .get("data")
-                .and_then(|v| v.get("bytes_b64"))
-                .and_then(|v| v.as_str())
-            else {
-                continue;
-            };
-            let Ok(pkt) = base64::engine::general_purpose::STANDARD.decode(bytes_b64.as_bytes()) else {
-                continue;
-            };
-            if pkt.len() == PACKET_SIZE {
-                if let Some(status) = status::parse_bs(&pkt) {
-                    last_status = status;
-                    have_status = true;
-                    saw_bs = true;
-                }
-            }
+                .and_then(|d| d.get("value"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u16;
+            last_status = bs;
+            have_status = true;
+            saw_bs = true;
         }
 
         if saw_bs && last_emitted_status != Some(last_status) {
@@ -1657,7 +1964,7 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
 
         let end = (sent_bytes + packet_size).min(total_bytes);
         let chunk = &data[sent_bytes..end];
-        midi_write_packet(state, chunk.to_vec()).await?;
+        midi_write_stream_packet(state, chunk.to_vec()).await?;
         sent_bytes = end;
         sent_at_packets = sent_at_packets.saturating_add(1);
 
@@ -1746,20 +2053,71 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
                 emit_event(state.as_ref(), "rx_sysex_restarts", json!({ "count": sysex_restarts }));
         }
 
+        const CMD_MARKER: u8 = 0xA5;
+        let cmd_has_marker = item.cmd[PACKET_SIZE - 1] == CMD_MARKER;
+        let stream_capture = state.stream_capture.load(Ordering::Relaxed);
+        let stream_is_bs = status::parse_bs(&item.stream).is_some();
+        let cmd_has_any = item.cmd.iter().any(|&b| b != 0);
+        let stream_has_any = item.stream.iter().any(|&b| b != 0);
+
+        // Transport RX log (full superframe).
+        if let Ok(mut guard) = state.transport_rx.lock() {
+            let sf = midi_sysex::build_superframe(item.cmd, item.stream);
+            let kind = (cmd_has_any as u8)
+                | ((cmd_has_marker as u8) << 1)
+                | ((stream_has_any as u8) << 2)
+                | ((stream_is_bs as u8) << 3);
+            guard.append(&sf, item.ts_ms, kind);
+        }
+
         // Emit RX event first so command/BS listeners don't get blocked by buffer work.
-        let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(item.pkt);
-        let payload = BridgeEvent {
-            event: "rx_bytes",
-            data: json!({ "bytes_b64": bytes_b64, "ts_ms": item.ts_ms }),
-        };
-        if let Ok(mut out) = serde_json::to_vec(&payload) {
-            out.push(b'\n');
-            let _ = state.event_tx.send(out);
+        if cmd_has_marker {
+            let mut cmd = item.cmd;
+            cmd[PACKET_SIZE - 1] = 0;
+
+            if let Ok(mut guard) = state.command_last.lock() {
+                *guard = cmd;
+                state.command_last_ts_ms.store(item.ts_ms, Ordering::Relaxed);
+                state.command_gen.fetch_add(1, Ordering::SeqCst);
+                state.command_notify.notify_waiters();
+            }
+            if let Ok(mut guard) = state.command_log.lock() {
+                guard.append(&cmd, item.ts_ms, 2u8); // 2 = RX resp
+            }
+
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(cmd);
+            let payload = BridgeEvent {
+                event: "rx_bytes",
+                data: json!({ "bytes_b64": bytes_b64, "ts_ms": item.ts_ms }),
+            };
+            if let Ok(mut out) = serde_json::to_vec(&payload) {
+                out.push(b'\n');
+                let _ = state.event_tx.send(out);
+            }
+        }
+
+        if stream_capture || stream_is_bs {
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(item.stream);
+            let payload = BridgeEvent {
+                event: "rx_stream",
+                data: json!({ "bytes_b64": bytes_b64, "ts_ms": item.ts_ms }),
+            };
+            if let Ok(mut out) = serde_json::to_vec(&payload) {
+                out.push(b'\n');
+                let _ = state.event_tx.send(out);
+            }
+        }
+
+        if let Some(bs) = status::parse_bs(&item.stream) {
+            let _ = emit_event(state.as_ref(), "bs", json!({ "value": bs }));
         }
 
         if !state.rx_drop.load(Ordering::Relaxed) {
-            if let Ok(mut guard) = state.buffer.lock() {
-                buffer::append_rx_bytes(&mut *guard, &item.pkt, item.ts_ms);
+            if stream_capture {
+                if let Ok(mut guard) = state.buffer.lock() {
+                    // Append only stream lane bytes while sampling.
+                    buffer::append_rx_bytes(&mut *guard, &item.stream, item.ts_ms);
+                }
             }
         }
         state.rx_notify.notify_waiters();

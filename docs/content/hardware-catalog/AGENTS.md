@@ -1,14 +1,13 @@
-# emwaver-hardware
+# Hardware history archive
 
-This repository is the hardware documentation + asset host for EMWaver devices and versions, intended to be published via GitHub Pages (static content).
+This directory is a historical archive of prior EMWaver boards/modules and related assets.
 
-For broader EMWaver context (non-hardware), see the sibling repo `../emwaver`.
+It is **not** intended to be a reproduction/build catalog for end users.
 
 ## Primary goals
 
-- Store well-organized, human-browsable hardware information per EMWaver device/board.
-- Keep photos/renders/screenshots structured so they can be surfaced by a GitHub Pages site.
-- Make it easy to add new devices (40+ expected) without inventing a new structure each time.
+- Preserve photos/renders/files for older iterations.
+- Capture the journey and lessons learned as the platform converged on a single current-gen device.
 
 ## Repository layout
 

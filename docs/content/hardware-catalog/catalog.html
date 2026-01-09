@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMWaver Hardware Catalog</title>
-    <meta name="description" content="Complete EMWaver hardware list, grouped by platform." />
+    <title>EMWaver Board Evolution</title>
+    <meta name="description" content="EMWaver board evolution: a chronological archive of devices and experiments." />
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link
@@ -59,7 +59,7 @@
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-3">
             <a
-              href="hardware.html"
+              href="../"
               class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
             >
               <img
@@ -77,7 +77,7 @@
               >Hardware</a
             >
             <span class="text-slate-300 hidden sm:inline">/</span>
-            <span class="text-sm font-medium text-slate-600 hidden sm:inline">Catalog</span>
+            <span class="text-sm font-medium text-slate-600 hidden sm:inline">History</span>
           </div>
 
           <div class="flex items-center gap-4">
@@ -89,214 +89,16 @@
 
     <main class="pt-20 pb-5" style="padding-left: var(--page-pad); padding-right: var(--page-pad)">
       <section class="max-w-7xl mx-auto">
-        <div class="flex items-center justify-between gap-4 mb-4">
+        <div class="flex items-end justify-between gap-4 mb-4">
           <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">Hardware Catalog</h1>
-            <p class="text-sm text-slate-600 mt-1">Espressif • STM32 • Modules</p>
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">Board Evolution</h1>
+            <p class="text-sm text-slate-600 mt-1">A chronological archive (one card per device).</p>
           </div>
-            <div class="flex items-center gap-3">
-              <div class="inline-flex items-center rounded-xl border border-slate-200 bg-white/80 p-1 shadow-sm">
-                <button
-                  id="tab-current"
-	                  class="px-4 py-2 text-base font-semibold rounded-lg bg-brand-600 text-white transition"
-	                  type="button"
-	                >
-	                  Current gen
-	                </button>
-                <button
-                  id="tab-experimental"
-                  class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
-	                  type="button"
-	                >
-	                  Experimental
-	                </button>
-                <button
-                  id="tab-old"
-                  class="px-3 py-1.5 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 transition"
-                  type="button"
-                >
-                  Previous gen
-                </button>
-              </div>
-            <div class="text-xs text-slate-500" id="count-pill">…</div>
-          </div>
+          <div class="text-xs text-slate-500" id="count-pill">…</div>
         </div>
 
-        <div id="view-current" class="catalog-grid grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                  <img
-                    src="https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg"
-                    alt="Espressif"
-                    title="Espressif"
-                    loading="lazy"
-                    referrerpolicy="no-referrer"
-                    class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-                    onerror="this.onerror=null; this.style.display='none';"
-                  />
-                  <span class="text-slate-900">Espressif-based</span>
-                </h2>
-                <div class="text-xs text-slate-500" id="count-esp32">…</div>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">Android • iOS • desktop</div>
-            </div>
-            <div id="list-esp32" class="p-2 space-y-2"></div>
-          </section>
-
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                  <img
-                    src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s"
-                    alt="STM32"
-                    title="STM32"
-                    loading="lazy"
-                    referrerpolicy="no-referrer"
-                    class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-                    onerror="this.onerror=null; this.style.display='none';"
-                  />
-                  <span class="text-slate-900">STM32-based</span>
-                </h2>
-                <div class="text-xs text-slate-500" id="count-stm32">…</div>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">Typically USB: Android • desktop</div>
-            </div>
-            <div id="list-stm32" class="p-2 space-y-2"></div>
-          </section>
-
-          <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-            <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
-                <div class="text-xs text-slate-500" id="count-modules">…</div>
-              </div>
-              <div class="text-xs text-slate-500 mt-1">Add-ons (not standalone)</div>
-            </div>
-            <div id="list-modules" class="p-2 space-y-2"></div>
-          </section>
-        </div>
-
-	        <div id="view-experimental" class="hidden">
-	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-	                <div class="flex items-center justify-between gap-3">
-	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-	                    <img
-	                      src="https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg"
-	                      alt="Espressif"
-	                      title="Espressif"
-	                      loading="lazy"
-	                      referrerpolicy="no-referrer"
-	                      class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-	                      onerror="this.onerror=null; this.style.display='none';"
-	                    />
-	                    <span class="text-slate-900">Espressif-based</span>
-	                  </h2>
-	                  <div class="text-xs text-slate-500" id="count-esp32-exp">…</div>
-	                </div>
-	                <div class="text-xs text-slate-500 mt-1">Experimental</div>
-	              </div>
-	              <div id="list-esp32-exp" class="p-2 space-y-2"></div>
-	            </section>
-	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-	                <div class="flex items-center justify-between gap-3">
-	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-	                    <img
-	                      src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s"
-	                      alt="STM32"
-	                      title="STM32"
-	                      loading="lazy"
-	                      referrerpolicy="no-referrer"
-	                      class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-	                      onerror="this.onerror=null; this.style.display='none';"
-	                    />
-	                    <span class="text-slate-900">STM32-based</span>
-	                  </h2>
-	                  <div class="text-xs text-slate-500" id="count-stm32-exp">…</div>
-	                </div>
-	                <div class="text-xs text-slate-500 mt-1">Experimental</div>
-	              </div>
-	              <div id="list-stm32-exp" class="p-2 space-y-2"></div>
-	            </section>
-	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-	                <div class="flex items-center justify-between gap-3">
-	                  <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
-	                  <div class="text-xs text-slate-500" id="count-modules-exp">…</div>
-	                </div>
-	                <div class="text-xs text-slate-500 mt-1">Experimental add-ons</div>
-	              </div>
-	              <div id="list-modules-exp" class="p-2 space-y-2"></div>
-	            </section>
-	          </div>
-	        </div>
-
-	        <div id="view-old" class="hidden">
-	          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-	                <div class="flex items-center justify-between gap-3">
-	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-	                    <img
-	                      src="https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg"
-	                      alt="Espressif"
-	                      title="Espressif"
-	                      loading="lazy"
-	                      referrerpolicy="no-referrer"
-	                      class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-	                      onerror="this.onerror=null; this.style.display='none';"
-	                    />
-	                    <span class="text-slate-900">Espressif-based</span>
-	                  </h2>
-	                  <div class="text-xs text-slate-500" id="count-esp32-old">…</div>
-	                </div>
-		                <div class="text-xs text-slate-500 mt-1">Previous gen devices</div>
-	              </div>
-	              <div id="list-esp32-old" class="p-2 space-y-2"></div>
-	            </section>
-	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-	                <div class="flex items-center justify-between gap-3">
-	                  <h2 class="text-sm font-semibold text-slate-900 flex items-center gap-2">
-	                    <img
-	                      src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s"
-	                      alt="STM32"
-	                      title="STM32"
-	                      loading="lazy"
-	                      referrerpolicy="no-referrer"
-	                      class="w-5 h-5 rounded object-cover border border-slate-200 bg-white"
-	                      onerror="this.onerror=null; this.style.display='none';"
-	                    />
-	                    <span class="text-slate-900">STM32-based</span>
-	                  </h2>
-	                  <div class="text-xs text-slate-500" id="count-stm32-old">…</div>
-	                </div>
-		                <div class="text-xs text-slate-500 mt-1">Previous gen devices</div>
-	              </div>
-	              <div id="list-stm32-old" class="p-2 space-y-2"></div>
-	            </section>
-	
-	            <section class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	              <div class="px-4 py-3 border-b border-slate-200 bg-slate-50">
-	                <div class="flex items-center justify-between gap-3">
-	                  <h2 class="text-sm font-semibold text-slate-900">Modules</h2>
-	                  <div class="text-xs text-slate-500" id="count-modules-old">…</div>
-	                </div>
-		                <div class="text-xs text-slate-500 mt-1">Previous gen add-ons</div>
-	              </div>
-	              <div id="list-modules-old" class="p-2 space-y-2"></div>
-	            </section>
-	          </div>
-	        </div>
-	      </section>
+        <div id="history-list" class="space-y-2"></div>
+      </section>
 	    </main>
 
     <script>
@@ -305,64 +107,12 @@
         android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
         ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
         desktop: "https://static.thenounproject.com/png/1982056-200.png",
-        esp32: "https://pbs.twimg.com/profile_images/773245254979903488/yB0xE3NR_400x400.jpg",
-        stm32: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGA1dAJdCt6ImQBjINirfxm0lm7rqspmRK4g&s",
       };
 
-	      const el = {
-	        countPill: document.getElementById("count-pill"),
-	        countEsp32: document.getElementById("count-esp32"),
-	        countStm32: document.getElementById("count-stm32"),
-	        countModules: document.getElementById("count-modules"),
-	        countEsp32Exp: document.getElementById("count-esp32-exp"),
-	        countStm32Exp: document.getElementById("count-stm32-exp"),
-	        countModulesExp: document.getElementById("count-modules-exp"),
-	        countEsp32Old: document.getElementById("count-esp32-old"),
-	        countStm32Old: document.getElementById("count-stm32-old"),
-	        countModulesOld: document.getElementById("count-modules-old"),
-	        listEsp32: document.getElementById("list-esp32"),
-	        listStm32: document.getElementById("list-stm32"),
-	        listModules: document.getElementById("list-modules"),
-	        listEsp32Exp: document.getElementById("list-esp32-exp"),
-	        listStm32Exp: document.getElementById("list-stm32-exp"),
-	        listModulesExp: document.getElementById("list-modules-exp"),
-	        listEsp32Old: document.getElementById("list-esp32-old"),
-	        listStm32Old: document.getElementById("list-stm32-old"),
-	        listModulesOld: document.getElementById("list-modules-old"),
-	        tabCurrent: document.getElementById("tab-current"),
-	        tabExperimental: document.getElementById("tab-experimental"),
-	        tabOld: document.getElementById("tab-old"),
-	        viewCurrent: document.getElementById("view-current"),
-	        viewExperimental: document.getElementById("view-experimental"),
-	        viewOld: document.getElementById("view-old"),
+      const el = {
+        countPill: document.getElementById("count-pill"),
+        list: document.getElementById("history-list"),
       };
-
-      const state = {
-        view: "current",
-      };
-
-      function setView(view) {
-        const next = view === "experimental" || view === "old" ? view : "current";
-        state.view = next;
-
-        el.viewCurrent.classList.toggle("hidden", next !== "current");
-        el.viewExperimental.classList.toggle("hidden", next !== "experimental");
-        el.viewOld.classList.toggle("hidden", next !== "old");
-
-        const active = (btn, on) => {
-          btn.classList.toggle("bg-brand-600", on);
-          btn.classList.toggle("text-white", on);
-          btn.classList.toggle("text-slate-700", !on);
-          btn.classList.toggle("hover:bg-slate-50", !on);
-          btn.setAttribute("aria-selected", String(on));
-        };
-
-        active(el.tabCurrent, next === "current");
-        active(el.tabExperimental, next === "experimental");
-        active(el.tabOld, next === "old");
-
-        window.location.hash = next === "current" ? "" : next;
-      }
 
       function prettyTitle(folderOrTitle) {
         return String(folderOrTitle || "")
@@ -376,8 +126,8 @@
         return `<span class="inline-flex items-center gap-2 px-2.5 py-1 text-[11px] font-semibold rounded-full border text-cyan-700 bg-cyan-50 border-cyan-200">Module</span>`;
       }
 
-      function iconImg(src, label, className) {
-        return `<img src="${src}" alt="${label}" title="${label}" loading="lazy" referrerpolicy="no-referrer" class="${className}" onerror="this.onerror=null; this.style.display='none';" />`;
+      function iconImg(src, label) {
+        return `<img src="${src}" alt="${label}" title="${label}" loading="lazy" referrerpolicy="no-referrer" class="w-4 h-4 object-contain opacity-90" onerror="this.onerror=null; this.style.display='none';" />`;
       }
 
       function deriveSupport(group, support) {
@@ -392,35 +142,37 @@
         );
       }
 
-	      function supportIcons(group, support) {
-	        const derived = deriveSupport(group, support);
-	        const map = {
-	          android: () => iconImg(ICONS.android, "Android", "w-4 h-4 object-contain opacity-90"),
-	          ios: () => iconImg(ICONS.ios, "iOS", "w-4 h-4 object-contain opacity-90"),
-	          desktop: () => iconImg(ICONS.desktop, "Desktop", "w-4 h-4 object-contain opacity-90"),
-	        };
-	        return derived.filter((x) => map[x]).map((x) => map[x]()).join("");
-	      }
-	
-		      function resolveDeviceImage(device) {
-		        const rawImages = Array.isArray(device.images) ? device.images : [];
-		        const preferred = rawImages.length ? String(rawImages[0]).trim() : "";
-		        const raw = preferred || (device.image ? String(device.image).trim() : "");
-		        if (!raw) return `hardware/${device.folder}/${device.folder}.png`;
-		        if (/^https?:\/\//i.test(raw)) return raw;
-		        if (raw.startsWith("hardware/")) return raw;
-		        if (raw.includes("/")) return `hardware/${raw}`;
-		        return `hardware/${device.folder}/${raw}`;
-		      }
+      function supportIcons(group, support) {
+        const derived = deriveSupport(group, support);
+        const map = {
+          android: () => iconImg(ICONS.android, "Android"),
+          ios: () => iconImg(ICONS.ios, "iOS"),
+          desktop: () => iconImg(ICONS.desktop, "Desktop"),
+        };
+        return derived.filter((x) => map[x]).map((x) => map[x]()).join("");
+      }
+
+      function resolveDeviceImage(device) {
+        const rawImages = Array.isArray(device.images) ? device.images : [];
+        const preferred = rawImages.length ? String(rawImages[0]).trim() : "";
+        const raw = preferred || (device.image ? String(device.image).trim() : "");
+        if (!raw) return `hardware/${device.folder}/${device.folder}.png`;
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (raw.startsWith("hardware/")) return raw;
+        if (raw.includes("/")) return `hardware/${raw}`;
+        return `hardware/${device.folder}/${raw}`;
+      }
 
       function rowHtml(device, lookup) {
         const title = prettyTitle(device.displayTitle || device.title || device.folder);
         const group = device.group || "";
         const parent = device.parent ? String(device.parent).trim() : "";
-        const parentTitle = parent && lookup[parent] ? prettyTitle(lookup[parent].displayTitle || lookup[parent].title || parent) : prettyTitle(parent);
-        const from = "catalog";
-        const back = state.view;
+        const parentTitle =
+          parent && lookup[parent]
+            ? prettyTitle(lookup[parent].displayTitle || lookup[parent].title || parent)
+            : prettyTitle(parent);
         const imageSrc = resolveDeviceImage(device);
+
         const requirementLabels = [];
         const requirementSeen = new Set();
         if (parent) {
@@ -445,34 +197,34 @@
 
         return `
           <div class="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition overflow-hidden">
-            <a href="device.html?id=${encodeURIComponent(device.folder)}&from=${from}&back=${encodeURIComponent(back)}" class="block group">
+            <a href="device.html?id=${encodeURIComponent(device.folder)}&from=history" class="block group">
               <div class="px-3 py-2.5">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 flex items-start gap-3">
                     ${
-	                      imageSrc
-	                        ? `<img
-	                             src="${imageSrc}"
-	                             alt="${title}"
-	                             loading="lazy"
-	                             class="w-10 h-10 rounded-lg object-cover object-center bg-white border border-slate-200 shrink-0"
-	                             onerror="this.onerror=null; this.style.display='none';"
-	                           />`
-	                        : ""
-	                    }
-	                    <div class="min-w-0">
-	                      <div class="text-sm font-semibold text-slate-900 group-hover:text-brand-600 transition truncate">${title}</div>
-	                      <div class="mt-1 flex items-center gap-2 opacity-90">
-	                        <div class="flex items-center gap-2">${supportIcons(group, device.appSupport)}</div>
-	                      </div>
+                      imageSrc
+                        ? `<img
+                             src="${imageSrc}"
+                             alt="${title}"
+                             loading="lazy"
+                             class="w-10 h-10 rounded-lg object-cover object-center bg-white border border-slate-200 shrink-0"
+                             onerror="this.onerror=null; this.style.display='none';"
+                           />`
+                        : ""
+                    }
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-slate-900 group-hover:text-brand-600 transition truncate">${title}</div>
+                      <div class="mt-1 flex items-center gap-2 opacity-90">
+                        <div class="flex items-center gap-2">${supportIcons(group, device.appSupport)}</div>
+                      </div>
                       ${requirementsLine}
                     </div>
                   </div>
-	                  <div class="shrink-0 flex items-center gap-2">
-	                    ${modulePill(device.status)}
-	                    <span class="text-slate-400 text-xs">→</span>
-	                  </div>
-	                </div>
+                  <div class="shrink-0 flex items-center gap-2">
+                    ${modulePill(device.status)}
+                    <span class="text-slate-400 text-xs">→</span>
+                  </div>
+                </div>
               </div>
             </a>
           </div>
@@ -495,98 +247,18 @@
           }
         });
 
-	        const devices = await Promise.all(reads);
-	        const lookup = Object.fromEntries(devices.map((d) => [d.folder, d]));
-	        devices.sort((a, b) => {
-	          return prettyTitle(a.displayTitle || a.title || a.folder).localeCompare(
-	            prettyTitle(b.displayTitle || b.title || b.folder),
-	          );
-	        });
+        const devices = await Promise.all(reads);
+        const lookup = Object.fromEntries(devices.map((d) => [d.folder, d]));
 
-        el.countPill.textContent = `${devices.length} entries`;
+        el.countPill.textContent = `${devices.length} devices`;
+        el.list.innerHTML = devices.map((d) => rowHtml(d, lookup)).join("");
+      }
 
-        const old = devices.filter((d) => {
-          const lifecycle = d.lifecycle ? String(d.lifecycle).trim().toLowerCase() : "";
-          const status = d.status ? String(d.status).trim().toLowerCase() : "";
-          const tags = Array.isArray(d.tags) ? d.tags.map((t) => String(t).trim().toLowerCase()) : [];
-          return (
-            lifecycle === "old" ||
-            lifecycle === "legacy" ||
-            status === "old" ||
-            status === "legacy" ||
-            tags.includes("old") ||
-            tags.includes("legacy")
-          );
-        });
-
-        const experimental = devices.filter((d) => {
-          const lifecycle = d.lifecycle ? String(d.lifecycle).trim().toLowerCase() : "";
-          const status = d.status ? String(d.status).trim().toLowerCase() : "";
-          const tags = Array.isArray(d.tags) ? d.tags.map((t) => String(t).trim().toLowerCase()) : [];
-          const group = d.group ? String(d.group).trim().toLowerCase() : "";
-
-          const explicit =
-            d.experimental === true ||
-            lifecycle === "experimental" ||
-            lifecycle === "archived" ||
-            status === "experimental" ||
-            status === "archived" ||
-            tags.includes("experimental") ||
-            tags.includes("archived") ||
-            tags.includes("prototype") ||
-            tags.includes("wip");
-
-          const unknownGroup = group !== "esp32" && group !== "stm32" && group !== "module";
-          return explicit || unknownGroup;
-        });
-
-	        const oldSet = new Set(old.map((d) => d.folder));
-	        const experimentalSet = new Set(experimental.filter((d) => !oldSet.has(d.folder)).map((d) => d.folder));
-
-	        const esp32 = devices.filter((d) => d.group === "esp32" && !experimentalSet.has(d.folder) && !oldSet.has(d.folder));
-	        const stm32 = devices.filter((d) => d.group === "stm32" && !experimentalSet.has(d.folder) && !oldSet.has(d.folder));
-	        const modules = devices.filter((d) => d.group === "module" && !experimentalSet.has(d.folder) && !oldSet.has(d.folder));
-	
-	        const effectiveExperimental = experimental.filter((d) => !oldSet.has(d.folder));
-	        const expEsp32 = effectiveExperimental.filter((d) => d.group === "esp32");
-	        const expModules = effectiveExperimental.filter((d) => d.group === "module");
-	        const expStm32 = effectiveExperimental.filter((d) => d.group !== "esp32" && d.group !== "module");
-
-	        const oldEsp32 = old.filter((d) => d.group === "esp32");
-	        const oldModules = old.filter((d) => d.group === "module");
-	        const oldStm32 = old.filter((d) => d.group !== "esp32" && d.group !== "module");
-
-	        el.countEsp32.textContent = `${esp32.length}`;
-	        el.countStm32.textContent = `${stm32.length}`;
-	        el.countModules.textContent = `${modules.length}`;
-	        el.countEsp32Exp.textContent = `${expEsp32.length}`;
-	        el.countStm32Exp.textContent = `${expStm32.length}`;
-	        el.countModulesExp.textContent = `${expModules.length}`;
-	        el.countEsp32Old.textContent = `${oldEsp32.length}`;
-	        el.countStm32Old.textContent = `${oldStm32.length}`;
-	        el.countModulesOld.textContent = `${oldModules.length}`;
-
-	        el.listEsp32.innerHTML = esp32.map((d) => rowHtml(d, lookup)).join("");
-	        el.listStm32.innerHTML = stm32.map((d) => rowHtml(d, lookup)).join("");
-	        el.listModules.innerHTML = modules.map((d) => rowHtml(d, lookup)).join("");
-	        el.listEsp32Exp.innerHTML = expEsp32.map((d) => rowHtml(d, lookup)).join("");
-	        el.listStm32Exp.innerHTML = expStm32.map((d) => rowHtml(d, lookup)).join("");
-	        el.listModulesExp.innerHTML = expModules.map((d) => rowHtml(d, lookup)).join("");
-	        el.listEsp32Old.innerHTML = oldEsp32.map((d) => rowHtml(d, lookup)).join("");
-	        el.listStm32Old.innerHTML = oldStm32.map((d) => rowHtml(d, lookup)).join("");
-	        el.listModulesOld.innerHTML = oldModules.map((d) => rowHtml(d, lookup)).join("");
-	      }
-
-      el.tabCurrent.addEventListener("click", () => setView("current"));
-      el.tabExperimental.addEventListener("click", () => setView("experimental"));
-      el.tabOld.addEventListener("click", () => setView("old"));
-
-      setView(window.location.hash === "#experimental" ? "experimental" : window.location.hash === "#old" ? "old" : "current");
       load().catch((err) => {
         const isFileProtocol = window.location && window.location.protocol === "file:";
-        const html = `
+        el.list.innerHTML = `
           <div class="rounded-2xl border border-slate-200 bg-white/80 p-6">
-            <div class="text-slate-900 font-semibold">Couldn’t load catalog</div>
+            <div class="text-slate-900 font-semibold">Couldn’t load history</div>
             <div class="text-slate-600 text-sm mt-2">
               Ensure <code>hardware/devices.json</code> exists and is valid JSON.
             </div>
@@ -602,16 +274,7 @@
             <div class="text-slate-500 text-xs mt-2">${String(err)}</div>
           </div>
         `;
-	        el.listEsp32.innerHTML = html;
-	        el.listStm32.innerHTML = "";
-	        el.listModules.innerHTML = "";
-	        el.listEsp32Exp.innerHTML = "";
-	        el.listStm32Exp.innerHTML = "";
-	        el.listModulesExp.innerHTML = "";
-	        el.listEsp32Old.innerHTML = "";
-	        el.listStm32Old.innerHTML = "";
-	        el.listModulesOld.innerHTML = "";
-	      });
-	    </script>
+      });
+    </script>
 	  </body>
 	</html>
