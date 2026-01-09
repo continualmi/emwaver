@@ -29,6 +29,7 @@ type HomePageProps = {
 const MAX_MONITOR_ENTRIES = 1500;
 const MAX_COMMAND_ENTRIES = 600;
 const AUTO_CONNECT_ENABLED_KEY = "emwaver:autoConnectEnabled";
+const DEV_MONITORS_ENABLED_KEY = "emwaver:devMonitorsEnabled";
 
 type BufferEntry = {
   data: Uint8Array;
@@ -85,10 +86,32 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
   });
 
+  const devMonitorsAllowed = import.meta.env.DEV || import.meta.env.VITE_MONITOR === "1";
+  const [devMonitorsEnabled, setDevMonitorsEnabled] = useState<boolean>(() => {
+    if (!devMonitorsAllowed) return false;
+    try {
+      const raw = localStorage.getItem(DEV_MONITORS_ENABLED_KEY);
+      if (raw !== null) return raw === "1";
+    } catch {
+      // ignore
+    }
+    // If you explicitly opt-in via env var, default to enabled.
+    return import.meta.env.VITE_MONITOR === "1";
+  });
+
   const persistAutoConnectEnabled = useCallback((enabled: boolean) => {
     setAutoConnectEnabled(enabled);
     try {
       localStorage.setItem(AUTO_CONNECT_ENABLED_KEY, enabled ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const persistDevMonitorsEnabled = useCallback((enabled: boolean) => {
+    setDevMonitorsEnabled(enabled);
+    try {
+      localStorage.setItem(DEV_MONITORS_ENABLED_KEY, enabled ? "1" : "0");
     } catch {
       // ignore
     }
@@ -293,15 +316,16 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
   const appendBatchToCommandMonitor = useCallback((batch: CommandPacketEntry[]) => {
     if (batch.length === 0) return;
+    const limit = devMonitorsEnabled ? MAX_COMMAND_ENTRIES : 64;
     setCommandEntries((prev) => {
       const next = [...prev, ...batch];
       next.sort((a, b) => (a.timestamp !== b.timestamp ? a.timestamp - b.timestamp : a.seq - b.seq));
-      if (next.length > MAX_COMMAND_ENTRIES) {
-        return next.slice(next.length - MAX_COMMAND_ENTRIES);
+      if (next.length > limit) {
+        return next.slice(next.length - limit);
       }
       return next;
     });
-  }, []);
+  }, [devMonitorsEnabled]);
 
   // Transport Monitor: global RX/TX (128B superframes).
   useEffect(() => {
@@ -377,7 +401,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       }
     };
 
-    if (!status.connected) {
+    if (!status.connected || !devMonitorsEnabled) {
       resetLocal();
       return;
     }
@@ -391,7 +415,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       if (interval) window.clearInterval(interval);
     };
-  }, [appendBatchToTransport, isActive, status.connected]);
+  }, [appendBatchToTransport, devMonitorsEnabled, isActive, status.connected]);
 
   // Command Monitor: TX/RX cmd lane packets (64B).
   useEffect(() => {
@@ -511,7 +535,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       }
     };
 
-    if (!status.connected) {
+    if (!status.connected || !devMonitorsEnabled) {
       resetLocal();
       return;
     }
@@ -525,7 +549,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       if (interval) window.clearInterval(interval);
     };
-  }, [appendBatchToStream, isActive, status.connected]);
+  }, [appendBatchToStream, devMonitorsEnabled, isActive, status.connected]);
 
   const handleConnect = async () => {
       try {
@@ -681,6 +705,17 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                       />
                       <span>Auto-connect</span>
                     </label>
+                    {devMonitorsAllowed ? (
+                      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={devMonitorsEnabled}
+                          onChange={(e) => persistDevMonitorsEnabled(e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                        />
+                        <span>Monitors</span>
+                      </label>
+                    ) : null}
                 </div>
               </div>
               
@@ -778,123 +813,127 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
           </div>
         </div>
 
-        {/* Transport Monitor */}
         <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">
-          <div className="flex items-center justify-between mb-2 flex-shrink-0">
-            <div className="text-sm font-semibold text-slate-400">Transport Monitor</div>
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showTxHex}
-                  onChange={(e) => setShowTxHex(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
-                />
-                <span>TX HEX</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showRxHex}
-                  onChange={(e) => setShowRxHex(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
-                />
-                <span>RX HEX</span>
-              </label>
-              <button
-                onClick={clearMonitor}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-	          <div ref={transportContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
-	            {transportEntries.length === 0 ? (
-	              <div className="text-slate-500">No transport packets yet...</div>
-	            ) : (
-              <>
-                {transportEntries.map((entry) => {
-                  const content = entry.isTx ? (showTxHex ? entry.hex : entry.ascii) : (showRxHex ? entry.hex : entry.ascii);
-                  const kind = entry.kind ?? 0;
-                  const flags = [
-                    (kind & 0x01) !== 0 ? "C" : "",
-                    (kind & 0x02) !== 0 ? "M" : "",
-                    (kind & 0x04) !== 0 ? "S" : "",
-                    (kind & 0x08) !== 0 ? "B" : "",
-                  ].filter(Boolean).join("");
-
-                  return (
-                    <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
-                      <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
-                      {flags ? <span className="text-slate-500">{`[${flags}] `}</span> : null}
-                      <span className={entry.isTx ? "text-slate-100" : "text-sky-400"}>{content}</span>
-                    </div>
-                  );
-                })}
-              </>
-	            )}
-	          </div>
-
-	          {/* Command Monitor */}
-	          <div className="mt-3 flex-shrink-0">
-	            <div className="flex items-center justify-between mb-2">
-	              <div className="text-sm font-semibold text-slate-400">Command Monitor</div>
-	              <button
-	                onClick={clearMonitor}
-	                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
-	              >
-	                Clear
-	              </button>
-	            </div>
-	            <div ref={commandContainerRef} className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
-	              {commandEntries.length === 0 ? (
-	                <div className="text-slate-500">No commands yet...</div>
-	              ) : (
-	                commandEntries.map((entry) => {
-                    const dir = entry.isTx ? ">" : "<";
-                    const color = entry.isTx ? "text-slate-100" : "text-sky-400";
-                    return (
-                      <div key={entry.seq} className="mb-2 whitespace-pre-wrap break-words">
-                        <div>
-                          <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
-                          <span className={color}>{`${dir} ${entry.ascii || "(empty)"}`}</span>
-                        </div>
-                        <div className="text-slate-600">{entry.hex}</div>
-                      </div>
-                    );
-                  })
-	              )}
-	            </div>
-	          </div>
-
-            {/* Stream Monitor */}
-            <div className="mt-3 flex-shrink-0">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-semibold text-slate-400">Stream Monitor</div>
-                <button
-                  onClick={clearMonitor}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
-                >
-                  Clear
-                </button>
+          {devMonitorsEnabled ? (
+            <>
+              {/* Transport Monitor */}
+              <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                <div className="text-sm font-semibold text-slate-400">Transport Monitor</div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showTxHex}
+                      onChange={(e) => setShowTxHex(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                    />
+                    <span>TX HEX</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showRxHex}
+                      onChange={(e) => setShowRxHex(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                    />
+                    <span>RX HEX</span>
+                  </label>
+                  <button
+                    onClick={clearMonitor}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
-              <div ref={streamContainerRef} className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
-                {streamEntries.length === 0 ? (
-                  <div className="text-slate-500">No stream packets yet...</div>
+              <div ref={transportContainerRef} className="overflow-y-auto overflow-x-hidden font-mono text-sm text-slate-300 bg-slate-900 rounded p-3 flex-1 min-h-0">
+                {transportEntries.length === 0 ? (
+                  <div className="text-slate-500">No transport packets yet...</div>
                 ) : (
-                  streamEntries.map((entry) => {
-                    const content = showRxHex ? entry.hex : entry.ascii;
-                    return (
-                      <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
-                        <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
-                        <span className="text-sky-400">{content}</span>
-                      </div>
-                    );
-                  })
+                  <>
+                    {transportEntries.map((entry) => {
+                      const content = entry.isTx ? (showTxHex ? entry.hex : entry.ascii) : (showRxHex ? entry.hex : entry.ascii);
+                      const kind = entry.kind ?? 0;
+                      const flags = [
+                        (kind & 0x01) !== 0 ? "C" : "",
+                        (kind & 0x02) !== 0 ? "M" : "",
+                        (kind & 0x04) !== 0 ? "S" : "",
+                        (kind & 0x08) !== 0 ? "B" : "",
+                      ].filter(Boolean).join("");
+
+                      return (
+                        <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
+                          <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+                          {flags ? <span className="text-slate-500">{`[${flags}] `}</span> : null}
+                          <span className={entry.isTx ? "text-slate-100" : "text-sky-400"}>{content}</span>
+                        </div>
+                      );
+                    })}
+                  </>
                 )}
               </div>
-            </div>
+
+              {/* Command Monitor */}
+              <div className="mt-3 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-slate-400">Command Monitor</div>
+                  <button
+                    onClick={clearMonitor}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div ref={commandContainerRef} className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
+                  {commandEntries.length === 0 ? (
+                    <div className="text-slate-500">No commands yet...</div>
+                  ) : (
+                    commandEntries.map((entry) => {
+                      const dir = entry.isTx ? ">" : "<";
+                      const color = entry.isTx ? "text-slate-100" : "text-sky-400";
+                      return (
+                        <div key={entry.seq} className="mb-2 whitespace-pre-wrap break-words">
+                          <div>
+                            <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+                            <span className={color}>{`${dir} ${entry.ascii || "(empty)"}`}</span>
+                          </div>
+                          <div className="text-slate-600">{entry.hex}</div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Stream Monitor */}
+              <div className="mt-3 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-slate-400">Stream Monitor</div>
+                  <button
+                    onClick={clearMonitor}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-800 rounded hover:border-slate-700 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div ref={streamContainerRef} className="max-h-40 overflow-y-auto overflow-x-hidden font-mono text-xs text-slate-300 bg-slate-900 rounded p-3">
+                  {streamEntries.length === 0 ? (
+                    <div className="text-slate-500">No stream packets yet...</div>
+                  ) : (
+                    streamEntries.map((entry) => {
+                      const content = showRxHex ? entry.hex : entry.ascii;
+                      return (
+                        <div key={entry.seq} className="mb-1 whitespace-pre-wrap break-words">
+                          <span className="text-slate-500">{`[${entry.timeStr}] `}</span>
+                          <span className="text-sky-400">{content}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
 
 	          <div className="mt-3 flex-shrink-0">
 	            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>

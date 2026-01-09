@@ -24,7 +24,11 @@ function keepAlive() {
 
 function spawnNpmDev() {
   const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-  const child = spawn(npmCmd, ["run", "dev"], { stdio: "inherit" });
+  const env = { ...process.env };
+  if (!env.VITE_MONITOR && env.MONITOR) {
+    env.VITE_MONITOR = env.MONITOR;
+  }
+  const child = spawn(npmCmd, ["run", "dev"], { stdio: "inherit", env });
 
   const forward = (signal) => child.kill(signal);
   process.on("SIGINT", () => forward("SIGINT"));

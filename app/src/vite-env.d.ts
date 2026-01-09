@@ -18,6 +18,10 @@
 /// <reference types="vite/client" />
 
 declare global {
+  interface ImportMetaEnv {
+    readonly VITE_MONITOR?: string;
+  }
+
   interface Window {
     __emwaverSplash?: {
       setProgress?: (progress: number) => void;
