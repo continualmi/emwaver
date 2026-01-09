@@ -79,3 +79,4 @@ cli/crates/**/Cargo.lock
 # Git worktrees (local developer checkouts)
 worktrees/
 prompt.txt
+notes.txt
