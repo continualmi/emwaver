@@ -408,6 +408,14 @@ async fn buffer_clear(state: State<'_, DeviceState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn sampler_buffer_clear(state: State<'_, DeviceState>) -> Result<(), String> {
+    state
+        .rpc("sampler_buffer_clear", serde_json::json!({}))
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn buffer_get_counter(state: State<'_, DeviceState>) -> Result<u64, String> {
     let value = state
         .rpc("buffer_get_rx_counter", serde_json::json!({}))
@@ -1642,12 +1650,13 @@ pub fn run() {
             write_file,
             write_binary_file,
             ensure_dir,
-            buffer_clear,
-            buffer_get_counter,
-            buffer_set_counter,
-            buffer_get_packet_count,
-            buffer_get_len_bytes,
-            buffer_read_packets_since,
+                buffer_clear,
+                sampler_buffer_clear,
+                buffer_get_counter,
+                buffer_set_counter,
+                buffer_get_packet_count,
+                buffer_get_len_bytes,
+                buffer_read_packets_since,
             buffer_next_packet,
             buffer_read_tx_since,
             transport_read_rx_since,

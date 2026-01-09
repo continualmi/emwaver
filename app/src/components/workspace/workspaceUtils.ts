@@ -24,6 +24,7 @@ export const SCRIPT_ASSET_SCRIPTS = [
   "gpio.js",
   "ir_send_saved_signal.js",
   "packet_mode.js",
+  "sampler.js",
   "rfid.js",
   "usb.js",
   "script_demo.js",

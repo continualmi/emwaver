@@ -33,7 +33,17 @@ use boa_engine::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use emwaver_device_core::bridge::{BridgeState, send_packet_command_bytes};
+use emwaver_device_core::bridge::{
+    BridgeState,
+    sampler_buffer_clear_only,
+    sampler_buffer_compress_viewport,
+    sampler_buffer_get_bytes,
+    sampler_buffer_len_bytes,
+    sampler_buffer_packet_count,
+    sampler_buffer_read_packets_since,
+    sampler_buffer_set_invert_rx,
+    send_packet_command_bytes,
+};
 
 /// Events sent from the script runtime to the frontend.
 #[derive(Debug, Clone, Serialize)]
@@ -370,6 +380,189 @@ impl ScriptRuntime {
         context
             .register_global_builtin_callable(js_string!("_scriptCreateByteArray"), 1, create_bytes_fn)
             .map_err(|e| format!("Failed to register _scriptCreateByteArray: {}", e))?;
+
+        // _scriptSleep - blocking sleep for sampler capture workflows.
+        let sleep_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let ms = args
+                    .get_or_undefined(0)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as u64;
+                std::thread::sleep(Duration::from_millis(ms));
+                Ok(JsValue::undefined())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSleep"), 1, sleep_fn)
+            .map_err(|e| format!("Failed to register _scriptSleep: {}", e))?;
+
+        // _scriptSamplerBufferGetPacketCount
+        let state_sampler_pkt_count = state.clone();
+        let sampler_pkt_count_fn = unsafe {
+            NativeFunction::from_closure(move |_this, _args, _ctx| {
+                let st = state_sampler_pkt_count.borrow();
+                let count = sampler_buffer_packet_count(&st.device)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                Ok(JsValue::from(count as f64))
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferGetPacketCount"), 0, sampler_pkt_count_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferGetPacketCount: {}", e))?;
+
+        // _scriptSamplerBufferGetLenBytes
+        let state_sampler_len = state.clone();
+        let sampler_len_fn = unsafe {
+            NativeFunction::from_closure(move |_this, _args, _ctx| {
+                let st = state_sampler_len.borrow();
+                let len = sampler_buffer_len_bytes(&st.device)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                Ok(JsValue::from(len as f64))
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferGetLenBytes"), 0, sampler_len_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferGetLenBytes: {}", e))?;
+
+        // _scriptSamplerBufferGetBytes
+        let state_sampler_bytes = state.clone();
+        let sampler_get_bytes_fn = unsafe {
+            NativeFunction::from_closure(move |_this, _args, ctx| {
+                let st = state_sampler_bytes.borrow();
+                let bytes = sampler_buffer_get_bytes(&st.device)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                let array = boa_engine::object::builtins::JsUint8Array::from_iter(
+                    bytes.into_iter(),
+                    ctx,
+                )
+                .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                Ok(array.into())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferGetBytes"), 0, sampler_get_bytes_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferGetBytes: {}", e))?;
+
+        // _scriptSamplerBufferClear
+        let state_sampler_clear = state.clone();
+        let sampler_clear_fn = unsafe {
+            NativeFunction::from_closure(move |_this, _args, _ctx| {
+                let st = state_sampler_clear.borrow();
+                sampler_buffer_clear_only(&st.device)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                Ok(JsValue::undefined())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferClear"), 0, sampler_clear_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferClear: {}", e))?;
+
+        // _scriptSamplerBufferSetInvertRx
+        let state_sampler_invert = state.clone();
+        let sampler_invert_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, _ctx| {
+                let enabled = args.get_or_undefined(0).to_boolean();
+                let st = state_sampler_invert.borrow();
+                sampler_buffer_set_invert_rx(&st.device, enabled)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                Ok(JsValue::undefined())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferSetInvertRx"), 1, sampler_invert_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferSetInvertRx: {}", e))?;
+
+        // _scriptSamplerBufferReadPacketsSince(packetIndex, maxPackets)
+        let state_sampler_read = state.clone();
+        let sampler_read_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let packet_index = args
+                    .get_or_undefined(0)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as u64;
+                let max_packets = args
+                    .get_or_undefined(1)
+                    .to_u32(ctx)
+                    .unwrap_or(256) as usize;
+
+                let st = state_sampler_read.borrow();
+                let packets = sampler_buffer_read_packets_since(&st.device, packet_index, max_packets)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+
+                let data = boa_engine::object::builtins::JsUint8Array::from_iter(
+                    packets.data.into_iter(),
+                    ctx,
+                )
+                .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+
+                let obj = boa_engine::object::ObjectInitializer::new(ctx)
+                    .property(js_string!("data"), data, boa_engine::property::Attribute::all())
+                    .property(
+                        js_string!("nextPacketIndex"),
+                        JsValue::from(packets.next_packet_index as f64),
+                        boa_engine::property::Attribute::all(),
+                    )
+                    .property(
+                        js_string!("availablePackets"),
+                        JsValue::from(packets.available_packets as f64),
+                        boa_engine::property::Attribute::all(),
+                    )
+                    .build();
+
+                Ok(obj.into())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferReadPacketsSince"), 2, sampler_read_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferReadPacketsSince: {}", e))?;
+
+        // _scriptSamplerBufferCompressViewport(startBit, endBit, bins)
+        let state_sampler_compress = state.clone();
+        let sampler_compress_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let start_bit = args
+                    .get_or_undefined(0)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as usize;
+                let end_bit = args
+                    .get_or_undefined(1)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as usize;
+                let bins = args
+                    .get_or_undefined(2)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as usize;
+
+                let st = state_sampler_compress.borrow();
+                let (buffer_len_bytes, time_values, data_values) =
+                    sampler_buffer_compress_viewport(&st.device, start_bit, end_bit, bins)
+                        .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+
+                let time_values = boa_engine::object::builtins::JsArray::from_iter(
+                    time_values.into_iter().map(|v| JsValue::from(v as f64)),
+                    ctx,
+                );
+                let data_values = boa_engine::object::builtins::JsArray::from_iter(
+                    data_values.into_iter().map(|v| JsValue::from(v as f64)),
+                    ctx,
+                );
+
+                let obj = boa_engine::object::ObjectInitializer::new(ctx)
+                    .property(
+                        js_string!("bufferLenBytes"),
+                        JsValue::from(buffer_len_bytes as f64),
+                        boa_engine::property::Attribute::all(),
+                    )
+                    .property(js_string!("timeValues"), time_values, boa_engine::property::Attribute::all())
+                    .property(js_string!("dataValues"), data_values, boa_engine::property::Attribute::all())
+                    .build();
+
+                Ok(obj.into())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSamplerBufferCompressViewport"), 3, sampler_compress_fn)
+            .map_err(|e| format!("Failed to register _scriptSamplerBufferCompressViewport: {}", e))?;
 
         Ok(())
     }

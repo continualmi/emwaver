@@ -289,7 +289,10 @@ export default function ScriptUIRenderer({
           })
           .filter(Boolean) as Array<{ label: string; value: string }>;
 
-        const value = inputValues[nodeId] !== undefined ? inputValues[nodeId] : ((props.value as string) || "");
+        const value =
+          inputValues[nodeId] !== undefined
+            ? inputValues[nodeId]
+            : (((props as any).selected as string | undefined) ?? ((props.value as string) || ""));
 
         return (
           <div className="flex flex-col gap-2">
@@ -338,4 +341,3 @@ export default function ScriptUIRenderer({
 
   return <div className="w-full">{renderNode(tree)}</div>;
 }
-

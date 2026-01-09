@@ -156,3 +156,16 @@ Access to saved sampler signals (typically `.raw` captures stored by the app).
   - Returns newline-separated filenames (empty string if none).
 - `SamplerSignals.readSignal(name)` → bytes (or `null`)
   - Reads the contents of a saved signal by filename.
+
+### `Sampler` (desktop only)
+
+Live sampler capture from the device (`sample start/stop`) while keeping bytes in the shared RX buffer.
+
+- `await Sampler.start({ pin, clearBefore?, invert? })` → `{ id, startPacket }`
+- `await Sampler.stop(id?)` → `void`
+- `await Sampler.status(id?)` → `{ active, pin?, packetCount, lenBytes }`
+- `await Sampler.capture({ pin, durationMs, clearBefore?, invert? })` → `{ bytes, startPacket, endPacket, bufferLenBytes }`
+- Buffer access while running (polling):
+  - `await Sampler.buffer.readPacketsSince({ packetIndex, maxPackets? })` → `{ data, nextPacketIndex, availablePackets }`
+  - `await Sampler.buffer.firstBytes(n)` / `await Sampler.buffer.lastBytes(n)` / `await Sampler.buffer.sliceBytes(start, end)`
+  - `await Sampler.buffer.compressViewport({ startBit, endBit, bins })` → `{ bufferLenBytes, timeValues, dataValues }`

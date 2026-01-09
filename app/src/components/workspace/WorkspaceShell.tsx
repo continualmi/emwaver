@@ -1178,6 +1178,44 @@ export default function WorkspaceShell({
             DeviceConnection: scriptDeviceConnection,
             Utils: scriptUtilsBinding,
             createByteArray: scriptCreateByteArray,
+            _scriptSleep: async (ms: number) => {
+              const durationMs = Math.max(0, Number(ms) || 0);
+              await new Promise<void>((resolve) => window.setTimeout(resolve, durationMs));
+            },
+            _scriptSamplerBufferGetPacketCount: async () => (await safeInvoke<number>("buffer_get_packet_count")) ?? 0,
+            _scriptSamplerBufferGetLenBytes: async () => (await safeInvoke<number>("buffer_get_len_bytes")) ?? 0,
+            _scriptSamplerBufferGetBytes: async () => {
+              const bytes = (await safeInvoke<number[]>("buffer_get_bytes")) ?? [];
+              return new Uint8Array(bytes);
+            },
+            _scriptSamplerBufferClear: async () => {
+              await safeInvoke<void>("sampler_buffer_clear");
+            },
+            _scriptSamplerBufferSetInvertRx: async (enabled: boolean) => {
+              await safeInvoke<void>("buffer_set_invert_rx", { enabled: !!enabled }).catch(() => {});
+            },
+            _scriptSamplerBufferReadPacketsSince: async (packetIndex: number, maxPackets: number) => {
+              const packet_index = Math.max(0, Math.floor(Number(packetIndex) || 0));
+              const max_packets = Math.max(1, Math.floor(Number(maxPackets) || 256));
+              const resp = await safeInvoke<any>("buffer_read_packets_since", { packet_index, max_packets });
+              const data = new Uint8Array((resp && Array.isArray(resp.data) ? resp.data : []) as number[]);
+              return {
+                data,
+                nextPacketIndex: Number(resp?.next_packet_index ?? 0),
+                availablePackets: Number(resp?.available_packets ?? 0),
+              };
+            },
+            _scriptSamplerBufferCompressViewport: async (startBit: number, endBit: number, bins: number) => {
+              const range_start = Math.max(0, Math.floor(Number(startBit) || 0));
+              const range_end = Math.max(0, Math.floor(Number(endBit) || 0));
+              const number_bins = Math.max(0, Math.floor(Number(bins) || 0));
+              const resp = await safeInvoke<any>("buffer_compress_viewport", { range_start, range_end, number_bins });
+              return {
+                bufferLenBytes: Number(resp?.buffer_len_bytes ?? 0),
+                timeValues: (resp?.time_values ?? []) as number[],
+                dataValues: (resp?.data_values ?? []) as number[],
+              };
+            },
           },
         );
         scriptEngineByPathRef.current.set(normalizedPath, engine);
