@@ -1,8 +1,8 @@
 Build & Reproduce guide (docs)
 https://luispl77.github.io/emwaver/hardware/
 
-Hardware catalog (EasyEDA designs + casings)
-https://luispl77.github.io/emwaver-hardware/
+Hardware history (legacy designs)
+https://luispl77.github.io/emwaver/hardware-catalog/
 
 In this video we go through the full EMWaver lineup and the end-to-end manufacturing workflow: choosing the right board, ordering PCBs + assembly through JLCPCB, sourcing the parts you’ll need to buy separately, and (when available) printing 3D cases.
 
@@ -21,7 +21,7 @@ You’ll learn
 - How to review/fix BOM issues (missing parts, wrong values, IR receiver selection quirks)
 - How to handle out-of-stock parts with global sourcing / “My Parts” inventory (antennas)
 - What you must hand-solder / buy separately (headers, modules, antennas, dev boards)
-- 3D printed casings: Onshape export (STL) → JLC3DP materials → assembly screws
+- 3D printed casings: export/download STL → print → assembly screws
 - Optional add-on modules (RC522, CC1101, NRF24) and quick prototyping with jumper wires
 
 Ordering links
@@ -36,14 +36,6 @@ https://jlcpcb.com/user-center/smtPrivateLibrary/orderParts/?global=1
 
 3D printing (JLC3DP)
 https://jlc3dp.com/
-
-Onshape (casing CAD)
-https://luispl77.github.io/emwaver-hardware/
-EMWaver device , 3D case , Open in OnShape
-
-Direct STL download (if you don’t want to use Onshape)
-https://luispl77.github.io/emwaver-hardware/
-EMWaver device , 3D case , Download STL
 
 Parts links (AliExpress)
 RFM69HW module (choose the correct frequency variant; 433 MHz is a good default starter)

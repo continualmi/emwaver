@@ -1,14 +1,14 @@
 ---
-title: Wavelets
+title: EMWaver scripts
 ---
 
-# Wavelets
+# EMWaver scripts
 
-Wavelets are JavaScript scripts that render portable UI and orchestrate EMWaver hardware workflows without requiring custom native app builds.
+EMWaver scripts (formerly “Wavelets”) are JavaScript scripts that render portable UI and orchestrate EMWaver hardware workflows without requiring custom native app builds.
 
 ## UI and Components
 
-Wavelets build UI by constructing a tree of components and passing it to `UI.render(...)`. Every node is a plain object created by calling a `UI.*` function (for example `UI.column({ ... })`).
+EMWaver scripts build UI by constructing a tree of components and passing it to `UI.render(...)`. Every node is a plain object created by calling a `UI.*` function (for example `UI.column({ ... })`).
 
 ### Rendering model
 
@@ -16,7 +16,7 @@ Wavelets build UI by constructing a tree of components and passing it to `UI.ren
 - Implement a `render()` function that calls `UI.render(...)`.
 - Update state inside event handlers (`onTap`, `onChange`, `onSubmit`), then call `render()` again.
 
-```javascript title="Minimal wavelet UI"
+```javascript title="Minimal script UI"
 let count = 0;
 
 function render() {
@@ -85,11 +85,42 @@ Handlers should be fast; for longer device operations, update UI state with a st
 
 ## APIs
 
-Wavelets run inside a sandbox that exposes a small set of global objects. The exact set can vary by surface (Android, iOS, desktop, CLI). For now, the docs only cover the three public wavelet classes below.
+Scripts run inside a sandbox that exposes a small set of global objects. The exact set can vary by surface (Android, iOS, desktop, CLI).
+
+### Arduino-like API (recommended)
+
+The lowest-level interface is the ASCII command protocol (via `emw.send(...)`). For script authors, it’s often more productive to wrap those commands in a tiny Arduino-like helper layer:
+
+- `pinMode(pin, "in"|"out")` → uses `gpio in --pin=...` / `gpio out --pin=...`
+- `digitalRead(pin)` → uses `gpio read --pin=...` (returns boolean)
+- `digitalWrite(pin, value)` → uses `gpio high --pin=...` / `gpio low --pin=...`
+- `delay(ms)` → `Utils.delay(ms)`
+
+```javascript title="Arduino-style GPIO helpers (implemented in-script)"
+function pinMode(pin, mode) {
+    return emw.send("gpio " + mode + " --pin=" + pin);
+}
+
+function digitalRead(pin) {
+    let resp = emw.send("gpio read --pin=" + pin);
+    return !!(resp && resp.length > 0 && resp[0] !== 0);
+}
+
+function digitalWrite(pin, value) {
+    pinMode(pin, "out");
+    return emw.send((value ? "gpio high" : "gpio low") + " --pin=" + pin);
+}
+
+function delay(ms) {
+    Utils.delay(ms);
+}
+```
+
+For now, the docs cover the public runtime classes below.
 
 ### `DeviceConnection`
 
-`DeviceConnection` is the transport-agnostic way to talk to an attached device (BLE or USB).
+`DeviceConnection` is the transport-agnostic way to talk to an attached device (USB).
 
 - `DeviceConnection.sendCommandString(command, timeoutMs?)` → response bytes (or `null` on failure)
   - Appends a trailing `\\n` if missing.

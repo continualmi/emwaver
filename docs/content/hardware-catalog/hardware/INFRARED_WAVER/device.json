@@ -12,7 +12,6 @@
     "INFRARED_WAVER.png"
   ],
   "casingImage": "INFRARED_WAVER_CASING.png",
-  "onshapeUrl": "https://cad.onshape.com/documents/ae514e04e9142f1950f842d0/w/b56970aa7caefb19ccd7a35b/e/cc4c22d50b560a15ef8bcd57",
   "description": "Infrared Waver is a low-cost IR board based on the STM32F042 (48 MHz) with crystal-less native USB 2.0. It features two IR LEDs and an IR receiver for working with infrared remote controls. With the EMWaver app you can record, analyze, and replay IR signals to replicate compatible remotes. It communicates over USB (no BLE), intended for Android (USB OTG) and the desktop EMWaver app. Bonus: the native USB stack also enables USB device emulation.",
   "tags": ["IR", "STM32F042", "USB"],
   "appSupport": ["android", "desktop"],

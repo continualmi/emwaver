@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.luispl.emwaver",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "node scripts/tauri-beforedev.mjs",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
