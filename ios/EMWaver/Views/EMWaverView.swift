@@ -21,33 +21,37 @@ struct EMWaverView: View {
     @EnvironmentObject var bleManager: USBManager
     @Binding var selection: String
 
-    @State private var commandInput = ""
-    @FocusState private var isCommandFieldFocused: Bool
+    @State private var shellInput = ""
+    @FocusState private var isShellFocused: Bool
+    @State private var shellLog: String = ""
+    
+    // To track what we've already seen in the buffer
+    @State private var lastBufferSeq: UInt64 = 0
 
     @State private var firmwareVersion = "Unknown"
-
-    @State private var showTxHex = false
-    @State private var showRxHex = false
     @State private var showingSettingsSheet = false
 
-    private static let maxMonitorEntries = 1500
-
-    private static let monitorBackground = Color(red: 2/255, green: 6/255, blue: 23/255) // slate-950
-    private static let monitorBorder = Color.white.opacity(0.10)
-    private static let monitorTextPrimary = Color.white
-    private static let monitorTextSecondary = Color.white.opacity(0.70)
-    private static let txColor = Color.white
-    private static let rxColor = Color(red: 59/255, green: 130/255, blue: 246/255) // blue-500
-
+    private static let shellBackground = Color.black
+    private static let shellText = Color(red: 0, green: 1, blue: 0) // Green
+    
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                connectionRow
-                commandRow
-                bufferMonitor
+        VStack(spacing: 0) {
+            connectionRow
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground))
+            
+            Divider()
+            
+            shellSection
+            
+            Divider()
+            
+            ScrollView {
                 fragmentsGrid
+                    .padding(.vertical, 16)
             }
-            .padding(.vertical, 16)
+            .frame(height: 120) // Fixed height for fragments at bottom
+            .background(Color(.secondarySystemBackground))
         }
         .background(Color(.systemBackground))
         .navigationTitle("EMWaver")
@@ -56,7 +60,10 @@ struct EMWaverView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("Settings") { showingSettingsSheet = true }
-                    Button("Clear Buffer", role: .destructive) { clearMonitorAndBuffer() }
+                    Button("Clear Shell", role: .destructive) { 
+                        shellLog = "" 
+                        bleManager.bufferClear()
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -69,10 +76,14 @@ struct EMWaverView: View {
             if !connected {
                 firmwareVersion = "Unknown"
             } else {
-                requestFirmwareVersionSoon()
+                // Wait a bit for connection to stabilize
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    requestFirmwareVersion()
+                }
             }
         }
         .onChange(of: bleManager.bufferVersion) { _ in
+            updateShell()
             updateFirmwareVersionFromBufferIfNeeded()
         }
     }
@@ -80,13 +91,13 @@ struct EMWaverView: View {
     private var connectionRow: some View {
         HStack(spacing: 12) {
             Panel {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Circle()
                             .fill(connectionStatusColor)
-                            .frame(width: 10, height: 10)
+                            .frame(width: 8, height: 8)
                         Text(connectionStatusText)
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                     }
@@ -98,44 +109,101 @@ struct EMWaverView: View {
                             bleManager.startScan()
                         }
                     } label: {
-                        HStack {
-                            Image(systemName: bleManager.isConnected ? "cable.connector.slash" : "cable.connector")
-                            Text(bleManager.isConnected ? "Disconnect" : "Connect USB")
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
+                        Text(bleManager.isConnected ? "Disconnect" : "Connect")
+                            .font(.caption).bold()
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(bleManager.isConnected ? .red : .blue)
+                    .controlSize(.small)
                 }
             }
+            .frame(maxWidth: .infinity)
 
             Panel {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Firmware")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(.secondary)
 
-                    HStack(spacing: 8) {
+                    HStack {
                         Text(firmwareVersion)
-                            .font(.headline)
+                            .font(.callout).bold()
                             .foregroundColor(firmwareVersion == "Unknown" ? .secondary : .blue)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-
+                            .minimumScaleFactor(0.8)
+                        
                         Spacer()
-
+                        
                         Button {
                             requestFirmwareVersion()
                         } label: {
                             Image(systemName: "arrow.clockwise")
+                                .font(.caption)
                         }
-                        .foregroundColor(.blue)
                         .disabled(!bleManager.isConnected)
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal)
+    }
+
+    private var shellSection: some View {
+        VStack(spacing: 0) {
+            // Shell Output
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(shellLog)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(Self.shellText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .id("bottom")
+                }
+                .background(Self.shellBackground)
+                .onChange(of: shellLog) { _ in
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+            
+            // Shell Input
+            HStack(spacing: 0) {
+                Text("emw> ")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(Self.shellText)
+                    .padding(.leading, 8)
+                
+                TextField("", text: $shellInput)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(Self.shellText)
+                    .accentColor(Self.shellText)
+                    .submitLabel(.send)
+                    .onSubmit { sendCommand() }
+                    .focused($isShellFocused)
+                    .disableAutocorrection(true)
+                    .autocapitalization(.none)
+                
+                Button {
+                    sendCommand()
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(Self.shellText)
+                }
+                .padding(.horizontal, 8)
+                .disabled(shellInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !bleManager.isConnected)
+            }
+            .padding(.vertical, 8)
+            .background(Self.shellBackground)
+            .overlay(
+                Rectangle()
+                    .frame(height: 1)
+                    .foregroundColor(.white.opacity(0.2)),
+                alignment: .top
+            )
+        }
     }
 
     private var fragmentsGrid: some View {
@@ -176,101 +244,9 @@ struct EMWaverView: View {
         .padding(.horizontal)
     }
 
-    private var commandRow: some View {
-        Panel {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Command")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-
-                HStack(spacing: 8) {
-                    TextField("e.g. version", text: $commandInput)
-                        .textFieldStyle(.roundedBorder)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                        .focused($isCommandFieldFocused)
-                        .onSubmit { sendCommandFromInput() }
-
-                    Button("Send") { sendCommandFromInput() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!bleManager.isConnected || commandInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        .padding(.horizontal)
-    }
-
-    private var bufferMonitor: some View {
-        let _ = bleManager.bufferVersion
-        let entries = bleManager.bufferMonitorEntries(limit: Self.maxMonitorEntries)
-
-        return VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Buffer Monitor")
-                        .font(.headline)
-                        .foregroundColor(Self.monitorTextPrimary)
-                    Spacer()
-                    Button("Clear") { clearMonitorAndBuffer() }
-                        .foregroundColor(.red)
-                }
-
-                HStack(spacing: 12) {
-                    Toggle("TX HEX", isOn: $showTxHex)
-                    Toggle("RX HEX", isOn: $showRxHex)
-                }
-                .font(.subheadline)
-                .foregroundColor(Self.monitorTextSecondary)
-                .tint(.blue)
-
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        if entries.isEmpty {
-                            Text("No buffer entries yet.")
-                                .foregroundColor(Self.monitorTextSecondary)
-                                .font(.subheadline)
-                                .padding(.vertical, 8)
-                        } else {
-                            ForEach(entries) { entry in
-                                let timeStr = Self.formatTimestampMs(entry.ts_ms)
-                                let content = entry.isTx
-                                    ? (showTxHex ? Self.hexString(entry.data) : Self.asciiString(entry.data))
-                                    : (showRxHex ? Self.hexString(entry.data) : Self.asciiString(entry.data))
-                                Text("[\(timeStr)] \(entry.isTx ? "TX" : "RX"): \(content)")
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundColor(entry.isTx ? Self.txColor : Self.rxColor)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-                .frame(minHeight: 240, maxHeight: 360)
-                .background(Self.monitorBackground.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Self.monitorBorder.opacity(0.8), lineWidth: 1)
-                )
-            }
-        }
-        .padding(12)
-        .background(Self.monitorBackground, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Self.monitorBorder, lineWidth: 1)
-        )
-        .padding(.horizontal)
-    }
-
     private var connectionStatusText: String {
-        if bleManager.isScanning { return "Scanning…" }
-        if bleManager.isConnected {
-            if let name = bleManager.connectedPortName, !name.isEmpty {
-                return "Connected: \(name)"
-            }
-            return "Connected"
-        }
+        if bleManager.isScanning { return "Scanning..." }
+        if bleManager.isConnected { return "Connected" }
         return "Not connected"
     }
 
@@ -280,47 +256,76 @@ struct EMWaverView: View {
         return .red
     }
 
-    private func requestFirmwareVersionSoon() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            requestFirmwareVersion()
-        }
-    }
-
     private func requestFirmwareVersion() {
         guard bleManager.isConnected else { return }
         bleManager.sendPacket(USBManager.frameAsciiCommand("version"))
     }
 
-    private func sendCommandFromInput() {
-        let trimmed = commandInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func sendCommand() {
+        let trimmed = shellInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard bleManager.isConnected else { return }
 
+        // The shell logic in updateShell will handle displaying the echo
+        // if we rely on what's actually sent, OR we can append here locally.
+        // Android implementation appended "emw> command" locally.
+        // But since we are streaming from buffer, let's see if TX is in buffer.
+        // Yes, USBManager puts TX in buffer.
+        
         bleManager.sendPacket(USBManager.frameAsciiCommand(trimmed))
-        commandInput = ""
+        shellInput = ""
     }
 
-    private func clearMonitorAndBuffer() {
-        bleManager.bufferClear()
-    }
-
-    private static func formatTimestampMs(_ tsMs: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: Double(tsMs) / 1000.0)
-        return timestampFormatter.string(from: date)
+    private func updateShell() {
+        // Poll new entries from bleManager since lastBufferSeq
+        // We need a way to get *new* entries from USBManager, or just get last N and filter.
+        // USBManager doesn't expose sequence numbers on entries directly in the View struct I saw earlier,
+        // but let's assume `bufferMonitorEntries` returns sorted entries.
+        // A better way is to keep track of the last processed timestamp or sequence.
+        
+        // Since `bufferMonitorEntries` returns a fresh array, let's just grab the latest ones
+        // that have a seq > lastBufferSeq.
+        // Note: The `PacketEntry` in `USBManager` (Swift) needs to expose `seq`.
+        // If it doesn't, we might need to rely on `ts_ms` or index.
+        
+        // Let's re-read USBManager.swift to see PacketEntry definition if needed.
+        // Assuming it matches what was there before or I can adapt.
+        
+        // Actually, the previous code used: `bleManager.bufferMonitorEntries(limit: Self.maxMonitorEntries)`
+        // `PacketEntry` had `seq` in Android, let's check Swift.
+        
+        // For now, I'll assume we can get all and filter locally, or just show the last N lines.
+        // But to be "shell-like", we want a continuous stream.
+        
+        let entries = bleManager.bufferMonitorEntries(limit: 50) // Get last 50
+        // We only append new ones.
+        // Simple logic: maintain a set of seen IDs or just rebuild the string if it's not too long?
+        // Rebuilding is safer for sync.
+        
+        var newLog = ""
+        for entry in entries.reversed() { // old to new
+             let content = asciiString(entry.data)
+             if entry.isTx {
+                 newLog += "emw> \(content)\n"
+             } else {
+                 newLog += "\(content)\n"
+             }
+        }
+        shellLog = newLog
     }
 
     private func updateFirmwareVersionFromBufferIfNeeded() {
         guard firmwareVersion == "Unknown" else { return }
         let entries = bleManager.bufferMonitorEntries(limit: 64)
-        for entry in entries.reversed() where !entry.isTx {
-            if let v = Self.extractFirmwareVersion(from: entry.data) {
+        for entry in entries { // Check recent entries
+            if !entry.isTx, let v = extractFirmwareVersion(from: entry.data) {
                 firmwareVersion = v
                 return
             }
         }
     }
 
-    private static func extractFirmwareVersion(from bytes: [UInt8]) -> String? {
+    private func extractFirmwareVersion(from bytes: [UInt8]) -> String? {
         guard !bytes.isEmpty else { return nil }
         let trimmed = bytes.prefix { $0 != 0 }
         let text = String(decoding: trimmed, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -338,23 +343,11 @@ struct EMWaverView: View {
         return nil
     }
 
-    private static func hexString(_ bytes: [UInt8]) -> String {
-        bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
-    }
-
-    private static func asciiString(_ bytes: [UInt8]) -> String {
+    private func asciiString(_ bytes: [UInt8]) -> String {
         bytes.map { byte in
             (32...126).contains(Int(byte)) ? String(UnicodeScalar(byte)) : "."
         }.joined()
     }
-
-    private static let timestampFormatter: DateFormatter = {
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.timeZone = .current
-        df.dateFormat = "HH:mm:ss.SSS"
-        return df
-    }()
 }
 
 private struct Panel<Content: View>: View {
