@@ -2,7 +2,7 @@ EMWaver (docs)
 https://luispl77.github.io/emwaver/
 
 EMWaver scripts (docs)
-https://luispl77.github.io/emwaver/wavelets/
+https://luispl77.github.io/emwaver/scripts/
 
 Board evolution (legacy devices)
 https://luispl77.github.io/emwaver/hardware-catalog/

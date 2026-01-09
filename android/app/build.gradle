@@ -35,28 +35,28 @@ android {
 
     sourceSets {
         main {
-            assets.srcDirs += ["${buildDir}/generated/emwaver-wavelets/assets"]
+            assets.srcDirs += ["${buildDir}/generated/emwaver-scripts/assets"]
             assets.srcDirs += ["${buildDir}/generated/emwaver-firmware/assets"]
         }
     }
 }
 
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
-def emwaverSharedWaveletAssetsDir = new File(emwaverRepoRootDir, "app/public/wavelet-assets")
-def emwaverGeneratedWaveletAssetsDir = new File(buildDir, "generated/emwaver-wavelets/assets")
+def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "app/public/default-scripts")
+def emwaverGeneratedScriptAssetsDir = new File(buildDir, "generated/emwaver-scripts/assets")
 
-tasks.register("syncWaveletAssets", Copy) {
+tasks.register("syncScriptAssets", Copy) {
     group = "emwaver"
-    description = "Copies the canonical wavelet asset scripts into generated Android assets."
+    description = "Copies the canonical script asset scripts into generated Android assets."
 
-    from(emwaverSharedWaveletAssetsDir) {
+    from(emwaverSharedScriptAssetsDir) {
         include("*.emw")
     }
-    into(emwaverGeneratedWaveletAssetsDir)
+    into(emwaverGeneratedScriptAssetsDir)
 
     doFirst {
-        if (!emwaverSharedWaveletAssetsDir.exists()) {
-            throw new GradleException("Missing canonical wavelet assets dir at: ${emwaverSharedWaveletAssetsDir}")
+        if (!emwaverSharedScriptAssetsDir.exists()) {
+            throw new GradleException("Missing canonical script assets dir at: ${emwaverSharedScriptAssetsDir}")
         }
     }
 }
@@ -134,7 +134,7 @@ tasks.register("rustAndroidBuild", Exec) {
 
 // Ensure Rust native library exists before Java compilation packages jniLibs.
 // This will fail fast with a clear message if Rust/NDK tooling isn't installed.
-preBuild.dependsOn("syncWaveletAssets")
+preBuild.dependsOn("syncScriptAssets")
 preBuild.dependsOn("syncBundledFirmware")
 preBuild.dependsOn("rustAndroidBuild")
 

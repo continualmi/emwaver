@@ -11,9 +11,9 @@ use tokio::net::UnixStream;
 #[cfg(windows)]
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
-pub fn spawn(app: tauri::AppHandle, device: super::DeviceState, wavelet_state: Arc<super::WaveletState>) {
+pub fn spawn(app: tauri::AppHandle, device: super::DeviceState, script_state: Arc<super::ScriptState>) {
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = run(app, device, wavelet_state).await {
+        if let Err(err) = run(app, device, script_state).await {
             eprintln!("[desktop_ipc] stopped: {err}");
         }
     });
@@ -22,7 +22,7 @@ pub fn spawn(app: tauri::AppHandle, device: super::DeviceState, wavelet_state: A
 async fn run(
     app: tauri::AppHandle,
     device: super::DeviceState,
-    wavelet_state: Arc<super::WaveletState>,
+    script_state: Arc<super::ScriptState>,
 ) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -46,7 +46,7 @@ async fn run(
                 stream,
                 app.clone(),
                 device.clone(),
-                wavelet_state.clone(),
+                script_state.clone(),
             ));
         }
     }
@@ -61,9 +61,9 @@ async fn run(
 
             let app = app.clone();
             let device = device.clone();
-            let wavelet_state = wavelet_state.clone();
+            let script_state = script_state.clone();
             tokio::spawn(async move {
-                if let Err(e) = handle_conn_pipe(server, app, device, wavelet_state).await {
+                if let Err(e) = handle_conn_pipe(server, app, device, script_state).await {
                     eprintln!("[desktop_ipc] conn error: {e}");
                 }
             });
@@ -78,9 +78,9 @@ async fn handle_conn_unix(
     mut stream: UnixStream,
     app: tauri::AppHandle,
     device: super::DeviceState,
-    wavelet_state: Arc<super::WaveletState>,
+    script_state: Arc<super::ScriptState>,
 ) {
-    if let Err(e) = handle_conn(&mut stream, app, device, wavelet_state).await {
+    if let Err(e) = handle_conn(&mut stream, app, device, script_state).await {
         eprintln!("[desktop_ipc] conn error: {e}");
     }
 }
@@ -90,20 +90,20 @@ async fn handle_conn_pipe(
     mut server: NamedPipeServer,
     app: tauri::AppHandle,
     device: super::DeviceState,
-    wavelet_state: Arc<super::WaveletState>,
+    script_state: Arc<super::ScriptState>,
 ) -> Result<(), String> {
     server
         .connect()
         .await
         .map_err(|e| format!("pipe connect failed: {e}"))?;
-    handle_conn(&mut server, app, device, wavelet_state).await
+    handle_conn(&mut server, app, device, script_state).await
 }
 
 async fn handle_conn<RW>(
     stream: &mut RW,
     app: tauri::AppHandle,
     device: super::DeviceState,
-    wavelet_state: Arc<super::WaveletState>,
+    script_state: Arc<super::ScriptState>,
 ) -> Result<(), String>
 where
     RW: AsyncReadExt + AsyncWriteExt + Unpin,
@@ -113,7 +113,7 @@ where
         serde_json::from_slice(&req_bytes).map_err(|e| format!("invalid request json: {e}"))?;
 
     let (ok, result, error) =
-        handle_request(app, device, wavelet_state, req.clone()).await;
+        handle_request(app, device, script_state, req.clone()).await;
     let resp = IpcResponse {
         id: req.id,
         ok,
@@ -130,7 +130,7 @@ where
 async fn handle_request(
     app: tauri::AppHandle,
     device: super::DeviceState,
-    wavelet_state: Arc<super::WaveletState>,
+    script_state: Arc<super::ScriptState>,
     req: IpcRequest,
 ) -> (bool, serde_json::Value, Option<String>) {
     match req.method.as_str() {
@@ -143,7 +143,7 @@ async fn handle_request(
             };
             (true, serde_json::to_value(ready).unwrap_or(serde_json::json!({})), None)
         }
-        "wavelet_execute" => {
+        "script_execute" => {
             let script = req
                 .params
                 .get("script")
@@ -157,16 +157,16 @@ async fn handle_request(
                 .unwrap_or("")
                 .to_string();
 
-            match super::wavelet_execute_impl(app, device.bridge.clone(), wavelet_state, script, bootstrap).await {
+            match super::script_execute_impl(app, device.bridge.clone(), script_state, script, bootstrap).await {
                 Ok(()) => (true, serde_json::json!({}), None),
                 Err(e) => (false, serde_json::Value::Null, Some(e)),
             }
         }
-        "wavelet_stop" => match super::wavelet_stop_impl(wavelet_state) {
+        "script_stop" => match super::script_stop_impl(script_state) {
             Ok(()) => (true, serde_json::json!({}), None),
             Err(e) => (false, serde_json::Value::Null, Some(e)),
         },
-        "wavelet_callback" => {
+        "script_callback" => {
             let token = req
                 .params
                 .get("token")
@@ -174,7 +174,7 @@ async fn handle_request(
                 .unwrap_or("")
                 .to_string();
             let data = req.params.get("data").cloned().unwrap_or(serde_json::Value::Null);
-            match super::wavelet_callback_impl(wavelet_state, token, data) {
+            match super::script_callback_impl(script_state, token, data) {
                 Ok(()) => (true, serde_json::json!({}), None),
                 Err(e) => (false, serde_json::Value::Null, Some(e)),
             }

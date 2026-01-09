@@ -8,7 +8,7 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Hardware:** **STM32 only** (one current-gen board)
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
 - **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
-- **Core UX:** **Wavelet-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
+- **Core UX:** **Script-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
 - **Surface area shipped:** Android app, iOS app, Desktop app, CLI
 
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
@@ -27,7 +27,7 @@ We are **not** trying to be a general-purpose firmware development environment o
 
 > **Time to Full Chip Exploit** should be as low as possible.
 
-Wavelets (EMWaver scripts) are the essence of EMWaver:
+EMWaver scripts are the essence of EMWaver:
 
 - No compile
 - Ultra-fast hardware exploration
@@ -83,13 +83,13 @@ Keep on-wire semantics stable:
 - ASCII command protocol inside the 64B frames
 - status/flow-control frames (e.g. `BS` for retransmit pacing)
 
-## Wavelets
+## Scripts
 
-Wavelets are user-authored extension bundles (manifest + JavaScript) that plug into the Wavelet Engine sandbox.
+Scripts are user-authored extension bundles (manifest + JavaScript) that plug into the Script Engine sandbox.
 
-- **Parity-first UI DSL**: wavelet UI must render consistently across Android/iOS/Desktop.
-- **Unified scripting engine**: WaveletEngine is the single runtime.
-- **In-wavelet logging**: scripts surface output through wavelet UI components.
+- **Parity-first UI DSL**: script UI must render consistently across Android/iOS/Desktop.
+- **Unified scripting engine**: ScriptEngine is the single runtime.
+- **In-script logging**: scripts surface output through script UI components.
 
 ## Cross-Cutting Practices
 
@@ -123,7 +123,7 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 ### Android (`/android`)
 
 - Native Android app.
-- USB transport + Wavelet workflows must stay aligned with iOS and Desktop.
+- USB transport + Script workflows must stay aligned with iOS and Desktop.
 
 > **Agent Note:** Don’t run Gradle builds unless explicitly requested.
 
@@ -137,9 +137,9 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 ### Desktop App (`/app`)
 
 - Cross-platform Tauri app.
-- Owns device I/O directly (in-process USB MIDI + framing) and runs wavelets locally for lowest latency.
+- Owns device I/O directly (in-process USB MIDI + framing) and runs scripts locally for lowest latency.
 - Exposes a simple local Desktop↔CLI bridge (file-based mailbox) so the CLI can request actions without owning the USB connection.
-- Focus is Wavelets authoring + device interaction.
+- Focus is Scripts authoring + device interaction.
 - Avoid expanding/centering an IDE-style firmware build/flash workflow.
 
 ### CLI (`/cli`)
@@ -149,7 +149,7 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
   - `app/crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
   - `app/crates/emwaver-buffer-ios-ffi` (iOS)
   - `app/crates/emwaver-buffer-android-jni` (Android)
-- The CLI does not own the USB MIDI connection; it asks the Desktop app to execute device commands and wavelets.
+- The CLI does not own the USB MIDI connection; it asks the Desktop app to execute device commands and scripts.
 
 #### Debugging With `emwaver cmd`
 
@@ -166,7 +166,7 @@ The `emwaver` CLI is a fast way to debug device ↔ firmware issues without the 
 ### Docs (`/docs`)
 
 - MkDocs-based docs.
-- Keep docs aligned with: STM32-only, USB MIDI-only, Wavelet-first.
+- Keep docs aligned with: STM32-only, USB MIDI-only, Script-first.
 
 ## Agent Workflow Guardrails
 

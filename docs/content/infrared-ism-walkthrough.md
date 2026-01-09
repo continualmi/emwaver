@@ -81,7 +81,7 @@ To prove retransmission matches the original capture, the video uses one device 
 
 ## Related docs
 
-- EMWaver scripts (UI + APIs): `wavelets.md`
+- EMWaver scripts (UI + APIs): `scripts.md`
 
 ## Legal / safety note
 

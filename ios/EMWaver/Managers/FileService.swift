@@ -42,7 +42,7 @@ final class FileService {
 
     init() {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        storageDir = documentsPath.appendingPathComponent("wavelets", isDirectory: true)
+        storageDir = documentsPath.appendingPathComponent("scripts", isDirectory: true)
         
         // Create directory if it doesn't exist
         try? fileManager.createDirectory(at: storageDir, withIntermediateDirectories: true)

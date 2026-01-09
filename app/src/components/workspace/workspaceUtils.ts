@@ -17,16 +17,16 @@
 
 import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 
-export const WAVELET_ASSET_ROOT = "/wavelet-assets";
-export const WAVELET_BOOTSTRAP_FILENAME = "wavelet_bootstrap.emw";
-export const WAVELET_ASSET_SCRIPTS = [
+export const SCRIPT_ASSET_ROOT = "/default-scripts";
+export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.emw";
+export const SCRIPT_ASSET_SCRIPTS = [
   "cc1101.emw",
   "gpio.emw",
   "ir_send_saved_signal.emw",
   "packet_mode.emw",
   "rfid.emw",
   "usb.emw",
-  "wavelet_demo.emw",
+  "script_demo.emw",
 ];
 
 export function basename(path: string): string {
@@ -58,18 +58,18 @@ export function languageForPath(path: string): string {
   return "plaintext";
 }
 
-export function isWaveletScriptPath(path: string): boolean {
+export function isScriptScriptPath(path: string): boolean {
   const ext = extension(path);
   return ext === "js" || ext === "jsx" || ext === "ts" || ext === "tsx" || ext === "emw";
 }
 
-export function isWaveletAssetPath(path: string): boolean {
+export function isScriptAssetPath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/");
-  return normalized === WAVELET_ASSET_ROOT || normalized.startsWith(`${WAVELET_ASSET_ROOT}/`);
+  return normalized === SCRIPT_ASSET_ROOT || normalized.startsWith(`${SCRIPT_ASSET_ROOT}/`);
 }
 
-export function waveletAssetPath(filename: string): string {
-  return `${WAVELET_ASSET_ROOT}/${filename}`;
+export function scriptAssetPath(filename: string): string {
+  return `${SCRIPT_ASSET_ROOT}/${filename}`;
 }
 
 export function defaultIgnoredName(name: string): boolean {
@@ -84,9 +84,9 @@ export function defaultIgnoredName(name: string): boolean {
   );
 }
 
-export async function readWaveletAssetScript(filename: string): Promise<string> {
+export async function readScriptAssetScript(filename: string): Promise<string> {
   try {
-    const response = await fetch(`${WAVELET_ASSET_ROOT}/${filename}`);
+    const response = await fetch(`${SCRIPT_ASSET_ROOT}/${filename}`);
     if (!response.ok) {
       return "";
     }

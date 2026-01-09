@@ -262,7 +262,7 @@ struct RFIDView: View {
             return response
         }
 
-        // Fallback: legacy binary framing used by older wavelets
+        // Fallback: legacy binary framing used by older scripts
         var bytes = Data()
         bytes.append(contentsOf: Array("mfrc522 read ".utf8))
         bytes.append(block)
@@ -286,7 +286,7 @@ struct RFIDView: View {
             return response
         }
 
-        // Fallback: legacy binary framing used by older wavelets
+        // Fallback: legacy binary framing used by older scripts
         var bytes = Data()
         bytes.append(contentsOf: Array("mfrc522 write ".utf8))
         bytes.append(block)

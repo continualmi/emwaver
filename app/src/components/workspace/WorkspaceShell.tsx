@@ -25,16 +25,16 @@ import "xterm/css/xterm.css";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
 import { useDevice } from "../../utils/DeviceContext";
-import { WaveletEngine, type WaveletTree } from "../../utils/WaveletEngine";
-import { useBackendWavelet } from "../../utils/useBackendWavelet";
-import { readWaveletsTabState, writeWaveletsTabState } from "../waveletsTabState";
+import { ScriptEngine, type ScriptTree } from "../../utils/ScriptEngine";
+import { useBackendScript } from "../../utils/useBackendScript";
+import { readScriptsTabState, writeScriptsTabState } from "../scriptsTabState";
 import { useWorkspaceGit } from "./hooks/useWorkspaceGit";
 import ExplorerTree from "./sidebar/ExplorerTree";
 import GitSidebarPanel from "./sidebar/GitSidebarPanel";
-import WaveletAssetsPanel from "./sidebar/WaveletAssetsPanel";
+import ScriptAssetsPanel from "./sidebar/ScriptAssetsPanel";
 import WorkspaceTopBar from "./top/WorkspaceTopBar";
 import GitDiffPanel from "./main/GitDiffPanel";
-import WaveletPreviewPanel from "./main/WaveletPreviewPanel";
+import ScriptPreviewPanel from "./main/ScriptPreviewPanel";
 import WorkspaceBottomPanel from "./terminal/WorkspaceBottomPanel";
 import {
   ArrowUpIcon,
@@ -83,20 +83,20 @@ import {
   readStoredAssetScriptsCollapsed,
 } from "./workspaceStorage";
 import {
-  WAVELET_ASSET_SCRIPTS,
-  WAVELET_ASSET_ROOT,
-  WAVELET_BOOTSTRAP_FILENAME,
+  SCRIPT_ASSET_SCRIPTS,
+  SCRIPT_ASSET_ROOT,
+  SCRIPT_BOOTSTRAP_FILENAME,
   basename,
   defaultIgnoredName,
   formatConsoleArgs,
   iconLabelForPath,
-  isWaveletAssetPath,
-  isWaveletScriptPath,
+  isScriptAssetPath,
+  isScriptScriptPath,
   languageForPath,
   nextTerminalTitle,
-  readWaveletAssetScript,
+  readScriptAssetScript,
   timestampLabel,
-  waveletAssetPath,
+  scriptAssetPath,
 } from "./workspaceUtils";
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
@@ -129,9 +129,9 @@ export default function WorkspaceShell({
   isActive?: boolean;
 }) {
   const keys = storageKeys();
-  const tabStateFileName = "wavelets-tabs.json";
-  const readTabState = readWaveletsTabState;
-  const writeTabState = writeWaveletsTabState;
+  const tabStateFileName = "scripts-tabs.json";
+  const readTabState = readScriptsTabState;
+  const writeTabState = writeScriptsTabState;
 
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot(keys));
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -228,52 +228,52 @@ export default function WorkspaceShell({
 
   const [activeMainTabKind, setActiveMainTabKind] = useState<"file" | "preview">("file");
   const [activePreviewPath, setActivePreviewPath] = useState<string | null>(null);
-  const [waveletPreviewTabs, setWaveletPreviewTabs] = useState<string[]>([]);
-  const [waveletPreviewState, setWaveletPreviewState] = useState<
+  const [scriptPreviewTabs, setScriptPreviewTabs] = useState<string[]>([]);
+  const [scriptPreviewState, setScriptPreviewState] = useState<
     Record<
       string,
       {
-        tree: WaveletTree | null;
+        tree: ScriptTree | null;
         console: string[];
         isRunning: boolean;
       }
     >
   >({});
-  const waveletEngineByPathRef = useRef<Map<string, WaveletEngine>>(new Map());
-  const waveletBootstrapRef = useRef<string | null>(null);
+  const scriptEngineByPathRef = useRef<Map<string, ScriptEngine>>(new Map());
+  const scriptBootstrapRef = useRef<string | null>(null);
   
-  // Backend wavelet execution (fast mode - ~2ms per command instead of ~6-8ms)
+  // Backend script execution (fast mode - ~2ms per command instead of ~6-8ms)
   const [useBackendEngine, setUseBackendEngine] = useState(true);
-  const backendWavelet = useBackendWavelet();
+  const backendScript = useBackendScript();
   const activeBackendPathRef = useRef<string | null>(null);
   
-  // Sync backend wavelet state to preview state
+  // Sync backend script state to preview state
   useEffect(() => {
     const path = activeBackendPathRef.current;
     if (!path || !useBackendEngine) return;
     
-    setWaveletPreviewState((prev) => ({
+    setScriptPreviewState((prev) => ({
       ...prev,
       [path]: {
-        tree: backendWavelet.state.tree,
-        console: backendWavelet.state.logs,
-        isRunning: backendWavelet.state.isRunning,
+        tree: backendScript.state.tree,
+        console: backendScript.state.logs,
+        isRunning: backendScript.state.isRunning,
       },
     }));
-  }, [backendWavelet.state, useBackendEngine]);
-  const waveletDeviceRef = useRef(device);
-  const waveletCommandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  }, [backendScript.state, useBackendEngine]);
+  const scriptDeviceRef = useRef(device);
+  const scriptCommandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
-    waveletDeviceRef.current = device;
+    scriptDeviceRef.current = device;
   }, [device]);
 
-  const waveletDeviceConnection = useMemo(
+  const scriptDeviceConnection = useMemo(
     () => ({
       sendCommandString: (command: string, timeoutMs: number = 1500) => {
-        const queued = waveletCommandQueueRef.current
+        const queued = scriptCommandQueueRef.current
           .then(async () => {
-            const { status, send } = waveletDeviceRef.current;
+            const { status, send } = scriptDeviceRef.current;
             if (!status.connected) {
               return null;
             }
@@ -281,16 +281,16 @@ export default function WorkspaceShell({
           })
           .catch(async () => null);
 
-        waveletCommandQueueRef.current = queued.then(
+        scriptCommandQueueRef.current = queued.then(
           () => undefined,
           () => undefined,
         );
         return queued as Promise<Uint8Array | null>;
       },
       sendPacket: (data: Uint8Array, timeoutMs: number = 1500) => {
-        const queued = waveletCommandQueueRef.current
+        const queued = scriptCommandQueueRef.current
           .then(async () => {
-            const { status, sendPacket } = waveletDeviceRef.current;
+            const { status, sendPacket } = scriptDeviceRef.current;
             if (!status.connected) {
               return null;
             }
@@ -298,30 +298,30 @@ export default function WorkspaceShell({
           })
           .catch(async () => null);
 
-        waveletCommandQueueRef.current = queued.then(
+        scriptCommandQueueRef.current = queued.then(
           () => undefined,
           () => undefined,
         );
         return queued as Promise<Uint8Array | null>;
       },
       write: (data: Uint8Array) => {
-        const { status, sendPacket } = waveletDeviceRef.current;
+        const { status, sendPacket } = scriptDeviceRef.current;
         if (!status.connected) {
           return;
         }
-        const queued = waveletCommandQueueRef.current
+        const queued = scriptCommandQueueRef.current
           .then(async () => {
             await sendPacket(data, 1500, 1);
             await new Promise<void>((resolve) => window.setTimeout(resolve, 5));
           })
           .catch(async () => undefined);
-        waveletCommandQueueRef.current = queued.then(
+        scriptCommandQueueRef.current = queued.then(
           () => undefined,
           () => undefined,
         );
       },
       connectionStatus: () => {
-        const { status } = waveletDeviceRef.current;
+        const { status } = scriptDeviceRef.current;
         if (!status.connected) {
           return "disconnected";
         }
@@ -331,20 +331,20 @@ export default function WorkspaceShell({
     [],
   );
 
-  const waveletUtilsBinding = useMemo(
+  const scriptUtilsBinding = useMemo(
     () => ({
       delay: (ms: number) => {
         const durationMs = Math.max(0, Number(ms) || 0);
         const start = Date.now();
         while (Date.now() - start < durationMs) {
-          // busy-wait (matches current mobile wavelet semantics)
+          // busy-wait (matches current mobile script semantics)
         }
       },
     }),
     [],
   );
 
-  const waveletCreateByteArray = useMemo(() => (bytes: number[]) => new Uint8Array(bytes), []);
+  const scriptCreateByteArray = useMemo(() => (bytes: number[]) => new Uint8Array(bytes), []);
 
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
   const activeTerminalTitle = useMemo(
@@ -368,21 +368,21 @@ export default function WorkspaceShell({
     return MONACO_EDITOR_OPTIONS;
   }, [activeFile]);
 
-  const waveletTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
-  const canRunWavelet = useMemo(() => {
-    const candidatePath = (activeMainTabKind === "preview" ? activePreviewPath : waveletTargetPath) ?? null;
+  const scriptTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
+  const canRunScript = useMemo(() => {
+    const candidatePath = (activeMainTabKind === "preview" ? activePreviewPath : scriptTargetPath) ?? null;
     if (!candidatePath) {
       return false;
     }
     const normalizedPath = candidatePath.replace(/\\/g, "/");
-    if (!isWaveletScriptPath(normalizedPath)) {
+    if (!isScriptScriptPath(normalizedPath)) {
       return false;
     }
-    if (isWaveletAssetPath(normalizedPath)) {
+    if (isScriptAssetPath(normalizedPath)) {
       return true;
     }
     return Boolean(rootDir);
-  }, [activeMainTabKind, activePreviewPath, rootDir, waveletTargetPath]);
+  }, [activeMainTabKind, activePreviewPath, rootDir, scriptTargetPath]);
 
 
   const openFilesRef = useRef<OpenFile[]>(openFiles);
@@ -832,10 +832,10 @@ export default function WorkspaceShell({
     setActiveFilePath(null);
     setActiveMainTabKind("file");
     setActivePreviewPath(null);
-    setWaveletPreviewTabs([]);
-    setWaveletPreviewState({});
-    waveletEngineByPathRef.current.forEach((engine) => engine.shutdown());
-    waveletEngineByPathRef.current.clear();
+    setScriptPreviewTabs([]);
+    setScriptPreviewState({});
+    scriptEngineByPathRef.current.forEach((engine) => engine.shutdown());
+    scriptEngineByPathRef.current.clear();
     setDirChildren({});
     setOpenDirs(new Set());
     setSidebarPanel("explorer");
@@ -980,7 +980,7 @@ export default function WorkspaceShell({
   const handleOpenFile = useCallback(async (path: string) => {
     tabsUserTouchedRef.current = true;
     const normalizedPath = path.replace(/\\/g, "/");
-    const isAssetPath = normalizedPath.startsWith(`${WAVELET_ASSET_ROOT}/`);
+    const isAssetPath = normalizedPath.startsWith(`${SCRIPT_ASSET_ROOT}/`);
     const effectivePath = isAssetPath ? normalizedPath : path;
     setActiveMainTabKind("file");
     setActivePreviewPath(null);
@@ -998,7 +998,7 @@ export default function WorkspaceShell({
     try {
       if (isAssetPath) {
         const filename = basename(effectivePath);
-        const content = await readWaveletAssetScript(filename);
+        const content = await readScriptAssetScript(filename);
         const next: OpenFile = {
           path: effectivePath,
           name: filename,
@@ -1037,10 +1037,10 @@ export default function WorkspaceShell({
     }
   }, [openFiles]);
 
-  const openWaveletPreviewTab = useCallback(
+  const openScriptPreviewTab = useCallback(
     async (path: string, { activate }: { activate: boolean }) => {
       await handleOpenFile(path);
-      setWaveletPreviewTabs((prev) => (prev.includes(path) ? prev : [...prev, path]));
+      setScriptPreviewTabs((prev) => (prev.includes(path) ? prev : [...prev, path]));
       if (activate) {
         setActiveMainTabKind("preview");
         setActivePreviewPath(path);
@@ -1049,18 +1049,18 @@ export default function WorkspaceShell({
     [handleOpenFile],
   );
 
-  const closeWaveletPreviewTab = useCallback(
+  const closeScriptPreviewTab = useCallback(
     (path: string) => {
-      setWaveletPreviewTabs((prev) => prev.filter((entry) => entry !== path));
-      setWaveletPreviewState((prev) => {
+      setScriptPreviewTabs((prev) => prev.filter((entry) => entry !== path));
+      setScriptPreviewState((prev) => {
         const next = { ...prev };
         delete next[path];
         return next;
       });
-      const engine = waveletEngineByPathRef.current.get(path);
+      const engine = scriptEngineByPathRef.current.get(path);
       if (engine) {
         engine.shutdown();
-        waveletEngineByPathRef.current.delete(path);
+        scriptEngineByPathRef.current.delete(path);
       }
       setActivePreviewPath((prev) => (prev === path ? null : prev));
       setActiveMainTabKind((prev) => {
@@ -1094,15 +1094,15 @@ export default function WorkspaceShell({
       });
       return next;
     });
-    closeWaveletPreviewTab(path);
-  }, [closeWaveletPreviewTab]);
+    closeScriptPreviewTab(path);
+  }, [closeScriptPreviewTab]);
 
-  const runWaveletForPath = useCallback(
+  const runScriptForPath = useCallback(
     async (path: string) => {
 
       const normalizedPath = path.replace(/\\/g, "/");
-      const isAssetPath = isWaveletAssetPath(normalizedPath);
-      if (!isWaveletScriptPath(normalizedPath)) {
+      const isAssetPath = isScriptAssetPath(normalizedPath);
+      if (!isScriptScriptPath(normalizedPath)) {
         return;
       }
       if (!rootDir && !isAssetPath) {
@@ -1111,7 +1111,7 @@ export default function WorkspaceShell({
 
       const normalizedRoot = rootDir ? rootDir.replace(/\\/g, "/").replace(/\/$/, "") : null;
 
-      setWaveletPreviewState((prev) => ({
+      setScriptPreviewState((prev) => ({
         ...prev,
         [normalizedPath]: {
           tree: prev[normalizedPath]?.tree ?? null,
@@ -1120,8 +1120,8 @@ export default function WorkspaceShell({
         },
       }));
 
-      if (!waveletBootstrapRef.current) {
-        waveletBootstrapRef.current = await readWaveletAssetScript(WAVELET_BOOTSTRAP_FILENAME);
+      if (!scriptBootstrapRef.current) {
+        scriptBootstrapRef.current = await readScriptAssetScript(SCRIPT_BOOTSTRAP_FILENAME);
       }
       
       // Get the script source
@@ -1131,7 +1131,7 @@ export default function WorkspaceShell({
       const entrySource =
         entryFile?.content ??
         (isAssetPath
-          ? await readWaveletAssetScript(basename(normalizedPath))
+          ? await readScriptAssetScript(basename(normalizedPath))
           : !isTauriAvailable()
             ? ""
             : (await safeInvoke<string>("read_file", { payload: { path: normalizedPath } })) ?? "");
@@ -1139,20 +1139,20 @@ export default function WorkspaceShell({
       // Use backend engine for fast execution (direct USB access, ~2ms per command)
       if (useBackendEngine && isTauriAvailable()) {
         activeBackendPathRef.current = normalizedPath;
-        backendWavelet.clearLogs();
-        await backendWavelet.execute(entrySource, waveletBootstrapRef.current ?? "");
+        backendScript.clearLogs();
+        await backendScript.execute(entrySource, scriptBootstrapRef.current ?? "");
         return;
       }
       
       // Fallback to frontend engine (slower, ~6-8ms per command via Tauri IPC)
-      let engine = waveletEngineByPathRef.current.get(normalizedPath);
+      let engine = scriptEngineByPathRef.current.get(normalizedPath);
       if (!engine) {
-        engine = new WaveletEngine();
-        const bootstrap = waveletBootstrapRef.current ?? "";
+        engine = new ScriptEngine();
+        const bootstrap = scriptBootstrapRef.current ?? "";
         engine.setBootstrapSource(bootstrap);
         engine.setup(
           (message: string) => {
-            setWaveletPreviewState((prev) => ({
+            setScriptPreviewState((prev) => ({
               ...prev,
               [normalizedPath]: {
                 tree: prev[normalizedPath]?.tree ?? null,
@@ -1161,8 +1161,8 @@ export default function WorkspaceShell({
               },
             }));
           },
-          (tree: WaveletTree) => {
-            setWaveletPreviewState((prev) => ({
+          (tree: ScriptTree) => {
+            setScriptPreviewState((prev) => ({
               ...prev,
               [normalizedPath]: {
                 tree,
@@ -1175,16 +1175,16 @@ export default function WorkspaceShell({
             alert(`${title}\n\n${message}`);
           },
           {
-            DeviceConnection: waveletDeviceConnection,
-            Utils: waveletUtilsBinding,
-            createByteArray: waveletCreateByteArray,
+            DeviceConnection: scriptDeviceConnection,
+            Utils: scriptUtilsBinding,
+            createByteArray: scriptCreateByteArray,
           },
         );
-        waveletEngineByPathRef.current.set(normalizedPath, engine);
+        scriptEngineByPathRef.current.set(normalizedPath, engine);
       }
 
       const moduleSources: Record<string, string> = {};
-      const assetScripts = await Promise.all(WAVELET_ASSET_SCRIPTS.map(async (name) => [name, await readWaveletAssetScript(name)] as const));
+      const assetScripts = await Promise.all(SCRIPT_ASSET_SCRIPTS.map(async (name) => [name, await readScriptAssetScript(name)] as const));
       assetScripts.forEach(([name, content]) => {
         if (content) {
           moduleSources[name] = content;
@@ -1215,7 +1215,7 @@ export default function WorkspaceShell({
               queue.push(entryPath);
               continue;
             }
-            if (!isWaveletScriptPath(entryPath)) {
+            if (!isScriptScriptPath(entryPath)) {
               continue;
             }
             filePaths.push(entryPath);
@@ -1249,17 +1249,17 @@ export default function WorkspaceShell({
       engine.updateModuleSources(moduleSources);
 
       engine.execute(entrySource, () => {
-        setWaveletPreviewState((prev) => ({
+        setScriptPreviewState((prev) => ({
           ...prev,
           [normalizedPath]: {
             tree: prev[normalizedPath]?.tree ?? null,
-            console: [...(prev[normalizedPath]?.console ?? []), "Wavelet execution completed."],
+            console: [...(prev[normalizedPath]?.console ?? []), "Script execution completed."],
             isRunning: false,
           },
         }));
       });
 
-      setWaveletPreviewState((prev) => ({
+      setScriptPreviewState((prev) => ({
         ...prev,
         [normalizedPath]: {
           tree: prev[normalizedPath]?.tree ?? null,
@@ -1268,7 +1268,7 @@ export default function WorkspaceShell({
         },
       }));
     },
-    [rootDir, waveletCreateByteArray, waveletDeviceConnection, waveletUtilsBinding],
+    [rootDir, scriptCreateByteArray, scriptDeviceConnection, scriptUtilsBinding],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -1392,9 +1392,9 @@ export default function WorkspaceShell({
             <img src="/emwaver-logo.png" alt="EMWaver" className="h-full w-full object-contain p-4" />
           </div>
           <h2 className="text-2xl font-semibold text-slate-100">
-            Open a wavelet project
+            Open a script project
           </h2>
-          <p className="mt-2 max-w-lg text-sm text-slate-400">Wavelets needs a folder to browse, edit, run, and preview wavelets.</p>
+          <p className="mt-2 max-w-lg text-sm text-slate-400">Scripts needs a folder to browse, edit, run, and preview scripts.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <button
               type="button"
@@ -1450,14 +1450,14 @@ export default function WorkspaceShell({
                           className="truncate text-sm font-semibold text-slate-200"
                           title={
                             sidebarPanel === "explorer"
-                              ? rootDir ?? "Wavelets"
+                              ? rootDir ?? "Scripts"
                               : "Source Control"
                           }
                         >
                           {sidebarPanel === "explorer"
                             ? rootDir
                               ? basename(rootDir)
-                              : "WAVELETS"
+                              : "SCRIPTS"
                             : "SOURCE CONTROL"}
                         </h2>
                         {sidebarPanel === "git" ? <p className="mt-1 text-[11px] text-slate-500">Git</p> : null}
@@ -1548,10 +1548,10 @@ export default function WorkspaceShell({
 
                   {
                     <div className="border-t border-slate-900 bg-slate-950 p-2">
-                      <WaveletAssetsPanel
+                      <ScriptAssetsPanel
                         isCollapsed={isAssetScriptsCollapsed}
                         onToggleCollapsed={() => setIsAssetScriptsCollapsed((prev) => !prev)}
-                        onOpenAsset={(filename) => handleOpenFile(waveletAssetPath(filename))}
+                        onOpenAsset={(filename) => handleOpenFile(scriptAssetPath(filename))}
                       />
                     </div>
                   }
@@ -1587,7 +1587,7 @@ export default function WorkspaceShell({
             isLoadingFile={isLoadingFile}
             activeMainTabKind={activeMainTabKind}
             activePreviewPath={activePreviewPath}
-            waveletPreviewTabs={waveletPreviewTabs}
+            scriptPreviewTabs={scriptPreviewTabs}
             onSelectFile={(path) => {
               setActiveMainTabKind("file");
               setActivePreviewPath(null);
@@ -1600,7 +1600,7 @@ export default function WorkspaceShell({
               setActivePreviewPath(path);
               setGitSelectedDiff(null);
             }}
-            onClosePreview={closeWaveletPreviewTab}
+            onClosePreview={closeScriptPreviewTab}
             rightActions={
               <>
                 {activeMainTabKind !== "preview" ? (
@@ -1608,23 +1608,23 @@ export default function WorkspaceShell({
                     <button
                       type="button"
                       onClick={() => {
-                        const target = waveletTargetPath;
+                        const target = scriptTargetPath;
                         if (!target) return;
                         void (async () => {
-                          await openWaveletPreviewTab(target, { activate: true });
-                          await runWaveletForPath(target);
+                          await openScriptPreviewTab(target, { activate: true });
+                          await runScriptForPath(target);
                         })();
                       }}
-                      disabled={!canRunWavelet || !waveletTargetPath}
+                      disabled={!canRunScript || !scriptTargetPath}
                       className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Preview wavelet"
+                      title="Preview script"
                     >
                       <span className="flex items-center gap-1.5">
                         <PlayIcon className="h-4 w-4" />
                         <span className="text-[11px] font-semibold">Preview</span>
                       </span>
                     </button>
-                    {waveletTargetPath && waveletPreviewState[waveletTargetPath]?.isRunning ? (
+                    {scriptTargetPath && scriptPreviewState[scriptTargetPath]?.isRunning ? (
                       <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
                         <div className="h-full w-full animate-pulse bg-emerald-400/80" />
                       </div>
@@ -1647,16 +1647,16 @@ export default function WorkspaceShell({
                   editorOptions={MONACO_EDITOR_OPTIONS as unknown as Record<string, unknown>}
                 />
               ) : activeMainTabKind === "preview" && activePreviewPath ? (
-                <WaveletPreviewPanel
+                <ScriptPreviewPanel
                   theme={theme}
                   path={activePreviewPath}
-                  state={waveletPreviewState[activePreviewPath]}
-                  deviceStatus={waveletDeviceConnection.connectionStatus()}
+                  state={scriptPreviewState[activePreviewPath]}
+                  deviceStatus={scriptDeviceConnection.connectionStatus()}
                   onInvokeCallback={(token, args) => {
                     if (useBackendEngine && activeBackendPathRef.current === activePreviewPath) {
-                      backendWavelet.invokeCallback(token, args);
+                      backendScript.invokeCallback(token, args);
                     } else {
-                      waveletEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
+                      scriptEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
                     }
                   }}
                 />

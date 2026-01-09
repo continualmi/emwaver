@@ -27,7 +27,7 @@ type WorkspaceTopBarProps = {
   isLoadingFile: boolean;
   activeMainTabKind: "file" | "preview";
   activePreviewPath: string | null;
-  waveletPreviewTabs: string[];
+  scriptPreviewTabs: string[];
   onSelectFile: (path: string) => void;
   onCloseFile: (path: string) => void;
   onSelectPreview: (path: string) => void;
@@ -43,7 +43,7 @@ export default function WorkspaceTopBar({
   isLoadingFile,
   activeMainTabKind,
   activePreviewPath,
-  waveletPreviewTabs,
+  scriptPreviewTabs,
   onSelectFile,
   onCloseFile,
   onSelectPreview,
@@ -97,7 +97,7 @@ export default function WorkspaceTopBar({
               );
             })
           )}
-          {waveletPreviewTabs.map((path) => {
+          {scriptPreviewTabs.map((path) => {
             const isActive = activeMainTabKind === "preview" && activePreviewPath === path;
             return (
               <div

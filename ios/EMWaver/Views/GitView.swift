@@ -143,7 +143,7 @@ struct GitLoginView: View {
                 .font(.title2)
                 .bold()
             
-            Text("Sync your Wavelet scripts and signals")
+            Text("Sync your Script scripts and signals")
                 .foregroundColor(.secondary)
             
             Button(action: {
@@ -254,7 +254,7 @@ struct CreateRepoView: View {
                     Toggle("Private", isOn: $isPrivate)
                 }
                 
-                Section(footer: Text("This will create a new repository and push all your local Wavelet files to it.")) {
+                Section(footer: Text("This will create a new repository and push all your local Script files to it.")) {
                     Button("Create Repository") {
                         Task {
                             await service.createRepository(name: name, description: description, isPrivate: isPrivate)

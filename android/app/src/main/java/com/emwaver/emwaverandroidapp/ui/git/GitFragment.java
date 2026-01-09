@@ -542,9 +542,9 @@ public class GitFragment extends Fragment {
     }
     
     private boolean checkLocalFileExists(String fileName) {
-        // Check if file exists in local wavelets storage
+        // Check if file exists in local scripts storage
         FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
-        java.io.File storageDir = new java.io.File(requireContext().getFilesDir(), "wavelets");
+        java.io.File storageDir = new java.io.File(requireContext().getFilesDir(), "scripts");
         java.io.File file = new java.io.File(storageDir, fileName);
         return file.exists();
     }
@@ -566,7 +566,7 @@ public class GitFragment extends Fragment {
                     // Get local content for diff
                     String localContent = "";
                     FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
-                    java.io.File storageDir = new java.io.File(requireContext().getFilesDir(), "wavelets");
+                    java.io.File storageDir = new java.io.File(requireContext().getFilesDir(), "scripts");
                     java.io.File localFile = new java.io.File(storageDir, content.name);
                     if (localFile.exists()) {
                         try {
@@ -614,7 +614,7 @@ public class GitFragment extends Fragment {
             @Override
             public void onSuccess(com.emwaver.emwaverandroidapp.files.UserFileMetadata metadata) {
                 requireActivity().runOnUiThread(() -> {
-                    showToast("File copied to local wavelets");
+                    showToast("File copied to local scripts");
                 });
             }
             
@@ -632,7 +632,7 @@ public class GitFragment extends Fragment {
         
         showToast("Loading from local...");
         
-        // Get file from local wavelets
+        // Get file from local scripts
         FileRepositoryLocal localRepo = FileRepositoryLocal.getInstance(requireContext());
         localRepo.getFile(content.name, new RepositoryCallback<com.emwaver.emwaverandroidapp.files.UserFileData>() {
             @Override
@@ -803,7 +803,7 @@ public class GitFragment extends Fragment {
     private void showCommitDialogForSync(GitHubApiClient.GitHubContent content, String localContent) {
         View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_commit_message, null);
         EditText messageInput = dialogView.findViewById(R.id.commit_message_input);
-        messageInput.setText("Update " + content.name + " from local wavelets");
+        messageInput.setText("Update " + content.name + " from local scripts");
         
         new AlertDialog.Builder(requireContext())
             .setTitle("Commit Changes")

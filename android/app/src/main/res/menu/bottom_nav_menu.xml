@@ -16,9 +16,9 @@
         android:title="Sampler" />
 
     <item
-        android:id="@+id/navigation_wavelets"
+        android:id="@+id/navigation_scripts"
         android:icon="@drawable/ic_console_black_24dp"
-        android:title="Wavelets" />
+        android:title="Scripts" />
 
     <item
         android:id="@+id/navigation_git"

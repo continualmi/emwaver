@@ -1,0 +1,214 @@
+// Simple GPIO control script
+let selectedTarget = "esp32";
+let selectedPin = "";
+let selectedMode = "out";
+let status = "";
+let lastResponse = "";
+
+const TARGETS = [
+    { label: "ESP32-S3", value: "esp32" },
+    { label: "STM32F042", value: "stm32" }
+];
+
+// Keep ESP32 pin labels aligned with the Sampler's ESP32 pin list (Desktop/iOS/Android),
+// including the [F]/[D]/[S] distinctions shown in the UI.
+const ESP32_PIN_LABELS = [
+    "IO1 DIO0[S]/GDO0[F]",
+    "IO2 DIO1[S]/GDO2[F]",
+    "IO3 GPIO3",
+    "IO4 IR TX[F/D]",
+    "IO5 IR RX[F/D]",
+    "IO6 GPIO6",
+    "IO7 GPIO7",
+    "IO8 GPIO8",
+    "IO9 GPIO9",
+    "IO10 GPIO10",
+    "IO11 GPIO11",
+    "IO12 GPIO12",
+    "IO13 GPIO13",
+    "IO14 GPIO14",
+    "IO15 GPIO15",
+    "IO16 GPIO16",
+    "IO17 GPIO17",
+    "IO18 GPIO18",
+    "IO37 IR TX[S]",
+    "IO38 IR RX[S]",
+    "IO39 DIO5[S]",
+    "IO40 DIO4[S]",
+    "IO41 DIO3[S]",
+    "IO42 DIO2[S]",
+    "IO46 GPIO46",
+];
+
+// Keep STM32 pin labels aligned with the Sampler's STM32 pin list (Desktop/iOS/Android).
+const STM32_PIN_LABELS = [
+    "PA0 (TIM2 CH1)",
+    "PA1 (IR_RX)",
+    "PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)",
+    "PA3 (TIM2 CH4)",
+    "PA4",
+    "PA5",
+    "PA6",
+    "PA7",
+    "PA13",
+    "PA14",
+    "PB6",
+    "PB7",
+];
+
+function esp32PinValueFromLabel(label) {
+    const match = String(label).match(/\bIO(\d+)\b/);
+    return match ? match[1] : "";
+}
+
+function stm32PinValueFromLabel(label) {
+    const match = String(label).match(/\bP([AB])(\d{1,2})\b/);
+    if (!match) return "";
+    const bank = match[1];
+    const pin = parseInt(match[2], 10);
+    if (!Number.isFinite(pin) || pin < 0 || pin > 15) return "";
+    return String(bank === "A" ? pin : 16 + pin);
+}
+
+const ESP32_PINS = ESP32_PIN_LABELS
+    .map((label) => ({ label, value: esp32PinValueFromLabel(label) }))
+    .filter((pin) => pin.value !== "");
+
+const STM32_PINS = STM32_PIN_LABELS
+    .map((label) => ({ label, value: stm32PinValueFromLabel(label) }))
+    .filter((pin) => pin.value !== "");
+
+function pinsForTarget(target) {
+    return target === "stm32" ? STM32_PINS : ESP32_PINS;
+}
+
+selectedPin = (pinsForTarget(selectedTarget)[0] || { value: "" }).value;
+
+function gpioRead() {
+    status = "Reading...";
+    lastResponse = "";
+    render();
+
+    if (selectedMode === "in") {
+        emw.send("gpio in --pin=" + selectedPin);
+    }
+
+    let response = emw.send("gpio read --pin=" + selectedPin);
+
+    let state = response && response.length > 0 && response[0] !== 0;
+    let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
+    let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+    status = pinName + " is " + (state ? "HIGH" : "LOW");
+    lastResponse = "gpio read -> " + (response && response.length ? ("0x" + response[0].toString(16).padStart(2, "0")) : "(no data)");
+    render();
+}
+
+function gpioWriteHigh() {
+    gpioWrite(1);
+}
+
+function gpioWriteLow() {
+    gpioWrite(0);
+}
+
+function gpioWrite(value) {
+    status = value ? "Setting HIGH..." : "Setting LOW...";
+    lastResponse = "";
+    render();
+
+    let outResp = emw.send("gpio out --pin=" + selectedPin);
+    let writeResp = emw.send(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
+    let readResp = emw.send("gpio read --pin=" + selectedPin);
+
+    let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
+    let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+
+    let readLevel = readResp && readResp.length > 0 && readResp[0] !== 0;
+    status = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readLevel ? "HIGH" : "LOW") + ")";
+
+    function fmt(resp) {
+        if (!resp || !resp.length) return "(no data)";
+        return "0x" + resp[0].toString(16).padStart(2, "0");
+    }
+    lastResponse =
+        "gpio out -> " + fmt(outResp) + "\n" +
+        (value ? "gpio high -> " : "gpio low -> ") + fmt(writeResp) + "\n" +
+        "gpio read -> " + fmt(readResp);
+    render();
+}
+
+function render() {
+    const pins = pinsForTarget(selectedTarget);
+    UI.render(UI.column({
+        padding: 16,
+        spacing: 16,
+        children: [
+            UI.text({ text: "GPIO Control", font: "title2", fontWeight: "semibold" }),
+            UI.text({ text: "Target", fontWeight: "medium" }),
+            UI.picker({
+                style: "menu",
+                selected: selectedTarget,
+                options: TARGETS,
+                onChange: function(value) {
+                    selectedTarget = value;
+                    selectedPin = pinsForTarget(selectedTarget)[0].value;
+                    status = "";
+                    render();
+                }
+            }),
+            // Pin selection
+            UI.text({ text: "Select Pin", fontWeight: "medium" }),
+            UI.picker({
+                style: "menu",
+                selected: String(selectedPin),
+                options: pins,
+                onChange: function(value) {
+                    selectedPin = value;
+                }
+            }),
+
+            // Mode selection
+            UI.text({ text: "Mode", fontWeight: "medium" }),
+            UI.picker({
+                style: "menu",
+                selected: selectedMode,
+                options: [
+                    { label: "Output", value: "out" },
+                    { label: "Input", value: "in" }
+                ],
+                onChange: function(value) {
+                    selectedMode = value;
+                }
+            }),
+            
+            // GPIO operations
+            UI.row({
+                spacing: 12,
+                children: [
+                    UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: gpioRead }),
+                    UI.button({ label: "Write HIGH", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: gpioWriteHigh }),
+                    UI.button({ label: "Write LOW", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: gpioWriteLow })
+                ]
+            }),
+            
+            // Result display
+            status ? UI.text({
+                text: status,
+                backgroundColor: "#111827",
+                foregroundColor: "#FFFFFF",
+                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                cornerRadius: 8
+            }) : null
+            ,
+            lastResponse ? UI.text({
+                text: lastResponse,
+                backgroundColor: "#0B1220",
+                foregroundColor: "#E5E7EB",
+                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+                cornerRadius: 8
+            }) : null
+        ]
+    }));
+}
+
+render();

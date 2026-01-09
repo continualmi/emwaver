@@ -257,7 +257,7 @@
             opacity: 0.85;
         }
 
-        .wavelets-section {
+        .scripts-section {
             margin-top: 3rem;
             padding: 2.5rem;
             border-radius: 20px;
@@ -268,34 +268,34 @@
             box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
         }
 
-        .wavelets-section h2 {
+        .scripts-section h2 {
             font-size: 2rem;
             text-align: center;
             margin-bottom: 0.6rem;
         }
 
-        .wavelets-intro {
+        .scripts-intro {
             text-align: center;
             max-width: 840px;
             margin: 0 auto 2rem;
             opacity: 0.9;
         }
 
-        .wavelets-layout {
+        .scripts-layout {
             display: grid;
             grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr);
             gap: 2rem;
             align-items: start;
         }
 
-        .wavelets-right {
+        .scripts-right {
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
             align-items: center;
         }
 
-        .wavelet-script-card {
+        .script-script-card {
             background: rgba(8, 16, 32, 0.85);
             border-radius: 16px;
             border: 1px solid rgba(148, 163, 184, 0.35);
@@ -306,7 +306,7 @@
             text-align: left;
         }
 
-        .wavelet-label {
+        .script-label {
             text-transform: uppercase;
             letter-spacing: 0.12em;
             font-size: 0.75rem;
@@ -314,13 +314,13 @@
             color: #7dd3fc;
         }
 
-        .wavelet-script-name {
+        .script-script-name {
             font-size: 1rem;
             font-weight: 600;
             color: #e2e8f0;
         }
 
-        .wavelet-script-card pre {
+        .script-script-card pre {
             background: #0b1220;
             color: #e2e8f0;
             border-radius: 12px;
@@ -335,42 +335,42 @@
             text-align: left;
         }
 
-        .wavelet-script-card code {
+        .script-script-card code {
             display: block;
         }
 
-        .wavelet-script-card .token-keyword {
+        .script-script-card .token-keyword {
             color: #60a5fa;
         }
 
-        .wavelet-script-card .token-const {
+        .script-script-card .token-const {
             color: #fbbf24;
         }
 
-        .wavelet-script-card .token-string {
+        .script-script-card .token-string {
             color: #34d399;
         }
 
-        .wavelet-script-card .token-number {
+        .script-script-card .token-number {
             color: #f472b6;
         }
 
-        .wavelet-script-card .token-function {
+        .script-script-card .token-function {
             color: #a78bfa;
         }
 
-        .wavelet-script-card .token-comment {
+        .script-script-card .token-comment {
             color: #94a3b8;
         }
 
-        .wavelet-outputs {
+        .script-outputs {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 1.25rem;
             width: 100%;
         }
 
-        .wavelet-output {
+        .script-output {
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
@@ -397,7 +397,7 @@
             border-right: 6px solid transparent;
         }
 
-        .wavelet-output-card {
+        .script-output-card {
             background: rgba(255, 255, 255, 0.08);
             border-radius: 14px;
             border: 1px dashed rgba(255, 255, 255, 0.35);
@@ -409,19 +409,19 @@
             gap: 0.7rem;
         }
 
-        .wavelet-output-card.wavelet-output-card--auto {
+        .script-output-card.script-output-card--auto {
             width: fit-content;
             max-width: 100%;
             min-height: 0;
             align-self: center;
         }
 
-        .wavelet-output-title {
+        .script-output-title {
             font-weight: 600;
             font-size: 1rem;
         }
 
-        .wavelet-placeholder {
+        .script-placeholder {
             flex: 1;
             display: flex;
             align-items: center;
@@ -435,7 +435,7 @@
             padding: 0.75rem;
         }
 
-        .wavelet-output-image {
+        .script-output-image {
             width: 100%;
             max-height: 360px;
             border-radius: 10px;
@@ -443,13 +443,13 @@
             object-fit: contain;
         }
 
-        .wavelet-output-card--auto .wavelet-output-image {
+        .script-output-card--auto .script-output-image {
             width: auto;
             max-width: 100%;
             height: auto;
         }
 
-        .wavelets-footnote {
+        .scripts-footnote {
             margin-top: 1.5rem;
             text-align: center;
             font-size: 0.98rem;
@@ -695,19 +695,19 @@
                 width: min(480px, 100%);
             }
 
-            .wavelets-section {
+            .scripts-section {
                 padding: 2rem 1.5rem;
             }
 
-            .wavelets-layout {
+            .scripts-layout {
                 grid-template-columns: 1fr;
             }
 
-            .wavelet-outputs {
+            .script-outputs {
                 grid-template-columns: 1fr;
             }
 
-            .wavelet-output {
+            .script-output {
                 width: 100%;
             }
 
@@ -734,7 +734,7 @@
             <ul>
                 <li><a href="/news/">News</a></li>
                 <li><a href="overview/">Get Started</a></li>
-                <li><a href="wavelets/">Documentation</a></li>
+                <li><a href="scripts/">Documentation</a></li>
                 <li><a href="hardware-catalog/hardware.html">Order on JLCPCB</a></li>
             </ul>
         </div>
@@ -805,16 +805,16 @@
                     </a>
                 </div>
             </div>
-            <div class="wavelets-section">
+            <div class="scripts-section">
                 <h2>EMWaver scripts: One Script, Every Surface</h2>
-                <p class="wavelets-intro">
+                <p class="scripts-intro">
                     EMWaver scripts are powered by the EMWaver DSL so the same script renders consistent UI in the Scripts fragment,
                     iOS, Android, and desktop. Author once, sync through Git, and automate hardware interactions everywhere.
                 </p>
-                <div class="wavelets-layout">
-                    <div class="wavelet-script-card">
-                            <div class="wavelet-label">EMWaver DSL</div>
-                            <div class="wavelet-script-name">ir_send_saved_signal.emw</div>
+                <div class="scripts-layout">
+                    <div class="script-script-card">
+                            <div class="script-label">EMWaver DSL</div>
+                            <div class="script-script-name">ir_send_saved_signal.emw</div>
                             <pre><code><span class="token-keyword">const</span> <span class="token-const">DEFAULT_FREQ_HZ</span> = <span class="token-number">38000</span>;
 <span class="token-keyword">const</span> <span class="token-const">DEFAULT_DUTY_PERCENT</span> = <span class="token-number">50</span>;
 
@@ -854,33 +854,33 @@
 
 render();</code></pre>
                     </div>
-                    <div class="wavelets-right">
-                        <div class="wavelet-outputs">
-                            <div class="wavelet-output">
+                    <div class="scripts-right">
+                        <div class="script-outputs">
+                            <div class="script-output">
                                 <div class="flow-arrow"></div>
-                                <div class="wavelet-output-card">
-                                    <div class="wavelet-output-title">iOS Scripts Fragment</div>
-                                    <img src="wavelet_ios.PNG" alt="Wavelet UI on iOS" class="wavelet-output-image">
+                                <div class="script-output-card">
+                                    <div class="script-output-title">iOS Scripts Fragment</div>
+                                    <img src="script_ios.PNG" alt="Script UI on iOS" class="script-output-image">
                                 </div>
                             </div>
-                            <div class="wavelet-output">
+                            <div class="script-output">
                                 <div class="flow-arrow"></div>
-                                <div class="wavelet-output-card">
-                                    <div class="wavelet-output-title">Android Scripts Fragment</div>
-                                    <img src="wavelet_android.jpg" alt="Wavelet UI on Android" class="wavelet-output-image">
+                                <div class="script-output-card">
+                                    <div class="script-output-title">Android Scripts Fragment</div>
+                                    <img src="script_android.jpg" alt="Script UI on Android" class="script-output-image">
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="wavelet-output" style="margin-top: 1.75rem;">
+                <div class="script-output" style="margin-top: 1.75rem;">
                     <div class="flow-arrow"></div>
-                    <div class="wavelet-output-card wavelet-output-card--auto">
-                        <div class="wavelet-output-title">Desktop Scripts View</div>
-                        <img src="wavelet_desktop.png" alt="Wavelet UI on desktop" class="wavelet-output-image">
+                    <div class="script-output-card script-output-card--auto">
+                        <div class="script-output-title">Desktop Scripts View</div>
+                        <img src="script_desktop.png" alt="Script UI on desktop" class="script-output-image">
                     </div>
                 </div>
-                <p class="wavelets-footnote">
+                <p class="scripts-footnote">
                     EMWaver scripts let you automate hardware workflows and ship tailored UI controls to your phone or laptop without firmware changes.
                 </p>
             </div>

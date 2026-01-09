@@ -21,10 +21,10 @@
 
 
     <fragment
-        android:id="@+id/navigation_wavelets"
-        android:name="com.emwaver.emwaverandroidapp.ui.wavelets.WaveletsFragment"
-        android:label="Wavelets"
-        tools:layout="@layout/fragment_wavelets" />
+        android:id="@+id/navigation_scripts"
+        android:name="com.emwaver.emwaverandroidapp.ui.scripts.ScriptsFragment"
+        android:label="Scripts"
+        tools:layout="@layout/fragment_scripts" />
 
     <fragment
         android:id="@+id/navigation_sampler"

@@ -44,13 +44,13 @@ export const TERMINAL_VIEW_MIN_WIDTH = 320;
 
 export function storageKeys(): WorkspaceStorageKeys {
   return {
-    root: "emwaver.waveletsWorkspace.root",
-    sidebarWidth: "emwaver.waveletsWorkspace.sidebarWidth",
-    sidebarCollapsed: "emwaver.waveletsWorkspace.sidebarCollapsed",
-    terminalHeight: "emwaver.waveletsWorkspace.terminalHeight",
-    terminalListWidth: "emwaver.waveletsWorkspace.terminalListWidth",
-    terminalListCollapsed: "emwaver.waveletsWorkspace.terminalListCollapsed",
-    assetScriptsCollapsed: "emwaver.waveletsWorkspace.assetScriptsCollapsed",
+    root: "emwaver.scriptsWorkspace.root",
+    sidebarWidth: "emwaver.scriptsWorkspace.sidebarWidth",
+    sidebarCollapsed: "emwaver.scriptsWorkspace.sidebarCollapsed",
+    terminalHeight: "emwaver.scriptsWorkspace.terminalHeight",
+    terminalListWidth: "emwaver.scriptsWorkspace.terminalListWidth",
+    terminalListCollapsed: "emwaver.scriptsWorkspace.terminalListCollapsed",
+    assetScriptsCollapsed: "emwaver.scriptsWorkspace.assetScriptsCollapsed",
   };
 }
 

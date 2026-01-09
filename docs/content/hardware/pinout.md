@@ -16,7 +16,7 @@ For the exact physical header orientation and any board-specific routing constra
 
 EMWaver exposes two GPIO header “blocks”: **GPIO A** and **GPIO B**.
 
-In wavelets and commands, pins are addressed by a single integer:
+In scripts and commands, pins are addressed by a single integer:
 
 - `0..15` maps to `PA0..PA15`
 - `16..31` maps to `PB0..PB15`

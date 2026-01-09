@@ -17,7 +17,7 @@
 
 mod git;
 mod pty;
-mod wavelet_runtime;
+mod script_runtime;
 mod desktop_ipc;
 
 use serde::{Deserialize, Serialize};
@@ -47,13 +47,13 @@ use emwaver_device_core::bridge::{
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
 
-// ESP-IDF functionality removed - desktop app focuses on hardware interaction and wavelets
+// ESP-IDF functionality removed - desktop app focuses on hardware interaction and scripts
 const MENU_CLOSE_FOLDER_EVENT: &str = "menu-close-folder";
 const MENU_NEW_PROJECT_EVENT: &str = "menu-new-project";
 const MENU_OPEN_PROJECT_EVENT: &str = "menu-open-project";
 const MENU_TOGGLE_EXPLORER_EVENT: &str = "menu-toggle-explorer";
 const MENU_SHOW_EXPLORER_EVENT: &str = "menu-show-explorer";
-const MENU_SHOW_WAVELETS_EVENT: &str = "menu-show-wavelets";
+const MENU_SHOW_SCRIPTS_EVENT: &str = "menu-show-scripts";
 const MENU_SHOW_ISM_EVENT: &str = "menu-show-ism";
 const MENU_SHOW_SAMPLER_EVENT: &str = "menu-show-sampler";
 const MENU_SHOW_EMWAVER_EVENT: &str = "menu-show-emwaver";
@@ -1144,19 +1144,19 @@ async fn dfu_flash_file(app: tauri::AppHandle, path: String) -> Result<(), Strin
 }
 
 // ============================================================================
-// Wavelet Runtime Commands (embedded JS engine with direct USB access)
+// Script Runtime Commands (embedded JS engine with direct USB access)
 // ============================================================================
 
-use wavelet_runtime::{WaveletRuntime, WaveletEvent, WaveletCommand};
+use script_runtime::{ScriptRuntime, ScriptEvent, ScriptCommand};
 use std::sync::Mutex as StdMutex;
 use tokio::sync::mpsc;
 
-/// Global state for the active wavelet runtime.
-struct WaveletState {
-    command_tx: StdMutex<Option<mpsc::UnboundedSender<WaveletCommand>>>,
+/// Global state for the active script runtime.
+struct ScriptState {
+    command_tx: StdMutex<Option<mpsc::UnboundedSender<ScriptCommand>>>,
 }
 
-impl Default for WaveletState {
+impl Default for ScriptState {
     fn default() -> Self {
         Self {
             command_tx: StdMutex::new(None),
@@ -1164,48 +1164,48 @@ impl Default for WaveletState {
     }
 }
 
-/// Execute a wavelet script using the embedded JS engine (fast path - no IPC per command).
+/// Execute a script script using the embedded JS engine (fast path - no IPC per command).
 #[tauri::command]
-async fn wavelet_execute(
+async fn script_execute(
     app: tauri::AppHandle,
     device_state: tauri::State<'_, DeviceState>,
-    wavelet_state: tauri::State<'_, Arc<WaveletState>>,
+    script_state: tauri::State<'_, Arc<ScriptState>>,
     script: String,
     bootstrap: String,
 ) -> Result<(), String> {
-    wavelet_execute_impl(
+    script_execute_impl(
         app,
         device_state.bridge.clone(),
-        wavelet_state.inner().clone(),
+        script_state.inner().clone(),
         script,
         bootstrap,
     )
     .await
 }
 
-async fn wavelet_execute_impl(
+async fn script_execute_impl(
     app: tauri::AppHandle,
     device: Arc<BridgeState>,
-    wavelet_state: Arc<WaveletState>,
+    script_state: Arc<ScriptState>,
     script: String,
     bootstrap: String,
 ) -> Result<(), String> {
     use tauri::Emitter;
 
-    // Stop any existing wavelet first
+    // Stop any existing script first
     {
-        let mut tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+        let mut tx_guard = script_state.command_tx.lock().map_err(|e| e.to_string())?;
         if let Some(tx) = tx_guard.take() {
-            let _ = tx.send(WaveletCommand::Stop);
+            let _ = tx.send(ScriptCommand::Stop);
         }
     }
 
     // Create the runtime
-    let (runtime, command_tx, mut event_rx) = WaveletRuntime::new(device, bootstrap);
+    let (runtime, command_tx, mut event_rx) = ScriptRuntime::new(device, bootstrap);
 
     // Store command channel for callbacks
     {
-        let mut tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+        let mut tx_guard = script_state.command_tx.lock().map_err(|e| e.to_string())?;
         *tx_guard = Some(command_tx);
     }
 
@@ -1218,17 +1218,17 @@ async fn wavelet_execute_impl(
     tauri::async_runtime::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match &event {
-                WaveletEvent::Render { ui } => {
-                    let _ = app_clone.emit("wavelet:render", ui);
+                ScriptEvent::Render { ui } => {
+                    let _ = app_clone.emit("script:render", ui);
                 }
-                WaveletEvent::Print { message } => {
-                    let _ = app_clone.emit("wavelet:print", message);
+                ScriptEvent::Print { message } => {
+                    let _ = app_clone.emit("script:print", message);
                 }
-                WaveletEvent::Error { message } => {
-                    let _ = app_clone.emit("wavelet:error", message);
+                ScriptEvent::Error { message } => {
+                    let _ = app_clone.emit("script:error", message);
                 }
-                WaveletEvent::Stopped => {
-                    let _ = app_clone.emit("wavelet:stopped", ());
+                ScriptEvent::Stopped => {
+                    let _ = app_clone.emit("script:stopped", ());
                     break;
                 }
             }
@@ -1241,42 +1241,42 @@ async fn wavelet_execute_impl(
     Ok(())
 }
 
-/// Stop the currently running wavelet.
+/// Stop the currently running script.
 #[tauri::command]
-async fn wavelet_stop(wavelet_state: tauri::State<'_, Arc<WaveletState>>) -> Result<(), String> {
-    wavelet_stop_impl(wavelet_state.inner().clone())?;
+async fn script_stop(script_state: tauri::State<'_, Arc<ScriptState>>) -> Result<(), String> {
+    script_stop_impl(script_state.inner().clone())?;
     Ok(())
 }
 
-fn wavelet_stop_impl(wavelet_state: Arc<WaveletState>) -> Result<(), String> {
-    let tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+fn script_stop_impl(script_state: Arc<ScriptState>) -> Result<(), String> {
+    let tx_guard = script_state.command_tx.lock().map_err(|e| e.to_string())?;
     if let Some(tx) = tx_guard.as_ref() {
-        let _ = tx.send(WaveletCommand::Stop);
+        let _ = tx.send(ScriptCommand::Stop);
     }
     Ok(())
 }
 
-/// Send a callback event to the running wavelet (e.g., button click).
+/// Send a callback event to the running script (e.g., button click).
 #[tauri::command]
-async fn wavelet_callback(
-    wavelet_state: tauri::State<'_, Arc<WaveletState>>,
+async fn script_callback(
+    script_state: tauri::State<'_, Arc<ScriptState>>,
     token: String,
     data: serde_json::Value,
 ) -> Result<(), String> {
-    wavelet_callback_impl(wavelet_state.inner().clone(), token, data)
+    script_callback_impl(script_state.inner().clone(), token, data)
 }
 
-fn wavelet_callback_impl(
-    wavelet_state: Arc<WaveletState>,
+fn script_callback_impl(
+    script_state: Arc<ScriptState>,
     token: String,
     data: serde_json::Value,
 ) -> Result<(), String> {
-    let tx_guard = wavelet_state.command_tx.lock().map_err(|e| e.to_string())?;
+    let tx_guard = script_state.command_tx.lock().map_err(|e| e.to_string())?;
     if let Some(tx) = tx_guard.as_ref() {
-        tx.send(WaveletCommand::Callback { token, data })
+        tx.send(ScriptCommand::Callback { token, data })
             .map_err(|e| format!("Failed to send callback: {e}"))?;
     } else {
-        return Err("No running wavelet".to_string());
+        return Err("No running script".to_string());
     }
     Ok(())
 }
@@ -1295,8 +1295,8 @@ pub fn run() {
         next_id: Arc::new(std::sync::atomic::AtomicU64::new(1)),
     };
     let device_state_for_setup = device_state.clone();
-    let wavelet_state = Arc::new(WaveletState::default());
-    let wavelet_state_for_setup = wavelet_state.clone();
+    let script_state = Arc::new(ScriptState::default());
+    let script_state_for_setup = script_state.clone();
 
     tauri::Builder::default()
         .setup(move |app| {
@@ -1357,7 +1357,7 @@ pub fn run() {
                 }
             });
 
-            desktop_ipc::spawn(handle.clone(), device_state_for_setup.clone(), wavelet_state_for_setup.clone());
+            desktop_ipc::spawn(handle.clone(), device_state_for_setup.clone(), script_state_for_setup.clone());
 
             let new_item = MenuItem::with_id(
                 app,
@@ -1422,10 +1422,10 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let show_wavelets_item = MenuItem::with_id(
+            let show_scripts_item = MenuItem::with_id(
                 app,
-                "menu-show-wavelets",
-                "Show Wavelets",
+                "menu-show-scripts",
+                "Show Scripts",
                 true,
                 None::<&str>,
             )?;
@@ -1471,7 +1471,7 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+0"),
             )?;
-            // Wavelets menu items removed - no longer needed
+            // Scripts menu items removed - no longer needed
 
             let mut close_item_added = false;
             let mut view_menu_added = false;
@@ -1493,7 +1493,7 @@ pub fn run() {
                                 submenu.append(&reset_layout_item)?;
                                 submenu.append(&toggle_explorer_item)?;
                                 submenu.append(&show_explorer_item)?;
-                                submenu.append(&show_wavelets_item)?;
+                                submenu.append(&show_scripts_item)?;
                                 submenu.append(&show_ism_item)?;
                                 submenu.append(&show_sampler_item)?;
                                 submenu.append(&show_emwaver_item)?;
@@ -1521,7 +1521,7 @@ pub fn run() {
                 view_menu.append(&reset_layout_item)?;
                 view_menu.append(&toggle_explorer_item)?;
                 view_menu.append(&show_explorer_item)?;
-                view_menu.append(&show_wavelets_item)?;
+                view_menu.append(&show_scripts_item)?;
                 view_menu.append(&show_ism_item)?;
                 view_menu.append(&show_sampler_item)?;
                 view_menu.append(&show_emwaver_item)?;
@@ -1591,8 +1591,8 @@ pub fn run() {
                 "menu-show-explorer" => {
                     let _ = app.emit(MENU_SHOW_EXPLORER_EVENT, ());
                 }
-                "menu-show-wavelets" => {
-                    let _ = app.emit(MENU_SHOW_WAVELETS_EVENT, ());
+                "menu-show-scripts" => {
+                    let _ = app.emit(MENU_SHOW_SCRIPTS_EVENT, ());
                 }
                 "menu-show-ism" => {
                     let _ = app.emit(MENU_SHOW_ISM_EVENT, ());
@@ -1631,7 +1631,7 @@ pub fn run() {
                 .build(),
         )
         .manage(device_state)
-        .manage(wavelet_state)
+        .manage(script_state)
         .manage(Arc::new(PtyManager::new()))
 			        .invoke_handler(tauri::generate_handler![
             read_directory,
@@ -1687,9 +1687,9 @@ pub fn run() {
                 git_discard,
                 git_commit,
                 git_push,
-                wavelet_execute,
-                wavelet_stop,
-                wavelet_callback
+                script_execute,
+                script_stop,
+                script_callback
 	        ])
 	        .run(tauri::generate_context!())
         .expect("error while running tauri application");

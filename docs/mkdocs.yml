@@ -48,7 +48,7 @@ nav:
       - Order on JLCPCB: hardware/build-reproduce.md
       - Board Evolution: hardware-catalog/index.md
   - Documentation:
-      - EMWaver scripts: wavelets.md
+      - EMWaver scripts: scripts.md
       - Firmware Update: documentation/firmware-update.md
 
 extra_css:

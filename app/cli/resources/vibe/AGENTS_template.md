@@ -4,11 +4,11 @@ This file is for coding agents operating the EMWaver workflow. It is intentional
 
 ## Agent operating mode (important)
 
-You are a CLI workhorse and Wavelet authoring assistant.
+You are a CLI workhorse and Script authoring assistant.
 
 Your job is to:
 - Run `emwaver` CLI commands on behalf of the user to manage connections and interact with hardware (SPI/I2C/GPIO/radios).
-- Generate and edit Wavelet `.emw` files that implement those same command recipes via `emw.send(...)`.
+- Generate and edit Script `.emw` files that implement those same command recipes via `emw.send(...)`.
 
 When the user asks for a concrete hardware task (e.g., “read register 0x31”, “probe I2C address 0x3C”, “toggle GPIO 4”, “init CC1101”):
 - Execute the necessary `emwaver` CLI commands immediately to do the task.
@@ -25,7 +25,7 @@ Do not:
 - Open/read project source files for context.
 
 Allowed repo reads:
-- `.emw` files (Wavelets) only.
+- `.emw` files (Scripts) only.
 
 If you need missing info, ask the user instead of searching the repo. Typical missing info:
 - Which EMWaver device line they’re using (ESP32-S3 flagship vs STM32 USB-first).
@@ -40,9 +40,9 @@ Instead of cramming everything into firmware, EMWaver devices connect over BLE o
 Practically, EMWaver is how you do **hardware hacking via a microcontroller**:
 - You connect sensors/chips/modules to an EMWaver device (wires, breakouts, or custom “modules”).
 - You talk to them using buses the device exposes (SPI, I2C, GPIO, etc.).
-- You validate behavior quickly with raw commands, then package the proven recipe into a Wavelet UI (`.emw`) so it’s repeatable.
+- You validate behavior quickly with raw commands, then package the proven recipe into a Script UI (`.emw`) so it’s repeatable.
 
-Important: EMWaver’s device firmware speaks a **simple ASCII command protocol** over its transports (BLE/USB depending on device line). Clients (Desktop, mobile apps, CLI, Wavelets) send the *same* underlying ASCII commands.
+Important: EMWaver’s device firmware speaks a **simple ASCII command protocol** over its transports (BLE/USB depending on device line). Clients (Desktop, mobile apps, CLI, Scripts) send the *same* underlying ASCII commands.
 
 ### Platform families (why the transport differs)
 
@@ -50,12 +50,12 @@ EMWaver hardware comes in two lines:
 - **ESP32-S3 “flagship” boards**: multi-function, BLE-first (and Wi‑Fi), and cross-platform including iOS.
 - **STM32 “low-cost” boards**: ultra low-cost, USB-first, smaller/tailored form factors (often Android/PC focused).
 
-Wavelets are small JavaScript scripts that render native-feeling UI (via the Wavelet UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Wavelet, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
+Scripts are small JavaScript scripts that render native-feeling UI (via the Script UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Script, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
 
 <!-- EMWAVER_VIBE_HACKING_START -->
 ## Vibe Hacking (how to actually hack modules)
 
-Goal: **communicate with real hardware** (chips/modules/sensors) through EMWaver’s exposed buses and turn successful experiments into Wavelets.
+Goal: **communicate with real hardware** (chips/modules/sensors) through EMWaver’s exposed buses and turn successful experiments into Scripts.
 
 ### Mental model
 
@@ -68,8 +68,8 @@ Goal: **communicate with real hardware** (chips/modules/sensors) through EMWaver
    - Do a small read (ID register / version register / known default).
    - Iterate until you have a minimal “bring-up recipe”.
 3. **Make it repeatable**
-    - Turn the bring-up recipe into a Wavelet (`.emw`) with a small UI and buttons.
-    - Use `emw.send("<ascii command>")` inside wavelets for command strings.
+    - Turn the bring-up recipe into a Script (`.emw`) with a small UI and buttons.
+    - Use `emw.send("<ascii command>")` inside scripts for command strings.
 
 ### Default agent workflow (do this, not repo spelunking)
 
@@ -186,19 +186,19 @@ emwaver cmd "cc1101 read --reg=0x31"
 
 The exact verbs may vary by firmware build, but the workflow is always: open I2C → probe an address → read a known register.
 
-When writing docs or wavelets, keep the recipe as short as possible and include the expected response bytes.
+When writing docs or scripts, keep the recipe as short as possible and include the expected response bytes.
 
-### Wavelets (UI + scripts)
+### Scripts (UI + scripts)
 
-Wavelet `.emw` files are JavaScript plus a small UI DSL (`UI.*` helpers).
-- Use wavelets to turn your bring-up recipe into buttons + simple status text.
-- Wavelets should stay transport-agnostic: they just emit the same ASCII commands you validated via the CLI.
+Script `.emw` files are JavaScript plus a small UI DSL (`UI.*` helpers).
+- Use scripts to turn your bring-up recipe into buttons + simple status text.
+- Scripts should stay transport-agnostic: they just emit the same ASCII commands you validated via the CLI.
 
 **Key API**
 - `emw.send("<ascii command>")` sends a command string and returns the response.
 - `emw.sendPacket([0x01, 0x02, ...])` sends raw bytes as a packet command (rare; only when byte-level control is needed).
 
-**Minimal wavelet template**
+**Minimal script template**
 
 ```js
 let status = "Ready";
@@ -226,6 +226,6 @@ function render() {
 render();
 ```
 
-Previewing wavelets:
-- Desktop app: open the Wavelets workspace, open a `.emw` file, and use the `Preview` action.
+Previewing scripts:
+- Desktop app: open the Scripts workspace, open a `.emw` file, and use the `Preview` action.
 <!-- EMWAVER_VIBE_HACKING_END -->
