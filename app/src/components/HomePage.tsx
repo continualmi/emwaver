@@ -16,9 +16,12 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "xterm";
+import "xterm/css/xterm.css";
 import type { FragmentType } from "../App";
 import { useDevice } from "../utils/DeviceContext";
-import { safeInvoke } from "../utils/tauri";
+import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
 import { useAppDialog } from "../utils/AppDialogContext";
 
 type HomePageProps = {
@@ -58,18 +61,24 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     connectMIDI,
     disconnect, 
     listMIDIPorts,
-    send,
     sendNoWait,
   } = useDevice();
   const dialog = useAppDialog();
 
-  const [commandInput, setCommandInput] = useState("");
   const [transportEntries, setTransportEntries] = useState<BufferEntry[]>([]);
   const [streamEntries, setStreamEntries] = useState<BufferEntry[]>([]);
   const [commandEntries, setCommandEntries] = useState<CommandPacketEntry[]>([]);
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
+
+  const [shellSessionId, setShellSessionId] = useState<string | null>(null);
+  const shellContainerRef = useRef<HTMLDivElement>(null);
+  const shellTerminalRef = useRef<Terminal | null>(null);
+  const shellFitAddonRef = useRef<FitAddon | null>(null);
+  const shellDecoderRef = useRef(new TextDecoder());
+  const shellSessionIdRef = useRef<string | null>(null);
+  const pendingShellOutputBySessionRef = useRef<Map<string, Uint8Array[]>>(new Map());
   
   const [midiPorts, setMidiPorts] = useState<string[]>([]);
   const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
@@ -86,7 +95,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
   });
 
-  const devMonitorsAllowed = import.meta.env.DEV || import.meta.env.VITE_MONITOR === "1";
+  const devMonitorsAllowed = import.meta.env.VITE_MONITOR === "1";
   const [devMonitorsEnabled, setDevMonitorsEnabled] = useState<boolean>(() => {
     if (!devMonitorsAllowed) return false;
     try {
@@ -237,6 +246,184 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       window.clearInterval(interval);
     };
   }, [autoConnectEnabled, connectMIDI, isActive, refreshMidiPorts, selectedMidiPort, status.connected]);
+
+  useEffect(() => {
+    shellSessionIdRef.current = shellSessionId;
+  }, [shellSessionId]);
+
+  // Shell output wiring (listen immediately; buffer until we have a terminal + session).
+  useEffect(() => {
+    const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
+      const payload = event.payload;
+      if (!payload) return;
+
+      const bytes = new Uint8Array(payload.data);
+      const currentSessionId = shellSessionIdRef.current;
+      const terminal = shellTerminalRef.current;
+
+      if (terminal && currentSessionId && payload.session_id === currentSessionId) {
+        terminal.write(shellDecoderRef.current.decode(bytes, { stream: true }));
+        return;
+      }
+
+      const map = pendingShellOutputBySessionRef.current;
+      const existing = map.get(payload.session_id) ?? [];
+      existing.push(bytes);
+      map.set(payload.session_id, existing);
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isActive) return;
+    if (!isTauriAvailable()) return;
+    if (!shellContainerRef.current) return;
+    if (shellTerminalRef.current) return;
+
+    const terminal = new Terminal({
+      cursorBlink: true,
+      fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
+      fontSize: 13,
+      theme: {
+        background: "#020617",
+        foreground: "#e2e8f0",
+        cursor: "#38bdf8",
+      },
+    });
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(shellContainerRef.current);
+
+    terminal.onData((data) => {
+      const currentSessionId = shellSessionIdRef.current;
+      if (!currentSessionId) return;
+      void safeInvoke<void>("pty_write", {
+        payload: {
+          session_id: currentSessionId,
+          data,
+        },
+      });
+    });
+
+    shellTerminalRef.current = terminal;
+    shellFitAddonRef.current = fitAddon;
+
+    const currentSessionId = shellSessionIdRef.current;
+    if (currentSessionId) {
+      const pending = pendingShellOutputBySessionRef.current.get(currentSessionId);
+      if (pending && pending.length > 0) {
+        pendingShellOutputBySessionRef.current.delete(currentSessionId);
+        for (const chunk of pending) {
+          terminal.write(shellDecoderRef.current.decode(chunk, { stream: true }));
+        }
+      }
+    }
+
+    return () => {
+      terminal.dispose();
+      fitAddon.dispose();
+      shellTerminalRef.current = null;
+      shellFitAddonRef.current = null;
+    };
+  }, [isActive, shellSessionId]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    if (!isTauriAvailable()) return;
+    if (!status.connected) return;
+    if (shellSessionId) return;
+
+    let cancelled = false;
+    const start = async () => {
+      try {
+        const response = await safeInvoke<{ session_id: string }>("pty_start", {
+          payload: {
+            cwd: null,
+            cols: 120,
+            rows: 18,
+            emwaver_shell: true,
+          },
+        });
+        if (cancelled) return;
+        if (response?.session_id) {
+          setShellSessionId(response.session_id);
+          // Flush any output that arrived before the session id/state was ready.
+          const terminal = shellTerminalRef.current;
+          const pending = pendingShellOutputBySessionRef.current.get(response.session_id);
+          if (terminal && pending && pending.length > 0) {
+            pendingShellOutputBySessionRef.current.delete(response.session_id);
+            for (const chunk of pending) {
+              terminal.write(shellDecoderRef.current.decode(chunk, { stream: true }));
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to start shell", e);
+      }
+    };
+
+    void start();
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, shellSessionId, status.connected]);
+
+  useEffect(() => {
+    const fit = () => {
+      const terminal = shellTerminalRef.current;
+      const fitAddon = shellFitAddonRef.current;
+      if (!terminal || !fitAddon || !shellSessionId) return;
+      fitAddon.fit();
+      void safeInvoke<void>("pty_resize", {
+        payload: {
+          session_id: shellSessionId,
+          cols: terminal.cols,
+          rows: terminal.rows,
+        },
+      });
+    };
+
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [shellSessionId]);
+
+  // Stop shell when leaving Home.
+  useEffect(() => {
+    if (isActive) return;
+    if (!shellSessionId) return;
+
+    let cancelled = false;
+    void safeInvoke<void>("pty_stop", {
+      payload: { session_id: shellSessionId },
+    }).finally(() => {
+      if (!cancelled) setShellSessionId(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, shellSessionId]);
+
+  // Stop shell if the device disconnects.
+  useEffect(() => {
+    if (status.connected) return;
+    if (!shellSessionId) return;
+
+    let cancelled = false;
+    void safeInvoke<void>("pty_stop", {
+      payload: { session_id: shellSessionId },
+    }).finally(() => {
+      if (!cancelled) setShellSessionId(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shellSessionId, status.connected]);
 
   // Auto-scroll monitors
   useEffect(() => {
@@ -575,22 +762,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     await disconnect();
   };
 
-  const handleSendCommand = async () => {
-    if (!commandInput.trim()) return;
-    if (!status.connected) {
-      await dialog.alert("Device not connected.", { title: "Connection" });
-      return;
-    }
 
-    try {
-      const trimmed = commandInput.trim();
-      await send(trimmed, 2000, 1);
-      setCommandInput("");
-    } catch (error) {
-      console.error("Failed to send command:", error);
-      await dialog.alert(`Failed to send command:\n\n${String(error)}`, { title: "Send" });
-    }
-  };
 
   const handleCheckVersion = async () => {
     if (!status.connected) {
@@ -813,8 +985,19 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">
-          {devMonitorsEnabled ? (
+        {/* Shell (emwaver shell) */}
+        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-semibold text-slate-400">Shell</div>
+            <div className="text-xs text-slate-600">
+              {!status.connected ? "connect device" : shellSessionId ? "ready" : "starting..."}
+            </div>
+          </div>
+          <div ref={shellContainerRef} className="h-40 overflow-hidden rounded bg-slate-900" />
+        </div>
+
+        {devMonitorsEnabled ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">
             <>
               {/* Transport Monitor */}
               <div className="flex items-center justify-between mb-2 flex-shrink-0">
@@ -933,33 +1116,8 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
                 </div>
               </div>
             </>
-          ) : null}
-
-	          <div className="mt-3 flex-shrink-0">
-	            <label className="block text-sm font-semibold text-slate-400 mb-2">Command</label>
-	            <div className="flex gap-2">
-              <input
-                type="text"
-                value={commandInput}
-                onChange={(e) => setCommandInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSendCommand();
-                  }
-                }}
-                placeholder="e.g., version"
-                className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-600"
-              />
-              <button
-                onClick={handleSendCommand}
-                disabled={!status.connected || !commandInput.trim()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-              >
-                Send
-              </button>
-            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </section>
   );
