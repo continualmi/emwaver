@@ -67,13 +67,13 @@ final class ScriptsViewModel: ObservableObject {
     private let lastScriptDefaultsKey = "scripts.last_script_id"
     private let assetIdPrefix = "__asset__"
     private let assetScriptNames = [
-        "cc1101.emw",
-        "gpio.emw",
-        "ir_send_saved_signal.emw",
-        "packet_mode.emw",
-        "rfid.emw",
-        "usb.emw",
-        "script_demo.emw"
+        "cc1101.js",
+        "gpio.js",
+        "ir_send_saved_signal.js",
+        "packet_mode.js",
+        "rfid.js",
+        "usb.js",
+        "script_demo.js"
     ]
 
     init(
@@ -436,10 +436,10 @@ final class ScriptsViewModel: ObservableObject {
         var updated: [String: AssetRecord] = [:]
 
         for filename in assetScriptNames {
-            let nameWithoutExt = filename.replacingOccurrences(of: ".emw", with: "")
-            var url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "emw", subdirectory: "DefaultScripts")
+            let nameWithoutExt = filename.replacingOccurrences(of: ".js", with: "")
+            var url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js", subdirectory: "DefaultScripts")
             if url == nil {
-                url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "emw")
+                url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js")
             }
             guard let fileUrl = url,
                   let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
@@ -518,9 +518,7 @@ final class ScriptsViewModel: ObservableObject {
     private func isModuleScript(name: String, content: String) -> Bool {
         let lowered = name.lowercased()
         if lowered.hasSuffix(".module.js")
-            || lowered.hasSuffix("_module.js")
-            || lowered.hasSuffix(".module.emw")
-            || lowered.hasSuffix("_module.emw") {
+            || lowered.hasSuffix("_module.js") {
             return true
         }
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)

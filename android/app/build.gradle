@@ -50,8 +50,7 @@ tasks.register("syncScriptAssets", Copy) {
     description = "Copies the canonical script asset scripts into generated Android assets."
 
     from(emwaverSharedScriptAssetsDir) {
-        include("*.emw")
-    }
+                    include("*.js")    }
     into(emwaverGeneratedScriptAssetsDir)
 
     doFirst {

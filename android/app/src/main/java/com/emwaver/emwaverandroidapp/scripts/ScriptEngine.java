@@ -393,7 +393,7 @@ public final class ScriptEngine {
     private void injectDsl(Context cx, Scriptable scope) {
         String source = bootstrapSource;
         if (source == null || source.trim().isEmpty()) {
-            throw new EvaluatorException("Script bootstrap not loaded (missing script_bootstrap.emw)");
+            throw new EvaluatorException("Script bootstrap not loaded (missing script_bootstrap.js)");
         }
         cx.evaluateString(scope, source, "ScriptBootstrap", 1, null);
     }

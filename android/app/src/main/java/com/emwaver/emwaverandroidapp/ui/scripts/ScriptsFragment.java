@@ -101,7 +101,7 @@ public class ScriptsFragment extends Fragment {
 
     private static final String TAG = "ScriptsFragment";
     private static final String SCRIPT_EXTENSION = ".js";
-    private static final String ASSET_SCRIPT_EXTENSION = ".emw";
+    private static final String ASSET_SCRIPT_EXTENSION = ".js";
 
     private FragmentScriptsBinding binding;
     private final List<ScriptMetadata> assetScripts = new ArrayList<>();
@@ -632,13 +632,13 @@ public class ScriptsFragment extends Fragment {
     private List<String> getAssetScriptNames() {
         List<String> names = new ArrayList<>();
         String[] defaultScripts = {
-            "cc1101.emw",
-            "packet_mode.emw",
-            "rfid.emw",
-            "usb.emw",
-            "script_demo.emw",
-            "gpio.emw",
-            "ir_send_saved_signal.emw"
+            "cc1101.js",
+            "packet_mode.js",
+            "rfid.js",
+            "usb.js",
+            "script_demo.js",
+            "gpio.js",
+            "ir_send_saved_signal.js"
         };
         for (String filename : defaultScripts) {
             names.add(filename);
@@ -654,13 +654,13 @@ public class ScriptsFragment extends Fragment {
         assetScripts.clear(); // Clear existing asset scripts
         
         String[] assetScriptFiles = {
-            "cc1101.emw",
-            "packet_mode.emw",
-            "rfid.emw",
-            "usb.emw",
-            "script_demo.emw",
-            "gpio.emw",
-            "ir_send_saved_signal.emw"
+            "cc1101.js",
+            "packet_mode.js",
+            "rfid.js",
+            "usb.js",
+            "script_demo.js",
+            "gpio.js",
+            "ir_send_saved_signal.js"
         };
         
         for (String filename : assetScriptFiles) {
@@ -1578,7 +1578,7 @@ public class ScriptsFragment extends Fragment {
         if (scriptEngine == null) {
             scriptEngine = new ScriptEngine();
             scriptEngine.setDialogCallback(this::showDialog);
-            scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.emw"));
+            scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.js"));
             scriptEngine.setup(this::printLog, this::handleScriptTree, buildBindings());
             scriptEngine.updateModuleSources(moduleSources());
         }

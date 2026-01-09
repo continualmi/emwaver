@@ -274,7 +274,7 @@ final class ScriptEngine {
     private func injectDSL(into context: JSContext) {
         Swift.print("[ScriptEngine] Injecting shared script bootstrap")
         guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "emw") else {
-            let message = "Script bootstrap missing from app bundle (script_bootstrap.emw)"
+            let message = "Script bootstrap missing from app bundle (script_bootstrap.js)"
             printHandler?(message)
             Swift.print("[ScriptEngine] \(message)")
             return
