@@ -89,6 +89,23 @@ static void MX_SPI1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+#define USER_DATA_FLASH_ADDR 0x08007C00
+#define DEVICE_NAME_MAX_LEN 32
+
+void get_device_name(char* buf, size_t max_len) {
+    uint8_t* flash_ptr = (uint8_t*)USER_DATA_FLASH_ADDR;
+    if (flash_ptr[0] == 0xFF) {
+        buf[0] = '\0';
+        return;
+    }
+    size_t i;
+    for (i = 0; i < max_len - 1; i++) {
+        if (flash_ptr[i] == 0xFF || flash_ptr[i] == '\0') break;
+        buf[i] = (char)flash_ptr[i];
+    }
+    buf[i] = '\0';
+}
+
 #define ISM_BURST_MAX 64u
 #define EMW_LANE_SIZE 64u
 #define EMW_SUPERFRAME_SIZE 128u
@@ -735,8 +752,58 @@ int main(void)
       }
 
       if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
-          static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION;
-          command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
+          char name[DEVICE_NAME_MAX_LEN + 1];
+          get_device_name(name, sizeof(name));
+          char msg[128];
+          if (name[0] != '\0') {
+              snprintf(msg, sizeof(msg), "%s %s (%s)", EMWAVER_FIRMWARE_WELCOME, EMWAVER_FIRMWARE_VERSION, name);
+          } else {
+              snprintf(msg, sizeof(msg), "%s %s", EMWAVER_FIRMWARE_WELCOME, EMWAVER_FIRMWARE_VERSION);
+          }
+          command_send_ok((const uint8_t *)msg, strlen(msg));
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "name") == 0) {
+          if (cmd.positional_count > 0) {
+              const char* new_name = cmd.positional[0];
+              size_t len = strlen(new_name);
+              if (len > DEVICE_NAME_MAX_LEN) len = DEVICE_NAME_MAX_LEN;
+
+              HAL_FLASH_Unlock();
+              FLASH_EraseInitTypeDef EraseInitStruct;
+              EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
+              EraseInitStruct.PageAddress = USER_DATA_FLASH_ADDR;
+              EraseInitStruct.NbPages = 1;
+              uint32_t PageError = 0;
+
+              if (HAL_FLASHEx_Erase(&EraseInitStruct, &PageError) != HAL_OK) {
+                  command_send_err("Erase failed");
+              } else {
+                  for (size_t i = 0; i < len; i += 2) {
+                      uint16_t data = (unsigned char)new_name[i];
+                      if (i + 1 < len) data |= ((unsigned char)new_name[i+1] << 8);
+                      if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, USER_DATA_FLASH_ADDR + i, data) != HAL_OK) {
+                          command_send_err("Write failed");
+                          break;
+                      }
+                  }
+                  if (len % 2 == 0) {
+                       HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, USER_DATA_FLASH_ADDR + len, 0);
+                  }
+                  command_send_ok(NULL, 0);
+              }
+              HAL_FLASH_Lock();
+          } else {
+              char name[DEVICE_NAME_MAX_LEN + 1];
+              get_device_name(name, sizeof(name));
+              if (name[0] != '\0') {
+                  command_send_ok((const uint8_t*)name, strlen(name));
+              } else {
+                  command_send_ok((const uint8_t*)"(no name)", 9);
+              }
+          }
           free_bulk_packet();
           continue;
       }
