@@ -18,15 +18,15 @@
 import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 
 export const SCRIPT_ASSET_ROOT = "/default-scripts";
-export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.emw";
+export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.js";
 export const SCRIPT_ASSET_SCRIPTS = [
-  "cc1101.emw",
-  "gpio.emw",
-  "ir_send_saved_signal.emw",
-  "packet_mode.emw",
-  "rfid.emw",
-  "usb.emw",
-  "script_demo.emw",
+  "cc1101.js",
+  "gpio.js",
+  "ir_send_saved_signal.js",
+  "packet_mode.js",
+  "rfid.js",
+  "usb.js",
+  "script_demo.js",
 ];
 
 export function basename(path: string): string {
@@ -45,7 +45,6 @@ export function languageForPath(path: string): string {
   const ext = extension(path);
   if (ext === "ts" || ext === "tsx") return "typescript";
   if (ext === "js" || ext === "jsx") return "javascript";
-  if (ext === "emw") return "javascript";
   if (ext === "json") return "json";
   if (ext === "md") return "markdown";
   if (ext === "rs") return "rust";
@@ -60,7 +59,7 @@ export function languageForPath(path: string): string {
 
 export function isScriptScriptPath(path: string): boolean {
   const ext = extension(path);
-  return ext === "js" || ext === "jsx" || ext === "ts" || ext === "tsx" || ext === "emw";
+  return ext === "js" || ext === "jsx" || ext === "ts" || ext === "tsx";
 }
 
 export function isScriptAssetPath(path: string): boolean {
@@ -130,7 +129,6 @@ export function iconLabelForPath(path: string): { label: string; accentClass: st
   const ext = extension(path);
   if (ext === "ts" || ext === "tsx") return { label: "TS", accentClass: "text-sky-400" };
   if (ext === "js" || ext === "jsx") return { label: "JS", accentClass: "text-amber-300" };
-  if (ext === "emw") return { label: "EM", accentClass: "bg-gradient-to-r from-slate-50 to-sky-300 bg-clip-text text-transparent" };
   if (ext === "json") return { label: "{}", accentClass: "text-yellow-200" };
   if (ext === "md") return { label: "M", accentClass: "text-slate-300" };
   if (ext === "rs") return { label: "RS", accentClass: "text-orange-300" };

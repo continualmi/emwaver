@@ -35,7 +35,7 @@ EMWaver scripts are the essence of EMWaver:
   - low-level hardware interactions
   - high-level user interfaces
 
-We treat `.emw` as a first-class format for these scripts.
+We treat `.js` as a first-class format for these scripts.
 
 ### Explicit Tradeoffs
 
