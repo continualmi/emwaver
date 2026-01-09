@@ -21,7 +21,7 @@ import Foundation
 ///
 /// Format:
 ///   F0 7D 'E' 'M' 'W' 0x01 <7-bit encoded payload> F7
-/// where the payload decodes to exactly 64 bytes.
+/// where the payload decodes to exactly 128 bytes (Superframe).
 enum UsbMidiSysex {
     fileprivate static let sysexStart: UInt8 = 0xF0
     fileprivate static let sysexEnd: UInt8 = 0xF7
@@ -30,9 +30,9 @@ enum UsbMidiSysex {
     fileprivate static let magic: [UInt8] = Array("EMW".utf8)
     fileprivate static let version: UInt8 = 0x01
 
-    static func encodePacket64(_ packet64: Data) -> Data? {
-        guard packet64.count == 64 else { return nil }
-        guard let encoded = encodePayload7Bit(packet64) else { return nil }
+    static func encodeSuperframe(_ superframe: Data) -> Data? {
+        guard superframe.count == 128 else { return nil }
+        guard let encoded = encodePayload7Bit(superframe) else { return nil }
 
         var out = Data()
         out.reserveCapacity(1 + 1 + 3 + 1 + encoded.count + 1)
@@ -45,8 +45,8 @@ enum UsbMidiSysex {
         return out
     }
 
-    /// Returns decoded 64B packet or nil when not a valid EMWaver SysEx payload.
-    static func decodeSysexToPacket64(_ sysex: Data) -> Data? {
+    /// Returns decoded 128B superframe or nil when not a valid EMWaver SysEx payload.
+    static func decodeSysexToSuperframe(_ sysex: Data) -> Data? {
         guard sysex.count >= 8 else { return nil }
         guard sysex.first == sysexStart, sysex.last == sysexEnd else { return nil }
 
@@ -61,22 +61,22 @@ enum UsbMidiSysex {
 
     // MARK: - 7-bit payload codec
 
-    private static func encodePayload7Bit(_ in64: Data) -> Data? {
-        guard in64.count == 64 else { return nil }
+    private static func encodePayload7Bit(_ in128: Data) -> Data? {
+        guard in128.count == 128 else { return nil }
 
-        // Worst-case: ceil(64/7) * (1 + 7) = 10 * 8 = 80.
+        // Worst-case: ceil(128/7) * (1 + 7) = 19 * 8 = 152.
         var out = Data()
-        out.reserveCapacity(80)
+        out.reserveCapacity(160)
 
-        let bytes = [UInt8](in64)
+        let bytes = [UInt8](in128)
         var inPos = 0
-        while inPos < 64 {
+        while inPos < 128 {
             var prefix: UInt8 = 0
             var chunk = [UInt8](repeating: 0, count: 7)
             var chunkLen = 0
 
             for j in 0..<7 {
-                guard inPos < 64 else { break }
+                guard inPos < 128 else { break }
                 let b = bytes[inPos]
                 inPos += 1
 
@@ -98,17 +98,17 @@ enum UsbMidiSysex {
         guard !input.isEmpty else { return nil }
 
         let inBytes = [UInt8](input)
-        var out = [UInt8](repeating: 0, count: 64)
+        var out = [UInt8](repeating: 0, count: 128)
 
         var inPos = 0
         var outPos = 0
 
-        while inPos < inBytes.count && outPos < 64 {
+        while inPos < inBytes.count && outPos < 128 {
             let prefix = inBytes[inPos] & 0x7F
             inPos += 1
 
             for j in 0..<7 {
-                if outPos >= 64 { break }
+                if outPos >= 128 { break }
                 guard inPos < inBytes.count else { return nil }
 
                 var v = inBytes[inPos] & 0x7F
@@ -123,14 +123,14 @@ enum UsbMidiSysex {
             }
         }
 
-        guard outPos == 64 else { return nil }
+        guard outPos == 128 else { return nil }
         return Data(out)
     }
 }
 
 /// Accumulates chunked CoreMIDI byte streams into complete SysEx frames.
 struct UsbMidiSysexAccumulator {
-    private var buf = Data(capacity: 256)
+    private var buf = Data(capacity: 512)
     private var inSysex = false
 
     mutating func feed(_ data: Data) -> [Data] {
