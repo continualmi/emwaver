@@ -559,8 +559,9 @@ if (typeof emw.sendPacket !== 'function') {
 __scriptGlobal.emw = emw;
 
 // -----------------------------------------------------------------------------
-// Arduino-ish API surface (GPIO + SPI), implemented as thin wrappers over the
-// canonical, observable ASCII command protocol (e.g. `gpio ...`, `spi xfer ...`).
+// Arduino-ish API surface (GPIO + SPI + ADC), implemented as thin wrappers over the
+// canonical, observable ASCII command protocol (e.g. `gpio ...`, `spi xfer ...`,
+// `adc read ...`).
 // -----------------------------------------------------------------------------
 
 if (typeof LOW === 'undefined') {
@@ -678,6 +679,93 @@ if (typeof SPI === 'undefined') {
   };
 
   __scriptGlobal.SPI = SPI;
+}
+
+if (typeof analogReadResolution !== 'function') {
+  var analogReadResolution = function (bits) {
+    var n = Number(bits);
+    if (!isFinite(n) || n < 1 || n > 16) {
+      throw new Error('analogReadResolution: invalid bits ' + String(bits));
+    }
+    __scriptGlobal.__scriptAnalogReadResolution = n | 0;
+  };
+  __scriptGlobal.analogReadResolution = analogReadResolution;
+}
+
+function __scriptU16FromBytes(bytes) {
+  if (!bytes || bytes.length < 2) return 0;
+  var lo = bytes[0] & 0xff;
+  var hi = bytes[1] & 0xff;
+  return (hi << 8) | lo;
+}
+
+function __scriptScaleAnalogRead(value12) {
+  var bits = __scriptGlobal.__scriptAnalogReadResolution;
+  if (typeof bits !== 'number' || !isFinite(bits) || bits <= 0) bits = 12;
+
+  var v = Number(value12) | 0;
+  if (bits === 12) return v;
+  if (bits > 12) return v << (bits - 12);
+  return v >> (12 - bits);
+}
+
+if (typeof analogRead !== 'function') {
+  var analogRead = function (pin, opts) {
+    var pinNumber = __scriptResolvePin(pin);
+    var samples = opts && typeof opts.samples === 'number' ? (opts.samples | 0) : 1;
+    if (samples < 1) samples = 1;
+    if (samples > 64) samples = 64;
+
+    var cmd = 'adc read --pin=' + pinNumber;
+    if (samples !== 1) cmd += ' --samples=' + samples;
+
+    var resp = emw.send(cmd, 1500);
+    if (resp && typeof resp.then === 'function') {
+      return resp.then(function (bytes) {
+        return __scriptScaleAnalogRead(__scriptU16FromBytes(bytes));
+      });
+    }
+    return __scriptScaleAnalogRead(__scriptU16FromBytes(resp));
+  };
+  __scriptGlobal.analogRead = analogRead;
+}
+
+function __scriptAnalogReadInternal(src, opts) {
+  var samples = opts && typeof opts.samples === 'number' ? (opts.samples | 0) : 1;
+  if (samples < 1) samples = 1;
+  if (samples > 64) samples = 64;
+
+  var cmd = 'adc read --src=' + String(src);
+  if (samples !== 1) cmd += ' --samples=' + samples;
+
+  var resp = emw.send(cmd, 1500);
+  if (resp && typeof resp.then === 'function') {
+    return resp.then(function (bytes) {
+      return __scriptScaleAnalogRead(__scriptU16FromBytes(bytes));
+    });
+  }
+  return __scriptScaleAnalogRead(__scriptU16FromBytes(resp));
+}
+
+if (typeof analogReadVrefint !== 'function') {
+  var analogReadVrefint = function (opts) {
+    return __scriptAnalogReadInternal('vrefint', opts);
+  };
+  __scriptGlobal.analogReadVrefint = analogReadVrefint;
+}
+
+if (typeof analogReadTemp !== 'function') {
+  var analogReadTemp = function (opts) {
+    return __scriptAnalogReadInternal('temp', opts);
+  };
+  __scriptGlobal.analogReadTemp = analogReadTemp;
+}
+
+if (typeof analogReadVbat !== 'function') {
+  var analogReadVbat = function (opts) {
+    return __scriptAnalogReadInternal('vbat', opts);
+  };
+  __scriptGlobal.analogReadVbat = analogReadVbat;
 }
 
 if (typeof UI === 'undefined') {

@@ -473,6 +473,125 @@ static void gpio_set_mode(GPIO_TypeDef *port, uint16_t pin_mask, uint32_t mode, 
     configurePin(port, pin_mask, mode, pull);
 }
 
+// -----------------------------------------------------------------------------
+// ADC (analogRead) support
+// -----------------------------------------------------------------------------
+
+static bool adc_initialized = false;
+
+static void adc_init_once(void)
+{
+    if (adc_initialized) {
+        return;
+    }
+
+    // Enable ADC clock.
+    RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
+
+    // Ensure ADC is disabled before calibration/config.
+    if (ADC1->CR & ADC_CR_ADEN) {
+        ADC1->CR |= ADC_CR_ADDIS;
+        for (volatile uint32_t guard = 0; guard < 1000000u; ++guard) {
+            if ((ADC1->CR & ADC_CR_ADEN) == 0) {
+                break;
+            }
+        }
+    }
+
+    // ADC calibration.
+    ADC1->CR |= ADC_CR_ADCAL;
+    for (volatile uint32_t guard = 0; guard < 1000000u; ++guard) {
+        if ((ADC1->CR & ADC_CR_ADCAL) == 0) {
+            break;
+        }
+    }
+
+    // 12-bit, right-aligned, single conversion; ADC clocked by PCLK/2.
+    ADC1->CFGR1 = 0;
+    ADC1->CFGR2 = (ADC1->CFGR2 & ~ADC_CFGR2_CKMODE) | ADC_CFGR2_CKMODE_0;
+
+    // Use a long sampling time to support VREFINT/TEMP/VBAT reliably.
+    ADC1->SMPR = (ADC_SMPR_SMP_0 | ADC_SMPR_SMP_1 | ADC_SMPR_SMP_2);
+
+    // Enable ADC.
+    ADC1->ISR |= ADC_ISR_ADRDY;
+    ADC1->CR |= ADC_CR_ADEN;
+    for (volatile uint32_t guard = 0; guard < 1000000u; ++guard) {
+        if (ADC1->ISR & ADC_ISR_ADRDY) {
+            break;
+        }
+    }
+
+    adc_initialized = true;
+}
+
+static bool adc_channel_from_pin(GPIO_TypeDef *port, uint8_t pin_index, uint32_t *out_chsel_bit)
+{
+    if (!out_chsel_bit || !port) {
+        return false;
+    }
+
+    int channel = -1;
+    if (port == GPIOA) {
+        // STM32F042 ADC_IN0..7 map to PA0..PA7.
+        if (pin_index <= 7u) {
+            channel = (int)pin_index;
+        }
+    } else if (port == GPIOB) {
+        // STM32F042 ADC_IN8..9 map to PB0..PB1.
+        if (pin_index <= 1u) {
+            channel = 8 + (int)pin_index;
+        }
+    }
+
+    if (channel < 0 || channel > 18) {
+        return false;
+    }
+
+    *out_chsel_bit = (uint32_t)(1u << (uint32_t)channel);
+    return true;
+}
+
+static bool adc_read_single(uint32_t chsel_bit, uint16_t *out_value)
+{
+    if (!out_value) {
+        return false;
+    }
+
+    adc_init_once();
+    if (!adc_initialized) {
+        return false;
+    }
+
+    // Stop any ongoing conversion.
+    if (ADC1->CR & ADC_CR_ADSTART) {
+        ADC1->CR |= ADC_CR_ADSTP;
+        for (volatile uint32_t guard = 0; guard < 1000000u; ++guard) {
+            if ((ADC1->CR & ADC_CR_ADSTART) == 0) {
+                break;
+            }
+        }
+    }
+
+    // Select exactly one channel.
+    ADC1->CHSELR = chsel_bit;
+
+    // Clear status flags.
+    ADC1->ISR |= (ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR);
+
+    // Start conversion and wait for EOC.
+    ADC1->CR |= ADC_CR_ADSTART;
+    for (volatile uint32_t guard = 0; guard < 1000000u; ++guard) {
+        if (ADC1->ISR & ADC_ISR_EOC) {
+            uint16_t v = (uint16_t)(ADC1->DR & 0xFFFFu);
+            *out_value = v;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Minimal CLI parsing (copied/adapted from stm/emwaver-firmware command_registry.c).
 #define CLI_MAX_ARGS 10
 #define CLI_MAX_POSITIONAL 4
@@ -808,9 +927,9 @@ int main(void)
           continue;
       }
 
-      if (cmd.verb && strcmp(cmd.verb, "usb") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
-          if (strcmp(sub, "stats") == 0) {
+	      if (cmd.verb && strcmp(cmd.verb, "usb") == 0 && cmd.positional_count > 0) {
+	          const char *sub = cmd.positional[0];
+	          if (strcmp(sub, "stats") == 0) {
               uint32_t tx_ok = 0, tx_busy = 0, tx_timeout = 0, tx_fail = 0, rx_in = 0;
               MIDI_GetUsbStats_FS(&tx_ok, &tx_busy, &tx_timeout, &tx_fail, &rx_in);
               uint32_t data_in = USBD_MIDI_GetDataInCount();
@@ -829,13 +948,111 @@ int main(void)
               command_send_err(NULL);
           }
           free_bulk_packet();
-          continue;
-      }
+	          continue;
+	      }
 
-      if (cmd.verb && strcmp(cmd.verb, "spi") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
+	      if (cmd.verb && strcmp(cmd.verb, "adc") == 0 && cmd.positional_count > 0) {
+	          const char *sub = cmd.positional[0];
 
-          if (strcmp(sub, "xfer") == 0) {
+	          if (strcmp(sub, "read") == 0) {
+	              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+	              const char *src_str = cli_get_arg_view(&cmd, "src");
+	              const char *samples_str = cli_get_arg_view(&cmd, "samples");
+
+	              if ((pin_str && src_str) || (!pin_str && !src_str)) {
+	                  command_send_err(NULL);
+	                  free_bulk_packet();
+	                  continue;
+	              }
+
+	              int samples_i = 1;
+	              if (samples_str && !cli_parse_int(samples_str, &samples_i)) {
+	                  command_send_err(NULL);
+	                  free_bulk_packet();
+	                  continue;
+	              }
+	              if (samples_i < 1) samples_i = 1;
+	              if (samples_i > 64) samples_i = 64;
+
+	              uint32_t chsel_bit = 0;
+
+	              if (pin_str) {
+	                  int pin_enc = -1;
+	                  if (!cli_parse_int(pin_str, &pin_enc) || pin_enc < 0 || pin_enc > 31) {
+	                      command_send_err(NULL);
+	                      free_bulk_packet();
+	                      continue;
+	                  }
+
+	                  GPIO_TypeDef *port = NULL;
+	                  uint16_t pin_mask = 0;
+	                  if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+	                      command_send_err(NULL);
+	                      free_bulk_packet();
+	                      continue;
+	                  }
+
+	                  uint8_t pin_index = 0;
+	                  if (!pin_mask_to_index(pin_mask, &pin_index)) {
+	                      command_send_err(NULL);
+	                      free_bulk_packet();
+	                      continue;
+	                  }
+
+	                  disable_tim2_output_if_needed(port, pin_index);
+	                  gpio_set_mode(port, pin_mask, GPIO_MODE_ANALOG, GPIO_NOPULL);
+
+	                  if (!adc_channel_from_pin(port, pin_index, &chsel_bit)) {
+	                      command_send_err(NULL);
+	                      free_bulk_packet();
+	                      continue;
+	                  }
+	              } else {
+	                  // Internal sources: temp sensor (CH16), VREFINT (CH17), VBAT (CH18).
+	                  if (strcmp(src_str, "temp") == 0) {
+	                      ADC1_COMMON->CCR |= (ADC_CCR_TSEN | ADC_CCR_VREFEN);
+	                      chsel_bit = ADC_CHSELR_CHSEL16;
+	                  } else if (strcmp(src_str, "vrefint") == 0) {
+	                      ADC1_COMMON->CCR |= ADC_CCR_VREFEN;
+	                      chsel_bit = ADC_CHSELR_CHSEL17;
+	                  } else if (strcmp(src_str, "vbat") == 0) {
+	                      ADC1_COMMON->CCR |= ADC_CCR_VBATEN;
+	                      chsel_bit = ADC_CHSELR_CHSEL18;
+	                  } else {
+	                      command_send_err(NULL);
+	                      free_bulk_packet();
+	                      continue;
+	                  }
+	              }
+
+	              uint32_t sum = 0;
+	              for (int i = 0; i < samples_i; ++i) {
+	                  uint16_t v = 0;
+	                  if (!adc_read_single(chsel_bit, &v)) {
+	                      command_send_err(NULL);
+	                      free_bulk_packet();
+	                      goto adc_done;
+	                  }
+	                  sum += (uint32_t)v;
+	              }
+
+	              uint16_t avg = (uint16_t)((sum + (uint32_t)(samples_i / 2)) / (uint32_t)samples_i);
+	              uint8_t out[2] = {(uint8_t)(avg & 0xFFu), (uint8_t)((avg >> 8) & 0xFFu)};
+	              command_send_ok(out, sizeof(out));
+	              free_bulk_packet();
+adc_done:
+	              continue;
+	          }
+
+	          command_send_err(NULL);
+	          free_bulk_packet();
+	          continue;
+	      }
+
+	      if (cmd.verb && strcmp(cmd.verb, "spi") == 0 && cmd.positional_count > 0) {
+	          const char *sub = cmd.positional[0];
+
+	          if (strcmp(sub, "xfer") == 0) {
               int cs_i = 4; // Default CS pin: PA4 (NSS_RFID / CC1101 CS).
               int rx_i = 0;
               const char *cs_str = cli_get_arg_view(&cmd, "cs");
