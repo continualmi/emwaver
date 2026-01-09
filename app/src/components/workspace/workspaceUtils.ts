@@ -20,6 +20,7 @@ import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 export const SCRIPT_ASSET_ROOT = "/default-scripts";
 export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.js";
 export const SCRIPT_ASSET_SCRIPTS = [
+  "adc.js",
   "cc1101.js",
   "gpio.js",
   "ir_send_saved_signal.js",
