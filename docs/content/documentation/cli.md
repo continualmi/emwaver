@@ -84,7 +84,7 @@ emwaver dfu ./firmware.bin
 
 ## Desktop Notes
 
-The CLI is a helper client; hardware I/O and wavelet execution run inside the Desktop app.
+The CLI is a helper client; hardware I/O and script execution run inside the Desktop app.
 
 See [Desktop + CLI](desktop-cli.md) for details.
 

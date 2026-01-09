@@ -65,7 +65,7 @@
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-3">
             <a
-              href="hardware.html"
+              href="../"
               class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
             >
               <img
@@ -417,14 +417,17 @@
         const crumbCatalog = document.getElementById("crumb-catalog");
         const crumbCatalogSep = document.getElementById("crumb-catalog-sep");
         const cameFromCatalog = from === "catalog";
+        const cameFromHistory = from === "history";
+        const cameFromList = cameFromCatalog || cameFromHistory;
         const backToCatalog =
           back === "experimental" ? "catalog.html#experimental" : back === "old" ? "catalog.html#old" : "catalog.html";
-        if (cameFromCatalog) {
+        if (cameFromList) {
           navBack.href = backToCatalog;
-          navBack.textContent = "Back to catalog";
+          navBack.textContent = cameFromHistory ? "Back to history" : "Back to catalog";
           crumbCatalog.classList.remove("hidden");
           crumbCatalogSep.classList.remove("hidden");
           crumbCatalog.href = backToCatalog;
+          crumbCatalog.textContent = cameFromHistory ? "History" : "Catalog";
         } else {
           navBack.href = "hardware.html";
           navBack.textContent = "Back";
@@ -658,7 +661,6 @@
 	        const githubUrl = safeUrl(device.githubUrl);
 	        const schematicUrl = safeUrl(device.schematicUrl);
 	        const pcbUrl = safeUrl(device.pcbUrl);
-	        const onshapeUrl = safeUrl(device.onshapeUrl || (device.casing && device.casing.onshapeUrl));
 	        const casingRaw = device.casingImage || (device.casing && device.casing.image) || null;
 	        const casingImagesRaw = device.casingImages || (device.casing && device.casing.images) || null;
 	        const resolvedCasingImages = uniqueStrings([].concat(casingRaw || []).concat(casingImagesRaw || []))
@@ -667,7 +669,6 @@
 	
 	        const OSHW_ICON = "https://image.easyeda.com/avatars/2024/9/66Hu1UIb1xCgdcRIHsJDvgv7caIeg0LwlK8qwMFN.webp";
 	        const EASYEDA_ICON = "https://easyeda.com/images/easyeda-thumbnail.png?id=d5ed1fe5930602975df1";
-	        const ONSHAPE_ICON = "assets/onshape.jpg";
 	
 	        document.getElementById("action-buttons").innerHTML = [
 	          ...(resolvedCasingImages.length ? [casingThumbnailButton("open-casing", resolvedCasingImages[0])] : []),
@@ -685,9 +686,6 @@
 	              title: `${title} — 3D Casing`,
 	              images: resolvedCasingImages,
 	              index: 0,
-	              actionLabel: "Open in Onshape",
-	              actionUrl: onshapeUrl,
-	              actionIconUrl: ONSHAPE_ICON,
 	            })
 	          );
 	        }

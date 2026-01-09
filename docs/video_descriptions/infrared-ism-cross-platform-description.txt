@@ -1,11 +1,11 @@
 EMWaver (docs)
-https://luispl77.github.io/emwaver/overview/
+https://luispl77.github.io/emwaver/
 
-Wavelets (docs)
+EMWaver scripts (docs)
 https://luispl77.github.io/emwaver/wavelets/
 
-Hardware catalog (devices + cases)
-https://luispl77.github.io/emwaver-hardware/
+Board evolution (legacy devices)
+https://luispl77.github.io/emwaver/hardware-catalog/
 
 In this video we do a fully plug-and-play walkthrough of EMWaver’s Infrared + Sub‑GHz (ISM) tooling across Android, iOS, and Desktop—recording, saving, analyzing, and reliably retransmitting real signals with no firmware coding or flashing.
 
@@ -17,7 +17,7 @@ Devices used
 What you’ll see
 - Record an IR remote and inspect the captured pulses in the Sampler view
 - Save captures and move the same signals across Android ↔ iOS ↔ Desktop
-- Use the CC1101 Wavelet to init RX/TX at 433 MHz and verify configuration (frequency/modulation)
+- Use the CC1101 script to init RX/TX at 433 MHz and verify configuration (frequency/modulation)
 - Record a garage remote (Sub‑GHz), then retransmit and re-capture to confirm a 1:1 match
 - Cross-device + cross-platform parity: same UI, same workflow, same results
 
@@ -27,7 +27,6 @@ Notes
 
 Useful links
 - Releases: https://github.com/luispl77/emwaver/releases
-- Buffer/sampler reference (technical): https://luispl77.github.io/emwaver/documentation/buffer/
 
 Get the app
 - Android (Play Store): https://play.google.com/store/apps/details?id=com.emwaver.app

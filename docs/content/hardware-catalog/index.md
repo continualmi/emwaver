@@ -1,15 +1,19 @@
 ---
-title: Hardware History
+title: Board Evolution
 ---
 
-# Hardware History
+# Board Evolution
 
 EMWaver is now focused on a single current-gen device (see **Device → Current Device**).
 
-This section is kept as an archive of previous boards/modules and their reproduction links.
+This section is a **history/journey archive** of earlier boards and experiments: what we tried, what worked, what didn’t, and what it taught us.
 
-- [Legacy Hardware Catalog (archive)](hardware.html)
+It is **not** a build catalog, and intentionally omits external CAD/vendor links.
 
-## Written Guide
+## Device builder (current)
 
-- [Order on JLCPCB](../hardware/build-reproduce.md)
+- [EMWaver Board Builder](hardware.html)
+
+## Board evolution (chronological)
+
+- [Board Evolution](catalog.html)

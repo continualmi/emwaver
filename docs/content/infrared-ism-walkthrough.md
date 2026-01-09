@@ -25,7 +25,7 @@ This guide follows the workflow shown in the video: record, inspect, save, and r
 ## What you’ll do
 
 - **Infrared**: record a TV/AC remote, view pulses in the Sampler chart, save, then retransmit and re-capture to verify a 1:1 match.
-- **Sub‑GHz (ISM)**: use the CC1101 Wavelet to initialize RX/TX at 433 MHz, record a garage remote, then retransmit and re-capture to verify a 1:1 match.
+- **Sub‑GHz (ISM)**: use the CC1101 script to initialize RX/TX at 433 MHz, record a garage remote, then retransmit and re-capture to verify a 1:1 match.
 
 ## Platform notes
 
@@ -54,12 +54,12 @@ To prove retransmission matches the original capture, the video uses one device 
 5. Tap **Retransmit** on the transmitter.
 6. Stop recording on the receiver and compare the captured waveform to the original (they should match).
 
-## Sub‑GHz (ISM) setup (CC1101 Wavelet)
+## Sub‑GHz (ISM) setup (CC1101 script)
 
 1. Connect a Sub‑GHz capable device:
    - **ISM Waver** or **EMWaver flagship** (both use **CC1101**).
-2. Open **Wavelets** (bottom nav).
-3. Select the **CC1101** Wavelet.
+2. Open **EMWaver scripts**.
+3. Select the **CC1101** script.
 4. Tap **Init RX** and set the target frequency (the video uses **433 MHz**).
 5. (Optional) Open the **ISM view** to read/register-dump and confirm configuration (frequency + modulation like **ASK/OOK**).
 
@@ -74,15 +74,14 @@ To prove retransmission matches the original capture, the video uses one device 
 ## Sub‑GHz (ISM) retransmission (verify via second receiver)
 
 1. Keep the same sampler pin selected (**GDO0**).
-2. Open the **CC1101** Wavelet and tap **Init TX**.
+2. Open the **CC1101** script and tap **Init TX**.
 3. On the receiving device, select **GDO0** and tap **Record**.
-4. Tap **Retransmit** (the Wavelet’s TX button) on the transmitter.
+4. Tap **Retransmit** (the script’s TX button) on the transmitter.
 5. Stop recording on the receiver and compare the waveform to the original capture (including any small noise spikes).
 
 ## Related docs
 
-- Wavelets (UI + APIs): `wavelets.md`
-- Buffer + Sampler reference: `documentation/buffer.md`
+- EMWaver scripts (UI + APIs): `wavelets.md`
 
 ## Legal / safety note
 
