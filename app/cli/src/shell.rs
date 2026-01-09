@@ -24,7 +24,26 @@ use crate::desktop_ipc;
 
 pub fn run_shell(verbose: bool) -> Result<()> {
     desktop_ipc::desktop_ready(2_000)?;
-    println!("EMWaver shell (Desktop-backed). Type 'exit' to quit.");
+
+    let version_info = match desktop_ipc::rpc_ok(
+        "send_command",
+        serde_json::json!({
+            "text": "version",
+            "timeout_ms": 1500u64,
+            "packets": 1u32
+        }),
+        Duration::from_secs(2),
+    ) {
+        Ok(v) => {
+            let bytes_b64 = v.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
+            let bytes = desktop_ipc::decode_b64(bytes_b64).unwrap_or_default();
+            String::from_utf8_lossy(&bytes).trim().to_string()
+        }
+        Err(_) => "Unknown".to_string(),
+    };
+
+    println!("EMWaver shell (Desktop-backed). Connected to: {}", version_info);
+    println!("Type 'exit' to quit.");
 
     let mut line = String::new();
     loop {
