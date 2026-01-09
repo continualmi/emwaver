@@ -22,8 +22,8 @@ tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "io-util", "io-std", "net", "sync"] }
 walkdir = "2"
 sha2 = "0.10"
-emwaver-desktop-ipc = { path = "../app/crates/emwaver-desktop-ipc" }
-emwaver-dfu = { path = "../app/crates/emwaver-dfu", optional = true }
+emwaver-desktop-ipc = { path = "../crates/emwaver-desktop-ipc" }
+emwaver-dfu = { path = "../crates/emwaver-dfu", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 portable-pty = "0.9"

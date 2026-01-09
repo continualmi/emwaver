@@ -64,14 +64,14 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Android:** `android/`
 - **iOS:** `ios/`
 - **Desktop App:** `app/` (Tauri)
-- **CLI:** `cli/` (device shell + internal tooling)
+- **CLI:** `app/cli/` (device shell + internal tooling)
 - **Docs:** `docs/` (MkDocs)
 
 ## Project Structure & Module Organization
 
 STM32 firmware lives in `stm/` (CubeMX/CubeIDE project). Treat CubeMX-generated output as generated code; keep handwritten logic in intended user-edit regions and prefer regeneration over manual edits to generated layers.
 
-Apps live under `android/`, `ios/`, and `app/`. The Rust CLI lives under `cli/`.
+Apps live under `android/`, `ios/`, and `app/`. The Rust CLI lives under `app/cli/`.
 
 ## Transport / Buffer Model
 

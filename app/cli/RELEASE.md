@@ -41,7 +41,7 @@ This guide explains how to build and release the EMWaver CLI.
 ### Building Locally
 
 ```bash
-cd cli
+cd app/cli
 
 # Linux x86_64
 cargo build --release --target x86_64-unknown-linux-gnu
@@ -96,7 +96,7 @@ Get-ChildItem emwaver-cli-* | ForEach-Object { certutil -hashfile $_.Name SHA256
 
 **Linux/macOS:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/app/cli/install.sh | sh
 ```
 
 **Windows:**
@@ -117,8 +117,8 @@ After release, users can install with:
 
 ```bash
 # Latest version
-curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/app/cli/install.sh | sh
 
 # Specific version
-EMWAVER_CLI_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+EMWAVER_CLI_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/app/cli/install.sh | sh
 ```
