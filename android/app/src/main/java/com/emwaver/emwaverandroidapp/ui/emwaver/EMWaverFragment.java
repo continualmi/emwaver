@@ -75,10 +75,11 @@ import java.nio.charset.StandardCharsets;
 
 public class EMWaverFragment extends Fragment {
 
+    private EditText shellInput;
+    private ImageButton shellSendButton;
+    private TextView shellOutput;
+    private ScrollView shellScroll;
 
-    private EditText commandInput;
-    private Button sendPacketButton;
-    private Button clearMonitorButton;
     private TextView emwaverStatusText;
     private Button disconnectButton;
     private Button connectButton;
@@ -89,25 +90,7 @@ public class EMWaverFragment extends Fragment {
     private DeviceConnectionManager connectionManager;
     private DeviceConnectionService activeService;
 
-
-
     private static final String TAG = "EMWaverFragment";
-
-    private TextView serialMonitor;
-    private ScrollView serialMonitorScroll;
-
-    private CheckBox showTxHex;
-    private CheckBox showRxHex;
-
-    private static final int MONITOR_UPDATE_INTERVAL = 500; // 500ms
-    private Handler monitorHandler;
-    private Runnable monitorRunnable;
-
-    private static final int MAX_MONITOR_ENTRIES = 1500;
-    private final Deque<CharSequence> monitorLines = new ArrayDeque<>();
-    private long rxIndex = 0;
-    private long txIndex = 0;
-    private final SimpleDateFormat timestampFormat = new SimpleDateFormat("HH:mm:ss.SSS");
     
     // Handler for periodic status updates
     private Handler statusUpdateHandler;
@@ -121,13 +104,11 @@ public class EMWaverFragment extends Fragment {
         View root = inflater.inflate(R.layout.fragment_emwaver, container, false);
 
         // Initialize UI elements
-        commandInput = root.findViewById(R.id.command_input);
-        sendPacketButton = root.findViewById(R.id.send_packet_button);
-        clearMonitorButton = root.findViewById(R.id.clear_monitor_button);
-        serialMonitor = root.findViewById(R.id.serial_monitor);
-        serialMonitorScroll = root.findViewById(R.id.serial_monitor_scroll);
-        showTxHex = root.findViewById(R.id.show_tx_hex);
-        showRxHex = root.findViewById(R.id.show_rx_hex);
+        shellInput = root.findViewById(R.id.shell_input);
+        shellSendButton = root.findViewById(R.id.shell_send_button);
+        shellOutput = root.findViewById(R.id.shell_output);
+        shellScroll = root.findViewById(R.id.shell_scroll);
+        
         emwaverStatusText = root.findViewById(R.id.emwaver_status_text);
         disconnectButton = root.findViewById(R.id.disconnect_button);
         connectButton = root.findViewById(R.id.connect_button);
@@ -135,10 +116,7 @@ public class EMWaverFragment extends Fragment {
         checkVersionButton = root.findViewById(R.id.check_version_button);
         deviceIconView = root.findViewById(R.id.device_icon);
 
-
-        setupSendCommandButton();
-        setupClearMonitorButton();
-        setupMonitorUpdates();
+        setupShell();
         setupStatusUpdates();
         setupDisconnectButton();
         setupConnectButton();
@@ -174,7 +152,9 @@ public class EMWaverFragment extends Fragment {
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
                 if (menuItem.getItemId() == R.id.clear_serial) {
-                    clearSerialMonitor();
+                    if (shellOutput != null) {
+                        shellOutput.setText("");
+                    }
                     return true;
                 }
                 return false;
@@ -194,9 +174,6 @@ public class EMWaverFragment extends Fragment {
     @Override
     public void onStop() {
         super.onStop();
-        if (monitorHandler != null) {
-            monitorHandler.removeCallbacks(monitorRunnable);
-        }
         if (statusUpdateHandler != null) {
             statusUpdateHandler.removeCallbacksAndMessages(null);
         }
@@ -258,46 +235,57 @@ public class EMWaverFragment extends Fragment {
 
 
 
-    private void setupSendCommandButton() {
-        sendPacketButton.setOnClickListener(v -> {
-            String userInput = commandInput.getText().toString().trim();
-            if (userInput.isEmpty()) {
-                Toast.makeText(getContext(), "Please enter a packet.", Toast.LENGTH_SHORT).show();
-                return;
-            }
+    private void setupShell() {
+        View.OnClickListener sendListener = v -> {
+            String userInput = shellInput.getText().toString().trim();
+            if (userInput.isEmpty()) return;
+
+            // Echo command
+            appendShellOutput("emw> " + userInput + "\n");
+            shellInput.setText("");
 
             String framed = userInput.endsWith("\n") ? userInput : userInput + "\n";
             byte[] commandBytes = framed.getBytes(StandardCharsets.UTF_8);
 
-            Log.d(TAG, "Sending packet: " + bytesToHex(commandBytes));
             if (connectionManager != null) {
-                // Always get fresh reference to active service
                 activeService = connectionManager.getActiveService();
                 if (activeService != null && activeService.checkConnection()) {
-                    Log.d(TAG, "Sending via: " + activeService.getConnectionType());
-                    activeService.sendPacket(commandBytes);
-                    commandInput.setText("");
+                    new Thread(() -> {
+                        byte[] response = activeService.sendCommand(commandBytes, 2000);
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> {
+                                if (response != null) {
+                                    String respStr = new String(response, StandardCharsets.US_ASCII).replace("\0", "").trim();
+                                    appendShellOutput(respStr + "\n");
+                                } else {
+                                    appendShellOutput("[No response]\n");
+                                }
+                            });
+                        }
+                    }).start();
                 } else {
-                    Log.w(TAG, "Cannot send: service=" + (activeService != null) + ", connected=" + (activeService != null ? activeService.checkConnection() : false));
                     Toast.makeText(getContext(), "Device not connected", Toast.LENGTH_SHORT).show();
                 }
             } else {
                 Toast.makeText(getContext(), "Connection manager not initialized", Toast.LENGTH_SHORT).show();
             }
+        };
+
+        shellSendButton.setOnClickListener(sendListener);
+        shellInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                sendListener.onClick(v);
+                return true;
+            }
+            return false;
         });
     }
 
-    private void setupClearMonitorButton() {
-        if (clearMonitorButton == null) return;
-        clearMonitorButton.setOnClickListener(v -> {
-            NativeBuffer.clearAll();
-            monitorLines.clear();
-            rxIndex = 0;
-            txIndex = 0;
-            if (serialMonitor != null) {
-                serialMonitor.setText("");
-            }
-        });
+    private void appendShellOutput(String text) {
+        if (shellOutput != null) {
+            shellOutput.append(text);
+            shellScroll.post(() -> shellScroll.fullScroll(View.FOCUS_DOWN));
+        }
     }
 
     private void setupDisconnectButton() {
@@ -337,183 +325,7 @@ public class EMWaverFragment extends Fragment {
         });
     }
 
-    private static final class PacketEntry {
-        final long tsMs;
-        final boolean isTx;
-        final byte[] data;
-        final long seq;
 
-        PacketEntry(long tsMs, boolean isTx, byte[] data, long seq) {
-            this.tsMs = tsMs;
-            this.isTx = isTx;
-            this.data = data;
-            this.seq = seq;
-        }
-    }
-
-    private static final class ReadPackets {
-        final byte[] data;
-        final long[] tsMs;
-        final long nextPacketIndex;
-        final long availablePackets;
-
-        ReadPackets(byte[] data, long[] tsMs, long nextPacketIndex, long availablePackets) {
-            this.data = data != null ? data : new byte[0];
-            this.tsMs = tsMs != null ? tsMs : new long[0];
-            this.nextPacketIndex = nextPacketIndex;
-            this.availablePackets = availablePackets;
-        }
-    }
-
-    private ReadPackets parseReadPackets(Object[] resp) {
-        if (resp == null || resp.length < 4) {
-            return new ReadPackets(new byte[0], new long[0], 0, 0);
-        }
-
-        byte[] data = (byte[]) resp[0];
-        long[] ts = (long[]) resp[1];
-        long next = ((Long) resp[2]).longValue();
-        long avail = ((Long) resp[3]).longValue();
-        return new ReadPackets(data, ts, next, avail);
-    }
-
-    /**
-     * Converts a byte array to a hexadecimal string representation.
-     *
-     * @param bytes The byte array to convert.
-     * @return Hexadecimal string.
-     */
-    private static String bytesToHex(byte[] bytes) {
-        if (bytes == null) return "";
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02X ", b));
-        }
-        return sb.toString().trim();
-    }
-
-    /**
-     * Converts a byte array to an ASCII string representation.
-     *
-     * @param bytes The byte array to convert.
-     * @return ASCII string.
-     */
-    private static String bytesToAscii(byte[] bytes) {
-        if (bytes == null) return "";
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            if (b >= 32 && b <= 126) { // Printable ASCII range
-                sb.append((char) b);
-            } else {
-                sb.append('.');
-            }
-        }
-        return sb.toString();
-    }
-
-    private void clearSerialMonitor() {
-        NativeBuffer.clearAll();
-        monitorLines.clear();
-        rxIndex = 0;
-        txIndex = 0;
-        if (serialMonitor != null) serialMonitor.setText("");
-    }
-
-    private void appendMonitorLine(boolean isTx, long tsMs, byte[] bytes) {
-        if (serialMonitor == null || getActivity() == null) return;
-
-        final int timestampColor = ContextCompat.getColor(requireContext(), R.color.bufferMonitorTimestamp);
-        final int contentColor = ContextCompat.getColor(requireContext(), isTx ? R.color.bufferMonitorTx : R.color.bufferMonitorRx);
-
-        final String timeStr = timestampFormat.format(new Date(tsMs));
-        final boolean showHexForPacket = isTx ? (showTxHex != null && showTxHex.isChecked()) : (showRxHex != null && showRxHex.isChecked());
-        final String content = showHexForPacket ? bytesToHex(bytes) : bytesToAscii(bytes);
-
-        SpannableStringBuilder line = new SpannableStringBuilder();
-        int startTs = line.length();
-        line.append("[").append(timeStr).append("] ");
-        line.setSpan(new ForegroundColorSpan(timestampColor), startTs, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-
-        int startContent = line.length();
-        line.append(content).append("\n");
-        line.setSpan(new ForegroundColorSpan(contentColor), startContent, line.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-
-        monitorLines.addLast(line);
-        boolean needsRebuild = monitorLines.size() > MAX_MONITOR_ENTRIES;
-        while (monitorLines.size() > MAX_MONITOR_ENTRIES) {
-            monitorLines.removeFirst();
-        }
-
-        getActivity().runOnUiThread(() -> {
-            if (needsRebuild) {
-                SpannableStringBuilder rebuilt = new SpannableStringBuilder();
-                for (CharSequence l : monitorLines) {
-                    rebuilt.append(l);
-                }
-                serialMonitor.setText(rebuilt);
-            } else {
-                serialMonitor.append(line);
-            }
-            serialMonitorScroll.post(() -> serialMonitorScroll.fullScroll(View.FOCUS_DOWN));
-        });
-    }
-
-    private void setupMonitorUpdates() {
-        monitorHandler = new Handler(Looper.getMainLooper());
-        monitorRunnable = new Runnable() {
-            private long seq = 0;
-
-            @Override
-            public void run() {
-                if (connectionManager != null) {
-                    activeService = connectionManager.getActiveService();
-                    if (activeService != null && activeService.checkConnection()) {
-                        try {
-                            List<PacketEntry> batch = new ArrayList<>();
-
-                            ReadPackets tx = parseReadPackets(NativeBuffer.readTxSince(txIndex, 64));
-                            int txCount = tx.tsMs.length;
-                            if (txCount > 0 && tx.data.length >= txCount * 64) {
-                                for (int i = 0; i < txCount; i++) {
-                                    int start = i * 64;
-                                    int end = start + 64;
-                                    batch.add(new PacketEntry(tx.tsMs[i], true, Arrays.copyOfRange(tx.data, start, end), seq++));
-                                }
-                            }
-                            txIndex = tx.nextPacketIndex;
-
-                            ReadPackets rx = parseReadPackets(NativeBuffer.readRxSince(rxIndex, 64));
-                            int rxCount = rx.tsMs.length;
-                            if (rxCount > 0 && rx.data.length >= rxCount * 64) {
-                                for (int i = 0; i < rxCount; i++) {
-                                    int start = i * 64;
-                                    int end = start + 64;
-                                    batch.add(new PacketEntry(rx.tsMs[i], false, Arrays.copyOfRange(rx.data, start, end), seq++));
-                                }
-                            }
-                            rxIndex = rx.nextPacketIndex;
-
-                            if (!batch.isEmpty()) {
-                                Collections.sort(batch, (a, b) -> {
-                                    if (a.tsMs != b.tsMs) return Long.compare(a.tsMs, b.tsMs);
-                                    if (a.isTx != b.isTx) return a.isTx ? -1 : 1;
-                                    return Long.compare(a.seq, b.seq);
-                                });
-
-                                for (PacketEntry entry : batch) {
-                                    appendMonitorLine(entry.isTx, entry.tsMs, entry.data);
-                                }
-                            }
-                        } catch (Exception e) {
-                            Log.e(TAG, "Buffer monitor poll failed", e);
-                        }
-                    }
-                }
-                monitorHandler.postDelayed(this, MONITOR_UPDATE_INTERVAL);
-            }
-        };
-        monitorHandler.post(monitorRunnable);
-    }
 
     // Helper method to update UI based on connection status from broadcast
     private void updateConnectionUI(boolean connected) {
