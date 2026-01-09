@@ -23,7 +23,7 @@ use include_dir::{include_dir, Dir};
 
 use crate::cli::{Component, Target};
 
-static STM32F042_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../stm/emwaver-firmware");
+static STM32F042_TEMPLATE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../stm/emwaver-firmware");
 
 pub fn run_init(target: Target, _components: Vec<Component>, destination: PathBuf) -> Result<()> {
     match target {

@@ -24,19 +24,11 @@ Command-line interface for interacting with EMWaver devices.
 
 3. **Windows**: Add the `.exe` file to your PATH or run it directly.
 
-### Quick Install Script (If Available)
-
-If you have access to the install script:
-```bash
-curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
-```
-
-**Note**: This requires the repository to be public or access to the install script.
 
 ### Building from Source
 
 ```bash
-cd cli
+cd app/cli
 cargo build --release
 # Binary will be at target/release/emwaver
 ```
@@ -46,7 +38,7 @@ cargo build --release
 On macOS, the CLI uses a vendored libusb build (no Homebrew libusb required). If you previously installed a build that fails with `Library not loaded: ...libusb-1.0.0.dylib`, reinstall from source:
 
 ```bash
-cargo install --path cli --bin emwaver --force
+cargo install --path app/cli --bin emwaver --force
 ```
 
 ## Usage

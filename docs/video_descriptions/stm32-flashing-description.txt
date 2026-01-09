@@ -11,7 +11,7 @@ You’ll learn
 - Flash over USB DFU with STM32CubeProgrammer
 
 Install emwaver-cli (used only to generate the project)
-curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+cargo install --path app/cli --bin emwaver --force
 
 Generate a project
 emwaver init --target stm32f042 --path ./my-stm32-proj

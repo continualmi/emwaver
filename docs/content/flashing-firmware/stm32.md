@@ -43,10 +43,10 @@ Official downloads:
 
 You can run `emwaver-cli` on Windows or in WSL. If you use WSL, **copy the generated project to a normal Windows folder** (for example `Documents/`) before opening it in STM32CubeIDE (CubeIDE doesn’t like WSL paths).
 
-Install the CLI:
+Install the CLI (from source):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/luispl77/emwaver/main/cli/install.sh | sh
+cargo install --path app/cli --bin emwaver --force
 ```
 
 Generate a project:

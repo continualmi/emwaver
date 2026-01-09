@@ -16,8 +16,8 @@ If the Desktop app is not running, CLI commands that require hardware access wil
 
 ## Installing the CLI (developer)
 
-- Desktop-backed CLI (no direct USB / no DFU): `cargo install --path cli --bin emwaver --force`
-- Include firmware/DFU tools (macOS): `PKG_CONFIG_PATH="$(brew --prefix libusb)/lib/pkgconfig" cargo install --path cli --bin emwaver --features firmware-tools --force`
+- Desktop-backed CLI (no direct USB / no DFU): `cargo install --path app/cli --bin emwaver --force`
+- Include firmware/DFU tools (macOS): `PKG_CONFIG_PATH="$(brew --prefix libusb)/lib/pkgconfig" cargo install --path app/cli --bin emwaver --features firmware-tools --force`
 
 ## How the CLI talks to Desktop
 
