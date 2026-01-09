@@ -34,6 +34,8 @@ pub struct PtyStartPayload {
     pub cwd: Option<String>,
     pub cols: u16,
     pub rows: u16,
+    /// When true, spawn `emwaver shell` instead of a system shell.
+    pub emwaver_shell: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -105,15 +107,22 @@ impl PtyManager {
 
             // When the desktop app is launched via `npm run tauri dev`, npm injects environment
             // variables like `npm_config_prefix` that can trigger warnings in nvm-powered shells.
-            // Wrap the shell spawn in `/usr/bin/env -u ...` to ensure a clean interactive session.
+            // Wrap the spawn in `/usr/bin/env -u ...` to ensure a clean interactive session.
             let mut cmd = CommandBuilder::new("/usr/bin/env");
             cmd.arg("-u");
             cmd.arg("npm_config_prefix");
             cmd.arg("-u");
             cmd.arg("NPM_CONFIG_PREFIX");
-            cmd.arg("/bin/zsh");
-            cmd.arg("-l");
-            cmd.arg("-i");
+
+            if payload.emwaver_shell.unwrap_or(false) {
+                // Dedicated device shell (no general-purpose system commands).
+                cmd.arg("emwaver");
+                cmd.arg("shell");
+            } else {
+                cmd.arg("/bin/zsh");
+                cmd.arg("-l");
+                cmd.arg("-i");
+            }
 
             if let Some(cwd) = payload.cwd.as_deref() {
                 cmd.cwd(cwd);
