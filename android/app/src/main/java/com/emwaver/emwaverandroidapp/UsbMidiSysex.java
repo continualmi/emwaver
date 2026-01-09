@@ -24,7 +24,7 @@ import java.util.Arrays;
  *
  * Format:
  *   F0 7D 'E' 'M' 'W' 0x01 <7-bit encoded payload> F7
- * where the payload decodes to exactly 64 bytes.
+ * where the payload decodes to exactly 128 bytes (Superframe).
  */
 public final class UsbMidiSysex {
     private UsbMidiSysex() {}
@@ -36,11 +36,11 @@ public final class UsbMidiSysex {
     private static final byte[] MAGIC = new byte[] { 'E', 'M', 'W' };
     private static final byte VERSION = 0x01;
 
-    public static byte[] encodePacket64(byte[] packet64) {
-        if (packet64 == null || packet64.length != 64) {
+    public static byte[] encodeSuperframe(byte[] superframe) {
+        if (superframe == null || superframe.length != 128) {
             return null;
         }
-        byte[] encoded = encodePayload7Bit(packet64);
+        byte[] encoded = encodePayload7Bit(superframe);
         if (encoded == null) {
             return null;
         }
@@ -59,8 +59,8 @@ public final class UsbMidiSysex {
         return sysex;
     }
 
-    /** Returns decoded 64B packet or null when not a valid EMWaver SysEx payload. */
-    public static byte[] decodeSysexToPacket64(byte[] sysex) {
+    /** Returns decoded 128B superframe or null when not a valid EMWaver SysEx payload. */
+    public static byte[] decodeSysexToSuperframe(byte[] sysex) {
         if (sysex == null || sysex.length < 8) {
             return null;
         }
@@ -87,13 +87,13 @@ public final class UsbMidiSysex {
         if (in == null || in.length == 0) {
             return null;
         }
-        byte[] out = new byte[64];
+        byte[] out = new byte[128];
         int inPos = 0;
         int outPos = 0;
 
-        while (inPos < in.length && outPos < 64) {
+        while (inPos < in.length && outPos < 128) {
             int prefix = in[inPos++] & 0x7F;
-            for (int j = 0; j < 7 && outPos < 64; j++) {
+            for (int j = 0; j < 7 && outPos < 128; j++) {
                 if (inPos >= in.length) {
                     return null;
                 }
@@ -105,25 +105,25 @@ public final class UsbMidiSysex {
             }
         }
 
-        return outPos == 64 ? out : null;
+        return outPos == 128 ? out : null;
     }
 
-    private static byte[] encodePayload7Bit(byte[] in64) {
-        if (in64 == null || in64.length != 64) {
+    private static byte[] encodePayload7Bit(byte[] in128) {
+        if (in128 == null || in128.length != 128) {
             return null;
         }
-        // Worst-case: ceil(64/7) * (1 + 7) = 10 * 8 = 80.
-        byte[] out = new byte[96];
+        // Worst-case: ceil(128/7) * (1 + 7) = 19 * 8 = 152.
+        byte[] out = new byte[160];
         int outPos = 0;
         int inPos = 0;
 
-        while (inPos < 64) {
+        while (inPos < 128) {
             int prefix = 0;
             byte[] chunk = new byte[7];
             int chunkLen = 0;
 
-            for (int j = 0; j < 7 && inPos < 64; j++) {
-                int b = in64[inPos++] & 0xFF;
+            for (int j = 0; j < 7 && inPos < 128; j++) {
+                int b = in128[inPos++] & 0xFF;
                 if ((b & 0x80) != 0) {
                     prefix |= (1 << j);
                 }

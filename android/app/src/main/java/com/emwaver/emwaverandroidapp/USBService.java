@@ -77,7 +77,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private final Object midiLock = new Object();
 
     // SysEx receive accumulator
-    private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(256);
+    private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(512);
     private boolean inSysex = false;
 
     // Buffer bridge methods
@@ -121,6 +121,25 @@ public class USBService extends Service implements DeviceConnectionService {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    private static byte[] makeSuperframe(byte[] cmdLane, byte[] streamLane) {
+        byte[] sf = new byte[128];
+        if (cmdLane != null) {
+            System.arraycopy(cmdLane, 0, sf, 0, Math.min(cmdLane.length, 64));
+        }
+        if (streamLane != null) {
+            System.arraycopy(streamLane, 0, sf, 64, Math.min(streamLane.length, 64));
+        }
+        return sf;
+    }
+
+    private static boolean isLaneEmpty(byte[] lane) {
+        if (lane == null || lane.length == 0) return true;
+        for (byte b : lane) {
+            if (b != 0) return false;
+        }
+        return true;
     }
 
     public void setUsbDeviceConnection(UsbDeviceConnection connection) {
@@ -199,9 +218,20 @@ public class USBService extends Service implements DeviceConnectionService {
                     inSysex = false;
                     byte[] sysex = sysexBuf.toByteArray();
                     sysexBuf.reset();
-                    byte[] pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex);
-                    if (pkt64 != null) {
-                        storeBulkPkt(pkt64, tsMs);
+                    byte[] superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex);
+                    if (superframe != null) {
+                        byte[] cmdLane = Arrays.copyOfRange(superframe, 0, 64);
+                        byte[] streamLane = Arrays.copyOfRange(superframe, 64, 128);
+
+                        // Demultiplex into the shared buffer.
+                        // Order matters: sendCommand expects response in the next packet.
+                        // The firmware puts the command response in Lane 0.
+                        if (!isLaneEmpty(cmdLane)) {
+                            storeBulkPkt(cmdLane, tsMs);
+                        }
+                        if (!isLaneEmpty(streamLane)) {
+                            storeBulkPkt(streamLane, tsMs);
+                        }
                     }
                 }
             }
@@ -277,19 +307,8 @@ public class USBService extends Service implements DeviceConnectionService {
         midiDevice = null;
     }
 
-    @Override
-    public void write(byte[] bytes) {
-        if (bytes == null) {
-            return;
-        }
-
-        byte[] packet64 = bytes.length == 64 ? bytes : makePacket64(bytes);
-        if (packet64 == null) {
-            Log.e(TAG, "write: payload too large for packet64");
-            return;
-        }
-
-        byte[] sysex = UsbMidiSysex.encodePacket64(packet64);
+    private void writeSuperframe(byte[] superframe) {
+        byte[] sysex = UsbMidiSysex.encodeSuperframe(superframe);
         if (sysex == null) {
             Log.e(TAG, "write: failed to encode SysEx");
             return;
@@ -302,11 +321,30 @@ public class USBService extends Service implements DeviceConnectionService {
             }
             try {
                 midiIn.send(sysex, 0, sysex.length, 0);
-                logTx(packet64);
+                // Log non-empty lanes for debugging/visualizer
+                byte[] cmdLane = Arrays.copyOfRange(superframe, 0, 64);
+                byte[] streamLane = Arrays.copyOfRange(superframe, 64, 128);
+                if (!isLaneEmpty(cmdLane)) logTx(cmdLane);
+                if (!isLaneEmpty(streamLane)) logTx(streamLane);
             } catch (IOException e) {
                 Log.e(TAG, "Error writing USB packet", e);
             }
         }
+    }
+
+    @Override
+    public void write(byte[] bytes) {
+        if (bytes == null) {
+            return;
+        }
+        // Treat generic write as a Command Lane injection (Desktop behavior for commands).
+        byte[] packet64 = bytes.length == 64 ? bytes : makePacket64(bytes);
+        if (packet64 == null) {
+            Log.e(TAG, "write: payload too large for packet64");
+            return;
+        }
+        byte[] superframe = makeSuperframe(packet64, null);
+        writeSuperframe(superframe);
     }
 
     @Override
@@ -352,10 +390,11 @@ public class USBService extends Service implements DeviceConnectionService {
                 }
             }
 
-            // Always send packet64 frames on USB MIDI.
             byte[] pkt64 = makePacket64(chunk);
             if (pkt64 != null) {
-                write(pkt64);
+                // Send as Stream Lane
+                byte[] superframe = makeSuperframe(null, pkt64);
+                writeSuperframe(superframe);
             }
 
             startTime = NativeBuffer.txUsbAdjustDeadlineNs(startTime, lastStatus);
@@ -385,6 +424,7 @@ public class USBService extends Service implements DeviceConnectionService {
         // consumed via rx_counter belongs to this command's response.
         NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
 
+        // This calls write(), which sends on Command Lane.
         byte[] packet = makePacket64(command);
         if (packet == null) {
             Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
@@ -394,6 +434,8 @@ public class USBService extends Service implements DeviceConnectionService {
         write(packet);
 
         // Wait for exactly one 64B response packet (desktop convention).
+        // Since we Demultiplex received superframes into the single buffer,
+        // the response (from Cmd Lane) will appear here.
         long startTime = System.currentTimeMillis();
         ByteArrayOutputStream collected = new ByteArrayOutputStream(64);
         while (System.currentTimeMillis() - startTime < timeout && collected.size() < 64) {

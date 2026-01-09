@@ -41,8 +41,8 @@ final class CoreMidiSysexLoopbackTests: XCTestCase {
                 }
 
                 for sysex in ctx.accumulator.feed(data) {
-                    if let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex), ctx.received == nil {
-                        ctx.received = pkt64
+                    if let superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex), ctx.received == nil {
+                        ctx.received = superframe
                         DispatchQueue.main.async { ctx.exp.fulfill() }
                     }
                 }
@@ -53,8 +53,8 @@ final class CoreMidiSysexLoopbackTests: XCTestCase {
 
         XCTAssertEqual(MIDIDestinationCreate(client, "emwaver-test-dest" as CFString, readProc, refCon, &destination), noErr)
 
-        let expected = Data((0..<64).map { UInt8($0 & 0xFF) })
-        let sysex = UsbMidiSysex.encodePacket64(expected)!
+        let expected = Data((0..<128).map { UInt8($0 & 0xFF) })
+        let sysex = UsbMidiSysex.encodeSuperframe(expected)!
 
         let capacity = 2048
         let raw = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: MemoryLayout<MIDIPacketList>.alignment)

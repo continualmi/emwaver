@@ -23,7 +23,12 @@ import os
 /// NOTE: Despite the historical name, this is now a **USB MIDI (CoreMIDI)** transport.
 /// We keep the `USBManager` API surface to minimize churn across the iOS codebase.
 final class USBManager: ObservableObject {
+    private static let laneSizeBytes: Int = 64
+    private static let superframeSizeBytes: Int = 128
+    
+    // Legacy constant alias for code using it (usually referring to the lane/packet size)
     private static let packetSizeBytes: Int = 64
+    
     private static let log = Logger(subsystem: "com.emwaver", category: "usb-midi")
 
     private func dbg(_ msg: String) {
@@ -218,6 +223,38 @@ final class USBManager: ObservableObject {
     }
 
     // MARK: - Transport (TX/RX)
+    
+    private func makeSuperframe(cmdLane: Data?, streamLane: Data?) -> Data {
+        var sf = Data(repeating: 0, count: Self.superframeSizeBytes)
+        
+        if let c = cmdLane {
+            let len = min(c.count, Self.laneSizeBytes)
+            if len > 0 {
+                sf.replaceSubrange(0..<len, with: c.prefix(len))
+            }
+        }
+        
+        if let s = streamLane {
+            let len = min(s.count, Self.laneSizeBytes)
+            if len > 0 {
+                sf.replaceSubrange(Self.laneSizeBytes..<(Self.laneSizeBytes + len), with: s.prefix(len))
+            }
+        }
+        
+        return sf
+    }
+    
+    private func sendSuperframe(_ superframe: Data) {
+        guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else {
+            setError("Cannot send packet: SysEx encode failed")
+            return
+        }
+
+        let st = sendSysex(sysex, to: connectedDestination)
+        if st != noErr {
+            setError("MIDISend failed: \(st)")
+        }
+    }
 
     @objc func sendPacket(_ data: Data) {
         midiQueue.async {
@@ -230,28 +267,16 @@ final class USBManager: ObservableObject {
                 self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
                 return
             }
-
-            let ascii = String(decoding: packet64.prefix { $0 != 0 }, as: UTF8.self)
-            let prefix = packet64.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
-            self.dbg("TX: pkt64 prefix=\(prefix) ascii=\(ascii)")
-
+            
+            // Log command lane transmission
             self.withBufferQueueSync {
                 NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
             }
             DispatchQueue.main.async { self.bufferVersion += 1 }
 
-            guard let sysex = UsbMidiSysex.encodePacket64(packet64) else {
-                self.setError("Cannot send packet: SysEx encode failed")
-                return
-            }
-
-            let sysexHead = sysex.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
-            self.dbg("TX: sysex len=\(sysex.count) head=\(sysexHead)")
-
-            let st = self.sendSysex(sysex, to: self.connectedDestination)
-            if st != noErr {
-                self.setError("MIDISend failed: \(st)")
-            }
+            // Create superframe with Command Lane populated
+            let sf = self.makeSuperframe(cmdLane: packet64, streamLane: nil)
+            self.sendSuperframe(sf)
         }
     }
 
@@ -463,8 +488,18 @@ final class USBManager: ObservableObject {
             let endRange = bytesSent + packetSize
             let chunk = bufferToSend.subdata(in: bytesSent..<endRange)
 
-            // Always send as a 64-byte MIDI frame.
-            sendPacket(chunk)
+            // Construct and send as Stream Lane
+            midiQueue.async {
+                guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(chunk) }) else { return }
+                
+                // Log stream lane transmission
+                self.withBufferQueueSync {
+                    NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
+                }
+                
+                let sf = self.makeSuperframe(cmdLane: nil, streamLane: packet64)
+                self.sendSuperframe(sf)
+            }
 
             bytesSent = endRange
             Thread.sleep(forTimeInterval: fixedDelayMs / 1000.0)
@@ -540,7 +575,9 @@ final class USBManager: ObservableObject {
             DispatchQueue.main.async { self.bufferVersion += 1 }
 
             let test = Data((0..<64).map { UInt8($0 & 0xFF) })
-            guard let sysex = UsbMidiSysex.encodePacket64(test) else {
+            // Create superframe for test
+            let sf = self.makeSuperframe(cmdLane: test, streamLane: nil)
+            guard let sysex = UsbMidiSysex.encodeSuperframe(sf) else {
                 self.setError("Self-test: failed to encode")
                 return
             }
@@ -831,17 +868,28 @@ final class USBManager: ObservableObject {
             let head = sysex.prefix(min(16, sysex.count)).map { String(format: "%02X", $0) }.joined(separator: " ")
             dbg("RX: sysex len=\(sysex.count) head=\(head)")
 
-            guard let pkt64 = UsbMidiSysex.decodeSysexToPacket64(sysex) else {
-                dbg("RX: sysex did not decode as EMWaver packet")
+            guard let superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex) else {
+                dbg("RX: sysex did not decode as EMWaver superframe")
                 continue
             }
-            let pktPrefix = pkt64.prefix(16).map { String(format: "%02X", $0) }.joined(separator: " ")
-            let pktAscii = pkt64.prefix { $0 != 0 }.map { (32...126).contains(Int($0)) ? String(UnicodeScalar($0)) : "." }.joined()
-            dbg("RX: decoded pkt64 prefix=\(pktPrefix)")
-            dbg("RX: decoded pkt64 ascii=\(pktAscii)")
-
-            // `storeBulkPkt` already bumps `bufferVersion` for the UI.
-            storeBulkPkt(pkt64)
+            
+            let cmdLane = superframe.subdata(in: 0..<Self.laneSizeBytes)
+            let streamLane = superframe.subdata(in: Self.laneSizeBytes..<Self.superframeSizeBytes)
+            
+            // Push non-empty lanes to the shared buffer
+            // Check for empty (all zeros) logic
+            let cmdEmpty = cmdLane.allSatisfy { $0 == 0 }
+            let streamEmpty = streamLane.allSatisfy { $0 == 0 }
+            
+            if !cmdEmpty {
+                dbg("RX: Demux CMD lane")
+                storeBulkPkt(cmdLane)
+            }
+            
+            if !streamEmpty {
+                dbg("RX: Demux STREAM lane")
+                storeBulkPkt(streamLane)
+            }
         }
     }
 
