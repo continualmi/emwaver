@@ -21,6 +21,7 @@ export const SCRIPT_ASSET_ROOT = "/default-scripts";
 export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.js";
 export const SCRIPT_EXAMPLE_SCRIPTS = [
   "adc.js",
+  "pwm.js",
   "cc1101.js",
   "gpio.js",
   "i2c.js",

@@ -351,6 +351,91 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
     }
 }
 
+// -----------------------------------------------------------------------------
+// PWM (analogWrite) support
+// -----------------------------------------------------------------------------
+
+static bool tim2_channel_from_pin(GPIO_TypeDef *port, uint8_t pin_index, uint32_t *out_channel)
+{
+    if (!out_channel) {
+        return false;
+    }
+    if (port != GPIOA) {
+        return false;
+    }
+
+    switch (pin_index) {
+        case 0: *out_channel = TIM_CHANNEL_1; return true;
+        case 1: *out_channel = TIM_CHANNEL_2; return true;
+        case 2: *out_channel = TIM_CHANNEL_3; return true;
+        case 3: *out_channel = TIM_CHANNEL_4; return true;
+        default: return false;
+    }
+}
+
+static uint16_t tim2_ccer_mask_from_channel(uint32_t channel)
+{
+    switch (channel) {
+        case TIM_CHANNEL_1: return TIM_CCER_CC1E;
+        case TIM_CHANNEL_2: return TIM_CCER_CC2E;
+        case TIM_CHANNEL_3: return TIM_CCER_CC3E;
+        case TIM_CHANNEL_4: return TIM_CCER_CC4E;
+        default: return 0;
+    }
+}
+
+static void tim2_stop_pwm_channel(uint32_t channel)
+{
+    uint16_t mask = tim2_ccer_mask_from_channel(channel);
+    if (mask) {
+        TIM2->CCER &= (uint16_t)~mask;
+    }
+    stopPWM_TIM2(channel);
+    (void)HAL_TIM_PWM_Stop(&htim2, channel);
+}
+
+static void tim2_set_ccr_from_u12(uint32_t channel, uint16_t value_u12)
+{
+    uint32_t arr = TIM2->ARR;
+    uint32_t period = arr + 1u;
+
+    uint32_t ccr = (period * (uint32_t)value_u12 + 2047u) / 4095u;
+    if (ccr > arr) {
+        ccr = arr;
+    }
+
+    switch (channel) {
+        case TIM_CHANNEL_1: TIM2->CCR1 = ccr; break;
+        case TIM_CHANNEL_2: TIM2->CCR2 = ccr; break;
+        case TIM_CHANNEL_3: TIM2->CCR3 = ccr; break;
+        case TIM_CHANNEL_4: TIM2->CCR4 = ccr; break;
+        default: break;
+    }
+}
+
+static bool tim2_set_pwm_hz(uint32_t hz)
+{
+    if (hz < 1u) {
+        return false;
+    }
+
+    // TIM2 is on APB1. With the current clocking, APB1 == HCLK.
+    uint32_t timclk = HAL_RCC_GetHCLKFreq();
+    if (timclk == 0u) {
+        timclk = 48000000u;
+    }
+
+    // Keep it simple: prescaler=0, adjust ARR (TIM2 is 32-bit on STM32F0).
+    uint32_t ticks = timclk / hz;
+    if (ticks < 2u) {
+        ticks = 2u;
+    }
+    TIM2->PSC = 0u;
+    TIM2->ARR = ticks - 1u;
+    TIM2->EGR = TIM_EGR_UG;
+    return true;
+}
+
 static void stop_sampling(void)
 {
     HAL_TIM_Base_Stop_IT(&htim3);
@@ -2121,6 +2206,147 @@ adc_done:
 
               uint8_t response[6] = {mode, otype, pupd, af, idr_bit, odr_bit};
               command_send_ok(response, sizeof(response));
+              free_bulk_packet();
+              continue;
+          }
+
+          command_send_err(NULL);
+          free_bulk_packet();
+          continue;
+      }
+
+      if (cmd.verb && strcmp(cmd.verb, "pwm") == 0 && cmd.positional_count > 0) {
+          const char *sub = cmd.positional[0];
+
+          if (strcmp(sub, "freq") == 0) {
+              int hz_i = 0;
+              const char *hz_str = cli_get_arg_view(&cmd, "hz");
+              if (!cli_parse_int(hz_str, &hz_i) || hz_i <= 0) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              if (!tim2_set_pwm_hz((uint32_t)hz_i)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              command_send_ok(NULL, 0);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "stop") == 0 || strcmp(sub, "off") == 0) {
+              int pin_enc = -1;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              if (!cli_parse_int(pin_str, &pin_enc)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              GPIO_TypeDef *port = NULL;
+              uint16_t pin_mask = 0;
+              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint8_t pin_index = 0;
+              if (!pin_mask_to_index(pin_mask, &pin_index)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint32_t channel = 0;
+              if (!tim2_channel_from_pin(port, pin_index, &channel)) {
+                  command_send_err("PWM supports PA0..PA3 only");
+                  free_bulk_packet();
+                  continue;
+              }
+
+              tim2_stop_pwm_channel(channel);
+              gpio_write_latch(port, pin_mask, false);
+              gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+              HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
+
+              command_send_ok(NULL, 0);
+              free_bulk_packet();
+              continue;
+          }
+
+          if (strcmp(sub, "write") == 0) {
+              int pin_enc = -1;
+              int value_i = 0;
+              int hz_i = 0;
+              const char *pin_str = cli_get_arg_view(&cmd, "pin");
+              const char *value_str = cli_get_arg_view(&cmd, "value");
+              const char *hz_str = cli_get_arg_view(&cmd, "hz");
+              if (!cli_parse_int(pin_str, &pin_enc) || !cli_parse_int(value_str, &value_i)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              if (value_i < 0) value_i = 0;
+              if (value_i > 4095) value_i = 4095;
+
+              GPIO_TypeDef *port = NULL;
+              uint16_t pin_mask = 0;
+              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint8_t pin_index = 0;
+              if (!pin_mask_to_index(pin_mask, &pin_index)) {
+                  command_send_err(NULL);
+                  free_bulk_packet();
+                  continue;
+              }
+
+              uint32_t channel = 0;
+              if (!tim2_channel_from_pin(port, pin_index, &channel)) {
+                  command_send_err("PWM supports PA0..PA3 only");
+                  free_bulk_packet();
+                  continue;
+              }
+
+              if (hz_str && hz_i > 0) {
+                  if (!tim2_set_pwm_hz((uint32_t)hz_i)) {
+                      command_send_err(NULL);
+                      free_bulk_packet();
+                      continue;
+                  }
+              }
+
+              if (value_i == 0) {
+                  tim2_stop_pwm_channel(channel);
+                  gpio_write_latch(port, pin_mask, false);
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+                  HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
+              } else if (value_i >= 4095) {
+                  tim2_stop_pwm_channel(channel);
+                  gpio_write_latch(port, pin_mask, true);
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+                  HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_SET);
+              } else {
+                  // PWM output on TIM2 (AF2), duty in 12-bit units.
+                  configurePin(port, pin_mask, GPIO_MODE_AF_PP, GPIO_NOPULL);
+                  tim2_set_ccr_from_u12(channel, (uint16_t)value_i);
+                  startPWM_TIM2(channel);
+                  (void)HAL_TIM_PWM_Start(&htim2, channel);
+              }
+
+              command_send_ok(NULL, 0);
               free_bulk_packet();
               continue;
           }

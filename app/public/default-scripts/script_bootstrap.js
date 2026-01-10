@@ -865,6 +865,48 @@ if (typeof analogReadVbat !== 'function') {
   __scriptGlobal.analogReadVbat = analogReadVbat;
 }
 
+if (typeof analogWriteResolution !== 'function') {
+  var analogWriteResolution = function (bits) {
+    var n = Number(bits);
+    if (!isFinite(n) || n < 1 || n > 16) {
+      throw new Error('analogWriteResolution: invalid bits ' + String(bits));
+    }
+    __scriptGlobal.__scriptAnalogWriteResolution = n | 0;
+  };
+  __scriptGlobal.analogWriteResolution = analogWriteResolution;
+}
+
+function __scriptScaleAnalogWrite(value) {
+  var bits = __scriptGlobal.__scriptAnalogWriteResolution;
+  if (typeof bits !== 'number' || !isFinite(bits) || bits <= 0) bits = 12;
+
+  var v = Number(value) | 0;
+  if (v < 0) v = 0;
+
+  var max = bits >= 31 ? 0x7fffffff : (1 << bits) - 1;
+  if (v > max) v = max;
+
+  if (bits === 12) return v;
+  if (bits > 12) return v >> (bits - 12);
+  return v << (12 - bits);
+}
+
+if (typeof analogWrite !== 'function') {
+  var analogWrite = function (pin, value, opts) {
+    var pinNumber = __scriptResolvePin(pin);
+    var v12 = __scriptScaleAnalogWrite(value);
+
+    var hz = opts && typeof opts.hz === 'number' ? (opts.hz | 0) : undefined;
+    var timeout = opts && typeof opts.timeout === 'number' ? (opts.timeout | 0) : 1500;
+
+    var cmd = 'pwm write --pin=' + pinNumber + ' --value=' + v12;
+    if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
+
+    return emw.send(cmd, timeout);
+  };
+  __scriptGlobal.analogWrite = analogWrite;
+}
+
 if (typeof UI === 'undefined') {
   var UI = (function () {
     var idCounter = 0;

@@ -814,40 +814,33 @@
                 <div class="scripts-layout">
                     <div class="script-script-card">
                             <div class="script-label">EMWaver DSL</div>
-                            <div class="script-script-name">ir_send_saved_signal.js</div>
-                            <pre><code><span class="token-keyword">const</span> <span class="token-const">DEFAULT_FREQ_HZ</span> = <span class="token-number">38000</span>;
-<span class="token-keyword">const</span> <span class="token-const">DEFAULT_DUTY_PERCENT</span> = <span class="token-number">50</span>;
+                            <div class="script-script-name">adc.js</div>
+                            <pre><code>let status = "Ready";
+let samplesText = "8";
+let pinText = "0"; // PA0 (encoded pin 0)
 
-<span class="token-keyword">let</span> selectedSignal = <span class="token-string">""</span>;
-<span class="token-keyword">let</span> repetitionsText = <span class="token-string">"1"</span>;
-<span class="token-keyword">let</span> intervalText = <span class="token-string">"60"</span>;
-<span class="token-keyword">let</span> status = <span class="token-string">"Ready"</span>;
-
-<span class="token-keyword">function</span> <span class="token-function">sendSignal</span>() {
-    status = <span class="token-string">"Sending..."</span>;
+async function readAdc() {
+    status = "Reading...";
     render();
     Utils.delay(10);
 
-    const data = SamplerSignals.readSignal(selectedSignal);
-    const cmd = <span class="token-string">"transmit start --pin=4 --pwm --freq="</span> + DEFAULT_FREQ_HZ +
-        <span class="token-string">" --duty="</span> + DEFAULT_DUTY_PERCENT + <span class="token-string">"\n"</span>;
+    const pin = Number(pinText) | 0;
+    const samples = Math.max(1, Math.min(64, Number(samplesText) | 0));
+    const value = await analogRead(pin, { samples });
 
-    BLEService.loadBuffer(data);
-    BLEService.write(bytesFromString(cmd));
-    BLEService.transmitBuffer();
-
-    status = <span class="token-string">"Sent"</span>;
+    status = "ADC=" + value + " (0..4095)";
     render();
 }
 
-<span class="token-keyword">function</span> <span class="token-function">render</span>() {
+function render() {
     UI.render(UI.column({
         spacing: 12,
         children: [
-            UI.text({ text: <span class="token-string">"IR: Send Saved Signal"</span>, font: <span class="token-string">"title2"</span> }),
-            UI.picker({ ... }),
-            UI.textField({ label: <span class="token-string">"Repetitions"</span>, value: repetitionsText }),
-            UI.button({ label: <span class="token-string">"Send"</span>, onTap: sendSignal })
+            UI.text({ text: "ADC Read", font: "title2", fontWeight: "semibold" }),
+            UI.textField({ value: pinText, placeholder: "Pin (encoded)", onChange: (v) => { pinText = v; render(); } }),
+            UI.textField({ value: samplesText, placeholder: "Samples", onChange: (v) => { samplesText = v; render(); } }),
+            UI.button({ label: "Read", onTap: readAdc }),
+            UI.text({ text: status })
         ]
     }));
 }

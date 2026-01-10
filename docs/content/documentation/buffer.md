@@ -46,9 +46,9 @@ Over USB (SysEx tunnel), the client sends commands and consumes responses as **f
 
 Examples (shape, not an exhaustive list):
 
-- `gpio read --pin 4`
-- `spi xfer --cs 10 --tx 0x0f02aabbcc --rx 4`
-- `cc1101 read --reg 0`
+- `gpio read --pin=4`
+- `spi xfer --cs=10 --tx=0F02AABBCC --rx=4`
+- `adc read --src=vrefint`
 
 On the client side, every incoming chunk is appended to the receive buffer. The **buffer counter** is then used
 to decide when a “new response frame” is available and to consume the next 64 bytes deterministically (without
@@ -72,7 +72,7 @@ bounded (two fixed-size buffers).
 
 Sampler examples:
 
-- `sample start --pin 5`
+- `sample start --pin=5`
 - `sample stop`
 
 Firmware implementations:
@@ -87,7 +87,7 @@ keep arriving while a timer/ISR drains from the tail.
 
 Retransmit examples:
 
-- `transmit start --pin 2 --freq 38000 --duty 50`
+- `transmit start --pin=2`
 - `transmit stop`
 
 Firmware implementations:
