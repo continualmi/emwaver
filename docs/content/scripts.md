@@ -122,12 +122,29 @@ Convenience aliases for common device operations.
 - `emw.send(command, timeoutMs?)` → same as `DeviceConnection.sendCommandString(...)`
 - `emw.sendPacket(bytes, timeoutMs?)` → same as `DeviceConnection.sendPacket(...)`
 
+### `device`
+
+High-level device helpers.
+
+- `await device.version()` → `string`
+- `await device.reset()` → `void` (triggers an STM32 `NVIC_SystemReset()` on the device)
+
 ### `Utils`
 
 Utility helpers provided by the host runtime.
 
 - `Utils.delay(ms)` → `void` (blocking sleep)
 - `Utils.sleep(ms)` → `void` (alias on some hosts)
+
+### Timing helpers
+
+Best-effort host-side timing utilities (not suitable for precise MCU timing).
+
+- `millis()` → `number` (milliseconds since script start; monotonic when available)
+- `await delay(ms)` → `Promise<void>` (non-blocking sleep when timers are available on the host)
+- `every(periodMs, fn, { mode? })` → `{ stop() }`
+  - `fn` may be async; ticks do not overlap.
+  - `mode: "fixedRate"` (default) skips ticks when a run overruns the period; `"fixedDelay"` waits `periodMs` after each run.
 
 ### `SamplerSignals`
 

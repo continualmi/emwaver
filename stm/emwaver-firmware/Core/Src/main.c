@@ -1321,6 +1321,15 @@ int main(void)
           continue;
       }
 
+      if (cmd.verb && strcmp(cmd.verb, "reset") == 0) {
+          const char *msg = "resetting";
+          command_send_ok((const uint8_t *)msg, strlen(msg));
+          free_bulk_packet();
+          HAL_Delay(10);
+          NVIC_SystemReset();
+          while (1) {}
+      }
+
       if (cmd.verb && strcmp(cmd.verb, "name") == 0) {
           if (cmd.positional_count > 0) {
               const char* new_name = cmd.positional[0];

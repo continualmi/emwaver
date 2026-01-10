@@ -27,6 +27,19 @@ var __scriptGlobal = (function () {
   }
 })();
 
+var __scriptClock = (function () {
+  var hasPerformanceNow = typeof performance !== 'undefined' && performance && typeof performance.now === 'function';
+  var origin = hasPerformanceNow ? performance.now() : Date.now();
+  var now = function () {
+    return hasPerformanceNow ? performance.now() : Date.now();
+  };
+  return {
+    millis: function () {
+      return Math.floor(now() - origin);
+    },
+  };
+})();
+
 var ScriptBridge = typeof ScriptBridge !== 'undefined' ? ScriptBridge : {
   render: function (node) {
     _scriptRender(node);
@@ -228,6 +241,127 @@ Utils.sleep = function (ms) {
   return Utils.delay(ms);
 };
 
+if (typeof millis === 'undefined') {
+  var millis = function () {
+    return __scriptClock.millis();
+  };
+}
+
+if (typeof delay === 'undefined') {
+  var delay = function (ms) {
+    var durationMs = Math.max(0, Number(ms) || 0);
+    if (durationMs <= 0) {
+      return Promise.resolve();
+    }
+
+    if (typeof setTimeout === 'function') {
+      return new Promise(function (resolve) {
+        setTimeout(resolve, durationMs);
+      });
+    }
+
+    if (typeof _scriptSleep === 'function') {
+      _scriptSleep(durationMs);
+      return Promise.resolve();
+    }
+
+    if (Utils && typeof Utils.delay === 'function') {
+      Utils.delay(durationMs);
+      return Promise.resolve();
+    }
+
+    return new Promise(function (resolve) {
+      var start = Date.now();
+      while (Date.now() - start < durationMs) {}
+      resolve();
+    });
+  };
+}
+
+if (typeof every === 'undefined') {
+  var every = function (periodMs, fn, opts) {
+    var period = Math.max(0, Number(periodMs) || 0);
+    if (!isFinite(period) || period <= 0) {
+      throw new Error('every(periodMs, fn): periodMs must be > 0');
+    }
+    if (typeof fn !== 'function') {
+      throw new Error('every(periodMs, fn): fn must be a function');
+    }
+
+    var options = opts && typeof opts === 'object' ? opts : {};
+    var mode = options.mode === 'fixedDelay' ? 'fixedDelay' : 'fixedRate';
+
+    var stopped = false;
+    var running = false;
+    var startMs = __scriptClock.millis();
+    var tick = 0;
+    var timeoutId = null;
+
+    function stop() {
+      stopped = true;
+      if (timeoutId !== null && typeof clearTimeout === 'function') {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = null;
+    }
+
+    function scheduleNext() {
+      if (stopped) return;
+
+      if (mode === 'fixedDelay') {
+        timeoutId = typeof setTimeout === 'function' ? setTimeout(runTick, period) : null;
+        if (timeoutId === null) {
+          (async function () {
+            await delay(period);
+            runTick();
+          })();
+        }
+        return;
+      }
+
+      var due = startMs + (tick + 1) * period;
+      var waitMs = Math.max(0, due - __scriptClock.millis());
+      timeoutId = typeof setTimeout === 'function' ? setTimeout(runTick, waitMs) : null;
+      if (timeoutId === null) {
+        (async function () {
+          await delay(waitMs);
+          runTick();
+        })();
+      }
+    }
+
+    function runTick() {
+      if (stopped) return;
+
+      if (running) {
+        tick += 1;
+        scheduleNext();
+        return;
+      }
+
+      running = true;
+      tick += 1;
+
+      Promise.resolve()
+        .then(function () {
+          return fn();
+        })
+        .catch(function (error) {
+          try {
+            console.error('every() tick error:', error);
+          } catch (e) {}
+        })
+        .then(function () {
+          running = false;
+          scheduleNext();
+        });
+    }
+
+    scheduleNext();
+    return { stop: stop };
+  };
+}
+
 var SamplerSignals = {};
 SamplerSignals.__scriptShim = true;
 SamplerSignals.listSignals = function () {
@@ -261,6 +395,9 @@ SamplerSignals.readSignal = function (name) {
 __scriptGlobal.DeviceConnection = DeviceConnection;
 __scriptGlobal.Utils = Utils;
 __scriptGlobal.SamplerSignals = SamplerSignals;
+__scriptGlobal.millis = millis;
+__scriptGlobal.delay = delay;
+__scriptGlobal.every = every;
 
 // -----------------------------------------------------------------------------
 // Sampler API (live capture)
@@ -557,6 +694,45 @@ if (typeof emw.sendPacket !== 'function') {
   };
 }
 __scriptGlobal.emw = emw;
+
+function __scriptDecodeText(bytes) {
+  if (!bytes) return '';
+  if (typeof bytes === 'string') return bytes;
+  try {
+    if (typeof TextDecoder === 'function') {
+      return new TextDecoder('utf-8').decode(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    }
+  } catch (e) {}
+  try {
+    var arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    var out = '';
+    for (var i = 0; i < arr.length; i += 1) {
+      var c = arr[i] & 0xff;
+      if (c === 0) break;
+      out += String.fromCharCode(c);
+    }
+    return out;
+  } catch (e2) {
+    return String(bytes);
+  }
+}
+
+var device = typeof device !== 'undefined' ? device : {};
+if (typeof device.version !== 'function') {
+  device.version = function () {
+    return Promise.resolve(emw.send('version', 1500)).then(function (resp) {
+      return __scriptDecodeText(resp).trim();
+    });
+  };
+}
+if (typeof device.reset !== 'function') {
+  device.reset = function () {
+    return Promise.resolve(emw.send('reset', 1500)).then(function () {
+      return;
+    });
+  };
+}
+__scriptGlobal.device = device;
 
 // -----------------------------------------------------------------------------
 // Arduino-ish API surface (GPIO + SPI + ADC), implemented as thin wrappers over the
