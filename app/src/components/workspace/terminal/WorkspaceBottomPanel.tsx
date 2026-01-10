@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import type { MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDownIcon, CloseIcon, PlusIcon, TerminalIcon, TrashIcon } from "../WorkspaceIcons";
 import type { TerminalSession, ThemeMode } from "../workspaceTypes";
 
@@ -28,6 +29,13 @@ type WorkspaceBottomPanelProps = {
   isTerminalVisible: boolean;
   onToggleTerminalVisible: () => void;
   onClosePanel: () => void;
+
+  terminalActiveTab: "terminal" | "console";
+  onSetTerminalActiveTab: (tab: "terminal" | "console") => void;
+  terminalConsoleLines: string[];
+  terminalConsoleAnchorRef: MutableRefObject<HTMLDivElement | null>;
+  onClearTerminalConsole: () => void;
+  onSubmitConsoleInput: (line: string) => void;
 
   terminalPanelRef: RefObject<HTMLDivElement | null>;
   terminalHeight: number;
@@ -62,6 +70,12 @@ export default function WorkspaceBottomPanel({
   isTerminalVisible,
   onToggleTerminalVisible,
   onClosePanel,
+  terminalActiveTab,
+  onSetTerminalActiveTab,
+  terminalConsoleLines,
+  terminalConsoleAnchorRef,
+  onClearTerminalConsole,
+  onSubmitConsoleInput,
   terminalPanelRef,
   terminalHeight,
   onTerminalResizeMouseDown,
@@ -83,6 +97,29 @@ export default function WorkspaceBottomPanel({
   onTerminalListResizeMouseDown,
   terminalListWidth,
 }: WorkspaceBottomPanelProps) {
+  const isTerminalTab = terminalActiveTab === "terminal";
+  const isConsoleTab = terminalActiveTab === "console";
+
+  const consoleText = useMemo(() => terminalConsoleLines.join("\n"), [terminalConsoleLines]);
+  const [consoleInput, setConsoleInput] = useState("");
+
+  const submitConsoleInput = () => {
+    const trimmed = consoleInput.replace(/\r?\n/g, "").trimEnd();
+    if (!trimmed) {
+      return;
+    }
+    onSubmitConsoleInput(trimmed);
+    setConsoleInput("");
+  };
+
+  const handleConsoleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    submitConsoleInput();
+  };
+
   return (
     <div className="border-t border-slate-900 bg-slate-950">
       <button
@@ -116,76 +153,119 @@ export default function WorkspaceBottomPanel({
           style={{ height: terminalHeight }}
         >
           <div className="flex items-center justify-between border-b border-slate-900/70 px-2 py-1 text-xs">
-            <div className="flex items-end gap-1">
-              <div className="select-none px-3 py-2 font-semibold tracking-wide text-slate-100">TERMINAL</div>
-            </div>
-
-            <div ref={terminalPickerAnchorRef as unknown as RefObject<HTMLDivElement>} className="relative flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsTerminalPickerOpen(!isTerminalPickerOpen)}
-                className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
-                title="Select terminal"
+                onClick={() => onSetTerminalActiveTab("terminal")}
+                className={`select-none px-3 py-2 font-semibold tracking-wide ${
+                  isTerminalTab
+                    ? "border-b-2 border-sky-400 text-slate-100"
+                    : "border-b-2 border-transparent text-slate-500 hover:text-slate-200"
+                }`}
+                title="Terminal"
               >
-                <TerminalIcon className="h-4 w-4 text-slate-500" />
-                <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
-                <ChevronDownIcon className="h-4 w-4 text-slate-500" />
+                TERMINAL
               </button>
+              <button
+                type="button"
+                onClick={() => onSetTerminalActiveTab("console")}
+                className={`select-none px-3 py-2 font-semibold tracking-wide ${
+                  isConsoleTab
+                    ? "border-b-2 border-sky-400 text-slate-100"
+                    : "border-b-2 border-transparent text-slate-500 hover:text-slate-200"
+                }`}
+                title="Console"
+              >
+                CONSOLE
+              </button>
+            </div>
 
-              {isTerminalPickerOpen ? (
-                <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
-                  <div className="max-h-64 overflow-auto p-1">
-                    {terminalSessions.map((session) => {
-                      const isActive = session.id === activeTerminalSessionId;
-                      return (
-                        <button
-                          key={session.id}
-                          type="button"
-                          onClick={() => {
-                            setIsTerminalPickerOpen(false);
-                            setActiveTerminalSessionId(session.id);
-                            requestAnimationFrame(() => {
-                              ensureSessionTerminal(session.id);
-                              focusActiveTerminal();
-                            });
-                          }}
-                          className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-                            isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
-                          }`}
-                        >
-                          <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                          <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+            <div className="flex items-center gap-2">
+              {isConsoleTab ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={onClearTerminalConsole}
+                    className="rounded px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
+                    title="Clear console output"
+                  >
+                    CLEAR
+                  </button>
                 </div>
               ) : null}
 
-              <button
-                type="button"
-                onClick={() => void startTerminalSession({ makeActive: true })}
-                className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                title="New terminal"
-              >
-                <PlusIcon />
-              </button>
+              {isTerminalTab ? (
+                <div
+                  ref={terminalPickerAnchorRef as unknown as RefObject<HTMLDivElement>}
+                  className="relative flex items-center gap-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsTerminalPickerOpen(!isTerminalPickerOpen)}
+                    className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
+                    title="Select terminal"
+                  >
+                    <TerminalIcon className="h-4 w-4 text-slate-500" />
+                    <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
+                    <ChevronDownIcon className="h-4 w-4 text-slate-500" />
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const sessionId = activeTerminalSessionId;
-                  if (!sessionId) {
-                    return;
-                  }
-                  void closeTerminalSession(sessionId);
-                }}
-                disabled={!activeTerminalSessionId}
-                className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
-                title="Kill active terminal"
-              >
-                <TrashIcon />
-              </button>
+                  {isTerminalPickerOpen ? (
+                    <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
+                      <div className="max-h-64 overflow-auto p-1">
+                        {terminalSessions.map((session) => {
+                          const isActive = session.id === activeTerminalSessionId;
+                          return (
+                            <button
+                              key={session.id}
+                              type="button"
+                              onClick={() => {
+                                setIsTerminalPickerOpen(false);
+                                setActiveTerminalSessionId(session.id);
+                                requestAnimationFrame(() => {
+                                  ensureSessionTerminal(session.id);
+                                  focusActiveTerminal();
+                                });
+                              }}
+                              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
+                                isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
+                              }`}
+                            >
+                              <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
+                              <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => void startTerminalSession({ makeActive: true })}
+                    className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
+                    title="New terminal"
+                  >
+                    <PlusIcon />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sessionId = activeTerminalSessionId;
+                      if (!sessionId) {
+                        return;
+                      }
+                      void closeTerminalSession(sessionId);
+                    }}
+                    disabled={!activeTerminalSessionId}
+                    className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
+                    title="Kill active terminal"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              ) : null}
 
               <button
                 type="button"
@@ -201,29 +281,66 @@ export default function WorkspaceBottomPanel({
           <div className="flex min-h-0 flex-1">
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="relative min-h-0 flex-1 overflow-hidden">
-                {terminalSessions.map((session) => (
-                  <div
-                    key={session.id}
-                    ref={(node) => {
-                      if (!node) {
-                        terminalContainerBySessionRef.current.delete(session.id);
-                        return;
-                      }
-                      terminalContainerBySessionRef.current.set(session.id, node);
-                      if (isTerminalVisible) {
-                        ensureSessionTerminal(session.id);
-                      }
-                    }}
-                    className={`absolute inset-0 select-text px-2 py-2 ${session.id === activeTerminalSessionId ? "block" : "hidden"}`}
-                  />
-                ))}
-                {terminalSessions.length === 0 ? (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
-                ) : null}
+                {isTerminalTab ? (
+                  <>
+                    {terminalSessions.map((session) => (
+                      <div
+                        key={session.id}
+                        ref={(node) => {
+                          if (!node) {
+                            terminalContainerBySessionRef.current.delete(session.id);
+                            return;
+                          }
+                          terminalContainerBySessionRef.current.set(session.id, node);
+                          if (isTerminalVisible) {
+                            ensureSessionTerminal(session.id);
+                          }
+                        }}
+                        className={`absolute inset-0 select-text px-2 py-2 ${
+                          session.id === activeTerminalSessionId ? "block" : "hidden"
+                        }`}
+                      />
+                    ))}
+                    {terminalSessions.length === 0 ? (
+                      <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col overflow-hidden">
+                    <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs text-slate-200">
+                      {terminalConsoleLines.length === 0 ? (
+                        <div className="pt-2 text-slate-500">No output yet.</div>
+                      ) : (
+                        <pre className="whitespace-pre-wrap font-mono leading-relaxed">{consoleText}</pre>
+                      )}
+                      <div ref={terminalConsoleAnchorRef} />
+                    </div>
+
+                    <div className="border-t border-slate-900/70 bg-slate-950 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={consoleInput}
+                          onChange={(event) => setConsoleInput(event.target.value)}
+                          onKeyDown={handleConsoleInputKeyDown}
+                          placeholder="Type a line and press Enter… (Console.readLine())"
+                          className="min-w-0 flex-1 rounded border border-slate-800 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:border-slate-600 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={submitConsoleInput}
+                          className="rounded bg-slate-900 px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-200 hover:bg-slate-800"
+                          title="Send (Enter)"
+                        >
+                          SEND
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {isTerminalListCollapsed ? (
+            {isTerminalTab && isTerminalListCollapsed ? (
               <button
                 type="button"
                 onClick={onExpandTerminalList}
@@ -232,7 +349,7 @@ export default function WorkspaceBottomPanel({
               >
                 <TerminalIcon className="h-4 w-4" />
               </button>
-            ) : (
+            ) : isTerminalTab ? (
               <>
                 <div
                   role="separator"
@@ -294,7 +411,7 @@ export default function WorkspaceBottomPanel({
                   </div>
                 </aside>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

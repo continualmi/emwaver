@@ -163,34 +163,22 @@ impl ScriptRuntime {
                         r#"
                         (function() {{
                             var cb = globalThis.__scriptCallbacks['{}'];
-                            print('[callback] Looking for token: {}');
-                            print('[callback] Callback type: ' + typeof cb);
                             if (typeof cb === 'function') {{
                                 try {{
                                     var args = {};
-                                    print('[callback] Invoking callback...');
-                                    var result = cb.apply(null, Array.isArray(args) && args.length === 0 ? [] : [args]);
-                                    print('[callback] Callback returned: ' + typeof result);
-                                    if (result && typeof result.then === 'function') {{
-                                        print('[callback] Result is a Promise, attaching handlers');
-                                        result.then(function(v) {{
-                                            print('[callback] Promise RESOLVED: ' + v);
-                                        }}).catch(function(e) {{
-                                            print('[callback] Promise REJECTED: ' + e);
-                                        }});
+                                    if (args === null || typeof args === 'undefined') {{
+                                        args = [];
                                     }}
+                                    var argv = Array.isArray(args) ? args : [args];
+                                    cb.apply(null, argv);
                                 }} catch (e) {{
-                                    print('[callback] Sync error: ' + e);
+                                    try {{ print('[callback] error: ' + e); }} catch (_) {{}}
                                 }}
-                            }} else {{
-                                print('[callback] Callback not found: {}');
                             }}
                         }})();
                         "#,
                         token.replace('\'', "\\'"),
-                        token.replace('\'', "\\'"),
                         data_str,
-                        token.replace('\'', "\\'")
                     );
                     
                     eprintln!("[script_runtime] Executing invoke script");
