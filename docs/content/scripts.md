@@ -89,32 +89,15 @@ Scripts run inside a sandbox that exposes a small set of global objects. The exa
 
 ### Arduino-like API (recommended)
 
-The lowest-level interface is the ASCII command protocol (via `emw.send(...)`). For script authors, it’s often more productive to wrap those commands in a tiny Arduino-like helper layer:
+The lowest-level interface is the ASCII command protocol (via `emw.send(...)`). On desktop/mobile, the default script runtime loads `script_bootstrap.js`, which exposes an Arduino-ish convenience layer as thin wrappers over the command protocol:
 
-- `pinMode(pin, "in"|"out")` → uses `gpio in --pin=...` / `gpio out --pin=...`
-- `digitalRead(pin)` → uses `gpio read --pin=...` (returns boolean)
-- `digitalWrite(pin, value)` → uses `gpio high --pin=...` / `gpio low --pin=...`
-- `delay(ms)` → `Utils.delay(ms)`
-
-```javascript title="Arduino-style GPIO helpers (implemented in-script)"
-function pinMode(pin, mode) {
-    return emw.send("gpio " + mode + " --pin=" + pin);
-}
-
-function digitalRead(pin) {
-    let resp = emw.send("gpio read --pin=" + pin);
-    return !!(resp && resp.length > 0 && resp[0] !== 0);
-}
-
-function digitalWrite(pin, value) {
-    pinMode(pin, "out");
-    return emw.send((value ? "gpio high" : "gpio low") + " --pin=" + pin);
-}
-
-function delay(ms) {
-    Utils.delay(ms);
-}
-```
+- Digital IO: `pinMode(pin, INPUT|OUTPUT)`, `digitalRead(pin)`, `digitalWrite(pin, LOW|HIGH)`
+- ADC input: `analogRead(pin, { samples? })`, `analogReadResolution(bits)` (defaults to 12-bit on STM32F0)
+- Internal ADC sources: `analogReadTemp()`, `analogReadVrefint()`, `analogReadVbat()`
+- PWM output: `analogWrite(pin, value, { hz?, timeout? })`, `analogWriteResolution(bits)` (PWM currently supports `PA0..PA3` only)
+- SPI: `SPI.transfer(txBytes, { cs?, rxLength? })` (maps to `spi xfer ...`)
+- I2C: `Wire.begin({ hz? })`, `Wire.write(...)`, `Wire.read(...)`, `Wire.xfer(...)`
+- UART: `Serial.begin(baud)`, `Serial.write(...)`, `Serial.read(...)`, `Serial.end()`
 
 For now, the docs cover the public runtime classes below.
 
@@ -130,7 +113,7 @@ For now, the docs cover the public runtime classes below.
 - `DeviceConnection.write(bytes)` → `void` (stream/write without expecting a response)
 - `DeviceConnection.connectionStatus()` → `string` (if provided by the host)
 
-`sendCommandString(...)` is typically used with the EMWaver ASCII command protocol (verbs + flags) like `gpio read --pin=4` or `cc1101 set_freq --mhz=433.92`.
+`sendCommandString(...)` is typically used with the EMWaver ASCII command protocol (verbs + flags) like `gpio read --pin=4`, `spi xfer --cs=4 --tx=F100 --rx=2`, or `adc read --src=temp`.
 
 ### `emw`
 
