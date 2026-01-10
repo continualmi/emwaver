@@ -100,6 +100,7 @@ import {
 } from "./workspaceUtils";
 
 const DEFAULT_TERMINAL_TITLE = "zsh";
+const CONSOLE_INPUT_TOKEN = "__emw_console_input";
 
 const FILE_AUTO_RELOAD_INTERVAL_MS = 2000;
 
@@ -180,6 +181,7 @@ export default function WorkspaceShell({
   const explorerResizeStartWidthRef = useRef(0);
 
   const [isTerminalVisible, setIsTerminalVisible] = useState(false);
+  const [terminalActiveTab, setTerminalActiveTab] = useState<"terminal" | "console">("terminal");
   const [terminalHeight, setTerminalHeight] = useState<number>(() => readStoredTerminalHeight(keys));
   const terminalResizeActiveRef = useRef(false);
   const terminalResizeStartYRef = useRef(0);
@@ -214,6 +216,15 @@ export default function WorkspaceShell({
   const pendingTerminalOutputRef = useRef<Map<string, Uint8Array[]>>(new Map());
   const outputDecoderRef = useRef(new TextDecoder());
 
+  const [terminalConsoleLines, setTerminalConsoleLines] = useState<string[]>([]);
+  const terminalConsoleAnchorRef = useRef<HTMLDivElement | null>(null);
+  const appendTerminalConsoleLine = useCallback((message: string) => {
+    setTerminalConsoleLines((prev) => [...prev.slice(-499), String(message)]);
+  }, []);
+  const clearTerminalConsole = useCallback(() => {
+    setTerminalConsoleLines([]);
+  }, []);
+
 
   const monaco = useMonaco();
   const device = useDevice();
@@ -246,6 +257,36 @@ export default function WorkspaceShell({
   const [useBackendEngine, setUseBackendEngine] = useState(true);
   const backendScript = useBackendScript();
   const activeBackendPathRef = useRef<string | null>(null);
+
+  const submitTerminalConsoleInput = useCallback(
+    (line: string) => {
+      const trimmed = String(line ?? "").trimEnd();
+      if (!trimmed) {
+        return;
+      }
+
+      appendTerminalConsoleLine(`> ${trimmed}`);
+
+      const targetPath = activePreviewPath ?? activeBackendPathRef.current;
+      if (!targetPath) {
+        appendTerminalConsoleLine("(no active script)");
+        return;
+      }
+
+      if (useBackendEngine && activeBackendPathRef.current === targetPath) {
+        void backendScript.invokeCallback(CONSOLE_INPUT_TOKEN, [trimmed]);
+        return;
+      }
+
+      const engine = scriptEngineByPathRef.current.get(targetPath);
+      if (!engine) {
+        appendTerminalConsoleLine("(no frontend engine for active script)");
+        return;
+      }
+      engine.invoke(CONSOLE_INPUT_TOKEN, [trimmed]);
+    },
+    [activePreviewPath, appendTerminalConsoleLine, backendScript, useBackendEngine],
+  );
   
   // Sync backend script state to preview state
   useEffect(() => {
@@ -564,6 +605,28 @@ export default function WorkspaceShell({
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
+
+  useEffect(() => {
+    if (!isTauriAvailable()) {
+      return;
+    }
+
+    const unlistenPromise = safeListen<string>("script:print", (event) => {
+      appendTerminalConsoleLine(event.payload);
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [appendTerminalConsoleLine]);
+
+  useEffect(() => {
+    const anchor = terminalConsoleAnchorRef.current;
+    if (!anchor) {
+      return;
+    }
+    anchor.scrollIntoView({ block: "end" });
+  }, [terminalConsoleLines.length]);
 
   const ensureSessionTerminal = useCallback(
     (sessionId: string) => {
@@ -1152,6 +1215,7 @@ export default function WorkspaceShell({
         engine.setBootstrapSource(bootstrap);
         engine.setup(
           (message: string) => {
+            appendTerminalConsoleLine(message);
             setScriptPreviewState((prev) => ({
               ...prev,
               [normalizedPath]: {
@@ -1729,6 +1793,12 @@ export default function WorkspaceShell({
               isTerminalVisible={isTerminalVisible}
               onToggleTerminalVisible={handleToggleTerminalVisible}
               onClosePanel={() => setIsTerminalVisible(false)}
+              terminalActiveTab={terminalActiveTab}
+              onSetTerminalActiveTab={setTerminalActiveTab}
+              terminalConsoleLines={terminalConsoleLines}
+              terminalConsoleAnchorRef={terminalConsoleAnchorRef}
+              onClearTerminalConsole={clearTerminalConsole}
+              onSubmitConsoleInput={submitTerminalConsoleInput}
               terminalPanelRef={terminalPanelRef}
               terminalHeight={terminalHeight}
               onTerminalResizeMouseDown={handleTerminalResizeMouseDown}

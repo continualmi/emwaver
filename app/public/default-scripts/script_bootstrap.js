@@ -75,6 +75,88 @@ if (typeof print === 'undefined') {
   var print = function () {
     ScriptBridge.log(_scriptJoinArgs(arguments));
   };
+  __scriptGlobal.print = print;
+}
+
+// -----------------------------------------------------------------------------
+// Console API (Arduino Serial Monitor-ish)
+// -----------------------------------------------------------------------------
+
+if (typeof Console === 'undefined') {
+  var Console = (function () {
+    var rxLines = [];
+    var pendingLineResolvers = [];
+
+    function enqueueLine(line) {
+      var text = String(line == null ? '' : line);
+      if (pendingLineResolvers.length > 0) {
+        var resolve = pendingLineResolvers.shift();
+        try {
+          resolve(text);
+        } catch (e) {}
+        return;
+      }
+      rxLines.push(text);
+    }
+
+    function readNow() {
+      if (rxLines.length === 0) return null;
+      return rxLines.shift();
+    }
+
+    function peekNow() {
+      if (rxLines.length === 0) return null;
+      return rxLines[0];
+    }
+
+    function readLine() {
+      if (rxLines.length > 0) {
+        return Promise.resolve(rxLines.shift());
+      }
+      return new Promise(function (resolve) {
+        pendingLineResolvers.push(resolve);
+      });
+    }
+
+    // Host-delivered console input.
+    ScriptBridge.registerCallback('__emw_console_input', function (payload) {
+      if (typeof payload === 'string') {
+        enqueueLine(payload);
+        return;
+      }
+      if (payload && typeof payload === 'object' && typeof payload.line !== 'undefined') {
+        enqueueLine(payload.line);
+        return;
+      }
+      enqueueLine(payload);
+    });
+
+    return {
+      // Output (print/println are line-oriented in EMWaver today).
+      print: function () {
+        print.apply(null, arguments);
+      },
+      println: function () {
+        print.apply(null, arguments);
+      },
+
+      // Input (line-oriented).
+      available: function () {
+        return rxLines.length;
+      },
+      read: function () {
+        return readNow();
+      },
+      peek: function () {
+        return peekNow();
+      },
+      readLine: readLine,
+
+      // Internal/testing.
+      _enqueueLine: enqueueLine,
+    };
+  })();
+  __scriptGlobal.Console = Console;
 }
 
 if (typeof console === 'undefined') {

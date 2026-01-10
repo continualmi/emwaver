@@ -240,18 +240,14 @@ export class ScriptEngine {
     (this.context as any)._scriptRender = (nodeValue: unknown) => {
       try {
         console.log('[_scriptRender] Called with:', nodeValue);
-        this.printCallback?.('Render called');
         const tree = this.convertToScriptTree(nodeValue);
         console.log('[_scriptRender] Converted tree:', tree);
-        this.printCallback?.(`Rendering tree type: ${tree.type}`);
         this.renderCallback?.(tree);
         console.log('[_scriptRender] Render callback invoked');
-        this.printCallback?.('Render callback completed');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error('[_scriptRender] Error:', error);
         this.printCallback?.(`Render error: ${message}`);
-        this.printCallback?.(`Error stack: ${error instanceof Error ? error.stack : String(error)}`);
       }
     };
 
