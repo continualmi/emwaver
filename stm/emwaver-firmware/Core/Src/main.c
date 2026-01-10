@@ -1375,6 +1375,13 @@ int main(void)
           while (1) {}
       }
 
+      if (cmd.verb && strcmp(cmd.verb, "help") == 0) {
+          const char *msg = "https://luispl77.github.io/emwaver-docs/index.html";
+          command_send_ok((const uint8_t *)msg, strlen(msg));
+          midi_packet_consume();
+          continue;
+      }
+
       if (cmd.verb && strcmp(cmd.verb, "name") == 0) {
           if (cmd.positional_count > 0) {
               const char* new_name = cmd.positional[0];
