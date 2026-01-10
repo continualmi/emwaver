@@ -21,20 +21,19 @@
 #include "usbd_midi.h"
 
 #include "main.h"
-#include <stdlib.h>
 #include <string.h>
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
-extern uint8_t * bulk_packet;
-extern size_t bulk_packet_len;
+extern uint8_t midi_packet[64];
+extern volatile uint8_t midi_packet_ready;
 extern volatile EMW_Buffer_Type emw_buf_type;
 
 static uint8_t midi_rx_buf[64];
 static uint8_t midi_tx_buf[256];
 
 #define HL_RX_BUFFER_SIZE 512
-static uint8_t *rxBuffer = NULL;
+static uint8_t rxBuffer[HL_RX_BUFFER_SIZE];
 static uint16_t rxBufferHeadPos = 0;
 static uint16_t rxBufferTailPos = 0;
 
@@ -154,11 +153,6 @@ static void handle_complete_sysex(void)
 
   if (emw_buf_type == EMW_BUFFER_CIRCULAR) {
     // Mirror the previous circular RX buffer behavior for retransmission flow-control.
-    if (rxBuffer == NULL) {
-      sysex_reset();
-      return;
-    }
-
     uint16_t tempHeadPos = rxBufferHeadPos;
     for (uint32_t i = 0; i < EMW_LANE_SIZE; i++) {
       rxBuffer[tempHeadPos] = stream_lane[i];
@@ -184,17 +178,9 @@ static void handle_complete_sysex(void)
   }
 
   if (cmd_any) {
-    if (bulk_packet != NULL) {
-      free(bulk_packet);
-      bulk_packet = NULL;
-      bulk_packet_len = 0;
-    }
-    bulk_packet_len = EMW_LANE_SIZE;
-    bulk_packet = (uint8_t*)malloc(EMW_LANE_SIZE);
-    if (bulk_packet != NULL) {
-      memcpy(bulk_packet, cmd_lane, EMW_LANE_SIZE);
-    } else {
-      bulk_packet_len = 0;
+    if (!midi_packet_ready) {
+      memcpy(midi_packet, cmd_lane, EMW_LANE_SIZE);
+      midi_packet_ready = 1;
     }
   }
 
@@ -329,18 +315,11 @@ EMW_Buffer_Type MIDI_GetBufferType_FS(void)
 
 uint16_t MIDI_GetRxBufferBytesAvailable_FS(void)
 {
-  if (rxBuffer == NULL) {
-    return 0;
-  }
   return (uint16_t)(rxBufferHeadPos - rxBufferTailPos) % HL_RX_BUFFER_SIZE;
 }
 
 uint8_t MIDI_ReadRxBuffer_FS(uint8_t* Buf, uint16_t Len)
 {
-  if (rxBuffer == NULL) {
-    return EMW_USB_RX_BUFFER_NO_DATA;
-  }
-
   uint16_t bytesAvailable = MIDI_GetRxBufferBytesAvailable_FS();
   if (bytesAvailable < Len) {
     return EMW_USB_RX_BUFFER_NO_DATA;
@@ -356,12 +335,6 @@ uint8_t MIDI_ReadRxBuffer_FS(uint8_t* Buf, uint16_t Len)
 
 void MIDI_FlushRxBuffer_FS(void)
 {
-  if (rxBuffer == NULL) {
-    rxBufferHeadPos = 0;
-    rxBufferTailPos = 0;
-    return;
-  }
-
   for (int i = 0; i < HL_RX_BUFFER_SIZE; i++) {
     rxBuffer[i] = 0;
   }
@@ -371,25 +344,14 @@ void MIDI_FlushRxBuffer_FS(void)
 
 void MIDI_InitRxBuffer_FS(void)
 {
-  if (rxBuffer != NULL) {
-    free(rxBuffer);
-    rxBuffer = NULL;
-  }
-
-  rxBuffer = (uint8_t*)malloc(HL_RX_BUFFER_SIZE * sizeof(uint8_t));
-  if (rxBuffer == NULL) {
-    MIDI_Print_FS("<STR>Circular buffer allocation failed\n</STR>");
-    exit(1);
-  }
-  memset(rxBuffer, 0, HL_RX_BUFFER_SIZE * sizeof(uint8_t));
+  memset(rxBuffer, 0, HL_RX_BUFFER_SIZE);
   rxBufferHeadPos = 0;
   rxBufferTailPos = 0;
 }
 
 void MIDI_FreeRxBuffer_FS(void)
 {
-  free(rxBuffer);
-  rxBuffer = NULL;
+  // No-op: static buffer.
   rxBufferHeadPos = 0;
   rxBufferTailPos = 0;
 }
