@@ -61,11 +61,13 @@ static GPIO_TypeDef *samplerPort = GPIOA;
 static uint16_t samplerPin = GPIO_PIN_0;
 volatile uint32_t selectedChannel = TIM_CHANNEL_3; // Default to channel 3 for backward compatibility
 
-uint8_t * bulk_packet = NULL;
-size_t bulk_packet_len = 0;
+uint8_t midi_packet[64];
+volatile uint8_t midi_packet_ready = 0;
 
-volatile uint8_t* bufferA = NULL;
-volatile uint8_t* bufferB = NULL;
+static uint8_t sampler_buf_a[64];
+static uint8_t sampler_buf_b[64];
+volatile uint8_t* bufferA = sampler_buf_a;
+volatile uint8_t* bufferB = sampler_buf_b;
 volatile uint8_t* currentBuffer = NULL;
 volatile uint8_t* transmitBuffer = NULL;
 volatile int bufferIndex = 0;
@@ -119,13 +121,17 @@ volatile uint8_t pending_cmd_lane[EMW_LANE_SIZE];
 volatile uint8_t pending_cmd_ready = 0;
 
 
+static void midi_packet_consume(void)
+{
+    midi_packet_ready = 0;
+    for (uint32_t i = 0; i < EMW_LANE_SIZE; i++) {
+        midi_packet[i] = 0;
+    }
+}
+
 static void free_bulk_packet(void)
 {
-    if (bulk_packet != NULL) {
-        free(bulk_packet);
-        bulk_packet = NULL;
-        bulk_packet_len = 0;
-    }
+    midi_packet_consume();
 }
 
 static size_t strbuf_append(char *buf, size_t cap, size_t offset, const char *src)
@@ -472,10 +478,8 @@ static void stop_sampling(void)
     HAL_TIM_Base_Stop_IT(&htim3);
     EMW_USB_SetBufferType_FS(EMW_BUFFER_PACKET);
 
-    free((void *)bufferA);
-    free((void *)bufferB);
-    bufferA = NULL;
-    bufferB = NULL;
+    bufferA = sampler_buf_a;
+    bufferB = sampler_buf_b;
     currentBuffer = NULL;
     transmitBuffer = NULL;
     bufferIndex = 0;
@@ -1301,27 +1305,28 @@ int main(void)
           }
       }
 
-      if (bulk_packet == NULL) {
+      if (!midi_packet_ready) {
           continue;
       }
 
-      if (bulk_packet_len < 1) {
+      size_t midi_packet_len = EMW_LANE_SIZE;
+      if (midi_packet_len < 1) {
           command_send_err(NULL);
-          free_bulk_packet();
+          midi_packet_consume();
           continue;
       }
 
       static char scratch_line[CLI_COMMAND_BUFFER + 1];
-      size_t line_len = bulk_packet_len;
+      size_t line_len = midi_packet_len;
       if (line_len > CLI_COMMAND_BUFFER) {
           line_len = CLI_COMMAND_BUFFER;
       }
       size_t effective = 0;
       for (size_t i = 0; i < line_len; i++) {
-          if (bulk_packet[i] == '\0') {
+          if (midi_packet[i] == '\0') {
               break;
           }
-          scratch_line[i] = (char)bulk_packet[i];
+          scratch_line[i] = (char)midi_packet[i];
           effective++;
       }
       scratch_line[effective] = '\0';
@@ -1334,7 +1339,7 @@ int main(void)
       cli_command_view_t cmd;
       if (!parse_cli_command_inplace(scratch_line, &cmd)) {
           command_send_err(NULL);
-          free_bulk_packet();
+          midi_packet_consume();
           continue;
       }
 
@@ -1357,14 +1362,14 @@ int main(void)
               msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_VERSION);
           }
           command_send_ok((const uint8_t *)msg, msg_len);
-          free_bulk_packet();
+          midi_packet_consume();
           continue;
       }
 
       if (cmd.verb && strcmp(cmd.verb, "reset") == 0) {
           const char *msg = "resetting";
           command_send_ok((const uint8_t *)msg, strlen(msg));
-          free_bulk_packet();
+          midi_packet_consume();
           HAL_Delay(10);
           NVIC_SystemReset();
           while (1) {}
@@ -1409,7 +1414,7 @@ int main(void)
                   command_send_ok((const uint8_t*)"(no name)", 9);
               }
           }
-          free_bulk_packet();
+          midi_packet_consume();
           continue;
       }
 
@@ -2023,18 +2028,7 @@ adc_done:
               samplerPort = port;
               samplerPin = pin_mask;
 
-              bufferA = (uint8_t *)malloc(64);
-              bufferB = (uint8_t *)malloc(64);
-              if (bufferA == NULL || bufferB == NULL) {
-                  command_send_err(NULL);
-                  free((void *)bufferA);
-                  free((void *)bufferB);
-                  bufferA = NULL;
-                  bufferB = NULL;
-                  free_bulk_packet();
-                  continue;
-              }
-              currentBuffer = bufferA;
+              currentBuffer = sampler_buf_a;
               transmitBuffer = NULL;
               bufferIndex = 0;
               bufferReady = 0;
