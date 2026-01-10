@@ -2,7 +2,7 @@
 let selectedTarget = "esp32";
 let selectedPin = "";
 let selectedMode = "out";
-let status = "";
+let statusText = "";
 let lastResponse = "";
 
 const TARGETS = [
@@ -85,7 +85,7 @@ function pinsForTarget(target) {
 selectedPin = (pinsForTarget(selectedTarget)[0] || { value: "" }).value;
 
 function gpioRead() {
-    status = "Reading...";
+    statusText = "Reading...";
     lastResponse = "";
     render();
 
@@ -98,7 +98,7 @@ function gpioRead() {
     let state = response && response.length > 0 && response[0] !== 0;
     let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
     let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-    status = pinName + " is " + (state ? "HIGH" : "LOW");
+    statusText = pinName + " is " + (state ? "HIGH" : "LOW");
     lastResponse = "gpio read -> " + (response && response.length ? ("0x" + response[0].toString(16).padStart(2, "0")) : "(no data)");
     render();
 }
@@ -112,7 +112,7 @@ function gpioWriteLow() {
 }
 
 function gpioWrite(value) {
-    status = value ? "Setting HIGH..." : "Setting LOW...";
+    statusText = value ? "Setting HIGH..." : "Setting LOW...";
     lastResponse = "";
     render();
 
@@ -124,7 +124,7 @@ function gpioWrite(value) {
     let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
 
     let readLevel = readResp && readResp.length > 0 && readResp[0] !== 0;
-    status = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readLevel ? "HIGH" : "LOW") + ")";
+    statusText = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readLevel ? "HIGH" : "LOW") + ")";
 
     function fmt(resp) {
         if (!resp || !resp.length) return "(no data)";
@@ -152,7 +152,7 @@ function render() {
                 onChange: function(value) {
                     selectedTarget = value;
                     selectedPin = pinsForTarget(selectedTarget)[0].value;
-                    status = "";
+                    statusText = "";
                     render();
                 }
             }),
@@ -192,8 +192,8 @@ function render() {
             }),
             
             // Result display
-            status ? UI.text({
-                text: status,
+            statusText ? UI.text({
+                text: statusText,
                 backgroundColor: "#111827",
                 foregroundColor: "#FFFFFF",
                 padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },

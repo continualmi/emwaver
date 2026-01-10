@@ -3,7 +3,7 @@ let mode = "pin"; // "pin" | "internal"
 let selectedPin = "0";
 let internalSrc = "vrefint"; // "vrefint" | "temp" | "vbat"
 let samples = 1;
-let status = "";
+let statusText = "";
 let lastResponse = "";
 
 const ADC_PINS = [
@@ -24,7 +24,7 @@ const INTERNAL_SOURCES = [
 ];
 
 function readAdc() {
-  status = "Reading...";
+  statusText = "Reading...";
   lastResponse = "";
   render();
 
@@ -43,7 +43,7 @@ function readAdc() {
   }
 
   const finalize = function (value) {
-    status = "Value: " + String(value) + " (0..4095)";
+    statusText = "Value: " + String(value) + " (0..4095)";
     lastResponse = cmd + " -> " + String(value);
     render();
   };
@@ -125,9 +125,9 @@ function render() {
           onTap: readAdc,
         }),
 
-        status
+        statusText
           ? UI.text({
-              text: status,
+              text: statusText,
               backgroundColor: "#111827",
               foregroundColor: "#FFFFFF",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
@@ -150,4 +150,3 @@ function render() {
 }
 
 render();
-

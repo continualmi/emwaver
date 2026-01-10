@@ -2,9 +2,9 @@
 let baud = "115200";
 let readLen = 16;
 let writeMode = "text"; // "text" | "hex"
-let writeText = "hello\\n";
+let writeText = "hello\n";
 let writeHex = "48 65 6C 6C 6F 0A";
-let status = "";
+let statusText = "";
 let logLines = [];
 
 function pushLog(line) {
@@ -32,11 +32,11 @@ function fmtAscii(bytes) {
 }
 
 function openUart() {
-  status = "Opening...";
+  statusText = "Opening...";
   render();
   var b = parseInt(baud, 10);
   if (!Number.isFinite(b) || b <= 0) {
-    status = "Invalid baud: " + String(baud);
+    statusText = "Invalid baud: " + String(baud);
     render();
     return;
   }
@@ -44,35 +44,35 @@ function openUart() {
   if (resp && typeof resp.then === "function") {
     resp.then(function () {
       pushLog("uart open --baud=" + b);
-      status = "Opened @ " + b + " baud";
+      statusText = "Opened @ " + b + " baud";
       render();
     });
   } else {
     pushLog("uart open --baud=" + b);
-    status = "Opened @ " + b + " baud";
+    statusText = "Opened @ " + b + " baud";
     render();
   }
 }
 
 function closeUart() {
-  status = "Closing...";
+  statusText = "Closing...";
   render();
   var resp = Serial.end();
   if (resp && typeof resp.then === "function") {
     resp.then(function () {
       pushLog("uart close");
-      status = "Closed";
+      statusText = "Closed";
       render();
     });
   } else {
     pushLog("uart close");
-    status = "Closed";
+    statusText = "Closed";
     render();
   }
 }
 
 function writeUart() {
-  status = "Writing...";
+  statusText = "Writing...";
   render();
 
   var b = parseInt(baud, 10);
@@ -85,7 +85,7 @@ function writeUart() {
   var done = function (bytes) {
     var n = bytes && bytes.length ? bytes[0] : 0;
     pushLog(cmd + " -> " + String(n) + " bytes");
-    status = "Wrote " + String(n) + " byte(s)";
+    statusText = "Wrote " + String(n) + " byte(s)";
     render();
   };
 
@@ -94,7 +94,7 @@ function writeUart() {
 }
 
 function readUart() {
-  status = "Reading...";
+  statusText = "Reading...";
   render();
 
   var b = parseInt(baud, 10);
@@ -107,13 +107,13 @@ function readUart() {
   var done = function (bytes) {
     pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
     if (!bytes || !bytes.length) {
-      status = "No data";
+      statusText = "No data";
       render();
       return;
     }
     pushLog("rx hex: " + fmtBytes(bytes));
     pushLog("rx txt: " + fmtAscii(bytes));
-    status = "Read " + bytes.length + " byte(s)";
+    statusText = "Read " + bytes.length + " byte(s)";
     render();
   };
 
@@ -195,9 +195,9 @@ function render() {
           ],
         }),
 
-        status
+        statusText
           ? UI.text({
-              text: status,
+              text: statusText,
               backgroundColor: "#111827",
               foregroundColor: "#FFFFFF",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
@@ -224,4 +224,3 @@ function render() {
 }
 
 render();
-

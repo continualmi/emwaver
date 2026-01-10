@@ -4,7 +4,7 @@ let selectedPin = "0"; // PA0..PA3 only
 let hzText = "1000";
 let resolutionBits = 12;
 let dutyU12 = 0;
-let status = "";
+let statusText = "";
 let lastAction = "";
 let logLines = [];
 let sweeping = false;
@@ -68,7 +68,7 @@ function applyWrite(value, opts) {
   lastAction = "analogWrite(" + String(pin) + ", " + String(v) + ", { hz: " + String(hz) + " })";
   pushLog(lastAction);
 
-  status = "Writing...";
+  statusText = "Writing...";
   render();
 
   const timeout =
@@ -77,11 +77,11 @@ function applyWrite(value, opts) {
       : 1500;
   const res = analogWrite(pin, v, { hz: hz, timeout: timeout });
   const done = function () {
-    status = "OK (" + dutyAsPercent() + "% @ " + hz + " Hz)";
+    statusText = "OK (" + dutyAsPercent() + "% @ " + hz + " Hz)";
     render();
   };
   const fail = function (e) {
-    status = "Error: " + String(e && e.message ? e.message : e);
+    statusText = "Error: " + String(e && e.message ? e.message : e);
     render();
   };
   if (res && typeof res.then === "function") {
@@ -94,13 +94,13 @@ function applyWrite(value, opts) {
 async function sweep() {
   if (sweeping) {
     sweeping = false;
-    status = "Stopping sweep...";
+    statusText = "Stopping sweep...";
     render();
     return;
   }
 
   sweeping = true;
-  status = "Sweeping...";
+  statusText = "Sweeping...";
   render();
 
   const max = currentMaxValue();
@@ -119,7 +119,7 @@ async function sweep() {
     }
   }
 
-  status = "Sweep stopped";
+  statusText = "Sweep stopped";
   render();
 }
 
@@ -248,9 +248,9 @@ function render() {
           onTap: sweep,
         }),
 
-        status
+        statusText
           ? UI.text({
-              text: status,
+              text: statusText,
               backgroundColor: "#0B1220",
               foregroundColor: "#E5E7EB",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
