@@ -83,7 +83,7 @@ import {
   readStoredAssetScriptsCollapsed,
 } from "./workspaceStorage";
 import {
-  SCRIPT_ASSET_SCRIPTS,
+  SCRIPT_EXAMPLE_SCRIPTS,
   SCRIPT_ASSET_ROOT,
   SCRIPT_BOOTSTRAP_FILENAME,
   basename,
@@ -1222,8 +1222,8 @@ export default function WorkspaceShell({
       }
 
       const moduleSources: Record<string, string> = {};
-      const assetScripts = await Promise.all(SCRIPT_ASSET_SCRIPTS.map(async (name) => [name, await readScriptAssetScript(name)] as const));
-      assetScripts.forEach(([name, content]) => {
+      const exampleScripts = await Promise.all(SCRIPT_EXAMPLE_SCRIPTS.map(async (name) => [name, await readScriptAssetScript(name)] as const));
+      exampleScripts.forEach(([name, content]) => {
         if (content) {
           moduleSources[name] = content;
         }

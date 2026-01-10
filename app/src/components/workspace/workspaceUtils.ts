@@ -19,17 +19,17 @@ import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 
 export const SCRIPT_ASSET_ROOT = "/default-scripts";
 export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.js";
-export const SCRIPT_ASSET_SCRIPTS = [
+export const SCRIPT_EXAMPLE_SCRIPTS = [
   "adc.js",
   "cc1101.js",
   "gpio.js",
-  "ir_send_saved_signal.js",
-  "packet_mode.js",
+  "i2c.js",
   "sampler.js",
-  "rfid.js",
-  "usb.js",
-  "script_demo.js",
+  "mfrc522.js",
+  "uart.js",
 ];
+
+export const SCRIPT_ASSET_SCRIPTS = SCRIPT_EXAMPLE_SCRIPTS;
 
 export function basename(path: string): string {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
