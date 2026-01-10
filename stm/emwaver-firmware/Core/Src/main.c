@@ -31,7 +31,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "emwaver_usb_io.h"
-#include "cc1101.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -592,6 +591,359 @@ static bool adc_read_single(uint32_t chsel_bit, uint16_t *out_value)
     return false;
 }
 
+// -----------------------------------------------------------------------------
+// UART/I2C support (PB6/PB7)
+// -----------------------------------------------------------------------------
+
+typedef enum {
+    BUS_OWNER_NONE = 0,
+    BUS_OWNER_UART1 = 1,
+    BUS_OWNER_I2C1 = 2,
+} bus_owner_t;
+
+static bus_owner_t bus_owner = BUS_OWNER_NONE;
+
+static bool uart1_initialized = false;
+static uint32_t uart1_baud = 115200u;
+
+static bool i2c1_initialized = false;
+static uint32_t i2c1_hz = 100000u;
+
+static void gpio_release_pb6_pb7(void)
+{
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_6 | GPIO_PIN_7);
+}
+
+static void uart1_deinit(void)
+{
+    if (USART1->CR1 & USART_CR1_UE) {
+        USART1->CR1 &= ~USART_CR1_UE;
+        for (volatile uint32_t guard = 0; guard < 1000000u; ++guard) {
+            if ((USART1->CR1 & USART_CR1_UE) == 0) {
+                break;
+            }
+        }
+    }
+    RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN;
+    gpio_release_pb6_pb7();
+
+    uart1_initialized = false;
+    if (bus_owner == BUS_OWNER_UART1) {
+        bus_owner = BUS_OWNER_NONE;
+    }
+}
+
+static bool uart1_ensure(uint32_t baud)
+{
+    if (baud == 0) {
+        baud = 115200u;
+    }
+
+    if (bus_owner == BUS_OWNER_UART1 && uart1_initialized && uart1_baud == baud) {
+        return true;
+    }
+
+    if (bus_owner == BUS_OWNER_I2C1) {
+        // Deinit I2C before taking over the pins/peripheral clocks.
+        i2c1_initialized = false;
+        I2C1->CR1 &= ~I2C_CR1_PE;
+        RCC->APB1ENR &= ~RCC_APB1ENR_I2C1EN;
+        gpio_release_pb6_pb7();
+        bus_owner = BUS_OWNER_NONE;
+    }
+
+    // Configure PB6/PB7 as USART1 TX/RX (AF0).
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF0_USART1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    // Enable USART1 clock and (re)configure.
+    RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+
+    // Disable UE while configuring.
+    USART1->CR1 &= ~USART_CR1_UE;
+
+    uint32_t pclk = HAL_RCC_GetHCLKFreq();
+    if (pclk == 0) {
+        pclk = 48000000u;
+    }
+    uint32_t brr = (pclk + (baud / 2u)) / baud;
+    if (brr == 0) {
+        brr = 1;
+    }
+    USART1->BRR = brr;
+
+    // 8N1, oversampling 16, enable TX/RX.
+    USART1->CR2 = 0;
+    USART1->CR3 = 0;
+    USART1->CR1 = USART_CR1_TE | USART_CR1_RE;
+
+    USART1->ICR = 0xFFFFFFFFu;
+    USART1->RQR = USART_RQR_RXFRQ;
+
+    USART1->CR1 |= USART_CR1_UE;
+
+    uart1_baud = baud;
+    uart1_initialized = true;
+    bus_owner = BUS_OWNER_UART1;
+    return true;
+}
+
+static bool uart1_write(const uint8_t *data, size_t len, uint32_t timeout_ms, size_t *out_written)
+{
+    if (out_written) {
+        *out_written = 0;
+    }
+    if (!data || len == 0) {
+        return true;
+    }
+    if (!uart1_ensure(uart1_baud)) {
+        return false;
+    }
+
+    uint32_t start = HAL_GetTick();
+    for (size_t i = 0; i < len; ++i) {
+        while ((USART1->ISR & USART_ISR_TXE) == 0) {
+            if ((HAL_GetTick() - start) > timeout_ms) {
+                return false;
+            }
+        }
+        USART1->TDR = data[i];
+        if (out_written) {
+            *out_written = i + 1;
+        }
+    }
+
+    while ((USART1->ISR & USART_ISR_TC) == 0) {
+        if ((HAL_GetTick() - start) > timeout_ms) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool uart1_read(uint8_t *out, size_t len, uint32_t timeout_ms, size_t *out_read)
+{
+    if (out_read) {
+        *out_read = 0;
+    }
+    if (!out || len == 0) {
+        return true;
+    }
+    if (!uart1_ensure(uart1_baud)) {
+        return false;
+    }
+
+    uint32_t start = HAL_GetTick();
+    size_t got = 0;
+    while (got < len) {
+        if (USART1->ISR & USART_ISR_RXNE) {
+            out[got++] = (uint8_t)(USART1->RDR & 0xFFu);
+            if (out_read) {
+                *out_read = got;
+            }
+            start = HAL_GetTick(); // reset timeout after progress
+            continue;
+        }
+        if ((HAL_GetTick() - start) > timeout_ms) {
+            break;
+        }
+    }
+    return true;
+}
+
+static uint32_t i2c1_timing_for_hz(uint32_t hz)
+{
+    // NOTE: These are intentionally conservative, "works on short wires" timings for a 48 MHz core clock.
+    // The goal is a simple bring-up path (Wire-like I2C), not perfect spec edge coverage.
+    //
+    // TIMINGR fields: PRESC[31:28], SCLDEL[23:20], SDADEL[19:16], SCLH[15:8], SCLL[7:0].
+    if (hz >= 400000u) {
+        // ~400 kHz (@48 MHz).
+        return 0x00213B3Bu;
+    }
+    // ~100 kHz (@48 MHz).
+    return 0x10427777u;
+}
+
+static void i2c1_deinit(void)
+{
+    if (I2C1->CR1 & I2C_CR1_PE) {
+        I2C1->CR1 &= ~I2C_CR1_PE;
+    }
+    RCC->APB1ENR &= ~RCC_APB1ENR_I2C1EN;
+    gpio_release_pb6_pb7();
+
+    i2c1_initialized = false;
+    if (bus_owner == BUS_OWNER_I2C1) {
+        bus_owner = BUS_OWNER_NONE;
+    }
+}
+
+static bool i2c1_ensure(uint32_t hz)
+{
+    if (hz == 0) {
+        hz = 100000u;
+    }
+
+    if (bus_owner == BUS_OWNER_I2C1 && i2c1_initialized && i2c1_hz == hz) {
+        return true;
+    }
+
+    if (bus_owner == BUS_OWNER_UART1) {
+        uart1_deinit();
+    }
+
+    // Configure PB6/PB7 as I2C1 SCL/SDA (AF1, open-drain).
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF1_I2C1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+    // Enable and reset I2C1.
+    RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;
+    RCC->APB1RSTR |= RCC_APB1RSTR_I2C1RST;
+    RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C1RST;
+
+    I2C1->CR1 &= ~I2C_CR1_PE;
+    I2C1->TIMINGR = i2c1_timing_for_hz(hz);
+    I2C1->ICR = 0xFFFFFFFFu;
+    I2C1->CR1 = I2C_CR1_PE;
+
+    i2c1_hz = hz;
+    i2c1_initialized = true;
+    bus_owner = BUS_OWNER_I2C1;
+    return true;
+}
+
+static bool i2c1_wait_flag(uint32_t isr_mask, bool set, uint32_t timeout_ms)
+{
+    uint32_t start = HAL_GetTick();
+    while (1) {
+        bool is_set = (I2C1->ISR & isr_mask) != 0;
+        if (is_set == set) {
+            return true;
+        }
+        if ((HAL_GetTick() - start) > timeout_ms) {
+            return false;
+        }
+        if (I2C1->ISR & (I2C_ISR_NACKF | I2C_ISR_BERR | I2C_ISR_ARLO)) {
+            return false;
+        }
+    }
+}
+
+static void i2c1_clear_errors(void)
+{
+    I2C1->ICR = I2C_ICR_NACKCF | I2C_ICR_BERRCF | I2C_ICR_ARLOCF | I2C_ICR_STOPCF;
+}
+
+static bool i2c1_write_then_maybe_stop(uint8_t addr7, const uint8_t *data, size_t len, bool send_stop, uint32_t timeout_ms)
+{
+    if (!i2c1_ensure(i2c1_hz)) {
+        return false;
+    }
+    if (addr7 > 0x7F) {
+        return false;
+    }
+
+    i2c1_clear_errors();
+    I2C1->CR2 =
+        ((uint32_t)addr7 << 1) |
+        ((uint32_t)len << I2C_CR2_NBYTES_Pos) |
+        (send_stop ? I2C_CR2_AUTOEND : 0) |
+        I2C_CR2_START;
+
+    for (size_t i = 0; i < len; ++i) {
+        if (!i2c1_wait_flag(I2C_ISR_TXIS, true, timeout_ms)) {
+            return false;
+        }
+        I2C1->TXDR = data[i];
+    }
+
+    if (send_stop) {
+        if (!i2c1_wait_flag(I2C_ISR_STOPF, true, timeout_ms)) {
+            return false;
+        }
+        I2C1->ICR = I2C_ICR_STOPCF;
+    } else {
+        if (!i2c1_wait_flag(I2C_ISR_TC, true, timeout_ms)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool i2c1_read_with_stop(uint8_t addr7, uint8_t *out, size_t len, uint32_t timeout_ms)
+{
+    if (!i2c1_ensure(i2c1_hz)) {
+        return false;
+    }
+    if (!out || len == 0) {
+        return true;
+    }
+    if (addr7 > 0x7F) {
+        return false;
+    }
+
+    i2c1_clear_errors();
+    I2C1->CR2 =
+        ((uint32_t)addr7 << 1) |
+        ((uint32_t)len << I2C_CR2_NBYTES_Pos) |
+        I2C_CR2_RD_WRN |
+        I2C_CR2_AUTOEND |
+        I2C_CR2_START;
+
+    for (size_t i = 0; i < len; ++i) {
+        if (!i2c1_wait_flag(I2C_ISR_RXNE, true, timeout_ms)) {
+            return false;
+        }
+        out[i] = (uint8_t)(I2C1->RXDR & 0xFFu);
+    }
+
+    if (!i2c1_wait_flag(I2C_ISR_STOPF, true, timeout_ms)) {
+        return false;
+    }
+    I2C1->ICR = I2C_ICR_STOPCF;
+    return true;
+}
+
+static bool i2c1_xfer(uint8_t addr7,
+                      const uint8_t *w, size_t wlen,
+                      uint8_t *r, size_t rlen,
+                      uint32_t timeout_ms)
+{
+    if (!i2c1_ensure(i2c1_hz)) {
+        return false;
+    }
+    if (addr7 > 0x7F) {
+        return false;
+    }
+    if (wlen == 0) {
+        return i2c1_read_with_stop(addr7, r, rlen, timeout_ms);
+    }
+    if (rlen == 0) {
+        return i2c1_write_then_maybe_stop(addr7, w, wlen, true, timeout_ms);
+    }
+
+    // Write without STOP, then repeated-start read with STOP.
+    if (!i2c1_write_then_maybe_stop(addr7, w, wlen, false, timeout_ms)) {
+        return false;
+    }
+    return i2c1_read_with_stop(addr7, r, rlen, timeout_ms);
+}
+
 // Minimal CLI parsing (copied/adapted from stm/emwaver-firmware command_registry.c).
 #define CLI_MAX_ARGS 10
 #define CLI_MAX_POSITIONAL 4
@@ -1044,16 +1396,399 @@ adc_done:
 	              continue;
 	          }
 
-	          command_send_err(NULL);
-	          free_bulk_packet();
-	          continue;
-	      }
+		          command_send_err(NULL);
+		          free_bulk_packet();
+		          continue;
+		      }
 
-	      if (cmd.verb && strcmp(cmd.verb, "spi") == 0 && cmd.positional_count > 0) {
-	          const char *sub = cmd.positional[0];
+		      if (cmd.verb && strcmp(cmd.verb, "uart") == 0 && cmd.positional_count > 0) {
+		          const char *sub = cmd.positional[0];
 
-	          if (strcmp(sub, "xfer") == 0) {
-              int cs_i = 4; // Default CS pin: PA4 (NSS_RFID / CC1101 CS).
+		          if (strcmp(sub, "open") == 0) {
+		              int baud_i = 115200;
+		              const char *baud_str = cli_get_arg_view(&cmd, "baud");
+		              if (baud_str && !cli_parse_int(baud_str, &baud_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (baud_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              uart1_baud = (uint32_t)baud_i;
+		              if (!uart1_ensure(uart1_baud)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              command_send_ok(NULL, 0);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "close") == 0) {
+		              uart1_deinit();
+		              command_send_ok(NULL, 0);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "write") == 0) {
+		              int baud_i = (int)uart1_baud;
+		              int timeout_i = 1000;
+		              const char *baud_str = cli_get_arg_view(&cmd, "baud");
+		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
+		              const char *tx_str = cli_get_arg_view(&cmd, "tx");
+		              if (baud_str && !cli_parse_int(baud_str, &baud_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!tx_str || tx_str[0] == '\0') {
+		                  command_send_ok(NULL, 0);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (baud_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uart1_baud = (uint32_t)baud_i;
+		              if (!uart1_ensure(uart1_baud)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uint8_t tx_buf[64] = {0};
+		              size_t tx_len = 0;
+		              if (!cli_parse_hex_bytes(tx_str, tx_buf, 63u, &tx_len)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              size_t written = 0;
+		              if (!uart1_write(tx_buf, tx_len, (uint32_t)timeout_i, &written)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              uint8_t out = (uint8_t)(written & 0xFFu);
+		              command_send_ok(&out, 1);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "read") == 0) {
+		              int baud_i = (int)uart1_baud;
+		              int timeout_i = 250;
+		              int n_i = 0;
+		              const char *baud_str = cli_get_arg_view(&cmd, "baud");
+		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
+		              const char *n_str = cli_get_arg_view(&cmd, "n");
+		              if (baud_str && !cli_parse_int(baud_str, &baud_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!cli_parse_int(n_str, &n_i) || n_i < 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (n_i == 0) {
+		                  command_send_ok(NULL, 0);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (n_i > 63) {
+		                  n_i = 63;
+		              }
+		              if (baud_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uart1_baud = (uint32_t)baud_i;
+		              if (!uart1_ensure(uart1_baud)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uint8_t rx_buf[64] = {0};
+		              size_t got = 0;
+		              if (!uart1_read(rx_buf, (size_t)n_i, (uint32_t)timeout_i, &got)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              command_send_ok(rx_buf, got);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          command_send_err(NULL);
+		          free_bulk_packet();
+		          continue;
+		      }
+
+		      if (cmd.verb && strcmp(cmd.verb, "i2c") == 0 && cmd.positional_count > 0) {
+		          const char *sub = cmd.positional[0];
+
+		          if (strcmp(sub, "open") == 0) {
+		              int hz_i = 100000;
+		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
+		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (hz_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              i2c1_hz = (uint32_t)hz_i;
+		              if (!i2c1_ensure(i2c1_hz)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              command_send_ok(NULL, 0);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "close") == 0) {
+		              i2c1_deinit();
+		              command_send_ok(NULL, 0);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "write") == 0) {
+		              int hz_i = (int)i2c1_hz;
+		              int timeout_i = 250;
+		              int addr_i = -1;
+		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
+		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
+		              const char *addr_str = cli_get_arg_view(&cmd, "addr");
+		              const char *tx_str = cli_get_arg_view(&cmd, "tx");
+		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!cli_parse_int(addr_str, &addr_i) || addr_i < 0 || addr_i > 0x7F) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!tx_str || tx_str[0] == '\0') {
+		                  command_send_ok(NULL, 0);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (hz_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              i2c1_hz = (uint32_t)hz_i;
+		              if (!i2c1_ensure(i2c1_hz)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uint8_t tx_buf[64] = {0};
+		              size_t tx_len = 0;
+		              if (!cli_parse_hex_bytes(tx_str, tx_buf, 63u, &tx_len)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              if (!i2c1_write_then_maybe_stop((uint8_t)addr_i, tx_buf, tx_len, true, (uint32_t)timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              command_send_ok(NULL, 0);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "read") == 0) {
+		              int hz_i = (int)i2c1_hz;
+		              int timeout_i = 250;
+		              int addr_i = -1;
+		              int n_i = 0;
+		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
+		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
+		              const char *addr_str = cli_get_arg_view(&cmd, "addr");
+		              const char *n_str = cli_get_arg_view(&cmd, "n");
+		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!cli_parse_int(addr_str, &addr_i) || addr_i < 0 || addr_i > 0x7F) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!cli_parse_int(n_str, &n_i) || n_i < 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (n_i == 0) {
+		                  command_send_ok(NULL, 0);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (n_i > 63) {
+		                  n_i = 63;
+		              }
+		              if (hz_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              i2c1_hz = (uint32_t)hz_i;
+		              if (!i2c1_ensure(i2c1_hz)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uint8_t rx_buf[64] = {0};
+		              if (!i2c1_read_with_stop((uint8_t)addr_i, rx_buf, (size_t)n_i, (uint32_t)timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              command_send_ok(rx_buf, (size_t)n_i);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          if (strcmp(sub, "xfer") == 0) {
+		              int hz_i = (int)i2c1_hz;
+		              int timeout_i = 250;
+		              int addr_i = -1;
+		              int rx_i = 0;
+		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
+		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
+		              const char *addr_str = cli_get_arg_view(&cmd, "addr");
+		              const char *tx_str = cli_get_arg_view(&cmd, "tx");
+		              const char *rx_str = cli_get_arg_view(&cmd, "rx");
+		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (!cli_parse_int(addr_str, &addr_i) || addr_i < 0 || addr_i > 0x7F) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (rx_str && !cli_parse_int(rx_str, &rx_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (rx_i < 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+		              if (rx_i > 63) {
+		                  rx_i = 63;
+		              }
+		              if (hz_i <= 0) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              i2c1_hz = (uint32_t)hz_i;
+		              if (!i2c1_ensure(i2c1_hz)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              uint8_t tx_buf[64] = {0};
+		              size_t tx_len = 0;
+		              if (tx_str && tx_str[0] != '\0') {
+		                  if (!cli_parse_hex_bytes(tx_str, tx_buf, 63u, &tx_len)) {
+		                      command_send_err(NULL);
+		                      free_bulk_packet();
+		                      continue;
+		                  }
+		              }
+
+		              uint8_t rx_buf[64] = {0};
+		              if (!i2c1_xfer((uint8_t)addr_i,
+		                             tx_buf, tx_len,
+		                             rx_buf, (size_t)rx_i,
+		                             (uint32_t)timeout_i)) {
+		                  command_send_err(NULL);
+		                  free_bulk_packet();
+		                  continue;
+		              }
+
+		              command_send_ok(rx_buf, (size_t)rx_i);
+		              free_bulk_packet();
+		              continue;
+		          }
+
+		          command_send_err(NULL);
+		          free_bulk_packet();
+		          continue;
+		      }
+
+		      if (cmd.verb && strcmp(cmd.verb, "spi") == 0 && cmd.positional_count > 0) {
+		          const char *sub = cmd.positional[0];
+
+		          if (strcmp(sub, "xfer") == 0) {
+	              int cs_i = 4; // Default CS pin: PA4 (NSS_RFID / CC1101 CS).
               int rx_i = 0;
               const char *cs_str = cli_get_arg_view(&cmd, "cs");
               const char *rx_str = cli_get_arg_view(&cmd, "rx");
@@ -1145,127 +1880,6 @@ adc_done:
               }
 
               command_send_ok(rx_buf, requested_rx);
-              free_bulk_packet();
-              continue;
-          }
-
-          command_send_err(NULL);
-          free_bulk_packet();
-          continue;
-      }
-
-      if (cmd.verb && strcmp(cmd.verb, "cc1101") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
-
-          if (strcmp(sub, "init") == 0) {
-              // `--cs` is accepted for parity with other platforms, but STM32 uses a fixed CS pin.
-              // (See `CC1101_CS_*` in `cc1101.c`.)
-              cc1101_init();
-              command_send_ok(NULL, 0);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (!cc1101_is_initialized()) {
-              cc1101_init();
-          }
-
-          if (strcmp(sub, "read") == 0) {
-              int reg_i = -1;
-              const char *reg_str = cli_get_arg_view(&cmd, "reg");
-              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              uint8_t out = cc1101_read_reg((uint8_t)reg_i);
-              command_send_ok(&out, 1);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "write") == 0) {
-              int reg_i = -1;
-              int val_i = -1;
-              const char *reg_str = cli_get_arg_view(&cmd, "reg");
-              const char *val_str = cli_get_arg_view(&cmd, "val");
-              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255 ||
-                  !cli_parse_int(val_str, &val_i) || val_i < 0 || val_i > 255) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              cc1101_write_reg((uint8_t)reg_i, (uint8_t)val_i);
-              command_send_ok(NULL, 0);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "strobe") == 0) {
-              int cmd_i = -1;
-              const char *cmd_str = cli_get_arg_view(&cmd, "cmd");
-              if (!cli_parse_int(cmd_str, &cmd_i) || cmd_i < 0 || cmd_i > 255) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              uint8_t status = cc1101_strobe((uint8_t)cmd_i);
-              command_send_ok(&status, 1);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "read_burst") == 0) {
-              int reg_i = -1;
-              int len_i = -1;
-              const char *reg_str = cli_get_arg_view(&cmd, "reg");
-              const char *len_str = cli_get_arg_view(&cmd, "len");
-              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255 ||
-                  !cli_parse_int(len_str, &len_i) || len_i <= 0) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              size_t len = (size_t)len_i;
-              if (len > 63u) {
-                  len = 63u;
-              }
-
-              uint8_t out[64] = {0};
-              cc1101_read_burst((uint8_t)reg_i, out, len);
-              command_send_ok(out, len);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "write_burst") == 0) {
-              int reg_i = -1;
-              const char *reg_str = cli_get_arg_view(&cmd, "reg");
-              const char *data_str = cli_get_arg_view(&cmd, "data");
-              if (!cli_parse_int(reg_str, &reg_i) || reg_i < 0 || reg_i > 255 || !data_str) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint8_t bytes[64] = {0};
-              size_t bytes_len = 0;
-              if (!cli_parse_hex_bytes(data_str, bytes, sizeof(bytes), &bytes_len) || bytes_len == 0) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              (void)cc1101_write_burst((uint8_t)reg_i, bytes, bytes_len);
-              command_send_ok(NULL, 0);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "defaults") == 0) {
-              cc1101_apply_defaults();
-              command_send_ok(NULL, 0);
               free_bulk_packet();
               continue;
           }
@@ -1868,9 +2482,6 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(NSS_RFID_GPIO_Port, NSS_RFID_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(RESET_GPIO_Port, RESET_Pin, GPIO_PIN_RESET);
-
   /*Configure GPIO pin : IR_RX_Pin */
   GPIO_InitStruct.Pin = IR_RX_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -1883,13 +2494,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(NSS_RFID_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : RESET_Pin */
-  GPIO_InitStruct.Pin = RESET_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(RESET_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
   /*Configure GPIO pin : PB0 (VCTL) */

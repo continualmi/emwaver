@@ -1,0 +1,227 @@
+// Simple UART test script for STM32F042 (USART1 on PB6/PB7)
+let baud = "115200";
+let readLen = 16;
+let writeMode = "text"; // "text" | "hex"
+let writeText = "hello\\n";
+let writeHex = "48 65 6C 6C 6F 0A";
+let status = "";
+let logLines = [];
+
+function pushLog(line) {
+  logLines.push(String(line));
+  if (logLines.length > 200) logLines = logLines.slice(logLines.length - 200);
+}
+
+function fmtBytes(bytes) {
+  if (!bytes || !bytes.length) return "";
+  var out = [];
+  for (var i = 0; i < bytes.length; i += 1) {
+    out.push((bytes[i] & 0xff).toString(16).toUpperCase().padStart(2, "0"));
+  }
+  return out.join(" ");
+}
+
+function fmtAscii(bytes) {
+  if (!bytes || !bytes.length) return "";
+  var s = "";
+  for (var i = 0; i < bytes.length; i += 1) {
+    var c = bytes[i] & 0xff;
+    s += c >= 32 && c <= 126 ? String.fromCharCode(c) : ".";
+  }
+  return s;
+}
+
+function openUart() {
+  status = "Opening...";
+  render();
+  var b = parseInt(baud, 10);
+  if (!Number.isFinite(b) || b <= 0) {
+    status = "Invalid baud: " + String(baud);
+    render();
+    return;
+  }
+  var resp = Serial.begin(b);
+  if (resp && typeof resp.then === "function") {
+    resp.then(function () {
+      pushLog("uart open --baud=" + b);
+      status = "Opened @ " + b + " baud";
+      render();
+    });
+  } else {
+    pushLog("uart open --baud=" + b);
+    status = "Opened @ " + b + " baud";
+    render();
+  }
+}
+
+function closeUart() {
+  status = "Closing...";
+  render();
+  var resp = Serial.end();
+  if (resp && typeof resp.then === "function") {
+    resp.then(function () {
+      pushLog("uart close");
+      status = "Closed";
+      render();
+    });
+  } else {
+    pushLog("uart close");
+    status = "Closed";
+    render();
+  }
+}
+
+function writeUart() {
+  status = "Writing...";
+  render();
+
+  var b = parseInt(baud, 10);
+  if (!Number.isFinite(b) || b <= 0) b = 115200;
+
+  var payload = writeMode === "hex" ? writeHex : writeText;
+  var resp = Serial.write(payload, { baud: b });
+  var cmd = "uart write" + " --baud=" + b + (writeMode === "hex" ? " --tx=" + String(writeHex) : " (text)");
+
+  var done = function (bytes) {
+    var n = bytes && bytes.length ? bytes[0] : 0;
+    pushLog(cmd + " -> " + String(n) + " bytes");
+    status = "Wrote " + String(n) + " byte(s)";
+    render();
+  };
+
+  if (resp && typeof resp.then === "function") resp.then(done);
+  else done(resp);
+}
+
+function readUart() {
+  status = "Reading...";
+  render();
+
+  var b = parseInt(baud, 10);
+  if (!Number.isFinite(b) || b <= 0) b = 115200;
+  var n = Math.max(0, Math.min(63, Number(readLen) | 0));
+
+  var resp = Serial.read(n, { baud: b, timeout: 250 });
+  var cmd = "uart read --n=" + n + " --baud=" + b;
+
+  var done = function (bytes) {
+    pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
+    if (!bytes || !bytes.length) {
+      status = "No data";
+      render();
+      return;
+    }
+    pushLog("rx hex: " + fmtBytes(bytes));
+    pushLog("rx txt: " + fmtAscii(bytes));
+    status = "Read " + bytes.length + " byte(s)";
+    render();
+  };
+
+  if (resp && typeof resp.then === "function") resp.then(done);
+  else done(resp);
+}
+
+function render() {
+  UI.render(
+    UI.scroll({
+      padding: 16,
+      spacing: 12,
+      children: [
+        UI.text({ text: "UART (PB6/PB7)", font: "title2", fontWeight: "semibold" }),
+        UI.text({ text: "Note: PB6/PB7 are shared with I2C1; using UART will switch the pins to USART1.", foregroundColor: "#9CA3AF" }),
+
+        UI.row({
+          spacing: 12,
+          children: [
+            UI.textField({
+              value: String(baud),
+              placeholder: "Baud (115200)",
+              onChange: function (v) {
+                baud = String(v).replace(/[^0-9]/g, "");
+                render();
+              },
+            }),
+            UI.button({ label: "Open", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: openUart }),
+            UI.button({ label: "Close", onTap: closeUart }),
+          ],
+        }),
+
+        UI.text({ text: "Write", fontWeight: "medium" }),
+        UI.picker({
+          style: "segmented",
+          selected: writeMode,
+          options: [
+            { label: "Text", value: "text" },
+            { label: "Hex", value: "hex" },
+          ],
+          onChange: function (v) {
+            writeMode = v === "hex" ? "hex" : "text";
+            render();
+          },
+        }),
+        writeMode === "hex"
+          ? UI.textField({
+              value: writeHex,
+              placeholder: "Hex bytes (e.g. 01 02 FF)",
+              onChange: function (v) {
+                writeHex = String(v);
+              },
+            })
+          : UI.textField({
+              value: writeText,
+              placeholder: "Text to send",
+              onChange: function (v) {
+                writeText = String(v);
+              },
+            }),
+        UI.button({ label: "Write", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: writeUart }),
+
+        UI.text({ text: "Read", fontWeight: "medium" }),
+        UI.row({
+          spacing: 12,
+          children: [
+            UI.slider({
+              min: 0,
+              max: 63,
+              step: 1,
+              value: readLen,
+              onChange: function (v) {
+                readLen = v;
+                render();
+              },
+            }),
+            UI.text({ text: String(readLen) + " bytes", foregroundColor: "#9CA3AF" }),
+            UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: readUart }),
+          ],
+        }),
+
+        status
+          ? UI.text({
+              text: status,
+              backgroundColor: "#111827",
+              foregroundColor: "#FFFFFF",
+              padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+              cornerRadius: 8,
+            })
+          : null,
+
+        UI.row({
+          spacing: 12,
+          children: [
+            UI.button({
+              label: "Clear Log",
+              onTap: function () {
+                logLines = [];
+                render();
+              },
+            }),
+          ],
+        }),
+        UI.logViewer({ text: logLines.join("\n"), minHeight: 240 }),
+      ],
+    }),
+  );
+}
+
+render();
+

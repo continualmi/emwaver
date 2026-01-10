@@ -624,6 +624,18 @@ function __scriptHexBytes(values) {
   return hex;
 }
 
+function __scriptAsciiHex(text) {
+  var s = String(text);
+  var hex = '';
+  for (var i = 0; i < s.length; i += 1) {
+    var v = s.charCodeAt(i) & 0xff;
+    var part = v.toString(16).toUpperCase();
+    if (part.length < 2) part = '0' + part;
+    hex += part;
+  }
+  return hex;
+}
+
 if (typeof pinMode !== 'function') {
   var pinMode = function (pin, mode) {
     var pinNumber = __scriptResolvePin(pin);
@@ -679,6 +691,91 @@ if (typeof SPI === 'undefined') {
   };
 
   __scriptGlobal.SPI = SPI;
+}
+
+if (typeof Serial === 'undefined') {
+  var Serial = {
+    begin: function (baud, opts) {
+      var b = typeof baud === 'number' ? baud | 0 : 115200;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
+      return emw.send('uart open --baud=' + b, timeout);
+    },
+    end: function (opts) {
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
+      return emw.send('uart close', timeout);
+    },
+    write: function (data, opts) {
+      var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
+      var hex = typeof data === 'string' ? __scriptAsciiHex(data) : __scriptHexBytes(data);
+      var cmd = 'uart write';
+      if (typeof baud === 'number' && isFinite(baud) && baud > 0) cmd += ' --baud=' + baud;
+      if (hex) cmd += ' --tx=' + hex;
+      return emw.send(cmd, timeout);
+    },
+    read: function (n, opts) {
+      var len = Number(n) | 0;
+      if (len < 0) len = 0;
+      if (len > 63) len = 63;
+      var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
+      var cmd = 'uart read --n=' + len;
+      if (typeof baud === 'number' && isFinite(baud) && baud > 0) cmd += ' --baud=' + baud;
+      return emw.send(cmd, timeout);
+    },
+  };
+
+  __scriptGlobal.Serial = Serial;
+}
+
+if (typeof Wire === 'undefined') {
+  var Wire = {
+    begin: function (hz, opts) {
+      var h = typeof hz === 'number' ? hz | 0 : 100000;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
+      return emw.send('i2c open --hz=' + h, timeout);
+    },
+    end: function (opts) {
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
+      return emw.send('i2c close', timeout);
+    },
+    write: function (addr, data, opts) {
+      var a = Number(addr) | 0;
+      var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
+      var hex = __scriptHexBytes(data);
+      var cmd = 'i2c write --addr=' + a;
+      if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
+      if (hex) cmd += ' --tx=' + hex;
+      return emw.send(cmd, timeout);
+    },
+    read: function (addr, n, opts) {
+      var a = Number(addr) | 0;
+      var len = Number(n) | 0;
+      if (len < 0) len = 0;
+      if (len > 63) len = 63;
+      var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
+      var cmd = 'i2c read --addr=' + a + ' --n=' + len;
+      if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
+      return emw.send(cmd, timeout);
+    },
+    xfer: function (addr, tx, rxLen, opts) {
+      var a = Number(addr) | 0;
+      var len = Number(rxLen) | 0;
+      if (len < 0) len = 0;
+      if (len > 63) len = 63;
+      var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
+      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
+      var hex = __scriptHexBytes(tx);
+      var cmd = 'i2c xfer --addr=' + a + ' --rx=' + len;
+      if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
+      if (hex) cmd += ' --tx=' + hex;
+      return emw.send(cmd, timeout);
+    },
+  };
+
+  __scriptGlobal.Wire = Wire;
 }
 
 if (typeof analogReadResolution !== 'function') {

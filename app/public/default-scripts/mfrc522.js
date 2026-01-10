@@ -150,7 +150,7 @@ function runRead() {
       var dataParts = [];
       for (var j = 6; j < 22; j += 1) dataParts.push(toHexByte(payload[j]));
       var message = 'Card Type: ' + tagTypeName(payload[0], payload[1]) + '\nUID: ' + uid + '\nData: ' + dataParts.join(' ');
-      dialog('RFID Read', message);
+      dialog('MFRC522 Read', message);
       setStatus('Read OK', false);
       appendLog('RX: ' + message.replace(/\n/g, ' | '));
       return;
@@ -201,7 +201,7 @@ function runWrite() {
     var ascii = bytesToAscii(response).trim();
     if (ascii === 'No card detected') throw new Error('No card detected');
     if (ascii === 'Success') {
-      dialog('RFID Write', 'Write successful');
+      dialog('MFRC522 Write', 'Write successful');
       setStatus('Write OK', false);
       appendLog('RX: Success');
       return;
@@ -223,7 +223,7 @@ function render() {
       padding: 16,
       spacing: 12,
       children: [
-        UI.text({ text: 'RFID', font: 'title2', fontWeight: 'semibold' }),
+        UI.text({ text: 'MFRC522', font: 'title2', fontWeight: 'semibold' }),
         UI.text({ text: 'MIFARE block read/write via firmware rfid commands', fontWeight: 'medium' }),
         statusText
           ? UI.text({
@@ -315,4 +315,3 @@ function render() {
 }
 
 render();
-

@@ -66,10 +66,6 @@ extern SPI_HandleTypeDef hspi1;
 #define IR_RX_GPIO_Port GPIOA
 #define NSS_RFID_Pin GPIO_PIN_4
 #define NSS_RFID_GPIO_Port GPIOA
-#define CC1101_MISO_Pin GPIO_PIN_6
-#define CC1101_MISO_GPIO_Port GPIOA
-#define RESET_Pin GPIO_PIN_6
-#define RESET_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 #define CommandReg     0x01
