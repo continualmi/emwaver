@@ -3,7 +3,7 @@ let hz = "100000";
 let addrHex = "3C";
 let txHex = "";
 let rxLen = 1;
-let status = "";
+let statusText = "";
 let logLines = [];
 
 function pushLog(line) {
@@ -30,11 +30,11 @@ function fmtBytes(bytes) {
 }
 
 function openI2c() {
-  status = "Opening...";
+  statusText = "Opening...";
   render();
   var h = parseInt(hz, 10);
   if (!Number.isFinite(h) || h <= 0) {
-    status = "Invalid hz: " + String(hz);
+    statusText = "Invalid hz: " + String(hz);
     render();
     return;
   }
@@ -42,41 +42,41 @@ function openI2c() {
   if (resp && typeof resp.then === "function") {
     resp.then(function () {
       pushLog("i2c open --hz=" + h);
-      status = "Opened @ " + h + " Hz";
+      statusText = "Opened @ " + h + " Hz";
       render();
     });
   } else {
     pushLog("i2c open --hz=" + h);
-    status = "Opened @ " + h + " Hz";
+    statusText = "Opened @ " + h + " Hz";
     render();
   }
 }
 
 function closeI2c() {
-  status = "Closing...";
+  statusText = "Closing...";
   render();
   var resp = Wire.end();
   if (resp && typeof resp.then === "function") {
     resp.then(function () {
       pushLog("i2c close");
-      status = "Closed";
+      statusText = "Closed";
       render();
     });
   } else {
     pushLog("i2c close");
-    status = "Closed";
+    statusText = "Closed";
     render();
   }
 }
 
 function writeI2c() {
-  status = "Writing...";
+  statusText = "Writing...";
   render();
   var h = parseInt(hz, 10);
   if (!Number.isFinite(h) || h <= 0) h = 100000;
   var a = parseAddr7();
   if (a < 0) {
-    status = "Invalid addr: " + String(addrHex);
+    statusText = "Invalid addr: " + String(addrHex);
     render();
     return;
   }
@@ -85,7 +85,7 @@ function writeI2c() {
 
   var done = function () {
     pushLog(cmd);
-    status = "Write OK";
+    statusText = "Write OK";
     render();
   };
   if (resp && typeof resp.then === "function") resp.then(done);
@@ -93,13 +93,13 @@ function writeI2c() {
 }
 
 function readI2c() {
-  status = "Reading...";
+  statusText = "Reading...";
   render();
   var h = parseInt(hz, 10);
   if (!Number.isFinite(h) || h <= 0) h = 100000;
   var a = parseAddr7();
   if (a < 0) {
-    status = "Invalid addr: " + String(addrHex);
+    statusText = "Invalid addr: " + String(addrHex);
     render();
     return;
   }
@@ -110,7 +110,7 @@ function readI2c() {
   var done = function (bytes) {
     pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
     if (bytes && bytes.length) pushLog("rx: " + fmtBytes(bytes));
-    status = bytes && bytes.length ? "Read " + bytes.length + " byte(s)" : "No data";
+    statusText = bytes && bytes.length ? "Read " + bytes.length + " byte(s)" : "No data";
     render();
   };
   if (resp && typeof resp.then === "function") resp.then(done);
@@ -118,13 +118,13 @@ function readI2c() {
 }
 
 function xferI2c() {
-  status = "Transferring...";
+  statusText = "Transferring...";
   render();
   var h = parseInt(hz, 10);
   if (!Number.isFinite(h) || h <= 0) h = 100000;
   var a = parseAddr7();
   if (a < 0) {
-    status = "Invalid addr: " + String(addrHex);
+    statusText = "Invalid addr: " + String(addrHex);
     render();
     return;
   }
@@ -141,7 +141,7 @@ function xferI2c() {
   var done = function (bytes) {
     pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
     if (bytes && bytes.length) pushLog("rx: " + fmtBytes(bytes));
-    status = bytes && bytes.length ? "OK" : "OK (no data)";
+    statusText = bytes && bytes.length ? "OK" : "OK (no data)";
     render();
   };
   if (resp && typeof resp.then === "function") resp.then(done);
@@ -149,7 +149,7 @@ function xferI2c() {
 }
 
 function scanI2c() {
-  status = "Scanning...";
+  statusText = "Scanning...";
   render();
 
   var h = parseInt(hz, 10);
@@ -162,7 +162,7 @@ function scanI2c() {
 
   var step = function () {
     if (addr > end) {
-      status = "Scan done (" + found.length + " found)";
+      statusText = "Scan done (" + found.length + " found)";
       pushLog("scan: " + (found.length ? found.map(function (a) { return "0x" + a.toString(16).toUpperCase().padStart(2, "0"); }).join(" ") : "(none)"));
       render();
       return;
@@ -268,9 +268,9 @@ function render() {
           ],
         }),
 
-        status
+        statusText
           ? UI.text({
-              text: status,
+              text: statusText,
               backgroundColor: "#111827",
               foregroundColor: "#FFFFFF",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
@@ -285,4 +285,3 @@ function render() {
 }
 
 render();
-

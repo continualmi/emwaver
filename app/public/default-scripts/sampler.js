@@ -1,7 +1,7 @@
 // Live sampler capture (desktop)
 let selectedPin = "0";
 let isRecording = false;
-let status = "";
+let statusText = "";
 let bytesInBuffer = 0;
 let sessionId = null;
 let pollHandle = null;
@@ -70,25 +70,25 @@ async function startRecording() {
   if (isRecording) return;
   const pin = getSelectedPinNumber();
   if (!Number.isFinite(pin) || pin < 0) {
-    status = "Invalid pin";
+    statusText = "Invalid pin";
     render();
     return;
   }
 
-  status = "Starting sampler...";
+  statusText = "Starting sampler...";
   render();
 
   try {
     const session = await Sampler.start({ pin: pin, clearBefore: true });
     sessionId = session && session.id ? String(session.id) : null;
     isRecording = true;
-    status = supportsTimers ? "Recording (live polling on)..." : "Recording (live polling unavailable)...";
+    statusText = supportsTimers ? "Recording (live polling on)..." : "Recording (live polling unavailable)...";
     await refreshBufferStats();
     startPolling();
   } catch (e) {
     sessionId = null;
     isRecording = false;
-    status = "Start failed: " + String(e && e.message ? e.message : e);
+    statusText = "Start failed: " + String(e && e.message ? e.message : e);
     stopPolling();
     render();
   }
@@ -96,7 +96,7 @@ async function startRecording() {
 
 async function stopRecording() {
   if (!isRecording) return;
-  status = "Stopping sampler...";
+  statusText = "Stopping sampler...";
   render();
 
   stopPolling();
@@ -104,10 +104,10 @@ async function stopRecording() {
     await Sampler.stop(sessionId);
     sessionId = null;
     isRecording = false;
-    status = "Stopped";
+    statusText = "Stopped";
     await refreshBufferStats();
   } catch (e) {
-    status = "Stop failed: " + String(e && e.message ? e.message : e);
+    statusText = "Stop failed: " + String(e && e.message ? e.message : e);
     render();
   }
 }
@@ -166,9 +166,9 @@ function render() {
           cornerRadius: 8,
         }),
 
-        status
+        statusText
           ? UI.text({
-              text: status,
+              text: statusText,
               backgroundColor: "#111827",
               foregroundColor: "#FFFFFF",
               padding: { top: 10, bottom: 10, leading: 12, trailing: 12 },

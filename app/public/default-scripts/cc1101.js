@@ -158,7 +158,7 @@ async function cc1101SetModulationAndPower(modulation, dbm) {
 }
 
 async function initRx() {
-  status = "Initializing RX...";
+  statusText = "Initializing RX...";
   render();
   await cc1101Reset();
   await cc1101ApplyDefaults();
@@ -169,12 +169,12 @@ async function initRx() {
   await cc1101SetDataRate(100000);
   await cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
   await cc1101Strobe(CC1101_SRX);
-  status = "RX init complete";
+  statusText = "RX init complete";
   render();
 }
 
 async function initTx() {
-  status = "Initializing TX...";
+  statusText = "Initializing TX...";
   render();
   await cc1101Reset();
   await cc1101ApplyDefaults();
@@ -187,11 +187,11 @@ async function initTx() {
   await cc1101SetDataRate(100000);
   await cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
   await cc1101Strobe(CC1101_STX);
-  status = "TX init complete";
+  statusText = "TX init complete";
   render();
 }
 
-var status = "Ready";
+var statusText = "Ready";
 
 var packetCsPin = typeof CC1101_CS !== "undefined" ? CC1101_CS : 4;
 var packetFreqMHz = 433.92;
@@ -330,7 +330,7 @@ function render() {
             UI.button({ label: "InitTx", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: initTx }),
           ],
         }),
-        UI.text({ text: status, fontWeight: "medium" }),
+        UI.text({ text: statusText, fontWeight: "medium" }),
 
         UI.text({ text: "Packet Mode", fontWeight: "semibold" }),
         UI.row({
