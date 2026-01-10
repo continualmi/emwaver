@@ -29,7 +29,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include "emwaver_usb_io.h"
 /* USER CODE END Includes */
 
@@ -127,6 +126,38 @@ static void free_bulk_packet(void)
         bulk_packet = NULL;
         bulk_packet_len = 0;
     }
+}
+
+static size_t strbuf_append(char *buf, size_t cap, size_t offset, const char *src)
+{
+    if (cap == 0) {
+        return 0;
+    }
+    if (!buf) {
+        return 0;
+    }
+    if (!src) {
+        buf[offset < cap ? offset : (cap - 1u)] = '\0';
+        return offset < cap ? offset : (cap - 1u);
+    }
+
+    size_t out = offset;
+    if (out >= cap) {
+        out = cap - 1u;
+    }
+    while (*src && out + 1u < cap) {
+        buf[out++] = *src++;
+    }
+    buf[out] = '\0';
+    return out;
+}
+
+static size_t strbuf_append_char(char *buf, size_t cap, size_t offset, char c)
+{
+    char tmp[2];
+    tmp[0] = c;
+    tmp[1] = '\0';
+    return strbuf_append(buf, cap, offset, tmp);
 }
 
 static void command_send_ok(const uint8_t *data, size_t len)
@@ -1311,12 +1342,21 @@ int main(void)
           char name[DEVICE_NAME_MAX_LEN + 1];
           get_device_name(name, sizeof(name));
           char msg[128];
+          size_t msg_len = 0;
+          msg[0] = '\0';
           if (name[0] != '\0') {
-              snprintf(msg, sizeof(msg), "%s %s (%s)", EMWAVER_FIRMWARE_WELCOME, EMWAVER_FIRMWARE_VERSION, name);
+              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_WELCOME);
+              msg_len = strbuf_append_char(msg, sizeof(msg), msg_len, ' ');
+              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_VERSION);
+              msg_len = strbuf_append(msg, sizeof(msg), msg_len, " (");
+              msg_len = strbuf_append(msg, sizeof(msg), msg_len, name);
+              msg_len = strbuf_append_char(msg, sizeof(msg), msg_len, ')');
           } else {
-              snprintf(msg, sizeof(msg), "%s %s", EMWAVER_FIRMWARE_WELCOME, EMWAVER_FIRMWARE_VERSION);
+              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_WELCOME);
+              msg_len = strbuf_append_char(msg, sizeof(msg), msg_len, ' ');
+              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_VERSION);
           }
-          command_send_ok((const uint8_t *)msg, strlen(msg));
+          command_send_ok((const uint8_t *)msg, msg_len);
           free_bulk_packet();
           continue;
       }
@@ -1372,30 +1412,6 @@ int main(void)
           free_bulk_packet();
           continue;
       }
-
-	      if (cmd.verb && strcmp(cmd.verb, "usb") == 0 && cmd.positional_count > 0) {
-	          const char *sub = cmd.positional[0];
-	          if (strcmp(sub, "stats") == 0) {
-              uint32_t tx_ok = 0, tx_busy = 0, tx_timeout = 0, tx_fail = 0, rx_in = 0;
-              MIDI_GetUsbStats_FS(&tx_ok, &tx_busy, &tx_timeout, &tx_fail, &rx_in);
-              uint32_t data_in = USBD_MIDI_GetDataInCount();
-              char stats_buf[64];
-              int len = snprintf(stats_buf, sizeof(stats_buf),
-                  "tx=%lu di=%lu busy=%lu to=%lu fail=%lu in=%lu",
-                  (unsigned long)tx_ok, (unsigned long)data_in,
-                  (unsigned long)tx_busy, (unsigned long)tx_timeout,
-                  (unsigned long)tx_fail, (unsigned long)rx_in);
-              if (len > 0 && (size_t)len < sizeof(stats_buf)) {
-                  command_send_ok((const uint8_t *)stats_buf, (size_t)len);
-              } else {
-                  command_send_ok(NULL, 0);
-              }
-          } else {
-              command_send_err(NULL);
-          }
-          free_bulk_packet();
-	          continue;
-	      }
 
 	      if (cmd.verb && strcmp(cmd.verb, "adc") == 0 && cmd.positional_count > 0) {
 	          const char *sub = cmd.positional[0];
