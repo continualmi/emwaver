@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
 SESSION=$1
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Window 1: Clean Terminal
+# Window 1: Terminal & Git
+# Force the first pane to the correct directory just in case
+tmux send-keys -t $SESSION:1 'cd ' "$PROJECT_DIR" C-m
+tmux clear-history -t $SESSION:1
+
 tmux rename-window -t $SESSION:1 'terminal'
+tmux split-window -h -t $SESSION:1 -c "$PROJECT_DIR"
+tmux send-keys -t $SESSION:1.2 'lazygit' C-m
+tmux select-pane -t $SESSION:1.1
 
-# Window 2: Build Operations (4 Panes)
-tmux new-window -t $SESSION -n 'build-ops'
+# Window 2: Build Operations (2x2 Grid)
+# Explicitly set the directory for the new window
+tmux new-window -t $SESSION -n 'build-ops' -c "$PROJECT_DIR"
 
-# Create 4 panes (2x2 grid)
-tmux split-window -h -t $SESSION:2
-tmux split-window -v -t $SESSION:2.1
-tmux split-window -v -t $SESSION:2.2
+# 1. Split window horizontally -> Left(1) | Right(2)
+tmux split-window -h -t $SESSION:2 -c "$PROJECT_DIR"
+
+# 2. Split Left pane vertically -> Top-Left(1) / Bottom-Left(2) | Right(3)
+tmux split-window -v -t $SESSION:2.1 -c "$PROJECT_DIR"
+
+# 3. Split Right pane (now pane 3) vertically -> Top-Left(1) / Bottom-Left(2) | Top-Right(3) / Bottom-Right(4)
+tmux split-window -v -t $SESSION:2.3 -c "$PROJECT_DIR"
 
 # Pane 1 (Top Left): Tauri App
 tmux send-keys -t $SESSION:2.1 'cd app' C-m
