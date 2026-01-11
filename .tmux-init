@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+SESSION=$1
+
+# Window 1: Clean Terminal
+tmux rename-window -t $SESSION:1 'terminal'
+
+# Window 2: Build Operations (4 Panes)
+tmux new-window -t $SESSION -n 'build-ops'
+
+# Create 4 panes (2x2 grid)
+tmux split-window -h -t $SESSION:2
+tmux split-window -v -t $SESSION:2.1
+tmux split-window -v -t $SESSION:2.2
+
+# Pane 1 (Top Left): Tauri App
+tmux send-keys -t $SESSION:2.1 'cd app' C-m
+tmux send-keys -t $SESSION:2.1 'npm run tauri dev'
+
+# Pane 2 (Bottom Left): Firmware
+tmux send-keys -t $SESSION:2.2 'cd stm/emwaver-firmware' C-m
+tmux send-keys -t $SESSION:2.2 'emwaver build && emwaver flash'
+
+# Pane 3 (Top Right): Android
+tmux send-keys -t $SESSION:2.3 'cd android' C-m
+tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
+
+# Pane 4 (Bottom Right): Docs
+tmux send-keys -t $SESSION:2.4 'cd docs' C-m
+tmux send-keys -t $SESSION:2.4 'mkdocs serve'
+
+# Focus back on terminal window
+tmux select-window -t $SESSION:1
