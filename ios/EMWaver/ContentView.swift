@@ -34,7 +34,7 @@ struct ContentView: View {
         ZStack {
             TabView(selection: $selection) {
                 NavigationView {
-                    EMWaverView(selection: $selection)
+                    EMWaverView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
                 .tabItem {

@@ -17,56 +17,65 @@
 
 import SwiftUI
 
+#if os(iOS) || os(tvOS) || os(visionOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
 struct EMWaverView: View {
     @EnvironmentObject var bleManager: USBManager
-    @Binding var selection: String
 
     @State private var shellInput = ""
     @FocusState private var isShellFocused: Bool
     @State private var shellLog: String = ""
-    
-    // To track what we've already seen in the buffer
-    @State private var lastBufferSeq: UInt64 = 0
 
     @State private var firmwareVersion = "Unknown"
     @State private var showingSettingsSheet = false
 
     private static let shellBackground = Color.black
     private static let shellText = Color(red: 0, green: 1, blue: 0) // Green
+
+    private static var platformBackground: Color {
+#if os(iOS) || os(tvOS) || os(visionOS)
+        return Color(UIColor.systemBackground)
+#elseif os(macOS)
+        return Color(NSColor.windowBackgroundColor)
+#else
+        return Color.white
+#endif
+    }
     
     var body: some View {
         VStack(spacing: 0) {
             connectionRow
                 .padding(.vertical, 8)
-                .background(Color(.systemBackground))
+                .background(Self.platformBackground)
             
             Divider()
             
             shellSection
-            
-            Divider()
-            
-            ScrollView {
-                fragmentsGrid
-                    .padding(.vertical, 16)
-            }
-            .frame(height: 120) // Fixed height for fragments at bottom
-            .background(Color(.secondarySystemBackground))
+                .frame(maxHeight: .infinity)
         }
-        .background(Color(.systemBackground))
+        .background(Self.platformBackground)
         .navigationTitle("EMWaver")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button("Settings") { showingSettingsSheet = true }
-                    Button("Clear Shell", role: .destructive) { 
-                        shellLog = "" 
+                    Button("Clear Shell", role: .destructive) {
+                        shellLog = ""
                         bleManager.bufferClear()
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+            }
+
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isShellFocused = false }
             }
         }
         .sheet(isPresented: $showingSettingsSheet) {
@@ -163,6 +172,8 @@ struct EMWaverView: View {
                         .id("bottom")
                 }
                 .background(Self.shellBackground)
+                .contentShape(Rectangle())
+                .onTapGesture { isShellFocused = false }
                 .onChange(of: shellLog) { _ in
                     proxy.scrollTo("bottom", anchor: .bottom)
                 }
@@ -183,7 +194,7 @@ struct EMWaverView: View {
                     .onSubmit { sendCommand() }
                     .focused($isShellFocused)
                     .disableAutocorrection(true)
-                    .autocapitalization(.none)
+                    .emw_disableAutocapitalization()
                 
                 Button {
                     sendCommand()
@@ -204,44 +215,6 @@ struct EMWaverView: View {
                 alignment: .top
             )
         }
-    }
-
-    private var fragmentsGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12),
-        ]
-
-        return LazyVGrid(columns: columns, spacing: 12) {
-            FragmentCard(
-                title: "Scripts",
-                subtitle: "Manage and run scripts",
-                systemImage: "puzzlepiece.extension",
-                tint: .cyan
-            ) { selection = "Scripts" }
-
-            FragmentCard(
-                title: "ISM",
-                subtitle: "Sub‑GHz radio control",
-                systemImage: "dot.radiowaves.left.and.right",
-                tint: .green
-            ) { selection = "ISM" }
-
-            FragmentCard(
-                title: "Sampler",
-                subtitle: "Signal sampling and analysis",
-                systemImage: "waveform.path.ecg",
-                tint: .purple
-            ) { selection = "Sampler" }
-
-            FragmentCard(
-                title: "Git",
-                subtitle: "Sync scripts with GitHub",
-                systemImage: "arrow.triangle.branch",
-                tint: .secondary
-            ) { selection = "Git" }
-        }
-        .padding(.horizontal)
     }
 
     private var connectionStatusText: String {
@@ -277,39 +250,19 @@ struct EMWaverView: View {
     }
 
     private func updateShell() {
-        // Poll new entries from bleManager since lastBufferSeq
-        // We need a way to get *new* entries from USBManager, or just get last N and filter.
-        // USBManager doesn't expose sequence numbers on entries directly in the View struct I saw earlier,
-        // but let's assume `bufferMonitorEntries` returns sorted entries.
-        // A better way is to keep track of the last processed timestamp or sequence.
-        
-        // Since `bufferMonitorEntries` returns a fresh array, let's just grab the latest ones
-        // that have a seq > lastBufferSeq.
-        // Note: The `PacketEntry` in `USBManager` (Swift) needs to expose `seq`.
-        // If it doesn't, we might need to rely on `ts_ms` or index.
-        
-        // Let's re-read USBManager.swift to see PacketEntry definition if needed.
-        // Assuming it matches what was there before or I can adapt.
-        
-        // Actually, the previous code used: `bleManager.bufferMonitorEntries(limit: Self.maxMonitorEntries)`
-        // `PacketEntry` had `seq` in Android, let's check Swift.
-        
-        // For now, I'll assume we can get all and filter locally, or just show the last N lines.
-        // But to be "shell-like", we want a continuous stream.
-        
-        let entries = bleManager.bufferMonitorEntries(limit: 50) // Get last 50
-        // We only append new ones.
-        // Simple logic: maintain a set of seen IDs or just rebuild the string if it's not too long?
-        // Rebuilding is safer for sync.
-        
+        // Render the most recent buffer entries in timestamp order.
+        // `bufferMonitorEntries` already returns oldest → newest.
+        let entries = bleManager.bufferMonitorEntries(limit: 200)
+
         var newLog = ""
-        for entry in entries.reversed() { // old to new
-             let content = asciiString(entry.data)
-             if entry.isTx {
-                 newLog += "emw> \(content)\n"
-             } else {
-                 newLog += "\(content)\n"
-             }
+        for entry in entries {
+            let content = asciiString(entry.data)
+            guard !content.isEmpty else { continue }
+            if entry.isTx {
+                newLog += "emw> \(content)\n"
+            } else {
+                newLog += "\(content)\n"
+            }
         }
         shellLog = newLog
     }
@@ -344,19 +297,29 @@ struct EMWaverView: View {
     }
 
     private func asciiString(_ bytes: [UInt8]) -> String {
-        bytes.map { byte in
-            (32...126).contains(Int(byte)) ? String(UnicodeScalar(byte)) : "."
-        }.joined()
+        let trimmed = bytes.prefix { $0 != 0 }
+        let text = String(decoding: trimmed, as: UTF8.self)
+        return text.trimmingCharacters(in: .newlines)
     }
 }
 
 private struct Panel<Content: View>: View {
     @ViewBuilder var content: Content
 
+    private static var panelBackground: Color {
+#if os(iOS) || os(tvOS) || os(visionOS)
+        return Color(UIColor.systemBackground)
+#elseif os(macOS)
+        return Color(NSColor.windowBackgroundColor)
+#else
+        return Color.white
+#endif
+    }
+
     var body: some View {
         content
             .padding(12)
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .background(Self.panelBackground, in: RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
@@ -364,47 +327,24 @@ private struct Panel<Content: View>: View {
     }
 }
 
-private struct FragmentCard: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-    var isEnabled: Bool = true
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: systemImage)
-                        .foregroundColor(tint)
-                    Spacer()
-                }
-                Text(title)
-                    .font(.headline)
-                    .foregroundColor(isEnabled ? .primary : .secondary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
-            .padding(12)
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(isEnabled ? tint.opacity(0.18) : Color.gray.opacity(0.12), lineWidth: 1)
-            )
+private extension View {
+    @ViewBuilder
+    func emw_disableAutocapitalization() -> some View {
+#if os(iOS) || os(tvOS) || os(visionOS)
+        if #available(iOS 15.0, tvOS 15.0, *) {
+            self.textInputAutocapitalization(.never)
+        } else {
+            self.autocapitalization(.none)
         }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1.0 : 0.55)
+#else
+        self
+#endif
     }
 }
 
 #Preview {
     NavigationView {
-        EMWaverView(selection: .constant("EMWaver"))
+        EMWaverView()
             .environmentObject(USBManager())
     }
 }
