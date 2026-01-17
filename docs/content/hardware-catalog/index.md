@@ -10,9 +10,9 @@ This section is a **history/journey archive** of earlier boards and experiments:
 
 It is **not** a build catalog, and intentionally omits external CAD/vendor links.
 
-## Device builder (current)
+## Current device (designer)
 
-- [EMWaver Board Builder](hardware.html)
+- [EMWaver Designer](hardware.html)
 
 ## Board evolution (chronological)
 
