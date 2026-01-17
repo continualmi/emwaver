@@ -875,6 +875,7 @@ fn find_single_elf(release_dir: &Path) -> Result<PathBuf> {
 }
 
 fn stm32_build_env() -> Result<Vec<(String, String)>> {
+    // Highest priority: explicit override.
     if let Some(bin_dir) = env::var_os("EMWAVER_ARM_TOOLCHAIN_BIN") {
         let bin_dir = PathBuf::from(bin_dir);
         if !bin_dir.is_dir() {
@@ -893,10 +894,8 @@ fn stm32_build_env() -> Result<Vec<(String, String)>> {
         )]);
     }
 
-    if toolchain_ok().unwrap_or(false) {
-        return Ok(Vec::new());
-    }
-
+    // Prefer the STM32CubeIDE-bundled toolchain when present.
+    // This keeps `emwaver build/flash` working without the user manually editing PATH.
     if let Some(bin_dir) = find_cubeide_toolchain_bin()? {
         let current = env::var_os("PATH").unwrap_or_default();
         let mut new_path = std::ffi::OsString::from(bin_dir);
@@ -906,6 +905,11 @@ fn stm32_build_env() -> Result<Vec<(String, String)>> {
             "PATH".to_string(),
             new_path.to_string_lossy().into_owned(),
         )]);
+    }
+
+    // Fall back to whatever is on PATH.
+    if toolchain_ok().unwrap_or(false) {
+        return Ok(Vec::new());
     }
 
     if try_install_arm_toolchain_interactive()? {
@@ -1191,7 +1195,8 @@ fn toolchain_ok() -> Result<bool> {
 }
 
 fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
-    let candidates = [
+    // macOS: STM32CubeIDE.app bundle
+    let macos_candidates = [
         PathBuf::from("/Applications/STM32CubeIDE.app"),
         env::var_os("HOME")
             .map(PathBuf::from)
@@ -1199,7 +1204,7 @@ fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
             .join("Applications/STM32CubeIDE.app"),
     ];
 
-    for app in candidates {
+    for app in macos_candidates {
         let ide_root = app.join("Contents").join("Eclipse");
         if !ide_root.is_dir() {
             continue;
@@ -1217,6 +1222,51 @@ fn find_cubeide_toolchain_bin() -> Result<Option<PathBuf>> {
                     .is_some_and(|p| p.file_name() == Some(OsStr::new("bin")))
                 {
                     return Ok(path.parent().map(|p| p.to_path_buf()));
+                }
+            }
+        }
+    }
+
+    // Linux: STM32CubeIDE installs under /opt or user-chosen folders.
+    // On recent versions the toolchain lives under:
+    //   <ide>/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.* /tools/bin
+    if host_platform() == HostPlatform::Linux {
+        let mut roots = Vec::new();
+        roots.push(PathBuf::from("/opt"));
+        if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+            roots.push(home.join("st"));
+            roots.push(home.join("STM32CubeIDE"));
+            roots.push(home.clone());
+        }
+
+        for root in roots {
+            if !root.is_dir() {
+                continue;
+            }
+
+            for entry in WalkDir::new(&root)
+                .max_depth(8)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                if entry.file_name() != "arm-none-eabi-gcc" {
+                    continue;
+                }
+
+                let path = entry.path();
+                if path
+                    .parent()
+                    .is_some_and(|p| p.file_name() == Some(OsStr::new("bin")))
+                {
+                    // Ensure this is *actually* the CubeIDE-bundled GNU tools, not some random toolchain.
+                    // CubeIDE's path typically contains `/plugins/` and `/tools/bin`.
+                    let s = path.to_string_lossy();
+                    if s.contains("/plugins/") && s.contains("/tools/bin/") {
+                        return Ok(path.parent().map(|p| p.to_path_buf()));
+                    }
                 }
             }
         }
