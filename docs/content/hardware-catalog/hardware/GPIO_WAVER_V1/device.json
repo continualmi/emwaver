@@ -5,6 +5,7 @@
   "image": "GPIO_WAVER_V1.png",
   "lifecycle": "old",
   "description": "GPIO 15-pin variant (description coming soon).",
+  "designDate": "2024-07-08",
   "tags": ["GPIO", "15-pin", "STM32"],
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",

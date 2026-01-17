@@ -5,6 +5,7 @@
   "image": "INFRARED_WAVER_V0.png",
   "lifecycle": "old",
   "description": "Cost-down IR board revision (description coming soon).",
+  "designDate": "2024-03-12",
   "tags": ["IR", "STM32"],
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",

@@ -7,6 +7,7 @@
   "image": "DUPLEX_WAVER_MODULE.png",
   "lifecycle": "old",
   "description": "Duplex add-on module (requires GPIO Waver V1; description coming soon).",
+  "designDate": "2024-07-17",
   "tags": ["Duplex", "module"],
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",

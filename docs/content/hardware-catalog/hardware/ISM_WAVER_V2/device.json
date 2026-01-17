@@ -4,6 +4,7 @@
   "group": "stm32",
   "lifecycle": "old",
   "image": "ISM_WAVER_V2.png",
+  "designDate": "2024-02-01",
   "description": "433 MHz ISM band board with Rainsun antenna (description coming soon).",
   "tags": ["ISM", "STM32", "433MHz", "Rainsun"],
   "appSupport": ["android", "desktop"],

@@ -20,6 +20,7 @@
     "EMWAVER_DIY.png"
   ],
   "casingImage": "EMWAVER_DIY_CASING.png",
+  "designDate": "2025-06-23",
   "description": "EMWaver DIY is a do‑it‑yourself EMWaver board: slightly larger, but designed so you can use your own ESP32‑S3 module and CC1101 radio module to reach functionality similar to the flagship EMWaver. It includes an IR receiver + IR LEDs, plus USB‑C for power/programming and USB communication. Bonus: the ESP32‑S3 native USB stack also enables USB device emulation.",
   "tags": ["DIY", "ESP32-S3", "CC1101", "IR", "USB-C", "module"],
   "requires": ["ESP32-S3 DevKit", "CC1101"],
