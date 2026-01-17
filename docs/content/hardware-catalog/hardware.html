@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMWaver Designer</title>
+    <title>EMWaver Hardware</title>
     <meta
       name="description"
-      content="EMWaver Designer: choose what gets assembled at JLCPCB, then download the right BOM/CPL and case files."
+      content="EMWaver hardware: choose what gets assembled at JLCPCB, then download the right BOM/CPL and case files."
     />
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -79,12 +79,19 @@
           transform: translateY(0);
         }
       }
-      .clamp-3 {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
-        overflow: hidden;
-      }
+       .clamp-3 {
+         display: -webkit-box;
+         -webkit-box-orient: vertical;
+         -webkit-line-clamp: 3;
+         overflow: hidden;
+       }
+
+       .thumb-row {
+         scrollbar-width: thin;
+       }
+       .board-thumb.is-active {
+         background-color: rgba(2, 6, 23, 0.45);
+       }
     </style>
   </head>
 
@@ -97,7 +104,7 @@
           <div class="flex items-center gap-3">
             <a
               href="../"
-              class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
+               class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-100 hover:text-white transition"
             >
 		            <img
 		              src="assets/emwaver-logo.png"
@@ -107,93 +114,84 @@
 		            />
               EMWaver
             </a>
-            <span class="text-slate-300 hidden sm:inline">/</span>
-            <span class="text-sm font-medium text-slate-600 hidden sm:inline">Designer</span>
+             <span class="text-slate-300 hidden sm:inline">/</span>
+             <span class="text-sm font-medium text-slate-600 hidden sm:inline">Hardware</span>
           </div>
 
           <div class="flex items-center gap-4">
             <a
               href="../"
-              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
-              >Home</a
+               class="text-sm font-medium text-slate-200 hover:text-white transition hidden sm:inline"
+               >Home</a
             >
             <a
               href="catalog.html"
-              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
-              >History</a
+               class="text-sm font-medium text-slate-200 hover:text-white transition hidden sm:inline"
+               >History</a
             >
             <a
               href="../documentation/"
-              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
-              >Documentation</a
+               class="text-sm font-medium text-slate-200 hover:text-white transition hidden sm:inline"
+               >Documentation</a
             >
           </div>
         </div>
       </div>
     </nav>
 
-    <header class="pt-28 pb-10">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="fade-in">
-            <h1 class="text-4xl sm:text-5xl font-bold text-slate-900 leading-tight">
-              EMWaver Designer
-            </h1>
-            <p class="mt-5 text-lg text-slate-600 leading-relaxed max-w-2xl">
-              Pick a board variant (population/placement options on the same PCB), then download the matching BOM/CPL and case files.
-            </p>
-             <div class="mt-6 flex flex-wrap gap-3">
-               <a
-                 href="https://www.youtube.com/@EMWavers"
-                 target="_blank"
-                 rel="noreferrer"
-                 class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition"
-                 >5-minute JLCPCB order tutorial (placeholder)</a
-               >
-             </div>
-          </div>
-      </div>
-    </header>
 
-	    <main class="pb-20">
+
+	    <main class="pt-20 pb-10">
 	      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
-	        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
-	          <div>
-	            <h2 class="text-2xl font-bold text-slate-900">EMWaver board</h2>
-	            <p class="mt-2 text-slate-600">Select what goes on the main board, then download JLCPCB-ready files.</p>
-	          </div>
-	          <a
-	            href="catalog.html"
-	            class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition shadow-lg shadow-brand-500/20"
-	            >Board Evolution →</a
-	          >
-	        </div>
 
-	        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+	        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
 	          <div class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	            <div class="p-5">
-	              <div class="flex items-center justify-between gap-3">
-	                <div class="text-sm font-semibold text-slate-900">Preview</div>
+	            <div class="p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-sm font-semibold text-slate-900">Board</div>
+              </div>
+
+	              <div class="mt-3 rounded-2xl bg-slate-950/10 overflow-hidden">
+	                <img
+	                  id="board-hero"
+	                  src="downloads/emwaver.png"
+	                  alt="EMWaver board"
+	                  class="block w-full max-h-[420px] object-contain"
+	                  loading="lazy"
+	                />
 	              </div>
-	              <img
-	                src="downloads/emwaver.png"
-	                alt="EMWaver board"
-	                class="mt-4 w-full rounded-xl bg-slate-950/10 object-contain"
-	                loading="lazy"
-	              />
-	              <div class="mt-4 text-sm text-slate-600 leading-relaxed">
-	                <div class="font-semibold text-slate-900">Base assembly (always included)</div>
-	                <ul class="mt-2 list-disc pl-5">
-	                  <li>MCU + passives</li>
-	                  <li>USB-C port</li>
-	                </ul>
-	              </div>
+
+              <div class="mt-3 flex gap-2 overflow-x-auto thumb-row pb-1" id="board-gallery">
+                <button type="button" class="board-thumb is-active relative shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition" data-src="downloads/emwaver.png" aria-label="Board image">
+                  <img src="downloads/emwaver.png" alt="Board thumbnail" loading="lazy" class="w-full h-full object-cover" />
+                </button>
+              </div>
+
 	            </div>
 	          </div>
 
-	          <div class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	            <div class="p-5">
-	              <div class="text-sm font-semibold text-slate-900">Assembly options</div>
-	              <div class="mt-4 space-y-3">
+	          <div class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm h-full">
+	            <div class="p-4 h-full flex flex-col">
+	              <div class="flex items-center justify-between gap-3">
+	                <div class="text-sm font-semibold text-slate-900">Assembly</div>
+	              </div>
+
+	              <div class="mt-3 flex flex-wrap gap-2">
+	                <a
+	                  href="https://www.youtube.com/@EMWavers"
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition text-sm"
+	                  >
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+	                    <path d="M10 8.5v7l6-3.5-6-3.5z" />
+	                    <path d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.7 4.6 12 4.6 12 4.6s-5.7 0-7.5.5A3 3 0 0 0 2.4 7.2 31.5 31.5 0 0 0 2 12a31.5 31.5 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.8.5 7.5.5 7.5.5s5.7 0 7.5-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 22 12a31.5 31.5 0 0 0-.4-4.8z" />
+	                  </svg>
+	                  5-minute tutorial</a>
+	              </div>
+
+	              <div class="mt-3 space-y-2">
 	                <label class="flex items-start gap-3">
 	                  <input id="opt-gpio" type="checkbox" class="mt-1" checked />
 	                  <span>
@@ -215,130 +213,120 @@
 	                    <span class="block text-sm text-slate-600">Assemble IR receiver + transmitter section.</span>
 	                  </span>
 	                </label>
-	                <label class="flex items-start gap-3">
-	                  <input id="opt-no-usb-male" type="checkbox" class="mt-1" />
-	                  <span>
-	                    <span class="font-semibold text-slate-900">Remove USB-C male</span>
-	                    <span class="block text-sm text-slate-600">Variant option (requires different Gerbers when available).</span>
-	                  </span>
-	                </label>
+	                <div class="pt-1">
+	                  <div class="text-sm font-semibold text-slate-900">USB-C connector</div>
+	                  <div class="text-xs text-slate-500 mt-1">Pick at least one (male and female can both be installed).</div>
+	                  <div class="mt-2 space-y-2">
+	                    <label class="flex items-start gap-3">
+	                      <input id="opt-usb-male" type="checkbox" class="mt-1" checked />
+	                      <span>
+	                        <span class="font-semibold text-slate-900">USB-C male</span>
+	                        <span class="block text-sm text-slate-600">Direct use with phone.</span>
+	                      </span>
+	                    </label>
+	                    <label class="flex items-start gap-3">
+	                      <input id="opt-usb-female" type="checkbox" class="mt-1" checked />
+	                      <span>
+	                        <span class="font-semibold text-slate-900">USB-C female</span>
+	                        <span class="block text-sm text-slate-600">Use with a cable; useful for PC development.</span>
+	                      </span>
+	                    </label>
+	                  </div>
+	                </div>
 	              </div>
 
-	              <div class="mt-5 rounded-xl border border-slate-200 bg-white p-4">
-	                <div class="text-xs text-slate-500">Selected variant id</div>
-	                <div class="mt-1 font-mono text-sm text-slate-900" id="variant-id">…</div>
+	              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+	                <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWAVER_DIY_2_PCB_emwaver_diy_2025-12-09.zip" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+	                    <path d="M9 7h6M9 11h6M9 15h3" />
+	                    <path d="M15.5 15.5h.01" />
+	                  </svg>
+	                  PCB
+	                </a>
+	                <a id="dl-bom" href="hardware/pcb/BOM_EMWAVER_DIY_2_2025-12-09.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M8 6h13M8 12h13M8 18h13" />
+	                    <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+	                  </svg>
+	                  BOM
+	                </a>
+	                <a id="dl-cpl" href="hardware/pcb/PickAndPlace_PCB_emwaver_diy_2025-12-09.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M4 4h16v16H4z" />
+	                    <path d="M9 9h6v6H9z" />
+	                    <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+	                  </svg>
+	                  CPL
+	                </a>
+	                <a id="dl-case" href="#" aria-disabled="true" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 text-white font-semibold transition text-sm pointer-events-none opacity-50">
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
+	                    <path d="M12 22V12" />
+	                    <path d="M20 6.5l-8 4.5-8-4.5" />
+	                  </svg>
+	                  STEP
+	                </a>
 	              </div>
+
 	            </div>
 	          </div>
 	        </div>
 
-	        <div class="mt-6 rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
-	          <div class="p-5">
-	            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-	              <div>
-                <div class="text-lg font-bold text-slate-900">JLCPCB files</div>
-                <div class="text-sm text-slate-600">Gerbers are fixed (PCB is the same). BOM/CPL change with your variant selection.</div>
-	              </div>
-	              <button
-	                id="copy-config"
-	                type="button"
-	                class="inline-flex items-center justify-center px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition"
-	              >Copy config</button>
-	            </div>
 
-            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-              <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWAVER_DIY_2_PCB_emwaver_diy_2025-12-09.zip" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition">Gerbers (ZIP)</a>
-              <a id="dl-bom" href="hardware/pcb/BOM_EMWAVER_DIY_2_2025-12-09.csv" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">BOM (CSV)</a>
-              <a id="dl-cpl" href="hardware/pcb/PickAndPlace_PCB_emwaver_diy_2025-12-09.csv" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">CPL / Pick&Place (CSV)</a>
-              <a id="dl-pcb" href="hardware/pcb/PCB_emwaver_2025-12-09.pdf" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">PCB (PDF)</a>
-              <a id="dl-case" href="#" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">Case (STEP)</a>
-              <a id="dl-notes" href="#" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">Variant notes</a>
-            </div>
-	          </div>
-	        </div>
 	      </section>
 	    </main>
 
-    <footer class="border-t border-slate-200 bg-white/70">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="text-sm text-slate-600">
-            EMWaver hardware docs — static and GitHub Pages friendly.
-          </div>
-          <div class="text-sm text-slate-600">
-            Browse older devices in <a class="font-semibold text-brand-600 hover:text-brand-500" href="catalog.html">Board Evolution</a>.
-          </div>
-        </div>
-      </div>
-    </footer>
+    
 
     <script>
       const el = {
-        variantId: document.getElementById("variant-id"),
-        copyConfig: document.getElementById("copy-config"),
         optGpio: document.getElementById("opt-gpio"),
         optCc1101: document.getElementById("opt-cc1101"),
         optIr: document.getElementById("opt-ir"),
-        optNoUsbMale: document.getElementById("opt-no-usb-male"),
+        optUsbMale: document.getElementById("opt-usb-male"),
+        optUsbFemale: document.getElementById("opt-usb-female"),
         dlCase: document.getElementById("dl-case"),
-        dlNotes: document.getElementById("dl-notes"),
       };
 
-      function computeVariant() {
-        const gpio = !!el.optGpio.checked;
-        const cc1101 = !!el.optCc1101.checked;
-        const ir = !!el.optIr.checked;
-        const noUsbMale = !!el.optNoUsbMale.checked;
+      function enforceUsbAtLeastOne(changedEl) {
+        const male = !!el.optUsbMale?.checked;
+        const female = !!el.optUsbFemale?.checked;
 
-        const parts = [
-          "emwaver",
-          gpio ? "gpio" : "nogpio",
-          cc1101 ? "cc1101" : "nocc1101",
-          ir ? "ir" : "noir",
-          noUsbMale ? "no-usb-male" : null,
-        ].filter(Boolean);
-
-        return parts.join("-");
+        if (!male && !female) {
+          // If the user tries to uncheck the last one, keep it.
+          if (changedEl) changedEl.checked = true;
+          else el.optUsbMale.checked = true;
+        }
       }
 
       function render() {
-        const variant = computeVariant();
-        el.variantId.textContent = variant;
-
         // Placeholders until per-variant files land in-repo.
         if (el.dlCase) {
           el.dlCase.href = "#";
           el.dlCase.setAttribute("aria-disabled", "true");
           el.dlCase.classList.add("pointer-events-none", "opacity-50");
         }
-        if (el.dlNotes) {
-          el.dlNotes.href = "#";
-          el.dlNotes.setAttribute("aria-disabled", "true");
-          el.dlNotes.classList.add("pointer-events-none", "opacity-50");
-        }
-      }
-
-      async function copyConfig() {
-        const cfg = {
-          variant: computeVariant(),
-          gpio: !!el.optGpio.checked,
-          cc1101: !!el.optCc1101.checked,
-          ir: !!el.optIr.checked,
-          noUsbMale: !!el.optNoUsbMale.checked,
-        };
-        const text = JSON.stringify(cfg, null, 2);
-        try {
-          await navigator.clipboard.writeText(text);
-          el.copyConfig.textContent = "Copied";
-          setTimeout(() => (el.copyConfig.textContent = "Copy config"), 900);
-        } catch {
-          window.prompt("Copy this config:", text);
-        }
       }
 
       function attach() {
-        [el.optGpio, el.optCc1101, el.optIr, el.optNoUsbMale].forEach((x) => x.addEventListener("change", render));
-        el.copyConfig.addEventListener("click", copyConfig);
+        [el.optGpio, el.optCc1101, el.optIr].forEach((x) => x?.addEventListener("change", render));
+
+        if (el.optUsbMale) {
+          el.optUsbMale.addEventListener("change", () => {
+            enforceUsbAtLeastOne(el.optUsbMale);
+            render();
+          });
+        }
+
+        if (el.optUsbFemale) {
+          el.optUsbFemale.addEventListener("change", () => {
+            enforceUsbAtLeastOne(el.optUsbFemale);
+            render();
+          });
+        }
+
+        enforceUsbAtLeastOne();
         render();
       }
 
