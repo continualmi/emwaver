@@ -6,6 +6,7 @@
   "experimental": true,
   "image": "BLE_WAVER_DONGLE.png",
   "description": "BLE add-on (description coming soon).",
+  "designDate": "2025-01-04",
   "tags": ["BLE", "Espressif"],
   "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "",

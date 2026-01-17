@@ -5,6 +5,7 @@
   "image": "ISM_WAVER_V1.png",
   "lifecycle": "old",
   "description": "Early STM32-based revision (description coming soon).",
+  "designDate": "2023-05-13",
   "tags": ["ISM", "STM32"],
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",

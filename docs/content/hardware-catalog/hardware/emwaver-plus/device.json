@@ -1,10 +1,11 @@
 {
   "title": "emwaver-plus",
-  "displayTitle": "EMWaver Plus",
+  "displayTitle": "EMWaver v1",
   "group": "esp32",
   "lifecycle": "experimental",
   "image": "emwaver-plus.png",
   "description": "EMWaver Plus (ESP32-based) entry-level hardware (description coming soon).",
+  "designDate": "2025-03-24",
   "tags": ["ESP32"],
   "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "",

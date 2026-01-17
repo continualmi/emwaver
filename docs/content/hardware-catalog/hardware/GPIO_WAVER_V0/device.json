@@ -5,6 +5,7 @@
   "image": "GPIO_WAVER_V0.png",
   "lifecycle": "old",
   "description": "GPIO-focused expansion board (description coming soon).",
+  "designDate": "2024-06-14",
   "tags": ["GPIO", "STM32"],
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",

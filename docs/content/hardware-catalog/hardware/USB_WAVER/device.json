@@ -5,6 +5,7 @@
   "experimental": true,
   "image": "USB_WAVER.png",
   "description": "USB form-factor board (description coming soon).",
+  "designDate": "2024-09-12",
   "tags": ["USB"],
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "",
