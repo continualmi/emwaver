@@ -166,7 +166,19 @@ The `emwaver` CLI is a fast way to debug device ↔ firmware issues without the 
 ### Docs (`/docs`)
 
 - MkDocs-based docs.
-- Keep docs aligned with: STM32-only, USB MIDI-only, Script-first.
+- Keep docs aligned with: STM32-only (current product), USB MIDI-only, Script-first.
+
+#### Hardware docs: Builder vs History
+
+Docs includes a hardware UX under `docs/content/hardware-catalog/`.
+
+- **Builder / Designer** (`docs/content/hardware-catalog/hardware.html`): only for the **single current EMWaver board**.
+  - Allowed: JLCPCB-ready downloads (Gerber/BOM/CPL/PCB PDF) and **Onshape casing links** per variant.
+  - Variants are **population/placement options on the same PCB** (IR / ISM / GPIO / etc.).
+  - Disallowed: schematics/electronics CAD exposure.
+- **Board history / catalog** (`docs/content/hardware-catalog/catalog.html`, `docs/content/hardware-catalog/device.html`): archive only.
+  - Allowed: description, photo gallery, and basic metadata (name, release date, MCU family like `stm32`/`esp32`, lifecycle).
+  - Disallowed: any fabrication or schematic artifacts (no Gerbers/BOM/CPL/schematics), and no external hardware project links (OSHW/EasyEDA/etc.).
 
 ## Agent Workflow Guardrails
 
