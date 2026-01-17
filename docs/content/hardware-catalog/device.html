@@ -184,11 +184,10 @@
               <div class="mt-6 flex flex-wrap gap-3" id="action-buttons"></div>
 
               <div class="mt-10 rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-                <div class="text-slate-900 font-semibold">Notes</div>
+                <div class="text-slate-900 font-semibold">Metadata</div>
                 <div class="mt-2 text-sm text-slate-600 leading-relaxed">
-                  Fill in links, description, and metadata inside this device’s <code>device.json</code>.
+                  This page is intentionally gallery-first (no build files or external CAD links).
                 </div>
-                <div id="cost" class="mt-3 text-sm text-slate-700"></div>
                 <div id="tags" class="mt-4 flex flex-wrap gap-2"></div>
               </div>
             </div>
@@ -241,6 +240,13 @@
 	        if (!url) return null;
 	        const s = String(url).trim();
 	        if (!s) return null;
+	        return s;
+	      }
+
+	      function toDisplayDate(raw) {
+	        const s = String(raw || "").trim();
+	        if (!s) return "";
+	        // Keep it as-provided (YYYY, YYYY-MM, or YYYY-MM-DD).
 	        return s;
 	      }
 
@@ -412,6 +418,15 @@
         document.getElementById("device-title").textContent = title;
         document.getElementById("device-description").textContent =
           device.description || "Description coming soon.";
+
+        // Metadata fields (history pages)
+        const designDate = toDisplayDate(device.designDate || device.date);
+        if (designDate) {
+          const metaWrap = document.createElement("div");
+          metaWrap.className = "mt-3 text-sm text-slate-500";
+          metaWrap.textContent = `Designed ${designDate}`;
+          document.getElementById("device-description").insertAdjacentElement("afterend", metaWrap);
+        }
 
         const navBack = document.getElementById("nav-back");
         const crumbCatalog = document.getElementById("crumb-catalog");
@@ -656,54 +671,13 @@
 
         setIndex(0);
 
-	        const oshwLabUrl = safeUrl(device.oshwLabUrl);
-	        const easyEdaUrl = safeUrl(device.easyEdaUrl);
-	        const githubUrl = safeUrl(device.githubUrl);
-	        const schematicUrl = safeUrl(device.schematicUrl);
-	        const pcbUrl = safeUrl(device.pcbUrl);
-	        const casingRaw = device.casingImage || (device.casing && device.casing.image) || null;
-	        const casingImagesRaw = device.casingImages || (device.casing && device.casing.images) || null;
-	        const resolvedCasingImages = uniqueStrings([].concat(casingRaw || []).concat(casingImagesRaw || []))
-	          .map((x) => resolveHardwareAssetUrl(deviceId, x))
-	          .filter(Boolean);
-	
-	        const OSHW_ICON = "https://image.easyeda.com/avatars/2024/9/66Hu1UIb1xCgdcRIHsJDvgv7caIeg0LwlK8qwMFN.webp";
-	        const EASYEDA_ICON = "https://easyeda.com/images/easyeda-thumbnail.png?id=d5ed1fe5930602975df1";
-	
-	        document.getElementById("action-buttons").innerHTML = [
-	          ...(resolvedCasingImages.length ? [casingThumbnailButton("open-casing", resolvedCasingImages[0])] : []),
-	          actionButton("Open in OSHW Lab", oshwLabUrl, true, OSHW_ICON),
-	          actionButton("Open in EasyEDA", easyEdaUrl, true, EASYEDA_ICON),
-	          actionButton("GitHub files", githubUrl, false),
-	          actionButton("Schematic", schematicUrl, false),
-	          actionButton("PCB", pcbUrl, false),
-	        ].join("");
+	        // History device pages are metadata + photo gallery only.
+	        // No build files, no schematics, and no external hardware project links.
+	        document.getElementById("action-buttons").innerHTML = "";
 
-	        const openCasingBtn = document.getElementById("open-casing");
-	        if (openCasingBtn) {
-	          openCasingBtn.addEventListener("click", () =>
-	            openLightbox({
-	              title: `${title} — 3D Casing`,
-	              images: resolvedCasingImages,
-	              index: 0,
-	            })
-	          );
-	        }
-
-        const relationsEl = document.getElementById("relations");
-        const parent = device.parent ? String(device.parent).trim() : "";
-        if (parent) {
-          relationsEl.classList.remove("hidden");
-          relationsEl.innerHTML = `
-            <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
-              <div class="text-xs text-slate-500">Requires</div>
-              <a href="device.html?id=${encodeURIComponent(parent)}" class="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-brand-600 transition">
-                ${prettyTitle(parent)}
-                <span class="text-slate-400">→</span>
-              </a>
-            </div>
-          `;
-        }
+        // History pages do not show dependency/requirement relations.
+        document.getElementById("relations").classList.add("hidden");
+        document.getElementById("relations").innerHTML = "";
 
 	        const tags = Array.isArray(device.tags) ? device.tags.slice(0, 8) : [];
 	        document.getElementById("tags").innerHTML = tags
@@ -713,80 +687,8 @@
 	          )
 	          .join("");
 
-	        const costEl = document.getElementById("cost");
-	        const cost = device.reproductionCost;
-	        if (typeof cost === "string" && cost.trim()) {
-	          costEl.innerHTML = `<span class="font-semibold text-slate-900">Build cost:</span> ${safeText(cost)}`;
-	        } else if (cost && typeof cost === "object") {
-	          const amount = Number(cost.amount);
-	          const units = Number(cost.units);
-	          const currency = String(cost.currency || "USD").toUpperCase();
-	          const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : "";
-	          if (Number.isFinite(amount)) {
-	            const unitText = Number.isFinite(units) && units > 0 ? ` (${units} units)` : "";
-	            costEl.innerHTML = `<span class="font-semibold text-slate-900">Build cost:</span> ${symbol}${amount}${symbol ? "" : " " + safeText(currency)}${unitText}`;
-	          }
-	        }
-
-	        const variantsEl = document.getElementById("variants");
-	        const variants = Array.isArray(device.variants) ? device.variants : [];
-	        if (variants.length) {
-	          variantsEl.classList.remove("hidden");
-	          variantsEl.innerHTML = `
-	            <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
-	              <div class="text-xs text-slate-500">Variants</div>
-	              <div class="mt-2 flex flex-wrap gap-2">
-	                ${variants
-	                  .map((v) => {
-	                    const key = String(v.key || "").trim();
-	                    const title = safeText(v.displayTitle || v.id || key);
-	                    const selected = key && activeVariant && key.toLowerCase() === activeVariant.toLowerCase();
-	                    const href = `device.html?id=${encodeURIComponent(deviceId)}&variant=${encodeURIComponent(key)}`;
-	                    return `<a href="${href}" class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border ${
-	                      selected ? "text-white bg-brand-600 border-brand-600" : "text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
-	                    } transition">${title}</a>`;
-	                  })
-	                  .join("")}
-	              </div>
-	              <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-	                ${variants
-	                  .map((v) => {
-	                    const key = String(v.key || "").trim();
-	                    const selected = key && activeVariant && key.toLowerCase() === activeVariant.toLowerCase();
-	                    const frequency = safeText(v.frequency || "");
-	                    const antenna = safeText(v.antenna || "");
-	                    const schematic = safeUrl(v.files && v.files.schematic);
-	                    const pcb = safeUrl(v.files && v.files.pcb);
-	                    const schematicHref = schematic ? encodeURI(schematic) : null;
-	                    const pcbHref = pcb ? encodeURI(pcb) : null;
-	                    return `
-	                      <div class="rounded-xl border ${selected ? "border-brand-200 bg-brand-50/40" : "border-slate-200 bg-white"} p-3">
-	                        <div class="text-sm font-semibold text-slate-900">${safeText(v.displayTitle || v.id || key)}</div>
-	                        ${
-	                          frequency || antenna
-	                            ? `<div class="mt-1 text-xs text-slate-600">${[frequency, antenna].filter(Boolean).join(" • ")}</div>`
-	                            : ""
-	                        }
-	                        <div class="mt-3 flex flex-wrap gap-2">
-	                          ${
-	                            schematicHref
-	                              ? `<a class="text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition" href="${schematicHref}">Schematic</a>`
-	                              : ""
-	                          }
-	                          ${
-	                            pcbHref
-	                              ? `<a class="text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition" href="${pcbHref}">PCB</a>`
-	                              : ""
-	                          }
-	                        </div>
-	                      </div>
-	                    `;
-	                  })
-	                  .join("")}
-	              </div>
-	            </div>
-	          `;
-	        }
+	        // History pages do not show build cost or variants.
+	        document.getElementById("variants").classList.add("hidden");
 
 	        document.getElementById("content").classList.remove("hidden");
 	      }

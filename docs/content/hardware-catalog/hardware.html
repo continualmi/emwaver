@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMWaver Device Builder</title>
+    <title>EMWaver Designer</title>
     <meta
       name="description"
-      content="EMWaver board builder: choose what gets assembled at JLCPCB and download BOM/CPL."
+      content="EMWaver Designer: choose what gets assembled at JLCPCB, then download the right BOM/CPL and case files."
     />
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -92,7 +92,7 @@
               EMWaver
             </a>
             <span class="text-slate-300 hidden sm:inline">/</span>
-            <span class="text-sm font-medium text-slate-600 hidden sm:inline">Builder</span>
+            <span class="text-sm font-medium text-slate-600 hidden sm:inline">Designer</span>
           </div>
 
           <div class="flex items-center gap-4">
@@ -120,11 +120,20 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="fade-in">
             <h1 class="text-4xl sm:text-5xl font-bold text-slate-900 leading-tight">
-              EMWaver Device Builder
+              EMWaver Designer
             </h1>
             <p class="mt-5 text-lg text-slate-600 leading-relaxed max-w-2xl">
-              Choose what gets assembled on the EMWaver board (JLCPCB) to reduce cost, then download the BOM/CPL.
+              Pick a board variant (population/placement options on the same PCB), then download the matching BOM/CPL and case files.
             </p>
+             <div class="mt-6 flex flex-wrap gap-3">
+               <a
+                 href="https://www.youtube.com/@EMWavers"
+                 target="_blank"
+                 rel="noreferrer"
+                 class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition"
+                 >5-minute JLCPCB order tutorial (placeholder)</a
+               >
+             </div>
           </div>
       </div>
     </header>
@@ -211,8 +220,8 @@
 	          <div class="p-5">
 	            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 	              <div>
-	                <div class="text-lg font-bold text-slate-900">JLCPCB files</div>
-	                <div class="text-sm text-slate-600">(Currently a single default set; per-variant BOM/CPL files are next.)</div>
+                <div class="text-lg font-bold text-slate-900">JLCPCB files</div>
+                <div class="text-sm text-slate-600">Gerbers are fixed (PCB is the same). BOM/CPL change with your variant selection.</div>
 	              </div>
 	              <button
 	                id="copy-config"
@@ -221,12 +230,14 @@
 	              >Copy config</button>
 	            </div>
 
-	            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-	              <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWAVER_DIY_2_PCB_emwaver_diy_2025-12-09.zip" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition">Gerbers (ZIP)</a>
-	              <a id="dl-bom" href="hardware/pcb/BOM_EMWAVER_DIY_2_2025-12-09.csv" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">BOM (CSV)</a>
-	              <a id="dl-cpl" href="hardware/pcb/PickAndPlace_PCB_emwaver_diy_2025-12-09.csv" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">CPL / Pick&Place (CSV)</a>
-	              <a id="dl-pcb" href="hardware/pcb/PCB_emwaver_2025-12-09.pdf" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">PCB (PDF)</a>
-	            </div>
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+              <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWAVER_DIY_2_PCB_emwaver_diy_2025-12-09.zip" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition">Gerbers (ZIP)</a>
+              <a id="dl-bom" href="hardware/pcb/BOM_EMWAVER_DIY_2_2025-12-09.csv" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">BOM (CSV)</a>
+              <a id="dl-cpl" href="hardware/pcb/PickAndPlace_PCB_emwaver_diy_2025-12-09.csv" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">CPL / Pick&Place (CSV)</a>
+              <a id="dl-pcb" href="hardware/pcb/PCB_emwaver_2025-12-09.pdf" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">PCB (PDF)</a>
+              <a id="dl-case" href="#" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">Case (STEP)</a>
+              <a id="dl-notes" href="#" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-semibold transition">Variant notes</a>
+            </div>
 	          </div>
 	        </div>
 	      </section>
@@ -253,6 +264,8 @@
         optCc1101: document.getElementById("opt-cc1101"),
         optIr: document.getElementById("opt-ir"),
         optNoUsbMale: document.getElementById("opt-no-usb-male"),
+        dlCase: document.getElementById("dl-case"),
+        dlNotes: document.getElementById("dl-notes"),
       };
 
       function computeVariant() {
@@ -273,7 +286,20 @@
       }
 
       function render() {
-        el.variantId.textContent = computeVariant();
+        const variant = computeVariant();
+        el.variantId.textContent = variant;
+
+        // Placeholders until per-variant files land in-repo.
+        if (el.dlCase) {
+          el.dlCase.href = "#";
+          el.dlCase.setAttribute("aria-disabled", "true");
+          el.dlCase.classList.add("pointer-events-none", "opacity-50");
+        }
+        if (el.dlNotes) {
+          el.dlNotes.href = "#";
+          el.dlNotes.setAttribute("aria-disabled", "true");
+          el.dlNotes.classList.add("pointer-events-none", "opacity-50");
+        }
       }
 
       async function copyConfig() {

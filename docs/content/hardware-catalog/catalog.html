@@ -4,114 +4,229 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EMWaver Board Evolution</title>
-    <meta name="description" content="EMWaver board evolution: a chronological archive of devices and experiments." />
+    <meta name="description" content="A chronological archive of EMWaver prototypes (photos + metadata only)." />
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@300;400;600&display=swap"
       rel="stylesheet"
     />
+
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            fontFamily: { sans: ["Inter", "sans-serif"] },
+            fontFamily: {
+              serif: ["Fraunces", "ui-serif", "Georgia", "serif"],
+              sans: ["IBM Plex Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+            },
             colors: {
-              brand: { 400: "#38bdf8", 500: "#0ea5e9", 600: "#0284c7" },
+              ink: {
+                900: "#121417",
+                700: "#2A2E34",
+                500: "#4B525C",
+              },
+              paper: {
+                50: "#FAF7F0",
+                100: "#F4EFE4",
+                200: "#E7DFCF",
+              },
+              brass: {
+                600: "#8A6B28",
+                500: "#A27C2C",
+                200: "#E7D4A7",
+              },
             },
           },
         },
       };
     </script>
+
     <style>
       :root {
         color-scheme: light;
         --nav-height: 64px;
-        --page-pad: 20px;
+        --page-pad: 18px;
       }
       body {
-        background: radial-gradient(1200px 800px at 20% 0%, rgba(14, 165, 233, 0.16), transparent 60%),
-          radial-gradient(900px 700px at 90% 15%, rgba(56, 189, 248, 0.12), transparent 55%),
-          linear-gradient(180deg, #f8fafc 0%, #ffffff 55%, #f8fafc 100%);
-        color: #0f172a;
+        background: radial-gradient(1100px 780px at 20% 0%, rgba(162, 124, 44, 0.12), transparent 55%),
+          radial-gradient(900px 700px at 90% 12%, rgba(18, 20, 23, 0.06), transparent 50%),
+          linear-gradient(180deg, #faf7f0 0%, #f4efe4 40%, #faf7f0 100%);
+        color: #121417;
       }
       .noise {
         position: fixed;
         inset: 0;
         pointer-events: none;
-        opacity: 0.03;
+        opacity: 0.05;
         mix-blend-mode: multiply;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
       }
-      @media (min-width: 1024px) {
-        .catalog-grid {
-          height: auto;
-        }
+      .reveal {
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 460ms ease, transform 460ms ease;
+      }
+      .reveal.is-visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .thumb-row {
+        scrollbar-width: thin;
       }
     </style>
   </head>
 
-  <body class="antialiased selection:bg-brand-500 selection:text-white bg-white text-slate-900">
+  <body class="antialiased selection:bg-brass-500 selection:text-paper-50 font-sans">
     <div class="noise"></div>
 
-    <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav class="fixed top-0 w-full z-50 bg-paper-50/80 backdrop-blur-md border-b border-paper-200">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-3">
             <a
               href="../"
-              class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
+              class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-900 hover:text-ink-700 transition"
             >
               <img
                 src="assets/emwaver-logo.png"
                 alt="EMWaver"
-                class="w-7 h-7 rounded-lg object-contain bg-white border border-slate-200"
+                class="w-7 h-7 rounded-lg object-contain bg-paper-50 border border-paper-200"
                 loading="lazy"
               />
               EMWaver
             </a>
-            <span class="text-slate-300 hidden sm:inline">/</span>
+            <span class="text-paper-200 hidden sm:inline">/</span>
             <a
               href="hardware.html"
-              class="text-sm font-medium text-slate-600 hover:text-slate-900 transition hidden sm:inline"
+              class="text-sm font-medium text-ink-500 hover:text-ink-900 transition hidden sm:inline"
               >Hardware</a
             >
-            <span class="text-slate-300 hidden sm:inline">/</span>
-            <span class="text-sm font-medium text-slate-600 hidden sm:inline">History</span>
+            <span class="text-paper-200 hidden sm:inline">/</span>
+            <span class="text-sm font-medium text-ink-500 hidden sm:inline">History</span>
           </div>
 
           <div class="flex items-center gap-4">
-            <a href="hardware.html" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition">Back</a>
+            <a href="hardware.html" class="text-sm font-medium text-ink-500 hover:text-ink-900 transition">Back</a>
           </div>
         </div>
       </div>
     </nav>
 
-    <main class="pt-20 pb-5" style="padding-left: var(--page-pad); padding-right: var(--page-pad)">
-      <section class="max-w-7xl mx-auto">
-        <div class="flex items-end justify-between gap-4 mb-4">
-          <div>
-            <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">Board Evolution</h1>
-            <p class="text-sm text-slate-600 mt-1">A chronological archive (one card per device).</p>
+    <main class="pt-20 pb-16" style="padding-left: var(--page-pad); padding-right: var(--page-pad)">
+      <section class="max-w-6xl mx-auto">
+        <div class="rounded-3xl border border-paper-200 bg-paper-50/70 shadow-sm overflow-hidden reveal">
+          <div class="p-6 sm:p-8">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <div class="text-[11px] uppercase tracking-[0.24em] text-ink-500">Archive</div>
+                <h1 class="mt-3 font-serif text-3xl sm:text-4xl font-semibold tracking-tight text-ink-900">
+                  Board Evolution
+                </h1>
+                <p class="mt-4 text-ink-500 leading-relaxed max-w-2xl">
+                  A chronological walk through the prototypes that led to the current EMWaver. This page is intentionally
+                  photos + metadata only.
+                </p>
+              </div>
+              <div class="text-xs text-ink-500" id="count-pill">…</div>
+            </div>
           </div>
-          <div class="text-xs text-slate-500" id="count-pill">…</div>
+
+          <div class="border-t border-paper-200 bg-paper-100/60">
+            <div class="p-6 sm:p-8">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <div class="font-serif text-lg font-semibold text-ink-900">Prototype box</div>
+                  <div class="mt-1 text-sm text-ink-500">Top-of-timeline photo (placeholder until you add it).</div>
+                </div>
+                <div class="text-xs text-ink-500 hidden sm:block">Add image: <code>assets/prototype-box.jpg</code></div>
+              </div>
+
+              <div class="mt-5 rounded-2xl border border-paper-200 bg-paper-50 overflow-hidden">
+                <img
+                  src="assets/prototype-box.jpg"
+                  alt="Prototype assortment box"
+                  class="w-full h-56 sm:h-72 object-cover"
+                  loading="lazy"
+                  onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');"
+                />
+                <div class="hidden p-6">
+                  <div class="text-ink-900 font-semibold">Prototype box photo missing</div>
+                  <div class="mt-2 text-sm text-ink-500">
+                    Drop a photo at <code>docs/content/hardware-catalog/assets/prototype-box.jpg</code>.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div id="history-list" class="space-y-2"></div>
+        <div class="mt-10 relative">
+          <div class="hidden sm:block absolute left-[13px] top-0 bottom-0 w-px bg-brass-200"></div>
+          <div id="timeline" class="space-y-12"></div>
+        </div>
       </section>
-	    </main>
+    </main>
+
+    <div
+      id="lightbox"
+      class="hidden fixed inset-0 z-[100] bg-ink-900/70 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="mx-auto max-w-5xl h-full flex flex-col">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div id="lightbox-title" class="text-paper-50 font-semibold truncate">Image</div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              id="lightbox-close"
+              type="button"
+              class="h-10 w-10 inline-flex items-center justify-center rounded-xl bg-paper-50/10 hover:bg-paper-50/20 text-paper-50 border border-paper-50/10 transition"
+              aria-label="Close"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="relative flex-1 rounded-2xl overflow-hidden border border-paper-50/10 bg-black/30">
+          <img id="lightbox-image" alt="" class="w-full h-full object-contain" />
+          <button
+            id="lightbox-prev"
+            type="button"
+            class="hidden absolute left-3 top-1/2 -translate-y-1/2 h-11 w-11 items-center justify-center rounded-2xl bg-paper-50/10 hover:bg-paper-50/20 text-paper-50 border border-paper-50/10 transition"
+            aria-label="Previous image"
+            title="Previous"
+          >
+            ‹
+          </button>
+          <button
+            id="lightbox-next"
+            type="button"
+            class="hidden absolute right-3 top-1/2 -translate-y-1/2 h-11 w-11 items-center justify-center rounded-2xl bg-paper-50/10 hover:bg-paper-50/20 text-paper-50 border border-paper-50/10 transition"
+            aria-label="Next image"
+            title="Next"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+    </div>
 
     <script>
       const MANIFEST_URL = "hardware/devices.json";
-      const ICONS = {
-        android: "https://cdn-icons-png.flaticon.com/512/174/174836.png",
-        ios: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTuBwquN0tazhKIHqb8QT2eW_6xUA0VRFSiXg&s",
-        desktop: "https://static.thenounproject.com/png/1982056-200.png",
-      };
 
       const el = {
         countPill: document.getElementById("count-pill"),
-        list: document.getElementById("history-list"),
+        timeline: document.getElementById("timeline"),
+        lightbox: document.getElementById("lightbox"),
+        lightboxTitle: document.getElementById("lightbox-title"),
+        lightboxImg: document.getElementById("lightbox-image"),
+        lightboxPrev: document.getElementById("lightbox-prev"),
+        lightboxNext: document.getElementById("lightbox-next"),
+        lightboxClose: document.getElementById("lightbox-close"),
       };
 
       function prettyTitle(folderOrTitle) {
@@ -121,114 +236,266 @@
           .trim();
       }
 
-      function modulePill(status) {
-        if (status !== "module") return "";
-        return `<span class="inline-flex items-center gap-2 px-2.5 py-1 text-[11px] font-semibold rounded-full border text-cyan-700 bg-cyan-50 border-cyan-200">Module</span>`;
+      function isHttpUrl(s) {
+        return /^https?:\/\//i.test(String(s || "").trim());
       }
 
-      function iconImg(src, label) {
-        return `<img src="${src}" alt="${label}" title="${label}" loading="lazy" referrerpolicy="no-referrer" class="w-4 h-4 object-contain opacity-90" onerror="this.onerror=null; this.style.display='none';" />`;
+      function resolveHardwareAssetUrl(deviceId, raw) {
+        const s = String(raw || "").trim();
+        if (!s) return null;
+        if (isHttpUrl(s)) return s;
+        if (s.startsWith("hardware/")) return s;
+        if (s.startsWith("/")) return s.slice(1);
+        if (s.includes("/")) return `hardware/${s}`;
+        return `hardware/${deviceId}/${s}`;
       }
 
-      function deriveSupport(group, support) {
-        const normalized = Array.isArray(support) ? support : null;
-        return (
-          normalized ||
-          (group === "esp32"
-            ? ["android", "ios", "desktop"]
-            : group === "stm32" || group === "module"
-              ? ["android", "desktop"]
-              : [])
-        );
+      function resolveDeviceHero(device) {
+        const raw = String(device.image || "").trim() || (Array.isArray(device.images) && device.images.length ? String(device.images[0]).trim() : "");
+        return resolveHardwareAssetUrl(device.folder, raw) || `hardware/${device.folder}/${device.folder}.png`;
       }
 
-      function supportIcons(group, support) {
-        const derived = deriveSupport(group, support);
-        const map = {
-          android: () => iconImg(ICONS.android, "Android"),
-          ios: () => iconImg(ICONS.ios, "iOS"),
-          desktop: () => iconImg(ICONS.desktop, "Desktop"),
-        };
-        return derived.filter((x) => map[x]).map((x) => map[x]()).join("");
+      function normalizeImages(device) {
+        const raw = Array.isArray(device.images) ? device.images : [];
+        const out = [];
+        const seen = new Set();
+        for (const item of raw) {
+          const src = resolveHardwareAssetUrl(device.folder, item);
+          if (!src || seen.has(src)) continue;
+          seen.add(src);
+          out.push(src);
+        }
+
+        const hero = resolveDeviceHero(device);
+        if (hero && !seen.has(hero)) out.unshift(hero);
+
+        return out;
       }
 
-      function resolveDeviceImage(device) {
-        const rawImages = Array.isArray(device.images) ? device.images : [];
-        const preferred = rawImages.length ? String(rawImages[0]).trim() : "";
-        const raw = preferred || (device.image ? String(device.image).trim() : "");
-        if (!raw) return `hardware/${device.folder}/${device.folder}.png`;
-        if (/^https?:\/\//i.test(raw)) return raw;
-        if (raw.startsWith("hardware/")) return raw;
-        if (raw.includes("/")) return `hardware/${raw}`;
-        return `hardware/${device.folder}/${raw}`;
+      function parseDesignDate(raw) {
+        const s = String(raw || "").trim();
+        if (!s) return null;
+        if (/^\d{4}$/.test(s)) return { y: Number(s), m: 1, d: 1, precision: "year" };
+        if (/^\d{4}-\d{2}$/.test(s)) {
+          const [y, m] = s.split("-").map((n) => Number(n));
+          if (!y || !m) return null;
+          return { y, m, d: 1, precision: "month" };
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          const [y, m, d] = s.split("-").map((n) => Number(n));
+          if (!y || !m || !d) return null;
+          return { y, m, d, precision: "day" };
+        }
+        return { raw: s, precision: "raw" };
       }
 
-      function rowHtml(device, lookup) {
+      function dateSortKey(raw) {
+        const parsed = parseDesignDate(raw);
+        if (!parsed || parsed.precision === "raw") return Number.NEGATIVE_INFINITY;
+        return parsed.y * 10000 + parsed.m * 100 + parsed.d;
+      }
+
+      function prettyDesignDate(raw) {
+        const parsed = parseDesignDate(raw);
+        if (!parsed) return "Undated";
+        if (parsed.precision === "raw") return String(parsed.raw);
+
+        const dt = new Date(parsed.y, (parsed.m || 1) - 1, parsed.d || 1);
+        if (Number.isNaN(dt.getTime())) return "Undated";
+
+        if (parsed.precision === "year") {
+          return String(parsed.y);
+        }
+
+        if (parsed.precision === "month") {
+          return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(dt);
+        }
+
+        return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dt);
+      }
+
+      function groupBadge(group) {
+        const g = String(group || "").trim().toLowerCase();
+        const label = g === "stm32" ? "STM32" : g === "esp32" ? "ESP32" : g ? g.toUpperCase() : "";
+        if (!label) return "";
+        return `<span class="inline-flex items-center px-2.5 py-1 rounded-full border border-paper-200 bg-paper-50 text-[11px] font-semibold text-ink-700">${label}</span>`;
+      }
+
+      function entryHtml(device, idx, total) {
         const title = prettyTitle(device.displayTitle || device.title || device.folder);
-        const group = device.group || "";
-        const parent = device.parent ? String(device.parent).trim() : "";
-        const parentTitle =
-          parent && lookup[parent]
-            ? prettyTitle(lookup[parent].displayTitle || lookup[parent].title || parent)
-            : prettyTitle(parent);
-        const imageSrc = resolveDeviceImage(device);
+        const designDate = prettyDesignDate(device.designDate || device.date);
+        const hero = resolveDeviceHero(device);
+        const gallery = normalizeImages(device);
 
-        const requirementLabels = [];
-        const requirementSeen = new Set();
-        if (parent) {
-          const key = parentTitle.trim().toLowerCase();
-          requirementSeen.add(key);
-          requirementLabels.push(`<span class="text-slate-700 font-semibold">${parentTitle}</span>`);
-        }
-        if (device.requires) {
-          const rawRequirements = Array.isArray(device.requires) ? device.requires : [device.requires];
-          rawRequirements.forEach((req) => {
-            const trimmed = String(req || "").trim();
-            const key = trimmed.toLowerCase();
-            if (trimmed && !requirementSeen.has(key)) {
-              requirementSeen.add(key);
-              requirementLabels.push(`<span class="text-slate-700 font-semibold">${trimmed}</span>`);
-            }
-          });
-        }
-        const requirementsLine = requirementLabels.length
-          ? `<div class="text-[11px] text-slate-500 mt-1 truncate">Requires ${requirementLabels.join(", ")}</div>`
-          : "";
+        const thumbs = gallery.slice(0, 7);
+        const moreCount = Math.max(0, gallery.length - thumbs.length);
 
-        return `
-          <div class="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition overflow-hidden">
-            <a href="device.html?id=${encodeURIComponent(device.folder)}&from=history" class="block group">
-              <div class="px-3 py-2.5">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 flex items-start gap-3">
-                    ${
-                      imageSrc
-                        ? `<img
-                             src="${imageSrc}"
-                             alt="${title}"
-                             loading="lazy"
-                             class="w-10 h-10 rounded-lg object-cover object-center bg-white border border-slate-200 shrink-0"
-                             onerror="this.onerror=null; this.style.display='none';"
-                           />`
-                        : ""
-                    }
-                    <div class="min-w-0">
-                      <div class="text-sm font-semibold text-slate-900 group-hover:text-brand-600 transition truncate">${title}</div>
-                      <div class="mt-1 flex items-center gap-2 opacity-90">
-                        <div class="flex items-center gap-2">${supportIcons(group, device.appSupport)}</div>
-                      </div>
-                      ${requirementsLine}
-                    </div>
-                  </div>
-                  <div class="shrink-0 flex items-center gap-2">
-                    ${modulePill(device.status)}
-                    <span class="text-slate-400 text-xs">→</span>
-                  </div>
-                </div>
-              </div>
-            </a>
+        const dot = `
+          <div class="hidden sm:block absolute left-0 top-6">
+            <div class="w-7 h-7 rounded-full bg-paper-50 border border-paper-200 shadow-sm flex items-center justify-center">
+              <div class="w-2.5 h-2.5 rounded-full bg-brass-500"></div>
+            </div>
           </div>
         `;
+
+        const isLast = idx === total - 1;
+        const mobileLine = isLast ? "" : `<div class=\"sm:hidden absolute left-[11px] top-14 bottom-0 w-px bg-brass-200\"></div>`;
+
+        return `
+          <article class="relative sm:pl-12 reveal">
+            ${dot}
+            ${mobileLine}
+
+            <div class="rounded-3xl border border-paper-200 bg-paper-50/70 shadow-sm overflow-hidden">
+              <div class="p-6 sm:p-8">
+                <div class="flex flex-wrap items-center gap-2">
+                  ${groupBadge(device.group)}
+                  <span class="text-[11px] uppercase tracking-[0.18em] text-ink-500">Design: ${designDate}</span>
+                </div>
+
+                <h2 class="mt-4 font-serif text-2xl sm:text-3xl font-semibold text-ink-900 tracking-tight">${title}</h2>
+                <p class="mt-3 text-ink-500 leading-relaxed max-w-3xl">${String(device.description || "Description coming soon.")}</p>
+
+                <div class="mt-6 rounded-2xl border border-paper-200 bg-paper-50 overflow-hidden">
+                  <img
+                    src="${hero}"
+                    alt="${title}"
+                    class="w-full h-56 sm:h-72 object-contain bg-paper-100/70"
+                    loading="lazy"
+                    data-gallery-index="0"
+                    data-gallery-title="${title}"
+                    data-gallery-folder="${device.folder}"
+                    onerror="this.onerror=null; this.style.display='none';"
+                  />
+                </div>
+
+                <div class="mt-4 flex items-center justify-between gap-3">
+                  <div class="text-xs text-ink-500">Photos</div>
+                  <div class="text-xs text-ink-500">${gallery.length} image${gallery.length === 1 ? "" : "s"}</div>
+                </div>
+
+                <div class="mt-3 flex gap-2 overflow-x-auto thumb-row pb-1">
+                  ${thumbs
+                    .map((src, tIdx) => {
+                      const label = tIdx === 0 ? "Hero" : `Photo ${tIdx + 1}`;
+                      return `
+                        <button
+                          type="button"
+                          class="relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-paper-200 bg-paper-50 hover:bg-paper-100 transition"
+                          title="${label}"
+                          data-gallery-title="${title}"
+                          data-gallery-folder="${device.folder}"
+                          data-gallery-index="${tIdx}"
+                        >
+                          <img src="${src}" alt="${title} thumbnail ${tIdx + 1}" loading="lazy" class="w-full h-full object-cover" onerror="this.onerror=null; this.style.display='none';" />
+                        </button>
+                      `.trim();
+                    })
+                    .join("")}
+
+                  ${
+                    moreCount > 0
+                      ? `<div class="shrink-0 flex items-center justify-center w-16 h-16 rounded-xl border border-paper-200 bg-paper-100 text-xs font-semibold text-ink-700">+${moreCount}</div>`
+                      : ""
+                  }
+                </div>
+              </div>
+            </div>
+          </article>
+        `;
+      }
+
+      let lightboxState = null;
+
+      function openLightbox({ title, images, index }) {
+        if (!el.lightbox) return;
+        lightboxState = { title, images, index };
+        renderLightbox();
+        el.lightbox.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeLightbox() {
+        if (!el.lightbox) return;
+        el.lightbox.classList.add("hidden");
+        document.body.style.overflow = "";
+        lightboxState = null;
+      }
+
+      function renderLightbox() {
+        if (!lightboxState) return;
+        const { title, images, index } = lightboxState;
+        const count = images.length;
+
+        el.lightboxTitle.textContent = `${title}${count > 1 ? ` (${index + 1}/${count})` : ""}`;
+        el.lightboxImg.src = images[index];
+        el.lightboxImg.alt = title;
+
+        const showNav = count > 1;
+        for (const button of [el.lightboxPrev, el.lightboxNext]) {
+          button.classList.toggle("hidden", !showNav);
+          if (showNav) button.classList.add("inline-flex");
+        }
+      }
+
+      function lightboxStep(delta) {
+        if (!lightboxState) return;
+        const { images } = lightboxState;
+        if (images.length <= 1) return;
+        const n = images.length;
+        lightboxState.index = ((lightboxState.index + delta) % n + n) % n;
+        renderLightbox();
+      }
+
+      function attachLightboxHandlers() {
+        el.lightboxClose.addEventListener("click", closeLightbox);
+        el.lightboxPrev.addEventListener("click", () => lightboxStep(-1));
+        el.lightboxNext.addEventListener("click", () => lightboxStep(1));
+        el.lightbox.addEventListener("click", (e) => {
+          if (e.target === el.lightbox) closeLightbox();
+        });
+        document.addEventListener("keydown", (e) => {
+          const isOpen = el.lightbox && !el.lightbox.classList.contains("hidden");
+          if (!isOpen) return;
+          if (e.key === "Escape") return closeLightbox();
+          if (e.key === "ArrowLeft") return lightboxStep(-1);
+          if (e.key === "ArrowRight") return lightboxStep(1);
+        });
+      }
+
+      function attachGalleryHandlers(devicesByFolder) {
+        document.addEventListener("click", (e) => {
+          const btn = e.target && e.target.closest ? e.target.closest("[data-gallery-index]") : null;
+          if (!btn) return;
+
+          const folder = String(btn.getAttribute("data-gallery-folder") || "").trim();
+          const index = Number(btn.getAttribute("data-gallery-index"));
+          const title = String(btn.getAttribute("data-gallery-title") || "").trim() || "Gallery";
+          const device = devicesByFolder[folder];
+
+          if (!device) return;
+          const images = normalizeImages(device);
+          if (!images.length) return;
+
+          const safeIndex = Number.isFinite(index) ? Math.max(0, Math.min(images.length - 1, index)) : 0;
+          openLightbox({ title, images, index: safeIndex });
+        });
+      }
+
+      function observeReveals() {
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("is-visible");
+                io.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.08 }
+        );
+
+        document.querySelectorAll(".reveal").forEach((node) => io.observe(node));
       }
 
       async function load() {
@@ -248,33 +515,39 @@
         });
 
         const devices = await Promise.all(reads);
-        const lookup = Object.fromEntries(devices.map((d) => [d.folder, d]));
+        const byFolder = Object.fromEntries(devices.map((d) => [d.folder, d]));
 
-        el.countPill.textContent = `${devices.length} devices`;
-        el.list.innerHTML = devices.map((d) => rowHtml(d, lookup)).join("");
+        devices.sort((a, b) => dateSortKey(b.designDate || b.date) - dateSortKey(a.designDate || a.date));
+
+        el.countPill.textContent = `${devices.length} prototypes`;
+        el.timeline.innerHTML = devices.map((d, idx) => entryHtml(d, idx, devices.length)).join("");
+
+        attachLightboxHandlers();
+        attachGalleryHandlers(byFolder);
+        observeReveals();
       }
 
       load().catch((err) => {
         const isFileProtocol = window.location && window.location.protocol === "file:";
-        el.list.innerHTML = `
-          <div class="rounded-2xl border border-slate-200 bg-white/80 p-6">
-            <div class="text-slate-900 font-semibold">Couldn’t load history</div>
-            <div class="text-slate-600 text-sm mt-2">
+        el.timeline.innerHTML = `
+          <div class="rounded-3xl border border-paper-200 bg-paper-50/70 p-6">
+            <div class="text-ink-900 font-semibold">Couldn’t load history</div>
+            <div class="text-ink-500 text-sm mt-2">
               Ensure <code>hardware/devices.json</code> exists and is valid JSON.
             </div>
             ${
               isFileProtocol
-                ? `<div class="text-slate-600 text-sm mt-2">
+                ? `<div class="text-ink-500 text-sm mt-2">
                      You’re opening this page via <code>file://</code>, which blocks <code>fetch()</code>.
                      Run a local server: <code>python3 -m http.server 8000</code> then open
                      <code>http://localhost:8000/catalog.html</code>.
                    </div>`
                 : ""
             }
-            <div class="text-slate-500 text-xs mt-2">${String(err)}</div>
+            <div class="text-ink-500 text-xs mt-2">${String(err)}</div>
           </div>
         `;
       });
     </script>
-	  </body>
-	</html>
+  </body>
+</html>
