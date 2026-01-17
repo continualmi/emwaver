@@ -34,22 +34,38 @@
     </script>
     <style>
       :root {
-        color-scheme: light;
+        color-scheme: dark;
       }
       body {
-        background: radial-gradient(1200px 820px at 18% 0%, rgba(2, 136, 209, 0.28), transparent 60%),
-          radial-gradient(980px 720px at 92% 10%, rgba(56, 189, 248, 0.18), transparent 55%),
-          linear-gradient(180deg, #061423 0%, #0b3a6d 14%, #f1f7ff 62%, #ffffff 100%);
-        color: #0f172a;
+        background:
+          radial-gradient(1100px 760px at 14% -10%, rgba(56, 189, 248, 0.18), transparent 56%),
+          radial-gradient(900px 680px at 88% 8%, rgba(2, 132, 199, 0.12), transparent 55%),
+          linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
+        color: #e5e7eb;
       }
       .noise {
         position: fixed;
         inset: 0;
         pointer-events: none;
-        opacity: 0.03;
-        mix-blend-mode: multiply;
+        opacity: 0.05;
+        mix-blend-mode: overlay;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
       }
+
+      /* Dark-only overrides (kept local to this page). */
+      .bg-white\/70 { background-color: rgba(2, 6, 23, 0.55) !important; }
+      .bg-white\/80 { background-color: rgba(2, 6, 23, 0.45) !important; }
+      .bg-white { background-color: rgba(2, 6, 23, 0.28) !important; }
+      .bg-slate-50 { background-color: rgba(15, 23, 42, 0.55) !important; }
+      .bg-slate-100 { background-color: rgba(15, 23, 42, 0.65) !important; }
+      .border-slate-200 { border-color: rgba(148, 163, 184, 0.18) !important; }
+      .border-white\/40 { border-color: rgba(255, 255, 255, 0.10) !important; }
+      .text-slate-900 { color: rgba(248, 250, 252, 0.96) !important; }
+      .text-slate-700 { color: rgba(226, 232, 240, 0.86) !important; }
+      .text-slate-600 { color: rgba(226, 232, 240, 0.72) !important; }
+      .text-slate-500 { color: rgba(226, 232, 240, 0.60) !important; }
+      .text-slate-400 { color: rgba(226, 232, 240, 0.48) !important; }
+      .text-slate-300 { color: rgba(226, 232, 240, 0.35) !important; }
       .fade-in {
         animation: fade 280ms ease-out both;
       }
@@ -72,10 +88,10 @@
     </style>
   </head>
 
-  <body class="antialiased selection:bg-brand-500 selection:text-white text-slate-900">
+  <body class="antialiased selection:bg-brand-500 selection:text-white text-slate-100">
     <div class="noise"></div>
 
-    <nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md border-b border-white/40">
+    <nav class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-md border-b border-white/10">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-3">
@@ -83,12 +99,12 @@
               href="../"
               class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:text-brand-600 transition"
             >
-              <img
-                src="assets/emwaver-logo.png"
-                alt="EMWaver"
-                class="w-7 h-7 rounded-lg object-contain bg-white border border-slate-200"
-                loading="lazy"
-              />
+		            <img
+		              src="assets/emwaver-logo.png"
+		              alt="EMWaver"
+		              class="w-7 h-7 rounded-lg object-contain bg-white/10"
+		              loading="lazy"
+		            />
               EMWaver
             </a>
             <span class="text-slate-300 hidden sm:inline">/</span>
@@ -161,7 +177,7 @@
 	              <img
 	                src="downloads/emwaver.png"
 	                alt="EMWaver board"
-	                class="mt-4 w-full rounded-xl border border-slate-200 bg-white object-contain"
+	                class="mt-4 w-full rounded-xl bg-slate-950/10 object-contain"
 	                loading="lazy"
 	              />
 	              <div class="mt-4 text-sm text-slate-600 leading-relaxed">
