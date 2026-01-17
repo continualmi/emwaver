@@ -24,23 +24,24 @@
       };
     </script>
     <style>
-      :root {
-        color-scheme: light;
-      }
-      body {
-        background: radial-gradient(1200px 820px at 18% 0%, rgba(2, 136, 209, 0.28), transparent 60%),
-          radial-gradient(980px 720px at 92% 10%, rgba(56, 189, 248, 0.18), transparent 55%),
-          linear-gradient(180deg, #061423 0%, #0b3a6d 14%, #f1f7ff 62%, #ffffff 100%);
-        color: #0f172a;
-      }
-      .noise {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.03;
-        mix-blend-mode: multiply;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
-      }
+       :root {
+         color-scheme: dark;
+       }
+       body {
+         background:
+           radial-gradient(1100px 760px at 14% -10%, rgba(56, 189, 248, 0.18), transparent 56%),
+           radial-gradient(900px 680px at 88% 8%, rgba(2, 132, 199, 0.12), transparent 55%),
+           linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
+         color: #e5e7eb;
+       }
+       .noise {
+         position: fixed;
+         inset: 0;
+         pointer-events: none;
+         opacity: 0.05;
+         mix-blend-mode: overlay;
+         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+       }
       .fade-in {
         animation: fade 280ms ease-out both;
       }
@@ -57,10 +58,10 @@
     </style>
   </head>
 
-  <body class="antialiased selection:bg-brand-500 selection:text-white text-slate-900">
+  <body class="antialiased selection:bg-brand-500 selection:text-white text-slate-100">
     <div class="noise"></div>
 
-    <nav class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md border-b border-white/40">
+    <nav class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-md border-b border-white/10">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center gap-3">
@@ -71,7 +72,7 @@
               <img
                 src="assets/emwaver-logo.png"
                 alt="EMWaver"
-                class="w-7 h-7 rounded-lg object-contain bg-white border border-slate-200"
+                 class="w-7 h-7 rounded-lg object-contain bg-white/10"
                 loading="lazy"
               />
               EMWaver
@@ -105,7 +106,27 @@
       </div>
     </nav>
 
-    <main class="pt-28 pb-20">
+     <main class="pt-28 pb-20">
+       <style>
+         /* Dark-only overrides (kept local to this page). */
+          .bg-white\/5 { background-color: rgba(2, 6, 23, 0.22) !important; }
+          .bg-white\/10 { background-color: rgba(2, 6, 23, 0.30) !important; }
+          .bg-white\/15 { background-color: rgba(2, 6, 23, 0.36) !important; }
+          .bg-white\/70 { background-color: rgba(2, 6, 23, 0.55) !important; }
+          .bg-white\/80 { background-color: rgba(2, 6, 23, 0.45) !important; }
+          .bg-white\/90 { background-color: rgba(2, 6, 23, 0.60) !important; }
+          .bg-white { background-color: rgba(2, 6, 23, 0.28) !important; }
+         .bg-slate-50 { background-color: rgba(15, 23, 42, 0.55) !important; }
+         .bg-slate-100 { background-color: rgba(15, 23, 42, 0.65) !important; }
+         .border-slate-200 { border-color: rgba(148, 163, 184, 0.18) !important; }
+         .border-white\/40 { border-color: rgba(255, 255, 255, 0.10) !important; }
+         .text-slate-900 { color: rgba(248, 250, 252, 0.96) !important; }
+         .text-slate-700 { color: rgba(226, 232, 240, 0.86) !important; }
+         .text-slate-600 { color: rgba(226, 232, 240, 0.72) !important; }
+         .text-slate-500 { color: rgba(226, 232, 240, 0.60) !important; }
+         .text-slate-400 { color: rgba(226, 232, 240, 0.48) !important; }
+         .text-slate-300 { color: rgba(226, 232, 240, 0.35) !important; }
+       </style>
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div id="error" class="hidden rounded-2xl border border-slate-200 bg-white/80 p-6"></div>
 
@@ -114,17 +135,15 @@
             <div class="lg:col-span-5">
               <div class="relative group">
                 <div
-                  class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-2xl blur opacity-25 group-hover:opacity-40 transition duration-700"
+                   class="absolute -inset-1 bg-gradient-to-r from-brand-500 to-brand-400 rounded-2xl blur opacity-18 group-hover:opacity-28 transition duration-700"
                 ></div>
-                <div
-                  class="relative rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm"
-                >
-                  <div class="relative">
+                  <div class="relative rounded-2xl overflow-hidden bg-white/5">
+                   <div class="relative p-5 sm:p-6">
                     <img
                       id="device-image"
                       src=""
                       alt=""
-                      class="w-full h-72 sm:h-[26rem] object-contain bg-slate-50"
+                      class="w-full h-72 sm:h-[26rem] object-contain bg-transparent"
                       loading="lazy"
                     />
                     <div class="absolute top-4 left-4" id="status-pill"></div>
@@ -307,11 +326,11 @@
       }
 
       function groupBadge(group) {
-        if (group === "esp32") {
-          return `${iconImg(ICONS.esp32, "Espressif", "w-5 h-5 rounded object-cover border border-slate-200 bg-white")}<span class="font-semibold text-slate-900">Espressif</span>`;
+         if (group === "esp32") {
+          return `${iconImg(ICONS.esp32, "Espressif", "w-5 h-5 rounded object-cover bg-white/10")}<span class="font-semibold text-slate-900">Espressif</span>`;
         }
         if (group === "stm32") {
-          return `${iconImg(ICONS.stm32, "STM32", "w-5 h-5 rounded object-cover border border-slate-200 bg-white")}<span class="font-semibold text-slate-900">STM32</span>`;
+          return `${iconImg(ICONS.stm32, "STM32", "w-5 h-5 rounded object-cover bg-white/10")}<span class="font-semibold text-slate-900">STM32</span>`;
         }
         if (group === "module") {
           return `<span class="font-semibold text-slate-900">Module</span>`;
@@ -356,8 +375,8 @@
 
       function casingThumbnailButton(id, src) {
         return `
-          <button id="${id}" type="button" class="group inline-flex items-center gap-3 p-2 pr-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 transition shadow-sm">
-            <span class="relative w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 shrink-0">
+          <button id="${id}" type="button" class="group inline-flex items-center gap-3 p-2 pr-4 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-700 transition">
+            <span class="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-50 shrink-0">
               <img src="${src}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.onerror=null; this.style.display='none'; this.parentElement.classList.add('bg-slate-100');" />
             </span>
             <span class="text-left">
@@ -519,10 +538,12 @@
 
         function setActiveThumb(idx) {
           thumbButtons.forEach((b, i) => {
-            b.classList.toggle("border-brand-500", i === idx);
-            b.classList.toggle("ring-2", i === idx);
-            b.classList.toggle("ring-brand-200", i === idx);
-            b.classList.toggle("border-slate-200", i !== idx);
+            const active = i === idx;
+            b.classList.toggle("bg-white/15", active);
+            b.classList.toggle("bg-white/5", !active);
+            b.classList.toggle("scale-[1.03]", active);
+            b.classList.toggle("shadow-lg", active);
+            b.classList.toggle("shadow-brand-500/10", active);
           });
         }
 
@@ -616,7 +637,7 @@
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className =
-              "relative shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-slate-200 bg-white hover:bg-slate-50 transition focus:outline-none focus:ring-2 focus:ring-brand-200";
+              "relative shrink-0 w-16 h-16 rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition focus:outline-none will-change-transform";
             btn.title = `Image ${idx + 1}`;
 
             const thumb = document.createElement("img");

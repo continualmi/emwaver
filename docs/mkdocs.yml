@@ -18,18 +18,9 @@ theme:
   toc:
     permalink: false
   palette:
-    - scheme: default
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/weather-night
-        name: Switch to dark mode
     - scheme: slate
       primary: custom
       accent: custom
-      toggle:
-        icon: material/weather-sunny
-        name: Switch to light mode
 extra:
   toc:
     sidebar: false

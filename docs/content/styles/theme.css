@@ -10,24 +10,27 @@
 /*
   Site-wide atmosphere
 
-  The docs should feel like EMWaver: bright, coastal blue, not flat white.
-  We keep Material's content surfaces readable, but tint the page background.
+  Dark-only docs: deep ocean blues + subtle sky glow.
+  Let the background show through Material's layout wrappers.
 */
-[data-md-color-scheme="default"] {
-  --md-default-bg-color: #f1f7ff;
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #061423;
 }
 
-[data-md-color-scheme="default"] body {
+[data-md-color-scheme="default"] body,
+[data-md-color-scheme="slate"] body {
   background:
-    radial-gradient(1100px 760px at 12% -10%, rgba(2, 136, 209, 0.22), transparent 55%),
-    radial-gradient(900px 680px at 90% 8%, rgba(56, 189, 248, 0.14), transparent 52%),
-    linear-gradient(180deg, #0b3a6d 0%, #0f4f8d 10%, #f1f7ff 58%, #ffffff 100%);
+    radial-gradient(1000px 720px at 15% -10%, rgba(56, 189, 248, 0.16), transparent 55%),
+    radial-gradient(900px 680px at 90% 10%, rgba(2, 136, 209, 0.12), transparent 52%),
+    linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
   background-attachment: fixed;
 }
 
-/* Let the gradient show through under Material's layout wrappers. */
 [data-md-color-scheme="default"] .md-container,
-[data-md-color-scheme="default"] .md-main {
+[data-md-color-scheme="default"] .md-main,
+[data-md-color-scheme="slate"] .md-container,
+[data-md-color-scheme="slate"] .md-main {
   background: transparent;
 }
 
