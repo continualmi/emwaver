@@ -25,9 +25,9 @@ This guide walks you through ordering the EMWaver device through **JLCPCB** (PCB
 
 These are checked into the repo docs so you can upload them directly to JLCPCB:
 
-[Gerbers (ZIP)](../hardware-catalog/hardware/pcb/Gerber_EMWAVER_DIY_2_PCB_emwaver_diy_2025-12-09.zip){ .md-button }
-[BOM (CSV)](../hardware-catalog/hardware/pcb/BOM_EMWAVER_DIY_2_2025-12-09.csv){ .md-button }
-[Pick & Place / CPL (CSV)](../hardware-catalog/hardware/pcb/PickAndPlace_PCB_emwaver_diy_2025-12-09.csv){ .md-button }
+[Gerbers (ZIP)](../hardware-catalog/hardware/pcb/Gerber_EMWaver_2026-01-21.zip){ .md-button }
+[BOM (CSV)](../hardware-catalog/hardware/pcb/BOM_EMWaver_2026-01-21.csv){ .md-button }
+[Pick & Place / CPL (CSV)](../hardware-catalog/hardware/pcb/CPL_EMWaver_2026-01-21.csv){ .md-button }
 
 You can also reference the PCB PDF when reviewing placement/orientation:
 
