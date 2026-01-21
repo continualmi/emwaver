@@ -236,7 +236,7 @@
 	              </div>
 
 	              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-	                <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWAVER_DIY_2_PCB_emwaver_diy_2025-12-09.zip" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
+	                <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                    <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
 	                    <path d="M9 7h6M9 11h6M9 15h3" />
@@ -244,14 +244,14 @@
 	                  </svg>
 	                  PCB
 	                </a>
-	                <a id="dl-bom" href="hardware/pcb/BOM_EMWAVER_DIY_2_2025-12-09.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
+	                <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                    <path d="M8 6h13M8 12h13M8 18h13" />
 	                    <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
 	                  </svg>
 	                  BOM
 	                </a>
-	                <a id="dl-cpl" href="hardware/pcb/PickAndPlace_PCB_emwaver_diy_2025-12-09.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
+	                <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                    <path d="M4 4h16v16H4z" />
 	                    <path d="M9 9h6v6H9z" />
@@ -259,13 +259,13 @@
 	                  </svg>
 	                  CPL
 	                </a>
-	                <a id="dl-case" href="#" aria-disabled="true" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 text-white font-semibold transition text-sm pointer-events-none opacity-50">
+	                <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                    <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
 	                    <path d="M12 22V12" />
 	                    <path d="M20 6.5l-8 4.5-8-4.5" />
 	                  </svg>
-	                  STEP
+	                  STL
 	                </a>
 	              </div>
 
@@ -300,14 +300,14 @@
         }
       }
 
-      function render() {
-        // Placeholders until per-variant files land in-repo.
-        if (el.dlCase) {
-          el.dlCase.href = "#";
-          el.dlCase.setAttribute("aria-disabled", "true");
-          el.dlCase.classList.add("pointer-events-none", "opacity-50");
-        }
-      }
+	      function render() {
+	        // Currently: single in-repo artifact set.
+	        // Future: pick per-variant (GPIO/CC1101/IR/USB) BOM/CPL/Case.
+	        if (el.dlCase) {
+	          el.dlCase.removeAttribute("aria-disabled");
+	          el.dlCase.classList.remove("pointer-events-none", "opacity-50");
+	        }
+	      }
 
       function attach() {
         [el.optGpio, el.optCc1101, el.optIr].forEach((x) => x?.addEventListener("change", render));
