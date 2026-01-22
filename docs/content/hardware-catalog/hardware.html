@@ -614,6 +614,88 @@
 	    return bomState.rows.filter((r) => !rowMatchesRemovalSets(r, removalSets));
 	  }
 
+	  function tsvEscapeField(v) {
+	    const s = String(v ?? "");
+	    if (/[\t\r\n"]/g.test(s)) return `"${s.replace(/"/g, '""')}"`;
+	    return s;
+	  }
+
+	  function bomRowsToTsv(header, rows) {
+	    const out = [];
+	    out.push(header.map(tsvEscapeField).join("\t"));
+	    for (const r of rows) {
+	      out.push(header.map((h) => tsvEscapeField(r?.[h] ?? "")).join("\t"));
+	    }
+	    // Keep Windows-friendly newlines.
+	    return out.join("\r\n") + "\r\n";
+	  }
+
+	  function encodeUtf16leWithBom(s) {
+	    // UTF-16LE bytes + BOM (0xFF 0xFE). JLC/Excel-friendly.
+	    const str = String(s ?? "");
+	    const buf = new Uint8Array(2 + str.length * 2);
+	    buf[0] = 0xff;
+	    buf[1] = 0xfe;
+	    for (let i = 0; i < str.length; i++) {
+	      const codeUnit = str.charCodeAt(i);
+	      buf[2 + i * 2] = codeUnit & 0xff;
+	      buf[2 + i * 2 + 1] = (codeUnit >> 8) & 0xff;
+	    }
+	    return buf;
+	  }
+
+	  function downloadBytes({ filename, bytes, mimeType }) {
+	    const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
+	    const url = URL.createObjectURL(blob);
+	    const a = document.createElement("a");
+	    a.href = url;
+	    a.download = filename;
+	    document.body.appendChild(a);
+	    a.click();
+	    a.remove();
+	    // Allow the browser to start the download before revoking.
+	    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+	  }
+
+	  function baseNameFromHref(href) {
+	    const clean = String(href || "").split("?")[0].split("#")[0];
+	    const parts = clean.split("/").filter(Boolean);
+	    return parts[parts.length - 1] || "BOM.csv";
+	  }
+
+	  function splitFileName(name) {
+	    const s = String(name || "");
+	    const idx = s.lastIndexOf(".");
+	    if (idx <= 0) return { stem: s || "BOM", ext: "" };
+	    return { stem: s.slice(0, idx), ext: s.slice(idx) };
+	  }
+
+	  async function downloadFilteredBom() {
+	    const href = stripQuotes(el.dlBom?.getAttribute("href") || "");
+	    if (!href) return;
+
+	    await ensureBomLoaded();
+	    if (bomState.error || !bomState.loaded) {
+	      // Best-effort fallback to the original artifact.
+	      window.location.href = href;
+	      return;
+	    }
+
+	    const variantKey = pickVariantKey();
+	    const baseName = baseNameFromHref(href);
+	    const { stem, ext } = splitFileName(baseName);
+	    const filename = `${stem}__${variantKey}${ext || ".csv"}`;
+
+	    const filtered = computeFilteredBomRows();
+	    const tsv = bomRowsToTsv(bomState.header, filtered);
+	    const bytes = encodeUtf16leWithBom(tsv);
+	    downloadBytes({
+	      filename,
+	      bytes,
+	      mimeType: "text/tab-separated-values;charset=utf-16le",
+	    });
+	  }
+
 	  function renderBomCount() {
 	    if (!el.bomCountBadge) return;
 	
@@ -1000,8 +1082,16 @@
         }
 
         // Ensure defaults remain valid even if user enables customization later.
-        enforceFeaturesAtLeastOne();
-        enforceUsbAtLeastOne();
+	        enforceFeaturesAtLeastOne();
+	        enforceUsbAtLeastOne();
+
+	        if (el.dlBom) {
+	          el.dlBom.addEventListener("click", (e) => {
+	            if (!isCustomizeEnabled()) return;
+	            e.preventDefault();
+	            downloadFilteredBom();
+	          });
+	        }
 	    attachInfoButtons();
         render();
       }
