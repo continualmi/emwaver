@@ -304,16 +304,47 @@
         noIr: "hardware/emwaver/emwaver_no_ir.png",
         noIrNoGpio: "hardware/emwaver/emwaver_no_ir_no_gpio.png",
         noIrNoIsm: "hardware/emwaver/emwaver_no_ir_no_ism.png",
+
+        noUsbMale: "hardware/emwaver/emwaver_no_usbmale.png",
+        noUsbFemale: "hardware/emwaver/emwaver_no_usbfemale.png",
+
+        noIrNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_usbmale.png",
+        // Note: asset name uses "usbmal" (kept as-is).
+        noIrNoGpioNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_gpio_no_usbmal.png",
+        // Note: asset name uses "no_maleusb" (kept as-is).
+        noIrNoIsmNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_ism_no_maleusb.png",
       };
 
       const VARIANT_GALLERY = {
-        all: [BOARD_IMAGES.all, BOARD_IMAGES.allIso],
-        noGpio: [BOARD_IMAGES.noGpio],
-        noIsm: [BOARD_IMAGES.noIsm],
-        noIsmNoGpio: [BOARD_IMAGES.noIsmNoGpio],
-        noIr: [BOARD_IMAGES.noIr],
-        noIrNoGpio: [BOARD_IMAGES.noIrNoGpio],
-        noIsmNoIr: [BOARD_IMAGES.noIrNoIsm],
+        // Variant key = `<featureKey>__<usbKey>`.
+        // If a specific key is missing, we fall back to `<featureKey>__usbBoth`.
+        // If that is missing, we fall back to `all__usbBoth`.
+
+        // All features on.
+        all__usbBoth: [BOARD_IMAGES.all, BOARD_IMAGES.allIso],
+        all__usbMaleOnly: [BOARD_IMAGES.noUsbFemale],
+        all__usbFemaleOnly: [BOARD_IMAGES.noUsbMale],
+
+        // No GPIO.
+        noGpio__usbBoth: [BOARD_IMAGES.noGpio],
+
+        // No CC1101.
+        noIsm__usbBoth: [BOARD_IMAGES.noIsm],
+
+        // No CC1101 + no GPIO.
+        noIsmNoGpio__usbBoth: [BOARD_IMAGES.noIsmNoGpio],
+
+        // No IR.
+        noIr__usbBoth: [BOARD_IMAGES.noIr],
+        noIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoUsbMale],
+
+        // No IR + no GPIO.
+        noIrNoGpio__usbBoth: [BOARD_IMAGES.noIrNoGpio],
+        noIrNoGpio__usbFemaleOnly: [BOARD_IMAGES.noIrNoGpioNoUsbMale],
+
+        // No IR + no CC1101.
+        noIsmNoIr__usbBoth: [BOARD_IMAGES.noIrNoIsm],
+        noIsmNoIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoIsmNoUsbMale],
       };
 
       let galleryVariantKey = null;
@@ -386,7 +417,7 @@
         }
       }
 
-      function pickVariantKey() {
+      function pickFeatureKey() {
         const gpio = !!el.optGpio?.checked;
         const cc1101 = !!el.optCc1101?.checked;
         const ir = !!el.optIr?.checked;
@@ -404,8 +435,32 @@
         return "all";
       }
 
+      function pickUsbKey() {
+        const male = !!el.optUsbMale?.checked;
+        const female = !!el.optUsbFemale?.checked;
+
+        if (male && female) return "usbBoth";
+        if (male && !female) return "usbMaleOnly";
+        if (!male && female) return "usbFemaleOnly";
+
+        // Should be prevented by constraints.
+        return "usbBoth";
+      }
+
+      function pickVariantKey() {
+        const featureKey = pickFeatureKey();
+        const usbKey = pickUsbKey();
+        return `${featureKey}__${usbKey}`;
+      }
+
       function getGalleryForVariant(variantKey) {
-        return VARIANT_GALLERY[variantKey] || VARIANT_GALLERY.all;
+        if (VARIANT_GALLERY[variantKey]) return VARIANT_GALLERY[variantKey];
+
+        const [featureKey] = String(variantKey).split("__");
+        const featureFallback = `${featureKey}__usbBoth`;
+        if (VARIANT_GALLERY[featureFallback]) return VARIANT_GALLERY[featureFallback];
+
+        return VARIANT_GALLERY.all__usbBoth;
       }
 
       function pickBoardImageSrc() {
