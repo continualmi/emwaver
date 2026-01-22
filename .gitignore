@@ -15,6 +15,9 @@ adapter/managed_components/
 node_modules/
 **/.emwaver/
 
+# Python virtualenvs
+.venv/
+
 # Vim swap files
 *.swp
 *.swo
