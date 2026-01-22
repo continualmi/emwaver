@@ -39,8 +39,3 @@ Mobile apps are the primary UI for connecting to devices and running workflows.
   </a>
 </div>
 
-## Firmware updates
-
-Firmware is updated directly from the EMWaver app (Desktop or Android).
-
-See: [Firmware Update](documentation/firmware-update.md)

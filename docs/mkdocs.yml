@@ -32,15 +32,14 @@ nav:
   - Get Started:
       - EMWaver: overview.md
       - Installing & Using: installing-using.md
-      - Infrared + Sub‑GHz Walkthrough: infrared-ism-walkthrough.md
-  - Device:
-      - Pinout: hardware/pinout.md
       - Current Device: hardware/device.md
-      - Order on JLCPCB: hardware/build-reproduce.md
-      - Board Evolution: hardware-catalog/index.md
-  - Documentation:
+      - Infrared + Sub‑GHz Walkthrough: infrared-ism-walkthrough.md
+  - Pinout: hardware/pinout.md
+  - Scripts:
       - EMWaver scripts: scripts.md
-      - Firmware Update: documentation/firmware-update.md
+  - Order from JLCPCB: hardware-catalog/hardware.html
+  - News: news/index.html
+  - History: hardware-catalog/catalog.html
 
 extra_css:
   - styles/theme.css

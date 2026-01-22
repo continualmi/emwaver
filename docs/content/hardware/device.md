@@ -8,8 +8,7 @@ EMWaver is focused on a single current-gen **STM32** device that connects over *
 
 [PCB (PDF)](../hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf){ .md-button }
 [Pinout](pinout.md){ .md-button }
-[Order on JLCPCB](build-reproduce.md){ .md-button }
-[Firmware Update](../documentation/firmware-update.md){ .md-button }
+[Order from JLCPCB](../hardware-catalog/hardware.html){ .md-button }
 
 ## What you get
 
