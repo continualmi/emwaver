@@ -356,13 +356,24 @@
         noIrNoIsmNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_ism_no_usbfemale.png",
       };
 
+      const ALL_PHOTOSHOOT_IMAGES = [
+        "hardware/emwaver_photoshoot/IMG_0130.webp",
+        "hardware/emwaver_photoshoot/IMG_0142.webp",
+        "hardware/emwaver_photoshoot/IMG_0143.webp",
+        "hardware/emwaver_photoshoot/IMG_0146.webp",
+        "hardware/emwaver_photoshoot/IMG_0147.webp",
+        "hardware/emwaver_photoshoot/IMG_0148.webp",
+        "hardware/emwaver_photoshoot/IMG_0149.webp",
+        "hardware/emwaver_photoshoot/IMG_0150.webp",
+      ];
+
       const VARIANT_GALLERY = {
         // Variant key = `<featureKey>__<usbKey>`.
         // If a specific key is missing, we fall back to `<featureKey>__usbBoth`.
         // If that is missing, we fall back to `all__usbBoth`.
 
         // All features on.
-        all__usbBoth: [BOARD_IMAGES.all, BOARD_IMAGES.allIso],
+        all__usbBoth: [BOARD_IMAGES.all, BOARD_IMAGES.allIso, ...ALL_PHOTOSHOOT_IMAGES],
         all__usbMaleOnly: [BOARD_IMAGES.noUsbFemale],
         all__usbFemaleOnly: [BOARD_IMAGES.noUsbMale],
 
