@@ -87,6 +87,18 @@
         animation: badgePop 380ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
       }
 
+      .cost-panel-pop {
+        will-change: transform, filter, box-shadow;
+        animation: costPanelPop 420ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+
+      .cost-pop {
+        display: inline-block;
+        transform-origin: center;
+        will-change: transform, filter;
+        animation: costPop 420ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+
       @keyframes badgePop {
         0% {
           transform: scale(0.78) translateY(1px);
@@ -118,8 +130,51 @@
         }
       }
 
+      @keyframes costPanelPop {
+        0% {
+          transform: translateY(1px);
+          filter: saturate(1);
+          box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+        }
+        45% {
+          transform: translateY(-1px);
+          filter: saturate(1.08);
+          box-shadow:
+            0 0 0 5px rgba(56, 189, 248, 0.16),
+            0 14px 40px rgba(2, 132, 199, 0.12);
+        }
+        100% {
+          transform: translateY(0);
+          filter: saturate(1);
+          box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+        }
+      }
+
+      @keyframes costPop {
+        0% {
+          transform: scale(0.96);
+          filter: brightness(0.98);
+        }
+        45% {
+          transform: scale(1.08);
+          filter: brightness(1.15) drop-shadow(0 6px 16px rgba(56, 189, 248, 0.25));
+        }
+        100% {
+          transform: scale(1);
+          filter: brightness(1);
+        }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .badge-pop {
+          animation: none;
+        }
+
+        .cost-panel-pop {
+          animation: none;
+        }
+
+        .cost-pop {
           animation: none;
         }
       }
@@ -162,20 +217,30 @@
 	             <span class="text-sm font-medium text-slate-600 hidden sm:inline">Order from JLCPCB</span>
           </div>
 
-	          <div class="flex items-center gap-4">
+	          <div class="flex items-center gap-4 overflow-x-auto whitespace-nowrap -mr-2 pr-2">
 	            <a
-	              href="../news/"
-	              class="text-sm font-medium text-slate-200 hover:text-white transition hidden sm:inline"
-	              >News</a
+	              href="../overview/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >Get Started</a
 	            >
 	            <a
-	              href="../documentation/"
-	              class="text-sm font-medium text-slate-200 hover:text-white transition hidden sm:inline"
-	              >Documentation</a
+	              href="../hardware/pinout/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >Pinout</a
+	            >
+	            <a
+	              href="../scripts/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >Scripts</a
+	            >
+	            <a
+	              href="../news/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >News</a
 	            >
             <a
               href="catalog.html"
-              class="text-sm font-medium text-slate-200 hover:text-white transition hidden sm:inline"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
               >History</a
             >
           </div>
@@ -185,7 +250,7 @@
 
 
 
-	    <main class="pt-20 pb-4">
+	    <main class="pt-20 pb-24 relative">
 	      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
 
 
@@ -218,7 +283,7 @@
 	                  href="https://www.youtube.com/@EMWavers"
 	                  target="_blank"
 	                  rel="noreferrer"
-	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition text-sm"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-red-400/25 bg-red-500/15 hover:bg-red-500/20 text-white/90 hover:text-white font-semibold transition text-sm backdrop-blur-sm"
 	                  >
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
 	                    <path d="M10 8.5v7l6-3.5-6-3.5z" fill="currentColor" />
@@ -290,7 +355,7 @@
 
 	              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
 	                <div class="relative">
-	                  <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-brand-400/25 bg-brand-500/15 hover:bg-brand-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
 	                      <path d="M9 7h6M9 11h6M9 15h3" />
@@ -312,7 +377,7 @@
 	                  </button>
 	                </div>
 	                <div class="relative">
-	                  <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-emerald-400/25 bg-emerald-500/15 hover:bg-emerald-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M8 6h13M8 12h13M8 18h13" />
 	                      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
@@ -338,7 +403,7 @@
 	                  </button>
 	                </div>
 	                <div class="relative">
-	                  <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-cyan-300/25 bg-cyan-500/15 hover:bg-cyan-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M4 4h16v16H4z" />
 	                      <path d="M9 9h6v6H9z" />
@@ -360,7 +425,7 @@
 	                  </button>
 	                </div>
 	                <div class="relative">
-	                  <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-amber-300/25 bg-amber-500/15 hover:bg-amber-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
 	                      <path d="M12 22V12" />
@@ -426,7 +491,7 @@
 	                  href="https://jlcpcb.com/quote"
 	                  target="_blank"
 	                  rel="noreferrer"
-	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition text-sm"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-blue-400/25 bg-blue-500/15 hover:bg-blue-500/20 text-white font-semibold transition text-sm backdrop-blur-sm"
 	                >
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                    <path d="M3 7h18" />
@@ -440,7 +505,7 @@
 	                  href="https://jlc3dp.com/"
 	                  target="_blank"
 	                  rel="noreferrer"
-	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold transition text-sm"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-sky-300/25 bg-sky-500/15 hover:bg-sky-500/20 text-white font-semibold transition text-sm backdrop-blur-sm"
 	                >
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                    <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
@@ -457,6 +522,10 @@
 
 
 	      </section>
+	      <div
+	        aria-hidden="true"
+	        class="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[#062440]"
+	      ></div>
 	    </main>
 
     
@@ -743,30 +812,53 @@
 
 	  function renderCostEstimate() {
 	    if (!el.costPanel || !el.cost2Total || !el.cost2Each || !el.cost5Total || !el.cost5Each) return;
+	    if (renderCostEstimate.lastSig === undefined) renderCostEstimate.lastSig = null;
 
+	    const pulse = () => {
+	      // Visible only when customization is enabled.
+	      el.costPanel.classList.remove("cost-panel-pop");
+	      void el.costPanel.offsetWidth;
+	      el.costPanel.classList.add("cost-panel-pop");
+
+	      [el.cost2Total, el.cost2Each, el.cost5Total, el.cost5Each].forEach((node) => {
+	        if (!node) return;
+	        node.classList.remove("cost-pop");
+	        void node.offsetWidth;
+	        node.classList.add("cost-pop");
+	      });
+	    };
+ 
 	    if (bomState.error) {
+	      const nextSig = "error";
 	      el.cost2Total.textContent = "?";
 	      el.cost2Each.textContent = "?";
 	      el.cost5Total.textContent = "?";
 	      el.cost5Each.textContent = "?";
+	      if (isCustomizeEnabled() && renderCostEstimate.lastSig && renderCostEstimate.lastSig !== nextSig) pulse();
+	      renderCostEstimate.lastSig = nextSig;
 	      return;
 	    }
-
+ 
 	    if (!bomState.loaded) {
+	      const nextSig = "loading";
 	      el.cost2Total.textContent = "...";
 	      el.cost2Each.textContent = "...";
 	      el.cost5Total.textContent = "...";
 	      el.cost5Each.textContent = "...";
+	      renderCostEstimate.lastSig = nextSig;
 	      ensureBomLoaded().then(() => render());
 	      return;
 	    }
-
+ 
 	    const rows = computeBomRowsForCost();
 	    const est = estimateCostFromRowCount(rows.length);
+	    const nextSig = `${isCustomizeEnabled() ? "custom" : "full"}|${rows.length}|${est.two}|${est.five}`;
 	    el.cost2Total.textContent = `$${est.two}`;
 	    el.cost2Each.textContent = `$${(est.two / 2).toFixed(2)}`;
 	    el.cost5Total.textContent = `$${est.five}`;
 	    el.cost5Each.textContent = `$${(est.five / 5).toFixed(2)}`;
+	    if (isCustomizeEnabled() && renderCostEstimate.lastSig && renderCostEstimate.lastSig !== nextSig) pulse();
+	    renderCostEstimate.lastSig = nextSig;
 	  }
 
 	  function tsvEscapeField(v) {

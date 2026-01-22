@@ -16,7 +16,7 @@ Hardware is now centered around a single current-gen **STM32** device (USB).
 
 The goal behind EMWaver IDE is simple: how fast can you fully exploit a new sensor/module/chip—not just “read a register” on a 1D serial monitor, but ship a complete UI for the chip’s functionality? With EMWaver, scripts let you build that UI in minutes with zero reflashing, while the EMWaver IDE and ecosystem let you iterate on firmware when needed. Instead of parsing logs, you get real controls (buttons, lists, pickers) that make it practical to explore and operate hardware features across common embedded protocols like SPI and I2C.
 
-See the current device here: [Current Device](hardware/device.md). Legacy boards are archived under the [board evolution](hardware-catalog/index.md).
+See the current device here: [Current Device](hardware/device.md). Legacy boards are archived under [History](hardware-catalog/catalog.html).
 
 ## Next steps
 
@@ -38,15 +38,23 @@ See the current device here: [Current Device](hardware/device.md). Legacy boards
 
     [:octicons-arrow-right-24: Open Device](hardware/device.md)
 
--   :material-flash:{ .lg .middle } **Firmware Update**
+-   :material-order-bool-ascending-variant:{ .lg .middle } **Order from JLCPCB**
 
     ---
 
-    Update firmware directly from the EMWaver app.
+    Download the PCB/BOM/CPL files and order the board.
 
-    [:octicons-arrow-right-24: Firmware Update](documentation/firmware-update.md)
+    [:octicons-arrow-right-24: Open Order from JLCPCB](hardware-catalog/hardware.html)
 
--   :material-book-open-variant:{ .lg .middle } **Documentation**
+-   :material-pin:{ .lg .middle } **Pinout**
+
+    ---
+
+    GPIO numbering model and STM32 pin mapping.
+
+    [:octicons-arrow-right-24: Open Pinout](hardware/pinout.md)
+
+-   :material-book-open-variant:{ .lg .middle } **Scripts**
 
     ---
 

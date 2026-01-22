@@ -4,7 +4,7 @@ title: Pinout
 
 # Pinout
 
-![EMWaver device](../EMWAVER.jpg)
+![EMWaver device](../hardware-catalog/hardware/emwaver_photoshoot/IMG_0150.webp)
 
 This page describes the **GPIO numbering model** used by EMWaver commands, and how it maps to STM32 port pins.
 
