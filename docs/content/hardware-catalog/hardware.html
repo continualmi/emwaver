@@ -308,11 +308,23 @@
         noUsbMale: "hardware/emwaver/emwaver_no_usbmale.png",
         noUsbFemale: "hardware/emwaver/emwaver_no_usbfemale.png",
 
+        noGpioNoUsbMale: "hardware/emwaver/emwaver_no_gpio_no_usbmale.png",
+        noGpioNoUsbFemale: "hardware/emwaver/emwaver_no_gpio_no_usbfemale.png",
+
+        noIsmNoUsbMale: "hardware/emwaver/emwaver_no_ism_no_usbmale.png",
+        noIsmNoUsbFemale: "hardware/emwaver/emwaver_no_ism_no_usbfemale.png",
+
+        noIsmNoGpioNoUsbFemale: "hardware/emwaver/emwaver_no_ism_no_gpio_no_usbfemale.png",
+        noIsmNoGpioNoUsbMale: "hardware/emwaver/emwaver_no_ism_no_gpio_no_usbmale.png",
+
         noIrNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_usbmale.png",
+        noIrNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_usbfemale.png",
         // Note: asset name uses "usbmal" (kept as-is).
         noIrNoGpioNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_gpio_no_usbmal.png",
+        noIrNoGpioNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_gpio_no_usbfemale.png",
         // Note: asset name uses "no_maleusb" (kept as-is).
         noIrNoIsmNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_ism_no_maleusb.png",
+        noIrNoIsmNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_ism_no_usbfemale.png",
       };
 
       const VARIANT_GALLERY = {
@@ -327,23 +339,32 @@
 
         // No GPIO.
         noGpio__usbBoth: [BOARD_IMAGES.noGpio],
+        noGpio__usbMaleOnly: [BOARD_IMAGES.noGpioNoUsbFemale],
+        noGpio__usbFemaleOnly: [BOARD_IMAGES.noGpioNoUsbMale],
 
         // No CC1101.
         noIsm__usbBoth: [BOARD_IMAGES.noIsm],
+        noIsm__usbMaleOnly: [BOARD_IMAGES.noIsmNoUsbFemale],
+        noIsm__usbFemaleOnly: [BOARD_IMAGES.noIsmNoUsbMale],
 
         // No CC1101 + no GPIO.
         noIsmNoGpio__usbBoth: [BOARD_IMAGES.noIsmNoGpio],
+        noIsmNoGpio__usbMaleOnly: [BOARD_IMAGES.noIsmNoGpioNoUsbFemale],
+        noIsmNoGpio__usbFemaleOnly: [BOARD_IMAGES.noIsmNoGpioNoUsbMale],
 
         // No IR.
         noIr__usbBoth: [BOARD_IMAGES.noIr],
+        noIr__usbMaleOnly: [BOARD_IMAGES.noIrNoUsbFemale],
         noIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoUsbMale],
 
         // No IR + no GPIO.
         noIrNoGpio__usbBoth: [BOARD_IMAGES.noIrNoGpio],
+        noIrNoGpio__usbMaleOnly: [BOARD_IMAGES.noIrNoGpioNoUsbFemale],
         noIrNoGpio__usbFemaleOnly: [BOARD_IMAGES.noIrNoGpioNoUsbMale],
 
         // No IR + no CC1101.
         noIsmNoIr__usbBoth: [BOARD_IMAGES.noIrNoIsm],
+        noIsmNoIr__usbMaleOnly: [BOARD_IMAGES.noIrNoIsmNoUsbFemale],
         noIsmNoIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoIsmNoUsbMale],
       };
 
