@@ -155,18 +155,14 @@
 	              <div class="mt-3 rounded-2xl bg-slate-950/10 overflow-hidden">
 	                <img
 	                  id="board-hero"
-	                  src="downloads/emwaver.png"
+	                  src="hardware/emwaver/emwaver_all.png"
 	                  alt="EMWaver board"
 	                  class="block w-full max-h-[420px] object-contain"
 	                  loading="lazy"
 	                />
 	              </div>
 
-              <div class="mt-3 flex gap-2 overflow-x-auto thumb-row pb-1" id="board-gallery">
-                <button type="button" class="board-thumb is-active relative shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition" data-src="downloads/emwaver.png" aria-label="Board image">
-                  <img src="downloads/emwaver.png" alt="Board thumbnail" loading="lazy" class="w-full h-full object-cover" />
-                </button>
-              </div>
+	              <div class="mt-3 flex gap-2 overflow-x-auto thumb-row pb-1" id="board-gallery"></div>
 
 	            </div>
 	          </div>
@@ -192,28 +188,31 @@
 	              </div>
 
 	              <div class="mt-3 space-y-2">
-	                <label class="flex items-start gap-3">
-	                  <input id="opt-gpio" type="checkbox" class="mt-1" checked />
-	                  <span>
-	                    <span class="font-semibold text-slate-900">GPIO headers</span>
-	                    <span class="block text-sm text-slate-600">Add the 2 GPIO header blocks.</span>
-	                  </span>
-	                </label>
-	                <label class="flex items-start gap-3">
-	                  <input id="opt-cc1101" type="checkbox" class="mt-1" checked />
-	                  <span>
-	                    <span class="font-semibold text-slate-900">CC1101 + antenna</span>
-	                    <span class="block text-sm text-slate-600">Assemble the Sub-GHz radio section.</span>
-	                  </span>
-	                </label>
-	                <label class="flex items-start gap-3">
-	                  <input id="opt-ir" type="checkbox" class="mt-1" checked />
-	                  <span>
-	                    <span class="font-semibold text-slate-900">Infrared RX/TX</span>
-	                    <span class="block text-sm text-slate-600">Assemble IR receiver + transmitter section.</span>
-	                  </span>
-	                </label>
-	                <div class="pt-1">
+	                <div id="feature-group" class="rounded-xl -mx-2 px-2 py-1 transition">
+	                  <label class="flex items-start gap-3">
+	                    <input id="opt-gpio" type="checkbox" class="mt-1" checked />
+	                    <span>
+	                      <span class="font-semibold text-slate-900">GPIO headers</span>
+	                      <span class="block text-sm text-slate-600">Add the 2 GPIO header blocks.</span>
+	                    </span>
+	                  </label>
+	                  <label class="flex items-start gap-3 mt-2">
+	                    <input id="opt-cc1101" type="checkbox" class="mt-1" checked />
+	                    <span>
+	                      <span class="font-semibold text-slate-900">CC1101 + antenna</span>
+	                      <span class="block text-sm text-slate-600">Assemble the Sub-GHz radio section.</span>
+	                    </span>
+	                  </label>
+	                  <label class="flex items-start gap-3 mt-2">
+	                    <input id="opt-ir" type="checkbox" class="mt-1" checked />
+	                    <span>
+	                      <span class="font-semibold text-slate-900">Infrared RX/TX</span>
+	                      <span class="block text-sm text-slate-600">Assemble IR receiver + transmitter section.</span>
+	                    </span>
+	                  </label>
+	                  <div id="feature-group-msg" class="hidden mt-2 text-xs font-semibold text-red-300"></div>
+	                </div>
+	                <div id="usb-group" class="pt-1 rounded-xl -mx-2 px-2 py-1 transition">
 	                  <div class="text-sm font-semibold text-slate-900">USB-C connector</div>
 	                  <div class="text-xs text-slate-500 mt-1">Pick at least one (male and female can both be installed).</div>
 	                  <div class="mt-2 space-y-2">
@@ -232,6 +231,7 @@
 	                      </span>
 	                    </label>
 	                  </div>
+	                  <div id="usb-group-msg" class="hidden mt-2 text-xs font-semibold text-red-300"></div>
 	                </div>
 	              </div>
 
@@ -287,7 +287,58 @@
         optUsbMale: document.getElementById("opt-usb-male"),
         optUsbFemale: document.getElementById("opt-usb-female"),
         dlCase: document.getElementById("dl-case"),
+        boardHero: document.getElementById("board-hero"),
+        boardGallery: document.getElementById("board-gallery"),
+        featureGroup: document.getElementById("feature-group"),
+        featureGroupMsg: document.getElementById("feature-group-msg"),
+        usbGroup: document.getElementById("usb-group"),
+        usbGroupMsg: document.getElementById("usb-group-msg"),
       };
+
+      const BOARD_IMAGES = {
+        all: "hardware/emwaver/emwaver_all.png",
+        noGpio: "hardware/emwaver/emwaver_no_gpio.png",
+        noIsm: "hardware/emwaver/emwaver_no_ism.png",
+        noIsmNoGpio: "hardware/emwaver/emwaver_no_ism_no_gpio.png",
+      };
+
+      const boardVariantToConfig = {
+        [BOARD_IMAGES.all]: { gpio: true, cc1101: true, ir: true },
+        [BOARD_IMAGES.noGpio]: { gpio: false, cc1101: true, ir: true },
+        [BOARD_IMAGES.noIsm]: { gpio: true, cc1101: false, ir: true },
+        [BOARD_IMAGES.noIsmNoGpio]: { gpio: false, cc1101: false, ir: true },
+      };
+
+      let clearFeatureGroupFlashTimer = null;
+      let clearUsbGroupFlashTimer = null;
+
+      function flashConstraint(groupEl, msgEl, message, kind) {
+        if (!groupEl || !msgEl) return;
+
+        msgEl.textContent = message;
+        msgEl.classList.remove("hidden");
+        groupEl.classList.add("ring-2");
+
+        if (kind === "usb") {
+          groupEl.classList.add("ring-red-500/70", "bg-red-500/5");
+        } else {
+          groupEl.classList.add("ring-red-500/70", "bg-red-500/5");
+        }
+
+        if (kind === "usb") {
+          if (clearUsbGroupFlashTimer) window.clearTimeout(clearUsbGroupFlashTimer);
+          clearUsbGroupFlashTimer = window.setTimeout(() => {
+            msgEl.classList.add("hidden");
+            groupEl.classList.remove("ring-2", "ring-red-500/70", "bg-red-500/5");
+          }, 1800);
+        } else {
+          if (clearFeatureGroupFlashTimer) window.clearTimeout(clearFeatureGroupFlashTimer);
+          clearFeatureGroupFlashTimer = window.setTimeout(() => {
+            msgEl.classList.add("hidden");
+            groupEl.classList.remove("ring-2", "ring-red-500/70", "bg-red-500/5");
+          }, 1800);
+        }
+      }
 
       function enforceUsbAtLeastOne(changedEl) {
         const male = !!el.optUsbMale?.checked;
@@ -297,10 +348,98 @@
           // If the user tries to uncheck the last one, keep it.
           if (changedEl) changedEl.checked = true;
           else el.optUsbMale.checked = true;
+
+          flashConstraint(
+            el.usbGroup,
+            el.usbGroupMsg,
+            "Pick at least one USB-C connector (male or female).",
+            "usb",
+          );
         }
       }
 
+      function enforceFeaturesAtLeastOne(changedEl) {
+        const gpio = !!el.optGpio?.checked;
+        const cc1101 = !!el.optCc1101?.checked;
+        const ir = !!el.optIr?.checked;
+
+        if (!gpio && !cc1101 && !ir) {
+          if (changedEl) changedEl.checked = true;
+          else el.optIr.checked = true;
+
+          flashConstraint(
+            el.featureGroup,
+            el.featureGroupMsg,
+            "Pick at least one feature: GPIO, CC1101, or Infrared.",
+            "feature",
+          );
+        }
+      }
+
+      function pickBoardImageSrc() {
+        const gpio = !!el.optGpio?.checked;
+        const cc1101 = !!el.optCc1101?.checked;
+        const ir = !!el.optIr?.checked;
+
+        // Only some variants are available as images for now.
+        // If we don't have a matching asset, fall back to "all".
+        if (gpio && cc1101 && ir) return BOARD_IMAGES.all;
+        if (!gpio && cc1101 && ir) return BOARD_IMAGES.noGpio;
+        if (gpio && !cc1101 && ir) return BOARD_IMAGES.noIsm;
+        if (!gpio && !cc1101 && ir) return BOARD_IMAGES.noIsmNoGpio;
+        return BOARD_IMAGES.all;
+      }
+
+      function setActiveGalleryImage(src) {
+        if (!el.boardGallery) return;
+        const buttons = el.boardGallery.querySelectorAll("button.board-thumb");
+        buttons.forEach((b) => {
+          const isActive = b.getAttribute("data-src") === src;
+          b.classList.toggle("is-active", isActive);
+        });
+      }
+
+      function ensureGallery() {
+        if (!el.boardGallery) return;
+
+        const wanted = [
+          { src: BOARD_IMAGES.all, label: "All" },
+          { src: BOARD_IMAGES.noGpio, label: "No GPIO" },
+          { src: BOARD_IMAGES.noIsm, label: "No CC1101" },
+          { src: BOARD_IMAGES.noIsmNoGpio, label: "No CC1101 + No GPIO" },
+        ];
+
+        el.boardGallery.innerHTML = "";
+        wanted.forEach(({ src, label }) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className =
+            "board-thumb relative shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition";
+          btn.setAttribute("data-src", src);
+          btn.setAttribute("aria-label", label);
+          btn.innerHTML = `<img src="${src}" alt="${label}" loading="lazy" class="w-full h-full object-cover" />`;
+
+          btn.addEventListener("click", () => {
+            const cfg = boardVariantToConfig[src];
+            if (cfg) {
+              el.optGpio.checked = cfg.gpio;
+              el.optCc1101.checked = cfg.cc1101;
+              el.optIr.checked = cfg.ir;
+            }
+            render();
+          });
+
+          el.boardGallery.appendChild(btn);
+        });
+      }
+
 	      function render() {
+	        const imgSrc = pickBoardImageSrc();
+	        if (el.boardHero && el.boardHero.getAttribute("src") !== imgSrc) {
+	          el.boardHero.setAttribute("src", imgSrc);
+	        }
+	        setActiveGalleryImage(imgSrc);
+
 	        // Currently: single in-repo artifact set.
 	        // Future: pick per-variant (GPIO/CC1101/IR/USB) BOM/CPL/Case.
 	        if (el.dlCase) {
@@ -310,7 +449,12 @@
 	      }
 
       function attach() {
-        [el.optGpio, el.optCc1101, el.optIr].forEach((x) => x?.addEventListener("change", render));
+	        [el.optGpio, el.optCc1101, el.optIr].forEach((x) =>
+	          x?.addEventListener("change", () => {
+	            enforceFeaturesAtLeastOne(x);
+	            render();
+	          }),
+	        );
 
         if (el.optUsbMale) {
           el.optUsbMale.addEventListener("change", () => {
@@ -327,6 +471,9 @@
         }
 
         enforceUsbAtLeastOne();
+        enforceFeaturesAtLeastOne();
+
+        ensureGallery();
         render();
       }
 
