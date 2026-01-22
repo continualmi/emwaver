@@ -276,7 +276,12 @@
 	                    <path d="M8 6h13M8 12h13M8 18h13" />
 	                    <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
 	                  </svg>
-	                  BOM
+	                  <span>BOM</span>
+	                  <span
+	                    id="bom-count-badge"
+	                    class="hidden ml-1 px-2 py-0.5 rounded-full text-[11px] leading-none font-semibold bg-white/10 border border-white/10 text-white/90"
+	                    title="Filtered BOM row count"
+	                  ></span>
 	                </a>
 	                <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -315,6 +320,7 @@
         optIr: document.getElementById("opt-ir"),
         optUsbMale: document.getElementById("opt-usb-male"),
         optUsbFemale: document.getElementById("opt-usb-female"),
+	      dlBom: document.getElementById("dl-bom"),
         dlCase: document.getElementById("dl-case"),
         boardHero: document.getElementById("board-hero"),
         boardGallery: document.getElementById("board-gallery"),
@@ -322,7 +328,180 @@
         featureGroupMsg: document.getElementById("feature-group-msg"),
         usbGroup: document.getElementById("usb-group"),
         usbGroupMsg: document.getElementById("usb-group-msg"),
+	      bomCountBadge: document.getElementById("bom-count-badge"),
       };
+
+	  // NOTE: these are starter removal lists. They are intentionally conservative
+	  // (only the obvious parts), and you can refine them as the BOM evolves.
+	  const BOM_REMOVALS = {
+	    ir: new Set([
+	      // IR receiver + IR emitter (best guess based on part name/footprint).
+	      "IR_REC1",
+	      "U2",
+	    ]),
+	    ism: new Set([
+	      // Sub-GHz module + antenna.
+	      "U1",
+	      "U5",
+	    ]),
+	    usbMale: new Set([
+	      // Initial guess: adjust once confirmed.
+	      "USB2",
+	    ]),
+	    usbFemale: new Set([
+	      // Initial guess: adjust once confirmed.
+	      "USB-C1",
+	    ]),
+	    gpio: new Set([
+	      // Two GPIO header blocks.
+	      "CN1",
+	      "U4",
+	    ]),
+	  };
+
+	  const bomState = {
+	    loaded: false,
+	    loading: false,
+	    error: null,
+	    header: [],
+	    rows: [],
+	  };
+	  let bomLoadPromise = null;
+
+	  function stripQuotes(x) {
+	    const s = String(x ?? "").trim();
+	    if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
+	    return s;
+	  }
+
+	  function parseDesignators(designatorField) {
+	    const raw = stripQuotes(designatorField);
+	    if (!raw) return [];
+	    return raw
+	      .split(",")
+	      .map((x) => x.trim())
+	      .filter(Boolean);
+	  }
+
+	  function decodeUtf16TsvFromArrayBuffer(buf) {
+	    const bytes = new Uint8Array(buf);
+	    let encoding = "utf-16le";
+	    if (bytes.length >= 2) {
+	      const b0 = bytes[0];
+	      const b1 = bytes[1];
+	      if (b0 === 0xfe && b1 === 0xff) encoding = "utf-16be";
+	      if (b0 === 0xff && b1 === 0xfe) encoding = "utf-16le";
+	    }
+	    // TextDecoder supports utf-16le broadly; utf-16be support varies.
+	    // If utf-16be isn't available, this will throw and we'll surface an error.
+	    const decoder = new TextDecoder(encoding);
+	    return decoder.decode(buf);
+	  }
+
+	  function parseBomTsv(text) {
+	    const lines = String(text)
+	      .split(/\r?\n/)
+	      .map((ln) => ln.trim())
+	      .filter(Boolean);
+	    if (lines.length === 0) return { header: [], rows: [] };
+
+	    const header = lines[0].split("\t").map(stripQuotes);
+	    const rows = [];
+	    for (const line of lines.slice(1)) {
+	      const cols = line.split("\t").map(stripQuotes);
+	      const row = {};
+	      for (let i = 0; i < header.length; i++) row[header[i]] = cols[i] ?? "";
+	      rows.push(row);
+	    }
+	    return { header, rows };
+	  }
+
+	  async function ensureBomLoaded() {
+	    if (bomState.loaded) return;
+	    if (bomState.error && !bomState.loading) {
+	      // Allow a best-effort retry (useful if the page was opened before a local
+	      // server started, or a transient fetch error occurred).
+	      bomLoadPromise = null;
+	      bomState.error = null;
+	    }
+	    if (bomLoadPromise) return bomLoadPromise;
+
+	    const url = stripQuotes(el.dlBom?.getAttribute("href") || "");
+	    if (!url) {
+	      bomState.error = "BOM link not found";
+	      return;
+	    }
+
+	    bomState.loading = true;
+	    bomLoadPromise = (async () => {
+	      try {
+	        const res = await fetch(url);
+	        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	        const buf = await res.arrayBuffer();
+	        const text = decodeUtf16TsvFromArrayBuffer(buf);
+	        const parsed = parseBomTsv(text);
+	        bomState.header = parsed.header;
+	        bomState.rows = parsed.rows;
+	        bomState.loaded = true;
+	        bomState.error = null;
+	      } catch (e) {
+	        bomState.error = String(e?.message || e);
+	      } finally {
+	        bomState.loading = false;
+	      }
+	    })();
+
+	    await bomLoadPromise;
+	  }
+
+	  function rowMatchesRemovalSets(row, sets) {
+	    const designators = parseDesignators(row?.Designator);
+	    for (const d of designators) {
+	      for (const s of sets) {
+	        if (s.has(d)) return true;
+	      }
+	    }
+	    return false;
+	  }
+
+	  function computeFilteredBomRows() {
+	    if (!bomState.loaded) return [];
+
+	    const removalSets = [];
+	    if (!el.optIr?.checked) removalSets.push(BOM_REMOVALS.ir);
+	    if (!el.optCc1101?.checked) removalSets.push(BOM_REMOVALS.ism);
+	    if (!el.optUsbMale?.checked) removalSets.push(BOM_REMOVALS.usbMale);
+	    if (!el.optUsbFemale?.checked) removalSets.push(BOM_REMOVALS.usbFemale);
+	    if (!el.optGpio?.checked) removalSets.push(BOM_REMOVALS.gpio);
+
+	    return bomState.rows.filter((r) => !rowMatchesRemovalSets(r, removalSets));
+	  }
+
+	  function renderBomCount() {
+	    if (!el.bomCountBadge) return;
+	
+	    if (!isCustomizeEnabled()) {
+	      el.bomCountBadge.classList.add("hidden");
+	      el.bomCountBadge.textContent = "";
+	      return;
+	    }
+
+	    el.bomCountBadge.classList.remove("hidden");
+	
+	    if (bomState.error) {
+	      el.bomCountBadge.textContent = "?";
+	      return;
+	    }
+
+	    if (!bomState.loaded) {
+	      el.bomCountBadge.textContent = "...";
+	      ensureBomLoaded().then(() => render());
+	      return;
+	    }
+
+	    const rows = computeFilteredBomRows();
+	    el.bomCountBadge.textContent = String(rows.length);
+	  }
 
       const BOARD_IMAGES = {
         all: "hardware/emwaver/emwaver_all.png",
@@ -606,6 +785,8 @@
 	          el.dlCase.removeAttribute("aria-disabled");
 	          el.dlCase.classList.remove("pointer-events-none", "opacity-50");
 	        }
+
+	        renderBomCount();
 	      }
 
       function attach() {
