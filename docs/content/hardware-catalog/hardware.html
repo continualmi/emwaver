@@ -392,22 +392,37 @@
 	  // (only the obvious parts), and you can refine them as the BOM evolves.
 	  const BOM_REMOVALS = {
 	    ir: new Set([
-	      // IR receiver + IR emitter (best guess based on part name/footprint).
+	      // IR receiver + IR emitter + supporting passives/driver parts.
 	      "IR_REC1",
 	      "U2",
+	      "C3",
+	      "LED2",
+	      "Q1",
+	      "Q2",
+	      "R1",
+	      "R5",
+	      "R8",
+	      "R10",
+	      "R13",
+	      "R18",
 	    ]),
 	    ism: new Set([
 	      // Sub-GHz module + antenna.
 	      "U1",
 	      "U5",
+	      "LED3",
+	      "R17",
 	    ]),
 	    usbMale: new Set([
 	      // Initial guess: adjust once confirmed.
 	      "USB2",
+	      "R1",
 	    ]),
 	    usbFemale: new Set([
 	      // Initial guess: adjust once confirmed.
 	      "USB-C1",
+	      "R11",
+	      "R12",
 	    ]),
 	    gpio: new Set([
 	      // Two GPIO header blocks.
