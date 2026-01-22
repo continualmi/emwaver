@@ -270,6 +270,11 @@
 	                    <path d="M15.5 15.5h.01" />
 	                  </svg>
 	                  PCB
+	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                    <path d="M7 10l5 5 5-5" />
+	                    <path d="M12 15V3" />
+	                  </svg>
 	                </a>
 	                <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -282,6 +287,11 @@
 	                    class="hidden ml-1 px-2 py-0.5 rounded-full text-[11px] leading-none font-semibold bg-white/10 border border-white/10 text-white/90"
 	                    title="Filtered BOM row count"
 	                  ></span>
+	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                    <path d="M7 10l5 5 5-5" />
+	                    <path d="M12 15V3" />
+	                  </svg>
 	                </a>
 	                <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -290,6 +300,11 @@
 	                    <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
 	                  </svg>
 	                  CPL
+	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                    <path d="M7 10l5 5 5-5" />
+	                    <path d="M12 15V3" />
+	                  </svg>
 	                </a>
 	                <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
 	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -298,6 +313,11 @@
 	                    <path d="M20 6.5l-8 4.5-8-4.5" />
 	                  </svg>
 	                  STL
+	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                    <path d="M7 10l5 5 5-5" />
+	                    <path d="M12 15V3" />
+	                  </svg>
 	                </a>
 	              </div>
 
@@ -557,13 +577,29 @@
 	      "hardware/emwaver_photoshoot/IMG_0164.webp",
       ];
 
+	  const ALL_PHOTOSHOOT_MODULE_IMAGES = [
+	    "hardware/emwaver_photoshoot_modules/IMG_0178.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0179.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0180.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0181.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0183.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0184.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0185.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0186.webp",
+	  ];
+
       const VARIANT_GALLERY = {
         // Variant key = `<featureKey>__<usbKey>`.
         // If a specific key is missing, we fall back to `<featureKey>__usbBoth`.
         // If that is missing, we fall back to `all__usbBoth`.
 
         // All features on.
-        all__usbBoth: [BOARD_IMAGES.all, BOARD_IMAGES.allIso, ...ALL_PHOTOSHOOT_IMAGES],
+	    all__usbBoth: [
+	      BOARD_IMAGES.all,
+	      BOARD_IMAGES.allIso,
+	      ...ALL_PHOTOSHOOT_IMAGES,
+	      ...ALL_PHOTOSHOOT_MODULE_IMAGES,
+	    ],
         all__usbMaleOnly: [BOARD_IMAGES.noUsbFemale],
         all__usbFemaleOnly: [BOARD_IMAGES.noUsbMale],
 
@@ -602,6 +638,7 @@
 	  // Keep the renders available, just not leading.
 	  const NON_CUSTOMIZE_GALLERY = [
 	    ...ALL_PHOTOSHOOT_IMAGES,
+	    ...ALL_PHOTOSHOOT_MODULE_IMAGES,
 	    BOARD_IMAGES.all,
 	    BOARD_IMAGES.allIso,
 	  ];
