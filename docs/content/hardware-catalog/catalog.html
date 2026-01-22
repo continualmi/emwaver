@@ -51,10 +51,11 @@
         --page-pad: 18px;
       }
        body {
+         /* Lighter blue field behind the cards (header + cards keep their own styles). */
          background:
-           radial-gradient(1100px 760px at 14% -10%, rgba(56, 189, 248, 0.18), transparent 56%),
-           radial-gradient(900px 680px at 88% 8%, rgba(2, 132, 199, 0.12), transparent 55%),
-           linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
+           radial-gradient(1200px 780px at 12% -12%, rgba(56, 189, 248, 0.22), transparent 60%),
+           radial-gradient(1000px 760px at 92% 6%, rgba(14, 165, 233, 0.18), transparent 58%),
+           linear-gradient(180deg, #0b3b63 0%, #072c4b 55%, #062440 100%);
          color: #e5e7eb;
        }
       .noise {
@@ -102,7 +103,8 @@
       .timeline-hero img {
         width: 100%;
         height: 260px;
-        object-fit: contain;
+        object-fit: cover;
+        object-position: center;
         padding: 0;
         background: transparent;
         transition: transform 420ms ease;
@@ -251,7 +253,7 @@
           </div>
         </div>
         <div class="relative flex-1 rounded-2xl overflow-hidden border border-paper-50/10 bg-black/30">
-          <img id="lightbox-image" alt="" class="w-full h-full object-contain" />
+          <img id="lightbox-image" alt="" class="w-full h-full object-cover object-center" />
           <button
             id="lightbox-prev"
             type="button"
@@ -303,6 +305,8 @@
         const s = String(raw || "").trim();
         if (!s) return null;
         if (isHttpUrl(s)) return s;
+        if (s.startsWith("downloads/")) return s;
+        if (s.startsWith("assets/")) return s;
         if (s.startsWith("hardware/")) return s;
         if (s.startsWith("/")) return s.slice(1);
         if (s.includes("/")) return `hardware/${s}`;

@@ -37,10 +37,11 @@
         color-scheme: dark;
       }
       body {
+        /* Lighter blue field behind the cards (header + cards keep their own styles). */
         background:
-          radial-gradient(1100px 760px at 14% -10%, rgba(56, 189, 248, 0.18), transparent 56%),
-          radial-gradient(900px 680px at 88% 8%, rgba(2, 132, 199, 0.12), transparent 55%),
-          linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
+          radial-gradient(1200px 780px at 12% -12%, rgba(56, 189, 248, 0.22), transparent 60%),
+          radial-gradient(1000px 760px at 92% 6%, rgba(14, 165, 233, 0.18), transparent 58%),
+          linear-gradient(180deg, #0b3b63 0%, #072c4b 55%, #062440 100%);
         color: #e5e7eb;
       }
       .noise {
@@ -180,9 +181,9 @@
 	                  rel="noreferrer"
 	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition text-sm"
 	                  >
-	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-	                    <path d="M10 8.5v7l6-3.5-6-3.5z" />
-	                    <path d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.7 4.6 12 4.6 12 4.6s-5.7 0-7.5.5A3 3 0 0 0 2.4 7.2 31.5 31.5 0 0 0 2 12a31.5 31.5 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.8.5 7.5.5 7.5.5s5.7 0 7.5-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 22 12a31.5 31.5 0 0 0-.4-4.8z" />
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+	                    <path d="M10 8.5v7l6-3.5-6-3.5z" fill="currentColor" />
+	                    <path d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.7 4.6 12 4.6 12 4.6s-5.7 0-7.5.5A3 3 0 0 0 2.4 7.2 31.5 31.5 0 0 0 2 12a31.5 31.5 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.8.5 7.5.5 7.5.5s5.7 0 7.5-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 22 12a31.5 31.5 0 0 0-.4-4.8z" fill="none" stroke="currentColor" stroke-width="1.6" />
 	                  </svg>
 	                  5-minute tutorial</a>
 	                <a
@@ -263,62 +264,98 @@
 	              </div>
 
 	              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-	                <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
-	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
-	                    <path d="M9 7h6M9 11h6M9 15h3" />
-	                    <path d="M15.5 15.5h.01" />
-	                  </svg>
-	                  PCB
-	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-	                    <path d="M7 10l5 5 5-5" />
-	                    <path d="M12 15V3" />
-	                  </svg>
-	                </a>
-	                <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
-	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M8 6h13M8 12h13M8 18h13" />
-	                    <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
-	                  </svg>
-	                  <span>BOM</span>
-	                  <span
-	                    id="bom-count-badge"
-	                    class="hidden ml-1 px-2 py-0.5 rounded-full text-[11px] leading-none font-semibold bg-white/10 border border-white/10 text-white/90"
-	                    title="Filtered BOM row count"
-	                  ></span>
-	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-	                    <path d="M7 10l5 5 5-5" />
-	                    <path d="M12 15V3" />
-	                  </svg>
-	                </a>
-	                <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
-	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M4 4h16v16H4z" />
-	                    <path d="M9 9h6v6H9z" />
-	                    <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
-	                  </svg>
-	                  CPL
-	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-	                    <path d="M7 10l5 5 5-5" />
-	                    <path d="M12 15V3" />
-	                  </svg>
-	                </a>
-	                <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
-	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
-	                    <path d="M12 22V12" />
-	                    <path d="M20 6.5l-8 4.5-8-4.5" />
-	                  </svg>
-	                  STL
-	                  <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-	                    <path d="M7 10l5 5 5-5" />
-	                    <path d="M12 15V3" />
-	                  </svg>
-	                </a>
+	                <div class="relative">
+	                  <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+	                      <path d="M9 7h6M9 11h6M9 15h3" />
+	                      <path d="M15.5 15.5h.01" />
+	                    </svg>
+	                    PCB
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="Gerber ZIP for PCB fabrication (upload to JLCPCB as the PCB file)." aria-label="PCB file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	                <div class="relative">
+	                  <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M8 6h13M8 12h13M8 18h13" />
+	                      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+	                    </svg>
+	                    <span>BOM</span>
+	                    <span
+	                      id="bom-count-badge"
+	                      class="hidden ml-1 px-2 py-0.5 rounded-full text-[11px] leading-none font-semibold bg-white/10 border border-white/10 text-white/90"
+	                      title="Filtered BOM row count"
+	                    ></span>
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="Bill of Materials: the parts list for JLCPCB PCBA (upload as BOM during assembly quoting)." aria-label="BOM file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	                <div class="relative">
+	                  <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M4 4h16v16H4z" />
+	                      <path d="M9 9h6v6H9z" />
+	                      <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+	                    </svg>
+	                    CPL
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="Component Placement List (pick-and-place). JLCPCB uses this to place parts during PCBA." aria-label="CPL file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	                <div class="relative">
+	                  <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
+	                      <path d="M12 22V12" />
+	                      <path d="M20 6.5l-8 4.5-8-4.5" />
+	                    </svg>
+	                    STL
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="3D-printable case file (STL)." aria-label="STL file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
 	              </div>
 
 	            </div>
@@ -387,6 +424,71 @@
 	    rows: [],
 	  };
 	  let bomLoadPromise = null;
+
+	  function attachInfoButtons() {
+	    const buttons = Array.from(document.querySelectorAll("button.dl-info"));
+	    if (buttons.length === 0) return;
+
+	    let pop = document.getElementById("dl-info-pop");
+	    if (!pop) {
+	      pop = document.createElement("div");
+	      pop.id = "dl-info-pop";
+	      pop.className =
+	        "hidden fixed z-[60] max-w-[280px] rounded-xl border border-white/10 bg-slate-950/90 text-slate-100 shadow-lg backdrop-blur-md px-3 py-2 text-xs leading-snug";
+	      pop.setAttribute("role", "dialog");
+	      pop.setAttribute("aria-live", "polite");
+	      document.body.appendChild(pop);
+	    }
+
+	    function hide() {
+	      pop.classList.add("hidden");
+	      pop.textContent = "";
+	    }
+
+	    function showNear(btn, text) {
+	      if (!text) return;
+	      pop.textContent = text;
+	      pop.classList.remove("hidden");
+
+	      const r = btn.getBoundingClientRect();
+	      const pad = 10;
+	
+	      // Prefer to the left of the button, otherwise clamp.
+	      const desiredLeft = r.left - pad - pop.offsetWidth;
+	      const left = Math.max(pad, Math.min(desiredLeft, window.innerWidth - pad - pop.offsetWidth));
+	
+	      // Align vertically with button, but keep on-screen.
+	      const desiredTop = r.top - 2;
+	      const top = Math.max(pad, Math.min(desiredTop, window.innerHeight - pad - pop.offsetHeight));
+
+	      pop.style.left = `${Math.round(left)}px`;
+	      pop.style.top = `${Math.round(top)}px`;
+	    }
+
+	    buttons.forEach((btn) => {
+	      const show = () => {
+	        const text = btn.getAttribute("data-info") || "";
+	        showNear(btn, text);
+	      };
+
+	      btn.addEventListener("mouseenter", show);
+	      btn.addEventListener("focus", show);
+	      btn.addEventListener("mouseleave", hide);
+	      btn.addEventListener("blur", hide);
+
+	      // Touch fallback: tap to show briefly.
+	      btn.addEventListener("pointerup", (e) => {
+	        if (e.pointerType !== "touch") return;
+	        show();
+	        window.setTimeout(hide, 2200);
+	      });
+	    });
+
+	    document.addEventListener("scroll", hide, { passive: true });
+	    document.addEventListener("keydown", (e) => {
+	      if (e.key === "Escape") hide();
+	    });
+	  }
 
 	  function stripQuotes(x) {
 	    const s = String(x ?? "").trim();
@@ -885,6 +987,7 @@
         // Ensure defaults remain valid even if user enables customization later.
         enforceFeaturesAtLeastOne();
         enforceUsbAtLeastOne();
+	    attachInfoButtons();
         render();
       }
 
