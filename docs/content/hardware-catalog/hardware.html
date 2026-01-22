@@ -297,17 +297,27 @@
 
       const BOARD_IMAGES = {
         all: "hardware/emwaver/emwaver_all.png",
+        allIso: "downloads/emwaver.png",
         noGpio: "hardware/emwaver/emwaver_no_gpio.png",
         noIsm: "hardware/emwaver/emwaver_no_ism.png",
         noIsmNoGpio: "hardware/emwaver/emwaver_no_ism_no_gpio.png",
+        noIr: "hardware/emwaver/emwaver_no_ir.png",
+        noIrNoGpio: "hardware/emwaver/emwaver_no_ir_no_gpio.png",
+        noIrNoIsm: "hardware/emwaver/emwaver_no_ir_no_ism.png",
       };
 
-      const boardVariantToConfig = {
-        [BOARD_IMAGES.all]: { gpio: true, cc1101: true, ir: true },
-        [BOARD_IMAGES.noGpio]: { gpio: false, cc1101: true, ir: true },
-        [BOARD_IMAGES.noIsm]: { gpio: true, cc1101: false, ir: true },
-        [BOARD_IMAGES.noIsmNoGpio]: { gpio: false, cc1101: false, ir: true },
+      const VARIANT_GALLERY = {
+        all: [BOARD_IMAGES.all, BOARD_IMAGES.allIso],
+        noGpio: [BOARD_IMAGES.noGpio],
+        noIsm: [BOARD_IMAGES.noIsm],
+        noIsmNoGpio: [BOARD_IMAGES.noIsmNoGpio],
+        noIr: [BOARD_IMAGES.noIr],
+        noIrNoGpio: [BOARD_IMAGES.noIrNoGpio],
+        noIsmNoIr: [BOARD_IMAGES.noIrNoIsm],
       };
+
+      let galleryVariantKey = null;
+      const selectedHeroByVariant = {};
 
       let clearFeatureGroupFlashTimer = null;
       let clearUsbGroupFlashTimer = null;
@@ -376,18 +386,34 @@
         }
       }
 
-      function pickBoardImageSrc() {
+      function pickVariantKey() {
         const gpio = !!el.optGpio?.checked;
         const cc1101 = !!el.optCc1101?.checked;
         const ir = !!el.optIr?.checked;
 
-        // Only some variants are available as images for now.
-        // If we don't have a matching asset, fall back to "all".
-        if (gpio && cc1101 && ir) return BOARD_IMAGES.all;
-        if (!gpio && cc1101 && ir) return BOARD_IMAGES.noGpio;
-        if (gpio && !cc1101 && ir) return BOARD_IMAGES.noIsm;
-        if (!gpio && !cc1101 && ir) return BOARD_IMAGES.noIsmNoGpio;
-        return BOARD_IMAGES.all;
+        if (gpio && cc1101 && ir) return "all";
+        if (!gpio && cc1101 && ir) return "noGpio";
+        if (gpio && !cc1101 && ir) return "noIsm";
+        if (!gpio && !cc1101 && ir) return "noIsmNoGpio";
+
+        if (gpio && cc1101 && !ir) return "noIr";
+        if (!gpio && cc1101 && !ir) return "noIrNoGpio";
+        if (gpio && !cc1101 && !ir) return "noIsmNoIr";
+
+        // Disallowed by constraints (and may occur briefly during toggles).
+        return "all";
+      }
+
+      function getGalleryForVariant(variantKey) {
+        return VARIANT_GALLERY[variantKey] || VARIANT_GALLERY.all;
+      }
+
+      function pickBoardImageSrc() {
+        const variantKey = pickVariantKey();
+        const gallery = getGalleryForVariant(variantKey);
+        const preferred = selectedHeroByVariant[variantKey];
+        if (preferred && gallery.includes(preferred)) return preferred;
+        return gallery[0] || BOARD_IMAGES.all;
       }
 
       function setActiveGalleryImage(src) {
@@ -399,34 +425,29 @@
         });
       }
 
-      function ensureGallery() {
+      function ensureGallery(variantKey) {
         if (!el.boardGallery) return;
 
-        const wanted = [
-          { src: BOARD_IMAGES.all, label: "All" },
-          { src: BOARD_IMAGES.noGpio, label: "No GPIO" },
-          { src: BOARD_IMAGES.noIsm, label: "No CC1101" },
-          { src: BOARD_IMAGES.noIsmNoGpio, label: "No CC1101 + No GPIO" },
-        ];
+        if (galleryVariantKey === variantKey) return;
+        galleryVariantKey = variantKey;
+
+        const images = getGalleryForVariant(variantKey);
 
         el.boardGallery.innerHTML = "";
-        wanted.forEach(({ src, label }) => {
+
+        images.forEach((src, idx) => {
           const btn = document.createElement("button");
           btn.type = "button";
           btn.className =
             "board-thumb relative shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition";
           btn.setAttribute("data-src", src);
-          btn.setAttribute("aria-label", label);
-          btn.innerHTML = `<img src="${src}" alt="${label}" loading="lazy" class="w-full h-full object-cover" />`;
+          btn.setAttribute("aria-label", `Board view ${idx + 1}`);
+          btn.innerHTML = `<img src="${src}" alt="Board view ${idx + 1}" loading="lazy" class="w-full h-full object-cover" />`;
 
           btn.addEventListener("click", () => {
-            const cfg = boardVariantToConfig[src];
-            if (cfg) {
-              el.optGpio.checked = cfg.gpio;
-              el.optCc1101.checked = cfg.cc1101;
-              el.optIr.checked = cfg.ir;
-            }
-            render();
+            selectedHeroByVariant[variantKey] = src;
+            if (el.boardHero) el.boardHero.setAttribute("src", src);
+            setActiveGalleryImage(src);
           });
 
           el.boardGallery.appendChild(btn);
@@ -434,6 +455,9 @@
       }
 
 	      function render() {
+	        const variantKey = pickVariantKey();
+	        ensureGallery(variantKey);
+
 	        const imgSrc = pickBoardImageSrc();
 	        if (el.boardHero && el.boardHero.getAttribute("src") !== imgSrc) {
 	          el.boardHero.setAttribute("src", imgSrc);
@@ -470,10 +494,8 @@
           });
         }
 
-        enforceUsbAtLeastOne();
         enforceFeaturesAtLeastOne();
-
-        ensureGallery();
+        enforceUsbAtLeastOne();
         render();
       }
 
