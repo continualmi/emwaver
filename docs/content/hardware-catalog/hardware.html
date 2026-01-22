@@ -152,12 +152,12 @@
                 <div class="text-sm font-semibold text-slate-900">Board</div>
               </div>
 
-	              <div class="mt-3 rounded-2xl bg-slate-950/10 overflow-hidden">
+	              <div class="mt-3 rounded-2xl bg-slate-950/10 overflow-hidden h-[320px] sm:h-[380px] lg:h-[420px]">
 	                <img
 	                  id="board-hero"
 	                  src="hardware/emwaver/emwaver_all.png"
 	                  alt="EMWaver board"
-	                  class="block w-full max-h-[420px] object-contain"
+	                  class="block w-full h-full object-cover object-center"
 	                  loading="lazy"
 	                />
 	              </div>
@@ -536,22 +536,25 @@
       };
 
       const ALL_PHOTOSHOOT_IMAGES = [
-        "hardware/emwaver_photoshoot/IMG_0130.webp",
-        "hardware/emwaver_photoshoot/IMG_0142.webp",
-        "hardware/emwaver_photoshoot/IMG_0143.webp",
-        "hardware/emwaver_photoshoot/IMG_0146.webp",
-        "hardware/emwaver_photoshoot/IMG_0147.webp",
-        "hardware/emwaver_photoshoot/IMG_0148.webp",
-        "hardware/emwaver_photoshoot/IMG_0149.webp",
-        "hardware/emwaver_photoshoot/IMG_0150.webp",
-        "hardware/emwaver_photoshoot/IMG_0151.webp",
-        "hardware/emwaver_photoshoot/IMG_0152.webp",
-        "hardware/emwaver_photoshoot/IMG_0153.webp",
-        "hardware/emwaver_photoshoot/IMG_0154.webp",
-        "hardware/emwaver_photoshoot/IMG_0156.webp",
-        "hardware/emwaver_photoshoot/IMG_0160.webp",
-        "hardware/emwaver_photoshoot/IMG_0162.webp",
-        "hardware/emwaver_photoshoot/IMG_0164.webp",
+	      // Promoted “hero” shots.
+	      "hardware/emwaver_photoshoot/IMG_0149.webp",
+	      "hardware/emwaver_photoshoot/IMG_0150.webp",
+	      "hardware/emwaver_photoshoot/IMG_0153.webp",
+	      "hardware/emwaver_photoshoot/IMG_0142.webp",
+
+	      // Everything else.
+	      "hardware/emwaver_photoshoot/IMG_0130.webp",
+	      "hardware/emwaver_photoshoot/IMG_0143.webp",
+	      "hardware/emwaver_photoshoot/IMG_0146.webp",
+	      "hardware/emwaver_photoshoot/IMG_0147.webp",
+	      "hardware/emwaver_photoshoot/IMG_0148.webp",
+	      "hardware/emwaver_photoshoot/IMG_0151.webp",
+	      "hardware/emwaver_photoshoot/IMG_0152.webp",
+	      "hardware/emwaver_photoshoot/IMG_0154.webp",
+	      "hardware/emwaver_photoshoot/IMG_0156.webp",
+	      "hardware/emwaver_photoshoot/IMG_0160.webp",
+	      "hardware/emwaver_photoshoot/IMG_0162.webp",
+	      "hardware/emwaver_photoshoot/IMG_0164.webp",
       ];
 
       const VARIANT_GALLERY = {
@@ -595,6 +598,14 @@
         noIsmNoIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoIsmNoUsbMale],
       };
 
+	  // When customization is OFF, promote real photos first.
+	  // Keep the renders available, just not leading.
+	  const NON_CUSTOMIZE_GALLERY = [
+	    ...ALL_PHOTOSHOOT_IMAGES,
+	    BOARD_IMAGES.all,
+	    BOARD_IMAGES.allIso,
+	  ];
+
       let galleryVariantKey = null;
       const selectedHeroByVariant = {};
 
@@ -603,6 +614,13 @@
 
 	    function isCustomizeEnabled() {
 	      return !!el.optCustomize?.checked;
+	    }
+
+	    function variantStateKey(variantKey) {
+	      // Separate selection state for customize vs non-customize,
+	      // so the non-customize “photo-first” view doesn't override the
+	      // customize default render-first view.
+	      return isCustomizeEnabled() ? String(variantKey) : `${variantKey}__default`;
 	    }
 
 	    function applyCustomizeVisibility() {
@@ -713,6 +731,7 @@
       }
 
       function getGalleryForVariant(variantKey) {
+	      if (!isCustomizeEnabled() && variantKey === "all__usbBoth") return NON_CUSTOMIZE_GALLERY;
         if (VARIANT_GALLERY[variantKey]) return VARIANT_GALLERY[variantKey];
 
         const [featureKey] = String(variantKey).split("__");
@@ -724,8 +743,9 @@
 
       function pickBoardImageSrc() {
         const variantKey = pickVariantKey();
+        const stateKey = variantStateKey(variantKey);
         const gallery = getGalleryForVariant(variantKey);
-        const preferred = selectedHeroByVariant[variantKey];
+        const preferred = selectedHeroByVariant[stateKey];
         if (preferred && gallery.includes(preferred)) return preferred;
         return gallery[0] || BOARD_IMAGES.all;
       }
@@ -742,8 +762,10 @@
       function ensureGallery(variantKey) {
         if (!el.boardGallery) return;
 
-        if (galleryVariantKey === variantKey) return;
-        galleryVariantKey = variantKey;
+        const stateKey = variantStateKey(variantKey);
+
+        if (galleryVariantKey === stateKey) return;
+        galleryVariantKey = stateKey;
 
         const images = getGalleryForVariant(variantKey);
 
@@ -759,7 +781,7 @@
           btn.innerHTML = `<img src="${src}" alt="Board view ${idx + 1}" loading="lazy" class="w-full h-full object-cover" />`;
 
           btn.addEventListener("click", () => {
-            selectedHeroByVariant[variantKey] = src;
+            selectedHeroByVariant[stateKey] = src;
             if (el.boardHero) el.boardHero.setAttribute("src", src);
             setActiveGalleryImage(src);
           });
