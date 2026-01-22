@@ -80,6 +80,49 @@
           transform: translateY(0);
         }
       }
+
+      .badge-pop {
+        transform-origin: center;
+        will-change: transform, filter, box-shadow;
+        animation: badgePop 380ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+
+      @keyframes badgePop {
+        0% {
+          transform: scale(0.78) translateY(1px);
+          filter: brightness(0.95);
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+          background-color: rgba(255, 255, 255, 0.10);
+          border-color: rgba(255, 255, 255, 0.10);
+        }
+        45% {
+          transform: scale(1.22) translateY(-1px);
+          filter: brightness(1.35);
+          box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.18);
+          background-color: rgba(16, 185, 129, 0.26);
+          border-color: rgba(16, 185, 129, 0.55);
+        }
+        75% {
+          transform: scale(0.98) translateY(0);
+          filter: brightness(1.08);
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.10);
+          background-color: rgba(16, 185, 129, 0.18);
+          border-color: rgba(16, 185, 129, 0.42);
+        }
+        100% {
+          transform: scale(1) translateY(0);
+          filter: brightness(1);
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+          background-color: rgba(255, 255, 255, 0.10);
+          border-color: rgba(255, 255, 255, 0.10);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .badge-pop {
+          animation: none;
+        }
+      }
        .clamp-3 {
          display: -webkit-box;
          -webkit-box-orient: vertical;
@@ -186,23 +229,9 @@
 	                    <path d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.7 4.6 12 4.6 12 4.6s-5.7 0-7.5.5A3 3 0 0 0 2.4 7.2 31.5 31.5 0 0 0 2 12a31.5 31.5 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.8.5 7.5.5 7.5.5s5.7 0 7.5-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 22 12a31.5 31.5 0 0 0-.4-4.8z" fill="none" stroke="currentColor" stroke-width="1.6" />
 	                  </svg>
 	                  5-minute tutorial</a>
-	                <a
-	                  href="https://jlcpcb.com/quote"
-	                  target="_blank"
-	                  rel="noreferrer"
-	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-900/70 hover:bg-slate-900 text-white font-semibold transition text-sm border border-white/10"
-	                >
-	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-	                    <path d="M3 7h18" />
-	                    <path d="M5 7l1.5 12h11L19 7" />
-	                    <path d="M9 10h6" />
-	                    <path d="M10 3h4l1 4H9l1-4z" />
-	                  </svg>
-	                  JLCPCB quote
-	                </a>
 	              </div>
 	              <div class="mt-2 text-xs text-slate-500">
-	                Download the PCB/BOM/CPL files here, then upload them on the JLCPCB quote page (pick PCBA/SMT assembly if you want parts placed).
+	                Download the PCB/BOM/CPL files here, then upload them on the JLCPCB quote page (PCBA/SMT assembly).
 	              </div>
 
 	              <div class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
@@ -265,7 +294,7 @@
 
 	              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
 	                <div class="relative">
-	                  <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex w-full items-center justify-center gap-2 pl-3 pr-11 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold transition text-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
 	                      <path d="M9 7h6M9 11h6M9 15h3" />
@@ -287,7 +316,7 @@
 	                  </button>
 	                </div>
 	                <div class="relative">
-	                  <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-center gap-2 pl-3 pr-11 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition text-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M8 6h13M8 12h13M8 18h13" />
 	                      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
@@ -313,7 +342,7 @@
 	                  </button>
 	                </div>
 	                <div class="relative">
-	                  <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-center gap-2 pl-3 pr-11 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M4 4h16v16H4z" />
 	                      <path d="M9 9h6v6H9z" />
@@ -335,7 +364,7 @@
 	                  </button>
 	                </div>
 	                <div class="relative">
-	                  <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex w-full items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
+	                  <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex w-full items-center justify-center gap-2 pl-3 pr-11 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold transition text-sm">
 	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 	                      <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
 	                      <path d="M12 22V12" />
@@ -356,6 +385,74 @@
 	                    </svg>
 	                  </button>
 	                </div>
+	              </div>
+
+	              <div id="cost-panel" class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+	                <div class="text-xs font-semibold text-slate-900">Approx PCBA cost</div>
+	                <div class="mt-2 grid gap-2">
+	                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/80 border border-slate-200/70 px-2 py-1.5">
+	                    <div class="flex items-center gap-2">
+	                      <div class="flex items-center gap-1" aria-hidden="true">
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                      </div>
+	                      <div class="text-xs font-semibold text-slate-900">2 units</div>
+	                    </div>
+	                    <div class="text-xs text-slate-900 font-semibold">
+	                      <span id="cost-2-total">...</span>
+	                      <span class="text-slate-600 font-normal">(<span id="cost-2-each">...</span>/ea)</span>
+	                    </div>
+	                  </div>
+	                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/80 border border-slate-200/70 px-2 py-1.5">
+	                    <div class="flex items-center gap-2">
+	                      <div class="flex items-center gap-1" aria-hidden="true">
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                      </div>
+	                      <div class="text-xs font-semibold text-slate-900">5 units</div>
+	                    </div>
+	                    <div class="text-xs text-slate-900 font-semibold">
+	                      <span id="cost-5-total">...</span>
+	                      <span class="text-slate-600 font-normal">(<span id="cost-5-each">...</span>/ea)</span>
+	                    </div>
+	                  </div>
+	                </div>
+	                <div class="mt-2 text-[11px] leading-snug text-slate-600">
+	                  Rough estimate; mostly driven by per-part setup fees (~$3 per BOM row).
+	                </div>
+	              </div>
+
+	              <div class="mt-3 flex flex-wrap gap-2">
+	                <a
+	                  href="https://jlcpcb.com/quote"
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition text-sm"
+	                >
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M3 7h18" />
+	                    <path d="M5 7l1.5 12h11L19 7" />
+	                    <path d="M9 10h6" />
+	                    <path d="M10 3h4l1 4H9l1-4z" />
+	                  </svg>
+	                  JLCPCB
+	                </a>
+	                <a
+	                  href="https://jlc3dp.com/"
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold transition text-sm"
+	                >
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
+	                    <path d="M12 22V12" />
+	                    <path d="M20 6.5l-8 4.5-8-4.5" />
+	                  </svg>
+	                  JLC3DP
+	                </a>
 	              </div>
 
 	            </div>
@@ -386,6 +483,11 @@
         usbGroup: document.getElementById("usb-group"),
         usbGroupMsg: document.getElementById("usb-group-msg"),
 	      bomCountBadge: document.getElementById("bom-count-badge"),
+	      costPanel: document.getElementById("cost-panel"),
+	      cost2Total: document.getElementById("cost-2-total"),
+	      cost2Each: document.getElementById("cost-2-each"),
+	      cost5Total: document.getElementById("cost-5-total"),
+	      cost5Each: document.getElementById("cost-5-each"),
       };
 
 	  // NOTE: these are starter removal lists. They are intentionally conservative
@@ -614,6 +716,63 @@
 	    return bomState.rows.filter((r) => !rowMatchesRemovalSets(r, removalSets));
 	  }
 
+	  function computeBomRowsForCost() {
+	    if (!bomState.loaded) return [];
+	    // When customization is OFF, treat the build as fully-populated.
+	    if (!isCustomizeEnabled()) return bomState.rows;
+	    return computeFilteredBomRows();
+	  }
+
+	  const COST_ESTIMATE_MODEL = {
+	    // Calibrated from a real quote:
+	    // Variant: no ISM, no IR, no USB female
+	    // Cost: $40 (2 units), $55 (5 units)
+	    baseVariantKey: "noIsmNoIr__usbMaleOnly",
+	    baseRows: 9,
+	    baseCost2: 40,
+	    baseCost5: 55,
+	    dollarsPerRow: 3,
+	  };
+
+	  function estimateCostFromRowCount(rowCount) {
+	    const n = Number(rowCount || 0);
+	    const delta = n - COST_ESTIMATE_MODEL.baseRows;
+	    const two = COST_ESTIMATE_MODEL.baseCost2 + COST_ESTIMATE_MODEL.dollarsPerRow * delta;
+	    const five = COST_ESTIMATE_MODEL.baseCost5 + COST_ESTIMATE_MODEL.dollarsPerRow * delta;
+	    return {
+	      two: Math.max(0, Math.round(two)),
+	      five: Math.max(0, Math.round(five)),
+	    };
+	  }
+
+	  function renderCostEstimate() {
+	    if (!el.costPanel || !el.cost2Total || !el.cost2Each || !el.cost5Total || !el.cost5Each) return;
+
+	    if (bomState.error) {
+	      el.cost2Total.textContent = "?";
+	      el.cost2Each.textContent = "?";
+	      el.cost5Total.textContent = "?";
+	      el.cost5Each.textContent = "?";
+	      return;
+	    }
+
+	    if (!bomState.loaded) {
+	      el.cost2Total.textContent = "...";
+	      el.cost2Each.textContent = "...";
+	      el.cost5Total.textContent = "...";
+	      el.cost5Each.textContent = "...";
+	      ensureBomLoaded().then(() => render());
+	      return;
+	    }
+
+	    const rows = computeBomRowsForCost();
+	    const est = estimateCostFromRowCount(rows.length);
+	    el.cost2Total.textContent = `$${est.two}`;
+	    el.cost2Each.textContent = `$${(est.two / 2).toFixed(2)}`;
+	    el.cost5Total.textContent = `$${est.five}`;
+	    el.cost5Each.textContent = `$${(est.five / 5).toFixed(2)}`;
+	  }
+
 	  function tsvEscapeField(v) {
 	    const s = String(v ?? "");
 	    if (/[\t\r\n"]/g.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -698,28 +857,46 @@
 
 	  function renderBomCount() {
 	    if (!el.bomCountBadge) return;
+	    if (renderBomCount.lastText === undefined) renderBomCount.lastText = null;
 	
 	    if (!isCustomizeEnabled()) {
 	      el.bomCountBadge.classList.add("hidden");
 	      el.bomCountBadge.textContent = "";
+	      renderBomCount.lastText = null;
 	      return;
 	    }
 
 	    el.bomCountBadge.classList.remove("hidden");
 	
 	    if (bomState.error) {
-	      el.bomCountBadge.textContent = "?";
+	      const next = "?";
+	      if (renderBomCount.lastText !== next) {
+	        el.bomCountBadge.classList.remove("badge-pop");
+	        void el.bomCountBadge.offsetWidth;
+	        el.bomCountBadge.classList.add("badge-pop");
+	        renderBomCount.lastText = next;
+	      }
+	      el.bomCountBadge.textContent = next;
 	      return;
 	    }
 
 	    if (!bomState.loaded) {
-	      el.bomCountBadge.textContent = "...";
+	      const next = "...";
+	      el.bomCountBadge.textContent = next;
+	      renderBomCount.lastText = next;
 	      ensureBomLoaded().then(() => render());
 	      return;
 	    }
-
+	
 	    const rows = computeFilteredBomRows();
-	    el.bomCountBadge.textContent = String(rows.length);
+	    const next = String(rows.length);
+	    if (renderBomCount.lastText !== next) {
+	      el.bomCountBadge.classList.remove("badge-pop");
+	      void el.bomCountBadge.offsetWidth;
+	      el.bomCountBadge.classList.add("badge-pop");
+	      renderBomCount.lastText = next;
+	    }
+	    el.bomCountBadge.textContent = next;
 	  }
 
       const BOARD_IMAGES = {
@@ -1045,6 +1222,7 @@
 	        }
 
 	        renderBomCount();
+	        renderCostEstimate();
 	      }
 
       function attach() {
