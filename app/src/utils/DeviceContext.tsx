@@ -34,9 +34,7 @@ interface DeviceContextType {
   disconnect: () => Promise<void>;
   listMIDIPorts: () => Promise<string[]>;
   sendPacket: (data: Uint8Array, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
-  send: (commandString: string, timeoutMs?: number, packets?: number) => Promise<Uint8Array | null>;
   sendPacketNoWait: (data: Uint8Array) => Promise<void>;
-  sendNoWait: (commandString: string) => Promise<void>;
   transmitBuffer: (data: Uint8Array) => Promise<void>;
   // Event listeners
   addNotificationListener: (listener: (data: Uint8Array, timestamp: number) => void) => void;
@@ -153,14 +151,10 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const sendPacket = useCallback(async (data: Uint8Array, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
     if (!status.connected || !status.transport) return null;
     const args = { data: Array.from(data), timeoutMs, packets };
-    const resp = await safeInvoke<number[]>('device_send_command', args, { throwOnError: true });
+    const resp = await safeInvoke<number[]>('device_send_packet', args, { throwOnError: true });
     return resp ? new Uint8Array(resp) : null;
   }, [status.connected, status.transport]);
 
-  const send = useCallback(async (commandString: string, timeoutMs: number = 2000, packets: number = 1): Promise<Uint8Array | null> => {
-    const encoded = new TextEncoder().encode(commandString);
-    return await sendPacket(encoded, timeoutMs, packets);
-  }, [sendPacket]);
 
   const sendPacketNoWait = useCallback(async (data: Uint8Array) => {
     if (!status.connected || !status.transport) return;
@@ -168,10 +162,6 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await safeInvoke('device_write', args, { throwOnError: true });
   }, [status.connected, status.transport]);
 
-  const sendNoWait = useCallback(async (commandString: string) => {
-    const encoded = new TextEncoder().encode(commandString);
-    await sendPacketNoWait(encoded);
-  }, [sendPacketNoWait]);
 
   const transmitBuffer = useCallback(async (data: Uint8Array) => {
     if (!status.connected || !status.transport) return;
@@ -201,9 +191,7 @@ export const DeviceProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       disconnect,
       listMIDIPorts,
       sendPacket,
-      send,
       sendPacketNoWait,
-      sendNoWait,
       transmitBuffer,
       addNotificationListener,
       removeNotificationListener,

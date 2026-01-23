@@ -80,7 +80,7 @@ EMWaver uses **fixed 64-byte framing** over a USB MIDI SysEx tunnel, with an app
 Keep on-wire semantics stable:
 
 - `PACKET_SIZE = 64`
-- ASCII command protocol inside the 64B frames
+- Binary opcode protocol inside the 64B frames (no command strings)
 - status/flow-control frames (e.g. `BS` for retransmit pacing)
 
 ## Scripts
@@ -149,19 +149,17 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
   - `app/crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
   - `app/crates/emwaver-buffer-ios-ffi` (iOS)
   - `app/crates/emwaver-buffer-android-jni` (Android)
-- The CLI does not own the USB MIDI connection; it asks the Desktop app to execute device commands and scripts.
+- The CLI does not own the USB MIDI connection; it asks the Desktop app to execute scripts and device packet I/O.
 
-#### Debugging With `emwaver cmd`
+#### Script REPL (Packet-Only)
 
-The `emwaver` CLI is a fast way to debug device ↔ firmware issues without the desktop UI.
+EMWaver's "REPL" is a JavaScript-based evaluator for EMWaver scripts (".emw") with a Python-like workflow.
 
-- Connection sanity check: open Desktop app, connect device, then run `emwaver cmd version` (expects `Welcome to EMWaver ... 0.1.0`).
-- Raw SPI debug (CS is manual GPIO; `--cs` uses encoded pins: `PA0..PA15 => 0..15`, `PB0..PB15 => 16..31`):
-  - CC1101 VERSION (returns 2 bytes: status + data): `emwaver cmd --verbose "spi xfer --cs=4 --tx=F100 --rx=2"` (look at `rx[1]`).
-  - CC1101 helper path: `emwaver cmd --verbose "cc1101 read --reg=0x31"`.
-- GPIO inspection can confirm pin mux/state while debugging: `emwaver cmd --verbose "gpio info --pin=4"`.
-- The transport is fixed 64-byte frames: the command string must be ≤ 64 bytes or you’ll hit `Command too large`.
-  - Prefer compact hex like `--tx=F100` over verbose `--tx=0xF1,0x00` when sending many bytes.
+- It evaluates EMWaver code (ScriptEngine) and relies on host-provided bridge functions.
+- Device I/O from scripts is packet-only via `_scriptSendPacket`.
+- Do not add or re-introduce ASCII command-string transports (no `_scriptSendCommandString`, no `send_command`, no firmware string parsing).
+
+If you need a quick device sanity check, prefer a tiny `.emw` snippet in the REPL (e.g. `await device.version()`), not a bespoke command-string path.
 
 ### Docs (`/docs`)
 

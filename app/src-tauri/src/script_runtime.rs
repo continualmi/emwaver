@@ -278,49 +278,6 @@ impl ScriptRuntime {
             .register_global_builtin_callable(js_string!("_scriptRegisterCallback"), 2, register_cb_fn)
             .map_err(|e| format!("Failed to register _scriptRegisterCallback: {}", e))?;
 
-        // _scriptSendCommandString - THE HOT PATH - direct USB access!
-        let state_send = state.clone();
-        let send_fn = unsafe {
-            NativeFunction::from_closure(move |_this, args, ctx| {
-                let command = args.get_or_undefined(0).to_string(ctx)?;
-                let timeout_ms = args
-                    .get_or_undefined(1)
-                    .to_u32(ctx)
-                    .unwrap_or(2000) as u64;
-
-                let cmd_str = command.to_std_string_escaped();
-                eprintln!("[_scriptSendCommandString] CALLED: cmd={}, timeout={}ms", cmd_str.trim(), timeout_ms);
-                let st = state_send.borrow();
-                let device = st.device.clone();
-                let rt = st.rt_handle.clone();
-
-                // Execute synchronously using the tokio runtime
-                let result = rt.block_on(async {
-                    send_packet_command_bytes(&device, cmd_str.as_bytes().to_vec(), timeout_ms, 1)
-                        .await
-                });
-
-                match result {
-                    Ok(bytes) => {
-
-                        // Return as Uint8Array
-                        let array = boa_engine::object::builtins::JsUint8Array::from_iter(
-                            bytes.into_iter(),
-                            ctx,
-                        )
-                        .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
-                        Ok(array.into())
-                    }
-                    Err(e) => Err(JsNativeError::error()
-                        .with_message(format!("Send failed: {}", e))
-                        .into()),
-                }
-            })
-        };
-        context
-            .register_global_builtin_callable(js_string!("_scriptSendCommandString"), 2, send_fn)
-            .map_err(|e| format!("Failed to register _scriptSendCommandString: {}", e))?;
-
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         let state_send_pkt = state.clone();
         let send_pkt_fn = unsafe {
