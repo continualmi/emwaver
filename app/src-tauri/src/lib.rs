@@ -1108,7 +1108,8 @@ async fn dfu_flash_embedded(app: tauri::AppHandle) -> Result<(), String> {
     let app_handle = app.clone();
 
     spawn_blocking(move || {
-        emit_dfu_progress(&app_handle, "Opening DFU device...");
+        emit_dfu_progress(&app_handle, "Using bundled firmware".to_string());
+        emit_dfu_progress(&app_handle, "Opening device in Update Mode...");
         let (mut device, _discovery) = DfuDevice::open_with_options(
             DEFAULT_USB_VENDOR_ID,
             DEFAULT_USB_PRODUCT_ID,
@@ -1118,33 +1119,6 @@ async fn dfu_flash_embedded(app: tauri::AppHandle) -> Result<(), String> {
             },
         )?;
         device.flash(bytes, 0x0800_0000, |msg| emit_dfu_progress(&app_handle, msg))?;
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| format!("Task failed: {e}"))?
-}
-
-#[tauri::command]
-async fn dfu_flash_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    let firmware_path = expand_path(&path);
-    let app_handle = app.clone();
-
-    spawn_blocking(move || {
-        emit_dfu_progress(&app_handle, format!("Reading firmware file: {}", firmware_path.display()));
-        let bytes = fs::read(&firmware_path)
-            .map_err(|e| format!("Failed to read firmware file {}: {e}", firmware_path.display()))?;
-        emit_dfu_progress(&app_handle, format!("Firmware size: {} bytes", bytes.len()));
-
-        emit_dfu_progress(&app_handle, "Opening DFU device...");
-        let (mut device, _discovery) = DfuDevice::open_with_options(
-            DEFAULT_USB_VENDOR_ID,
-            DEFAULT_USB_PRODUCT_ID,
-            DfuOpenOptions {
-                alt_setting: None,
-                verbose: false,
-            },
-        )?;
-        device.flash(&bytes, 0x0800_0000, |msg| emit_dfu_progress(&app_handle, msg))?;
         Ok::<(), String>(())
     })
     .await
@@ -1641,7 +1615,7 @@ pub fn run() {
         .manage(device_state)
         .manage(script_state)
         .manage(Arc::new(PtyManager::new()))
-			        .invoke_handler(tauri::generate_handler![
+		        .invoke_handler(tauri::generate_handler![
             read_directory,
             read_directory_children,
             read_file,
@@ -1684,10 +1658,9 @@ pub fn run() {
             midi_disconnect,
             midi_get_status,
             device_get_status,
-            dfu_is_connected,
-            dfu_flash_embedded,
-            dfu_flash_file,
-                git_status,
+	            dfu_is_connected,
+	            dfu_flash_embedded,
+	                git_status,
                 git_diff_contents,
                 git_stage,
                 git_stage_all,

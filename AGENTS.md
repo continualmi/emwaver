@@ -155,7 +155,7 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 The `emwaver` CLI is a fast way to debug device ↔ firmware issues without the desktop UI.
 
-- Connection sanity check: open Desktop app, connect device, then run `emwaver cmd version` (expects `Welcome to EMWaver firmware ...`).
+- Connection sanity check: open Desktop app, connect device, then run `emwaver cmd version` (expects `Welcome to EMWaver ... 0.1.0`).
 - Raw SPI debug (CS is manual GPIO; `--cs` uses encoded pins: `PA0..PA15 => 0..15`, `PB0..PB15 => 16..31`):
   - CC1101 VERSION (returns 2 bytes: status + data): `emwaver cmd --verbose "spi xfer --cs=4 --tx=F100 --rx=2"` (look at `rx[1]`).
   - CC1101 helper path: `emwaver cmd --verbose "cc1101 read --reg=0x31"`.

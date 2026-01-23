@@ -48,6 +48,22 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Build the STM32 firmware (updates the bundled .bin used by Desktop).
+    Build {
+        /// Run `make clean` before building.
+        #[arg(long)]
+        clean: bool,
+    },
+
+    /// Flash the bundled firmware to a device in Update Mode (DFU).
+    Flash {
+        /// Print DFU discovery details.
+        #[arg(long)]
+        verbose: bool,
+        /// DFU alt setting to use (defaults to "Internal Flash" if present).
+        #[arg(long)]
+        alt: Option<u8>,
+    },
     /// Send an ASCII command to the connected device (Desktop owns the USB connection).
     Cmd {
         /// Command text to send.

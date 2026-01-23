@@ -40,8 +40,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define CDC_TIMEOUT 100
-#define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver firmware"
-#define EMWAVER_FIRMWARE_VERSION "1.0.0"
+#define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver"
+#define EMWAVER_FIRMWARE_VERSION "0.1.0"
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/

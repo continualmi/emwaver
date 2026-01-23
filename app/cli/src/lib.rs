@@ -21,6 +21,10 @@ mod repl;
 
 use anyhow::Result;
 use clap::Parser;
+use std::path::PathBuf;
+use std::process::Command;
+use std::fs;
+use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
@@ -32,6 +36,8 @@ pub fn run() -> Result<()> {
     }
 
     match cli.subcommand {
+        Some(cli::Command::Build { clean }) => build_firmware(clean),
+        Some(cli::Command::Flash { verbose, alt }) => flash_firmware(verbose, alt),
         Some(cli::Command::Cmd {
             text,
             timeout_ms,
@@ -55,6 +61,87 @@ pub fn run() -> Result<()> {
             repl::run_repl()
         }
     }
+}
+
+fn build_firmware(clean: bool) -> Result<()> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Expected app/cli to live under repo_root/app/cli"))?
+        .to_path_buf();
+
+    let release_dir = repo_root.join("stm/emwaver-firmware/Release");
+
+    if clean {
+        let status = Command::new("make").current_dir(&release_dir).arg("clean").status()?;
+        if !status.success() {
+            anyhow::bail!("Firmware clean failed");
+        }
+    }
+
+    let status = Command::new("make").current_dir(&release_dir).arg("all").status()?;
+    if !status.success() {
+        anyhow::bail!("Firmware build failed");
+    }
+
+    // The CubeIDE-generated Makefile doesn't always emit a .bin by default.
+    // Always regenerate it from the ELF so `stm/.../Release/emwaver-firmware.bin` stays fresh.
+    let status = Command::new("arm-none-eabi-objcopy")
+        .current_dir(&release_dir)
+        .args([
+            "-O",
+            "binary",
+            "emwaver-firmware.elf",
+            "emwaver-firmware.bin",
+        ])
+        .status()?;
+    if !status.success() {
+        anyhow::bail!("Failed to generate emwaver-firmware.bin (arm-none-eabi-objcopy)");
+    }
+
+    let built_bin = release_dir.join("emwaver-firmware.bin");
+
+    // Keep a copy inside the repo under `app/` for Desktop dev builds
+    // (so `app/src-tauri/build.rs` can bundle it deterministically).
+    let repo_app_firmware = repo_root.join("app/src-tauri/firmware/emwaver.bin");
+    if let Some(parent) = repo_app_firmware.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(&built_bin, &repo_app_firmware)?;
+
+    println!("ok: {}", built_bin.strip_prefix(&repo_root).unwrap_or(&built_bin).display());
+    println!("ok: {}", repo_app_firmware.strip_prefix(&repo_root).unwrap_or(&repo_app_firmware).display());
+    Ok(())
+}
+
+fn flash_firmware(verbose: bool, alt: Option<u8>) -> Result<()> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .ok_or_else(|| anyhow::anyhow!("Expected app/cli to live under repo_root/app/cli"))?
+        .to_path_buf();
+
+    let firmware_path = repo_root.join("app/src-tauri/firmware/emwaver.bin");
+    let bytes = fs::read(&firmware_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read {}: {e}", firmware_path.display()))?;
+
+    println!("Using {} ({} bytes)", firmware_path.display(), bytes.len());
+    println!("Waiting for device in Update Mode (DFU)...");
+
+    let (mut device, _discovery) = DfuDevice::open_with_options(
+        DEFAULT_USB_VENDOR_ID,
+        DEFAULT_USB_PRODUCT_ID,
+        DfuOpenOptions { alt_setting: alt, verbose },
+    )
+    .map_err(anyhow::Error::msg)?;
+
+    device
+        .flash(&bytes, 0x0800_0000, |msg| println!("{msg}"))
+        .map_err(anyhow::Error::msg)?;
+
+    Ok(())
 }
 
 fn cmd_desktop(
