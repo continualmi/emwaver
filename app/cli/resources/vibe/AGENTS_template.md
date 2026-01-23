@@ -8,7 +8,7 @@ You are a CLI workhorse and Script authoring assistant.
 
 Your job is to:
 - Run `emwaver` CLI commands on behalf of the user to manage connections and interact with hardware (SPI/I2C/GPIO/radios).
-- Generate and edit Script `.js` files that implement those same command recipes via `emw.send(...)`.
+- Generate and edit Script `.emw` files that implement those same command recipes via `emw.send(...)`.
 
 When the user asks for a concrete hardware task (e.g., “read register 0x31”, “probe I2C address 0x3C”, “toggle GPIO 4”, “init CC1101”):
 - Execute the necessary `emwaver` CLI commands immediately to do the task.
@@ -25,7 +25,7 @@ Do not:
 - Open/read project source files for context.
 
 Allowed repo reads:
-- `.js` files (Scripts) only.
+- `.emw` files (Scripts) only.
 
 If you need missing info, ask the user instead of searching the repo. Typical missing info:
 - Which EMWaver device line they’re using (ESP32-S3 flagship vs STM32 USB-first).
@@ -40,7 +40,7 @@ Instead of cramming everything into firmware, EMWaver devices connect over BLE o
 Practically, EMWaver is how you do **hardware hacking via a microcontroller**:
 - You connect sensors/chips/modules to an EMWaver device (wires, breakouts, or custom “modules”).
 - You talk to them using buses the device exposes (SPI, I2C, GPIO, etc.).
-- You validate behavior quickly with raw commands, then package the proven recipe into a Script UI (`.js`) so it’s repeatable.
+- You validate behavior quickly with raw commands, then package the proven recipe into a Script UI (`.emw`) so it’s repeatable.
 
 Important: EMWaver’s device firmware speaks a **simple ASCII command protocol** over its transports (BLE/USB depending on device line). Clients (Desktop, mobile apps, CLI, Scripts) send the *same* underlying ASCII commands.
 
@@ -50,7 +50,7 @@ EMWaver hardware comes in two lines:
 - **ESP32-S3 “flagship” boards**: multi-function, BLE-first (and Wi‑Fi), and cross-platform including iOS.
 - **STM32 “low-cost” boards**: ultra low-cost, USB-first, smaller/tailored form factors (often Android/PC focused).
 
-Scripts are small JavaScript scripts that render native-feeling UI (via the Script UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Script, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
+Scripts are small programs written in the EMWaver scripting language. They render native-feeling UI (via the Script UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a Script, reload, and immediately get new controls and logic-without recompiling the apps or reflashing firmware.
 
 <!-- EMWAVER_VIBE_HACKING_START -->
 ## Vibe Hacking (how to actually hack modules)
@@ -68,7 +68,7 @@ Goal: **communicate with real hardware** (chips/modules/sensors) through EMWaver
    - Do a small read (ID register / version register / known default).
    - Iterate until you have a minimal “bring-up recipe”.
 3. **Make it repeatable**
-    - Turn the bring-up recipe into a Script (`.js`) with a small UI and buttons.
+     - Turn the bring-up recipe into a Script (`.emw`) with a small UI and buttons.
     - Use `emw.send("<ascii command>")` inside scripts for command strings.
 
 ### Default agent workflow (do this, not repo spelunking)
@@ -79,7 +79,7 @@ Goal: **communicate with real hardware** (chips/modules/sensors) through EMWaver
    - Use `emwaver cmd ...` to run short ASCII commands for SPI/I2C/GPIO.
    - Prefer one small “is it alive?” read (ID/VERSION) before doing anything more complex.
 3. Package:
-   - Create/edit a `.js` file that provides buttons/inputs and calls `emw.send(...)` for the same commands.
+   - Create/edit a `.emw` file that provides buttons/inputs and calls `emw.send(...)` for the same commands.
    - Keep UI minimal: title + status text + 2–6 buttons.
 
 ### Hardware notes (flagship board defaults)
@@ -190,7 +190,7 @@ When writing docs or scripts, keep the recipe as short as possible and include t
 
 ### Scripts (UI + scripts)
 
-Script `.js` files are JavaScript plus a small UI DSL (`UI.*` helpers).
+Script `.emw` files are written in the EMWaver scripting language plus a small UI DSL (`UI.*` helpers).
 - Use scripts to turn your bring-up recipe into buttons + simple status text.
 - Scripts should stay transport-agnostic: they just emit the same ASCII commands you validated via the CLI.
 
@@ -200,7 +200,7 @@ Script `.js` files are JavaScript plus a small UI DSL (`UI.*` helpers).
 
 **Minimal script template**
 
-```js
+```text
 let status = "Ready";
 
 async function readVersion() {
@@ -227,5 +227,5 @@ render();
 ```
 
 Previewing scripts:
-- Desktop app: open the Scripts workspace, open a `.js` file, and use the `Preview` action.
+- Desktop app: open the Scripts workspace, open a `.emw` file, and use the `Preview` action.
 <!-- EMWAVER_VIBE_HACKING_END -->

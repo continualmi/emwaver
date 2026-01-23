@@ -1,4 +1,7 @@
 {
+  "files.associations": {
+    "*.emw": "javascript"
+  },
   "[plaintext]": {
     "editor.quickSuggestions": {
       "comments": "off",

@@ -79,7 +79,14 @@ export default function WorkspaceTopBar({
                       className={`flex h-4 w-6 items-center justify-center rounded bg-slate-950/40 text-[10px] font-semibold ${icon.accentClass}`}
                       aria-hidden="true"
                     >
-                      {icon.label}
+                      {icon.kind === "emw" ? (
+                        <span className="flex">
+                          <span className="text-slate-100">E</span>
+                          <span className="text-sky-400">M</span>
+                        </span>
+                      ) : (
+                        icon.label
+                      )}
                     </span>
                     <span className="max-w-[12rem] truncate">{file.name}</span>
                     {file.isDirty ? <span className="text-amber-300">●</span> : null}
@@ -145,4 +152,3 @@ export default function WorkspaceTopBar({
     </div>
   );
 }
-

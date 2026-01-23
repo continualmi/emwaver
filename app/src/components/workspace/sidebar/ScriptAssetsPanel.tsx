@@ -61,7 +61,14 @@ export default function ScriptAssetsPanel({ isCollapsed, onToggleCollapsed, onOp
                   className={`flex h-4 w-6 items-center justify-center rounded bg-slate-950/40 text-[10px] font-semibold ${icon.accentClass}`}
                   aria-hidden="true"
                 >
-                  {icon.label}
+                  {icon.kind === "emw" ? (
+                    <span className="flex">
+                      <span className="text-slate-100">E</span>
+                      <span className="text-sky-400">M</span>
+                    </span>
+                  ) : (
+                    icon.label
+                  )}
                 </span>
                 <span className="min-w-0 truncate">{filename}</span>
               </button>
