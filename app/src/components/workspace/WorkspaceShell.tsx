@@ -670,8 +670,8 @@ export default function WorkspaceShell({
               cursor: "#0ea5e9",
             }
           : {
-              background: "#020617",
-              foreground: "#e2e8f0",
+              background: "#0b1220",
+              foreground: "#f1f5f9",
               cursor: "#38bdf8",
             },
       });
