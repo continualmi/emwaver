@@ -372,21 +372,6 @@ export default function WorkspaceShell({
     [],
   );
 
-  const scriptUtilsBinding = useMemo(
-    () => ({
-      delay: (ms: number) => {
-        const durationMs = Math.max(0, Number(ms) || 0);
-        const start = Date.now();
-        while (Date.now() - start < durationMs) {
-          // busy-wait (matches current mobile script semantics)
-        }
-      },
-    }),
-    [],
-  );
-
-  const scriptCreateByteArray = useMemo(() => (bytes: number[]) => new Uint8Array(bytes), []);
-
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
   const activeTerminalTitle = useMemo(
     () => terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? DEFAULT_TERMINAL_TITLE,
@@ -1180,8 +1165,6 @@ export default function WorkspaceShell({
         return;
       }
 
-      const normalizedRoot = rootDir ? rootDir.replace(/\\/g, "/").replace(/\/$/, "") : null;
-
       setScriptPreviewState((prev) => ({
         ...prev,
         [normalizedPath]: {
@@ -1243,13 +1226,8 @@ export default function WorkspaceShell({
               },
             }));
           },
-          (title: string, message: string) => {
-            alert(`${title}\n\n${message}`);
-          },
           {
-            DeviceConnection: scriptDeviceConnection,
-            Utils: scriptUtilsBinding,
-            createByteArray: scriptCreateByteArray,
+            _scriptSendCommandString: scriptDeviceConnection.sendCommandString,
             _scriptSleep: async (ms: number) => {
               const durationMs = Math.max(0, Number(ms) || 0);
               await new Promise<void>((resolve) => window.setTimeout(resolve, durationMs));
@@ -1293,71 +1271,6 @@ export default function WorkspaceShell({
         scriptEngineByPathRef.current.set(normalizedPath, engine);
       }
 
-      const moduleSources: Record<string, string> = {};
-      const exampleScripts = await Promise.all(SCRIPT_EXAMPLE_SCRIPTS.map(async (name) => [name, await readScriptAssetScript(name)] as const));
-      exampleScripts.forEach(([name, content]) => {
-        if (content) {
-          moduleSources[name] = content;
-        }
-      });
-
-      // openFileSnapshot and openFileByPath already declared above
-
-      const maxFiles = 200;
-      const filePaths: string[] = [];
-
-      if (rootDir && isTauriAvailable()) {
-        const queue: string[] = [rootDir];
-        const visited = new Set<string>();
-
-        while (queue.length > 0 && filePaths.length < maxFiles) {
-          const current = queue.shift();
-          if (!current || visited.has(current)) {
-            continue;
-          }
-          visited.add(current);
-          const entries = await safeInvoke<DirectoryChildEntry[]>("read_directory_children", {
-            payload: { path: current },
-          });
-          for (const entry of (entries ?? []).filter((child) => !defaultIgnoredName(child.name))) {
-            const entryPath = entry.path;
-            if (entry.kind === "directory") {
-              queue.push(entryPath);
-              continue;
-            }
-            if (!isScriptScriptPath(entryPath)) {
-              continue;
-            }
-            filePaths.push(entryPath);
-            if (filePaths.length >= maxFiles) {
-              break;
-            }
-          }
-        }
-      }
-
-      for (const filePath of filePaths) {
-        const normalizedFilePath = filePath.replace(/\\/g, "/");
-        const relative = normalizedRoot && normalizedFilePath.startsWith(`${normalizedRoot}/`)
-          ? normalizedFilePath.slice(`${normalizedRoot}/`.length)
-          : basename(filePath);
-
-        const openFile = openFileByPath.get(filePath);
-        const content =
-          openFile?.content ??
-          (!isTauriAvailable() ? "" : (await safeInvoke<string>("read_file", { payload: { path: filePath } })) ?? "");
-        if (!content) {
-          continue;
-        }
-        moduleSources[relative] = content;
-        const shortName = basename(relative);
-        if (!moduleSources[shortName]) {
-          moduleSources[shortName] = content;
-        }
-      }
-
-      engine.updateModuleSources(moduleSources);
-
       engine.execute(entrySource, () => {
         setScriptPreviewState((prev) => ({
           ...prev,
@@ -1378,7 +1291,7 @@ export default function WorkspaceShell({
         },
       }));
     },
-    [rootDir, scriptCreateByteArray, scriptDeviceConnection, scriptUtilsBinding],
+    [rootDir, scriptDeviceConnection],
   );
 
   const handleSaveFile = useCallback(async () => {

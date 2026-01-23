@@ -69,7 +69,6 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.emwaver.emwaverandroidapp.R;
-import com.emwaver.emwaverandroidapp.Utils;
 import com.emwaver.emwaverandroidapp.databinding.FragmentScriptsBinding;
 import com.emwaver.emwaverandroidapp.files.FileRepositoryLocal;
 import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
@@ -117,7 +116,6 @@ public class ScriptsFragment extends Fragment {
     private ScriptsViewModel viewModel;
     private FileRepositoryLocal fileRepository;
 
-    private Utils utils;
     private ScriptDeviceConnection scriptDeviceConnection;
     private ScriptSignalStore scriptSignalStore;
 
@@ -205,7 +203,6 @@ public class ScriptsFragment extends Fragment {
         binding = FragmentScriptsBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
-        utils = new Utils();
         utils.setContext(requireContext());
 
         setupMenu();
@@ -1551,7 +1548,6 @@ public class ScriptsFragment extends Fragment {
             showToast("Script engine not ready.");
             return;
         }
-        scriptEngine.updateModuleSources(moduleSources());
         if (viewModel != null) {
             viewModel.setLastScriptContent(script);
             viewModel.setLastScriptName(currentScriptName);
@@ -1577,31 +1573,23 @@ public class ScriptsFragment extends Fragment {
         ensureScriptEngineBindings();
         if (scriptEngine == null) {
             scriptEngine = new ScriptEngine();
-            scriptEngine.setDialogCallback(this::showDialog);
             scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.js"));
+            if (scriptDeviceConnection == null && isAdded()) {
+                scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
+            }
+            scriptEngine.setDeviceConnection(scriptDeviceConnection);
             scriptEngine.setup(this::printLog, this::handleScriptTree, buildBindings());
-            scriptEngine.updateModuleSources(moduleSources());
         }
     }
 
     private void ensureScriptEngineBindings() {
         if (scriptEngine != null) {
             scriptEngine.registerGlobalBindings(buildBindings());
-            scriptEngine.updateModuleSources(moduleSources());
         }
     }
 
     private Map<String, Object> buildBindings() {
         Map<String, Object> bindings = new HashMap<>();
-        if (utils != null) {
-            bindings.put("Utils", utils);
-        }
-        if (scriptDeviceConnection == null && isAdded()) {
-            scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
-        }
-        if (scriptDeviceConnection != null) {
-            bindings.put("DeviceConnection", scriptDeviceConnection);
-        }
         if (scriptSignalStore == null && isAdded()) {
             scriptSignalStore = new ScriptSignalStore(requireContext());
         }

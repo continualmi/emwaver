@@ -89,18 +89,42 @@ function gpioRead() {
     lastResponse = "";
     render();
 
-    if (selectedMode === "in") {
-        emw.send("gpio in --pin=" + selectedPin);
+    const pinNumber = Number(selectedPin);
+    if (!Number.isFinite(pinNumber)) {
+        statusText = "Invalid pin";
+        render();
+        return;
     }
 
-    let response = emw.send("gpio read --pin=" + selectedPin);
+    const done = function (level) {
+        const state = Number(level) ? true : false;
+        const pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
+        const pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+        statusText = pinName + " is " + (state ? "HIGH" : "LOW");
+        lastResponse = "digitalRead(" + String(pinNumber) + ") -> " + (state ? "HIGH" : "LOW");
+        render();
+    };
 
-    let state = response && response.length > 0 && response[0] !== 0;
-    let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
-    let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-    statusText = pinName + " is " + (state ? "HIGH" : "LOW");
-    lastResponse = "gpio read -> " + (response && response.length ? ("0x" + response[0].toString(16).padStart(2, "0")) : "(no data)");
-    render();
+    try {
+        if (selectedMode === "in") {
+            const r = pinMode(pinNumber, INPUT);
+            if (r && typeof r.then === "function") {
+                r.then(function () {
+                    const resp = digitalRead(pinNumber);
+                    if (resp && typeof resp.then === "function") resp.then(done);
+                    else done(resp);
+                });
+                return;
+            }
+        }
+
+        const resp = digitalRead(pinNumber);
+        if (resp && typeof resp.then === "function") resp.then(done);
+        else done(resp);
+    } catch (e) {
+        statusText = "Read failed: " + String(e && e.message ? e.message : e);
+        render();
+    }
 }
 
 function gpioWriteHigh() {
@@ -116,25 +140,45 @@ function gpioWrite(value) {
     lastResponse = "";
     render();
 
-    let outResp = emw.send("gpio out --pin=" + selectedPin);
-    let writeResp = emw.send(value ? "gpio high --pin=" + selectedPin : "gpio low --pin=" + selectedPin);
-    let readResp = emw.send("gpio read --pin=" + selectedPin);
-
-    let pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
-    let pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-
-    let readLevel = readResp && readResp.length > 0 && readResp[0] !== 0;
-    statusText = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readLevel ? "HIGH" : "LOW") + ")";
-
-    function fmt(resp) {
-        if (!resp || !resp.length) return "(no data)";
-        return "0x" + resp[0].toString(16).padStart(2, "0");
+    const pinNumber = Number(selectedPin);
+    if (!Number.isFinite(pinNumber)) {
+        statusText = "Invalid pin";
+        render();
+        return;
     }
-    lastResponse =
-        "gpio out -> " + fmt(outResp) + "\n" +
-        (value ? "gpio high -> " : "gpio low -> ") + fmt(writeResp) + "\n" +
-        "gpio read -> " + fmt(readResp);
-    render();
+
+    const targetLevel = value ? HIGH : LOW;
+    const pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
+    const pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
+
+    const finish = function (readLevel) {
+        const readHigh = Number(readLevel) ? true : false;
+        statusText = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readHigh ? "HIGH" : "LOW") + ")";
+        lastResponse =
+            "pinMode(" + String(pinNumber) + ", OUTPUT)\n" +
+            "digitalWrite(" + String(pinNumber) + ", " + (value ? "HIGH" : "LOW") + ")\n" +
+            "digitalRead(" + String(pinNumber) + ") -> " + (readHigh ? "HIGH" : "LOW");
+        render();
+    };
+
+    try {
+        const pm = pinMode(pinNumber, OUTPUT);
+        const afterPinMode = function () {
+            const w = digitalWrite(pinNumber, targetLevel);
+            const afterWrite = function () {
+                const r = digitalRead(pinNumber);
+                if (r && typeof r.then === "function") r.then(finish);
+                else finish(r);
+            };
+            if (w && typeof w.then === "function") w.then(afterWrite);
+            else afterWrite();
+        };
+        if (pm && typeof pm.then === "function") pm.then(afterPinMode);
+        else afterPinMode();
+    } catch (e) {
+        statusText = "Write failed: " + String(e && e.message ? e.message : e);
+        render();
+    }
 }
 
 function render() {

@@ -21,26 +21,19 @@
  * Provides:
  * - Script execution in isolated context
  * - UI DSL (UI.column, UI.row, UI.button, etc.)
- * - Native bindings (BLE, CC1101, etc.)
- * - Module loading system
+ * - Native bindings (transport + hardware helpers)
  * - Print/log callbacks
  * - Render callbacks for UI
  */
 
 export type PrintCallback = (message: string) => void;
 export type RenderCallback = (tree: ScriptTree) => void;
-export type DialogCallback = (title: string, message: string) => void;
 
 export interface ScriptTree {
   type: 'column' | 'row' | 'button' | 'text' | 'logViewer' | 'slider' | 'scroll' | 'textField' | 'textEditor' | 'picker' | 'grid' | 'spacer' | 'divider' | 'progress';
   props?: Record<string, unknown>;
   children?: ScriptTree[];
   handlers?: Record<string, string>;
-}
-
-export interface ModuleSource {
-  name: string;
-  content: string;
 }
 
 export interface GlobalBindings {
@@ -51,14 +44,10 @@ export class ScriptEngine {
   private context: Window | null = null;
   private callbackRegistry: Map<string, Function> = new Map();
   private globalBindings: GlobalBindings = {};
-  private moduleSources: Map<string, ModuleSource> = new Map();
-  private moduleCache: Map<string, unknown> = new Map();
-  private moduleLoadingStack: Set<string> = new Set();
   private bootstrapSource = '';
   
   private printCallback?: PrintCallback;
   private renderCallback?: RenderCallback;
-  private dialogCallback?: DialogCallback;
   private initialized = false;
 
   /**
@@ -67,12 +56,10 @@ export class ScriptEngine {
   setup(
     printCallback: PrintCallback,
     renderCallback: RenderCallback,
-    dialogCallback?: DialogCallback,
     bindings: GlobalBindings = {}
   ): void {
     this.printCallback = printCallback;
     this.renderCallback = renderCallback;
-    this.dialogCallback = dialogCallback;
     this.globalBindings = { ...bindings };
 
     // Use a simple object as context instead of iframe (works better in Tauri)
@@ -106,7 +93,7 @@ export class ScriptEngine {
 
     // Clear previous callbacks
     this.callbackRegistry.clear();
-    this.moduleLoadingStack.clear();
+    
     
     console.log('[ScriptEngine.execute] About to inject DSL');
 
@@ -125,16 +112,11 @@ export class ScriptEngine {
 
       const func = new Function(
         '_scriptPrint',
-        '_scriptRender', 
+        '_scriptRender',
         '_scriptRegisterCallback',
-        '_scriptImportModule',
-        '_scriptShowDialog',
-        '_scriptCreateByteArray',
-        'BLEService',
-        'DeviceConnection',
-        'Utils',
-        'SamplerSignals',
-        fullScript
+        '_scriptSendCommandString',
+        '_scriptSleep',
+        fullScript,
       );
       
       console.log('[ScriptEngine.execute] Calling function with context');
@@ -146,13 +128,8 @@ export class ScriptEngine {
         ctx._scriptPrint,
         ctx._scriptRender,
         ctx._scriptRegisterCallback,
-        ctx._scriptImportModule,
-        ctx._scriptShowDialog,
-        ctx._scriptCreateByteArray,
-        ctx.BLEService,
-        ctx.DeviceConnection,
-        ctx.Utils,
-        ctx.SamplerSignals
+        ctx._scriptSendCommandString,
+        ctx._scriptSleep,
       );
       
       console.log('[ScriptEngine.execute] Function executed successfully');
@@ -199,29 +176,11 @@ export class ScriptEngine {
   }
 
   /**
-   * Update module sources for require/import
-   */
-  updateModuleSources(sources: Record<string, string>): void {
-    this.moduleSources.clear();
-    for (const [name, content] of Object.entries(sources)) {
-      const normalized = this.normalizeModuleName(name);
-      if (normalized) {
-        this.moduleSources.set(normalized, { name, content });
-      }
-    }
-    this.moduleCache.clear();
-    this.moduleLoadingStack.clear();
-  }
-
-  /**
    * Shutdown the engine
    */
   shutdown(): void {
     this.context = null;
     this.callbackRegistry.clear();
-    this.moduleSources.clear();
-    this.moduleCache.clear();
-    this.moduleLoadingStack.clear();
     this.initialized = false;
   }
 
@@ -257,28 +216,6 @@ export class ScriptEngine {
         this.callbackRegistry.set(token, callback);
       }
     };
-
-    // Module import
-    (this.context as any)._scriptImportModule = (moduleName: string): unknown => {
-      return this.importModule(moduleName);
-    };
-
-    // Dialog function
-    (this.context as any)._scriptShowDialog = (title: string, message: string) => {
-      this.dialogCallback?.(title, message);
-    };
-
-    // Byte array helper (kept as a bridge primitive so the shared bootstrap can call it).
-    (this.context as any)._scriptCreateByteArray = (jsArray: unknown) => {
-      const ctx = this.context as any;
-      if (typeof ctx.createByteArray === "function") {
-        return ctx.createByteArray(jsArray);
-      }
-      if (Array.isArray(jsArray)) {
-        return new Uint8Array(jsArray.map((value) => Number(value) & 0xff));
-      }
-      return new Uint8Array([]);
-    };
   }
 
   /**
@@ -294,74 +231,6 @@ export class ScriptEngine {
         console.error(`Failed to bind ${name}:`, error);
       }
     }
-  }
-
-  /**
-   * Import a module by name
-   */
-  private importModule(moduleName: string): unknown {
-    if (/\.(js|jsx)$/i.test(String(moduleName || ""))) {
-      throw new Error(".js scripts/modules are not supported. Rename to .emw");
-    }
-    const normalized = this.normalizeModuleName(moduleName);
-    if (!normalized) {
-      throw new Error(`Invalid module name: ${moduleName}`);
-    }
-
-    // Check cache
-    if (this.moduleCache.has(normalized)) {
-      return this.moduleCache.get(normalized);
-    }
-
-    // Check for circular dependencies
-    if (this.moduleLoadingStack.has(normalized)) {
-      throw new Error(`Circular dependency detected: ${normalized}`);
-    }
-
-    // Find module source
-    const source = this.moduleSources.get(normalized);
-    if (!source) {
-      throw new Error(`Module not found: ${moduleName}`);
-    }
-
-    // Mark as loading
-    this.moduleLoadingStack.add(normalized);
-
-    try {
-      // Execute module in context
-      if (!this.context) {
-        throw new Error('Context not available');
-      }
-
-      const wrappedModule = `return (function() {
-        const module = { exports: {} };
-        ${source.content}
-        return module.exports;
-      })();`;
-
-      const func = new Function(wrappedModule);
-      const exports = func.call(this.context);
-      
-      // Cache result
-      this.moduleCache.set(normalized, exports);
-      this.moduleLoadingStack.delete(normalized);
-      
-      return exports;
-    } catch (error) {
-      this.moduleLoadingStack.delete(normalized);
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to load module ${moduleName}: ${message}`);
-    }
-  }
-
-  /**
-   * Normalize module name (remove .emw extension, handle paths)
-   */
-  private normalizeModuleName(name: string): string {
-    return name
-      .replace(/\.emw$/, '')
-      .replace(/^\.\//, '')
-      .toLowerCase();
   }
 
   /**

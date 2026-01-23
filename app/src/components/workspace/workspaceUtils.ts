@@ -28,7 +28,6 @@ export const SCRIPT_EXAMPLE_SCRIPTS = [
   "gpio.emw",
   "i2c.emw",
   "sampler.emw",
-  "mfrc522.emw",
   "uart.emw",
 ];
 

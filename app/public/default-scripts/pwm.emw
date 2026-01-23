@@ -110,12 +110,12 @@ async function sweep() {
     for (let i = 0; i <= steps && sweeping; i += 1) {
       const v = Math.round((i * max) / steps);
       applyWrite(v);
-      Utils.delay(8);
+      sleep(8);
     }
     for (let i = steps; i >= 0 && sweeping; i -= 1) {
       const v = Math.round((i * max) / steps);
       applyWrite(v);
-      Utils.delay(8);
+      sleep(8);
     }
   }
 

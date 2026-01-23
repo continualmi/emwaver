@@ -18,8 +18,8 @@
 /**
  * Hook for executing scripts using the fast backend Boa JS engine.
  * 
- * This provides ~2ms latency for emw.send() commands instead of ~6-8ms
- * when using the frontend JS engine with Tauri IPC.
+ * This provides ~2ms latency for script device operations (SPI/I2C/GPIO/etc)
+ * instead of ~6-8ms when using the frontend JS engine with Tauri IPC.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -148,4 +148,3 @@ export function useBackendScript(): UseBackendScriptResult {
     clearLogs,
   };
 }
-

@@ -96,7 +96,6 @@ final class ScriptPreviewManager: ObservableObject {
 
         setupEngineIfNeeded()
         guard let engine = scriptEngine else { return }
-        engine.updateModuleSources(moduleSources)
 
         activeScriptName = name
         isPreviewVisible = true
@@ -144,10 +143,6 @@ final class ScriptPreviewManager: ObservableObject {
                 self.scriptTree = tree
                 self.isRendering = false
                 self.isPreviewVisible = true
-            },
-            dialogHandler: { [weak self] title, message in
-                guard let self else { return }
-                self.dialog = Dialog(title: title.isEmpty ? "Script" : title, message: message)
             },
             bindings: buildBindings()
         )

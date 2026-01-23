@@ -320,55 +320,6 @@ impl ScriptRuntime {
             .register_global_builtin_callable(js_string!("_scriptSendCommandString"), 2, send_fn)
             .map_err(|e| format!("Failed to register _scriptSendCommandString: {}", e))?;
 
-        // _scriptShowDialog (stub)
-        let dialog_fn = unsafe {
-            NativeFunction::from_closure(move |_this, _args, _ctx| {
-                // TODO: Implement dialog
-                Ok(JsValue::undefined())
-            })
-        };
-        context
-            .register_global_builtin_callable(js_string!("_scriptShowDialog"), 2, dialog_fn)
-            .map_err(|e| format!("Failed to register _scriptShowDialog: {}", e))?;
-
-        // _scriptImportModule (stub)
-        let import_fn = unsafe {
-            NativeFunction::from_closure(move |_this, _args, _ctx| {
-                Ok(JsValue::undefined())
-            })
-        };
-        context
-            .register_global_builtin_callable(js_string!("_scriptImportModule"), 1, import_fn)
-            .map_err(|e| format!("Failed to register _scriptImportModule: {}", e))?;
-
-        // _scriptCreateByteArray
-        let create_bytes_fn = unsafe {
-            NativeFunction::from_closure(move |_this, args, ctx| {
-                let arr = args.get_or_undefined(0);
-                if let Some(obj) = arr.as_object() {
-                    let len = obj
-                        .get(js_string!("length"), ctx)?
-                        .to_u32(ctx)
-                        .unwrap_or(0);
-                    let mut bytes = Vec::with_capacity(len as usize);
-                    for i in 0..len {
-                        let val = obj.get(i, ctx)?;
-                        bytes.push(val.to_u32(ctx).unwrap_or(0) as u8);
-                    }
-                    let array = boa_engine::object::builtins::JsUint8Array::from_iter(
-                        bytes.into_iter(),
-                        ctx,
-                    )
-                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
-                    return Ok(array.into());
-                }
-                Ok(JsValue::undefined())
-            })
-        };
-        context
-            .register_global_builtin_callable(js_string!("_scriptCreateByteArray"), 1, create_bytes_fn)
-            .map_err(|e| format!("Failed to register _scriptCreateByteArray: {}", e))?;
-
         // _scriptSleep - blocking sleep for sampler capture workflows.
         let sleep_fn = unsafe {
             NativeFunction::from_closure(move |_this, args, ctx| {
