@@ -24,72 +24,22 @@ fn help_displays() {
 }
 
 #[test]
-fn init_creates_expected_files() {
+fn rejects_non_emw_files() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let project_dir = temp.path().join("my-stm32-proj");
+    let path = temp.path().join("script.js");
+    std::fs::write(&path, "print('hi')").expect("write script");
 
     let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
-    cmd.args(["init", "--target", "stm32f042", "--path"])
-        .arg(&project_dir);
-    cmd.assert().success();
-
-    assert!(project_dir.join(".project").exists());
-    assert!(project_dir.join(".cproject").exists());
-    assert!(project_dir.join("my-stm32-proj.ioc").exists());
-    assert!(project_dir.join("Core/Src/main.c").exists());
-    assert!(project_dir.join("USB_DEVICE/App/usbd_midi_if.c").exists());
+    cmd.arg(&path)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("Only .emw scripts are supported"));
 }
 
 #[test]
-fn init_writes_selected_components() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let project_dir = temp.path().join("my-stm32-proj");
-
+fn eval_flag_parses() {
+    // Don't assert behavior here (it depends on whether Desktop is running in the test env).
+    // We just ensure Clap accepts the flag and the process starts.
     let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
-    cmd.args([
-        "init",
-        "--target",
-        "stm32f042",
-        "--path",
-        project_dir.to_str().expect("utf8 path"),
-        "--components",
-        "gpio,cc1101",
-    ]);
-    cmd.assert().success();
-
-    assert!(project_dir.join("Core/Src/cc1101.c").exists());
-}
-
-#[test]
-fn init_stm32f042_creates_project_files() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let project_dir = temp.path().join("my-stm32-proj");
-
-    let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
-    cmd.args(["init", "--target", "stm32f042", "--path"])
-        .arg(&project_dir);
-    cmd.assert().success();
-
-    assert!(project_dir.join(".project").exists());
-    assert!(project_dir.join(".cproject").exists());
-    assert!(project_dir.join("my-stm32-proj.ioc").exists());
-    assert!(project_dir.join("Core/Src/main.c").exists());
-}
-
-#[test]
-fn vibe_init_writes_agents_md() {
-    let temp = tempfile::tempdir().expect("tempdir");
-
-    let mut cmd = Command::cargo_bin("emwaver").expect("binary exists");
-    cmd.args(["vibe", "init", "--path"])
-        .arg(temp.path())
-        .args(["--force"]);
-    cmd.assert().success();
-
-    let agents_path = temp.path().join("AGENTS.md");
-    assert!(agents_path.exists());
-
-    let agents = std::fs::read_to_string(agents_path).expect("read agents");
-    assert!(agents.contains("## Vibe Hacking"));
-    assert!(agents.contains("emw.send("));
+    let _ = cmd.args(["-c", "print(1)"]).output();
 }

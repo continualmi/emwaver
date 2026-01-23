@@ -39,21 +39,11 @@ Official downloads:
 - https://www.st.com/en/development-tools/stm32cubeprog.html
 - https://www.st.com/en/development-tools/stm32cubemx.html
 
-## 2) Generate a Project (`emwaver-cli`)
+## 2) Note on Firmware Builds
 
-You can run `emwaver-cli` on Windows or in WSL. If you use WSL, **copy the generated project to a normal Windows folder** (for example `Documents/`) before opening it in STM32CubeIDE (CubeIDE doesn’t like WSL paths).
+EMWaver is **binary-first**: end users should not be building or flashing firmware from source.
 
-Install the CLI (from source):
-
-```bash
-cargo install --path app/cli --bin emwaver --force
-```
-
-Generate a project:
-
-```bash
-emwaver init --target stm32f042 --path ./my-stm32-proj
-```
+This page is kept for internal development/manufacturing workflows.
 
 ## 3) Build (STM32CubeIDE)
 
