@@ -234,7 +234,7 @@ export default function WorkspaceShell({
       return;
     }
     ensureEmwaverMonacoThemes(monaco);
-    monaco.editor.setTheme(getEmwaverMonacoTheme(theme));
+    monaco.editor.setTheme(getEmwaverMonacoTheme());
   }, [monaco, theme]);
 
   const [activeMainTabKind, setActiveMainTabKind] = useState<"file" | "preview">("file");
@@ -658,22 +658,15 @@ export default function WorkspaceShell({
         return;
       }
 
-      const isLight = theme === "light";
       const terminal = new Terminal({
         cursorBlink: true,
         fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
         fontSize: 13,
-        theme: isLight
-          ? {
-              background: "#f8fafc",
-              foreground: "#0f172a",
-              cursor: "#0ea5e9",
-            }
-          : {
-              background: "#0b1220",
-              foreground: "#f1f5f9",
-              cursor: "#38bdf8",
-            },
+        theme: {
+          background: "#111c32",
+          foreground: "#f1f5f9",
+          cursor: "#38bdf8",
+        },
       });
 
       const fitAddon = new FitAddon();
@@ -1788,7 +1781,7 @@ export default function WorkspaceShell({
               ) : activeFile ? (
                 <div className="h-full select-text">
                   <MonacoEditor
-                    theme={getEmwaverMonacoTheme(theme)}
+                    theme={getEmwaverMonacoTheme()}
                     path={activeFile.path}
                     language={activeFile.language}
                     value={activeFile.content}

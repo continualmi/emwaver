@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export type ThemeMode = "dark" | "light";
+export type ThemeMode = "dark";
 
 export type TerminalSession = {
   id: string;

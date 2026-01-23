@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type ThemeMode = "dark" | "light";
+type ThemeMode = "dark";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isTauriAvailable, safeInvoke } from "../utils/tauri";
 
@@ -222,7 +222,7 @@ export default function FlashFragment({ theme = "dark" }: { theme?: ThemeMode })
             </div>
             <div className="flex justify-center md:justify-end">
               <img
-                src={theme === "light" ? "/flash-mode-light.png" : "/flash-mode.png"}
+                src="/flash-mode.png"
                 alt="BOOT0 switch positions for Flash (DFU) vs Run mode"
                 className="max-h-[220px] w-auto select-none opacity-95"
                 draggable={false}

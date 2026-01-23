@@ -25,9 +25,7 @@ import { AppDialogProvider } from "./utils/AppDialogContext";
 
 if (typeof window !== "undefined") {
   window.__emwaverSplash?.setProgress?.(25);
-  const storedTheme = window.localStorage.getItem("emwaver.theme");
-  const theme = storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
-  document.documentElement.classList.add(`theme-${theme}`);
+  document.documentElement.classList.add("theme-dark");
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

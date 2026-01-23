@@ -149,7 +149,7 @@ export default function WorkspaceBottomPanel({
 
         <div
           ref={terminalPanelRef as unknown as RefObject<HTMLDivElement>}
-          className={`flex flex-col overflow-hidden ${theme === "light" ? "bg-slate-50" : "bg-slate-950"}`}
+          className="flex flex-col overflow-hidden bg-slate-950"
           style={{ height: terminalHeight }}
         >
           <div className="flex items-center justify-between border-b border-slate-900/70 px-2 py-1 text-xs">

@@ -74,12 +74,9 @@ type RecentProject = {
   lastOpenedAt: number;
 };
 
-type ThemeMode = "dark" | "light";
-
 const RECENT_PROJECTS_STORAGE_KEY = "emwaver.recentProjects";
 const RECENT_PROJECTS_LIMIT = 10;
-const THEME_STORAGE_KEY = "emwaver.theme";
-const DEFAULT_THEME: ThemeMode = "dark";
+const DEFAULT_THEME = "dark";
 
 const DEFAULT_SIDEBAR_WIDTH = 288;
 const SIDEBAR_MIN_WIDTH = 220;
@@ -130,13 +127,7 @@ function readStoredNumber(key: string, fallback: number, min: number, max: numbe
   return clamp(parsed, min, max);
 }
 
-function readStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") {
-    return DEFAULT_THEME;
-  }
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "light" || stored === "dark" ? stored : DEFAULT_THEME;
-}
+// Light mode removed.
 
 function createId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -164,7 +155,7 @@ function App() {
   const treeOpenStateRef = useRef<Map<string, Record<string, boolean>>>(new Map());
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
   const [shouldRestoreProject, setShouldRestoreProject] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
+  const theme = DEFAULT_THEME;
   const monaco = useMonaco();
 
   const getTreeOpenState = useCallback((projectId: string) => {
@@ -226,19 +217,7 @@ function App() {
     window.localStorage.setItem(ZOOM_STORAGE_KEY, zoomLevel.toFixed(2));
   }, [zoomLevel]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    const root = window.document.documentElement;
-    root.classList.remove("theme-dark", "theme-light");
-    root.classList.add(`theme-${theme}`);
-  }, [theme]);
-
-  const handleToggleTheme = useCallback(() => {
-    setTheme((current) => (current === "dark" ? "light" : "dark"));
-  }, []);
+  // Light mode removed.
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -867,20 +846,15 @@ function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <ActivityBar
-        activePane={activePane}
-        onFragmentClick={handleFragmentClick}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-      />
+      <ActivityBar activePane={activePane} onFragmentClick={handleFragmentClick} />
       <div className="relative flex flex-1 min-h-0">
         <Pane active={isEMWaverActive}>
           <HomePage onNavigateToFragment={handleFragmentClick} isActive={isEMWaverActive} />
         </Pane>
-        <Pane active={isScriptsActive}><ScriptsFragment theme={theme} isActive={isScriptsActive} /></Pane>
+        <Pane active={isScriptsActive}><ScriptsFragment isActive={isScriptsActive} /></Pane>
         <Pane active={isISMActive}><ISMFragment /></Pane>
         <Pane active={isSamplerActive}><SamplerFragment /></Pane>
-        <Pane active={isFlashActive}><FlashFragment theme={theme} /></Pane>
+        <Pane active={isFlashActive}><FlashFragment theme="dark" /></Pane>
       </div>
     </div>
   );
@@ -1035,11 +1009,9 @@ function Sidebar({
 type ActivityBarProps = {
   activePane: FragmentType;
   onFragmentClick: (fragment: FragmentType) => void;
-  theme: ThemeMode;
-  onToggleTheme: () => void;
 };
 
-function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: ActivityBarProps) {
+function ActivityBar({ activePane, onFragmentClick }: ActivityBarProps) {
   return (
     <aside className="flex w-14 shrink-0 flex-col items-center gap-3 border-r border-slate-900 bg-slate-950 py-4 overflow-y-auto">
       <ActivityButton
@@ -1072,9 +1044,7 @@ function ActivityBar({ activePane, onFragmentClick, theme, onToggleTheme }: Acti
         onClick={() => onFragmentClick("flash")}
         icon={<FlashIcon />}
       />
-      <div className="mt-auto flex flex-col gap-3">
-        <ThemeToggleButton theme={theme} onToggle={onToggleTheme} />
-      </div>
+      <div className="mt-auto flex flex-col gap-3" />
     </aside>
   );
 }
@@ -1084,28 +1054,6 @@ function FlashIcon() {
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full" aria-hidden="true">
       <path d="M12.7071 2.29289C12.3166 1.90237 11.6834 1.90237 11.2929 2.29289L6.29289 7.29289C5.90237 7.68342 5.90237 8.31658 6.29289 8.70711C6.68342 9.09763 7.31658 9.09763 7.70711 8.70711L11 5.41421V18C11 18.5523 11.4477 19 12 19C12.5523 19 13 18.5523 13 18V5.41421L16.2929 8.70711C16.6834 9.09763 17.3166 9.09763 17.7071 8.70711C18.0976 8.31658 18.0976 7.68342 17.7071 7.29289L12.7071 2.29289ZM5.25 20.5C4.83579 20.5 4.5 20.8358 4.5 21.25C4.5 21.6642 4.83579 22 5.25 22H18.75C19.1642 22 19.5 21.6642 19.5 21.25C19.5 20.8358 19.1642 20.5 18.75 20.5H5.25Z" />
     </svg>
-  );
-}
-
-function ThemeToggleButton({ theme, onToggle }: { theme: ThemeMode; onToggle: () => void }) {
-  const isLight = theme === "light";
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      title={isLight ? "Switch to dark mode" : "Switch to light mode"}
-      aria-label="Toggle theme"
-      aria-pressed={isLight}
-      className={`theme-toggle-button flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-transform transition-colors duration-150 hover:-translate-y-0.5 ${
-        isLight
-          ? "theme-toggle-button--active bg-slate-900 text-sky-200 shadow-lg shadow-sky-500/10"
-          : "text-slate-400 hover:bg-slate-900 hover:text-sky-200"
-      }`}
-    >
-      <span className="h-5 w-5" aria-hidden="true">
-        {isLight ? <SunIcon /> : <MoonIcon />}
-      </span>
-    </button>
   );
 }
 
@@ -1125,7 +1073,7 @@ function ActivityButton({ label, isActive, onClick, icon }: ActivityButtonProps)
       aria-label={label}
       className={`activity-button flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg transition-transform transition-colors duration-150 hover:-translate-y-0.5 ${
         isActive
-          ? "activity-button--active bg-slate-900 text-sky-200 shadow-lg shadow-sky-500/10"
+          ? "activity-button--active bg-slate-800 text-sky-200 ring-1 ring-sky-500/40 shadow-lg shadow-sky-500/10"
           : "text-slate-400 hover:bg-slate-900 hover:text-sky-200"
       }`}
     >
@@ -1133,30 +1081,6 @@ function ActivityButton({ label, isActive, onClick, icon }: ActivityButtonProps)
         {icon}
       </span>
     </button>
-  );
-}
-
-function SunIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
-      <circle cx="12" cy="12" r="4" />
-      <line x1="12" y1="2" x2="12" y2="5" />
-      <line x1="12" y1="19" x2="12" y2="22" />
-      <line x1="2" y1="12" x2="5" y2="12" />
-      <line x1="19" y1="12" x2="22" y2="12" />
-      <line x1="4.2" y1="4.2" x2="6.3" y2="6.3" />
-      <line x1="17.7" y1="17.7" x2="19.8" y2="19.8" />
-      <line x1="17.7" y1="6.3" x2="19.8" y2="4.2" />
-      <line x1="4.2" y1="19.8" x2="6.3" y2="17.7" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
-      <path d="M21 12.8a8.5 8.5 0 1 1-9.8-9.8 7 7 0 0 0 9.8 9.8z" />
-    </svg>
   );
 }
 

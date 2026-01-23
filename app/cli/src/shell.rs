@@ -1,6 +1,6 @@
 /*
  * EMWaver
- * Copyright (c) 2026 Luís Marnoto
+ * Copyright (c) 2026 Luis Marnoto
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,12 +42,13 @@ pub fn run_shell(verbose: bool) -> Result<()> {
         Err(_) => "Unknown".to_string(),
     };
 
-    println!("EMWaver shell (Desktop-backed). Connected to: {}", version_info);
-    println!("Type 'exit' to quit.");
+    println!("Connected");
+    println!("{}", version_info);
+    println!("exit to quit");
 
     let mut line = String::new();
     loop {
-        print!("emw> ");
+        print!(">>> ");
         io::stdout().flush().ok();
         line.clear();
         let n = io::stdin().read_line(&mut line)?;
@@ -78,7 +79,10 @@ pub fn run_shell(verbose: bool) -> Result<()> {
             }
         };
 
-        let bytes_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
+        let bytes_b64 = value
+            .get("bytes_b64")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let bytes = desktop_ipc::decode_b64(bytes_b64).unwrap_or_default();
         if verbose {
             let mut hex = String::new();
@@ -93,9 +97,11 @@ pub fn run_shell(verbose: bool) -> Result<()> {
             }
             println!("hex: {hex}");
         }
-        println!("{}", String::from_utf8_lossy(&bytes).trim_matches(['\0', '\n', '\r']));
+        println!(
+            "{}",
+            String::from_utf8_lossy(&bytes).trim_matches(['\0', '\n', '\r'])
+        );
     }
 
     Ok(())
 }
-
