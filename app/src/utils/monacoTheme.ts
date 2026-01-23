@@ -34,9 +34,9 @@ export function ensureEmwaverMonacoThemes(monaco: typeof Monaco): void {
     inherit: true,
     rules: [],
     colors: {
-      "editor.background": "#020617",
-      "editor.foreground": "#E2E8F0",
-      "editorLineNumber.foreground": "#475569",
+      "editor.background": "#0B1220",
+      "editor.foreground": "#F1F5F9",
+      "editorLineNumber.foreground": "#64748B",
       "editorLineNumber.activeForeground": "#CBD5E1",
       "editorCursor.foreground": "#38BDF8",
       "editor.selectionBackground": "#33415580",
@@ -45,14 +45,14 @@ export function ensureEmwaverMonacoThemes(monaco: typeof Monaco): void {
       "editorWhitespace.foreground": "#334155",
       "editorIndentGuide.background": "#1E293B",
       "editorIndentGuide.activeBackground": "#334155",
-      "editorGutter.background": "#020617",
-      "editorOverviewRuler.background": "#020617",
-      "editorWidget.background": "#0B1220",
+      "editorGutter.background": "#0B1220",
+      "editorOverviewRuler.background": "#0B1220",
+      "editorWidget.background": "#0F172A",
       "editorWidget.border": "#1E293B",
-      "editorSuggestWidget.background": "#0B1220",
+      "editorSuggestWidget.background": "#0F172A",
       "editorSuggestWidget.border": "#1E293B",
       "editorSuggestWidget.selectedBackground": "#1E293B",
-      "editorHoverWidget.background": "#0B1220",
+      "editorHoverWidget.background": "#0F172A",
       "editorHoverWidget.border": "#1E293B",
       "diffEditor.insertedTextBackground": "#14532D55",
       "diffEditor.removedTextBackground": "#7F1D1D55",
@@ -95,4 +95,3 @@ export function ensureEmwaverMonacoThemes(monaco: typeof Monaco): void {
 export function getEmwaverMonacoTheme(mode: MonacoThemeMode): string {
   return mode === "light" ? EMWAVER_LIGHT_THEME : EMWAVER_DARK_THEME;
 }
-
