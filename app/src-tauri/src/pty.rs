@@ -19,7 +19,8 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    sync::{Mutex},
+    path::PathBuf,
+    sync::Mutex,
     thread,
 };
 use tauri::{AppHandle, Emitter};
@@ -86,7 +87,11 @@ impl PtyManager {
         Self::default()
     }
 
-    pub fn start(&self, app: AppHandle, payload: PtyStartPayload) -> Result<PtyStartResponse, String> {
+    pub fn start(
+        &self,
+        app: AppHandle,
+        payload: PtyStartPayload,
+    ) -> Result<PtyStartResponse, String> {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = (app, payload);
@@ -116,7 +121,25 @@ impl PtyManager {
 
             if payload.emwaver_shell.unwrap_or(false) {
                 // Dedicated device shell (no general-purpose system commands).
-                cmd.arg("emwaver");
+                // Prefer repo-local CLI binary in dev so prompt/banner changes apply
+                // without needing a separate `cargo install`.
+                let app_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .map(PathBuf::from);
+                let debug_cli = app_dir
+                    .as_ref()
+                    .map(|dir| dir.join("cli/target/debug/emwaver"));
+                let release_cli = app_dir
+                    .as_ref()
+                    .map(|dir| dir.join("cli/target/release/emwaver"));
+
+                if debug_cli.as_ref().is_some_and(|path| path.exists()) {
+                    cmd.arg(debug_cli.unwrap());
+                } else if release_cli.as_ref().is_some_and(|path| path.exists()) {
+                    cmd.arg(release_cli.unwrap());
+                } else {
+                    cmd.arg("emwaver");
+                }
                 cmd.arg("shell");
             } else {
                 cmd.arg("/bin/zsh");

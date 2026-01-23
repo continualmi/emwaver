@@ -17,14 +17,10 @@
 
 import WorkspaceShell from "./workspace/WorkspaceShell";
 
-type ThemeMode = "dark" | "light";
-
 export default function ScriptsFragment({
-  theme = "dark",
   isActive = false,
 }: {
-  theme?: ThemeMode;
   isActive?: boolean;
 }) {
-  return <WorkspaceShell theme={theme} isActive={isActive} />;
+  return <WorkspaceShell theme="dark" isActive={isActive} />;
 }

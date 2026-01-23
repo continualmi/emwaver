@@ -288,8 +288,8 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
       fontSize: 13,
       theme: {
-        background: "#020617",
-        foreground: "#e2e8f0",
+        background: "#111c32",
+        foreground: "#f1f5f9",
         cursor: "#38bdf8",
       },
     });
@@ -993,7 +993,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
               {!status.connected ? "connect device" : shellSessionId ? "ready" : "starting..."}
             </div>
           </div>
-          <div ref={shellContainerRef} className="h-40 overflow-hidden rounded bg-slate-900" />
+          <div ref={shellContainerRef} className="h-40 overflow-hidden bg-slate-900 p-2" />
         </div>
 
         {devMonitorsEnabled ? (

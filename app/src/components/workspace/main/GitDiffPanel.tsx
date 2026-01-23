@@ -52,7 +52,7 @@ export default function GitDiffPanel({ theme, filePath, onClose, isLoading, diff
           <div className="flex h-full items-center justify-center text-sm text-slate-500">Binary file diff not supported.</div>
         ) : (
           <DiffEditor
-            theme={getEmwaverMonacoTheme(theme)}
+            theme={getEmwaverMonacoTheme()}
             original={diffContents?.original ?? ""}
             modified={diffContents?.modified ?? ""}
             options={{
@@ -66,4 +66,3 @@ export default function GitDiffPanel({ theme, filePath, onClose, isLoading, diff
     </div>
   );
 }
-
