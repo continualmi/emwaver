@@ -12,7 +12,7 @@ EMWaver also targets rapid iteration: the desktop app includes an IDE + EMWaver 
 
 Hardware is now centered around a single current-gen **STM32** device (USB).
 
-**EMWaver scripts**  are small JavaScript scripts that render real, native-feeling UI (via the UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a script, reload, and immediately get new controls and logic—without recompiling the apps or reflashing firmware.
+**EMWaver scripts** are small programs written in the EMWaver scripting language. They render real, native-feeling UI (via the UI DSL) and call into device APIs to run hardware workflows. They’re designed for rapid iteration: edit a script, reload, and immediately get new controls and logic-without recompiling the apps or reflashing firmware.
 
 The goal behind EMWaver IDE is simple: how fast can you fully exploit a new sensor/module/chip—not just “read a register” on a 1D serial monitor, but ship a complete UI for the chip’s functionality? With EMWaver, scripts let you build that UI in minutes with zero reflashing, while the EMWaver IDE and ecosystem let you iterate on firmware when needed. Instead of parsing logs, you get real controls (buttons, lists, pickers) that make it practical to explore and operate hardware features across common embedded protocols like SPI and I2C.
 

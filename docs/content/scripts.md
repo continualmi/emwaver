@@ -4,7 +4,7 @@ title: EMWaver scripts
 
 # EMWaver scripts
 
-EMWaver scripts  are JavaScript scripts that render portable UI and orchestrate EMWaver hardware workflows without requiring custom native app builds.
+EMWaver scripts are programs written in the EMWaver scripting language. They render portable UI and orchestrate EMWaver hardware workflows without requiring custom native app builds.
 
 ## UI and Components
 
@@ -16,7 +16,7 @@ EMWaver scripts build UI by constructing a tree of components and passing it to 
 - Implement a `render()` function that calls `UI.render(...)`.
 - Update state inside event handlers (`onTap`, `onChange`, `onSubmit`), then call `render()` again.
 
-```javascript title="Minimal script UI"
+```text title="Minimal EMWaver script UI"
 let count = 0;
 
 function render() {
@@ -89,7 +89,7 @@ Scripts run inside a sandbox that exposes a small set of global objects. The exa
 
 ### Arduino-like API (recommended)
 
-The lowest-level interface is the ASCII command protocol (via `emw.send(...)`). On desktop/mobile, the default script runtime loads `script_bootstrap.js`, which exposes an Arduino-ish convenience layer as thin wrappers over the command protocol:
+The lowest-level interface is the ASCII command protocol (via `emw.send(...)`). On desktop/mobile, the default script runtime loads `script_bootstrap.emw`, which exposes an Arduino-ish convenience layer as thin wrappers over the command protocol:
 
 - Digital IO: `pinMode(pin, INPUT|OUTPUT)`, `digitalRead(pin)`, `digitalWrite(pin, LOW|HIGH)`
 - ADC input: `analogRead(pin, { samples? })`, `analogReadResolution(bits)` (defaults to 12-bit on STM32F0)

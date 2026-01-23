@@ -71,7 +71,14 @@ export default function ExplorerTree({ root, dirChildren, openDirs, selectedPath
                           iconLabel?.accentClass ?? ""
                         }`}
                       >
-                        {iconLabel?.label}
+                        {iconLabel?.kind === "emw" ? (
+                          <span className="flex">
+                            <span className="text-slate-100">E</span>
+                            <span className="text-sky-400">M</span>
+                          </span>
+                        ) : (
+                          iconLabel?.label
+                        )}
                       </span>
                     )}
                   </span>
@@ -98,4 +105,3 @@ export default function ExplorerTree({ root, dirChildren, openDirs, selectedPath
 
   return renderDirectory(root, 0);
 }
-

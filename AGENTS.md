@@ -35,7 +35,7 @@ EMWaver scripts are the essence of EMWaver:
   - low-level hardware interactions
   - high-level user interfaces
 
-We treat `.js` as a first-class format for these scripts.
+We treat `.emw` as the first-class format for these scripts.
 
 ### Explicit Tradeoffs
 
@@ -85,7 +85,7 @@ Keep on-wire semantics stable:
 
 ## Scripts
 
-Scripts are user-authored extension bundles (manifest + JavaScript) that plug into the Script Engine sandbox.
+Scripts are user-authored extension bundles (manifest + EMWaver scripts) that plug into the Script Engine sandbox.
 
 - **Parity-first UI DSL**: script UI must render consistently across Android/iOS/Desktop.
 - **Unified scripting engine**: ScriptEngine is the single runtime.

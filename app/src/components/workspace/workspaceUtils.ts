@@ -18,18 +18,18 @@
 import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
 
 export const SCRIPT_ASSET_ROOT = "/default-scripts";
-export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.js";
+export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.emw";
 export const SCRIPT_EXAMPLE_SCRIPTS = [
-  "hello.js",
-  "blink.js",
-  "adc.js",
-  "pwm.js",
-  "cc1101.js",
-  "gpio.js",
-  "i2c.js",
-  "sampler.js",
-  "mfrc522.js",
-  "uart.js",
+  "hello.emw",
+  "blink.emw",
+  "adc.emw",
+  "pwm.emw",
+  "cc1101.emw",
+  "gpio.emw",
+  "i2c.emw",
+  "sampler.emw",
+  "mfrc522.emw",
+  "uart.emw",
 ];
 
 export const SCRIPT_ASSET_SCRIPTS = SCRIPT_EXAMPLE_SCRIPTS;
@@ -50,6 +50,7 @@ export function languageForPath(path: string): string {
   const ext = extension(path);
   if (ext === "ts" || ext === "tsx") return "typescript";
   if (ext === "js" || ext === "jsx") return "javascript";
+  if (ext === "emw") return "javascript";
   if (ext === "json") return "json";
   if (ext === "md") return "markdown";
   if (ext === "rs") return "rust";
@@ -64,7 +65,7 @@ export function languageForPath(path: string): string {
 
 export function isScriptScriptPath(path: string): boolean {
   const ext = extension(path);
-  return ext === "js" || ext === "jsx" || ext === "ts" || ext === "tsx";
+  return ext === "emw";
 }
 
 export function isScriptAssetPath(path: string): boolean {
@@ -130,17 +131,18 @@ export function timestampLabel(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
 }
 
-export function iconLabelForPath(path: string): { label: string; accentClass: string } {
+export function iconLabelForPath(path: string): { kind: "emw" | "text"; label: string; accentClass: string } {
   const ext = extension(path);
-  if (ext === "ts" || ext === "tsx") return { label: "TS", accentClass: "text-sky-400" };
-  if (ext === "js" || ext === "jsx") return { label: "JS", accentClass: "text-amber-300" };
-  if (ext === "json") return { label: "{}", accentClass: "text-yellow-200" };
-  if (ext === "md") return { label: "M", accentClass: "text-slate-300" };
-  if (ext === "rs") return { label: "RS", accentClass: "text-orange-300" };
-  if (ext === "c") return { label: "C", accentClass: "text-sky-300" };
-  if (ext === "h") return { label: "H", accentClass: "text-pink-300" };
-  if (ext === "toml") return { label: "T", accentClass: "text-slate-300" };
-  if (ext === "yml" || ext === "yaml") return { label: "Y", accentClass: "text-emerald-300" };
-  if (ext === "sh") return { label: "$", accentClass: "text-emerald-300" };
-  return { label: "•", accentClass: "text-slate-400" };
+  if (ext === "emw") return { kind: "emw", label: "EM", accentClass: "" };
+  if (ext === "ts" || ext === "tsx") return { kind: "text", label: "TS", accentClass: "text-sky-400" };
+  if (ext === "js" || ext === "jsx") return { kind: "text", label: "JS", accentClass: "text-amber-300" };
+  if (ext === "json") return { kind: "text", label: "{}", accentClass: "text-yellow-200" };
+  if (ext === "md") return { kind: "text", label: "M", accentClass: "text-slate-300" };
+  if (ext === "rs") return { kind: "text", label: "RS", accentClass: "text-orange-300" };
+  if (ext === "c") return { kind: "text", label: "C", accentClass: "text-sky-300" };
+  if (ext === "h") return { kind: "text", label: "H", accentClass: "text-pink-300" };
+  if (ext === "toml") return { kind: "text", label: "T", accentClass: "text-slate-300" };
+  if (ext === "yml" || ext === "yaml") return { kind: "text", label: "Y", accentClass: "text-emerald-300" };
+  if (ext === "sh") return { kind: "text", label: "$", accentClass: "text-emerald-300" };
+  return { kind: "text", label: "•", accentClass: "text-slate-400" };
 }

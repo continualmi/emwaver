@@ -16,10 +16,10 @@
  */
 
 /**
- * ScriptEngine - JavaScript execution sandbox for running scripts
- * 
+ * ScriptEngine - EMWaver script execution sandbox
+ *
  * Provides:
- * - JavaScript execution in isolated context
+ * - Script execution in isolated context
  * - UI DSL (UI.column, UI.row, UI.button, etc.)
  * - Native bindings (BLE, CC1101, etc.)
  * - Module loading system
@@ -91,7 +91,7 @@ export class ScriptEngine {
   }
 
   /**
-   * Execute a JavaScript script
+   * Execute an EMWaver script
    */
   execute(script: string, completion?: () => void): void {
     console.log('[ScriptEngine.execute] Called');
@@ -300,6 +300,9 @@ export class ScriptEngine {
    * Import a module by name
    */
   private importModule(moduleName: string): unknown {
+    if (/\.(js|jsx)$/i.test(String(moduleName || ""))) {
+      throw new Error(".js scripts/modules are not supported. Rename to .emw");
+    }
     const normalized = this.normalizeModuleName(moduleName);
     if (!normalized) {
       throw new Error(`Invalid module name: ${moduleName}`);
@@ -352,17 +355,17 @@ export class ScriptEngine {
   }
 
   /**
-   * Normalize module name (remove .js extension, handle paths)
+   * Normalize module name (remove .emw extension, handle paths)
    */
   private normalizeModuleName(name: string): string {
     return name
-      .replace(/\.(js|emw)$/, '')
+      .replace(/\.emw$/, '')
       .replace(/^\.\//, '')
       .toLowerCase();
   }
 
   /**
-   * Convert JavaScript object to ScriptTree
+   * Convert script object to ScriptTree
    */
   private convertToScriptTree(value: unknown): ScriptTree {
     if (value === null || value === undefined) {

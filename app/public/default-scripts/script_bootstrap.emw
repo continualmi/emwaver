@@ -1,7 +1,7 @@
 'use strict';
 
 // Canonical Script bootstrap/runtime.
-// This file is intended to be the single source of truth for the JS-side Script API surface.
+// This file is intended to be the single source of truth for the EMWaver Script API surface.
 //
 // Hosts must provide (at minimum) these bridge functions:
 // - _scriptPrint(message: string): void
