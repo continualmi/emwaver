@@ -44,7 +44,7 @@ function getSelectedPinNumber() {
 
 async function refreshBufferStats() {
   try {
-    bytesInBuffer = Number(await Sampler.buffer.lenBytes());
+    bytesInBuffer = Number(await Sampler.lenBytes());
   } catch (e) {
     // Keep previous value.
   }

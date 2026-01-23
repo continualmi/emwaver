@@ -201,7 +201,7 @@ Script `.emw` files are written in the EMWaver scripting language plus a small U
 - UART: `Serial.begin(baud)`, `Serial.write(data, opts?)`, `Serial.read(n, opts?)`, `Serial.end()`
 - ADC/PWM: `analogRead*`, `analogWrite*`
 - Timing: `millis()`, `await delay(ms)`, `sleep(ms)`
-- Sampler (desktop): `Sampler.start/stop/status/capture` + `Sampler.buffer.*`
+- Sampler (desktop): `Sampler.start/stop/status/capture` + `Sampler.packetCount/lenBytes/getBytes/clear/setInvertRx/readPacketsSince/compressViewport/firstBytes/lastBytes/sliceBytes`
 
 **Minimal script template**
 
