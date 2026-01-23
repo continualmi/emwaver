@@ -891,19 +891,40 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       return;
     }
 
-    // The device EMWaver version comes back on the command lane (RX entries in Command Monitor).
+    // Only treat an RX packet as a version response if it follows a VERSION request (opcode 0x01).
+    // Many other command responses start with status=0 and would otherwise be mis-parsed as semver.
+    let lastVersionTxIndex = -1;
     for (let i = commandEntries.length - 1; i >= 0; i--) {
       const entry = commandEntries[i];
-      if (entry.isTx) continue;
-      // Check for version response: status 0, then 3 bytes major.minor.patch
-      if (entry.data && entry.data.length >= 4 && entry.data[0] === 0) {
-        const major = entry.data[1];
-        const minor = entry.data[2];
-        const patch = entry.data[3];
-        const version = `${major}.${minor}.${patch}`;
-        setDeviceEmwaverVersion(version);
-        return;
+      if (!entry.isTx) continue;
+      if (entry.data?.[0] === 0x01) {
+        lastVersionTxIndex = i;
+        break;
       }
+    }
+    if (lastVersionTxIndex < 0) return;
+
+    const tx = commandEntries[lastVersionTxIndex];
+    const txTs = tx.timestamp;
+    const MAX_VERSION_RTT_MS = 1500;
+
+    for (let i = lastVersionTxIndex + 1; i < commandEntries.length; i++) {
+      const entry = commandEntries[i];
+      if (entry.isTx) continue;
+      if (entry.timestamp < txTs) continue;
+      if (entry.timestamp - txTs > MAX_VERSION_RTT_MS) break;
+
+      // Expected: [status=0, major, minor, patch, ...]
+      if (!entry.data || entry.data.length < 4) continue;
+      if (entry.data[0] !== 0) continue;
+      if (!Array.from(entry.data.slice(4)).every((b) => b === 0)) continue;
+
+      const major = entry.data[1];
+      const minor = entry.data[2];
+      const patch = entry.data[3];
+      const version = `${major}.${minor}.${patch}`;
+      setDeviceEmwaverVersion(version);
+      return;
     }
   }, [commandEntries, status.connected]);
 
