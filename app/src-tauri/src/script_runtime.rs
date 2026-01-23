@@ -30,6 +30,7 @@ use boa_engine::{
     js_string, native_function::NativeFunction, Context, JsArgs, JsNativeError,
     JsResult, JsValue, Source,
 };
+use boa_engine::value::TryFromJs;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
@@ -319,6 +320,47 @@ impl ScriptRuntime {
         context
             .register_global_builtin_callable(js_string!("_scriptSendCommandString"), 2, send_fn)
             .map_err(|e| format!("Failed to register _scriptSendCommandString: {}", e))?;
+
+        // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
+        let state_send_pkt = state.clone();
+        let send_pkt_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let bytes_value = args.get_or_undefined(0);
+                let timeout_ms = args
+                    .get_or_undefined(1)
+                    .to_u32(ctx)
+                    .unwrap_or(2000) as u64;
+
+                let array = boa_engine::object::builtins::JsUint8Array::try_from_js(&bytes_value, ctx)
+                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                let bytes = array.iter(ctx).collect::<Vec<u8>>();
+
+                let st = state_send_pkt.borrow();
+                let device = st.device.clone();
+                let rt = st.rt_handle.clone();
+
+                let result = rt.block_on(async {
+                    send_packet_command_bytes(&device, bytes, timeout_ms, 1).await
+                });
+
+                match result {
+                    Ok(resp) => {
+                        let out = boa_engine::object::builtins::JsUint8Array::from_iter(
+                            resp.into_iter(),
+                            ctx,
+                        )
+                        .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+                        Ok(out.into())
+                    }
+                    Err(e) => Err(JsNativeError::error()
+                        .with_message(format!("Send failed: {}", e))
+                        .into()),
+                }
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("_scriptSendPacket"), 2, send_pkt_fn)
+            .map_err(|e| format!("Failed to register _scriptSendPacket: {}", e))?;
 
         // _scriptSleep - blocking sleep for sampler capture workflows.
         let sleep_fn = unsafe {

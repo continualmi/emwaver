@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "emwaver_usb_io.h"
+#include "emw_proto.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,8 +41,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define CDC_TIMEOUT 100
-#define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver"
-#define EMWAVER_FIRMWARE_VERSION "0.1.0"
+#define EMWAVER_FIRMWARE_VERSION_MAJOR 0u
+#define EMWAVER_FIRMWARE_VERSION_MINOR 1u
+#define EMWAVER_FIRMWARE_VERSION_PATCH 0u
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -166,64 +168,48 @@ static size_t strbuf_append_char(char *buf, size_t cap, size_t offset, char c)
     return strbuf_append(buf, cap, offset, tmp);
 }
 
-static void command_send_ok(const uint8_t *data, size_t len)
+static void command_send_status(uint8_t status, const uint8_t *payload, size_t payload_len)
 {
-    // Always send fixed-size 128B superframes:
-    // - lane0[0..63]: command/response
-    // - lane1[64..127]: stream/BS (zero-filled for normal commands)
-    if (!data || len == 0) {
-        uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
-        superframe[0] = 0x00;
-        superframe[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-        if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
-            memcpy((void *)pending_cmd_lane, superframe, EMW_LANE_SIZE);
-            pending_cmd_ready = 1;
-            return;
-        }
-        (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
-        return;
+    // Binary response format:
+    //   lane0[0] = status
+    //   lane0[1..] = payload
+    //   lane0[63] = EMW_CMD_MARKER
+    if (payload_len > EMW_RESP_MAX_PAYLOAD) {
+        payload_len = EMW_RESP_MAX_PAYLOAD;
     }
 
+    // Sampling / retransmit mode: only one response lane can be piggybacked.
     if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
-        // Sampling / retransmit mode: keep command semantics simple (single response lane).
-        // Anything beyond the first 64 bytes is dropped.
         uint8_t lane[EMW_LANE_SIZE] = {0};
-        size_t chunk = len > (EMW_LANE_SIZE - 1u) ? (EMW_LANE_SIZE - 1u) : len;
-        memcpy(lane, data, chunk);
+        lane[0] = status;
+        if (payload && payload_len > 0) {
+            memcpy(&lane[1], payload, payload_len);
+        }
         lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
         memcpy((void *)pending_cmd_lane, lane, EMW_LANE_SIZE);
         pending_cmd_ready = 1;
         return;
     }
 
-    size_t offset = 0;
-    while (offset < len) {
-        uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
-        size_t chunk = len - offset;
-        if (chunk > (EMW_LANE_SIZE - 1u)) {
-            chunk = EMW_LANE_SIZE - 1u;
-        }
-        memcpy(&superframe[0], data + offset, chunk);
-        superframe[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-        (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
-        offset += chunk;
+    uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+    uint8_t *lane0 = &superframe[0];
+    lane0[0] = status;
+    if (payload && payload_len > 0) {
+        memcpy(&lane0[1], payload, payload_len);
     }
+    lane0[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
+    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
+}
+
+static void command_send_ok(const uint8_t *data, size_t len)
+{
+    command_send_status(EMW_RESP_STATUS_OK, data, len);
 }
 
 static void command_send_err(const char *msg)
 {
     (void)msg;
-    // Match the registry firmware behavior: errors are best-effort no-ops.
-    uint8_t lane[EMW_LANE_SIZE] = {0};
-    lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-    if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
-        memcpy((void *)pending_cmd_lane, lane, EMW_LANE_SIZE);
-        pending_cmd_ready = 1;
-        return;
-    }
-    uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
-    memcpy(&superframe[0], lane, EMW_LANE_SIZE);
-    (void)EMW_USB_SendResponsePkt_FS((uint8_t *)superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
+    command_send_status(EMW_RESP_STATUS_ERR, NULL, 0);
 }
 
 static void ISR_Sampler_raw(void)
@@ -1251,6 +1237,19 @@ static bool cli_parse_hex_bytes(const char *str, uint8_t *out, size_t max_len, s
     return true;
 }
 
+static uint16_t emw_u16_le(const uint8_t *p)
+{
+    return (uint16_t)p[0] | (uint16_t)((uint16_t)p[1] << 8);
+}
+
+static uint32_t emw_u32_le(const uint8_t *p)
+{
+    return (uint32_t)p[0]
+        | ((uint32_t)p[1] << 8)
+        | ((uint32_t)p[2] << 16)
+        | ((uint32_t)p[3] << 24);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -1316,77 +1315,53 @@ int main(void)
           continue;
       }
 
-      static char scratch_line[CLI_COMMAND_BUFFER + 1];
-      size_t line_len = midi_packet_len;
-      if (line_len > CLI_COMMAND_BUFFER) {
-          line_len = CLI_COMMAND_BUFFER;
-      }
-      size_t effective = 0;
-      for (size_t i = 0; i < line_len; i++) {
-          if (midi_packet[i] == '\0') {
+      const uint8_t opcode = midi_packet[0];
+      switch (opcode) {
+          case 0x00u: {
+              command_send_ok(NULL, 0);
               break;
           }
-          scratch_line[i] = (char)midi_packet[i];
-          effective++;
-      }
-      scratch_line[effective] = '\0';
-      // Trim trailing whitespace/newlines.
-      while (effective > 0 && is_cli_space(scratch_line[effective - 1])) {
-          scratch_line[effective - 1] = '\0';
-          effective--;
-      }
 
-      cli_command_view_t cmd;
-      if (!parse_cli_command_inplace(scratch_line, &cmd)) {
-          command_send_err(NULL);
-          midi_packet_consume();
-          continue;
-      }
-
-      if (cmd.verb && strcmp(cmd.verb, "version") == 0) {
-          char name[DEVICE_NAME_MAX_LEN + 1];
-          get_device_name(name, sizeof(name));
-          char msg[128];
-          size_t msg_len = 0;
-          msg[0] = '\0';
-          if (name[0] != '\0') {
-              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_WELCOME);
-              msg_len = strbuf_append_char(msg, sizeof(msg), msg_len, ' ');
-              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_VERSION);
-              msg_len = strbuf_append(msg, sizeof(msg), msg_len, " (");
-              msg_len = strbuf_append(msg, sizeof(msg), msg_len, name);
-              msg_len = strbuf_append_char(msg, sizeof(msg), msg_len, ')');
-          } else {
-              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_WELCOME);
-              msg_len = strbuf_append_char(msg, sizeof(msg), msg_len, ' ');
-              msg_len = strbuf_append(msg, sizeof(msg), msg_len, EMWAVER_FIRMWARE_VERSION);
+          case EMW_OP_VERSION: {
+              uint8_t out[3] = {
+                  (uint8_t)EMWAVER_FIRMWARE_VERSION_MAJOR,
+                  (uint8_t)EMWAVER_FIRMWARE_VERSION_MINOR,
+                  (uint8_t)EMWAVER_FIRMWARE_VERSION_PATCH,
+              };
+              command_send_ok(out, sizeof(out));
+              break;
           }
-          command_send_ok((const uint8_t *)msg, msg_len);
-          midi_packet_consume();
-          continue;
-      }
 
-      if (cmd.verb && strcmp(cmd.verb, "reset") == 0) {
-          const char *msg = "resetting";
-          command_send_ok((const uint8_t *)msg, strlen(msg));
-          midi_packet_consume();
-          HAL_Delay(10);
-          NVIC_SystemReset();
-          while (1) {}
-      }
+          case EMW_OP_RESET: {
+              command_send_ok(NULL, 0);
+              midi_packet_consume();
+              HAL_Delay(10);
+              NVIC_SystemReset();
+              while (1) {}
+          }
 
-      if (cmd.verb && strcmp(cmd.verb, "help") == 0) {
-          const char *msg = "https://luispl77.github.io/emwaver-docs/index.html";
-          command_send_ok((const uint8_t *)msg, strlen(msg));
-          midi_packet_consume();
-          continue;
-      }
+          case EMW_OP_HELP: {
+              // Intentionally empty: docs are host-side.
+              command_send_ok(NULL, 0);
+              break;
+          }
 
-      if (cmd.verb && strcmp(cmd.verb, "name") == 0) {
-          if (cmd.positional_count > 0) {
-              const char* new_name = cmd.positional[0];
-              size_t len = strlen(new_name);
-              if (len > DEVICE_NAME_MAX_LEN) len = DEVICE_NAME_MAX_LEN;
+          case EMW_OP_NAME_GET: {
+              char name[DEVICE_NAME_MAX_LEN + 1];
+              get_device_name(name, sizeof(name));
+              size_t len = strlen(name);
+              command_send_ok((const uint8_t *)name, len);
+              break;
+          }
+
+          case EMW_OP_NAME_SET: {
+              uint8_t len = midi_packet[1];
+              if (len > DEVICE_NAME_MAX_LEN) {
+                  len = DEVICE_NAME_MAX_LEN;
+              }
+              if (len > 62u) {
+                  len = 62u;
+              }
 
               HAL_FLASH_Unlock();
               FLASH_EraseInitTypeDef EraseInitStruct;
@@ -1396,734 +1371,91 @@ int main(void)
               uint32_t PageError = 0;
 
               if (HAL_FLASHEx_Erase(&EraseInitStruct, &PageError) != HAL_OK) {
-                  command_send_err("Erase failed");
+                  command_send_err(NULL);
               } else {
                   for (size_t i = 0; i < len; i += 2) {
-                      uint16_t data = (unsigned char)new_name[i];
-                      if (i + 1 < len) data |= ((unsigned char)new_name[i+1] << 8);
+                      uint16_t data = (uint16_t)midi_packet[2 + i];
+                      if (i + 1 < len) {
+                          data |= (uint16_t)((uint16_t)midi_packet[2 + i + 1] << 8);
+                      }
                       if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, USER_DATA_FLASH_ADDR + i, data) != HAL_OK) {
-                          command_send_err("Write failed");
+                          command_send_err(NULL);
                           break;
                       }
                   }
-                  if (len % 2 == 0) {
-                       HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, USER_DATA_FLASH_ADDR + len, 0);
+                  if ((len % 2u) == 0u) {
+                      (void)HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, USER_DATA_FLASH_ADDR + len, 0);
                   }
                   command_send_ok(NULL, 0);
               }
               HAL_FLASH_Lock();
-          } else {
-              char name[DEVICE_NAME_MAX_LEN + 1];
-              get_device_name(name, sizeof(name));
-              if (name[0] != '\0') {
-                  command_send_ok((const uint8_t*)name, strlen(name));
-              } else {
-                  command_send_ok((const uint8_t*)"(no name)", 9);
-              }
-          }
-          midi_packet_consume();
-          continue;
-      }
-
-	      if (cmd.verb && strcmp(cmd.verb, "adc") == 0 && cmd.positional_count > 0) {
-	          const char *sub = cmd.positional[0];
-
-	          if (strcmp(sub, "read") == 0) {
-	              const char *pin_str = cli_get_arg_view(&cmd, "pin");
-	              const char *src_str = cli_get_arg_view(&cmd, "src");
-	              const char *samples_str = cli_get_arg_view(&cmd, "samples");
-
-	              if ((pin_str && src_str) || (!pin_str && !src_str)) {
-	                  command_send_err(NULL);
-	                  free_bulk_packet();
-	                  continue;
-	              }
-
-	              int samples_i = 1;
-	              if (samples_str && !cli_parse_int(samples_str, &samples_i)) {
-	                  command_send_err(NULL);
-	                  free_bulk_packet();
-	                  continue;
-	              }
-	              if (samples_i < 1) samples_i = 1;
-	              if (samples_i > 64) samples_i = 64;
-
-	              uint32_t chsel_bit = 0;
-
-	              if (pin_str) {
-	                  int pin_enc = -1;
-	                  if (!cli_parse_int(pin_str, &pin_enc) || pin_enc < 0 || pin_enc > 31) {
-	                      command_send_err(NULL);
-	                      free_bulk_packet();
-	                      continue;
-	                  }
-
-	                  GPIO_TypeDef *port = NULL;
-	                  uint16_t pin_mask = 0;
-	                  if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
-	                      command_send_err(NULL);
-	                      free_bulk_packet();
-	                      continue;
-	                  }
-
-	                  uint8_t pin_index = 0;
-	                  if (!pin_mask_to_index(pin_mask, &pin_index)) {
-	                      command_send_err(NULL);
-	                      free_bulk_packet();
-	                      continue;
-	                  }
-
-	                  disable_tim2_output_if_needed(port, pin_index);
-	                  gpio_set_mode(port, pin_mask, GPIO_MODE_ANALOG, GPIO_NOPULL);
-
-	                  if (!adc_channel_from_pin(port, pin_index, &chsel_bit)) {
-	                      command_send_err(NULL);
-	                      free_bulk_packet();
-	                      continue;
-	                  }
-	              } else {
-	                  // Internal sources: temp sensor (CH16), VREFINT (CH17), VBAT (CH18).
-	                  if (strcmp(src_str, "temp") == 0) {
-	                      ADC1_COMMON->CCR |= (ADC_CCR_TSEN | ADC_CCR_VREFEN);
-	                      chsel_bit = ADC_CHSELR_CHSEL16;
-	                  } else if (strcmp(src_str, "vrefint") == 0) {
-	                      ADC1_COMMON->CCR |= ADC_CCR_VREFEN;
-	                      chsel_bit = ADC_CHSELR_CHSEL17;
-	                  } else if (strcmp(src_str, "vbat") == 0) {
-	                      ADC1_COMMON->CCR |= ADC_CCR_VBATEN;
-	                      chsel_bit = ADC_CHSELR_CHSEL18;
-	                  } else {
-	                      command_send_err(NULL);
-	                      free_bulk_packet();
-	                      continue;
-	                  }
-	              }
-
-	              uint32_t sum = 0;
-	              for (int i = 0; i < samples_i; ++i) {
-	                  uint16_t v = 0;
-	                  if (!adc_read_single(chsel_bit, &v)) {
-	                      command_send_err(NULL);
-	                      free_bulk_packet();
-	                      goto adc_done;
-	                  }
-	                  sum += (uint32_t)v;
-	              }
-
-	              uint16_t avg = (uint16_t)((sum + (uint32_t)(samples_i / 2)) / (uint32_t)samples_i);
-	              uint8_t out[2] = {(uint8_t)(avg & 0xFFu), (uint8_t)((avg >> 8) & 0xFFu)};
-	              command_send_ok(out, sizeof(out));
-	              free_bulk_packet();
-adc_done:
-	              continue;
-	          }
-
-		          command_send_err(NULL);
-		          free_bulk_packet();
-		          continue;
-		      }
-
-		      if (cmd.verb && strcmp(cmd.verb, "uart") == 0 && cmd.positional_count > 0) {
-		          const char *sub = cmd.positional[0];
-
-		          if (strcmp(sub, "open") == 0) {
-		              int baud_i = 115200;
-		              const char *baud_str = cli_get_arg_view(&cmd, "baud");
-		              if (baud_str && !cli_parse_int(baud_str, &baud_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (baud_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              uart1_baud = (uint32_t)baud_i;
-		              if (!uart1_ensure(uart1_baud)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              command_send_ok(NULL, 0);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "close") == 0) {
-		              uart1_deinit();
-		              command_send_ok(NULL, 0);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "write") == 0) {
-		              int baud_i = (int)uart1_baud;
-		              int timeout_i = 1000;
-		              const char *baud_str = cli_get_arg_view(&cmd, "baud");
-		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
-		              const char *tx_str = cli_get_arg_view(&cmd, "tx");
-		              if (baud_str && !cli_parse_int(baud_str, &baud_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!tx_str || tx_str[0] == '\0') {
-		                  command_send_ok(NULL, 0);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (baud_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uart1_baud = (uint32_t)baud_i;
-		              if (!uart1_ensure(uart1_baud)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uint8_t tx_buf[64] = {0};
-		              size_t tx_len = 0;
-		              if (!cli_parse_hex_bytes(tx_str, tx_buf, 63u, &tx_len)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              size_t written = 0;
-		              if (!uart1_write(tx_buf, tx_len, (uint32_t)timeout_i, &written)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              uint8_t out = (uint8_t)(written & 0xFFu);
-		              command_send_ok(&out, 1);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "read") == 0) {
-		              int baud_i = (int)uart1_baud;
-		              int timeout_i = 250;
-		              int n_i = 0;
-		              const char *baud_str = cli_get_arg_view(&cmd, "baud");
-		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
-		              const char *n_str = cli_get_arg_view(&cmd, "n");
-		              if (baud_str && !cli_parse_int(baud_str, &baud_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!cli_parse_int(n_str, &n_i) || n_i < 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (n_i == 0) {
-		                  command_send_ok(NULL, 0);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (n_i > 63) {
-		                  n_i = 63;
-		              }
-		              if (baud_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uart1_baud = (uint32_t)baud_i;
-		              if (!uart1_ensure(uart1_baud)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uint8_t rx_buf[64] = {0};
-		              size_t got = 0;
-		              if (!uart1_read(rx_buf, (size_t)n_i, (uint32_t)timeout_i, &got)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              command_send_ok(rx_buf, got);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          command_send_err(NULL);
-		          free_bulk_packet();
-		          continue;
-		      }
-
-		      if (cmd.verb && strcmp(cmd.verb, "i2c") == 0 && cmd.positional_count > 0) {
-		          const char *sub = cmd.positional[0];
-
-		          if (strcmp(sub, "open") == 0) {
-		              int hz_i = 100000;
-		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
-		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (hz_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              i2c1_hz = (uint32_t)hz_i;
-		              if (!i2c1_ensure(i2c1_hz)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              command_send_ok(NULL, 0);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "close") == 0) {
-		              i2c1_deinit();
-		              command_send_ok(NULL, 0);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "write") == 0) {
-		              int hz_i = (int)i2c1_hz;
-		              int timeout_i = 250;
-		              int addr_i = -1;
-		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
-		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
-		              const char *addr_str = cli_get_arg_view(&cmd, "addr");
-		              const char *tx_str = cli_get_arg_view(&cmd, "tx");
-		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!cli_parse_int(addr_str, &addr_i) || addr_i < 0 || addr_i > 0x7F) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!tx_str || tx_str[0] == '\0') {
-		                  command_send_ok(NULL, 0);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (hz_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              i2c1_hz = (uint32_t)hz_i;
-		              if (!i2c1_ensure(i2c1_hz)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uint8_t tx_buf[64] = {0};
-		              size_t tx_len = 0;
-		              if (!cli_parse_hex_bytes(tx_str, tx_buf, 63u, &tx_len)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              if (!i2c1_write_then_maybe_stop((uint8_t)addr_i, tx_buf, tx_len, true, (uint32_t)timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              command_send_ok(NULL, 0);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "read") == 0) {
-		              int hz_i = (int)i2c1_hz;
-		              int timeout_i = 250;
-		              int addr_i = -1;
-		              int n_i = 0;
-		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
-		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
-		              const char *addr_str = cli_get_arg_view(&cmd, "addr");
-		              const char *n_str = cli_get_arg_view(&cmd, "n");
-		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!cli_parse_int(addr_str, &addr_i) || addr_i < 0 || addr_i > 0x7F) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!cli_parse_int(n_str, &n_i) || n_i < 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (n_i == 0) {
-		                  command_send_ok(NULL, 0);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (n_i > 63) {
-		                  n_i = 63;
-		              }
-		              if (hz_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              i2c1_hz = (uint32_t)hz_i;
-		              if (!i2c1_ensure(i2c1_hz)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uint8_t rx_buf[64] = {0};
-		              if (!i2c1_read_with_stop((uint8_t)addr_i, rx_buf, (size_t)n_i, (uint32_t)timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              command_send_ok(rx_buf, (size_t)n_i);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          if (strcmp(sub, "xfer") == 0) {
-		              int hz_i = (int)i2c1_hz;
-		              int timeout_i = 250;
-		              int addr_i = -1;
-		              int rx_i = 0;
-		              const char *hz_str = cli_get_arg_view(&cmd, "hz");
-		              const char *timeout_str = cli_get_arg_view(&cmd, "timeout");
-		              const char *addr_str = cli_get_arg_view(&cmd, "addr");
-		              const char *tx_str = cli_get_arg_view(&cmd, "tx");
-		              const char *rx_str = cli_get_arg_view(&cmd, "rx");
-		              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (timeout_str && !cli_parse_int(timeout_str, &timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (!cli_parse_int(addr_str, &addr_i) || addr_i < 0 || addr_i > 0x7F) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (rx_str && !cli_parse_int(rx_str, &rx_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (rx_i < 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-		              if (rx_i > 63) {
-		                  rx_i = 63;
-		              }
-		              if (hz_i <= 0) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              i2c1_hz = (uint32_t)hz_i;
-		              if (!i2c1_ensure(i2c1_hz)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              uint8_t tx_buf[64] = {0};
-		              size_t tx_len = 0;
-		              if (tx_str && tx_str[0] != '\0') {
-		                  if (!cli_parse_hex_bytes(tx_str, tx_buf, 63u, &tx_len)) {
-		                      command_send_err(NULL);
-		                      free_bulk_packet();
-		                      continue;
-		                  }
-		              }
-
-		              uint8_t rx_buf[64] = {0};
-		              if (!i2c1_xfer((uint8_t)addr_i,
-		                             tx_buf, tx_len,
-		                             rx_buf, (size_t)rx_i,
-		                             (uint32_t)timeout_i)) {
-		                  command_send_err(NULL);
-		                  free_bulk_packet();
-		                  continue;
-		              }
-
-		              command_send_ok(rx_buf, (size_t)rx_i);
-		              free_bulk_packet();
-		              continue;
-		          }
-
-		          command_send_err(NULL);
-		          free_bulk_packet();
-		          continue;
-		      }
-
-		      if (cmd.verb && strcmp(cmd.verb, "spi") == 0 && cmd.positional_count > 0) {
-		          const char *sub = cmd.positional[0];
-
-		          if (strcmp(sub, "xfer") == 0) {
-	              int cs_i = 4; // Default CS pin: PA4 (NSS_RFID / CC1101 CS).
-              int rx_i = 0;
-              const char *cs_str = cli_get_arg_view(&cmd, "cs");
-              const char *rx_str = cli_get_arg_view(&cmd, "rx");
-              const char *tx_str = cli_get_arg_view(&cmd, "tx");
-
-              if (cs_str && !cli_parse_int(cs_str, &cs_i)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              if (rx_str && !cli_parse_int(rx_str, &rx_i)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              if (cs_i < 0 || cs_i > 31 || rx_i < 0) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              GPIO_TypeDef *cs_port = NULL;
-              uint16_t cs_pin_mask = 0;
-              if (!decode_encoded_pin(cs_i, &cs_port, &cs_pin_mask)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint8_t tx_buf[64] = {0};
-              size_t tx_len = 0;
-              if (tx_str && tx_str[0] != '\0') {
-                  if (!cli_parse_hex_bytes(tx_str, tx_buf, sizeof(tx_buf), &tx_len)) {
-                      command_send_err(NULL);
-                      free_bulk_packet();
-                      continue;
-                  }
-              }
-
-              size_t requested_rx = 0;
-              if (rx_i > 0) {
-                  requested_rx = (size_t)rx_i;
-                  if (requested_rx > 63u) {
-                      requested_rx = 63u;
-                  }
-              }
-
-              size_t xfer_len = 0;
-              if (requested_rx == 0) {
-                  // If `--rx` is omitted or 0, return tx_len bytes.
-                  xfer_len = tx_len;
-                  requested_rx = tx_len;
-              } else {
-                  // If `--tx` is omitted, clock out 0x00 bytes to read rx bytes.
-                  xfer_len = tx_len > requested_rx ? tx_len : requested_rx;
-              }
-
-              if (xfer_len == 0 || requested_rx == 0) {
-                  command_send_ok(NULL, 0);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint8_t tx_xfer[64] = {0};
-              if (tx_len > 0) {
-                  memcpy(tx_xfer, tx_buf, tx_len);
-              }
-              uint8_t rx_buf[64] = {0};
-
-              // Ensure CS is configured and idle-high.
-              //
-              // Important: preload the output latch HIGH before switching the pin to output mode.
-              // Otherwise, HAL_GPIO_Init() can briefly drive the default output state (often LOW),
-              // creating a short CS pulse that can break some slaves (including CC1101).
-              enable_gpio_clock(cs_port);
-              gpio_write_latch(cs_port, cs_pin_mask, true);
-              configurePin(cs_port, cs_pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
-
-              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_RESET);
-              HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(&hspi1, tx_xfer, rx_buf, (uint16_t)xfer_len, 100u);
-              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
-
-              if (st != HAL_OK) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              command_send_ok(rx_buf, requested_rx);
-              free_bulk_packet();
-              continue;
+              break;
           }
 
-          command_send_err(NULL);
-          free_bulk_packet();
-          continue;
-      }
-
-	      if (cmd.verb && strcmp(cmd.verb, "sample") == 0 && cmd.positional_count > 0) {
-	          const char *sub = cmd.positional[0];
-	          if (strcmp(sub, "start") == 0) {
-              int pin_enc = -1;
-              const char *pin_str = cli_get_arg_view(&cmd, "pin");
-              if (!cli_parse_int(pin_str, &pin_enc)) {
+          case EMW_OP_GPIO: {
+              uint8_t sub = midi_packet[1];
+              uint8_t pin_enc = midi_packet[2];
+              if (pin_enc > 31u) {
                   command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
+                  break;
               }
 
               GPIO_TypeDef *port = NULL;
               uint16_t pin_mask = 0;
-              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
+              if (!decode_encoded_pin((int)pin_enc, &port, &pin_mask)) {
                   command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint32_t pull = (port == GPIOA && pin_mask == GPIO_PIN_1) ? GPIO_NOPULL : GPIO_PULLDOWN;
-              configurePin(port, pin_mask, GPIO_MODE_INPUT, pull);
-              samplerPort = port;
-              samplerPin = pin_mask;
-
-              currentBuffer = sampler_buf_a;
-              transmitBuffer = NULL;
-              bufferIndex = 0;
-              bufferReady = 0;
-
-              EMW_USB_SetBufferType_FS(EMW_BUFFER_DOUBLE);
-              ism_mode = ISM_MODE_RAW_SAMPLING;
-              HAL_TIM_Base_Start_IT(&htim3);
-              command_send_ok(NULL, 0);
-          } else if (strcmp(sub, "stop") == 0) {
-              stop_sampling();
-              command_send_ok(NULL, 0);
-          } else {
-              command_send_err(NULL);
-          }
-
-          free_bulk_packet();
-          continue;
-      }
-
-      if (cmd.verb && strcmp(cmd.verb, "gpio") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
-          if (strcmp(sub, "in") == 0 || strcmp(sub, "out") == 0 ||
-              strcmp(sub, "read") == 0 || strcmp(sub, "high") == 0 ||
-              strcmp(sub, "low") == 0 || strcmp(sub, "pull") == 0 ||
-              strcmp(sub, "info") == 0) {
-              int pin_enc = -1;
-              const char *pin_str = cli_get_arg_view(&cmd, "pin");
-              if (!cli_parse_int(pin_str, &pin_enc)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              GPIO_TypeDef *port = NULL;
-              uint16_t pin_mask = 0;
-              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
+                  break;
               }
 
               uint8_t pin_index = 0;
               if (!pin_mask_to_index(pin_mask, &pin_index)) {
                   command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
+                  break;
               }
 
               disable_tim2_output_if_needed(port, pin_index);
 
-              if (strcmp(sub, "in") == 0) {
+              if (sub == EMW_GPIO_IN) {
                   gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, GPIO_NOPULL);
                   command_send_ok(NULL, 0);
-              } else if (strcmp(sub, "out") == 0) {
+                  break;
+              }
+              if (sub == EMW_GPIO_OUT) {
                   gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
                   command_send_ok(NULL, 0);
-              } else if (strcmp(sub, "pull") == 0) {
-                  int pull_mode = 0;
-                  const char *mode_str = cli_get_arg_view(&cmd, "mode");
-                  if (!cli_parse_int(mode_str, &pull_mode)) {
-                      command_send_err(NULL);
-                      free_bulk_packet();
-                      continue;
-                  }
+                  break;
+              }
+              if (sub == EMW_GPIO_PULL) {
+                  uint8_t pull_mode = midi_packet[3];
                   uint32_t pull = GPIO_NOPULL;
-                  if (pull_mode == 1) {
+                  if (pull_mode == 1u) {
                       pull = GPIO_PULLUP;
-                  } else if (pull_mode == 2) {
+                  } else if (pull_mode == 2u) {
                       pull = GPIO_PULLDOWN;
-                  } else if (pull_mode != 0) {
+                  } else if (pull_mode != 0u) {
                       command_send_err(NULL);
-                      free_bulk_packet();
-                      continue;
+                      break;
                   }
                   gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, pull);
                   command_send_ok(NULL, 0);
-              } else if (strcmp(sub, "read") == 0) {
+                  break;
+              }
+              if (sub == EMW_GPIO_READ) {
                   gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, GPIO_NOPULL);
                   uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
                   command_send_ok(&out, 1);
-              } else if (strcmp(sub, "high") == 0 || strcmp(sub, "low") == 0) {
-                  bool value = (strcmp(sub, "high") == 0);
+                  break;
+              }
+              if (sub == EMW_GPIO_HIGH || sub == EMW_GPIO_LOW) {
+                  bool value = (sub == EMW_GPIO_HIGH);
                   gpio_write_latch(port, pin_mask, value);
                   gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
                   HAL_GPIO_WritePin(port, pin_mask, value ? GPIO_PIN_SET : GPIO_PIN_RESET);
                   uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
                   command_send_ok(&out, 1);
-              } else if (strcmp(sub, "info") == 0) {
+                  break;
+              }
+              if (sub == EMW_GPIO_INFO) {
                   enable_gpio_clock(port);
                   uint32_t moder = port->MODER;
                   uint32_t otyper = port->OTYPER;
@@ -2141,277 +1473,445 @@ adc_done:
 
                   uint8_t response[6] = {mode, otype, pupd, af, idr_bit, odr_bit};
                   command_send_ok(response, sizeof(response));
+                  break;
+              }
+
+              command_send_err(NULL);
+              break;
+          }
+
+          case EMW_OP_ADC_READ: {
+              uint8_t src = midi_packet[1];
+              uint8_t pin_enc = midi_packet[2];
+              uint8_t samples = midi_packet[3];
+              if (samples < 1u) samples = 1u;
+              if (samples > 64u) samples = 64u;
+
+              uint32_t chsel_bit = 0;
+              if (src == EMW_ADC_SRC_PIN) {
+                  if (pin_enc > 31u) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  GPIO_TypeDef *port = NULL;
+                  uint16_t pin_mask = 0;
+                  if (!decode_encoded_pin((int)pin_enc, &port, &pin_mask)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+
+                  uint8_t pin_index = 0;
+                  if (!pin_mask_to_index(pin_mask, &pin_index)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+
+                  disable_tim2_output_if_needed(port, pin_index);
+                  gpio_set_mode(port, pin_mask, GPIO_MODE_ANALOG, GPIO_NOPULL);
+                  if (!adc_channel_from_pin(port, pin_index, &chsel_bit)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+              } else if (src == EMW_ADC_SRC_TEMP) {
+                  ADC1_COMMON->CCR |= (ADC_CCR_TSEN | ADC_CCR_VREFEN);
+                  chsel_bit = ADC_CHSELR_CHSEL16;
+              } else if (src == EMW_ADC_SRC_VREFINT) {
+                  ADC1_COMMON->CCR |= ADC_CCR_VREFEN;
+                  chsel_bit = ADC_CHSELR_CHSEL17;
+              } else if (src == EMW_ADC_SRC_VBAT) {
+                  ADC1_COMMON->CCR |= ADC_CCR_VBATEN;
+                  chsel_bit = ADC_CHSELR_CHSEL18;
               } else {
                   command_send_err(NULL);
+                  break;
               }
 
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "R") == 0 && cmd.positional_count >= 3) {
-              int port_int = 0;
-              int pin_int = 0;
-              if (!cli_parse_int(cmd.positional[1], &port_int) || !cli_parse_int(cmd.positional[2], &pin_int)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              GPIO_TypeDef *port = (port_int == 0) ? GPIOA : (port_int == 1) ? GPIOB : NULL;
-              if (!port || pin_int < 0 || pin_int > 15) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              uint16_t pin_mask = (uint16_t)(1u << (uint8_t)pin_int);
-              disable_tim2_output_if_needed(port, (uint8_t)pin_int);
-              gpio_set_mode(port, pin_mask, GPIO_MODE_INPUT, GPIO_NOPULL);
-              uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
-              command_send_ok(&out, 1);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "W") == 0 && cmd.positional_count >= 4) {
-              int port_int = 0;
-              int pin_int = 0;
-              int value_int = 0;
-              if (!cli_parse_int(cmd.positional[1], &port_int) ||
-                  !cli_parse_int(cmd.positional[2], &pin_int) ||
-                  !cli_parse_int(cmd.positional[3], &value_int)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              GPIO_TypeDef *port = (port_int == 0) ? GPIOA : (port_int == 1) ? GPIOB : NULL;
-              if (!port || pin_int < 0 || pin_int > 15) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              uint16_t pin_mask = (uint16_t)(1u << (uint8_t)pin_int);
-              disable_tim2_output_if_needed(port, (uint8_t)pin_int);
-              bool value = value_int ? true : false;
-              gpio_write_latch(port, pin_mask, value);
-              gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-              HAL_GPIO_WritePin(port, pin_mask, value ? GPIO_PIN_SET : GPIO_PIN_RESET);
-              uint8_t out = (uint8_t)HAL_GPIO_ReadPin(port, pin_mask);
-              command_send_ok(&out, 1);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "I") == 0 && cmd.positional_count >= 3) {
-              int port_int = 0;
-              int pin_int = 0;
-              if (!cli_parse_int(cmd.positional[1], &port_int) || !cli_parse_int(cmd.positional[2], &pin_int)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              GPIO_TypeDef *port = (port_int == 0) ? GPIOA : (port_int == 1) ? GPIOB : NULL;
-              if (!port || pin_int < 0 || pin_int > 15) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              enable_gpio_clock(port);
-              uint32_t moder = port->MODER;
-              uint32_t otyper = port->OTYPER;
-              uint32_t pupdr = port->PUPDR;
-              uint32_t idr = port->IDR;
-              uint32_t odr = port->ODR;
-              uint32_t afr = (pin_int < 8) ? port->AFR[0] : port->AFR[1];
-
-              uint8_t mode = (uint8_t)((moder >> (pin_int * 2)) & 0x03);
-              uint8_t otype = (uint8_t)((otyper >> pin_int) & 0x01);
-              uint8_t pupd = (uint8_t)((pupdr >> (pin_int * 2)) & 0x03);
-              uint8_t idr_bit = (uint8_t)((idr >> pin_int) & 0x01);
-              uint8_t odr_bit = (uint8_t)((odr >> pin_int) & 0x01);
-              uint8_t af = (uint8_t)((afr >> ((pin_int % 8) * 4)) & 0x0F);
-
-              uint8_t response[6] = {mode, otype, pupd, af, idr_bit, odr_bit};
-              command_send_ok(response, sizeof(response));
-              free_bulk_packet();
-              continue;
-          }
-
-          command_send_err(NULL);
-          free_bulk_packet();
-          continue;
-      }
-
-      if (cmd.verb && strcmp(cmd.verb, "pwm") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
-
-          if (strcmp(sub, "freq") == 0) {
-              int hz_i = 0;
-              const char *hz_str = cli_get_arg_view(&cmd, "hz");
-              if (!cli_parse_int(hz_str, &hz_i) || hz_i <= 0) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              if (!tim2_set_pwm_hz((uint32_t)hz_i)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              command_send_ok(NULL, 0);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "stop") == 0 || strcmp(sub, "off") == 0) {
-              int pin_enc = -1;
-              const char *pin_str = cli_get_arg_view(&cmd, "pin");
-              if (!cli_parse_int(pin_str, &pin_enc)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              GPIO_TypeDef *port = NULL;
-              uint16_t pin_mask = 0;
-              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint8_t pin_index = 0;
-              if (!pin_mask_to_index(pin_mask, &pin_index)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint32_t channel = 0;
-              if (!tim2_channel_from_pin(port, pin_index, &channel)) {
-                  command_send_err("PWM supports PA0..PA3 only");
-                  free_bulk_packet();
-                  continue;
-              }
-
-              tim2_stop_pwm_channel(channel);
-              gpio_write_latch(port, pin_mask, false);
-              gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-              HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
-
-              command_send_ok(NULL, 0);
-              free_bulk_packet();
-              continue;
-          }
-
-          if (strcmp(sub, "write") == 0) {
-              int pin_enc = -1;
-              int value_i = 0;
-              int hz_i = 0;
-              const char *pin_str = cli_get_arg_view(&cmd, "pin");
-              const char *value_str = cli_get_arg_view(&cmd, "value");
-              const char *hz_str = cli_get_arg_view(&cmd, "hz");
-              if (!cli_parse_int(pin_str, &pin_enc) || !cli_parse_int(value_str, &value_i)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-              if (hz_str && !cli_parse_int(hz_str, &hz_i)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              if (value_i < 0) value_i = 0;
-              if (value_i > 4095) value_i = 4095;
-
-              GPIO_TypeDef *port = NULL;
-              uint16_t pin_mask = 0;
-              if (!decode_encoded_pin(pin_enc, &port, &pin_mask)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint8_t pin_index = 0;
-              if (!pin_mask_to_index(pin_mask, &pin_index)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
-              }
-
-              uint32_t channel = 0;
-              if (!tim2_channel_from_pin(port, pin_index, &channel)) {
-                  command_send_err("PWM supports PA0..PA3 only");
-                  free_bulk_packet();
-                  continue;
-              }
-
-              if (hz_str && hz_i > 0) {
-                  if (!tim2_set_pwm_hz((uint32_t)hz_i)) {
+              uint32_t sum = 0;
+              for (uint32_t i = 0; i < (uint32_t)samples; i++) {
+                  uint16_t v = 0;
+                  if (!adc_read_single(chsel_bit, &v)) {
                       command_send_err(NULL);
-                      free_bulk_packet();
-                      continue;
+                      goto adc_done_bin;
                   }
+                  sum += (uint32_t)v;
+              }
+              uint16_t avg = (uint16_t)((sum + (uint32_t)(samples / 2u)) / (uint32_t)samples);
+              uint8_t out[2] = {(uint8_t)(avg & 0xFFu), (uint8_t)((avg >> 8) & 0xFFu)};
+              command_send_ok(out, sizeof(out));
+adc_done_bin:
+              break;
+          }
+
+          case EMW_OP_UART: {
+              uint8_t sub = midi_packet[1];
+              uint32_t baud = emw_u32_le(&midi_packet[2]);
+              uint16_t timeout_ms = emw_u16_le(&midi_packet[6]);
+              uint8_t n_or_len = midi_packet[8];
+
+              if (sub == EMW_UART_OPEN) {
+                  if (baud == 0u) baud = 115200u;
+                  uart1_baud = baud;
+                  if (!uart1_ensure(uart1_baud)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  command_send_ok(NULL, 0);
+                  break;
               }
 
-              if (value_i == 0) {
+              if (sub == EMW_UART_CLOSE) {
+                  uart1_deinit();
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              if (sub == EMW_UART_WRITE) {
+                  if (baud != 0u) {
+                      uart1_baud = baud;
+                  }
+                  if (!uart1_ensure(uart1_baud)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  if (timeout_ms == 0u) timeout_ms = 1000u;
+
+                  uint8_t tx_len = n_or_len;
+                  if (tx_len > 54u) {
+                      tx_len = 54u;
+                  }
+                  size_t written = 0;
+                  if (tx_len == 0u) {
+                      uint8_t out = 0;
+                      command_send_ok(&out, 1);
+                      break;
+                  }
+                  if (!uart1_write(&midi_packet[9], tx_len, (uint32_t)timeout_ms, &written)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint8_t out = (uint8_t)(written & 0xFFu);
+                  command_send_ok(&out, 1);
+                  break;
+              }
+
+              if (sub == EMW_UART_READ) {
+                  if (baud != 0u) {
+                      uart1_baud = baud;
+                  }
+                  if (!uart1_ensure(uart1_baud)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  if (timeout_ms == 0u) timeout_ms = 250u;
+                  uint8_t n = n_or_len;
+                  if (n > 61u) n = 61u;
+                  if (n == 0u) {
+                      command_send_ok(NULL, 0);
+                      break;
+                  }
+                  uint8_t rx_buf[64] = {0};
+                  size_t got = 0;
+                  if (!uart1_read(rx_buf, (size_t)n, (uint32_t)timeout_ms, &got)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  if (got > 61u) got = 61u;
+                  uint8_t payload[62] = {0};
+                  payload[0] = (uint8_t)got;
+                  if (got > 0) {
+                      memcpy(&payload[1], rx_buf, got);
+                  }
+                  command_send_ok(payload, 1u + got);
+                  break;
+              }
+
+              command_send_err(NULL);
+              break;
+          }
+
+          case EMW_OP_I2C: {
+              uint8_t sub = midi_packet[1];
+              uint32_t hz = emw_u32_le(&midi_packet[2]);
+              uint16_t timeout_ms = emw_u16_le(&midi_packet[6]);
+              uint8_t addr = midi_packet[8] & 0x7Fu;
+              uint8_t tx_len = midi_packet[9];
+              uint8_t rx_len = midi_packet[10];
+
+              if (hz != 0u) {
+                  i2c1_hz = hz;
+              }
+              if (timeout_ms == 0u) timeout_ms = 250u;
+
+              if (sub == EMW_I2C_OPEN) {
+                  if (i2c1_hz == 0u) i2c1_hz = 100000u;
+                  if (!i2c1_ensure(i2c1_hz)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              if (sub == EMW_I2C_CLOSE) {
+                  i2c1_deinit();
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              if (!i2c1_ensure(i2c1_hz)) {
+                  command_send_err(NULL);
+                  break;
+              }
+
+              if (sub == EMW_I2C_WRITE) {
+                  if (tx_len == 0u) {
+                      command_send_ok(NULL, 0);
+                      break;
+                  }
+                  if (tx_len > 52u) tx_len = 52u;
+                  if (!i2c1_write_then_maybe_stop(addr, &midi_packet[11], tx_len, true, (uint32_t)timeout_ms)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              if (sub == EMW_I2C_READ) {
+                  uint8_t n = tx_len;
+                  if (n > 62u) n = 62u;
+                  if (n == 0u) {
+                      command_send_ok(NULL, 0);
+                      break;
+                  }
+                  uint8_t rx_buf[64] = {0};
+                  if (!i2c1_read_with_stop(addr, rx_buf, (size_t)n, (uint32_t)timeout_ms)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  command_send_ok(rx_buf, n);
+                  break;
+              }
+
+              if (sub == EMW_I2C_XFER) {
+                  if (tx_len > 51u) tx_len = 51u;
+                  if (rx_len > 62u) rx_len = 62u;
+                  uint8_t rx_buf[64] = {0};
+                  if (!i2c1_xfer(addr, &midi_packet[11], tx_len, rx_buf, (size_t)rx_len, (uint32_t)timeout_ms)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  command_send_ok(rx_buf, rx_len);
+                  break;
+              }
+
+              command_send_err(NULL);
+              break;
+          }
+
+          case EMW_OP_SPI_XFER: {
+              uint8_t cs_enc = midi_packet[1];
+              uint8_t rx_req = midi_packet[2];
+              uint8_t tx_len = midi_packet[3];
+              if (cs_enc > 31u) {
+                  command_send_err(NULL);
+                  break;
+              }
+              if (tx_len > 60u) tx_len = 60u;
+
+              GPIO_TypeDef *cs_port = NULL;
+              uint16_t cs_pin_mask = 0;
+              if (!decode_encoded_pin((int)cs_enc, &cs_port, &cs_pin_mask)) {
+                  command_send_err(NULL);
+                  break;
+              }
+
+              uint8_t requested_rx = rx_req;
+              if (requested_rx == 0u) {
+                  requested_rx = tx_len;
+              }
+              if (requested_rx > 62u) requested_rx = 62u;
+
+              uint8_t xfer_len = tx_len > requested_rx ? tx_len : requested_rx;
+              if (xfer_len == 0u || requested_rx == 0u) {
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              uint8_t tx_xfer[64] = {0};
+              if (tx_len > 0u) {
+                  memcpy(tx_xfer, &midi_packet[4], tx_len);
+              }
+              uint8_t rx_buf[64] = {0};
+
+              enable_gpio_clock(cs_port);
+              gpio_write_latch(cs_port, cs_pin_mask, true);
+              configurePin(cs_port, cs_pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
+
+              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_RESET);
+              HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(&hspi1, tx_xfer, rx_buf, (uint16_t)xfer_len, 100u);
+              HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
+
+              if (st != HAL_OK) {
+                  command_send_err(NULL);
+                  break;
+              }
+
+              command_send_ok(rx_buf, requested_rx);
+              break;
+          }
+
+          case EMW_OP_SAMPLE: {
+              uint8_t sub = midi_packet[1];
+              if (sub == EMW_SAMPLE_START) {
+                  uint8_t pin_enc = midi_packet[2];
+                  if (pin_enc > 31u) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  GPIO_TypeDef *port = NULL;
+                  uint16_t pin_mask = 0;
+                  if (!decode_encoded_pin((int)pin_enc, &port, &pin_mask)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint32_t pull = (port == GPIOA && pin_mask == GPIO_PIN_1) ? GPIO_NOPULL : GPIO_PULLDOWN;
+                  configurePin(port, pin_mask, GPIO_MODE_INPUT, pull);
+                  samplerPort = port;
+                  samplerPin = pin_mask;
+
+                  currentBuffer = sampler_buf_a;
+                  transmitBuffer = NULL;
+                  bufferIndex = 0;
+                  bufferReady = 0;
+                  EMW_USB_SetBufferType_FS(EMW_BUFFER_DOUBLE);
+                  ism_mode = ISM_MODE_RAW_SAMPLING;
+                  HAL_TIM_Base_Start_IT(&htim3);
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+              if (sub == EMW_SAMPLE_STOP) {
+                  stop_sampling();
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+              command_send_err(NULL);
+              break;
+          }
+
+          case EMW_OP_PWM: {
+              uint8_t sub = midi_packet[1];
+              if (sub == EMW_PWM_FREQ) {
+                  uint32_t hz = emw_u32_le(&midi_packet[2]);
+                  if (hz == 0u || !tim2_set_pwm_hz(hz)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              if (sub == EMW_PWM_STOP) {
+                  uint8_t pin_enc = midi_packet[2];
+                  GPIO_TypeDef *port = NULL;
+                  uint16_t pin_mask = 0;
+                  if (!decode_encoded_pin((int)pin_enc, &port, &pin_mask)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint8_t pin_index = 0;
+                  if (!pin_mask_to_index(pin_mask, &pin_index)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint32_t channel = 0;
+                  if (!tim2_channel_from_pin(port, pin_index, &channel)) {
+                      command_send_err(NULL);
+                      break;
+                  }
                   tim2_stop_pwm_channel(channel);
                   gpio_write_latch(port, pin_mask, false);
                   gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
                   HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
-              } else if (value_i >= 4095) {
-                  tim2_stop_pwm_channel(channel);
-                  gpio_write_latch(port, pin_mask, true);
-                  gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
-                  HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_SET);
-              } else {
-                  // PWM output on TIM2 (AF2), duty in 12-bit units.
-                  configurePin(port, pin_mask, GPIO_MODE_AF_PP, GPIO_NOPULL);
-                  tim2_set_ccr_from_u12(channel, (uint16_t)value_i);
-                  startPWM_TIM2(channel);
-                  (void)HAL_TIM_PWM_Start(&htim2, channel);
+                  command_send_ok(NULL, 0);
+                  break;
               }
 
-              command_send_ok(NULL, 0);
-              free_bulk_packet();
-              continue;
+              if (sub == EMW_PWM_WRITE) {
+                  uint8_t pin_enc = midi_packet[2];
+                  uint16_t value = emw_u16_le(&midi_packet[3]);
+                  uint32_t hz = emw_u32_le(&midi_packet[5]);
+                  if (value > 4095u) value = 4095u;
+
+                  GPIO_TypeDef *port = NULL;
+                  uint16_t pin_mask = 0;
+                  if (!decode_encoded_pin((int)pin_enc, &port, &pin_mask)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint8_t pin_index = 0;
+                  if (!pin_mask_to_index(pin_mask, &pin_index)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint32_t channel = 0;
+                  if (!tim2_channel_from_pin(port, pin_index, &channel)) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  if (hz != 0u) {
+                      if (!tim2_set_pwm_hz(hz)) {
+                          command_send_err(NULL);
+                          break;
+                      }
+                  }
+
+                  if (value == 0u) {
+                      tim2_stop_pwm_channel(channel);
+                      gpio_write_latch(port, pin_mask, false);
+                      gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+                      HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
+                  } else if (value >= 4095u) {
+                      tim2_stop_pwm_channel(channel);
+                      gpio_write_latch(port, pin_mask, true);
+                      gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+                      HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_SET);
+                  } else {
+                      configurePin(port, pin_mask, GPIO_MODE_AF_PP, GPIO_NOPULL);
+                      tim2_set_ccr_from_u12(channel, value);
+                      startPWM_TIM2(channel);
+                      (void)HAL_TIM_PWM_Start(&htim2, channel);
+                  }
+                  command_send_ok(NULL, 0);
+                  break;
+              }
+
+              command_send_err(NULL);
+              break;
           }
 
-          command_send_err(NULL);
-          free_bulk_packet();
-          continue;
-      }
-
-      if (cmd.verb && strcmp(cmd.verb, "transmit") == 0 && cmd.positional_count > 0) {
-          const char *sub = cmd.positional[0];
-          if (strcmp(sub, "start") == 0) {
-              int pin_enc = -1;
-              const char *pin_str = cli_get_arg_view(&cmd, "pin");
-              if (!cli_parse_int(pin_str, &pin_enc)) {
-                  command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
+          case EMW_OP_TRANSMIT: {
+              uint8_t sub = midi_packet[1];
+              uint8_t pin = midi_packet[2];
+              if (sub == EMW_TRANSMIT_STOP) {
+                  command_send_ok(NULL, 0);
+                  break;
               }
-              if (pin_enc < 0 || pin_enc > 3) {
+              if (sub != EMW_TRANSMIT_START || pin > 3u) {
                   command_send_err(NULL);
-                  free_bulk_packet();
-                  continue;
+                  break;
               }
 
               uint32_t tim_channel = 0;
               uint16_t gpio_pin = 0;
-              switch (pin_enc) {
+              switch (pin) {
                   case 0: tim_channel = TIM_CHANNEL_1; gpio_pin = GPIO_PIN_0; break;
                   case 1: tim_channel = TIM_CHANNEL_2; gpio_pin = GPIO_PIN_1; break;
                   case 2: tim_channel = TIM_CHANNEL_3; gpio_pin = GPIO_PIN_2; break;
                   case 3: tim_channel = TIM_CHANNEL_4; gpio_pin = GPIO_PIN_3; break;
               }
 
-              // Keep the legacy "tran" flow:
-              // - switch to circular RX buffer
-              // - wait for initial fill (or timeout)
-              // - enable TIM3 ISR which drains RX buffer into PWM gating
-              // - block until RX buffer drains to 0
               configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
               setDutyCycle_TIM2(tim_channel, 50);
               selectedChannel = tim_channel;
@@ -2438,20 +1938,17 @@ adc_done:
               stopPWM_TIM2(tim_channel);
               EMW_USB_FlushRxBuffer_FS();
               EMW_USB_FreeRxBuffer_FS();
-
               command_send_ok(NULL, 0);
-          } else if (strcmp(sub, "stop") == 0) {
-              command_send_ok(NULL, 0);
-          } else {
-              command_send_err(NULL);
+              break;
           }
 
-          free_bulk_packet();
-          continue;
+          default: {
+              command_send_err(NULL);
+              break;
+          }
       }
 
-      command_send_err(NULL);
-      free_bulk_packet();
+      midi_packet_consume();
   }
   /* USER CODE END 3 */
 }

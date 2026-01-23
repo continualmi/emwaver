@@ -1228,6 +1228,7 @@ export default function WorkspaceShell({
           },
           {
             _scriptSendCommandString: scriptDeviceConnection.sendCommandString,
+            _scriptSendPacket: scriptDeviceConnection.sendPacket,
             _scriptSleep: async (ms: number) => {
               const durationMs = Math.max(0, Number(ms) || 0);
               await new Promise<void>((resolve) => window.setTimeout(resolve, durationMs));
