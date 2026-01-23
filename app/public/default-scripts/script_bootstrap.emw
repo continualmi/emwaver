@@ -30,6 +30,8 @@ var __scriptGlobal = (function () {
 var __host_scriptSendCommandString =
   typeof _scriptSendCommandString === 'function' ? _scriptSendCommandString : null;
 
+var __host_scriptSendPacket = typeof _scriptSendPacket === 'function' ? _scriptSendPacket : null;
+
 
 var __scriptClock = (function () {
   var hasPerformanceNow = typeof performance !== 'undefined' && performance && typeof performance.now === 'function';
@@ -191,6 +193,105 @@ function __sendCommandString(command, timeoutMs) {
   }
   var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
   return sender(__scriptFrameCommand(command), timeout);
+}
+
+function __sendPacket(bytes, timeoutMs) {
+  var sender = typeof __host_scriptSendPacket === 'function' ? __host_scriptSendPacket : null;
+  if (typeof sender !== 'function') {
+    throw new Error('Device send unavailable (missing _scriptSendPacket)');
+  }
+  var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
+  return sender(bytes, timeout);
+}
+
+// Binary protocol opcodes/subcommands (must match firmware `emw_proto.h`).
+var EMW_OP_VERSION = 0x01;
+var EMW_OP_RESET = 0x02;
+var EMW_OP_HELP = 0x03;
+var EMW_OP_NAME_GET = 0x04;
+var EMW_OP_NAME_SET = 0x05;
+
+var EMW_OP_GPIO = 0x10;
+var EMW_GPIO_IN = 0x00;
+var EMW_GPIO_OUT = 0x01;
+var EMW_GPIO_READ = 0x02;
+var EMW_GPIO_HIGH = 0x03;
+var EMW_GPIO_LOW = 0x04;
+var EMW_GPIO_PULL = 0x05;
+var EMW_GPIO_INFO = 0x06;
+
+var EMW_OP_ADC_READ = 0x20;
+var EMW_ADC_SRC_PIN = 0x00;
+var EMW_ADC_SRC_TEMP = 0x01;
+var EMW_ADC_SRC_VREFINT = 0x02;
+var EMW_ADC_SRC_VBAT = 0x03;
+
+var EMW_OP_UART = 0x30;
+var EMW_UART_OPEN = 0x00;
+var EMW_UART_CLOSE = 0x01;
+var EMW_UART_WRITE = 0x02;
+var EMW_UART_READ = 0x03;
+
+var EMW_OP_I2C = 0x40;
+var EMW_I2C_OPEN = 0x00;
+var EMW_I2C_CLOSE = 0x01;
+var EMW_I2C_WRITE = 0x02;
+var EMW_I2C_READ = 0x03;
+var EMW_I2C_XFER = 0x04;
+
+var EMW_OP_SPI_XFER = 0x50;
+
+var EMW_OP_SAMPLE = 0x60;
+var EMW_SAMPLE_START = 0x00;
+var EMW_SAMPLE_STOP = 0x01;
+
+var EMW_OP_PWM = 0x70;
+var EMW_PWM_FREQ = 0x00;
+var EMW_PWM_WRITE = 0x01;
+var EMW_PWM_STOP = 0x02;
+
+var EMW_OP_TRANSMIT = 0x80;
+var EMW_TRANSMIT_START = 0x00;
+var EMW_TRANSMIT_STOP = 0x01;
+
+function __emwWriteU16LE(out, offset, value) {
+  var v = Number(value) >>> 0;
+  out[offset] = v & 0xff;
+  out[offset + 1] = (v >>> 8) & 0xff;
+}
+
+function __emwWriteU32LE(out, offset, value) {
+  var v = Number(value) >>> 0;
+  out[offset] = v & 0xff;
+  out[offset + 1] = (v >>> 8) & 0xff;
+  out[offset + 2] = (v >>> 16) & 0xff;
+  out[offset + 3] = (v >>> 24) & 0xff;
+}
+
+function __emwStatus(resp) {
+  return resp && resp.length ? (resp[0] & 0xff) : 0xff;
+}
+
+function __emwPayload(resp) {
+  // Firmware response is: [status, payload...] (marker is stripped by host).
+  if (!resp || resp.length < 1) return new Uint8Array();
+  return resp.slice(1);
+}
+
+function __emwAssertOk(resp) {
+  var st = __emwStatus(resp);
+  if (st !== 0) {
+    throw new Error('Device error: ' + st);
+  }
+  return resp;
+}
+
+function __emwSendPacket(packet, timeoutMs) {
+  var resp = __sendPacket(packet, timeoutMs);
+  if (resp && typeof resp.then === 'function') {
+    return resp.then(__emwAssertOk);
+  }
+  return __emwAssertOk(resp);
 }
 
 // Best-effort: hide host primitives that are not part of the public Script API.
@@ -583,7 +684,7 @@ Sampler.__scriptShim = true;
     await Sampler.setInvertRx(invert);
 
     var startPacket = await Sampler.packetCount();
-    await __sendCommandString('sample start --pin=' + pin);
+    await __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_START, pin & 0xff]), 1500);
 
     var id = __samplerMakeId();
     __samplerActiveSession = { id: id, pin: pin, startPacket: startPacket };
@@ -597,7 +698,7 @@ Sampler.__scriptShim = true;
     }
 
     try {
-      await __sendCommandString('sample stop');
+      await __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_STOP]), 1500);
     } finally {
       try { await Sampler.setInvertRx(false); } catch (e) {}
       __samplerActiveSession = null;
@@ -669,14 +770,20 @@ function __scriptDecodeText(bytes) {
 var device = typeof device !== 'undefined' ? device : {};
 if (typeof device.version !== 'function') {
   device.version = function () {
-    return Promise.resolve(__sendCommandString('version', 1500)).then(function (resp) {
-      return __scriptDecodeText(resp).trim();
+    var pkt = new Uint8Array([EMW_OP_VERSION]);
+    return Promise.resolve(__emwSendPacket(pkt, 1500)).then(function (resp) {
+      var p = __emwPayload(resp);
+      var major = p[0] & 0xff;
+      var minor = p[1] & 0xff;
+      var patch = p[2] & 0xff;
+      return String(major) + '.' + String(minor) + '.' + String(patch);
     });
   };
 }
 if (typeof device.reset !== 'function') {
   device.reset = function () {
-    return Promise.resolve(__sendCommandString('reset', 1500)).then(function () {
+    var pkt = new Uint8Array([EMW_OP_RESET]);
+    return Promise.resolve(__emwSendPacket(pkt, 1500)).then(function () {
       return;
     });
   };
@@ -685,8 +792,7 @@ __scriptGlobal.device = device;
 
 // -----------------------------------------------------------------------------
 // Arduino-ish API surface (GPIO + SPI + ADC), implemented as thin wrappers over the
-// canonical, observable ASCII command protocol (e.g. `gpio ...`, `spi xfer ...`,
-// `adc read ...`).
+// binary opcode protocol.
 // -----------------------------------------------------------------------------
 
 if (typeof LOW === 'undefined') {
@@ -761,14 +867,23 @@ function __scriptAsciiHex(text) {
   return hex;
 }
 
+function __scriptAsciiBytes(text) {
+  var s = String(text);
+  var out = new Uint8Array(s.length);
+  for (var i = 0; i < s.length; i += 1) {
+    out[i] = s.charCodeAt(i) & 0xff;
+  }
+  return out;
+}
+
 if (typeof pinMode !== 'function') {
   var pinMode = function (pin, mode) {
     var pinNumber = __scriptResolvePin(pin);
     if (String(mode) === INPUT) {
-      return __sendCommandString('gpio in --pin=' + pinNumber);
+      return __emwSendPacket(new Uint8Array([EMW_OP_GPIO, EMW_GPIO_IN, pinNumber & 0xff]), 1500);
     }
     if (String(mode) === OUTPUT) {
-      return __sendCommandString('gpio out --pin=' + pinNumber);
+      return __emwSendPacket(new Uint8Array([EMW_OP_GPIO, EMW_GPIO_OUT, pinNumber & 0xff]), 1500);
     }
     throw new Error('pinMode: unsupported mode ' + String(mode));
   };
@@ -779,7 +894,10 @@ if (typeof digitalWrite !== 'function') {
   var digitalWrite = function (pin, value) {
     var pinNumber = __scriptResolvePin(pin);
     var level = Number(value) ? 1 : 0;
-    return __sendCommandString(level ? 'gpio high --pin=' + pinNumber : 'gpio low --pin=' + pinNumber);
+    return __emwSendPacket(
+      new Uint8Array([EMW_OP_GPIO, level ? EMW_GPIO_HIGH : EMW_GPIO_LOW, pinNumber & 0xff]),
+      1500,
+    );
   };
   __scriptGlobal.digitalWrite = digitalWrite;
 }
@@ -787,13 +905,13 @@ if (typeof digitalWrite !== 'function') {
 if (typeof digitalRead !== 'function') {
   var digitalRead = function (pin) {
     var pinNumber = __scriptResolvePin(pin);
-    var resp = __sendCommandString('gpio read --pin=' + pinNumber);
+    var resp = __emwSendPacket(new Uint8Array([EMW_OP_GPIO, EMW_GPIO_READ, pinNumber & 0xff]), 1500);
     if (resp && typeof resp.then === 'function') {
       return resp.then(function (bytes) {
-        return bytes && bytes.length ? (bytes[0] ? HIGH : LOW) : LOW;
+        return bytes && bytes.length > 1 ? (bytes[1] ? HIGH : LOW) : LOW;
       });
     }
-    return resp && resp.length ? (resp[0] ? HIGH : LOW) : LOW;
+    return resp && resp.length > 1 ? (resp[1] ? HIGH : LOW) : LOW;
   };
   __scriptGlobal.digitalRead = digitalRead;
 }
@@ -804,14 +922,32 @@ if (typeof SPI === 'undefined') {
       var cs = opts && typeof opts.cs !== 'undefined' ? __scriptResolvePin(opts.cs) : undefined;
       var rxLength = opts && typeof opts.rxLength === 'number' ? opts.rxLength : undefined;
 
-      var cmd = 'spi xfer';
-      if (typeof cs === 'number') cmd += ' --cs=' + cs;
+      var csEnc = typeof cs === 'number' ? (cs & 0xff) : 4;
+      var rxLen = typeof rxLength === 'number' ? (rxLength | 0) : 0;
+      if (rxLen < 0) rxLen = 0;
+      if (rxLen > 62) rxLen = 62;
 
-      var txHex = __scriptHexBytes(txBytes);
-      if (txHex) cmd += ' --tx=' + txHex;
-      if (typeof rxLength === 'number') cmd += ' --rx=' + rxLength;
+      var tx = txBytes instanceof Uint8Array ? txBytes : new Uint8Array(txBytes || []);
+      var txLen = tx.length;
+      if (txLen > 60) txLen = 60;
 
-      return __sendCommandString(cmd, 1500);
+      var pkt = new Uint8Array(4 + txLen);
+      pkt[0] = EMW_OP_SPI_XFER;
+      pkt[1] = csEnc;
+      pkt[2] = rxLen & 0xff;
+      pkt[3] = txLen & 0xff;
+      for (var i = 0; i < txLen; i += 1) {
+        pkt[4 + i] = tx[i] & 0xff;
+      }
+
+      var resp = __emwSendPacket(pkt, 1500);
+      var want = rxLen > 0 ? rxLen : txLen;
+      if (resp && typeof resp.then === 'function') {
+        return resp.then(function (bytes) {
+          return bytes.slice(1, 1 + want);
+        });
+      }
+      return resp.slice(1, 1 + want);
     },
   };
 
@@ -823,20 +959,38 @@ if (typeof Serial === 'undefined') {
     begin: function (baud, opts) {
       var b = typeof baud === 'number' ? baud | 0 : 115200;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return __sendCommandString('uart open --baud=' + b, timeout);
+      var pkt = new Uint8Array(6);
+      pkt[0] = EMW_OP_UART;
+      pkt[1] = EMW_UART_OPEN;
+      __emwWriteU32LE(pkt, 2, b);
+      return __emwSendPacket(pkt, timeout);
     },
     end: function (opts) {
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return __sendCommandString('uart close', timeout);
+      return __emwSendPacket(new Uint8Array([EMW_OP_UART, EMW_UART_CLOSE]), timeout);
     },
     write: function (data, opts) {
       var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      var hex = typeof data === 'string' ? __scriptAsciiHex(data) : __scriptHexBytes(data);
-      var cmd = 'uart write';
-      if (typeof baud === 'number' && isFinite(baud) && baud > 0) cmd += ' --baud=' + baud;
-      if (hex) cmd += ' --tx=' + hex;
-      return __sendCommandString(cmd, timeout);
+      var tx = typeof data === 'string' ? __scriptAsciiBytes(data) : (data instanceof Uint8Array ? data : new Uint8Array(data || []));
+      var txLen = tx.length;
+      if (txLen > 54) txLen = 54;
+      var pkt = new Uint8Array(9 + txLen);
+      pkt[0] = EMW_OP_UART;
+      pkt[1] = EMW_UART_WRITE;
+      __emwWriteU32LE(pkt, 2, typeof baud === 'number' && isFinite(baud) && baud > 0 ? baud : 0);
+      __emwWriteU16LE(pkt, 6, timeout);
+      pkt[8] = txLen & 0xff;
+      for (var i = 0; i < txLen; i += 1) {
+        pkt[9 + i] = tx[i] & 0xff;
+      }
+      var resp = __emwSendPacket(pkt, timeout);
+      if (resp && typeof resp.then === 'function') {
+        return resp.then(function (bytes) {
+          return bytes.slice(1, 2); // payload[0] = written
+        });
+      }
+      return resp.slice(1, 2);
     },
     read: function (n, opts) {
       var len = Number(n) | 0;
@@ -844,9 +998,21 @@ if (typeof Serial === 'undefined') {
       if (len > 63) len = 63;
       var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var cmd = 'uart read --n=' + len;
-      if (typeof baud === 'number' && isFinite(baud) && baud > 0) cmd += ' --baud=' + baud;
-      return __sendCommandString(cmd, timeout);
+      var pkt = new Uint8Array(9);
+      pkt[0] = EMW_OP_UART;
+      pkt[1] = EMW_UART_READ;
+      __emwWriteU32LE(pkt, 2, typeof baud === 'number' && isFinite(baud) && baud > 0 ? baud : 0);
+      __emwWriteU16LE(pkt, 6, timeout);
+      pkt[8] = len & 0xff;
+      var resp = __emwSendPacket(pkt, timeout);
+      var parse = function (bytes) {
+        var got = bytes && bytes.length > 1 ? (bytes[1] & 0xff) : 0;
+        return bytes.slice(2, 2 + got);
+      };
+      if (resp && typeof resp.then === 'function') {
+        return resp.then(parse);
+      }
+      return parse(resp);
     },
   };
 
@@ -858,21 +1024,36 @@ if (typeof Wire === 'undefined') {
     begin: function (hz, opts) {
       var h = typeof hz === 'number' ? hz | 0 : 100000;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return __sendCommandString('i2c open --hz=' + h, timeout);
+      var pkt = new Uint8Array(6);
+      pkt[0] = EMW_OP_I2C;
+      pkt[1] = EMW_I2C_OPEN;
+      __emwWriteU32LE(pkt, 2, h);
+      return __emwSendPacket(pkt, timeout);
     },
     end: function (opts) {
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return __sendCommandString('i2c close', timeout);
+      return __emwSendPacket(new Uint8Array([EMW_OP_I2C, EMW_I2C_CLOSE]), timeout);
     },
     write: function (addr, data, opts) {
       var a = Number(addr) | 0;
       var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var hex = __scriptHexBytes(data);
-      var cmd = 'i2c write --addr=' + a;
-      if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
-      if (hex) cmd += ' --tx=' + hex;
-      return __sendCommandString(cmd, timeout);
+      var tx = data instanceof Uint8Array ? data : new Uint8Array(data || []);
+      var txLen = tx.length;
+      if (txLen > 52) txLen = 52;
+
+      var pkt = new Uint8Array(11 + txLen);
+      pkt[0] = EMW_OP_I2C;
+      pkt[1] = EMW_I2C_WRITE;
+      __emwWriteU32LE(pkt, 2, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
+      __emwWriteU16LE(pkt, 6, timeout);
+      pkt[8] = a & 0x7f;
+      pkt[9] = txLen & 0xff;
+      pkt[10] = 0;
+      for (var i = 0; i < txLen; i += 1) {
+        pkt[11 + i] = tx[i] & 0xff;
+      }
+      return __emwSendPacket(pkt, timeout);
     },
     read: function (addr, n, opts) {
       var a = Number(addr) | 0;
@@ -881,9 +1062,22 @@ if (typeof Wire === 'undefined') {
       if (len > 63) len = 63;
       var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var cmd = 'i2c read --addr=' + a + ' --n=' + len;
-      if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
-      return __sendCommandString(cmd, timeout);
+      var pkt = new Uint8Array(11);
+      pkt[0] = EMW_OP_I2C;
+      pkt[1] = EMW_I2C_READ;
+      __emwWriteU32LE(pkt, 2, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
+      __emwWriteU16LE(pkt, 6, timeout);
+      pkt[8] = a & 0x7f;
+      pkt[9] = len & 0xff;
+      pkt[10] = 0;
+      var resp = __emwSendPacket(pkt, timeout);
+      var parse = function (bytes) {
+        return bytes.slice(1, 1 + len);
+      };
+      if (resp && typeof resp.then === 'function') {
+        return resp.then(parse);
+      }
+      return parse(resp);
     },
     xfer: function (addr, tx, rxLen, opts) {
       var a = Number(addr) | 0;
@@ -892,11 +1086,31 @@ if (typeof Wire === 'undefined') {
       if (len > 63) len = 63;
       var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var hex = __scriptHexBytes(tx);
-      var cmd = 'i2c xfer --addr=' + a + ' --rx=' + len;
-      if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
-      if (hex) cmd += ' --tx=' + hex;
-      return __sendCommandString(cmd, timeout);
+      var txBytes = tx instanceof Uint8Array ? tx : new Uint8Array(tx || []);
+      var txLen = txBytes.length;
+      if (txLen > 51) txLen = 51;
+      if (len > 62) len = 62;
+
+      var pkt = new Uint8Array(11 + txLen);
+      pkt[0] = EMW_OP_I2C;
+      pkt[1] = EMW_I2C_XFER;
+      __emwWriteU32LE(pkt, 2, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
+      __emwWriteU16LE(pkt, 6, timeout);
+      pkt[8] = a & 0x7f;
+      pkt[9] = txLen & 0xff;
+      pkt[10] = len & 0xff;
+      for (var i = 0; i < txLen; i += 1) {
+        pkt[11 + i] = txBytes[i] & 0xff;
+      }
+
+      var resp = __emwSendPacket(pkt, timeout);
+      var parse = function (bytes) {
+        return bytes.slice(1, 1 + len);
+      };
+      if (resp && typeof resp.then === 'function') {
+        return resp.then(parse);
+      }
+      return parse(resp);
     },
   };
 
@@ -938,16 +1152,14 @@ if (typeof analogRead !== 'function') {
     if (samples < 1) samples = 1;
     if (samples > 64) samples = 64;
 
-    var cmd = 'adc read --pin=' + pinNumber;
-    if (samples !== 1) cmd += ' --samples=' + samples;
-
-    var resp = __sendCommandString(cmd, 1500);
+    var pkt = new Uint8Array([EMW_OP_ADC_READ, EMW_ADC_SRC_PIN, pinNumber & 0xff, samples & 0xff]);
+    var resp = __emwSendPacket(pkt, 1500);
     if (resp && typeof resp.then === 'function') {
       return resp.then(function (bytes) {
-        return __scriptScaleAnalogRead(__scriptU16FromBytes(bytes));
+        return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(bytes)));
       });
     }
-    return __scriptScaleAnalogRead(__scriptU16FromBytes(resp));
+    return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(resp)));
   };
   __scriptGlobal.analogRead = analogRead;
 }
@@ -957,16 +1169,20 @@ function __scriptAnalogReadInternal(src, opts) {
   if (samples < 1) samples = 1;
   if (samples > 64) samples = 64;
 
-  var cmd = 'adc read --src=' + String(src);
-  if (samples !== 1) cmd += ' --samples=' + samples;
+  var s = String(src);
+  var srcCode = EMW_ADC_SRC_VREFINT;
+  if (s === 'temp') srcCode = EMW_ADC_SRC_TEMP;
+  else if (s === 'vbat') srcCode = EMW_ADC_SRC_VBAT;
+  else if (s === 'vrefint') srcCode = EMW_ADC_SRC_VREFINT;
 
-  var resp = __sendCommandString(cmd, 1500);
+  var pkt = new Uint8Array([EMW_OP_ADC_READ, srcCode & 0xff, 0, samples & 0xff]);
+  var resp = __emwSendPacket(pkt, 1500);
   if (resp && typeof resp.then === 'function') {
     return resp.then(function (bytes) {
-      return __scriptScaleAnalogRead(__scriptU16FromBytes(bytes));
+      return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(bytes)));
     });
   }
-  return __scriptScaleAnalogRead(__scriptU16FromBytes(resp));
+  return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(resp)));
 }
 
 if (typeof analogReadVrefint !== 'function') {
@@ -1024,10 +1240,14 @@ if (typeof analogWrite !== 'function') {
     var hz = opts && typeof opts.hz === 'number' ? (opts.hz | 0) : undefined;
     var timeout = opts && typeof opts.timeout === 'number' ? (opts.timeout | 0) : 1500;
 
-    var cmd = 'pwm write --pin=' + pinNumber + ' --value=' + v12;
-    if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
+    var pkt = new Uint8Array(9);
+    pkt[0] = EMW_OP_PWM;
+    pkt[1] = EMW_PWM_WRITE;
+    pkt[2] = pinNumber & 0xff;
+    __emwWriteU16LE(pkt, 3, v12);
+    __emwWriteU32LE(pkt, 5, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
 
-    return __sendCommandString(cmd, timeout);
+    return __emwSendPacket(pkt, timeout);
   };
   __scriptGlobal.analogWrite = analogWrite;
 }

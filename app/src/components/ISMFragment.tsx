@@ -205,45 +205,15 @@ interface EditDialogState {
   onSave: (val: string) => Promise<void>;
 }
 
-function isPaddedPacket(response: Uint8Array | null, first: number) {
-  if (!response || response.length !== 64) return false;
-  if (response[0] !== first) return false;
-  for (let i = 1; i < response.length; i++) {
-    if (response[i] !== 0) return false;
-  }
-  return true;
-}
-
-function isOkAck(response: Uint8Array | null) {
-  return isPaddedPacket(response, 0x00);
-}
-
-function parseRawPayload(response: Uint8Array | null) {
-  if (!response || response.length === 0) return new Uint8Array(0);
-  if (isOkAck(response)) return new Uint8Array(0);
-  return response;
-}
-
-function parseRawString(response: Uint8Array | null) {
-  if (!response || response.length === 0) return "";
-  if (isOkAck(response)) return "";
-  const firstZero = response.indexOf(0);
-  const end = firstZero >= 0 ? firstZero : response.length;
-  return new TextDecoder().decode(response.slice(0, end)).trim();
-}
 
 function formatHexByte(value: number) {
   return `0x${(value & 0xff).toString(16).padStart(2, "0").toUpperCase()}`;
 }
 
-function formatHexByteList(values: number[]) {
-  // Keep commands under the 64-byte USB framing limit.
-  // The STM32 firmware accepts "F100" style hex without separators.
-  return values.map((value) => (value & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
-}
+// (legacy) formatHexByteList removed; protocol is binary now.
 
 export default function ISMFragment() {
-  const { status, send } = useDevice();
+  const { status, sendPacket } = useDevice();
 
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -266,25 +236,36 @@ export default function ISMFragment() {
 
   const isConnected = status.connected;
 
-  const sendCommandString = useCallback(
-    async (command: string, timeoutMs = 1000, packets = 1) => {
+  const cc1101SpiXfer = useCallback(
+    async (tx: number[], rx?: number, timeoutMs = 1000) => {
       if (!status.connected) {
         return null;
       }
-      setCurrentCommand(command);
-      return await send(command, timeoutMs, packets);
-    },
-    [send, status.connected],
-  );
+      const txBytes = tx.map((value) => value & 0xff);
+      const txLen = Math.min(60, txBytes.length);
+      const rxLen = typeof rx === "number" ? Math.max(0, Math.min(62, rx | 0)) : 0;
 
-  const cc1101SpiXfer = useCallback(
-    async (tx: number[], rx?: number, timeoutMs = 1000) => {
-      const txArg = formatHexByteList(tx);
-      const rxArg = typeof rx === "number" ? ` --rx=${rx}` : "";
-      const command = `spi xfer --cs=${DEFAULT_CC1101_CS} --tx=${txArg}${rxArg}`;
-      return await sendCommandString(command, timeoutMs);
+      const pkt = new Uint8Array(4 + txLen);
+      pkt[0] = 0x50; // EMW_OP_SPI_XFER
+      pkt[1] = DEFAULT_CC1101_CS & 0xff;
+      pkt[2] = rxLen & 0xff;
+      pkt[3] = txLen & 0xff;
+      for (let i = 0; i < txLen; i++) {
+        pkt[4 + i] = txBytes[i];
+      }
+
+      setCurrentCommand(`spi xfer (bin) cs=${DEFAULT_CC1101_CS} tx=${txLen} rx=${rxLen || txLen}`);
+      const resp = await sendPacket(pkt, timeoutMs, 1);
+      if (!resp || resp.length !== 64) {
+        return null;
+      }
+      if (resp[0] !== 0x00) {
+        return null;
+      }
+      const want = rxLen > 0 ? rxLen : txLen;
+      return resp.slice(1, 1 + want);
     },
-    [sendCommandString],
+    [sendPacket, status.connected],
   );
 
   const getRegisterAddress = useCallback((name: string) => CC1101_REGISTER_MAP[name] ?? 0, []);
@@ -294,8 +275,7 @@ export default function ISMFragment() {
       const isStatusRegister = addr >= 0x30 && addr <= 0x3d;
       const cmd = ((addr & 0x3f) | (isStatusRegister ? 0xc0 : 0x80)) & 0xff;
       const response = await cc1101SpiXfer([cmd, 0x00], 2, 1000);
-      const payload = parseRawPayload(response);
-      return payload.length >= 2 ? payload[1] & 0xff : 0;
+      return response && response.length >= 2 ? response[1] & 0xff : 0;
     },
     [cc1101SpiXfer],
   );
@@ -313,9 +293,8 @@ export default function ISMFragment() {
       const cmd = ((addr & 0x3f) | 0xc0) & 0xff;
       const tx = [cmd, ...new Array(requested).fill(0x00)];
       const response = await cc1101SpiXfer(tx, undefined, 1500);
-      const payload = parseRawPayload(response);
-      if (payload.length < 1) return new Uint8Array(0);
-      return payload.slice(1, 1 + requested);
+      if (!response || response.length < 1) return new Uint8Array(0);
+      return response.slice(1, 1 + requested);
     },
     [cc1101SpiXfer],
   );
@@ -326,16 +305,14 @@ export default function ISMFragment() {
       const cmd = ((addr & 0x3f) | 0x40) & 0xff;
       const tx = [cmd, ...bytes];
       const response = await cc1101SpiXfer(tx, undefined, 1500);
-      const payload = parseRawPayload(response);
-      return isOkAck(response) || payload.length >= tx.length;
+      return !!response && response.length >= tx.length;
     },
     [cc1101SpiXfer],
   );
 
   const ensureCc1101Init = useCallback(async () => {
     const response = await cc1101SpiXfer([0xf1, 0x00], 2, 1000);
-    const payload = parseRawPayload(response);
-    if (payload.length >= 2 && (payload[1] & 0xff) === 0x14) {
+    if (response && response.length >= 2 && (response[1] & 0xff) === 0x14) {
       return true;
     }
     if (!response || response.length === 0) {

@@ -150,7 +150,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 
 function SamplerFragment() {
   // Use Device context instead of polling directly
-  const { status, send, sendNoWait, transmitBuffer } = useDevice();
+  const { status, send, sendPacketNoWait, transmitBuffer } = useDevice();
   const dialog = useAppDialog();
   const isConnected = status.connected;
   const deviceType: SamplerDeviceType = 'stm32';
@@ -844,8 +844,8 @@ function SamplerFragment() {
 			    resetChartZoom();
           autoFitXRef.current = true;
 
-	    // Send "sample start --pin=<pin>" command (matching Android/iOS)
-	    await sendNoWait(`sample start --pin=${pinNumber}`);
+	    // Binary: EMW_OP_SAMPLE (0x60) / START (0x00)
+	    await sendPacketNoWait(new Uint8Array([0x60, 0x00, pinNumber & 0xff]));
 
 	    setIsRecording(true);
 	    setHasUnsavedChanges(true);
@@ -854,8 +854,8 @@ function SamplerFragment() {
 		  const stopRecording = async () => {
 		    if (!isConnected) return;
 
-		    // Send "sample stop" command (matching Android/iOS)
-			    await sendNoWait("sample stop");
+		    // Binary: EMW_OP_SAMPLE (0x60) / STOP (0x01)
+			    await sendPacketNoWait(new Uint8Array([0x60, 0x01]));
         await safeInvoke<void>('buffer_set_invert_rx', { enabled: false }).catch(() => {});
 		    setIsRecording(false);
 		  };
@@ -881,7 +881,7 @@ function SamplerFragment() {
     }
 
 	    try {
-	      let commandStr = `transmit start --pin=${pinNumber}`;
+	      // Binary: EMW_OP_TRANSMIT (0x80) / START (0x00)
 	      const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
 	      const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
 	      if (freqHz < 1) {
@@ -894,10 +894,8 @@ function SamplerFragment() {
 	      }
 	      setPwmFreqHz(freqHz);
 	      setPwmDutyPercent(dutyPercent);
-	      commandStr += ` --freq=${freqHz} --duty=${dutyPercent}`;
-
-	      // Send "transmit start --pin=<pin>" command (matching Android/iOS)
-	      await sendNoWait(commandStr);
+	      // NOTE: current STM32 transmit path ignores freq/duty; kept for UI validation only.
+	      await sendPacketNoWait(new Uint8Array([0x80, 0x00, pinNumber & 0xff]));
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);

@@ -115,6 +115,7 @@ export class ScriptEngine {
         '_scriptRender',
         '_scriptRegisterCallback',
         '_scriptSendCommandString',
+        '_scriptSendPacket',
         '_scriptSleep',
         fullScript,
       );
@@ -129,6 +130,7 @@ export class ScriptEngine {
         ctx._scriptRender,
         ctx._scriptRegisterCallback,
         ctx._scriptSendCommandString,
+        (ctx as any)._scriptSendPacket,
         ctx._scriptSleep,
       );
       

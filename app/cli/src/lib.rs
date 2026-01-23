@@ -73,14 +73,27 @@ fn build_firmware(clean: bool) -> Result<()> {
 
     let release_dir = repo_root.join("stm/emwaver-firmware/Release");
 
+    // Prepend STM32CubeIDE toolchain to PATH for correct arm-none-eabi-gcc
+    let stm32_toolchain_bin = "/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.macos64_1.0.100.202509120712/tools/bin";
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{}", stm32_toolchain_bin, current_path);
+
     if clean {
-        let status = Command::new("make").current_dir(&release_dir).arg("clean").status()?;
+        let status = Command::new("make")
+            .current_dir(&release_dir)
+            .env("PATH", &new_path)
+            .arg("clean")
+            .status()?;
         if !status.success() {
             anyhow::bail!("Firmware clean failed");
         }
     }
 
-    let status = Command::new("make").current_dir(&release_dir).arg("all").status()?;
+    let status = Command::new("make")
+        .current_dir(&release_dir)
+        .env("PATH", &new_path)
+        .arg("all")
+        .status()?;
     if !status.success() {
         anyhow::bail!("Firmware build failed");
     }

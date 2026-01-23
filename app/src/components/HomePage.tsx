@@ -94,7 +94,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     connectMIDI,
     disconnect, 
     listMIDIPorts,
-    sendNoWait,
+    sendPacketNoWait,
   } = useDevice();
 
   const [transportEntries, setTransportEntries] = useState<BufferEntry[]>([]);
@@ -839,7 +839,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
 
     const sendVersion = async () => {
       try {
-        await sendNoWait("version");
+        await sendPacketNoWait(new Uint8Array([0x01]));
       } catch (e) {
         console.error("Auto version query failed", e);
       }
@@ -860,7 +860,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       window.clearTimeout(retry);
     };
-  }, [deviceEmwaverVersion, sendNoWait, status.connected, status.device_address, status.transport]);
+  }, [deviceEmwaverVersion, sendPacketNoWait, status.connected, status.device_address, status.transport]);
 
   const clearMonitor = async () => {
     try {
@@ -894,10 +894,13 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     for (let i = commandEntries.length - 1; i >= 0; i--) {
       const entry = commandEntries[i];
       if (entry.isTx) continue;
-      const stripped = entry.ascii.replace(/\.+$/, "").trim();
-      const versionMatch = stripped.match(/(\d+\.\d+\.\d+)/);
-      if (versionMatch) {
-        setDeviceEmwaverVersion(versionMatch[1]);
+      // Check for version response: status 0, then 3 bytes major.minor.patch
+      if (entry.data && entry.data.length >= 4 && entry.data[0] === 0) {
+        const major = entry.data[1];
+        const minor = entry.data[2];
+        const patch = entry.data[3];
+        const version = `${major}.${minor}.${patch}`;
+        setDeviceEmwaverVersion(version);
         return;
       }
     }
