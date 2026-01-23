@@ -9,13 +9,13 @@ title: Sampler
 - `await Sampler.status(id?)` → `{ active, pin?, packetCount, lenBytes }`
 - `await Sampler.capture({ pin, durationMs, clearBefore?, invert? })` → `{ bytes, startPacket, endPacket, bufferLenBytes }`
 
-Sampler buffer:
+Buffer helpers:
 
-- `await Sampler.buffer.packetCount()`
-- `await Sampler.buffer.lenBytes()`
-- `await Sampler.buffer.getBytes()`
-- `await Sampler.buffer.clear()`
-- `await Sampler.buffer.setInvertRx(enabled)`
-- `await Sampler.buffer.readPacketsSince({ packetIndex, maxPackets? })` → `{ data, nextPacketIndex, availablePackets }`
-- `await Sampler.buffer.compressViewport({ startBit, endBit, bins })` → `{ bufferLenBytes, timeValues, dataValues }`
-- `await Sampler.buffer.firstBytes(n)` / `await Sampler.buffer.lastBytes(n)` / `await Sampler.buffer.sliceBytes(start, end)`
+- `await Sampler.packetCount()`
+- `await Sampler.lenBytes()`
+- `await Sampler.getBytes()`
+- `await Sampler.clear()`
+- `await Sampler.setInvertRx(enabled)`
+- `await Sampler.readPacketsSince({ packetIndex, maxPackets? })` → `{ data, nextPacketIndex, availablePackets }`
+- `await Sampler.compressViewport({ startBit, endBit, bins })` → `{ bufferLenBytes, timeValues, dataValues }`
+- `await Sampler.firstBytes(n)` / `await Sampler.lastBytes(n)` / `await Sampler.sliceBytes(start, end)`

@@ -421,7 +421,7 @@ Sampler.__scriptShim = true;
     while (cursor < end) {
       var remaining = end - cursor;
       var take = Math.max(1, Math.min(256, remaining));
-      var resp = await Sampler.buffer.readPacketsSince({ packetIndex: cursor, maxPackets: take });
+      var resp = await Sampler.readPacketsSince({ packetIndex: cursor, maxPackets: take });
       if (!resp || !resp.data || resp.data.length === 0) break;
       chunks.push(resp.data);
       var next = Number(resp.nextPacketIndex);
@@ -440,49 +440,47 @@ Sampler.__scriptShim = true;
     return out;
   }
 
-  Sampler.buffer = {};
-
-  Sampler.buffer.packetCount = async function () {
+  Sampler.packetCount = async function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.packetCount === 'function') {
       return await __scriptHostSampler.buffer.packetCount.call(__scriptHostSampler.buffer);
     }
     if (typeof _scriptSamplerBufferGetPacketCount === 'function') {
       return Number(await _scriptSamplerBufferGetPacketCount());
     }
-    throw new Error('Sampler.buffer.packetCount unavailable on this host');
+    throw new Error('Sampler.packetCount unavailable on this host');
   };
 
-  Sampler.buffer.lenBytes = async function () {
+  Sampler.lenBytes = async function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.lenBytes === 'function') {
       return Number(await __scriptHostSampler.buffer.lenBytes.call(__scriptHostSampler.buffer));
     }
     if (typeof _scriptSamplerBufferGetLenBytes === 'function') {
       return Number(await _scriptSamplerBufferGetLenBytes());
     }
-    throw new Error('Sampler.buffer.lenBytes unavailable on this host');
+    throw new Error('Sampler.lenBytes unavailable on this host');
   };
 
-  Sampler.buffer.getBytes = async function () {
+  Sampler.getBytes = async function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.getBytes === 'function') {
       return __samplerToUint8Array(await __scriptHostSampler.buffer.getBytes.call(__scriptHostSampler.buffer));
     }
     if (typeof _scriptSamplerBufferGetBytes === 'function') {
       return __samplerToUint8Array(await _scriptSamplerBufferGetBytes());
     }
-    throw new Error('Sampler.buffer.getBytes unavailable on this host');
+    throw new Error('Sampler.getBytes unavailable on this host');
   };
 
-  Sampler.buffer.clear = async function () {
+  Sampler.clear = async function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.clear === 'function') {
       return await __scriptHostSampler.buffer.clear.call(__scriptHostSampler.buffer);
     }
     if (typeof _scriptSamplerBufferClear === 'function') {
       return await _scriptSamplerBufferClear();
     }
-    throw new Error('Sampler.buffer.clear unavailable on this host');
+    throw new Error('Sampler.clear unavailable on this host');
   };
 
-  Sampler.buffer.setInvertRx = async function (enabled) {
+  Sampler.setInvertRx = async function (enabled) {
     var flag = !!enabled;
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.setInvertRx === 'function') {
       return await __scriptHostSampler.buffer.setInvertRx.call(__scriptHostSampler.buffer, flag);
@@ -490,10 +488,10 @@ Sampler.__scriptShim = true;
     if (typeof _scriptSamplerBufferSetInvertRx === 'function') {
       return await _scriptSamplerBufferSetInvertRx(flag);
     }
-    throw new Error('Sampler.buffer.setInvertRx unavailable on this host');
+    throw new Error('Sampler.setInvertRx unavailable on this host');
   };
 
-  Sampler.buffer.readPacketsSince = async function (opts) {
+  Sampler.readPacketsSince = async function (opts) {
     var packetIndex = Math.max(0, Number(opts && opts.packetIndex) || 0);
     var maxPackets = Math.max(1, Number(opts && opts.maxPackets) || 256);
 
@@ -506,7 +504,7 @@ Sampler.__scriptShim = true;
     } else if (typeof _scriptSamplerBufferReadPacketsSince === 'function') {
       resp = await _scriptSamplerBufferReadPacketsSince(packetIndex, maxPackets);
     } else {
-      throw new Error('Sampler.buffer.readPacketsSince unavailable on this host');
+      throw new Error('Sampler.readPacketsSince unavailable on this host');
     }
 
     return {
@@ -516,7 +514,7 @@ Sampler.__scriptShim = true;
     };
   };
 
-  Sampler.buffer.compressViewport = async function (opts) {
+  Sampler.compressViewport = async function (opts) {
     var startBit = Math.max(0, Number(opts && opts.startBit) || 0);
     var endBit = Math.max(0, Number(opts && opts.endBit) || 0);
     var bins = Math.max(0, Number(opts && opts.bins) || 0);
@@ -531,7 +529,7 @@ Sampler.__scriptShim = true;
     } else if (typeof _scriptSamplerBufferCompressViewport === 'function') {
       resp = await _scriptSamplerBufferCompressViewport(startBit, endBit, bins);
     } else {
-      throw new Error('Sampler.buffer.compressViewport unavailable on this host');
+      throw new Error('Sampler.compressViewport unavailable on this host');
     }
 
     return {
@@ -541,7 +539,7 @@ Sampler.__scriptShim = true;
     };
   };
 
-  Sampler.buffer.sliceBytes = async function (byteStart, byteEnd) {
+  Sampler.sliceBytes = async function (byteStart, byteEnd) {
     var start = Math.max(0, Number(byteStart) || 0);
     var end = Math.max(start, Number(byteEnd) || 0);
     if (end <= start) return new Uint8Array();
@@ -553,18 +551,18 @@ Sampler.__scriptShim = true;
     return bytes.slice(offset, offset + (end - start));
   };
 
-  Sampler.buffer.firstBytes = async function (n) {
+  Sampler.firstBytes = async function (n) {
     var len = Math.max(0, Number(n) || 0);
     if (len === 0) return new Uint8Array();
-    return await Sampler.buffer.sliceBytes(0, len);
+    return await Sampler.sliceBytes(0, len);
   };
 
-  Sampler.buffer.lastBytes = async function (n) {
+  Sampler.lastBytes = async function (n) {
     var len = Math.max(0, Number(n) || 0);
     if (len === 0) return new Uint8Array();
-    var total = await Sampler.buffer.lenBytes();
+    var total = await Sampler.lenBytes();
     var start = Math.max(0, total - len);
-    return await Sampler.buffer.sliceBytes(start, total);
+    return await Sampler.sliceBytes(start, total);
   };
 
   Sampler.start = async function (opts) {
@@ -580,11 +578,11 @@ Sampler.__scriptShim = true;
     var invert = !!(opts && opts.invert);
 
     if (clearBefore) {
-      await Sampler.buffer.clear();
+      await Sampler.clear();
     }
-    await Sampler.buffer.setInvertRx(invert);
+    await Sampler.setInvertRx(invert);
 
-    var startPacket = await Sampler.buffer.packetCount();
+    var startPacket = await Sampler.packetCount();
     await __sendCommandString('sample start --pin=' + pin);
 
     var id = __samplerMakeId();
@@ -601,7 +599,7 @@ Sampler.__scriptShim = true;
     try {
       await __sendCommandString('sample stop');
     } finally {
-      try { await Sampler.buffer.setInvertRx(false); } catch (e) {}
+      try { await Sampler.setInvertRx(false); } catch (e) {}
       __samplerActiveSession = null;
     }
   };
@@ -614,8 +612,8 @@ Sampler.__scriptShim = true;
     return {
       active: active,
       pin: active ? __samplerActiveSession.pin : undefined,
-      packetCount: await Sampler.buffer.packetCount(),
-      lenBytes: await Sampler.buffer.lenBytes(),
+      packetCount: await Sampler.packetCount(),
+      lenBytes: await Sampler.lenBytes(),
     };
   };
 
@@ -633,13 +631,13 @@ Sampler.__scriptShim = true;
       try { await Sampler.stop(session && session.id); } catch (e) {}
     }
 
-    var endPacket = await Sampler.buffer.packetCount();
+    var endPacket = await Sampler.packetCount();
     var bytes = await __samplerReadPacketRange(session ? session.startPacket : 0, endPacket);
     return {
       bytes: bytes,
       startPacket: session ? session.startPacket : 0,
       endPacket: endPacket,
-      bufferLenBytes: await Sampler.buffer.lenBytes(),
+      bufferLenBytes: await Sampler.lenBytes(),
     };
   };
 })();
