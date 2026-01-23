@@ -22,16 +22,49 @@ import "xterm/css/xterm.css";
 import type { FragmentType } from "../App";
 import { useDevice } from "../utils/DeviceContext";
 import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
-import { useAppDialog } from "../utils/AppDialogContext";
 
 type HomePageProps = {
   onNavigateToFragment: (fragment: FragmentType) => void;
   isActive: boolean;
 };
 
+type DfuProgressEventPayload = {
+  message: string;
+  timestamp_ms?: number;
+};
+
+function displayEmwaverName(name: string | null | undefined): string {
+  if (!name) return "";
+  return name
+    .replace(/\bEMWaver\b/gi, "")
+    .replace(/\bUSB\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseSemver(input: string): [number, number, number] | null {
+  const m = input.trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return null;
+  const a = Number.parseInt(m[1], 10);
+  const b = Number.parseInt(m[2], 10);
+  const c = Number.parseInt(m[3], 10);
+  if (![a, b, c].every(Number.isFinite)) return null;
+  return [a, b, c];
+}
+
+function compareSemver(a: string, b: string): number | null {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] < pb[i]) return -1;
+    if (pa[i] > pb[i]) return 1;
+  }
+  return 0;
+}
+
 const MAX_MONITOR_ENTRIES = 1500;
 const MAX_COMMAND_ENTRIES = 600;
-const AUTO_CONNECT_ENABLED_KEY = "emwaver:autoConnectEnabled";
 const DEV_MONITORS_ENABLED_KEY = "emwaver:devMonitorsEnabled";
 
 type BufferEntry = {
@@ -63,14 +96,73 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     listMIDIPorts,
     sendNoWait,
   } = useDevice();
-  const dialog = useAppDialog();
 
   const [transportEntries, setTransportEntries] = useState<BufferEntry[]>([]);
   const [streamEntries, setStreamEntries] = useState<BufferEntry[]>([]);
   const [commandEntries, setCommandEntries] = useState<CommandPacketEntry[]>([]);
   const [showTxHex, setShowTxHex] = useState(false);
   const [showRxHex, setShowRxHex] = useState(false);
-  const [firmwareVersion, setFirmwareVersion] = useState("Unknown");
+  const [deviceEmwaverVersion, setDeviceEmwaverVersion] = useState<string | null>(null);
+  const [appEmwaverVersion, setAppEmwaverVersion] = useState<string | null>(null);
+
+  const [dfuConnected, setDfuConnected] = useState(false);
+  const [isDfuFlashing, setIsDfuFlashing] = useState(false);
+
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateDone, setUpdateDone] = useState(false);
+  const [dfuProgressPct, setDfuProgressPct] = useState<number>(0);
+  const [dfuProgressMessage, setDfuProgressMessage] = useState<string>("");
+
+  useEffect(() => {
+    if (!isTauriAvailable()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getVersion } = await import("@tauri-apps/api/app");
+        const version = await getVersion();
+        if (!cancelled) setAppEmwaverVersion(version);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status.connected && dfuConnected) {
+      setDfuConnected(false);
+    }
+  }, [dfuConnected, status.connected]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    if (!dfuConnected) return;
+    if (status.connected) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const connected = await safeInvoke<boolean>("dfu_is_connected", undefined, { throwOnError: true });
+        if (cancelled) return;
+        if (!connected) setDfuConnected(false);
+      } catch {
+        // ignore
+      }
+    };
+
+    void tick();
+    const interval = window.setInterval(() => {
+      void tick();
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [dfuConnected, isActive, status.connected]);
 
   const [shellSessionId, setShellSessionId] = useState<string | null>(null);
   const shellContainerRef = useRef<HTMLDivElement>(null);
@@ -80,19 +172,9 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const shellSessionIdRef = useRef<string | null>(null);
   const pendingShellOutputBySessionRef = useRef<Map<string, Uint8Array[]>>(new Map());
   
-  const [midiPorts, setMidiPorts] = useState<string[]>([]);
-  const [selectedMidiPort, setSelectedMidiPort] = useState<string>("");
-  const [isRefreshingMidiPorts, setIsRefreshingMidiPorts] = useState(false);
-  const midiRefreshSeqRef = useRef(0);
-
-  const [autoConnectEnabled, setAutoConnectEnabled] = useState<boolean>(() => {
-    try {
-      const raw = localStorage.getItem(AUTO_CONNECT_ENABLED_KEY);
-      if (raw === null) return true;
-      return raw === "1";
-    } catch {
-      return true;
-    }
+  const connectionManagerRef = useRef<{ inFlight: boolean; lastAttemptMs: number }>({
+    inFlight: false,
+    lastAttemptMs: 0,
   });
 
   const devMonitorsAllowed = import.meta.env.VITE_MONITOR === "1";
@@ -107,15 +189,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     // If you explicitly opt-in via env var, default to enabled.
     return import.meta.env.VITE_MONITOR === "1";
   });
-
-  const persistAutoConnectEnabled = useCallback((enabled: boolean) => {
-    setAutoConnectEnabled(enabled);
-    try {
-      localStorage.setItem(AUTO_CONNECT_ENABLED_KEY, enabled ? "1" : "0");
-    } catch {
-      // ignore
-    }
-  }, []);
 
   const persistDevMonitorsEnabled = useCallback((enabled: boolean) => {
     setDevMonitorsEnabled(enabled);
@@ -138,114 +211,61 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   const transportTxIndexRef = useRef(0);
   const streamRxIndexRef = useRef(0);
   const commandIndexRef = useRef(0);
-  const autoConnectRef = useRef<{ inFlight: boolean; lastAttemptMs: number }>({
-    inFlight: false,
-    lastAttemptMs: 0,
-  });
   const lastVersionQueryKeyRef = useRef<string>("");
 
-  const refreshMidiPorts = useCallback(async (options: { silent?: boolean } = {}): Promise<string[]> => {
-    const { silent = false } = options;
-    const seq = ++midiRefreshSeqRef.current;
-    setIsRefreshingMidiPorts(true);
-    try {
-      const ports = await listMIDIPorts();
-      if (seq !== midiRefreshSeqRef.current) return ports;
-      setMidiPorts(ports);
-      setSelectedMidiPort((prev) => {
-        if (ports.length === 0) return "";
-        if (!prev || !ports.includes(prev)) return ports[0];
-        return prev;
-      });
-      return ports;
-    } catch (e) {
-      if (seq !== midiRefreshSeqRef.current) return [];
-      console.error("Failed to list USB devices", e);
-      if (!silent) {
-        await dialog.alert(`Failed to list USB devices:\n\n${String(e)}`, { title: "USB" });
-      }
-      return [];
-    } finally {
-      if (seq === midiRefreshSeqRef.current) {
-        setIsRefreshingMidiPorts(false);
-      }
-    }
-  }, [dialog, listMIDIPorts]);
-
-  // Refresh ports on mount
-  useEffect(() => {
-    refreshMidiPorts({ silent: true });
-  }, [refreshMidiPorts]);
-
-  // Hot-plug support: keep port pickers fresh while on Home and disconnected.
+  // Always-on connection manager: auto-connects to the first EMWaver MIDI device,
+  // and also auto-detects Update Mode devices.
   useEffect(() => {
     if (!isActive) return;
-    if (status.connected) return;
+    if (!isTauriAvailable()) return;
 
     let cancelled = false;
 
     const tick = async () => {
-      if (cancelled) return;
-      // Keep these silent to avoid user-facing error spam (e.g., transient CoreMIDI init).
-      await refreshMidiPorts({ silent: true });
-    };
-
-    void tick();
-    const interval = window.setInterval(() => {
-      void tick();
-    }, 1500);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [isActive, refreshMidiPorts, status.connected]);
-
-  // Auto-connect when Home is active (USB).
-  useEffect(() => {
-    if (!isActive) return;
-    if (status.connected) return;
-    if (!autoConnectEnabled) return;
-
-    let cancelled = false;
-
-    const attempt = async () => {
       const now = Date.now();
       if (cancelled) return;
-      if (autoConnectRef.current.inFlight) return;
-      if (now - autoConnectRef.current.lastAttemptMs < 2000) return;
+      if (isDfuFlashing) return;
+      if (connectionManagerRef.current.inFlight) return;
+      if (now - connectionManagerRef.current.lastAttemptMs < 800) return;
+      if (status.connected) return;
 
-      autoConnectRef.current.inFlight = true;
-      autoConnectRef.current.lastAttemptMs = now;
+      connectionManagerRef.current.inFlight = true;
+      connectionManagerRef.current.lastAttemptMs = now;
 
       try {
-        const midi = await refreshMidiPorts({ silent: true });
-        if (cancelled) return;
-        if (midi.length > 0) {
-          const portToUse =
-            selectedMidiPort && midi.includes(selectedMidiPort) ? selectedMidiPort : midi[0];
-          setSelectedMidiPort(portToUse);
-          await connectMIDI(portToUse);
-          return;
+        // Prefer run mode (MIDI) unless we're explicitly in update flow.
+        if (!updateModalOpen) {
+          const ports = await listMIDIPorts();
+          if (cancelled) return;
+          if (ports.length > 0) {
+            setDfuConnected(false);
+            await connectMIDI(ports[0]);
+            return;
+          }
         }
-      } catch (e) {
-        // Don't alert on auto-connect failure; user can use manual controls.
-        console.error("Auto-connect failed", e);
+
+        // If no MIDI device, try Update Mode (DFU).
+        const dfu = await safeInvoke<boolean>("dfu_is_connected", undefined, { throwOnError: true });
+        if (cancelled) return;
+        setDfuConnected(Boolean(dfu));
+        if (dfu) {
+          setDfuProgressMessage("Update Mode device detected.");
+          setDfuProgressPct(0);
+        }
+      } catch {
+        // ignore
       } finally {
-        autoConnectRef.current.inFlight = false;
+        connectionManagerRef.current.inFlight = false;
       }
     };
 
-    void attempt();
-    const interval = window.setInterval(() => {
-      void attempt();
-    }, 2000);
-
+    void tick();
+    const interval = window.setInterval(() => void tick(), 900);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [autoConnectEnabled, connectMIDI, isActive, refreshMidiPorts, selectedMidiPort, status.connected]);
+  }, [connectMIDI, isActive, isDfuFlashing, listMIDIPorts, status.connected, updateModalOpen]);
 
   useEffect(() => {
     shellSessionIdRef.current = shellSessionId;
@@ -431,6 +451,24 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       transportContainerRef.current.scrollTop = transportContainerRef.current.scrollHeight;
     }
   }, [transportEntries]);
+
+  useEffect(() => {
+    const unlistenPromise = safeListen<DfuProgressEventPayload>("dfu-progress", (event) => {
+      const msg = event?.payload?.message?.trim();
+      if (!msg) return;
+
+      setDfuProgressMessage(msg.replace(/\s*\(\d+%\)\s*$/, ""));
+      const m = msg.match(/\((\d+)%\)/);
+      if (m) {
+        const pct = Number.parseInt(m[1] ?? "0", 10);
+        if (Number.isFinite(pct)) setDfuProgressPct(Math.max(0, Math.min(100, pct)));
+      }
+    });
+
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     if (streamContainerRef.current) {
@@ -738,46 +776,54 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     };
   }, [appendBatchToStream, devMonitorsEnabled, isActive, status.connected]);
 
-  const handleConnect = async () => {
+  const openUpdateModal = useCallback(async () => {
+    setUpdateError(null);
+    setUpdateDone(false);
+    setDfuProgressPct(0);
+    setDfuProgressMessage("");
+    setUpdateModalOpen(true);
+
+    // If we're talking to the device over MIDI, disconnect so the user can enter Update Mode.
+    if (status.connected) {
       try {
-        const ports = await refreshMidiPorts();
-        const portToUse =
-          selectedMidiPort && ports.includes(selectedMidiPort) ? selectedMidiPort : (ports[0] ?? "");
-        if (!portToUse) {
-          await dialog.alert("No USB devices found.", { title: "USB" });
-          return;
-        }
-        setSelectedMidiPort(portToUse);
-        await connectMIDI(portToUse);
-      } catch (e) {
-        console.error("Connect failed", e);
-        await dialog.alert(`Connect failed:\n\n${String(e)}`, { title: "Connection" });
+        await disconnect();
+      } catch {
+        // ignore
       }
-  };
+    }
+  }, [disconnect, status.connected]);
 
-  const handleDisconnect = async () => {
-    persistAutoConnectEnabled(false);
-    autoConnectRef.current.inFlight = false;
-    autoConnectRef.current.lastAttemptMs = 0;
-    await disconnect();
-  };
+  const startUpdate = useCallback(async () => {
+    setUpdateError(null);
+    setUpdateDone(false);
+    setDfuProgressPct(0);
+    setDfuProgressMessage("Preparing update...");
 
-
-
-  const handleCheckVersion = async () => {
-    if (!status.connected) {
-      await dialog.alert("Device not connected.", { title: "Connection" });
+    if (!dfuConnected) {
+      setUpdateError(
+        "Connect the device in Update Mode first (unplug, flip the Update switch to Update, plug in, then wait for EMWaver to detect it).",
+      );
       return;
     }
 
+    setIsDfuFlashing(true);
     try {
-      await sendNoWait("version");
-    } catch (error) {
-      console.error("Failed to check version:", error);
+      await safeInvoke("dfu_flash_embedded", undefined, { throwOnError: true });
+      setDfuProgressPct(100);
+      setUpdateDone(true);
+    } catch (e) {
+      console.error("DFU flash failed", e);
+      setUpdateError(String(e));
+    } finally {
+      setIsDfuFlashing(false);
     }
-  };
+  }, [dfuConnected]);
 
-  // Automatically query firmware version after each (new) connection.
+
+
+  // Manual version refresh removed; version is queried automatically on connect.
+
+  // Automatically query EMWaver version after each (new) connection.
   useEffect(() => {
     if (!status.connected) {
       lastVersionQueryKeyRef.current = "";
@@ -806,7 +852,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       if (cancelled) return;
       if (!status.connected) return;
       if (lastVersionQueryKeyRef.current !== key) return;
-      if (firmwareVersion !== "Unknown") return;
+      if (deviceEmwaverVersion) return;
       void sendVersion();
     }, 2000);
 
@@ -814,7 +860,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       cancelled = true;
       window.clearTimeout(retry);
     };
-  }, [firmwareVersion, sendNoWait, status.connected, status.device_address, status.transport]);
+  }, [deviceEmwaverVersion, sendNoWait, status.connected, status.device_address, status.transport]);
 
   const clearMonitor = async () => {
     try {
@@ -840,150 +886,234 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
   // Extract version from notification when connected
   useEffect(() => {
     if (!status.connected) {
-      setFirmwareVersion("Unknown");
+      setDeviceEmwaverVersion(null);
       return;
     }
 
-    // The firmware version comes back on the command lane (RX entries in Command Monitor).
+    // The device EMWaver version comes back on the command lane (RX entries in Command Monitor).
     for (let i = commandEntries.length - 1; i >= 0; i--) {
       const entry = commandEntries[i];
       if (entry.isTx) continue;
       const stripped = entry.ascii.replace(/\.+$/, "").trim();
       const versionMatch = stripped.match(/(\d+\.\d+\.\d+)/);
       if (versionMatch) {
-        setFirmwareVersion(versionMatch[1]);
+        setDeviceEmwaverVersion(versionMatch[1]);
         return;
       }
     }
   }, [commandEntries, status.connected]);
 
+  const deviceVersionMismatch = Boolean(
+    status.connected && deviceEmwaverVersion && appEmwaverVersion && deviceEmwaverVersion !== appEmwaverVersion,
+  );
+  const deviceVersionCmp =
+    status.connected && deviceEmwaverVersion && appEmwaverVersion
+      ? compareSemver(deviceEmwaverVersion, appEmwaverVersion)
+      : null;
+  const deviceVersionOlder = deviceVersionMismatch && (deviceVersionCmp === null || deviceVersionCmp < 0);
+
   return (
     <section className="flex flex-1 flex-col min-h-0 bg-slate-950">
+      {updateModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+          <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-100">Update EMWaver</h2>
+                <p className="mt-2 text-sm text-slate-300">Update your device to the latest EMWaver version.</p>
+              </div>
+              <button
+                type="button"
+                disabled={isDfuFlashing}
+                onClick={() => setUpdateModalOpen(false)}
+                className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-xs text-slate-200 hover:bg-black/30 disabled:opacity-60"
+                aria-label="Close"
+                title="Close"
+              >
+                Close
+              </button>
+            </div>
+
+            {!dfuConnected && !updateDone ? (
+              <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+                <div className="font-medium text-slate-100">Put the device into Update Mode</div>
+                <div className="mt-1 text-xs text-slate-400">
+                  Unplug, flip the Update switch to
+                  <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 py-0.5 mx-1 text-slate-200">
+                    <GearIcon className="h-3.5 w-3.5 text-slate-200" />
+                    Update
+                  </span>
+                  , plug back in, and wait for EMWaver to detect it.
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500">
+                  <span className="inline-flex items-center gap-1">
+                    <GearIcon className="h-3.5 w-3.5" />
+                    Update mode
+                  </span>
+                  <span className="text-slate-600">|</span>
+                  <span className="inline-flex items-center gap-1">
+                    <PlayIcon className="h-3.5 w-3.5" />
+                    Run mode
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {dfuConnected && !updateDone ? (
+              <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-200">
+                Device connected in Update Mode.
+              </div>
+            ) : null}
+
+            {updateError ? (
+              <div className="mt-4 rounded-lg border border-rose-500/25 bg-rose-500/5 p-3 text-sm text-rose-200 whitespace-pre-wrap">
+                {updateError}
+              </div>
+            ) : null}
+
+            {isDfuFlashing ? (
+              <div className="mt-4">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>{dfuProgressMessage || "Updating..."}</span>
+                  <span>{Math.round(dfuProgressPct)}%</span>
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded bg-slate-800">
+                  <div
+                    className="h-full bg-sky-400/60 transition-[width] duration-150"
+                    style={{ width: `${Math.max(0, Math.min(100, dfuProgressPct))}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {updateDone ? (
+              <div className="mt-4 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-3 text-sm text-emerald-200">
+                Update complete. Unplug the device, flip the Update switch to
+                <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 py-0.5 mx-1 text-emerald-100">
+                  <PlayIcon className="h-3.5 w-3.5" />
+                  Run
+                </span>
+                , and reconnect.
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              {!updateDone ? (
+                <button
+                  type="button"
+                  onClick={() => void startUpdate()}
+                  disabled={!dfuConnected || isDfuFlashing}
+                  className="px-3 py-2 rounded text-sm font-medium text-slate-950 bg-sky-300 hover:bg-sky-200 disabled:opacity-60 transition-colors"
+                >
+                  Update device
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-1 flex-col min-h-0 gap-3 overflow-y-auto px-6 py-4">
-        {/* Connection Status and Firmware Version - Side by Side */}
+        {/* Connection Status and EMWaver Version - Side by Side */}
         <div className="grid grid-cols-2 gap-3 flex-shrink-0">
           {/* Connection Status */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
               <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-400">Connection</span>
-                <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={autoConnectEnabled}
-                        onChange={(e) => persistAutoConnectEnabled(e.target.checked)}
-                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
-                      />
-                      <span>Auto-connect</span>
-                    </label>
-                    {devMonitorsAllowed ? (
-                      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={devMonitorsEnabled}
-                          onChange={(e) => persistDevMonitorsEnabled(e.target.checked)}
-                          className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
-                        />
-                        <span>Monitors</span>
-                      </label>
-                    ) : null}
-                </div>
+                <span className="text-base font-semibold text-slate-300">Connection</span>
+                {devMonitorsAllowed ? (
+                  <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={devMonitorsEnabled}
+                      onChange={(e) => persistDevMonitorsEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-600"
+                    />
+                    <span>Monitors</span>
+                  </label>
+                ) : null}
               </div>
               
               <div className="flex items-center justify-between gap-2">
-	                {!status.connected ? (
-	                  <div className="flex flex-1 gap-2 min-w-0">
-	                    <select
-	                      value={selectedMidiPort}
-	                      onChange={(e) => setSelectedMidiPort(e.target.value)}
-	                      className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+	                <div className="flex flex-1 items-center justify-between">
+	                  <div className="flex flex-col">
+	                    {status.connected ? (
+	                      <span className="text-sm font-semibold text-emerald-300">Connected</span>
+	                    ) : dfuConnected ? (
+	                      <span className="text-sm font-semibold text-amber-300">Update Mode detected</span>
+	                    ) : (
+	                      <span className="text-sm font-semibold text-slate-300">Searching for device...</span>
+	                    )}
+	                    <span
+	                      className="text-xs text-slate-500 truncate max-w-[220px]"
+	                      title={dfuConnected ? "Update Mode" : (status.device_address || "")}
 	                    >
-	                      <option value="" disabled>Select USB Device</option>
-	                      {midiPorts.map((port) => <option key={port} value={port}>{port}</option>)}
-	                    </select>
-	                    <button
-	                      onClick={() => { void refreshMidiPorts(); }}
-	                      disabled={isRefreshingMidiPorts}
-	                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-xs text-slate-300 transition-colors"
-	                      title={isRefreshingMidiPorts ? "Refreshing..." : "Refresh USB Devices"}
-	                    >
-	                      <span className={isRefreshingMidiPorts ? "inline-block animate-spin" : "inline-block"}>
-	                        ↻
-	                      </span>
-	                    </button>
-	                    <button
-	                      onClick={handleConnect}
-	                      disabled={!selectedMidiPort}
-	                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white text-xs rounded transition-colors whitespace-nowrap"
-	                    >
-	                      Connect
-	                    </button>
+	                      {status.connected
+	                        ? (displayEmwaverName(status.device_address) || "Device")
+	                        : dfuConnected
+	                          ? "plugged in (Update Mode)"
+	                          : "connect device or enter Update Mode"}
+	                    </span>
 	                  </div>
-	                ) : (
-                   <div className="flex flex-1 items-center justify-between">
-                       <div className="flex flex-col">
-                           <span className="text-xs font-medium text-green-400">Connected ({status.transport})</span>
-                           <span className="text-[10px] text-slate-500 truncate max-w-[120px]" title={status.device_address || ""}>{status.device_address}</span>
-                       </div>
-                       <button
-                          onClick={handleDisconnect}
-                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
-                       >
-                          Disconnect
-                       </button>
-                   </div>
-                )}
+	                  {!status.connected && !dfuConnected ? (
+	                    <div className="h-2.5 w-2.5 rounded-full bg-slate-500/40 animate-pulse" aria-hidden="true" />
+	                  ) : null}
+	                </div>
               </div>
 
             </div>
           </div>
 
-          {/* Firmware Version */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            <div className="flex items-center justify-between h-full">
-              <div className="flex items-center gap-3">
-                <img
-                  src="/device-icons/emwaver-icon.png"
-                  alt="EMWaver icon"
-                  className="h-20 w-20 rounded-2xl bg-slate-950/30 p-1"
-                  draggable={false}
-                />
-                <div className="flex flex-col justify-center">
-                  <span className="text-sm font-semibold text-slate-400">Firmware</span>
-                  <span
-                    className={`text-sm ${
-                      firmwareVersion !== "Unknown" ? "text-blue-400" : "text-slate-500"
-                    }`}
-                  >
-                    {firmwareVersion}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={handleCheckVersion}
-                disabled={!status.connected}
-                className="p-2 text-slate-400 hover:text-slate-200 disabled:text-slate-700 disabled:cursor-not-allowed border border-slate-800 rounded hover:border-slate-700 transition-colors"
-                title="Check firmware version"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+           {/* EMWaver Version */}
+           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+             <div className="flex items-center justify-between h-full">
+               <div className="flex items-center gap-3">
+                  <img
+                    src="/device-icons/emwaver-icon.png"
+                    alt="Device icon"
+                    className="h-20 w-20 rounded-2xl bg-slate-950/30 p-1"
+                    draggable={false}
                   />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
+                  <div className="flex flex-col justify-center">
+                   {!dfuConnected && !updateModalOpen && status.connected && deviceEmwaverVersion ? (
+                     <span className="text-base font-semibold text-blue-300">{deviceEmwaverVersion}</span>
+                   ) : null}
+                  {dfuConnected || updateModalOpen ? null : status.connected ? (
+                    deviceEmwaverVersion ? (
+                      appEmwaverVersion ? (
+                        deviceVersionMismatch ? (
+                          <span className="mt-1 text-sm text-amber-200">
+                            Your device is running an {deviceVersionOlder ? "older" : "different"} EMWaver version {deviceEmwaverVersion}. Update it.
+                          </span>
+                        ) : (
+                          <span className="mt-1 text-sm text-emerald-200">Device emwaver version is up to date</span>
+                        )
+                      ) : (
+                        <span className="mt-1 text-sm text-slate-500">Checking...</span>
+                      )
+                    ) : (
+                      <span className="mt-1 text-sm text-slate-500">Checking device...</span>
+                    )
+                  ) : (
+                    <span className="mt-1 text-sm text-slate-500">Connect a device to check</span>
+                  )}
+
+                  {deviceVersionMismatch || dfuConnected ? (
+                    <>
+                      <span className="mt-3 text-xs font-medium text-slate-400">Update device emwaver version</span>
+                      <button
+                        type="button"
+                        onClick={() => void openUpdateModal()}
+                        className="mt-2 inline-flex items-center justify-center px-3 py-1.5 rounded text-sm font-semibold text-sky-100 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/20 transition-colors"
+                      >
+                        Update device
+                      </button>
+                    </>
+                  ) : null}
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
 
         {/* Shell (emwaver shell) */}
         <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-shrink-0">
@@ -1146,6 +1276,30 @@ function SettingsIcon() {
   );
 }
 
+function GearIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className={className ?? "h-4 w-4"}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 3.2l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+    </svg>
+  );
+}
+
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" className={className ?? "h-4 w-4"} aria-hidden="true">
+      <path d="M5.2 3.6a.8.8 0 011.2-.7l6.2 3.6a.8.8 0 010 1.4l-6.2 3.6a.8.8 0 01-1.2-.7V3.6z" />
+    </svg>
+  );
+}
+
 function ISMIcon() {
   // Converted from Android chip_svgrepo_com.xml
   return (
@@ -1177,14 +1331,6 @@ function PacketModeIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full">
       <path d="M10.5911 2.51301C11.4947 2.14671 12.5053 2.14671 13.4089 2.51301L20.9075 5.55298C21.5679 5.82071 22 6.46216 22 7.17477V16.8275C22 17.5401 21.5679 18.1815 20.9075 18.4493L13.4089 21.4892C12.5053 21.8555 11.4947 21.8555 10.5911 21.4892L3.09252 18.4493C2.43211 18.1815 2 17.5401 2 16.8275V7.17477C2 6.46216 2.43211 5.82071 3.09252 5.55298L10.5911 2.51301ZM12.8453 3.90312C12.3032 3.68334 11.6968 3.68334 11.1547 3.90312L9.24097 4.67894L16.7678 7.60604L19.437 6.57542L12.8453 3.90312ZM14.6911 8.40787L7.21472 5.50039L4.59029 6.56435L12.0013 9.44642L14.6911 8.40787ZM3.5 16.8275C3.5 16.9293 3.56173 17.0209 3.65607 17.0592L11.1547 20.0991C11.1863 20.112 11.2183 20.1241 11.2503 20.1354V10.7638L3.5 7.74979V16.8275ZM12.8453 20.0991L20.3439 17.0592C20.4383 17.0209 20.5 16.9293 20.5 16.8275V7.77292L12.7503 10.7651V20.1352C12.7822 20.1239 12.8139 20.1119 12.8453 20.0991Z" />
-    </svg>
-  );
-}
-
-function FlashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-full w-full" aria-hidden="true">
-      <path d="M12.7071 2.29289C12.3166 1.90237 11.6834 1.90237 11.2929 2.29289L6.29289 7.29289C5.90237 7.68342 5.90237 8.31658 6.29289 8.70711C6.68342 9.09763 7.31658 9.09763 7.70711 8.70711L11 5.41421V18C11 18.5523 11.4477 19 12 19C12.5523 19 13 18.5523 13 18V5.41421L16.2929 8.70711C16.6834 9.09763 17.3166 9.09763 17.7071 8.70711C18.0976 8.31658 18.0976 7.68342 17.7071 7.29289L12.7071 2.29289ZM5.25 20.5C4.83579 20.5 4.5 20.8358 4.5 21.25C4.5 21.6642 4.83579 22 5.25 22H18.75C19.1642 22 19.5 21.6642 19.5 21.25C19.5 20.8358 19.1642 20.5 18.75 20.5H5.25Z" />
     </svg>
   );
 }
