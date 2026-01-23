@@ -7,4 +7,5 @@ This folder is the single source of truth for EMWaver’s built-in Script assets
 
 ## Minimal example
 
+- `hello.js`: minimal script that just `print()`s.
 - `blink.js`: blinks `GDO0` using `every()` and `print()` with a tiny UI.

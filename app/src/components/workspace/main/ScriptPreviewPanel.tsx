@@ -52,7 +52,9 @@ export default function ScriptPreviewPanel({
         {state?.tree ? (
           <ScriptUIRenderer tree={state.tree as ScriptTree} onInvokeCallback={onInvokeCallback} />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">Preview this script to render.</div>
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+            No UI rendered (check the Console tab for print output).
+          </div>
         )}
       </div>
     </div>
