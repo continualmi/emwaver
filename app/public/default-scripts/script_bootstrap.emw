@@ -7,15 +7,12 @@
 // - _scriptPrint(message: string): void
 // - _scriptRender(node: object): void
 // - _scriptRegisterCallback(token: string, fn: Function): void
-// - _scriptImportModule(name: string): any
-// - _scriptShowDialog(title: string, message: string): void
-// - _scriptCreateByteArray(jsArray: any): any
+//
+// Device operations are performed by the standard library via:
+// - _scriptSendCommandString(command: string, timeoutMs: number): any
 //
 // Hosts may optionally provide:
-// - _scriptSendCommandString(command: string, timeoutMs: number): any
-// - _scriptSendPacket(bytes: any, timeoutMs: number): any
-// - _scriptWrite(bytes: any): void
-// - _scriptConnectionStatus(): string
+// - _scriptSleep(ms: number): void
 // - _scriptListSignals(): string[]
 // - _scriptReadSignal(name: string): any
 
@@ -26,6 +23,13 @@ var __scriptGlobal = (function () {
     return {};
   }
 })();
+
+// Capture host-only primitives so we can remove them from the public Script API surface.
+// Note: This file runs in different JS environments (desktop backend, desktop frontend fallback,
+// mobile). Some environments expose these as true globals (not function parameters).
+var __host_scriptSendCommandString =
+  typeof _scriptSendCommandString === 'function' ? _scriptSendCommandString : null;
+
 
 var __scriptClock = (function () {
   var hasPerformanceNow = typeof performance !== 'undefined' && performance && typeof performance.now === 'function';
@@ -39,20 +43,6 @@ var __scriptClock = (function () {
     },
   };
 })();
-
-var ScriptBridge = typeof ScriptBridge !== 'undefined' ? ScriptBridge : {
-  render: function (node) {
-    _scriptRender(node);
-  },
-  registerCallback: function (token, fn) {
-    if (typeof fn === 'function') {
-      _scriptRegisterCallback(token, fn);
-    }
-  },
-  log: function (message) {
-    _scriptPrint(String(message));
-  },
-};
 
 function _scriptJoinArgs(args) {
   var parts = [];
@@ -73,7 +63,7 @@ function _scriptJoinArgs(args) {
 
 if (typeof print === 'undefined') {
   var print = function () {
-    ScriptBridge.log(_scriptJoinArgs(arguments));
+    _scriptPrint(_scriptJoinArgs(arguments));
   };
   __scriptGlobal.print = print;
 }
@@ -119,7 +109,7 @@ if (typeof Console === 'undefined') {
     }
 
     // Host-delivered console input.
-    ScriptBridge.registerCallback('__emw_console_input', function (payload) {
+    _scriptRegisterCallback('__emw_console_input', function (payload) {
       if (typeof payload === 'string') {
         enqueueLine(payload);
         return;
@@ -178,150 +168,40 @@ if (typeof console.error !== 'function') {
   };
 }
 
-if (typeof dialog === 'undefined') {
-  var dialog = function (title, message) {
-    if (typeof _scriptShowDialog !== 'function') {
-      throw new Error('dialog unavailable (missing _scriptShowDialog)');
-    }
-    _scriptShowDialog(String(title || ''), String(message || ''));
-  };
-}
-
-if (typeof createByteArray === 'undefined') {
-  var createByteArray = function (jsArray) {
-    if (typeof _scriptCreateByteArray !== 'function') {
-      throw new Error('createByteArray unavailable (missing _scriptCreateByteArray)');
-    }
-    return _scriptCreateByteArray(jsArray);
-  };
-}
-
-if (typeof ScriptModules === 'undefined') {
-  var ScriptModules = (function () {
-    var cache = {};
-    var normalize = function (name) {
-      return String(name || '').trim();
-    };
-    return {
-      import: function (name) {
-        if (typeof _scriptImportModule !== 'function') {
-          throw new Error('Module loader unavailable (missing _scriptImportModule)');
-        }
-        var key = normalize(name);
-        if (!key) {
-          throw new Error('Module name is required');
-        }
-        if (!Object.prototype.hasOwnProperty.call(cache, key)) {
-          cache[key] = _scriptImportModule(key);
-        }
-        return cache[key];
-      },
-      clear: function () {
-        cache = {};
-      },
-    };
-  })();
-}
-
-if (typeof require !== 'function') {
-  var require = function (name) {
-    return ScriptModules.import(name);
-  };
-}
-
 function __scriptIsShim(obj) {
   return !!obj && obj.__scriptShim === true;
 }
 
-var __scriptHostDeviceConnection =
-  typeof DeviceConnection !== 'undefined' && !__scriptIsShim(DeviceConnection) ? DeviceConnection : null;
-var __scriptHostUtils = typeof Utils !== 'undefined' && !__scriptIsShim(Utils) ? Utils : null;
 var __scriptHostSamplerSignals =
   typeof SamplerSignals !== 'undefined' && !__scriptIsShim(SamplerSignals) ? SamplerSignals : null;
 var __scriptHostSampler = typeof Sampler !== 'undefined' && !__scriptIsShim(Sampler) ? Sampler : null;
 
-var DeviceConnection = {};
-DeviceConnection.__scriptShim = true;
-DeviceConnection.sendCommandString = function (command, timeoutMs) {
-  var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
+function __scriptFrameCommand(command) {
   var framed = String(command || '');
   if (framed.length > 0 && !/\n$/.test(framed)) {
     framed += '\n';
   }
+  return framed;
+}
 
-  if (__scriptHostDeviceConnection && typeof __scriptHostDeviceConnection.sendCommandString === 'function') {
-    return __scriptHostDeviceConnection.sendCommandString.call(__scriptHostDeviceConnection, framed, timeout);
+function __sendCommandString(command, timeoutMs) {
+  var sender = typeof __host_scriptSendCommandString === 'function' ? __host_scriptSendCommandString : null;
+  if (typeof sender !== 'function') {
+    throw new Error('Device send unavailable (missing _scriptSendCommandString)');
   }
-
-  if (typeof _scriptSendCommandString === 'function') {
-    return _scriptSendCommandString(framed, timeout);
-  }
-
-  throw new Error('DeviceConnection.sendCommandString unavailable on this host');
-};
-
-DeviceConnection.sendPacket = function (bytes, timeoutMs) {
   var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
+  return sender(__scriptFrameCommand(command), timeout);
+}
 
-  if (__scriptHostDeviceConnection) {
-    if (typeof __scriptHostDeviceConnection.sendPacket === 'function') {
-      return __scriptHostDeviceConnection.sendPacket.call(__scriptHostDeviceConnection, bytes, timeout);
-    }
-    if (typeof __scriptHostDeviceConnection.sendCommand === 'function') {
-      return __scriptHostDeviceConnection.sendCommand.call(__scriptHostDeviceConnection, bytes, timeout);
-    }
-  }
-
-  if (typeof _scriptSendPacket === 'function') {
-    return _scriptSendPacket(bytes, timeout);
-  }
-
-  // iOS host compatibility: some surfaces expose only `_manualSendCommand` which accepts (bytes, timeoutMs).
-  if (typeof _manualSendCommand === 'function') {
-    return _manualSendCommand(bytes, timeout);
-  }
-
-  throw new Error('DeviceConnection.sendPacket unavailable on this host');
-};
-
-DeviceConnection.write = function (bytes) {
-  if (__scriptHostDeviceConnection && typeof __scriptHostDeviceConnection.write === 'function') {
-    return __scriptHostDeviceConnection.write.call(__scriptHostDeviceConnection, bytes);
-  }
-  if (typeof _scriptWrite === 'function') {
-    return _scriptWrite(bytes);
-  }
-};
-
-DeviceConnection.connectionStatus = function () {
-  if (__scriptHostDeviceConnection && typeof __scriptHostDeviceConnection.connectionStatus === 'function') {
-    return String(__scriptHostDeviceConnection.connectionStatus.call(__scriptHostDeviceConnection));
-  }
-  if (typeof _scriptConnectionStatus === 'function') {
-    return String(_scriptConnectionStatus());
-  }
-  return 'unknown';
-};
-
-var Utils = {};
-Utils.__scriptShim = true;
-Utils.delay = function (ms) {
-  if (__scriptHostUtils && typeof __scriptHostUtils.delay === 'function') {
-    return __scriptHostUtils.delay.call(__scriptHostUtils, ms);
-  }
-  var durationMs = Math.max(0, Number(ms) || 0);
-  var start = Date.now();
-  while (Date.now() - start < durationMs) {
-    // busy-wait for parity with mobile hosts
-  }
-};
-
-Utils.sleep = function (ms) {
-  if (__scriptHostUtils && typeof __scriptHostUtils.sleep === 'function') {
-    return __scriptHostUtils.sleep.call(__scriptHostUtils, ms);
-  }
-  return Utils.delay(ms);
-};
+// Best-effort: hide host primitives that are not part of the public Script API.
+// (Scripts should use SPI/Wire/Serial/etc, not raw command strings.)
+try { __scriptGlobal._scriptSendCommandString = undefined; } catch (e) {}
+try { __scriptGlobal._scriptSendPacket = undefined; } catch (e) {}
+try { __scriptGlobal._manualSendCommand = undefined; } catch (e) {}
+try { __scriptGlobal._scriptWrite = undefined; } catch (e) {}
+try { __scriptGlobal._scriptImportModule = undefined; } catch (e) {}
+try { __scriptGlobal._scriptShowDialog = undefined; } catch (e) {}
+try { __scriptGlobal._scriptCreateByteArray = undefined; } catch (e) {}
 
 if (typeof millis === 'undefined') {
   var millis = function () {
@@ -343,12 +223,9 @@ if (typeof delay === 'undefined') {
     }
 
     if (typeof _scriptSleep === 'function') {
-      _scriptSleep(durationMs);
-      return Promise.resolve();
-    }
-
-    if (Utils && typeof Utils.delay === 'function') {
-      Utils.delay(durationMs);
+      try {
+        _scriptSleep(durationMs);
+      } catch (e) {}
       return Promise.resolve();
     }
 
@@ -358,6 +235,17 @@ if (typeof delay === 'undefined') {
       resolve();
     });
   };
+}
+
+if (typeof sleep === 'undefined') {
+  // Blocking sleep (best-effort; used for tight loops where async timers add too much overhead).
+  var sleep = function (ms) {
+    var durationMs = Math.max(0, Number(ms) || 0);
+    if (durationMs <= 0) return;
+    var start = Date.now();
+    while (Date.now() - start < durationMs) {}
+  };
+  __scriptGlobal.sleep = sleep;
 }
 
 if (typeof every === 'undefined') {
@@ -474,12 +362,11 @@ SamplerSignals.readSignal = function (name) {
   return null;
 };
 
-__scriptGlobal.DeviceConnection = DeviceConnection;
-__scriptGlobal.Utils = Utils;
 __scriptGlobal.SamplerSignals = SamplerSignals;
 __scriptGlobal.millis = millis;
 __scriptGlobal.delay = delay;
 __scriptGlobal.every = every;
+__scriptGlobal.sleep = sleep;
 
 // -----------------------------------------------------------------------------
 // Sampler API (live capture)
@@ -521,13 +408,8 @@ Sampler.__scriptShim = true;
       return;
     }
 
-    if (Utils && typeof Utils.delay === 'function') {
-      Utils.delay(durationMs);
-      return;
-    }
-
-    var start = Date.now();
-    while (Date.now() - start < durationMs) {}
+    // No async timers available; fall back to a blocking sleep.
+    sleep(durationMs);
   }
 
   async function __samplerReadPacketRange(startPacketIndex, endPacketIndex) {
@@ -703,7 +585,7 @@ Sampler.__scriptShim = true;
     await Sampler.buffer.setInvertRx(invert);
 
     var startPacket = await Sampler.buffer.packetCount();
-    await emw.send('sample start --pin=' + pin);
+    await __sendCommandString('sample start --pin=' + pin);
 
     var id = __samplerMakeId();
     __samplerActiveSession = { id: id, pin: pin, startPacket: startPacket };
@@ -717,7 +599,7 @@ Sampler.__scriptShim = true;
     }
 
     try {
-      await emw.send('sample stop');
+      await __sendCommandString('sample stop');
     } finally {
       try { await Sampler.buffer.setInvertRx(false); } catch (e) {}
       __samplerActiveSession = null;
@@ -764,19 +646,6 @@ Sampler.__scriptShim = true;
 
 __scriptGlobal.Sampler = Sampler;
 
-var emw = typeof emw !== 'undefined' ? emw : {};
-if (typeof emw.send !== 'function') {
-  emw.send = function (command, timeoutMs) {
-    return DeviceConnection.sendCommandString(command, timeoutMs);
-  };
-}
-if (typeof emw.sendPacket !== 'function') {
-  emw.sendPacket = function (bytes, timeoutMs) {
-    return DeviceConnection.sendPacket(bytes, timeoutMs);
-  };
-}
-__scriptGlobal.emw = emw;
-
 function __scriptDecodeText(bytes) {
   if (!bytes) return '';
   if (typeof bytes === 'string') return bytes;
@@ -802,14 +671,14 @@ function __scriptDecodeText(bytes) {
 var device = typeof device !== 'undefined' ? device : {};
 if (typeof device.version !== 'function') {
   device.version = function () {
-    return Promise.resolve(emw.send('version', 1500)).then(function (resp) {
+    return Promise.resolve(__sendCommandString('version', 1500)).then(function (resp) {
       return __scriptDecodeText(resp).trim();
     });
   };
 }
 if (typeof device.reset !== 'function') {
   device.reset = function () {
-    return Promise.resolve(emw.send('reset', 1500)).then(function () {
+    return Promise.resolve(__sendCommandString('reset', 1500)).then(function () {
       return;
     });
   };
@@ -898,10 +767,10 @@ if (typeof pinMode !== 'function') {
   var pinMode = function (pin, mode) {
     var pinNumber = __scriptResolvePin(pin);
     if (String(mode) === INPUT) {
-      return emw.send('gpio in --pin=' + pinNumber);
+      return __sendCommandString('gpio in --pin=' + pinNumber);
     }
     if (String(mode) === OUTPUT) {
-      return emw.send('gpio out --pin=' + pinNumber);
+      return __sendCommandString('gpio out --pin=' + pinNumber);
     }
     throw new Error('pinMode: unsupported mode ' + String(mode));
   };
@@ -912,7 +781,7 @@ if (typeof digitalWrite !== 'function') {
   var digitalWrite = function (pin, value) {
     var pinNumber = __scriptResolvePin(pin);
     var level = Number(value) ? 1 : 0;
-    return emw.send(level ? 'gpio high --pin=' + pinNumber : 'gpio low --pin=' + pinNumber);
+    return __sendCommandString(level ? 'gpio high --pin=' + pinNumber : 'gpio low --pin=' + pinNumber);
   };
   __scriptGlobal.digitalWrite = digitalWrite;
 }
@@ -920,7 +789,7 @@ if (typeof digitalWrite !== 'function') {
 if (typeof digitalRead !== 'function') {
   var digitalRead = function (pin) {
     var pinNumber = __scriptResolvePin(pin);
-    var resp = emw.send('gpio read --pin=' + pinNumber);
+    var resp = __sendCommandString('gpio read --pin=' + pinNumber);
     if (resp && typeof resp.then === 'function') {
       return resp.then(function (bytes) {
         return bytes && bytes.length ? (bytes[0] ? HIGH : LOW) : LOW;
@@ -944,7 +813,7 @@ if (typeof SPI === 'undefined') {
       if (txHex) cmd += ' --tx=' + txHex;
       if (typeof rxLength === 'number') cmd += ' --rx=' + rxLength;
 
-      return emw.send(cmd, 1500);
+      return __sendCommandString(cmd, 1500);
     },
   };
 
@@ -956,11 +825,11 @@ if (typeof Serial === 'undefined') {
     begin: function (baud, opts) {
       var b = typeof baud === 'number' ? baud | 0 : 115200;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return emw.send('uart open --baud=' + b, timeout);
+      return __sendCommandString('uart open --baud=' + b, timeout);
     },
     end: function (opts) {
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return emw.send('uart close', timeout);
+      return __sendCommandString('uart close', timeout);
     },
     write: function (data, opts) {
       var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
@@ -969,7 +838,7 @@ if (typeof Serial === 'undefined') {
       var cmd = 'uart write';
       if (typeof baud === 'number' && isFinite(baud) && baud > 0) cmd += ' --baud=' + baud;
       if (hex) cmd += ' --tx=' + hex;
-      return emw.send(cmd, timeout);
+      return __sendCommandString(cmd, timeout);
     },
     read: function (n, opts) {
       var len = Number(n) | 0;
@@ -979,7 +848,7 @@ if (typeof Serial === 'undefined') {
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
       var cmd = 'uart read --n=' + len;
       if (typeof baud === 'number' && isFinite(baud) && baud > 0) cmd += ' --baud=' + baud;
-      return emw.send(cmd, timeout);
+      return __sendCommandString(cmd, timeout);
     },
   };
 
@@ -991,11 +860,11 @@ if (typeof Wire === 'undefined') {
     begin: function (hz, opts) {
       var h = typeof hz === 'number' ? hz | 0 : 100000;
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return emw.send('i2c open --hz=' + h, timeout);
+      return __sendCommandString('i2c open --hz=' + h, timeout);
     },
     end: function (opts) {
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return emw.send('i2c close', timeout);
+      return __sendCommandString('i2c close', timeout);
     },
     write: function (addr, data, opts) {
       var a = Number(addr) | 0;
@@ -1005,7 +874,7 @@ if (typeof Wire === 'undefined') {
       var cmd = 'i2c write --addr=' + a;
       if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
       if (hex) cmd += ' --tx=' + hex;
-      return emw.send(cmd, timeout);
+      return __sendCommandString(cmd, timeout);
     },
     read: function (addr, n, opts) {
       var a = Number(addr) | 0;
@@ -1016,7 +885,7 @@ if (typeof Wire === 'undefined') {
       var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
       var cmd = 'i2c read --addr=' + a + ' --n=' + len;
       if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
-      return emw.send(cmd, timeout);
+      return __sendCommandString(cmd, timeout);
     },
     xfer: function (addr, tx, rxLen, opts) {
       var a = Number(addr) | 0;
@@ -1029,7 +898,7 @@ if (typeof Wire === 'undefined') {
       var cmd = 'i2c xfer --addr=' + a + ' --rx=' + len;
       if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
       if (hex) cmd += ' --tx=' + hex;
-      return emw.send(cmd, timeout);
+      return __sendCommandString(cmd, timeout);
     },
   };
 
@@ -1074,7 +943,7 @@ if (typeof analogRead !== 'function') {
     var cmd = 'adc read --pin=' + pinNumber;
     if (samples !== 1) cmd += ' --samples=' + samples;
 
-    var resp = emw.send(cmd, 1500);
+    var resp = __sendCommandString(cmd, 1500);
     if (resp && typeof resp.then === 'function') {
       return resp.then(function (bytes) {
         return __scriptScaleAnalogRead(__scriptU16FromBytes(bytes));
@@ -1093,7 +962,7 @@ function __scriptAnalogReadInternal(src, opts) {
   var cmd = 'adc read --src=' + String(src);
   if (samples !== 1) cmd += ' --samples=' + samples;
 
-  var resp = emw.send(cmd, 1500);
+  var resp = __sendCommandString(cmd, 1500);
   if (resp && typeof resp.then === 'function') {
     return resp.then(function (bytes) {
       return __scriptScaleAnalogRead(__scriptU16FromBytes(bytes));
@@ -1160,7 +1029,7 @@ if (typeof analogWrite !== 'function') {
     var cmd = 'pwm write --pin=' + pinNumber + ' --value=' + v12;
     if (typeof hz === 'number' && isFinite(hz) && hz > 0) cmd += ' --hz=' + hz;
 
-    return emw.send(cmd, timeout);
+    return __sendCommandString(cmd, timeout);
   };
   __scriptGlobal.analogWrite = analogWrite;
 }
@@ -1206,7 +1075,7 @@ if (typeof UI === 'undefined') {
         var fn = props[event.key];
         if (typeof fn === 'function') {
           var token = id + ':' + event.type;
-          ScriptBridge.registerCallback(token, fn);
+          _scriptRegisterCallback(token, fn);
           handlers[event.type] = token;
         }
         if (Object.prototype.hasOwnProperty.call(props, event.key)) {
@@ -1273,18 +1142,16 @@ if (typeof UI === 'undefined') {
       },
       render: function (node) {
         if (!node || typeof node !== 'object') {
-          ScriptBridge.log('UI.render called with invalid node');
+          try {
+            _scriptPrint('UI.render called with invalid node');
+          } catch (e) {}
           return;
         }
-        ScriptBridge.render(node);
+        _scriptRender(node);
       },
     };
   })();
 }
 
-__scriptGlobal.ScriptBridge = ScriptBridge;
-__scriptGlobal.ScriptModules = ScriptModules;
 __scriptGlobal.UI = UI;
 __scriptGlobal.print = print;
-__scriptGlobal.dialog = dialog;
-__scriptGlobal.createByteArray = createByteArray;

@@ -36,7 +36,19 @@ nav:
       - Infrared + Sub‑GHz Walkthrough: infrared-ism-walkthrough.md
   - Pinout: hardware/pinout.md
   - Scripts:
-      - EMWaver scripts: scripts.md
+      - Overview: scripts/index.md
+      - UI: scripts/ui.md
+      - Timing: scripts/timing.md
+      - Console: scripts/console.md
+      - Device: scripts/device.md
+      - GPIO: scripts/gpio.md
+      - SPI: scripts/spi.md
+      - I2C: scripts/i2c.md
+      - UART: scripts/uart.md
+      - ADC: scripts/adc.md
+      - PWM: scripts/pwm.md
+      - Sampler: scripts/sampler.md
+      - Signals: scripts/signals.md
   - Order from JLCPCB: hardware-catalog/hardware.html
   - News: news/index.html
   - History: hardware-catalog/catalog.html

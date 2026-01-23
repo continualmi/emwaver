@@ -428,42 +428,6 @@ fn register_natives(ctx: &mut Context) -> Result<()> {
     ctx.register_global_builtin_callable(js_string!("_scriptRegisterCallback"), 2, reg_cb_fn)
         .map_err(|e| anyhow::anyhow!("Failed to register _scriptRegisterCallback: {e}"))?;
 
-    // _scriptImportModule(name) (no-op in CLI)
-    let import_fn =
-        unsafe { NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined())) };
-    ctx.register_global_builtin_callable(js_string!("_scriptImportModule"), 1, import_fn)
-        .map_err(|e| anyhow::anyhow!("Failed to register _scriptImportModule: {e}"))?;
-
-    // _scriptShowDialog(title, message) (no-op in CLI)
-    let dialog_fn =
-        unsafe { NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined())) };
-    ctx.register_global_builtin_callable(js_string!("_scriptShowDialog"), 2, dialog_fn)
-        .map_err(|e| anyhow::anyhow!("Failed to register _scriptShowDialog: {e}"))?;
-
-    // _scriptCreateByteArray(jsArray)
-    let create_bytes_fn = unsafe {
-        NativeFunction::from_closure(move |_this, args, ctx| {
-            let arr = args.get_or_undefined(0);
-            if let Some(obj) = arr.as_object() {
-                let len = obj
-                    .get(PropertyKey::from(js_string!("length")), ctx)?
-                    .to_u32(ctx)
-                    .unwrap_or(0);
-                let mut bytes = Vec::with_capacity(len as usize);
-                for i in 0..len {
-                    let val = obj.get(i, ctx)?;
-                    bytes.push(val.to_u32(ctx).unwrap_or(0) as u8);
-                }
-                let array = JsUint8Array::from_iter(bytes.into_iter(), ctx)
-                    .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
-                return Ok(array.into());
-            }
-            Ok(JsValue::undefined())
-        })
-    };
-    ctx.register_global_builtin_callable(js_string!("_scriptCreateByteArray"), 1, create_bytes_fn)
-        .map_err(|e| anyhow::anyhow!("Failed to register _scriptCreateByteArray: {e}"))?;
-
     // _scriptSleep(ms)
     let sleep_fn = unsafe {
         NativeFunction::from_closure(move |_this, args, ctx| {

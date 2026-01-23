@@ -24,19 +24,18 @@ import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
-import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.Wrapper;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -62,28 +61,21 @@ public final class ScriptEngine {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Function> callbackRegistry = new ConcurrentHashMap<>();
     private final Map<String, Object> globalBindings = new ConcurrentHashMap<>();
-    private final Map<String, ModuleSource> moduleSources = new ConcurrentHashMap<>();
-    private final Map<String, Object> moduleCache = new ConcurrentHashMap<>();
-    private final ThreadLocal<Set<String>> moduleLoadingStack = ThreadLocal.withInitial(HashSet::new);
+    private volatile ScriptDeviceConnection deviceConnection;
 
     private volatile Scriptable scope;
     private volatile boolean initialized;
     private volatile String bootstrapSource = "";
 
-    public interface DialogCallback {
-        void showDialog(String title, String message);
-    }
-
     private PrintCallback printCallback;
     private RenderCallback renderCallback;
-    private DialogCallback dialogCallback;
 
     public void setBootstrapSource(String source) {
         bootstrapSource = source != null ? source : "";
     }
 
-    public void setDialogCallback(DialogCallback dialogCallback) {
-        this.dialogCallback = dialogCallback;
+    public void setDeviceConnection(ScriptDeviceConnection deviceConnection) {
+        this.deviceConnection = deviceConnection;
     }
 
     public void setup(PrintCallback printCallback, RenderCallback renderCallback, Map<String, Object> bindings) {
@@ -131,7 +123,6 @@ public final class ScriptEngine {
                 ensureScope(cx);
                 callbackRegistry.clear();
                 injectDsl(cx, scope);
-                moduleLoadingStack.get().clear();
 
                 String wrapped = "(function() {\n" + script + "\n})();";
                 try {
@@ -139,11 +130,9 @@ public final class ScriptEngine {
                 } catch (RhinoException ex) {
                     String summary = "Script error: " + formatRhinoException(ex);
                     dispatchPrint(summary);
-                    dispatchDialog("Script Error", summary + "\n\n" + fullRhinoTrace(ex));
                 } catch (Exception ex) {
                     String summary = "Script error: " + ex.getMessage();
                     dispatchPrint(summary);
-                    dispatchDialog("Script Error", summary + "\n\n" + android.util.Log.getStackTraceString(ex));
                 }
             } finally {
                 Context.exit();
@@ -177,11 +166,9 @@ public final class ScriptEngine {
             } catch (RhinoException ex) {
                 String summary = "Script callback error: " + formatRhinoException(ex);
                 dispatchPrint(summary);
-                dispatchDialog("Script Error", summary + "\n\n" + fullRhinoTrace(ex));
             } catch (Exception ex) {
                 String summary = "Script callback error: " + ex.getMessage();
                 dispatchPrint(summary);
-                dispatchDialog("Script Error", summary + "\n\n" + android.util.Log.getStackTraceString(ex));
             } finally {
                 Context.exit();
             }
@@ -223,41 +210,6 @@ public final class ScriptEngine {
         for (Map.Entry<String, Object> entry : bindings.entrySet()) {
             registerGlobalBinding(entry.getKey(), entry.getValue());
         }
-    }
-
-    public void updateModuleSources(Map<String, String> sources) {
-        Map<String, ModuleSource> prepared = new HashMap<>();
-        if (sources != null) {
-            for (Map.Entry<String, String> entry : sources.entrySet()) {
-                String name = entry.getKey();
-                if (name == null) {
-                    continue;
-                }
-                String normalized = normalizeModuleName(name);
-                if (normalized.isEmpty()) {
-                    continue;
-                }
-                String content = entry.getValue() != null ? entry.getValue() : "";
-                prepared.put(normalized, new ModuleSource(name, content));
-            }
-        }
-
-        executor.execute(() -> {
-            moduleSources.clear();
-            moduleSources.putAll(prepared);
-            moduleCache.clear();
-            moduleLoadingStack.get().clear();
-            Context cx = Context.enter();
-            try {
-                ensureScope(cx);
-                if (scope != null) {
-                    ScriptableObject.deleteProperty(scope, "ScriptModules");
-                    ScriptableObject.deleteProperty(scope, "require");
-                }
-            } finally {
-                Context.exit();
-            }
-        });
     }
 
     private void ensureScope(Context cx) {
@@ -335,57 +287,47 @@ public final class ScriptEngine {
             }
         });
 
-        ScriptableObject.putProperty(scope, "_scriptShowDialog", new BaseFunction() {
+        ScriptableObject.putProperty(scope, "_scriptSendCommandString", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 if (args.length < 2) {
                     return Context.getUndefinedValue();
                 }
-                String title = String.valueOf(args[0]);
-                String message = String.valueOf(args[1]);
-                
-                if (dialogCallback != null) {
-                    mainHandler.post(() -> dialogCallback.showDialog(title, message));
+                ScriptDeviceConnection connection = deviceConnection;
+                if (connection == null || !connection.isConnected()) {
+                    return null;
                 }
-                
-                return Context.getUndefinedValue();
+                String command = String.valueOf(args[0]);
+                int timeoutMs = 2000;
+                Object timeoutObj = args[1];
+                if (timeoutObj instanceof Number) {
+                    timeoutMs = Math.max(0, ((Number) timeoutObj).intValue());
+                }
+                byte[] response = connection.sendCommand(command.getBytes(StandardCharsets.UTF_8), timeoutMs);
+                if (response == null) {
+                    return null;
+                }
+                return Context.javaToJS(response, scope);
             }
         });
 
-        ScriptableObject.putProperty(scope, "_scriptCreateByteArray", new BaseFunction() {
+        ScriptableObject.putProperty(scope, "_scriptSleep", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length < 1) {
+                if (args.length == 0) {
                     return Context.getUndefinedValue();
                 }
-                
-                Object arrayArg = args[0];
-                if (arrayArg instanceof NativeArray) {
-                    NativeArray jsArray = (NativeArray) arrayArg;
-                    int length = (int) jsArray.getLength();
-                    byte[] byteArray = new byte[length];
-                    
-                    for (int i = 0; i < length; i++) {
-                        Object element = jsArray.get(i, jsArray);
-                        if (element instanceof Number) {
-                            byteArray[i] = ((Number) element).byteValue();
-                        }
-                    }
-                    
-                    return Context.javaToJS(byteArray, scope);
+                long ms = 0;
+                Object obj = args[0];
+                if (obj instanceof Number) {
+                    ms = Math.max(0L, ((Number) obj).longValue());
                 }
-                
+                try {
+                    Thread.sleep(ms);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
                 return Context.getUndefinedValue();
-            }
-        });
-
-        ScriptableObject.putProperty(scope, "_scriptImportModule", new BaseFunction() {
-            @Override
-            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length == 0 || args[0] == null) {
-                    return Context.getUndefinedValue();
-                }
-                return importModule(cx, String.valueOf(args[0]));
             }
         });
     }
@@ -396,93 +338,6 @@ public final class ScriptEngine {
             throw new EvaluatorException("Script bootstrap not loaded (missing script_bootstrap.js)");
         }
         cx.evaluateString(scope, source, "ScriptBootstrap", 1, null);
-    }
-
-    private Object importModule(Context cx, String rawName) {
-        if (rawName == null) {
-            return Context.getUndefinedValue();
-        }
-        String normalized = normalizeModuleName(rawName);
-        if (normalized.isEmpty()) {
-            throw new EvaluatorException("Module name is required");
-        }
-        ModuleSource source = moduleSources.get(normalized);
-        if (source == null) {
-            throw new EvaluatorException("Module '" + rawName + "' not found");
-        }
-        Object cached = moduleCache.get(normalized);
-        if (cached != null) {
-            return cached;
-        }
-
-        Set<String> loading = moduleLoadingStack.get();
-        if (loading.contains(normalized)) {
-            throw new EvaluatorException("Circular module dependency detected for '" + source.name + "'");
-        }
-
-        loading.add(normalized);
-        try {
-            ensureScope(cx);
-            String wrapped = "(function(exports, module, ScriptModules, require) {\n" + source.content + "\n})";
-            Object evaluated = cx.evaluateString(scope, wrapped, source.name, 1, null);
-            if (!(evaluated instanceof Function)) {
-                throw new EvaluatorException("Module '" + source.name + "' did not evaluate to a function");
-            }
-
-            Function factory = (Function) evaluated;
-            Scriptable moduleScope = cx.newObject(scope);
-            moduleScope.setPrototype(scope);
-            moduleScope.setParentScope(scope);
-
-            Scriptable exportsObject = cx.newObject(scope);
-            Scriptable moduleObject = cx.newObject(scope);
-            ScriptableObject.putProperty(moduleObject, "exports", exportsObject);
-            ScriptableObject.putProperty(moduleObject, "id", source.name);
-            ScriptableObject.putProperty(moduleObject, "filename", source.name);
-
-            Function requireFunction = new BaseFunction() {
-                @Override
-                public Object call(Context innerCx, Scriptable innerScope, Scriptable thisObj, Object[] args) {
-                    if (args.length == 0 || args[0] == null) {
-                        return Context.getUndefinedValue();
-                    }
-                    return importModule(innerCx, String.valueOf(args[0]));
-                }
-            };
-
-            Object library = scope != null ? scope.get("ScriptModules", scope) : Scriptable.NOT_FOUND;
-
-            factory.call(
-                cx,
-                moduleScope,
-                moduleScope,
-                new Object[]{
-                    exportsObject,
-                    moduleObject,
-                    library != Scriptable.NOT_FOUND ? library : Context.getUndefinedValue(),
-                    requireFunction
-                }
-            );
-
-            Object exportsValue = ScriptableObject.getProperty(moduleObject, "exports");
-            if (exportsValue == Scriptable.NOT_FOUND || exportsValue == null) {
-                exportsValue = exportsObject;
-            }
-            moduleCache.put(normalized, exportsValue);
-            return exportsValue;
-        } catch (RhinoException ex) {
-            String message = "Failed to load module '" + source.name + "': " + formatRhinoException(ex);
-            dispatchPrint(message);
-            throw ex;
-        } catch (Exception ex) {
-            String message = "Failed to load module '" + source.name + "': " + ex.getMessage();
-            dispatchPrint(message);
-            EvaluatorException evaluatorException = new EvaluatorException(message);
-            evaluatorException.initCause(ex);
-            throw evaluatorException;
-        } finally {
-            loading.remove(normalized);
-        }
     }
 
     private String formatRhinoException(RhinoException ex) {
@@ -523,37 +378,6 @@ public final class ScriptEngine {
             return ex.toString();
         }
         return trace.trim();
-    }
-
-    private void dispatchDialog(String title, String message) {
-        if (dialogCallback == null) {
-            return;
-        }
-        mainHandler.post(() -> dialogCallback.showDialog(title, message));
-    }
-
-    private String normalizeModuleName(String rawName) {
-        if (rawName == null) {
-            return "";
-        }
-        String trimmed = rawName.trim();
-        if (trimmed.isEmpty()) {
-            return "";
-        }
-        return trimmed
-            .replaceFirst("^\\./", "")
-            .replaceFirst("\\.(js|emw)$", "")
-            .toLowerCase(Locale.ROOT);
-    }
-
-    private static final class ModuleSource {
-        final String name;
-        final String content;
-
-        ModuleSource(String name, String content) {
-            this.name = name;
-            this.content = content != null ? content : "";
-        }
     }
 
     private Object[] convertArguments(Context cx, List<Object> arguments) {
