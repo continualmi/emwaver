@@ -20,11 +20,12 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context as _, Result};
+use base64::Engine as _;
+use boa_engine::value::TryFromJs;
 use boa_engine::{
     js_string,
     native_function::NativeFunction,
     object::{builtins::JsUint8Array, ObjectInitializer},
-    property::PropertyKey,
     Context, JsArgs, JsNativeError, JsValue, Source,
 };
 use serde_json::json;
@@ -459,19 +460,23 @@ fn register_natives(ctx: &mut Context) -> Result<()> {
     ctx.register_global_builtin_callable(js_string!("_scriptConnectionStatus"), 0, conn_fn)
         .map_err(|e| anyhow::anyhow!("Failed to register _scriptConnectionStatus: {e}"))?;
 
-    // _scriptSendCommandString(command: string, timeoutMs: number): Uint8Array
-    let send_fn = unsafe {
+    // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number): Uint8Array
+    let send_pkt_fn = unsafe {
         NativeFunction::from_closure(move |_this, args, ctx| {
-            let command = args.get_or_undefined(0).to_string(ctx)?;
             let timeout_ms = args
                 .get_or_undefined(1)
                 .to_u32(ctx)
                 .unwrap_or(DEFAULT_TIMEOUT_MS as u32) as u64;
-            let text = command.to_std_string_escaped();
+
+            let array = JsUint8Array::try_from_js(&args.get_or_undefined(0), ctx)
+                .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
+            let bytes = array.iter(ctx).collect::<Vec<u8>>();
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+
             let value = desktop_ipc::rpc_ok(
-                "send_command",
+                "send_packet_command",
                 json!({
-                    "text": text,
+                    "bytes_b64": bytes_b64,
                     "timeout_ms": timeout_ms,
                     "packets": 1u32
                 }),
@@ -479,19 +484,19 @@ fn register_natives(ctx: &mut Context) -> Result<()> {
             )
             .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
 
-            let bytes_b64 = value
+            let resp_b64 = value
                 .get("bytes_b64")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let bytes = desktop_ipc::decode_b64(bytes_b64)
+            let resp = desktop_ipc::decode_b64(resp_b64)
                 .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
-            let array = JsUint8Array::from_iter(bytes.into_iter(), ctx)
+            let out = JsUint8Array::from_iter(resp.into_iter(), ctx)
                 .map_err(|e| JsNativeError::error().with_message(e.to_string()))?;
-            Ok(array.into())
+            Ok(out.into())
         })
     };
-    ctx.register_global_builtin_callable(js_string!("_scriptSendCommandString"), 2, send_fn)
-        .map_err(|e| anyhow::anyhow!("Failed to register _scriptSendCommandString: {e}"))?;
+    ctx.register_global_builtin_callable(js_string!("_scriptSendPacket"), 2, send_pkt_fn)
+        .map_err(|e| anyhow::anyhow!("Failed to register _scriptSendPacket: {e}"))?;
 
     // Sampler/buffer bridge functions used by script_bootstrap.
     register_sampler_natives(ctx)?;

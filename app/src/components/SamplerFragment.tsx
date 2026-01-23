@@ -150,7 +150,7 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 
 function SamplerFragment() {
   // Use Device context instead of polling directly
-  const { status, send, sendPacketNoWait, transmitBuffer } = useDevice();
+  const { status, sendPacketNoWait, transmitBuffer } = useDevice();
   const dialog = useAppDialog();
   const isConnected = status.connected;
   const deviceType: SamplerDeviceType = 'stm32';

@@ -462,7 +462,6 @@ pub async fn dispatch_request(
             "transports": ["usb"],
             "features": {
                 "buffer": true,
-                "send_command": true,
                 "write": true,
                 "transmit_buffer": true,
                 "ota": false
@@ -497,27 +496,6 @@ pub async fn dispatch_request(
         "disconnect" => {
             midi_disconnect(&state).await?;
             Ok(json!({}))
-        }
-        "send_command" => {
-            let text = req
-                .params
-                .get("text")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("missing params.text"))?
-                .to_string();
-            let timeout_ms = req
-                .params
-                .get("timeout_ms")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(1500);
-            let packets = req
-                .params
-                .get("packets")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(1) as u32;
-            let bytes = send_command_text(&state, &text, timeout_ms, packets).await?;
-            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
-            Ok(json!({ "bytes_b64": bytes_b64 }))
         }
         "send_packet_command" => {
             let bytes_b64 = req
@@ -1945,16 +1923,6 @@ pub async fn send_packet_command_bytes(
     send_packet_command(state, bytes, timeout_ms, packets).await
 }
 
-async fn send_command_text(
-    state: &BridgeState,
-    text: &str,
-    timeout_ms: u64,
-    packets: u32,
-) -> Result<Vec<u8>> {
-    let payload = parse_command(text)?;
-    send_packet_command(state, payload.to_vec(), timeout_ms, packets).await
-}
-
 async fn transmit_buffer_active(state: &BridgeState, data: Vec<u8>) -> Result<()> {
     let _tx_burst = state.tx_burst_in_flight.lock().await;
     let midi_connected = match state.midi.lock().await.as_ref() {
@@ -2217,51 +2185,4 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
         }
         state.rx_notify.notify_waiters();
     }
-}
-
-fn parse_command(input: &str) -> Result<[u8; PACKET_SIZE]> {
-    let mut bytes = Vec::new();
-    let mut idx = 0;
-    let data = input.as_bytes();
-
-    while idx < data.len() {
-        if data[idx] == b'[' {
-            let end = input[idx + 1..]
-                .find(']')
-                .map(|off| idx + 1 + off)
-                .ok_or_else(|| anyhow!("missing closing ']'"))?;
-            let content = input[idx + 1..end].trim();
-            let value = parse_bracket_value(content)?;
-            bytes.push(value);
-            idx = end + 1;
-        } else {
-            bytes.push(data[idx]);
-            idx += 1;
-        }
-    }
-
-    make_packet64(&bytes).map_err(|e| anyhow!(e))
-}
-
-fn parse_bracket_value(content: &str) -> Result<u8> {
-    if content.is_empty() {
-        bail!("empty value inside brackets");
-    }
-
-    let value = if let Some(stripped) = content
-        .strip_prefix("0x")
-        .or_else(|| content.strip_prefix("0X"))
-    {
-        u8::from_str_radix(stripped.trim(), 16)
-            .map_err(|_| anyhow!("invalid hex byte: {content}"))?
-    } else if let Ok(hex) = u8::from_str_radix(content.trim(), 16) {
-        hex
-    } else {
-        content
-            .trim()
-            .parse::<u8>()
-            .map_err(|_| anyhow!("invalid byte value: {content}"))?
-    };
-
-    Ok(value)
 }

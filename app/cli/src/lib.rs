@@ -20,6 +20,7 @@ mod desktop_ipc;
 mod repl;
 
 use anyhow::Result;
+use base64::Engine as _;
 use clap::Parser;
 use std::path::PathBuf;
 use std::process::Command;
@@ -39,12 +40,12 @@ pub fn run() -> Result<()> {
         Some(cli::Command::Build { clean }) => build_firmware(clean),
         Some(cli::Command::Flash { verbose, alt }) => flash_firmware(verbose, alt),
         Some(cli::Command::Cmd {
-            text,
+            bytes,
             timeout_ms,
             packets,
             verbose,
             json,
-        }) => cmd_desktop(text, timeout_ms, packets, verbose, json),
+        }) => cmd_desktop(bytes, timeout_ms, packets, verbose, json),
         Some(cli::Command::Usb { command }) => match command {
             cli::MidiCommand::List { json } => usb_list(json),
             cli::MidiCommand::Connect { port, json } => usb_connect(port, json),
@@ -158,25 +159,27 @@ fn flash_firmware(verbose: bool, alt: Option<u8>) -> Result<()> {
 }
 
 fn cmd_desktop(
-    text: Vec<String>,
+    bytes: Vec<String>,
     timeout_ms: u64,
     packets: u32,
     verbose: bool,
     json: bool,
 ) -> Result<()> {
-    let text = text.join(" ");
+    let spec = bytes.join(" ");
+    let pkt = parse_hex_bytes(&spec)?;
+    let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&pkt);
     let value = desktop_ipc::rpc_ok(
-        "send_command",
+        "send_packet_command",
         serde_json::json!({
-            "text": text,
+            "bytes_b64": bytes_b64,
             "timeout_ms": timeout_ms,
             "packets": packets
         }),
         std::time::Duration::from_millis(timeout_ms.saturating_add(5_000).max(1)),
     )?;
 
-    let bytes_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
-    let bytes = desktop_ipc::decode_b64(bytes_b64)?;
+    let resp_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
+    let bytes = desktop_ipc::decode_b64(resp_b64)?;
 
     if json {
         println!(
@@ -199,6 +202,26 @@ fn cmd_desktop(
     }
     println!("{}", String::from_utf8_lossy(&bytes).trim_matches(['\0', '\n', '\r']));
     Ok(())
+}
+
+fn parse_hex_bytes(spec: &str) -> Result<Vec<u8>> {
+    let cleaned: String = spec
+        .chars()
+        .filter(|c| c.is_ascii_hexdigit())
+        .collect();
+    if cleaned.is_empty() {
+        anyhow::bail!("no bytes provided");
+    }
+    if cleaned.len() % 2 != 0 {
+        anyhow::bail!("hex string must have even length");
+    }
+    let mut out = Vec::with_capacity(cleaned.len() / 2);
+    for i in (0..cleaned.len()).step_by(2) {
+        let b = u8::from_str_radix(&cleaned[i..i + 2], 16)
+            .map_err(|_| anyhow::anyhow!("invalid hex"))?;
+        out.push(b);
+    }
+    Ok(out)
 }
 
 fn usb_list(json: bool) -> Result<()> {

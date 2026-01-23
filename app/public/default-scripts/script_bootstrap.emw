@@ -9,7 +9,7 @@
 // - _scriptRegisterCallback(token: string, fn: Function): void
 //
 // Device operations are performed by the standard library via:
-// - _scriptSendCommandString(command: string, timeoutMs: number): any
+// - _scriptSendPacket(bytes: Uint8Array, timeoutMs: number): Uint8Array
 //
 // Hosts may optionally provide:
 // - _scriptSleep(ms: number): void
@@ -27,9 +27,6 @@ var __scriptGlobal = (function () {
 // Capture host-only primitives so we can remove them from the public Script API surface.
 // Note: This file runs in different JS environments (desktop backend, desktop frontend fallback,
 // mobile). Some environments expose these as true globals (not function parameters).
-var __host_scriptSendCommandString =
-  typeof _scriptSendCommandString === 'function' ? _scriptSendCommandString : null;
-
 var __host_scriptSendPacket = typeof _scriptSendPacket === 'function' ? _scriptSendPacket : null;
 
 
@@ -178,23 +175,6 @@ var __scriptHostSamplerSignals =
   typeof SamplerSignals !== 'undefined' && !__scriptIsShim(SamplerSignals) ? SamplerSignals : null;
 var __scriptHostSampler = typeof Sampler !== 'undefined' && !__scriptIsShim(Sampler) ? Sampler : null;
 
-function __scriptFrameCommand(command) {
-  var framed = String(command || '');
-  if (framed.length > 0 && !/\n$/.test(framed)) {
-    framed += '\n';
-  }
-  return framed;
-}
-
-function __sendCommandString(command, timeoutMs) {
-  var sender = typeof __host_scriptSendCommandString === 'function' ? __host_scriptSendCommandString : null;
-  if (typeof sender !== 'function') {
-    throw new Error('Device send unavailable (missing _scriptSendCommandString)');
-  }
-  var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
-  return sender(__scriptFrameCommand(command), timeout);
-}
-
 function __sendPacket(bytes, timeoutMs) {
   var sender = typeof __host_scriptSendPacket === 'function' ? __host_scriptSendPacket : null;
   if (typeof sender !== 'function') {
@@ -296,7 +276,6 @@ function __emwSendPacket(packet, timeoutMs) {
 
 // Best-effort: hide host primitives that are not part of the public Script API.
 // (Scripts should use SPI/Wire/Serial/etc, not raw command strings.)
-try { __scriptGlobal._scriptSendCommandString = undefined; } catch (e) {}
 try { __scriptGlobal._scriptSendPacket = undefined; } catch (e) {}
 try { __scriptGlobal._manualSendCommand = undefined; } catch (e) {}
 try { __scriptGlobal._scriptWrite = undefined; } catch (e) {}

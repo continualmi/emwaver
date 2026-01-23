@@ -25,7 +25,6 @@ export const SCRIPT_EXAMPLE_SCRIPTS = [
   "adc.emw",
   "pwm.emw",
   "cc1101.emw",
-  "mfrc522.emw",
   "gpio.emw",
   "i2c.emw",
   "sampler.emw",

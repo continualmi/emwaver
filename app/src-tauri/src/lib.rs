@@ -982,7 +982,7 @@ async fn device_write(state: State<'_, DeviceState>, data: Vec<u8>) -> Result<()
 }
 
 #[tauri::command]
-async fn device_send_command(
+async fn device_send_packet(
     state: State<'_, DeviceState>,
     data: Vec<u8>,
     timeout_ms: u64,
@@ -1651,7 +1651,7 @@ pub fn run() {
             pty_resize,
             pty_stop,
             device_write,
-            device_send_command,
+            device_send_packet,
             device_transmit_buffer,
             midi_list_ports,
             midi_connect,

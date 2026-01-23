@@ -311,23 +311,6 @@ export default function WorkspaceShell({
 
   const scriptDeviceConnection = useMemo(
     () => ({
-      sendCommandString: (command: string, timeoutMs: number = 1500) => {
-        const queued = scriptCommandQueueRef.current
-          .then(async () => {
-            const { status, send } = scriptDeviceRef.current;
-            if (!status.connected) {
-              return null;
-            }
-            return await send(command, timeoutMs, 1);
-          })
-          .catch(async () => null);
-
-        scriptCommandQueueRef.current = queued.then(
-          () => undefined,
-          () => undefined,
-        );
-        return queued as Promise<Uint8Array | null>;
-      },
       sendPacket: (data: Uint8Array, timeoutMs: number = 1500) => {
         const queued = scriptCommandQueueRef.current
           .then(async () => {
@@ -1227,7 +1210,6 @@ export default function WorkspaceShell({
             }));
           },
           {
-            _scriptSendCommandString: scriptDeviceConnection.sendCommandString,
             _scriptSendPacket: scriptDeviceConnection.sendPacket,
             _scriptSleep: async (ms: number) => {
               const durationMs = Math.max(0, Number(ms) || 0);

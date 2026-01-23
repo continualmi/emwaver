@@ -64,11 +64,11 @@ pub enum Command {
         #[arg(long)]
         alt: Option<u8>,
     },
-    /// Send an ASCII command to the connected device (Desktop owns the USB connection).
+    /// Send a raw packet (bytes) to the connected device (Desktop owns the USB connection).
     Cmd {
-        /// Command text to send.
+        /// Hex bytes to send (e.g. `01` or `F100` or `F1 00`).
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
-        text: Vec<String>,
+        bytes: Vec<String>,
         /// Command response timeout in milliseconds.
         #[arg(long, default_value_t = 1500)]
         timeout_ms: u64,

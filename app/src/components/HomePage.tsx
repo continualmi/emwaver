@@ -79,6 +79,7 @@ type BufferEntry = {
 };
 
 type CommandPacketEntry = {
+  data: Uint8Array;
   timestamp: number;
   timeStr: string;
   seq: number;
@@ -692,7 +693,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
           const firstZero = pkt.indexOf(0);
           const endText = firstZero >= 0 ? firstZero : pkt.length;
           const ascii = new TextDecoder().decode(pkt.slice(0, endText)).trim();
-          batch.push({ timestamp: ts, timeStr, seq: commandSeqRef.current++, isTx, ascii, hex, kind });
+          batch.push({ data: pkt, timestamp: ts, timeStr, seq: commandSeqRef.current++, isTx, ascii, hex, kind });
         }
 
         commandIndexRef.current = resp.next_packet_index ?? commandIndexRef.current + count;
