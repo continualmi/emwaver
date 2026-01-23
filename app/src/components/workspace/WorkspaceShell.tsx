@@ -410,6 +410,21 @@ export default function WorkspaceShell({
   }, [activeFile]);
 
   const scriptTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
+
+  const scriptTargetWantsPreview = useMemo(() => {
+    if (!scriptTargetPath) {
+      return true;
+    }
+    const normalizedPath = scriptTargetPath.replace(/\\/g, "/");
+    const file = openFiles.find((entry) => entry.path.replace(/\\/g, "/") === normalizedPath);
+    if (!file) {
+      return true;
+    }
+
+    // Minimal heuristic: if the script calls UI.render, a preview panel is useful.
+    // If it doesn't render UI, treat it like a terminal/console script.
+    return /\bUI\.render\s*\(/.test(file.content);
+  }, [openFiles, scriptTargetPath]);
   const canRunScript = useMemo(() => {
     const candidatePath = (activeMainTabKind === "preview" ? activePreviewPath : scriptTargetPath) ?? null;
     if (!candidatePath) {
@@ -1712,18 +1727,26 @@ export default function WorkspaceShell({
                       onClick={() => {
                         const target = scriptTargetPath;
                         if (!target) return;
+
+                        if (!scriptTargetWantsPreview) {
+                          setIsTerminalVisible(true);
+                          setTerminalActiveTab("console");
+                        }
+
                         void (async () => {
-                          await openScriptPreviewTab(target, { activate: true });
+                          if (scriptTargetWantsPreview) {
+                            await openScriptPreviewTab(target, { activate: true });
+                          }
                           await runScriptForPath(target);
                         })();
                       }}
                       disabled={!canRunScript || !scriptTargetPath}
                       className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title="Preview script"
+                      title={scriptTargetWantsPreview ? "Preview script" : "Run script"}
                     >
                       <span className="flex items-center gap-1.5">
                         <PlayIcon className="h-4 w-4" />
-                        <span className="text-[11px] font-semibold">Preview</span>
+                        <span className="text-[11px] font-semibold">{scriptTargetWantsPreview ? "Preview" : "Run"}</span>
                       </span>
                     </button>
                     {scriptTargetPath && scriptPreviewState[scriptTargetPath]?.isRunning ? (
