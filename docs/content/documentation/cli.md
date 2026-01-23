@@ -43,35 +43,21 @@ cargo install --path app/cli --bin emwaver --force
 
 ## Usage
 
-`emwaver init` writes/overwrites the firmware template files in the destination directory.
-
 ```bash
-# Launch the interactive menu
+# Launch the EMWaver REPL (Python-like)
 emwaver
 
-# Desktop-backed device workflow
-# 1) Open the Desktop app
-# 2) Connect the device in the Desktop UI
-# 3) Use the CLI to run commands
+# Evaluate a one-off snippet and exit (Python-style `-c`)
+emwaver -c "print(await device.version())"
+
+# Run a script file and exit (Python-style `python file.py`)
+emwaver ./hello.emw
+
+# Run a script file, then drop into the REPL (Python-style `-i`)
+emwaver -i ./hello.emw
+
+# Raw device command escape hatch (Desktop owns USB connection)
 emwaver cmd version
-
-# Open an interactive shell (Desktop-backed)
-emwaver shell
-
-# Show raw hex payloads alongside ASCII output
-emwaver shell --verbose
-
-# Initialize an STM32F042 CubeIDE/CubeMX project
-emwaver init --target stm32f042 --path ./my-stm32-proj
-
-# Build firmware (STM32 CubeMX/CubeIDE)
-emwaver build
-
-# Flash firmware (runs CubeMX codegen, builds with `make`, exports `.bin`, then flashes over USB DFU)
-emwaver flash
-
-# Standalone STM32 DFU flashing (raw `.bin` or `.dfu` bytes)
-emwaver dfu ./firmware.bin
 ```
 
 ## Desktop Notes

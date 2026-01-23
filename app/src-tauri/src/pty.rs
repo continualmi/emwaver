@@ -140,7 +140,6 @@ impl PtyManager {
                 } else {
                     cmd.arg("emwaver");
                 }
-                cmd.arg("shell");
             } else {
                 cmd.arg("/bin/zsh");
                 cmd.arg("-l");

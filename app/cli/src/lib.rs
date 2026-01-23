@@ -17,23 +17,21 @@
 
 mod cli;
 mod desktop_ipc;
-#[cfg(feature = "firmware-tools")]
-pub mod firmware;
-pub mod init;
-mod vibe;
-mod interactive;
-mod shell;
+mod repl;
 
 use anyhow::Result;
 use clap::Parser;
 
-pub use cli::CodegenMode;
-pub use cli::{Component, Target};
-
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
-    match cli.command {
-        Some(cli::Command::Shell { verbose }) => shell::run_shell(verbose),
+
+    if cli.subcommand.is_some() {
+        if cli.command.is_some() || cli.path.is_some() || cli.interactive {
+            anyhow::bail!("Use either a subcommand (like `cmd`) or Python-style `-c`/FILE/REPL, not both");
+        }
+    }
+
+    match cli.subcommand {
         Some(cli::Command::Cmd {
             text,
             timeout_ms,
@@ -47,51 +45,15 @@ pub fn run() -> Result<()> {
             cli::MidiCommand::Disconnect => usb_disconnect(),
             cli::MidiCommand::Status { json } => usb_status(json),
         },
-        Some(cli::Command::Script { command }) => match command {
-            cli::ScriptCommand::Run { path, bootstrap } => script_run(path, bootstrap),
-            cli::ScriptCommand::Stop => script_stop(),
-        },
-        #[cfg(feature = "firmware-tools")]
-        Some(cli::Command::Build {
-            project,
-            codegen,
-            verbose,
-        }) => firmware::build(project, codegen, verbose),
-        #[cfg(feature = "firmware-tools")]
-        Some(cli::Command::Flash {
-            project,
-            codegen,
-            dfu_alt,
-            verbose,
-        }) => firmware::flash(project, codegen, dfu_alt, verbose),
-        #[cfg(feature = "firmware-tools")]
-        Some(cli::Command::Dfu {
-            file,
-            vid,
-            pid,
-            address,
-            alt,
-            verbose,
-        }) => firmware::dfu_flash_file(file, vid, pid, address, alt, verbose),
-        Some(cli::Command::Init {
-            target,
-            components,
-            path,
-        }) => {
-            let destination = path.unwrap_or(std::env::current_dir()?);
-            init::run_init(target, components, destination)
-        }
-        Some(cli::Command::Vibe { command }) => match command {
-            cli::VibeCommand::Init {
-                path,
-                force,
-                no_agents,
-            } => {
-                let destination = path.unwrap_or(std::env::current_dir()?);
-                vibe::init_repo(destination, force, !no_agents)
+        None => {
+            if let Some(code) = cli.command {
+                return repl::run_code(&code);
             }
-        },
-        None => interactive::run_menu(),
+            if let Some(path) = cli.path {
+                return repl::run_file(path, cli.interactive);
+            }
+            repl::run_repl()
+        }
     }
 }
 
@@ -195,27 +157,6 @@ fn usb_status(json: bool) -> Result<()> {
     } else {
         println!("disconnected");
     }
-    Ok(())
-}
-
-fn script_run(path: std::path::PathBuf, bootstrap: Option<std::path::PathBuf>) -> Result<()> {
-    let script = std::fs::read_to_string(&path)?;
-    let bootstrap = match bootstrap {
-        Some(p) => std::fs::read_to_string(p)?,
-        None => String::new(),
-    };
-    desktop_ipc::rpc_ok(
-        "script_execute",
-        serde_json::json!({ "script": script, "bootstrap": bootstrap }),
-        std::time::Duration::from_secs(5),
-    )?;
-    println!("ok");
-    Ok(())
-}
-
-fn script_stop() -> Result<()> {
-    desktop_ipc::rpc_ok("script_stop", serde_json::json!({}), std::time::Duration::from_secs(3))?;
-    println!("ok");
     Ok(())
 }
 
