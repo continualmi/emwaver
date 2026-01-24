@@ -1277,6 +1277,37 @@ export default function WorkspaceShell({
     [rootDir, scriptDeviceConnection],
   );
 
+  const stopScriptForPath = useCallback(
+    async (path: string, { closePreview }: { closePreview: boolean }) => {
+      const normalizedPath = path.replace(/\\/g, "/");
+
+      if (useBackendEngine && activeBackendPathRef.current === normalizedPath) {
+        await backendScript.stop();
+        activeBackendPathRef.current = null;
+      } else {
+        const engine = scriptEngineByPathRef.current.get(normalizedPath);
+        if (engine) {
+          engine.shutdown();
+          scriptEngineByPathRef.current.delete(normalizedPath);
+        }
+      }
+
+      setScriptPreviewState((prev) => ({
+        ...prev,
+        [normalizedPath]: {
+          tree: prev[normalizedPath]?.tree ?? null,
+          console: prev[normalizedPath]?.console ?? [],
+          isRunning: false,
+        },
+      }));
+
+      if (closePreview) {
+        closeScriptPreviewTab(normalizedPath);
+      }
+    },
+    [backendScript, closeScriptPreviewTab, useBackendEngine],
+  );
+
   const handleSaveFile = useCallback(async () => {
     if (!activeFile || !isTauriAvailable()) {
       return;
@@ -1638,6 +1669,19 @@ export default function WorkspaceShell({
                         <span className="text-[11px] font-semibold">{scriptTargetWantsPreview ? "Preview" : "Run"}</span>
                       </span>
                     </button>
+
+                    {scriptTargetPath && scriptPreviewState[scriptTargetPath]?.isRunning ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void stopScriptForPath(scriptTargetPath, { closePreview: false });
+                        }}
+                        className="rounded border border-rose-300/60 bg-rose-700 px-2 py-1.5 text-white shadow-sm hover:bg-rose-600 hover:shadow"
+                        title="Stop script"
+                      >
+                        <span className="text-[11px] font-semibold">Stop</span>
+                      </button>
+                    ) : null}
                     {scriptTargetPath && scriptPreviewState[scriptTargetPath]?.isRunning ? (
                       <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
                         <div className="h-full w-full animate-pulse bg-emerald-400/80" />
@@ -1672,6 +1716,9 @@ export default function WorkspaceShell({
                     } else {
                       scriptEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
                     }
+                  }}
+                  onStopPreview={(path) => {
+                    void stopScriptForPath(path, { closePreview: true });
                   }}
                 />
               ) : activeFile ? (

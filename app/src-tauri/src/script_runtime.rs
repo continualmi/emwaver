@@ -66,6 +66,8 @@ pub enum ScriptEvent {
 pub enum ScriptCommand {
     #[serde(rename = "callback")]
     Callback { token: String, data: serde_json::Value },
+    #[serde(rename = "timer")]
+    Timer { id: u64 },
     #[serde(rename = "stop")]
     Stop,
 }
@@ -74,18 +76,32 @@ pub enum ScriptCommand {
 struct RuntimeState {
     /// Channel to send events to frontend.
     event_tx: mpsc::UnboundedSender<ScriptEvent>,
+    /// Channel to send commands back into the runtime (timers, etc.).
+    command_tx: mpsc::UnboundedSender<ScriptCommand>,
     /// In-process device bridge for direct USB access.
     device: Arc<BridgeState>,
     /// Registered callback functions (token -> JS function source).
     callbacks: HashMap<String, String>,
     /// Tokio runtime handle for async operations.
     rt_handle: tokio::runtime::Handle,
+
+    /// Monotonic timer ids.
+    next_timer_id: u64,
+    /// Timer registry (setTimeout / setInterval).
+    timers: HashMap<u64, TimerEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct TimerEntry {
+    token: String,
+    repeat_ms: Option<u64>,
 }
 
 /// The script runtime that executes JS scripts with direct hardware access.
 pub struct ScriptRuntime {
     event_tx: mpsc::UnboundedSender<ScriptEvent>,
     command_rx: mpsc::UnboundedReceiver<ScriptCommand>,
+    command_tx: mpsc::UnboundedSender<ScriptCommand>,
     device: Arc<BridgeState>,
     bootstrap_source: String,
 }
@@ -101,6 +117,7 @@ impl ScriptRuntime {
         let runtime = Self {
             event_tx,
             command_rx,
+            command_tx: command_tx.clone(),
             device,
             bootstrap_source,
         };
@@ -115,9 +132,13 @@ impl ScriptRuntime {
         // Create shared state
         let state = Rc::new(RefCell::new(RuntimeState {
             event_tx: self.event_tx.clone(),
+            command_tx: self.command_tx.clone(),
             device: self.device.clone(),
             callbacks: HashMap::new(),
             rt_handle: rt_handle.clone(),
+
+            next_timer_id: 1,
+            timers: HashMap::new(),
         }));
 
         // Create Boa JS context
@@ -154,6 +175,60 @@ impl ScriptRuntime {
                     eprintln!("[script_runtime] Received Stop command");
                     let _ = self.event_tx.send(ScriptEvent::Stopped);
                     break;
+                }
+                Ok(ScriptCommand::Timer { id }) => {
+                    let entry = {
+                        let st = state.borrow();
+                        st.timers.get(&id).cloned()
+                    };
+                    let Some(entry) = entry else {
+                        continue;
+                    };
+
+                    let invoke_script = format!(
+                        r#"
+                        (function() {{
+                            var cb = globalThis.__scriptCallbacks['{}'];
+                            if (typeof cb === 'function') {{
+                                try {{
+                                    cb();
+                                }} catch (e) {{
+                                    try {{ print('[timer] error: ' + e); }} catch (_) {{}}
+                                }}
+                            }}
+                        }})();
+                        "#,
+                        entry.token.replace('\'', "\\'"),
+                    );
+
+                    if let Err(e) = context.eval(Source::from_bytes(&invoke_script)) {
+                        let _ = self.event_tx.send(ScriptEvent::Print {
+                            message: format!("Timer callback error: {}", e),
+                        });
+                    }
+                    for _ in 0..100 {
+                        context.run_jobs();
+                    }
+
+                    // Reschedule intervals.
+                    if let Some(period_ms) = entry.repeat_ms {
+                        let tx = {
+                            let st = state.borrow();
+                            st.command_tx.clone()
+                        };
+                        let rt = {
+                            let st = state.borrow();
+                            st.rt_handle.clone()
+                        };
+                        rt.spawn(async move {
+                            tokio::time::sleep(Duration::from_millis(period_ms)).await;
+                            let _ = tx.send(ScriptCommand::Timer { id });
+                        });
+                    } else {
+                        // One-shot: cleanup.
+                        let mut st = state.borrow_mut();
+                        st.timers.remove(&id);
+                    }
                 }
                 Ok(ScriptCommand::Callback { token, data }) => {
                     eprintln!("[script_runtime] Received Callback: token={}, data={:?}", token, data);
@@ -333,6 +408,157 @@ impl ScriptRuntime {
         context
             .register_global_builtin_callable(js_string!("_scriptSleep"), 1, sleep_fn)
             .map_err(|e| format!("Failed to register _scriptSleep: {}", e))?;
+
+        // Timers (setTimeout / setInterval) used by scripts like blink() and sampler polling.
+        // These must be non-blocking so ScriptCommand::Stop remains responsive.
+
+        let set_timeout_state = state.clone();
+        let set_timeout_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let cb = args.get_or_undefined(0);
+                if !cb.is_callable() {
+                    return Ok(JsValue::from(f64::NAN));
+                }
+
+                let ms = args
+                    .get_or_undefined(1)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as u64;
+
+                let (id, token, tx, rt_handle) = {
+                    let mut st = set_timeout_state.borrow_mut();
+                    let id = st.next_timer_id;
+                    st.next_timer_id = st.next_timer_id.saturating_add(1);
+                    let token = format!("__timer:{}", id);
+                    st.timers.insert(
+                        id,
+                        TimerEntry {
+                            token: token.clone(),
+                            repeat_ms: None,
+                        },
+                    );
+                    (id, token, st.command_tx.clone(), st.rt_handle.clone())
+                };
+
+                // Store callback in global registry.
+                let global = ctx.global_object();
+                let callbacks_obj = global.get(js_string!("__scriptCallbacks"), ctx)?;
+                if let Some(callbacks) = callbacks_obj.as_object() {
+                    callbacks.set(js_string!(token.as_str()), cb.clone(), false, ctx)?;
+                }
+
+                rt_handle.spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(ms)).await;
+                    let _ = tx.send(ScriptCommand::Timer { id });
+                });
+
+                Ok(JsValue::from(id as f64))
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("setTimeout"), 2, set_timeout_fn)
+            .map_err(|e| format!("Failed to register setTimeout: {}", e))?;
+
+        let clear_timeout_state = state.clone();
+        let clear_timeout_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let id = args
+                    .get_or_undefined(0)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as u64;
+
+                let token = {
+                    let mut st = clear_timeout_state.borrow_mut();
+                    st.timers.remove(&id).map(|t| t.token)
+                };
+                if let Some(token) = token {
+                    let global = ctx.global_object();
+                    let callbacks_obj = global.get(js_string!("__scriptCallbacks"), ctx)?;
+                    if let Some(callbacks) = callbacks_obj.as_object() {
+                        let _ = callbacks.delete_property_or_throw(js_string!(token.as_str()), ctx);
+                    }
+                }
+
+                Ok(JsValue::undefined())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("clearTimeout"), 1, clear_timeout_fn)
+            .map_err(|e| format!("Failed to register clearTimeout: {}", e))?;
+
+        let set_interval_state = state.clone();
+        let set_interval_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let cb = args.get_or_undefined(0);
+                if !cb.is_callable() {
+                    return Ok(JsValue::from(f64::NAN));
+                }
+
+                let ms = args
+                    .get_or_undefined(1)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as u64;
+                let period_ms = std::cmp::max(1, ms);
+
+                let (id, token, tx, rt_handle) = {
+                    let mut st = set_interval_state.borrow_mut();
+                    let id = st.next_timer_id;
+                    st.next_timer_id = st.next_timer_id.saturating_add(1);
+                    let token = format!("__timer:{}", id);
+                    st.timers.insert(
+                        id,
+                        TimerEntry {
+                            token: token.clone(),
+                            repeat_ms: Some(period_ms),
+                        },
+                    );
+                    (id, token, st.command_tx.clone(), st.rt_handle.clone())
+                };
+
+                let global = ctx.global_object();
+                let callbacks_obj = global.get(js_string!("__scriptCallbacks"), ctx)?;
+                if let Some(callbacks) = callbacks_obj.as_object() {
+                    callbacks.set(js_string!(token.as_str()), cb.clone(), false, ctx)?;
+                }
+
+                rt_handle.spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(period_ms)).await;
+                    let _ = tx.send(ScriptCommand::Timer { id });
+                });
+
+                Ok(JsValue::from(id as f64))
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("setInterval"), 2, set_interval_fn)
+            .map_err(|e| format!("Failed to register setInterval: {}", e))?;
+
+        let clear_interval_state = state.clone();
+        let clear_interval_fn = unsafe {
+            NativeFunction::from_closure(move |_this, args, ctx| {
+                let id = args
+                    .get_or_undefined(0)
+                    .to_u32(ctx)
+                    .unwrap_or(0) as u64;
+
+                let token = {
+                    let mut st = clear_interval_state.borrow_mut();
+                    st.timers.remove(&id).map(|t| t.token)
+                };
+                if let Some(token) = token {
+                    let global = ctx.global_object();
+                    let callbacks_obj = global.get(js_string!("__scriptCallbacks"), ctx)?;
+                    if let Some(callbacks) = callbacks_obj.as_object() {
+                        let _ = callbacks.delete_property_or_throw(js_string!(token.as_str()), ctx);
+                    }
+                }
+
+                Ok(JsValue::undefined())
+            })
+        };
+        context
+            .register_global_builtin_callable(js_string!("clearInterval"), 1, clear_interval_fn)
+            .map_err(|e| format!("Failed to register clearInterval: {}", e))?;
 
         // _scriptSamplerBufferGetPacketCount
         let state_sampler_pkt_count = state.clone();

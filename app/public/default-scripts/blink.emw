@@ -1,13 +1,128 @@
-// Minimal "hello world" EMWaver script: blink GDO0 using `every()`.
+// Blink a pin using timers (setTimeout) + `every()`.
 
-var periodMs = 250;
-var level = LOW;
+let selectedPin = GDO0;
+let periodMs = 250;
+let isBlinking = false;
+let level = LOW;
+let loopHandle = null;
+let statusText = "";
 
-pinMode(GDO0, OUTPUT);
-digitalWrite(GDO0, level);
-print("blink.js: blinking GDO0 every " + periodMs + "ms");
+const PINS = [
+  { label: "GDO0 (A2)", value: GDO0 },
+  { label: "GDO2 (A3)", value: GDO2 },
+  { label: "IR_RX (A0)", value: IR_RX },
+  { label: "IR_TX (A1)", value: IR_TX },
+  { label: "NSS (A4)", value: NSS },
+  { label: "SCK (A5)", value: SCK },
+  { label: "MISO (A6)", value: MISO },
+  { label: "MOSI (A7)", value: MOSI },
+  { label: "SWCLK (A13)", value: SWCLK },
+  { label: "SWDIO (A14)", value: SWDIO },
+  { label: "UART_TX (B6)", value: UART_TX },
+  { label: "UART_RX (B7)", value: UART_RX },
+];
 
-every(periodMs, function () {
-  level = level === LOW ? HIGH : LOW;
-  digitalWrite(GDO0, level);
-});
+function stopBlink() {
+  if (loopHandle && typeof loopHandle.stop === "function") {
+    loopHandle.stop();
+  }
+  loopHandle = null;
+  isBlinking = false;
+  statusText = "Stopped";
+  render();
+}
+
+async function startBlink() {
+  stopBlink();
+
+  const period = Math.max(1, Math.floor(Number(periodMs) || 1));
+  periodMs = period;
+  level = LOW;
+  statusText = "Starting...";
+  render();
+
+  await pinMode(selectedPin, OUTPUT);
+  await digitalWrite(selectedPin, level);
+
+  isBlinking = true;
+  statusText = "Blinking every " + String(periodMs) + "ms";
+  render();
+
+  loopHandle = every(periodMs, function () {
+    level = level === LOW ? HIGH : LOW;
+    digitalWrite(selectedPin, level);
+  });
+}
+
+function render() {
+  UI.render(
+    UI.column({
+      padding: 16,
+      spacing: 14,
+      children: [
+        UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
+
+        UI.text({ text: "Pin", fontWeight: "medium" }),
+        UI.picker({
+          style: "menu",
+          selected: String(selectedPin),
+          options: PINS,
+          onChange: function (value) {
+            selectedPin = String(value);
+            if (isBlinking) {
+              void startBlink();
+            } else {
+              render();
+            }
+          },
+        }),
+
+        UI.text({ text: "Period (ms)", fontWeight: "medium" }),
+        UI.slider({
+          value: Number(periodMs),
+          min: 1,
+          max: 2000,
+          step: 1,
+          onChange: function (value) {
+            periodMs = Math.max(1, Math.floor(Number(value) || 1));
+            if (isBlinking) {
+              void startBlink();
+            } else {
+              render();
+            }
+          },
+        }),
+
+        UI.row({
+          spacing: 12,
+          children: [
+            UI.button({
+              label: isBlinking ? "Blinking..." : "Start",
+              backgroundColor: isBlinking ? "#334155" : "#059669",
+              foregroundColor: "#FFFFFF",
+              onTap: startBlink,
+            }),
+            UI.button({
+              label: "Stop",
+              backgroundColor: "#DC2626",
+              foregroundColor: "#FFFFFF",
+              onTap: stopBlink,
+            }),
+          ],
+        }),
+
+        statusText
+          ? UI.text({
+              text: statusText,
+              backgroundColor: "#111827",
+              foregroundColor: "#FFFFFF",
+              padding: { top: 10, bottom: 10, leading: 12, trailing: 12 },
+              cornerRadius: 8,
+            })
+          : null,
+      ],
+    }),
+  );
+}
+
+render();
