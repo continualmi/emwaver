@@ -74,26 +74,26 @@ const INTERACTION_REFRESH_THROTTLE_MS = 80;
 
 // STM32 pins (MIDI sampler)
 // Encoded pin format matches STM32 firmware gpio aliases:
-// - PA0..PA15 => 0..15
-// - PB0..PB15 => 16..31
+// - A0..A15 (PA0..PA15) => 0..15
+// - B0..B15 (PB0..PB15) => 16..31
 // Keep labels aligned with Android (`android/.../SamplerFragment.java`).
 const STM32_PINS = [
-  'PA0 (TIM2 CH1)',
-  'PA1 (IR_RX)',
-  'PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)',
-  'PA3 (TIM2 CH4)',
-  'PA4',
-  'PA5',
-  'PA6',
-  'PA7',
-  'PA13',
-  'PA14',
-  'PB6',
-  'PB7',
+  'A0 (IR_RX)',
+  'A1 (IR_TX)',
+  'A2 (GDO0)',
+  'A3 (GDO2)',
+  'A4 (NSS)',
+  'A5 (SCK)',
+  'A6 (MISO)',
+  'A7 (MOSI)',
+  'A13 (SWCLK)',
+  'A14 (SWDIO)',
+  'B6 (UART TX / I2C SCL)',
+  'B7 (UART RX / I2C SDA)',
 ];
 
 function getStm32PinNumber(pinString: string): number {
-  const match = pinString.match(/\bP([AB])(\d{1,2})\b/);
+  const match = pinString.match(/\bP?([AB])(\d{1,2})\b/);
   if (!match) return -1;
   const bank = match[1];
   const pin = Number.parseInt(match[2], 10);

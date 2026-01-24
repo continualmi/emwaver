@@ -52,7 +52,7 @@ See the current device here: [Current Device](hardware/device.md). Legacy boards
 
     GPIO numbering model and STM32 pin mapping.
 
-    [:octicons-arrow-right-24: Open Pinout](hardware/pinout.md)
+    [:octicons-arrow-right-24: Open Pinout](hardware/pinout/)
 
 -   :material-book-open-variant:{ .lg .middle } **Scripts**
 

@@ -12,6 +12,12 @@
 .md-footer-meta {
   display: none !important;
 }
+
+/* Hide bottom prev/next navigation bar */
+.md-footer__inner,
+.md-footer-nav {
+  display: none !important;
+}
 /* Hide the right sidebar TOC only on the home page */
 [data-md-component="toc"][data-md-path="index.md"] {
   display: none !important;

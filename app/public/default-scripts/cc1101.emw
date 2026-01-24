@@ -338,7 +338,7 @@ function render() {
           children: [
             UI.textField({
               value: String(packetCsPin),
-              placeholder: "CS pin (encoded, default 4=PA4)",
+              placeholder: "CS pin (encoded, default 4=A4)",
               onChange: function (v) {
                 var n = parseInt(String(v), 10);
                 packetCsPin = Number.isFinite(n) ? n : String(v);

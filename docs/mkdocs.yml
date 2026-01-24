@@ -2,8 +2,7 @@ site_name: EMWaver
 site_dir: docs
 site_url: https://luispl77.github.io/emwaver/
 docs_dir: content
-repo_url: https://github.com/luispl77/emwaver
-edit_uri: edit/main/docs/content/
+# repo_url/edit_uri disabled (no GitHub link in header)
 theme:
   name: material
   features:
@@ -12,7 +11,6 @@ theme:
     - navigation.indexes
     - navigation.sections
     - navigation.expand
-    - navigation.footer
   logo: logo.png
   favicon: logo.png
   toc:
@@ -34,7 +32,10 @@ nav:
       - Installing & Using: installing-using.md
       - Current Device: hardware/device.md
       - Infrared + Sub‑GHz Walkthrough: infrared-ism-walkthrough.md
-  - Pinout: hardware/pinout.md
+  - Pinout:
+      - Diagram: hardware/pinout/index.md
+      - GPIOs: hardware/pinout/gpios.md
+      - Headers: hardware/pinout/headers.md
   - Scripts:
       - Overview: scripts/index.md
       - UI: scripts/ui.md

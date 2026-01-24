@@ -1,6 +1,6 @@
 // Simple PWM (analogWrite) test script for STM32F042
 // Firmware support: `pwm write --pin=<encoded> --value=<0..4095> [--hz=<freq>]`
-let selectedPin = "0"; // PA0..PA3 only
+let selectedPin = "0"; // A0..A3 (PA0..PA3) only
 let hzText = "1000";
 let resolutionBits = 12;
 let dutyU12 = 0;
@@ -10,10 +10,10 @@ let logLines = [];
 let sweeping = false;
 
 const PWM_PINS = [
-  { label: "PA0 / TIM2_CH1 (pin 0)", value: "0" },
-  { label: "PA1 / TIM2_CH2 (pin 1)", value: "1" },
-  { label: "PA2 / TIM2_CH3 (pin 2)", value: "2" },
-  { label: "PA3 / TIM2_CH4 (pin 3)", value: "3" },
+  { label: "A0 / TIM2_CH1 (pin 0)", value: "0" },
+  { label: "A1 / TIM2_CH2 (pin 1)", value: "1" },
+  { label: "A2 / TIM2_CH3 (pin 2)", value: "2" },
+  { label: "A3 / TIM2_CH4 (pin 3)", value: "3" },
 ];
 
 const RESOLUTIONS = [
@@ -133,7 +133,7 @@ function render() {
       spacing: 16,
       children: [
         UI.text({ text: "PWM / analogWrite", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "Firmware PWM pins: PA0..PA3 only (TIM2 channels).", foregroundColor: "#6B7280" }),
+        UI.text({ text: "Firmware PWM pins: A0..A3 only (TIM2 channels).", foregroundColor: "#6B7280" }),
 
         UI.text({ text: "Pin", fontWeight: "medium" }),
         UI.picker({

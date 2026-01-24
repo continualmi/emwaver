@@ -194,7 +194,7 @@ struct SamplerView: View {
     @EnvironmentObject var bleManager: USBManager
     @StateObject private var viewModel = SamplerViewModel()
 
-    @State private var selectedPinIndex = 0 // STM32 encoded pin 0 == PA0
+    @State private var selectedPinIndex = 0 // STM32 encoded pin 0 == A0 (PA0)
     @State private var selectedSignalIndex = 0
     @State private var isRecording = false
     @AppStorage("sampler_capture_invert") private var invertCaptureDuringRecording = false
@@ -231,20 +231,20 @@ struct SamplerView: View {
 
 
     // STM32-only: match Android's Sampler spinner labels.
-    // Encoded pin format (used by firmware): PA0..PA15 => 0..15, PB0..PB15 => 16..31.
+    // Encoded pin format (used by firmware): A0..A15 (PA0..PA15) => 0..15, B0..B15 (PB0..PB15) => 16..31.
     private let pins: [String] = [
-        "PA0 (TIM2 CH1)",
-        "PA1 (IR_RX)",
-        "PA2 (IR_TX on Infrared Waver / GDO0 on ISM Waver, TIM2 CH3)",
-        "PA3 (TIM2 CH4)",
-        "PA4",
-        "PA5",
-        "PA6",
-        "PA7",
-        "PA13",
-        "PA14",
-        "PB6",
-        "PB7"
+        "A0 (IR_RX)",
+        "A1 (IR_TX)",
+        "A2 (GDO0)",
+        "A3 (GDO2)",
+        "A4 (NSS)",
+        "A5 (SCK)",
+        "A6 (MISO)",
+        "A7 (MOSI)",
+        "A13 (SWCLK)",
+        "A14 (SWDIO)",
+        "B6 (UART TX / I2C SCL)",
+        "B7 (UART RX / I2C SDA)"
     ]
 
     var body: some View {
@@ -866,10 +866,13 @@ struct SamplerView: View {
         guard selectedPinIndex >= 0 && selectedPinIndex < pins.count else { return nil }
         let selected = pins[selectedPinIndex]
         guard let token = selected.split(whereSeparator: { $0 == " " || $0 == "(" }).first else { return nil }
-        let t = String(token) // e.g. "PA1"
-        guard t.count >= 3, t.first == "P" else { return nil }
-        let port = t[t.index(after: t.startIndex)]
-        let digits = t.dropFirst(2)
+        var t = String(token) // e.g. "A1" or "PA1"
+        if t.first == "P" {
+            t.removeFirst()
+        }
+        guard t.count >= 2 else { return nil }
+        let port = t[t.startIndex]
+        let digits = t.dropFirst(1)
         guard let pin = Int(digits), (0...15).contains(pin) else { return nil }
         switch port {
         case "A": return UInt8(pin)
