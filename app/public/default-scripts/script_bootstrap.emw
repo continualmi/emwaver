@@ -60,11 +60,8 @@ function _scriptJoinArgs(args) {
   return parts.join(' ');
 }
 
-if (typeof print === 'undefined') {
-  var print = function () {
-    _scriptPrint(_scriptJoinArgs(arguments));
-  };
-  __scriptGlobal.print = print;
+function __scriptPrintLine() {
+  _scriptPrint(_scriptJoinArgs(arguments));
 }
 
 // -----------------------------------------------------------------------------
@@ -123,10 +120,10 @@ if (typeof Console === 'undefined') {
     return {
       // Output (print/println are line-oriented in EMWaver today).
       print: function () {
-        print.apply(null, arguments);
+        __scriptPrintLine.apply(null, arguments);
       },
       println: function () {
-        print.apply(null, arguments);
+        __scriptPrintLine.apply(null, arguments);
       },
 
       // Input (line-oriented).
@@ -146,25 +143,6 @@ if (typeof Console === 'undefined') {
     };
   })();
   __scriptGlobal.Console = Console;
-}
-
-if (typeof console === 'undefined') {
-  var console = {};
-}
-if (typeof console.log !== 'function') {
-  console.log = function () {
-    print.apply(null, arguments);
-  };
-}
-if (typeof console.warn !== 'function') {
-  console.warn = function () {
-    print.apply(null, arguments);
-  };
-}
-if (typeof console.error !== 'function') {
-  console.error = function () {
-    print.apply(null, arguments);
-  };
 }
 
 function __scriptIsShim(obj) {
@@ -398,7 +376,7 @@ if (typeof every === 'undefined') {
         })
         .catch(function (error) {
           try {
-            console.error('every() tick error:', error);
+            __scriptPrintLine('every() tick error:', error);
           } catch (e) {}
         })
         .then(function () {
@@ -1497,4 +1475,3 @@ if (typeof UI === 'undefined') {
 }
 
 __scriptGlobal.UI = UI;
-__scriptGlobal.print = print;

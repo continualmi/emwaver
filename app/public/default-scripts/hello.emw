@@ -1,1 +1,10 @@
-print("hello");
+Console.print("hello");
+
+let level = LOW;
+pinMode(GDO0, OUTPUT);
+digitalWrite(GDO0, level);
+
+every(250, function () {
+  level = level === LOW ? HIGH : LOW;
+  digitalWrite(GDO0, level);
+});
