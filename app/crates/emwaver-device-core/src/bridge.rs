@@ -2091,7 +2091,9 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
 
         if saw_bs && last_emitted_status != Some(last_status) {
             last_emitted_status = Some(last_status);
-            let _ = emit_event(state, "bs", json!({ "value": last_status }));
+            // TX-side echo of BS while streaming (used to keep UI/host in sync even if
+            // the buffer cursor drifts). Mark with src="tx" so consumers can filter.
+            let _ = emit_event(state, "bs", json!({ "value": last_status, "src": "tx" }));
         }
 
         let end = (sent_bytes + packet_size).min(total_bytes);
@@ -2253,7 +2255,8 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
         }
 
         if let Some(bs) = status::parse_bs(&item.stream) {
-            let _ = emit_event(state.as_ref(), "bs", json!({ "value": bs }));
+            // BS parsed from an actual device stream lane.
+            let _ = emit_event(state.as_ref(), "bs", json!({ "value": bs, "src": "rx" }));
         }
 
         if !state.rx_drop.load(Ordering::Relaxed) {

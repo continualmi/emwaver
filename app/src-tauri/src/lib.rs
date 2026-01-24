@@ -1288,6 +1288,7 @@ pub fn run() {
             let mut events_rx = device_state_for_setup.bridge.event_tx.subscribe();
             tauri::async_runtime::spawn(async move {
                 let mut last_bs: u64 = 0;
+                let mut last_tx_period_ms: f64 = 0.0;
                 loop {
                     let line = match events_rx.recv().await {
                         Ok(bytes) => bytes,
@@ -1313,8 +1314,18 @@ pub fn run() {
                             .and_then(|d| d.get("value"))
                             .and_then(|v| v.as_u64())
                             .unwrap_or(0);
+                        let src = value
+                            .get("data")
+                            .and_then(|d| d.get("src"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("rx");
                         last_bs = bs;
-                        eprintln!("BS={bs}");
+
+                        // Only print BS frames that actually came from the device RX lane.
+                        // (During TX bursts the bridge also echoes BS with src="tx".)
+                        if src != "tx" {
+                            eprintln!("BS={bs} period={last_tx_period_ms:.2}ms");
+                        }
                         continue;
                     }
 
@@ -1331,6 +1342,7 @@ pub fn run() {
                         last_bs = bs;
 
                         let period_ms = (period_ns as f64) / 1_000_000.0;
+                        last_tx_period_ms = period_ms;
                         eprintln!(
                             "TX {pct:>3}% {sent}/{total}B chunk={chunk}B pkt={pkt}B period={period_ms:.2}ms BS={bs}"
                         );
