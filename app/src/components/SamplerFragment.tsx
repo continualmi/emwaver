@@ -19,7 +19,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import { appDataDir } from '@tauri-apps/api/path';
-import { isTauriAvailable, safeInvoke, safeJoin } from '../utils/tauri';
+import { isTauriAvailable, safeInvoke, safeJoin, safeListen } from '../utils/tauri';
 import { useDevice } from '../utils/DeviceContext';
 import { useAppDialog } from '../utils/AppDialogContext';
 
@@ -48,6 +48,16 @@ type SamplerCompressViewportResponse = {
   buffer_len_bytes: number;
   time_values: number[];
   data_values: number[];
+};
+
+type TxProgressEventPayload = {
+  pct: number;
+  sent_bytes: number;
+  total_bytes: number;
+  chunk_len?: number;
+  packet_size?: number;
+  period_ns?: number;
+  bs?: number;
 };
 
 const PIN_INDEX_STM32_KEY = 'sampler.pinIndex.stm32';
@@ -101,14 +111,14 @@ function getStm32PinNumber(pinString: string): number {
   return bank === 'A' ? pin : 16 + pin;
 }
 
-function normalizeSignalName(rawName: string, fallback: string): string {
+function normalizeSignalName(rawName: string, fallback: string, ext: '.raw' | '.txt' = '.raw'): string {
   const trimmed = rawName.trim();
   const baseName = trimmed || fallback;
   const lower = baseName.toLowerCase();
-  if (lower.endsWith('.raw')) {
+  if (lower.endsWith(ext)) {
     return baseName;
   }
-  return `${baseName}.raw`;
+  return `${baseName}${ext}`;
 }
 
 function parsePwmIntOrDefault(raw: string, fallback: number): number {
@@ -118,6 +128,116 @@ function parsePwmIntOrDefault(raw: string, fallback: number): number {
   }
   const parsed = Number.parseInt(trimmed, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+const TIMINGS_SAMPLE_PERIOD_US = 10;
+const PULSE_MEASURE_MAX_BITS = 250_000; // 31.25 KB at 8 bits/byte
+
+function getBitLSB(bytes: Uint8Array, bitIndex: number): 0 | 1 {
+  const byteIndex = bitIndex >> 3;
+  if (byteIndex < 0 || byteIndex >= bytes.length) return 0;
+  const mask = 1 << (bitIndex & 7);
+  return (bytes[byteIndex] & mask) !== 0 ? 1 : 0;
+}
+
+function computeSinglePulseWidthUs(
+  bytes: Uint8Array,
+  rangeStartBit: number,
+  rangeEndBitExclusive: number,
+  samplePeriodUs: number,
+): { widthUs: number; level: 'high' | 'low' } | null {
+  const start = Math.max(0, rangeStartBit | 0);
+  const end = Math.max(start + 1, rangeEndBitExclusive | 0);
+  if (end - start < 2) return null;
+
+  let cur = getBitLSB(bytes, start);
+  const transitions: number[] = [];
+
+  for (let i = start + 1; i < end; i++) {
+    const bit = getBitLSB(bytes, i);
+    if (bit !== cur) {
+      transitions.push(i);
+      cur = bit;
+      if (transitions.length > 2) return null;
+    }
+  }
+
+  if (transitions.length !== 2) return null;
+
+  const startBit = getBitLSB(bytes, start);
+  const endBit = getBitLSB(bytes, end - 1);
+  if (startBit !== endBit) return null;
+
+  const [t1, t2] = transitions;
+  if (t1 <= start || t2 >= end - 1) return null;
+
+  const widthBits = t2 - t1;
+  const widthUs = Math.max(0, widthBits * samplePeriodUs);
+  const level = getBitLSB(bytes, t1) === 1 ? 'high' : 'low';
+  return { widthUs, level };
+}
+
+function parseSignedTimingsText(text: string): number[] {
+  return text
+    .split(/\s+/g)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => {
+      // Accept plain integers (e.g. 1000, -450) and ignore any trailing commas.
+      const normalized = token.replace(/,+$/, '');
+      const value = Number.parseInt(normalized, 10);
+      return Number.isFinite(value) ? value : NaN;
+    })
+    .filter((value) => Number.isFinite(value));
+}
+
+function timingsToRawBufferBytes(
+  pulsesUs: number[],
+  options: { samplePeriodUs: number; maxBytes: number },
+): { data: Uint8Array; totalSamples: number; truncated: boolean } {
+  const samplePeriodUs = Math.max(1, options.samplePeriodUs | 0);
+  const maxBytes = Math.max(1, options.maxBytes | 0);
+  const maxBits = maxBytes * 8;
+
+  let totalSamples = 0;
+  for (const pulse of pulsesUs) {
+    const samples = Math.round(Math.abs(pulse) / samplePeriodUs);
+    if (samples > 0) {
+      totalSamples += samples;
+      if (totalSamples >= maxBits) {
+        totalSamples = maxBits;
+        break;
+      }
+    }
+  }
+
+  const bytesLen = Math.ceil(totalSamples / 8);
+  const data = new Uint8Array(bytesLen);
+  let bitCursor = 0;
+  let truncated = false;
+
+  for (const pulse of pulsesUs) {
+    if (bitCursor >= totalSamples) {
+      truncated = true;
+      break;
+    }
+    const isHigh = pulse > 0;
+    const samples = Math.round(Math.abs(pulse) / samplePeriodUs);
+    if (samples <= 0) continue;
+    const remaining = totalSamples - bitCursor;
+    const run = Math.min(samples, remaining);
+
+    if (isHigh) {
+      // Set bits for the run (LSB-first in each byte).
+      for (let i = 0; i < run; i++) {
+        const idx = bitCursor + i;
+        data[idx >> 3] |= 1 << (idx & 7);
+      }
+    }
+    bitCursor += run;
+  }
+
+  return { data, totalSamples, truncated };
 }
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -170,6 +290,10 @@ function SamplerFragment() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [chartPointCount, setChartPointCount] = useState(0);
   const [chartError, setChartError] = useState<string | null>(null);
+
+  const [pulseMeasure, setPulseMeasure] = useState<null | { widthUs: number; level: 'high' | 'low' }>(null);
+  const pulseMeasureTimeoutRef = useRef<number | null>(null);
+  const lastPulseMeasureKeyRef = useRef<string>('');
   const [invertCaptureDuringRecording, setInvertCaptureDuringRecording] = useState(() => {
     const stored = localStorage.getItem(INVERT_CAPTURE_KEY);
     if (stored != null) {
@@ -208,6 +332,15 @@ function SamplerFragment() {
   
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
+
+  const [isRetransmitting, setIsRetransmitting] = useState(false);
+  const [txProgress, setTxProgress] = useState<TxProgressEventPayload>({ pct: 0, sent_bytes: 0, total_bytes: 0 });
+
+  const [timingsModalOpen, setTimingsModalOpen] = useState(false);
+  const [timingsLoading, setTimingsLoading] = useState(false);
+  const [timingsText, setTimingsText] = useState<string>('');
+  const timingsList = useMemo(() => parseSignedTimingsText(timingsText), [timingsText]);
+  const timingsDisplay = useMemo(() => timingsText.trim().replace(/\s+/g, ' '), [timingsText]);
   const [chartResolution, setChartResolution] = useState(() => {
     const stored = Number.parseInt(localStorage.getItem(SETTINGS_RESOLUTION_KEY) || '1000', 10);
     return Number.isNaN(stored) ? 1000 : stored;
@@ -409,7 +542,7 @@ function SamplerFragment() {
     };
   }, []);
 
-				  const performChartRefresh = useCallback(() => {
+  const performChartRefresh = useCallback(() => {
 				    const plot = uplotRef.current;
 				    if (!plot) return;
 
@@ -457,10 +590,10 @@ function SamplerFragment() {
 
 			        const bufferBytes = result.buffer_len_bytes;
 			        bufferLenBytesRef.current = bufferBytes;
-			        setBufferLenBytes(bufferBytes);
+              setBufferLenBytes(bufferBytes);
               if (isRecordingRef.current && bufferBytes >= maxSamples) {
                 stopRecording();
-                alert('Recording stopped: Buffer size limit reached.');
+                void dialog.alert('Recording stopped: buffer size limit reached.');
                 return;
               }
 
@@ -469,6 +602,8 @@ function SamplerFragment() {
 			          return;
 			        }
 			        lastChartViewportKeyRef.current = nextViewportKey;
+
+              schedulePulseMeasurement(nextViewportKey, visibleRangeStart, visibleRangeEnd);
 
               if (result.time_values.length !== result.data_values.length) {
                 console.warn('Sampler viewport length mismatch', {
@@ -490,7 +625,55 @@ function SamplerFragment() {
 			      .finally(() => {
 			        chartRefreshInFlightRef.current = false;
 			      });
-		  }, [chartResolution, getAdaptiveBins, getViewportBits, maxSamples, minRenderIntervalMs]);
+			  }, [chartResolution, dialog, getAdaptiveBins, getViewportBits, maxSamples, minRenderIntervalMs]);
+
+  const schedulePulseMeasurement = useCallback(
+    (viewportKey: string, visibleRangeStart: number, visibleRangeEnd: number) => {
+      if (pulseMeasureTimeoutRef.current != null) {
+        window.clearTimeout(pulseMeasureTimeoutRef.current);
+        pulseMeasureTimeoutRef.current = null;
+      }
+
+      // Avoid work while recording, or when viewport is too large.
+      if (isRecordingRef.current) {
+        setPulseMeasure(null);
+        return;
+      }
+
+      const spanBits = Math.max(0, visibleRangeEnd - visibleRangeStart);
+      if (spanBits > PULSE_MEASURE_MAX_BITS) {
+        setPulseMeasure(null);
+        return;
+      }
+
+      // Only rerun when viewport actually changes.
+      if (viewportKey === lastPulseMeasureKeyRef.current) {
+        return;
+      }
+      lastPulseMeasureKeyRef.current = viewportKey;
+
+      pulseMeasureTimeoutRef.current = window.setTimeout(() => {
+        pulseMeasureTimeoutRef.current = null;
+        void (async () => {
+          const raw = await safeInvoke<number[]>('buffer_get_bytes');
+          const bytes = raw?.length ? new Uint8Array(raw) : new Uint8Array();
+          if (bytes.length === 0) {
+            setPulseMeasure(null);
+            return;
+          }
+
+          const result = computeSinglePulseWidthUs(
+            bytes,
+            Math.max(0, visibleRangeStart),
+            Math.max(0, visibleRangeEnd),
+            TIMINGS_SAMPLE_PERIOD_US,
+          );
+          setPulseMeasure(result);
+        })();
+      }, 180);
+    },
+    [],
+  );
 
   const scheduleChartRefresh = useCallback(() => {
     if (pendingChartRefreshRef.current != null) {
@@ -533,6 +716,37 @@ function SamplerFragment() {
       setSignalsDir(dir);
     };
     void resolveSignalsDir();
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriAvailable()) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+    void safeListen<TxProgressEventPayload>('tx_progress', (event) => {
+      if (!isRetransmitting) {
+        return;
+      }
+      const payload = event.payload;
+      if (!payload) return;
+      setTxProgress(payload);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [isRetransmitting]);
+
+  useEffect(() => {
+    return () => {
+      if (pulseMeasureTimeoutRef.current != null) {
+        window.clearTimeout(pulseMeasureTimeoutRef.current);
+        pulseMeasureTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const ensureSignalsDir = useCallback(async (): Promise<string | null> => {
@@ -818,14 +1032,14 @@ function SamplerFragment() {
 
 		  const startRecording = async () => {
 		    if (!isConnected) {
-		      alert('Not connected to device');
+		      await dialog.alert('Not connected to device');
 		      return;
 		    }
 
     const selectedPin = pinOptions[selectedPinIndex];
-    const pinNumber = getStm32PinNumber(selectedPin);
+		    const pinNumber = getStm32PinNumber(selectedPin);
 		    if (pinNumber === -1) {
-		      alert('Invalid pin selected');
+		      await dialog.alert('Invalid pin selected');
 		      return;
 		    }
 
@@ -861,25 +1075,28 @@ function SamplerFragment() {
 
 			  const retransmitSignal = async () => {
 			    if (!isConnected) {
-			      alert('Not connected to device');
+			      await dialog.alert('Not connected to device');
 			      return;
 			    }
 
 				    const bytes = await safeInvoke<number[]>('buffer_get_bytes');
 				    const buffer = bytes?.length ? new Uint8Array(bytes) : new Uint8Array();
 				    if (buffer.length === 0) {
-				      alert('Buffer is empty');
+				      await dialog.alert('Buffer is empty');
 				      return;
 				    }
 
     const selectedPin = pinOptions[selectedPinIndex];
     const pinNumber = getStm32PinNumber(selectedPin);
     if (pinNumber === -1) {
-      alert('Invalid pin selected');
+	      await dialog.alert('Invalid pin selected');
       return;
     }
 
 	    try {
+	      setIsRetransmitting(true);
+	      setTxProgress({ pct: 0, sent_bytes: 0, total_bytes: buffer.length });
+
 	      // Binary: EMW_OP_TRANSMIT (0x80) / START (0x00)
 	      // Mini-frame extension:
 	      //   [0]=0x80 [1]=0x00 [2]=pin [3]=duty% [4..7]=freqHz (u32 LE)
@@ -889,11 +1106,11 @@ function SamplerFragment() {
 	        freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
 	        dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
 	        if (freqHz < 1) {
-	          alert('Invalid PWM frequency');
+	          await dialog.alert('Invalid PWM frequency');
 	          return;
 	        }
 	        if (dutyPercent < 1 || dutyPercent > 100) {
-	          alert('Invalid PWM duty (1-100)');
+	          await dialog.alert('Invalid PWM duty (1-100)');
 	          return;
 	        }
 	        setPwmFreqHz(freqHz);
@@ -914,34 +1131,76 @@ function SamplerFragment() {
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);
-
-      alert(`Retransmitting ${buffer.length} samples on ${selectedPin}`);
     } catch (error) {
       console.error('Failed to retransmit signal:', error);
-      alert('Failed to retransmit signal');
+	      await dialog.alert('Failed to retransmit signal');
+	    } finally {
+	      setIsRetransmitting(false);
     }
 	  };
 
-					  const getTimings = () => {
-			    void safeInvoke<string>('buffer_build_signed_raw_timings')
-			      .then((timings) => {
-			        if (!timings) {
-			          alert('Buffer is empty');
-			          return;
-			        }
-              void copyTextToClipboard(timings).then((ok) => {
-                if (ok) {
-                  alert('Timings copied to clipboard');
-                } else {
-                  alert('Clipboard copy failed');
-                }
-              });
-			      })
-			      .catch((error) => {
-			        console.error('Failed to build timings:', error);
-			        alert('Failed to build timings');
-			      });
+				  const getTimings = async () => {
+			    setTimingsModalOpen(true);
+			    setTimingsLoading(true);
+			    setTimingsText('');
+			    try {
+			      const timings = await safeInvoke<string>('buffer_build_signed_raw_timings');
+			      if (!timings) {
+			        setTimingsModalOpen(false);
+			        await dialog.alert('Buffer is empty');
+			        return;
+			      }
+			      setTimingsText(timings.trim());
+			    } catch (error) {
+			      console.error('Failed to build timings:', error);
+			      setTimingsModalOpen(false);
+			      await dialog.alert('Failed to build timings');
+			    } finally {
+			      setTimingsLoading(false);
+			    }
 		  };
+
+      const generateNewTimingsName = (): string => {
+        const baseRaw = currentSignalName ? currentSignalName.replace(/\.(raw|txt)$/i, '') : 'signal';
+        const base = baseRaw.toLowerCase().endsWith('.timings') ? baseRaw : `${baseRaw}.timings`;
+        let counter = 1;
+        let candidate = `${base}.txt`;
+        const existing = new Set(signalEntries.map((entry) => entry.name.toLowerCase()));
+        while (existing.has(candidate.toLowerCase())) {
+          counter += 1;
+          candidate = `${base}.${counter}.txt`;
+        }
+        return candidate;
+      };
+
+      const saveTimingsToStorage = async () => {
+        const content = timingsText.trim().replace(/\s+/g, ' ');
+        if (!content) {
+          await dialog.alert('No timings to save.');
+          return;
+        }
+
+        const dir = await ensureSignalsDir();
+        if (!dir) {
+          await dialog.alert('Signals storage is not available');
+          return;
+        }
+
+        const fileName = generateNewTimingsName();
+        const targetPath = await safeJoin(dir, fileName);
+        try {
+          await safeInvoke<void>(
+            'write_file',
+            { payload: { path: targetPath, content: `${content}\n` } },
+            { throwOnError: true },
+          );
+          refreshSignalList();
+          await dialog.alert(`Timings saved: ${fileName}`);
+        } catch (error) {
+          console.error('Failed to save timings:', error);
+          await dialog.alert('Failed to save timings');
+        }
+      };
 
 	  const clearBuffer = () => {
 				    void safeInvoke<void>('buffer_clear', undefined, { throwOnError: true }).catch((error) => {
@@ -953,6 +1212,7 @@ function SamplerFragment() {
 				    lastBufferSizeRef.current = 0;
             lastRenderedAvailableBitsRef.current = 0;
 				    setChartPointCount(0);
+            setPulseMeasure(null);
             if (uplotRef.current) {
               uplotRef.current.setData([new Float64Array(), new Float32Array()]);
             }
@@ -978,7 +1238,7 @@ function SamplerFragment() {
 
 	  const loadSignal = async (signalName: string) => {
     if (!signalsDir) {
-      alert('Signals storage is not available');
+	      await dialog.alert('Signals storage is not available');
       return;
     }
     if (signalName === currentSignalName && !hasUnsavedChanges) {
@@ -987,7 +1247,54 @@ function SamplerFragment() {
     try {
       const entry = signalEntries.find((item) => item.name === signalName);
       if (!entry) {
-        alert('Signal file not found');
+	        await dialog.alert('Signal file not found');
+        return;
+      }
+
+      const lower = entry.name.toLowerCase();
+      if (lower.endsWith('.txt')) {
+        const text = await safeInvoke<string>(
+          'read_file',
+          { payload: { path: entry.path } },
+          { throwOnError: true },
+        );
+        if (!text || !text.trim()) {
+          await dialog.alert('Signal file is empty');
+          return;
+        }
+
+        const pulses = parseSignedTimingsText(text);
+        if (pulses.length === 0) {
+          await dialog.alert('No timings found in file');
+          return;
+        }
+
+        const { data: rawBytes, truncated } = timingsToRawBufferBytes(pulses, {
+          samplePeriodUs: TIMINGS_SAMPLE_PERIOD_US,
+          maxBytes: maxSamples,
+        });
+        if (rawBytes.length === 0) {
+          await dialog.alert('Timings decode resulted in an empty buffer');
+          return;
+        }
+
+        const nextLen = await safeInvoke<number>(
+          'buffer_set_bytes',
+          { data: Array.from(rawBytes) },
+          { throwOnError: true },
+        );
+        const lenBytes = Number(nextLen) || rawBytes.length;
+        bufferLenBytesRef.current = lenBytes;
+        setBufferLenBytes(lenBytes);
+        lastBufferSizeRef.current = lenBytes;
+        setCurrentSignalName(signalName);
+        setHasUnsavedChanges(false);
+        localStorage.setItem(LAST_SIGNAL_KEY, signalName);
+        resetChartZoom();
+        refreshChart();
+        if (truncated) {
+          void dialog.alert('Loaded timings were truncated to the current buffer limit.');
+        }
         return;
       }
 
@@ -997,7 +1304,7 @@ function SamplerFragment() {
         { throwOnError: true },
       );
 	      if (!data || data.length === 0) {
-	        alert('Signal file is empty');
+	        await dialog.alert('Signal file is empty');
 	        return;
 	      }
 
@@ -1017,24 +1324,24 @@ function SamplerFragment() {
 	      refreshChart();
 	    } catch (error) {
 	      console.error('Failed to load signal:', error);
-	      alert('Failed to load signal');
+	      await dialog.alert('Failed to load signal');
 	    }
   };
 
 		  const saveSignalToStorage = async (enteredName: string) => {
 		    const bufferSize = (await safeInvoke<number>('buffer_get_len_bytes')) ?? bufferLenBytesRef.current;
 		    if (bufferSize === 0) {
-		      alert('Buffer is empty');
+		      await dialog.alert('Buffer is empty');
 		      return;
 		    }
 
     const dir = await ensureSignalsDir();
     if (!dir) {
-      alert('Signals storage is not available');
+	    await dialog.alert('Signals storage is not available');
       return;
     }
 
-    const defaultName = currentSignalName || generateNewSignalName();
+	    const defaultName = currentSignalName?.toLowerCase().endsWith('.raw') ? currentSignalName : generateNewSignalName();
     const fileName = normalizeSignalName(enteredName || defaultName, defaultName);
 
 		    try {
@@ -1044,25 +1351,25 @@ function SamplerFragment() {
 			        { path: targetPath },
 			        { throwOnError: true },
 			      );
-		      setCurrentSignalName(fileName);
+	      setCurrentSignalName(fileName);
 	      setHasUnsavedChanges(false);
 	      localStorage.setItem(LAST_SIGNAL_KEY, fileName);
       refreshSignalList();
-      alert(`Signal saved: ${fileName}`);
+	      await dialog.alert(`Signal saved: ${fileName}`);
     } catch (error) {
       console.error('Failed to save signal:', error);
-      alert('Failed to save signal');
+	    await dialog.alert('Failed to save signal');
     }
   };
 
 		  const openSaveDialog = () => {
 		    const bufferSize = bufferLenBytesRef.current;
 		    if (bufferSize === 0) {
-		      alert('Buffer is empty');
+		      void dialog.alert('Buffer is empty');
 		      return;
 		    }
 
-    const defaultName = currentSignalName || generateNewSignalName();
+	    const defaultName = currentSignalName?.toLowerCase().endsWith('.raw') ? currentSignalName : generateNewSignalName();
     setTextDialogMode('save');
     setTextDialog({ open: true, title: 'Save Signal', value: defaultName, okLabel: 'Save' });
   };
@@ -1088,7 +1395,7 @@ function SamplerFragment() {
   const revealSignalsFolder = useCallback(async () => {
     const dir = await ensureSignalsDir();
     if (!dir) {
-      alert('Signals storage is not available');
+	    await dialog.alert('Signals storage is not available');
       return;
     }
     try {
@@ -1099,18 +1406,18 @@ function SamplerFragment() {
       );
     } catch (error) {
       console.error('Failed to reveal signals folder:', error);
-      alert('Failed to open signals folder');
+	    await dialog.alert('Failed to open signals folder');
     }
-  }, [ensureSignalsDir]);
+  }, [dialog, ensureSignalsDir]);
 
   const revealCurrentSignal = useCallback(async () => {
     const dir = await ensureSignalsDir();
     if (!dir) {
-      alert('Signals storage is not available');
+	    await dialog.alert('Signals storage is not available');
       return;
     }
     if (!currentSignalName) {
-      alert('No signal selected');
+	    await dialog.alert('No signal selected');
       return;
     }
     try {
@@ -1123,30 +1430,88 @@ function SamplerFragment() {
       );
     } catch (error) {
       console.error('Failed to reveal signal file:', error);
-      alert('Failed to open signal file');
+	    await dialog.alert('Failed to open signal file');
     }
-  }, [currentSignalName, ensureSignalsDir, signalEntries]);
+  }, [currentSignalName, dialog, ensureSignalsDir, signalEntries]);
 
   const importSignal = async () => {
     try {
       // Use file input for both browser and Tauri (simpler approach)
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.raw';
+      input.accept = '.raw,.txt';
       input.onchange = async (e) => {
         const selectedFile = (e.target as HTMLInputElement).files?.[0];
         if (!selectedFile) return;
 
         try {
+          const lowerName = (selectedFile.name || '').toLowerCase();
+
+          if (lowerName.endsWith('.txt')) {
+            const text = await selectedFile.text();
+            if (!text.trim()) {
+              await dialog.alert('Selected file is empty');
+              return;
+            }
+
+            const pulses = parseSignedTimingsText(text);
+            if (pulses.length === 0) {
+              await dialog.alert('No timings found in file');
+              return;
+            }
+
+            const { data: rawBytes, truncated } = timingsToRawBufferBytes(pulses, {
+              samplePeriodUs: TIMINGS_SAMPLE_PERIOD_US,
+              maxBytes: maxSamples,
+            });
+            if (rawBytes.length === 0) {
+              await dialog.alert('Timings decode resulted in an empty buffer');
+              return;
+            }
+
+            const defaultName = selectedFile.name || 'signal.timings.txt';
+            const fileName = normalizeSignalName(defaultName.replace(/\.txt$/i, ''), defaultName, '.txt');
+            const dir = await ensureSignalsDir();
+            if (dir) {
+              const targetPath = await safeJoin(dir, fileName);
+              await safeInvoke<void>(
+                'write_file',
+                { payload: { path: targetPath, content: text } },
+                { throwOnError: true },
+              );
+            }
+
+            const nextLen = await safeInvoke<number>(
+              'buffer_set_bytes',
+              { data: Array.from(rawBytes) },
+              { throwOnError: true },
+            );
+            const lenBytes = Number(nextLen) || rawBytes.length;
+            bufferLenBytesRef.current = lenBytes;
+            setBufferLenBytes(lenBytes);
+            lastBufferSizeRef.current = lenBytes;
+
+            setCurrentSignalName(fileName);
+            setHasUnsavedChanges(false);
+            localStorage.setItem(LAST_SIGNAL_KEY, fileName);
+            resetChartZoom();
+            refreshChart();
+            refreshSignalList();
+            if (truncated) {
+              void dialog.alert('Imported timings were truncated to the current buffer limit.');
+            }
+            return;
+          }
+
           const arrayBuffer = await selectedFile.arrayBuffer();
           const buffer = new Uint8Array(arrayBuffer);
 	          if (buffer.length === 0) {
-	            alert('Selected file is empty');
+	            await dialog.alert('Selected file is empty');
 	            return;
 	          }
 
 	          const defaultName = selectedFile.name || generateNewSignalName();
-	          const fileName = normalizeSignalName(defaultName, generateNewSignalName());
+	          const fileName = normalizeSignalName(defaultName, generateNewSignalName(), '.raw');
 	          const dir = await ensureSignalsDir();
 	          if (dir) {
 	            const targetPath = await safeJoin(dir, fileName);
@@ -1175,13 +1540,13 @@ function SamplerFragment() {
 	          refreshSignalList();
 	        } catch (error) {
 	          console.error('Failed to read file:', error);
-	          alert('Failed to import signal');
+	          await dialog.alert('Failed to import signal');
 	        }
       };
       input.click();
     } catch (error) {
       console.error('Failed to import signal:', error);
-      alert('Failed to import signal');
+	    await dialog.alert('Failed to import signal');
     }
   };
 
@@ -1205,9 +1570,11 @@ function SamplerFragment() {
           { payload: { path: signalsDir } },
           { throwOnError: true },
         );
-        const files = (entries || []).filter(
-          (entry) => entry.kind === 'file' && entry.name.toLowerCase().endsWith('.raw')
-        );
+        const files = (entries || []).filter((entry) => {
+          if (entry.kind !== 'file') return false;
+          const lower = entry.name.toLowerCase();
+          return lower.endsWith('.raw') || lower.endsWith('.txt');
+        });
         const mapped: SignalEntry[] = await Promise.all(
           files.map(async (entry) => ({
             name: entry.name,
@@ -1262,21 +1629,22 @@ function SamplerFragment() {
 
   const renameSignalToStorage = async (enteredName: string) => {
     if (!currentSignalName || !signalsDir) {
-      alert('No signal loaded');
+	    await dialog.alert('No signal loaded');
       return;
     }
-    const normalized = normalizeSignalName(enteredName, currentSignalName);
+    const ext = currentSignalName.toLowerCase().endsWith('.txt') ? '.txt' : '.raw';
+    const normalized = normalizeSignalName(enteredName, currentSignalName, ext);
     if (normalized === currentSignalName) {
-      alert('Name unchanged');
+	    await dialog.alert('Name unchanged');
       return;
     }
     if (signalEntries.some((entry) => entry.name === normalized)) {
-      alert('A signal with this name already exists');
+	    await dialog.alert('A signal with this name already exists');
       return;
     }
     const entry = signalEntries.find((item) => item.name === currentSignalName);
     if (!entry) {
-      alert('Signal file not found');
+	    await dialog.alert('Signal file not found');
       return;
     }
     const targetPath = await safeJoin(signalsDir, normalized);
@@ -1290,19 +1658,19 @@ function SamplerFragment() {
       setHasUnsavedChanges(false);
       localStorage.setItem(LAST_SIGNAL_KEY, normalized);
       refreshSignalList();
-      alert('Signal renamed');
+	    await dialog.alert('Signal renamed');
     } catch (error) {
       console.error('Failed to rename signal:', error);
-      alert('Failed to rename signal');
+	    await dialog.alert('Failed to rename signal');
     }
   };
 
   const openRenameDialog = () => {
     if (!currentSignalName) {
-      alert('No signal loaded');
+	    void dialog.alert('No signal loaded');
       return;
     }
-    const existing = currentSignalName.replace(/\.raw$/i, '');
+    const existing = currentSignalName.replace(/\.(raw|txt)$/i, '');
     setTextDialogMode('rename');
     setTextDialog({ open: true, title: 'Rename Signal', value: existing, okLabel: 'Rename' });
   };
@@ -1313,12 +1681,12 @@ function SamplerFragment() {
 
   const deleteSignal = async () => {
     if (!currentSignalName || !signalsDir) {
-      alert('No signal loaded');
+	    await dialog.alert('No signal loaded');
       return;
     }
     const entry = signalEntries.find((item) => item.name === currentSignalName);
     if (!entry) {
-      alert('Signal file not found');
+	    await dialog.alert('Signal file not found');
       return;
     }
     const confirmed = await dialog.confirm(`Delete ${currentSignalName}?`, {
@@ -1352,10 +1720,10 @@ function SamplerFragment() {
         setSelectedSignalIndex(0);
         void loadSignal(nextSignal);
       }
-      alert('Signal deleted');
+	    await dialog.alert('Signal deleted');
     } catch (error) {
       console.error('Failed to delete signal:', error);
-      alert('Failed to delete signal');
+	    await dialog.alert('Failed to delete signal');
     }
   };
 
@@ -1444,56 +1812,62 @@ function SamplerFragment() {
         <div className="flex gap-2">
           <button
             onClick={createNewSignal}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             New
           </button>
           <button
             onClick={openSaveDialog}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Save
           </button>
           <button
+            onClick={() => void getTimings()}
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
+          >
+            Timings
+          </button>
+          <button
             onClick={revealCurrentSignal}
             disabled={!currentSignalName}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Show File
           </button>
           <button
             onClick={revealSignalsFolder}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Show Folder
           </button>
           <button
             onClick={renameSignal}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Rename
           </button>
           <button
             onClick={deleteSignal}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Delete
           </button>
           <button
             onClick={importSignal}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Import
           </button>
           <button
             onClick={clearBuffer}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Clear
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3 py-1.5 text-sm bg-slate-800 text-slate-200 rounded hover:bg-slate-700"
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-slate-200 hover:bg-black/30"
           >
             Settings
           </button>
@@ -1527,6 +1901,12 @@ function SamplerFragment() {
                     <p>Chart error: {chartError}</p>
                   </div>
                 ) : null}
+
+                {pulseMeasure ? (
+                  <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur">
+                    Pulse: {Math.round(pulseMeasure.widthUs)} us ({pulseMeasure.level})
+                  </div>
+                ) : null}
               </div>
           </div>
         </div>
@@ -1537,14 +1917,14 @@ function SamplerFragment() {
             <button
               onClick={startRecording}
               disabled={!isConnected || isRecording}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 rounded-lg border border-sky-500/25 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-100 hover:bg-sky-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Record
             </button>
             <button
               onClick={stopRecording}
               disabled={!isConnected || !isRecording}
-              className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 rounded-lg border border-rose-500/25 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Stop
             </button>
@@ -1552,17 +1932,10 @@ function SamplerFragment() {
 
           <button
             onClick={retransmitSignal}
-            disabled={!isConnected}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!isConnected || isRetransmitting}
+            className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/15 disabled:border-slate-700 disabled:bg-slate-900/40 disabled:text-slate-500 disabled:cursor-not-allowed"
           >
-            Retransmit
-          </button>
-
-          <button
-            onClick={getTimings}
-            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-          >
-            Get Timings
+            {isRetransmitting ? 'Retransmitting…' : 'Retransmit'}
           </button>
         </div>
 
@@ -1646,15 +2019,90 @@ function SamplerFragment() {
               </option>
             ))}
           </select>
-	        </div>
+	      </div>
 	      </div>
 
+        {isRetransmitting ? (
+          <div className="fixed bottom-6 right-6 z-50 w-[360px] rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-2xl backdrop-blur">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">Transmitting</div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {Math.max(0, Math.min(100, Math.round(txProgress.pct || 0)))}% ({txProgress.sent_bytes || 0}/
+                  {txProgress.total_bytes || 0}B)
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded bg-slate-800">
+              <div
+                className="h-full bg-emerald-400/60 transition-[width] duration-150"
+                style={{ width: `${Math.max(0, Math.min(100, txProgress.pct || 0))}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+	      {timingsModalOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+            <div className="w-full max-w-3xl rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-100">Timings</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Space-separated signed microseconds. Positive = high, negative = low. ({timingsList.length} pulses)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTimingsModalOpen(false)}
+                  className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-xs text-slate-200 hover:bg-black/30"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4">
+                {timingsLoading ? (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-200">
+                    Computing timings...
+                  </div>
+                ) : (
+                  <textarea
+                    readOnly
+                    value={timingsDisplay}
+                    className="h-[360px] w-full resize-none rounded-lg border border-slate-800 bg-slate-950/40 p-3 font-mono text-xs text-slate-200 outline-none"
+                  />
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyTextToClipboard(timingsDisplay)}
+                  disabled={timingsLoading || !timingsText.trim()}
+                  className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-200 hover:bg-black/30 disabled:opacity-60"
+                >
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void saveTimingsToStorage()}
+                  disabled={timingsLoading || !timingsText.trim()}
+                  className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  Save .txt
+                </button>
+              </div>
+            </div>
+          </div>
+	      ) : null}
+
 	      {textDialog.open && (
-	        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-	          <div className="bg-slate-900 p-6 rounded-lg w-96 border border-slate-700 shadow-xl">
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+	          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
 	            <h3 className="text-lg font-medium text-slate-100 mb-4">{textDialog.title}</h3>
 	            <input
-	              className="w-full bg-slate-950 border border-slate-700 text-slate-100 rounded p-2 mb-4 font-mono"
+	              className="w-full rounded-lg border border-slate-800 bg-slate-950/40 p-2 mb-4 font-mono text-slate-100"
 	              value={textDialog.value}
 	              autoFocus
 	              onChange={(e) => setTextDialog((prev) => ({ ...prev, value: e.target.value }))}
@@ -1670,13 +2118,13 @@ function SamplerFragment() {
 	            <div className="flex justify-end gap-2">
 	              <button
 	                onClick={closeTextDialog}
-	                className="px-4 py-2 text-slate-300 hover:text-white"
+	                className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-200 hover:bg-black/30"
 	              >
 	                Cancel
 	              </button>
 	              <button
 	                onClick={() => void confirmTextDialog()}
-	                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded"
+	                className="rounded-lg bg-sky-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-200"
 	              >
 	                {textDialog.okLabel}
 	              </button>
@@ -1687,8 +2135,8 @@ function SamplerFragment() {
 
 	      {/* Settings Modal */}
 	      {showSettings && (
-	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-	          <div className="w-96 rounded-lg bg-slate-900 p-6 shadow-xl border border-slate-700">
+	        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4">
+	          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-semibold text-slate-100">Settings</h3>
 
             <div className="mb-6 space-y-3">
