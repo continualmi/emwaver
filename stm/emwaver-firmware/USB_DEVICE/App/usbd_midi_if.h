@@ -41,6 +41,8 @@ void MIDI_QueueStatusPacket_FS(uint16_t status);
 void MIDI_PollTx_FS(void);
 void MIDI_Print_FS(const char* str);
 uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeout);
+// Non-blocking variant: returns 0 on success, 1 if USB TX busy, 2 on invalid args.
+uint8_t MIDI_TrySendResponsePkt_FS(uint8_t* packet, uint16_t length);
 void MIDI_GetUsbStats_FS(uint32_t *tx_ok, uint32_t *tx_busy, uint32_t *tx_timeout, uint32_t *tx_fail, uint32_t *rx_in);
 
 void MIDI_SetBufferType_FS(EMW_Buffer_Type buffer_type);

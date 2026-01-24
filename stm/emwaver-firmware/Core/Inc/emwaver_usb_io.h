@@ -3,6 +3,7 @@
 #include "usbd_midi_if.h"
 
 #define EMW_USB_SendResponsePkt_FS MIDI_SendResponsePkt_FS
+#define EMW_USB_TrySendResponsePkt_FS MIDI_TrySendResponsePkt_FS
 #define EMW_USB_ReadRxBuffer_FS MIDI_ReadRxBuffer_FS
 #define EMW_USB_GetRxBufferBytesAvailable_FS MIDI_GetRxBufferBytesAvailable_FS
 #define EMW_USB_FlushRxBuffer_FS MIDI_FlushRxBuffer_FS

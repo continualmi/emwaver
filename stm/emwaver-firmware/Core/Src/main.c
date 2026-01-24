@@ -62,18 +62,32 @@ TIM_HandleTypeDef htim3;
 static GPIO_TypeDef *samplerPort = GPIOA;
 static uint16_t samplerPin = GPIO_PIN_0;
 volatile uint32_t selectedChannel = TIM_CHANNEL_3; // Default to channel 3 for backward compatibility
+volatile uint16_t selectedChannelMask = TIM_CCER_CC3E;
 
 uint8_t midi_packet[18];
 volatile uint8_t midi_packet_ready = 0;
 
-static uint8_t sampler_buf_a[18];
-static uint8_t sampler_buf_b[18];
-volatile uint8_t* bufferA = sampler_buf_a;
-volatile uint8_t* bufferB = sampler_buf_b;
-volatile uint8_t* currentBuffer = NULL;
-volatile uint8_t* transmitBuffer = NULL;
-volatile int bufferIndex = 0;
-volatile uint8_t bufferReady = 0;
+// Sampler capture ring (18-byte lanes). Ping-pong isn't robust at 5us: any brief USB stall
+// causes overwrite. Keep it bounded but allow a small backlog.
+#define SAMPLER_RING_LANES 16u
+#define SAMPLER_RING_MASK (SAMPLER_RING_LANES - 1u)
+static uint8_t sampler_ring[SAMPLER_RING_LANES][18];
+static uint8_t sampler_overflow_lane[18];
+static volatile uint8_t sampler_ring_head = 0; // lane currently being filled
+static volatile uint8_t sampler_ring_tail = 0; // next lane to transmit
+static volatile uint8_t sampler_ring_count = 0;
+static volatile uint8_t sampler_overflow_active = 0;
+static volatile uint32_t sampler_dropped_lanes = 0;
+
+// State for 1-bit sampler packing (TIM3 ISR).
+static volatile uint8_t sampler_bit_index = 0;
+static volatile uint8_t sampler_byte_index = 0;
+static volatile uint8_t sampler_current_byte = 0;
+
+// State for retransmit playback (TIM3 ISR).
+static volatile uint8_t tx_bit_index = 0;
+static volatile uint8_t tx_current_byte = 0;
+static volatile uint8_t tx_out_enabled = 0;
 
 volatile EMW_Buffer_Type emw_buf_type = EMW_BUFFER_PACKET;
 /* USER CODE END PV */
@@ -212,30 +226,53 @@ static void command_send_err(const char *msg)
 
 static void ISR_Sampler_raw(void)
 {
-    static uint8_t bitIndex = 0;
-    static uint8_t currentByte = 0;
-
-    uint8_t pin_state = HAL_GPIO_ReadPin(samplerPort, samplerPin);
+    // Fast path: direct GPIO read + bounded ring buffering.
+    uint8_t pin_state = ((samplerPort->IDR & samplerPin) != 0u) ? 1u : 0u;
 
     if (pin_state) {
-        currentByte |= (uint8_t)(1u << bitIndex);
-    } else {
-        currentByte &= (uint8_t)~(1u << bitIndex);
+        sampler_current_byte |= (uint8_t)(1u << sampler_bit_index);
     }
 
-    bitIndex++;
-    if (bitIndex >= 8) {
-        currentBuffer[bufferIndex] = currentByte;
-        bufferIndex++;
-        bitIndex = 0;
-        currentByte = 0;
+    sampler_bit_index++;
+    if (sampler_bit_index < 8u) {
+        return;
+    }
 
-        if (bufferIndex >= (int)EMW_LANE_SIZE) {
-            transmitBuffer = currentBuffer;
-            currentBuffer = (currentBuffer == bufferA) ? bufferB : bufferA;
-            bufferIndex = 0;
-            bufferReady = 1;
+    // Completed one byte.
+    sampler_bit_index = 0;
+
+    uint8_t *lane = sampler_overflow_active ? sampler_overflow_lane : sampler_ring[sampler_ring_head];
+    lane[sampler_byte_index] = sampler_current_byte;
+    sampler_current_byte = 0;
+    sampler_byte_index++;
+    if (sampler_byte_index < EMW_LANE_SIZE) {
+        return;
+    }
+
+    // Completed one lane (18 bytes).
+    sampler_byte_index = 0;
+
+    if (sampler_overflow_active) {
+        // We were discarding due to a full ring. If space exists now, resume into the ring.
+        if (sampler_ring_count < SAMPLER_RING_LANES) {
+            sampler_overflow_active = 0;
         }
+        return;
+    }
+
+    uint8_t cnt = sampler_ring_count;
+    if (cnt >= SAMPLER_RING_LANES) {
+        sampler_dropped_lanes++;
+        sampler_overflow_active = 1;
+        return;
+    }
+
+    // Commit filled lane and advance head.
+    sampler_ring_count = (uint8_t)(cnt + 1u);
+    sampler_ring_head = (uint8_t)((uint8_t)(sampler_ring_head + 1u) & (uint8_t)SAMPLER_RING_MASK);
+    if (sampler_ring_count >= SAMPLER_RING_LANES) {
+        // Ring is now full; avoid overwriting unsent lanes.
+        sampler_overflow_active = 1;
     }
 }
 
@@ -282,43 +319,50 @@ static void stopPWM_TIM2(uint32_t channel)
 
 static void ISR_Sampler_writing(void)
 {
-    static uint8_t bitIndex = 0;
-    static uint8_t currentByte = 0;
-
-    if (EMW_USB_GetRxBufferBytesAvailable_FS() > 0) {
-        if (bitIndex == 0) {
-            (void)EMW_USB_ReadRxBuffer_FS(&currentByte, 1);
+    // Fast playback: cache 1 byte and toggle only on state changes.
+    if (EMW_USB_GetRxBufferBytesAvailable_FS() > 0u) {
+        if (tx_bit_index == 0u) {
+            (void)EMW_USB_ReadRxBuffer_FS((uint8_t *)&tx_current_byte, 1);
         }
 
-        if (currentByte & (uint8_t)(1u << bitIndex)) {
-            startPWM_TIM2(selectedChannel);
+        uint8_t bit = (uint8_t)((tx_current_byte >> tx_bit_index) & 1u);
+        if (bit != 0u) {
+            if (!tx_out_enabled) {
+                TIM2->CCER |= selectedChannelMask;
+                tx_out_enabled = 1u;
+            }
         } else {
-            stopPWM_TIM2(selectedChannel);
+            if (tx_out_enabled) {
+                TIM2->CCER &= (uint16_t)~selectedChannelMask;
+                tx_out_enabled = 0u;
+            }
         }
 
-        bitIndex++;
-        if (bitIndex > 7) {
-            bitIndex = 0;
+        tx_bit_index = (uint8_t)(tx_bit_index + 1u);
+        if (tx_bit_index >= 8u) {
+            tx_bit_index = 0u;
         }
     } else {
-        stopPWM_TIM2(selectedChannel);
+        if (tx_out_enabled) {
+            TIM2->CCER &= (uint16_t)~selectedChannelMask;
+            tx_out_enabled = 0u;
+        }
+        tx_bit_index = 0u;
     }
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+// TIM3 hot path (called directly from the TIM3 IRQ handler).
+void EMW_TIM3_Tick_ISR(void)
 {
-    if (htim == &htim3) {
-        switch (EMW_USB_GetBufferType_FS()) {
-            case EMW_BUFFER_CIRCULAR:
-                ISR_Sampler_writing();
-                break;
-            case EMW_BUFFER_DOUBLE:
-                ISR_Sampler_raw();
-                break;
-            case EMW_BUFFER_PACKET:
-            default:
-                break;
-        }
+    // Keep this extremely small: 5us tick at 48MHz => ~240 cycles budget.
+    EMW_Buffer_Type t = emw_buf_type;
+    if (t == EMW_BUFFER_CIRCULAR) {
+        ISR_Sampler_writing();
+        return;
+    }
+    if (t == EMW_BUFFER_DOUBLE && ism_mode == ISM_MODE_RAW_SAMPLING) {
+        ISR_Sampler_raw();
+        return;
     }
 }
 
@@ -462,16 +506,17 @@ static void stop_sampling(void)
     HAL_TIM_Base_Stop_IT(&htim3);
     EMW_USB_SetBufferType_FS(EMW_BUFFER_PACKET);
 
-    bufferA = sampler_buf_a;
-    bufferB = sampler_buf_b;
-    currentBuffer = NULL;
-    transmitBuffer = NULL;
-    bufferIndex = 0;
-    bufferReady = 0;
+    sampler_ring_head = 0;
+    sampler_ring_tail = 0;
+    sampler_ring_count = 0;
+    sampler_overflow_active = 0;
+    sampler_bit_index = 0;
+    sampler_byte_index = 0;
+    sampler_current_byte = 0;
     ism_mode = ISM_MODE_IDLE;
 }
 
-static void send_sampling_superframe(const uint8_t *stream_lane)
+static uint8_t try_send_sampling_superframe(const uint8_t *stream_lane)
 {
     uint8_t frame[EMW_SUPERFRAME_SIZE] = {0};
     if (pending_cmd_ready) {
@@ -482,8 +527,12 @@ static void send_sampling_superframe(const uint8_t *stream_lane)
         memcpy(&frame[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
     }
 
-    (void)EMW_USB_SendResponsePkt_FS(frame, (uint16_t)sizeof(frame), USB_TIMEOUT);
-    pending_cmd_ready = 0;
+    uint8_t res = EMW_USB_TrySendResponsePkt_FS(frame, (uint16_t)sizeof(frame));
+    if (res == 0u) {
+        pending_cmd_ready = 0;
+        return 1u;
+    }
+    return 0u;
 }
 
 static bool decode_encoded_pin(int encoded, GPIO_TypeDef **out_port, uint16_t *out_pin)
@@ -1294,11 +1343,18 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
       if (ism_mode == ISM_MODE_RAW_SAMPLING) {
-          if (bufferReady == 1) {
-              // Only transmit when we have a fresh 64B sampler chunk.
-              // Any pending command response is piggybacked in lane0.
-              send_sampling_superframe((const uint8_t *)transmitBuffer);
-              bufferReady = 0;
+          if (sampler_ring_count > 0u) {
+              uint8_t lane_index = sampler_ring_tail;
+              const uint8_t *lane = (const uint8_t *)sampler_ring[lane_index];
+              // Non-blocking: if USB is busy we'll retry next loop.
+              if (try_send_sampling_superframe(lane)) {
+                  __disable_irq();
+                  sampler_ring_tail = (uint8_t)((uint8_t)(sampler_ring_tail + 1u) & (uint8_t)SAMPLER_RING_MASK);
+                  if (sampler_ring_count > 0u) {
+                      sampler_ring_count--;
+                  }
+                  __enable_irq();
+              }
           }
       }
 
@@ -1787,10 +1843,17 @@ adc_done_bin:
                   samplerPort = port;
                   samplerPin = pin_mask;
 
-                  currentBuffer = sampler_buf_a;
-                  transmitBuffer = NULL;
-                  bufferIndex = 0;
-                  bufferReady = 0;
+                  __disable_irq();
+                  sampler_ring_head = 0;
+                  sampler_ring_tail = 0;
+                  sampler_ring_count = 0;
+                  sampler_overflow_active = 0;
+                  sampler_dropped_lanes = 0;
+                  sampler_bit_index = 0;
+                  sampler_byte_index = 0;
+                  sampler_current_byte = 0;
+                  __enable_irq();
+
                   EMW_USB_SetBufferType_FS(EMW_BUFFER_DOUBLE);
                   ism_mode = ISM_MODE_RAW_SAMPLING;
                   HAL_TIM_Base_Start_IT(&htim3);
@@ -1937,6 +2000,10 @@ adc_done_bin:
               }
               setDutyCycle_TIM2(tim_channel, duty_percent);
               selectedChannel = tim_channel;
+              selectedChannelMask = tim2_ccer_mask_from_channel(tim_channel);
+              tx_bit_index = 0u;
+              tx_current_byte = 0u;
+              tx_out_enabled = 0u;
               (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
 
               EMW_USB_InitRxBuffer_FS();
@@ -2205,7 +2272,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 480-1;
+  htim3.Init.Period = 240-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)

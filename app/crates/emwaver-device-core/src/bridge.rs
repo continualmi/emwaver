@@ -927,7 +927,7 @@ pub async fn dispatch_request(
                 .map_err(|_| anyhow!("buffer lock poisoned"))?;
             let bytes = buffer::rx_snapshot(&*snapshot);
             drop(snapshot);
-            Ok(json!({ "timings": sampler::build_signed_raw_timings(&bytes, 10) }))
+            Ok(json!({ "timings": sampler::build_signed_raw_timings(&bytes, 5) }))
         }
         "buffer_get_rx_counter" => {
             let snapshot = state

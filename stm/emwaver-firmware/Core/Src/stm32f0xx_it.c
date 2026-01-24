@@ -150,9 +150,14 @@ void SysTick_Handler(void)
 void TIM3_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM3_IRQn 0 */
-
   /* USER CODE END TIM3_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim3);
+  // Hot path: bypass HAL_TIM_IRQHandler to keep the 5us tick small.
+  // We only use TIM3 update interrupts in this firmware.
+  if ((TIM3->SR & TIM_SR_UIF) != 0u) {
+    TIM3->SR &= (uint16_t)~TIM_SR_UIF;
+    extern void EMW_TIM3_Tick_ISR(void);
+    EMW_TIM3_Tick_ISR();
+  }
   /* USER CODE BEGIN TIM3_IRQn 1 */
 
   /* USER CODE END TIM3_IRQn 1 */

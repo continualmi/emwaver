@@ -374,6 +374,50 @@ uint8_t MIDI_SendResponsePkt_FS(uint8_t* packet, uint16_t length, uint32_t timeo
   return 0;
 }
 
+uint8_t MIDI_TrySendResponsePkt_FS(uint8_t* packet, uint16_t length)
+{
+  if (length != EMW_FRAME_SIZE || packet == NULL) {
+    usb_tx_fail++;
+    return 2u;
+  }
+
+  if (USBD_MIDI_IsTxBusy(&hUsbDeviceFS)) {
+    usb_tx_busy++;
+    return 1u;
+  }
+
+  uint8_t encoded[EMW_ENCODED_BYTES];
+  encode_payload_7bit_fixed(packet, encoded);
+
+  uint8_t sysex[EMW_SYSEX_BYTES];
+  sysex[0] = 0xF0;
+  sysex[1] = 0x7D;
+  sysex[2] = 'E';
+  sysex[3] = 'M';
+  sysex[4] = 'W';
+  memcpy(&sysex[5], encoded, EMW_ENCODED_BYTES);
+  sysex[EMW_SYSEX_BYTES - 1u] = 0xF7;
+
+  // Pack 48 bytes into 16 USB-MIDI event packets (4 bytes each) => exactly 64 USB bytes.
+  for (uint32_t i = 0; i < 16u; i++) {
+    uint8_t cin = (i == 15u) ? 0x7u : 0x4u;
+    midi_tx_buf[i * 4u + 0u] = (uint8_t)(cin & 0x0Fu);
+    midi_tx_buf[i * 4u + 1u] = sysex[i * 3u + 0u];
+    midi_tx_buf[i * 4u + 2u] = sysex[i * 3u + 1u];
+    midi_tx_buf[i * 4u + 3u] = sysex[i * 3u + 2u];
+  }
+
+  USBD_MIDI_SetTxBuffer(&hUsbDeviceFS, midi_tx_buf, (uint16_t)sizeof(midi_tx_buf));
+  uint8_t res = USBD_MIDI_TransmitPacket(&hUsbDeviceFS);
+  if (res != USBD_OK) {
+    usb_tx_fail++;
+    return 2u;
+  }
+
+  usb_tx_ok++;
+  return 0u;
+}
+
 void MIDI_GetUsbStats_FS(uint32_t *tx_ok, uint32_t *tx_busy, uint32_t *tx_timeout, uint32_t *tx_fail, uint32_t *rx_in)
 {
   if (tx_ok) *tx_ok = usb_tx_ok;
