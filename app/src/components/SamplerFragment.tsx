@@ -859,11 +859,11 @@ function SamplerFragment() {
 		    setIsRecording(false);
 		  };
 
-				  const retransmitSignal = async () => {
-				    if (!isConnected) {
-				      alert('Not connected to device');
-				      return;
-				    }
+			  const retransmitSignal = async () => {
+			    if (!isConnected) {
+			      alert('Not connected to device');
+			      return;
+			    }
 
 				    const bytes = await safeInvoke<number[]>('buffer_get_bytes');
 				    const buffer = bytes?.length ? new Uint8Array(bytes) : new Uint8Array();
@@ -881,20 +881,36 @@ function SamplerFragment() {
 
 	    try {
 	      // Binary: EMW_OP_TRANSMIT (0x80) / START (0x00)
-	      const freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
-	      const dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
-	      if (freqHz < 1) {
-	        alert('Invalid PWM frequency');
-	        return;
+	      // Mini-frame extension:
+	      //   [0]=0x80 [1]=0x00 [2]=pin [3]=duty% [4..7]=freqHz (u32 LE)
+	      let dutyPercent = 100;
+	      let freqHz = 0;
+	      if (pwmEnabled) {
+	        freqHz = parsePwmIntOrDefault(`${pwmFreqHz}`, DEFAULT_PWM_FREQ_HZ);
+	        dutyPercent = parsePwmIntOrDefault(`${pwmDutyPercent}`, DEFAULT_PWM_DUTY_PERCENT);
+	        if (freqHz < 1) {
+	          alert('Invalid PWM frequency');
+	          return;
+	        }
+	        if (dutyPercent < 1 || dutyPercent > 100) {
+	          alert('Invalid PWM duty (1-100)');
+	          return;
+	        }
+	        setPwmFreqHz(freqHz);
+	        setPwmDutyPercent(dutyPercent);
 	      }
-	      if (dutyPercent < 1 || dutyPercent > 100) {
-	        alert('Invalid PWM duty (1-100)');
-	        return;
-	      }
-	      setPwmFreqHz(freqHz);
-	      setPwmDutyPercent(dutyPercent);
-	      // NOTE: current STM32 transmit path ignores freq/duty; kept for UI validation only.
-	      await sendPacketNoWait(new Uint8Array([0x80, 0x00, pinNumber & 0xff]));
+
+	      const startPkt = new Uint8Array(8);
+	      startPkt[0] = 0x80;
+	      startPkt[1] = 0x00;
+	      startPkt[2] = pinNumber & 0xff;
+	      startPkt[3] = dutyPercent & 0xff;
+	      const hz = freqHz >>> 0;
+	      startPkt[4] = hz & 0xff;
+	      startPkt[5] = (hz >>> 8) & 0xff;
+	      startPkt[6] = (hz >>> 16) & 0xff;
+	      startPkt[7] = (hz >>> 24) & 0xff;
+	      await sendPacketNoWait(startPkt);
 
       // Use transmitBuffer method (matching Android/iOS)
       await transmitBuffer(buffer);
