@@ -83,6 +83,48 @@ Keep on-wire semantics stable:
 - Binary opcode protocol inside the 64B frames (no command strings)
 - status/flow-control frames (e.g. `BS` for retransmit pacing)
 
+### Mini-Frame (Single-Callback) Plan
+
+We are restructuring the USB MIDI SysEx tunnel to be:
+
+- Predictable: 1 USB OUT callback == 1 EMW frame
+- Simple: no SysEx accumulation, no multi-transaction decode bursts
+- Low CPU/IRQ load: bounded work inside the USB receive callback
+
+Motivation
+
+- The current 128B superframe (2x64 lanes) requires a full SysEx message that typically spans multiple USB bulk OUT transactions.
+- That forces the firmware to accumulate SysEx bytes until `0xF7`, then run a large decode/copy burst.
+- During retransmit (timed output), this receive-side burst work competes with timer ISR timing and can create glitches.
+
+New on-wire frame (fixed-size)
+
+- Always send exactly 64 USB bytes per OUT transaction.
+- This is 16 USB-MIDI event packets (4 bytes each).
+- Each event packet carries 3 MIDI bytes => 48 MIDI bytes per transaction.
+- Those 48 MIDI bytes are a complete SysEx message (no spanning):
+  - `F0 7D 'E' 'M' 'W' <42 encoded bytes> F7`
+  - Note: we drop the previous `0x01` version byte to fit cleanly.
+- The `<42 encoded bytes>` use the existing 7-bit prefix/MSB scheme.
+- 42 encoded bytes decode to 36 raw bytes.
+- 36 raw bytes split into two 18-byte lanes:
+  - cmd lane: 18 bytes
+  - stream/sampler lane: 18 bytes
+
+Behavioral rules
+
+- Firmware RX: single-pass decode directly in the USB MIDI receive callback.
+  - No `sysex_buf`, no `sysex_feed_byte`, no `handle_complete_sysex`.
+  - If `Len != 64` or header mismatches, ignore the transaction.
+- Firmware protocol: all requests/responses must fit within the 18-byte cmd lane.
+  - The host is responsible for not sending oversized requests.
+  - Firmware does not fragment and does not attempt to “detect/repair” oversize requests.
+
+Throughput target
+
+- Retransmit needs ~100 kbit/s (~12.5 kB/s).
+- With an 18-byte stream lane, sending 1 frame per 1ms yields ~18 kB/s (~144 kbit/s), which meets the target.
+
 ## Scripts
 
 Scripts are user-authored extension bundles (manifest + EMWaver scripts) that plug into the Script Engine sandbox.
