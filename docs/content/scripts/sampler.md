@@ -4,7 +4,7 @@ title: Sampler
 
 # Sampler (desktop)
 
-- `await Sampler.start({ pin, clearBefore?, invert? })` → `{ id, startPacket }`
+- `await Sampler.start({ pin, periodUs?, clearBefore?, invert? })` → `{ id, startPacket, periodUs }`
 - `await Sampler.stop(id?)`
 - `await Sampler.status(id?)` → `{ active, pin?, packetCount, lenBytes }`
 - `await Sampler.capture({ pin, durationMs, clearBefore?, invert? })` → `{ bytes, startPacket, endPacket, bufferLenBytes }`

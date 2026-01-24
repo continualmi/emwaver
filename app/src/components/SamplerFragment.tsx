@@ -69,6 +69,7 @@ const PWM_PREFS_MIGRATED_KEY = 'sampler.pwm.prefsMigrated.v2';
 const INVERT_CAPTURE_KEY = 'sampler.capture.invert';
 const LEGACY_INVERT_RECORDING_KEY = 'sampler.settings.invertRecording';
 const SETTINGS_RESOLUTION_KEY = 'sampler.settings.resolution';
+const SETTINGS_SAMPLE_PERIOD_US_KEY = 'sampler.settings.samplePeriodUs';
 const SETTINGS_REFRESH_KEY = 'sampler.settings.refreshRate';
 const SETTINGS_MAX_SAMPLES_KEY = 'sampler.settings.maxSamples';
 const SETTINGS_EVENT = 'emwaver-settings-change';
@@ -345,6 +346,11 @@ function SamplerFragment() {
     const stored = Number.parseInt(localStorage.getItem(SETTINGS_RESOLUTION_KEY) || '1000', 10);
     return Number.isNaN(stored) ? 1000 : stored;
   });
+  const [samplePeriodUs, setSamplePeriodUs] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(SETTINGS_SAMPLE_PERIOD_US_KEY) || '5', 10);
+    if (Number.isNaN(stored)) return 5;
+    return Math.max(5, Math.min(255, stored));
+  });
   const [maxSamples, setMaxSamples] = useState(() => {
     const stored = Number.parseInt(localStorage.getItem(SETTINGS_MAX_SAMPLES_KEY) || '393216', 10);
     return Number.isNaN(stored) ? 393216 : stored;
@@ -454,6 +460,10 @@ function SamplerFragment() {
   useEffect(() => {
     localStorage.setItem(SETTINGS_RESOLUTION_KEY, `${chartResolution}`);
   }, [chartResolution]);
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_SAMPLE_PERIOD_US_KEY, `${samplePeriodUs}`);
+  }, [samplePeriodUs]);
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_REFRESH_KEY, `${refreshRate}`);
@@ -1054,11 +1064,12 @@ function SamplerFragment() {
           if (uplotRef.current) {
             uplotRef.current.setData([new Float64Array(), new Float32Array()]);
           }
-			    resetChartZoom();
+	    resetChartZoom();
           autoFitXRef.current = true;
 
 	    // Binary: EMW_OP_SAMPLE (0x60) / START (0x00)
-	    await sendPacketNoWait(new Uint8Array([0x60, 0x00, pinNumber & 0xff]));
+	    const tickUs = Math.max(5, Math.min(255, Math.trunc(samplePeriodUs) || 5));
+	    await sendPacketNoWait(new Uint8Array([0x60, 0x00, pinNumber & 0xff, tickUs & 0xff]));
 
 	    setIsRecording(true);
 	    setHasUnsavedChanges(true);
@@ -1099,7 +1110,7 @@ function SamplerFragment() {
 
 	      // Binary: EMW_OP_TRANSMIT (0x80) / START (0x00)
 	      // Mini-frame extension:
-	      //   [0]=0x80 [1]=0x00 [2]=pin [3]=duty% [4..7]=freqHz (u32 LE)
+	      //   [0]=0x80 [1]=0x00 [2]=pin [3]=duty% [4..7]=freqHz (u32 LE) [8]=tickUs
 	      let dutyPercent = 100;
 	      let freqHz = 0;
 	      if (pwmEnabled) {
@@ -1117,7 +1128,7 @@ function SamplerFragment() {
 	        setPwmDutyPercent(dutyPercent);
 	      }
 
-	      const startPkt = new Uint8Array(8);
+	      const startPkt = new Uint8Array(9);
 	      startPkt[0] = 0x80;
 	      startPkt[1] = 0x00;
 	      startPkt[2] = pinNumber & 0xff;
@@ -1127,6 +1138,7 @@ function SamplerFragment() {
 	      startPkt[5] = (hz >>> 8) & 0xff;
 	      startPkt[6] = (hz >>> 16) & 0xff;
 	      startPkt[7] = (hz >>> 24) & 0xff;
+	      startPkt[8] = Math.max(5, Math.min(255, Math.trunc(samplePeriodUs) || 5)) & 0xff;
 	      await sendPacketNoWait(startPkt);
 
       // Use transmitBuffer method (matching Android/iOS)
@@ -1144,7 +1156,9 @@ function SamplerFragment() {
 			    setTimingsLoading(true);
 			    setTimingsText('');
 			    try {
-			      const timings = await safeInvoke<string>('buffer_build_signed_raw_timings');
+			      const timings = await safeInvoke<string>('buffer_build_signed_raw_timings', {
+			        sample_period_us: Math.max(5, Math.min(255, Math.trunc(samplePeriodUs) || 5)),
+			      });
 			      if (!timings) {
 			        setTimingsModalOpen(false);
 			        await dialog.alert('Buffer is empty');
@@ -2153,6 +2167,25 @@ function SamplerFragment() {
                   onChange={(event) => setInvertCaptureDuringRecording(event.target.checked)}
                   className="h-4 w-4 accent-sky-500"
                 />
+              </label>
+
+              <label className="flex flex-col gap-2 text-sm text-slate-200">
+                <div className="flex flex-col">
+                  <span>Sample period (us)</span>
+                  <span className="text-xs text-slate-500">Used for capture + retransmit pacing. Minimum: 5us.</span>
+                </div>
+                <select
+                  value={`${samplePeriodUs}`}
+                  onChange={(event) => {
+                    const next = Number.parseInt(event.target.value, 10);
+                    setSamplePeriodUs(Number.isNaN(next) ? 5 : Math.max(5, Math.min(255, next)));
+                  }}
+                  className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                </select>
               </label>
 
               <label className="flex flex-col gap-1 text-sm text-slate-200">

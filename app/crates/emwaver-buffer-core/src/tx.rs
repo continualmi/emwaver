@@ -104,6 +104,25 @@ impl UsbTxProfile {
             buffer_low_threshold: 200,
         }
     }
+
+    pub fn from_tick_us(tick_us: i64) -> Self {
+        let tick_us = tick_us.clamp(5, 255);
+        let period_ns = tick_us.saturating_mul(144_000);
+        let mut flow_time_delta_ns = period_ns / 6;
+        if flow_time_delta_ns < 50_000 {
+            flow_time_delta_ns = 50_000;
+        }
+        if flow_time_delta_ns > 1_000_000 {
+            flow_time_delta_ns = 1_000_000;
+        }
+        Self {
+            packet_size: crate::packet::PACKET_SIZE,
+            period_ns,
+            flow_time_delta_ns,
+            buffer_high_threshold: 300,
+            buffer_low_threshold: 200,
+        }
+    }
 }
 
 pub fn usb_adjust_deadline_ns(profile: UsbTxProfile, deadline_ns: i64, last_status: i32) -> i64 {
