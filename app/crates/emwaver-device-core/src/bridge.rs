@@ -233,6 +233,8 @@ pub struct BridgeState {
     rx_sysex_overflows: Arc<AtomicU64>,
     rx_sysex_restarts: Arc<AtomicU64>,
     stream_capture: Arc<AtomicBool>,
+    sampler_tick_us: Arc<AtomicU64>,
+    tx_tick_us: Arc<AtomicU64>,
     // During long host->device TX bursts, commands are injected into the next stream superframe.
     tx_streaming: Arc<AtomicBool>,
     tx_pending_cmd: Arc<Mutex<Option<[u8; LANE_SIZE]>>>,
@@ -927,7 +929,19 @@ pub async fn dispatch_request(
                 .map_err(|_| anyhow!("buffer lock poisoned"))?;
             let bytes = buffer::rx_snapshot(&*snapshot);
             drop(snapshot);
-            Ok(json!({ "timings": sampler::build_signed_raw_timings(&bytes, 5) }))
+
+            let sample_period_us = req
+                .params
+                .get("sample_period_us")
+                .and_then(|v| v.as_u64())
+                .filter(|v| *v > 0)
+                .unwrap_or_else(|| state.sampler_tick_us.load(Ordering::Relaxed));
+            let sample_period_us = sample_period_us.clamp(5, 255) as usize;
+
+            Ok(json!({
+                "timings": sampler::build_signed_raw_timings(&bytes, sample_period_us),
+                "sample_period_us": sample_period_us,
+            }))
         }
         "buffer_get_rx_counter" => {
             let snapshot = state
@@ -984,6 +998,8 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
         rx_sysex_overflows: Arc::new(AtomicU64::new(0)),
         rx_sysex_restarts: Arc::new(AtomicU64::new(0)),
         stream_capture: Arc::new(AtomicBool::new(false)),
+        sampler_tick_us: Arc::new(AtomicU64::new(5)),
+        tx_tick_us: Arc::new(AtomicU64::new(5)),
         tx_streaming: Arc::new(AtomicBool::new(false)),
         tx_pending_cmd: Arc::new(Mutex::new(None)),
         tx_burst_in_flight: Arc::new(AsyncMutex::new(())),
@@ -1452,10 +1468,18 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
 
 fn maybe_update_stream_capture(state: &BridgeState, bytes: &[u8]) {
     // Binary sampler opcodes (Desktop uses packet-only transport).
-    // EMW_OP_SAMPLE (0x60): [0]=op, [1]=sub, [2]=pin (start only)
+    // EMW_OP_SAMPLE (0x60):
+    //   START: [0]=op, [1]=0x00, [2]=pin, [3]=tick_us (optional, 0=keep)
+    //   STOP:  [0]=op, [1]=0x01
     if bytes.len() >= 2 && bytes[0] == 0x60 {
         match bytes[1] {
             0x00 => {
+                if bytes.len() >= 4 {
+                    let tick = bytes[3] as u64;
+                    if tick != 0 {
+                        state.sampler_tick_us.store(tick, Ordering::Relaxed);
+                    }
+                }
                 state.stream_capture.store(true, Ordering::Relaxed);
                 return;
             }
@@ -1464,6 +1488,15 @@ fn maybe_update_stream_capture(state: &BridgeState, bytes: &[u8]) {
                 return;
             }
             _ => {}
+        }
+    }
+
+    // Retransmit tick selection (host->device start packet).
+    // EMW_OP_TRANSMIT (0x80): START: [0]=op, [1]=0x00, ... [8]=tick_us (optional, 0=keep)
+    if bytes.len() >= 9 && bytes[0] == 0x80 && bytes[1] == 0x00 {
+        let tick = bytes[8] as u64;
+        if tick != 0 {
+            state.tx_tick_us.store(tick, Ordering::Relaxed);
         }
     }
 
@@ -2036,7 +2069,8 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
         (saved_rx, saved_rx_ts, saved_counter)
     };
 
-    let profile = tx::UsbTxProfile::default();
+    let tick_us = state.tx_tick_us.load(Ordering::Relaxed).clamp(5, 255) as i64;
+    let profile = tx::UsbTxProfile::from_tick_us(tick_us);
     let packet_size = PACKET_SIZE;
     let total_bytes = data.len();
 

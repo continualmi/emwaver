@@ -63,6 +63,7 @@ static GPIO_TypeDef *samplerPort = GPIOA;
 static uint16_t samplerPin = GPIO_PIN_0;
 volatile uint32_t selectedChannel = TIM_CHANNEL_3; // Default to channel 3 for backward compatibility
 volatile uint16_t selectedChannelMask = TIM_CCER_CC3E;
+static volatile uint8_t emw_tick_us = 5u;
 
 uint8_t midi_packet[18];
 volatile uint8_t midi_packet_ready = 0;
@@ -514,6 +515,36 @@ static void stop_sampling(void)
     sampler_byte_index = 0;
     sampler_current_byte = 0;
     ism_mode = ISM_MODE_IDLE;
+}
+
+static void tim3_set_tick_us(uint8_t requested_us)
+{
+    // TIM3 clock is 48 MHz => 48 ticks per microsecond.
+    // Keep sampler/retransmit resolution bounded: min 5us.
+    uint8_t us = requested_us;
+    if (us < 5u) {
+        us = 5u;
+    }
+
+    uint32_t ticks = (uint32_t)us * 48u;
+    if (ticks < 2u) {
+        ticks = 2u;
+    }
+    if (ticks > 0x10000u) {
+        ticks = 0x10000u;
+    }
+
+    uint16_t arr = (uint16_t)(ticks - 1u);
+
+    __disable_irq();
+    uint16_t cr1 = TIM3->CR1;
+    TIM3->CR1 = (uint16_t)(cr1 & (uint16_t)~TIM_CR1_CEN);
+    TIM3->ARR = arr;
+    TIM3->EGR = TIM_EGR_UG;
+    TIM3->SR &= (uint16_t)~TIM_SR_UIF;
+    TIM3->CR1 = cr1;
+    emw_tick_us = us;
+    __enable_irq();
 }
 
 static uint8_t try_send_sampling_superframe(const uint8_t *stream_lane)
@@ -1828,6 +1859,7 @@ adc_done_bin:
               uint8_t sub = midi_packet[1];
               if (sub == EMW_SAMPLE_START) {
                   uint8_t pin_enc = midi_packet[2];
+                  uint8_t tick_us = midi_packet[3];
                   if (pin_enc > 31u) {
                       command_send_err(NULL);
                       break;
@@ -1842,6 +1874,10 @@ adc_done_bin:
                   configurePin(port, pin_mask, GPIO_MODE_INPUT, pull);
                   samplerPort = port;
                   samplerPin = pin_mask;
+
+                  if (tick_us != 0u) {
+                      tim3_set_tick_us(tick_us);
+                  }
 
                   __disable_irq();
                   sampler_ring_head = 0;
@@ -1975,6 +2011,7 @@ adc_done_bin:
               // Optional configuration (mini-frame):
               //   [3] duty_percent (1..100, 0 => default)
               //   [4..7] pwm_hz (u32 LE, 0 => keep current/default)
+              //   [8] tick_us (>=5, 0 => keep current)
               uint8_t duty_percent = midi_packet[3];
               if (duty_percent == 0u) {
                   duty_percent = 50u;
@@ -1983,6 +2020,7 @@ adc_done_bin:
                   duty_percent = 100u;
               }
               uint32_t pwm_hz = emw_u32_le(&midi_packet[4]);
+              uint8_t tick_us = midi_packet[8];
 
               uint32_t tim_channel = 0;
               uint16_t gpio_pin = 0;
@@ -2005,6 +2043,10 @@ adc_done_bin:
               tx_current_byte = 0u;
               tx_out_enabled = 0u;
               (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
+
+              if (tick_us != 0u) {
+                  tim3_set_tick_us(tick_us);
+              }
 
               EMW_USB_InitRxBuffer_FS();
               EMW_USB_SetBufferType_FS(EMW_BUFFER_CIRCULAR);

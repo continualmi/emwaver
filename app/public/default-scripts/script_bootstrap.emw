@@ -633,6 +633,26 @@ Sampler.__scriptShim = true;
       throw new Error('Sampler already active');
     }
 
+    var periodUs = 0;
+    if (opts) {
+      // Support a few names; keep it simple and bounded.
+      periodUs = Number(opts.periodUs);
+      if (!isFinite(periodUs) || periodUs < 0) {
+        periodUs = Number(opts.resolutionUs);
+      }
+      if (!isFinite(periodUs) || periodUs < 0) {
+        periodUs = Number(opts.tickUs);
+      }
+      if (!isFinite(periodUs) || periodUs < 0) {
+        periodUs = 0;
+      }
+    }
+    periodUs = Math.floor(periodUs);
+    if (periodUs !== 0) {
+      if (periodUs < 5) periodUs = 5;
+      if (periodUs > 255) periodUs = 255;
+    }
+
     var clearBefore = !!(opts && opts.clearBefore);
     var invert = !!(opts && opts.invert);
 
@@ -642,11 +662,11 @@ Sampler.__scriptShim = true;
     await Sampler.setInvertRx(invert);
 
     var startPacket = await Sampler.packetCount();
-    await __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_START, pin & 0xff]), 1500);
+    await __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_START, pin & 0xff, periodUs & 0xff]), 1500);
 
     var id = __samplerMakeId();
-    __samplerActiveSession = { id: id, pin: pin, startPacket: startPacket };
-    return { id: id, startPacket: startPacket };
+    __samplerActiveSession = { id: id, pin: pin, startPacket: startPacket, periodUs: periodUs };
+    return { id: id, startPacket: startPacket, periodUs: periodUs };
   };
 
   Sampler.stop = async function (id) {

@@ -743,9 +743,13 @@ async fn buffer_write_file(
 #[tauri::command]
 async fn buffer_build_signed_raw_timings(
     state: State<'_, DeviceState>,
+    sample_period_us: Option<u64>,
 ) -> Result<String, String> {
     let value = state
-        .rpc("buffer_build_signed_raw_timings", serde_json::json!({}))
+        .rpc(
+            "buffer_build_signed_raw_timings",
+            serde_json::json!({ "sample_period_us": sample_period_us }),
+        )
         .await?;
     Ok(value.get("timings").and_then(|v| v.as_str()).unwrap_or("").to_string())
 }
