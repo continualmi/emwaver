@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 const SYSEX_START: u8 = 0xF0;
 const SYSEX_END: u8 = 0xF7;
@@ -9,7 +9,10 @@ const PROTO_VERSION: u8 = 0x01;
 pub(crate) const LANE_SIZE: usize = 64;
 pub(crate) const SUPERFRAME_SIZE: usize = 128;
 
-pub(crate) fn build_superframe(cmd_lane: [u8; LANE_SIZE], stream_lane: [u8; LANE_SIZE]) -> [u8; SUPERFRAME_SIZE] {
+pub(crate) fn build_superframe(
+    cmd_lane: [u8; LANE_SIZE],
+    stream_lane: [u8; LANE_SIZE],
+) -> [u8; SUPERFRAME_SIZE] {
     let mut sf = [0u8; SUPERFRAME_SIZE];
     sf[0..LANE_SIZE].copy_from_slice(&cmd_lane);
     sf[LANE_SIZE..SUPERFRAME_SIZE].copy_from_slice(&stream_lane);
@@ -57,7 +60,9 @@ pub(crate) fn decode_superframe(msg: &[u8]) -> Result<Option<[u8; SUPERFRAME_SIZ
     if msg[0] != SYSEX_START || *msg.last().unwrap() != SYSEX_END {
         return Ok(None);
     }
-    if msg[1] != MFR_NON_COMMERCIAL || msg.get(2..5) != Some(&PROTO_MAGIC) || msg[5] != PROTO_VERSION
+    if msg[1] != MFR_NON_COMMERCIAL
+        || msg.get(2..5) != Some(&PROTO_MAGIC)
+        || msg[5] != PROTO_VERSION
     {
         return Ok(None);
     }

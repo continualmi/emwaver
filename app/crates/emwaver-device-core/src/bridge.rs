@@ -16,15 +16,18 @@
  */
 
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc, Mutex,
 };
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use base64::Engine as _;
 #[cfg(target_os = "macos")]
-use coremidi::{Client as CoreMidiClient, Destination, Destinations, InputPortWithContext, OutputPort, PacketBuffer, Protocol, Source, Sources};
+use coremidi::{
+    Client as CoreMidiClient, Destination, Destinations, InputPortWithContext, OutputPort,
+    PacketBuffer, Protocol, Source, Sources,
+};
 #[cfg(not(target_os = "macos"))]
 use midir::{Ignore, MidiInput, MidiOutput};
 use rusb::UsbContext;
@@ -108,7 +111,11 @@ impl<const N: usize> PacketLog<N> {
         self.kinds.push(kind);
     }
 
-    fn read_since(&self, packet_index: u64, max_packets: usize) -> (Vec<u8>, Vec<u64>, Vec<u8>, u64, u64) {
+    fn read_since(
+        &self,
+        packet_index: u64,
+        max_packets: usize,
+    ) -> (Vec<u8>, Vec<u64>, Vec<u8>, u64, u64) {
         let available_packets = self.packet_count();
         if available_packets == 0 || max_packets == 0 || packet_index >= available_packets {
             return (
@@ -129,8 +136,16 @@ impl<const N: usize> PacketLog<N> {
 
         let ts_start = packet_index as usize;
         let ts_end = ts_start + take_packets;
-        let ts_ms = self.ts_ms.get(ts_start..ts_end).unwrap_or_default().to_vec();
-        let kinds = self.kinds.get(ts_start..ts_end).unwrap_or_default().to_vec();
+        let ts_ms = self
+            .ts_ms
+            .get(ts_start..ts_end)
+            .unwrap_or_default()
+            .to_vec();
+        let kinds = self
+            .kinds
+            .get(ts_start..ts_end)
+            .unwrap_or_default()
+            .to_vec();
 
         (
             data,
@@ -442,7 +457,8 @@ pub fn send_json_line(tx: &mpsc::UnboundedSender<Vec<u8>>, value: &impl Serializ
 }
 
 fn emit_event(state: &BridgeState, event: &str, data: serde_json::Value) -> Result<()> {
-    let mut buf = serde_json::to_vec(&BridgeEvent { event, data }).context("failed to encode json")?;
+    let mut buf =
+        serde_json::to_vec(&BridgeEvent { event, data }).context("failed to encode json")?;
     buf.push(b'\n');
     let _ = state.event_tx.send(buf);
     Ok(())
@@ -550,7 +566,8 @@ pub async fn dispatch_request(
                 .get("path")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow!("missing params.path"))?;
-            let bytes = std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
+            let bytes =
+                std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
             transmit_buffer_active(&state, bytes).await?;
             Ok(json!({}))
         }
@@ -819,7 +836,8 @@ pub async fn dispatch_request(
                 .get("path")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow!("missing params.path"))?;
-            let bytes = std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
+            let bytes =
+                std::fs::read(path).with_context(|| format!("failed to read file: {path}"))?;
             let len_bytes = {
                 let mut snapshot = state
                     .buffer
@@ -989,8 +1007,8 @@ pub async fn create_bridge_state() -> Result<Arc<BridgeState>> {
 
 #[cfg(target_os = "macos")]
 fn midi_io_init_for_state(state: &BridgeState) -> Result<MidiIo> {
-    let client =
-        CoreMidiClient::new("emwaver-desktop").map_err(|status| anyhow!("CoreMIDI client init failed: {status}"))?;
+    let client = CoreMidiClient::new("emwaver-desktop")
+        .map_err(|status| anyhow!("CoreMIDI client init failed: {status}"))?;
     let output = client
         .output_port("emwaver-usb-out")
         .map_err(|status| anyhow!("CoreMIDI output port init failed: {status}"))?;
@@ -1013,117 +1031,128 @@ fn midi_io_init_for_state(state: &BridgeState) -> Result<MidiIo> {
     // Data arrives as UMP (Universal MIDI Packets) which we parse to extract SysEx bytes.
     let mut sysex_buf: Vec<u8> = Vec::with_capacity(256);
     let input = client
-        .input_port_with_protocol("emwaver-usb-in", Protocol::Midi10, move |event_list, _ctx: &mut ()| {
-            let ts_ms = now_ms();
-            rx_raw_last_ts_ms.store(ts_ms, Ordering::Relaxed);
+        .input_port_with_protocol(
+            "emwaver-usb-in",
+            Protocol::Midi10,
+            move |event_list, _ctx: &mut ()| {
+                let ts_ms = now_ms();
+                rx_raw_last_ts_ms.store(ts_ms, Ordering::Relaxed);
 
-            for event_packet in event_list.iter() {
-                let words = event_packet.data();
-                rx_raw_packets.fetch_add(1, Ordering::Relaxed);
-                rx_raw_bytes.fetch_add((words.len() * 4) as u64, Ordering::Relaxed);
+                for event_packet in event_list.iter() {
+                    let words = event_packet.data();
+                    rx_raw_packets.fetch_add(1, Ordering::Relaxed);
+                    rx_raw_bytes.fetch_add((words.len() * 4) as u64, Ordering::Relaxed);
 
-                // Parse UMP words. For MIDI 1.0 protocol, SysEx uses Message Type 0x3 (Data Messages).
-                // Each 64-bit message (2 words) carries status + up to 6 data bytes.
-                let mut i = 0;
-                while i < words.len() {
-                    let w0 = words[i];
-                    let msg_type = (w0 >> 28) & 0xF;
+                    // Parse UMP words. For MIDI 1.0 protocol, SysEx uses Message Type 0x3 (Data Messages).
+                    // Each 64-bit message (2 words) carries status + up to 6 data bytes.
+                    let mut i = 0;
+                    while i < words.len() {
+                        let w0 = words[i];
+                        let msg_type = (w0 >> 28) & 0xF;
 
-                    if msg_type == 0x3 {
-                        // Data Message (SysEx7) - 64-bit, consumes 2 words
-                        let status = (w0 >> 20) & 0xF;
-                        let num_bytes = ((w0 >> 16) & 0xF) as usize;
-                        let w1 = if i + 1 < words.len() { words[i + 1] } else { 0 };
-                        i += 2;
+                        if msg_type == 0x3 {
+                            // Data Message (SysEx7) - 64-bit, consumes 2 words
+                            let status = (w0 >> 20) & 0xF;
+                            let num_bytes = ((w0 >> 16) & 0xF) as usize;
+                            let w1 = if i + 1 < words.len() { words[i + 1] } else { 0 };
+                            i += 2;
 
-                        // Extract up to 6 bytes from the two words
-                        let bytes: [u8; 6] = [
-                            ((w0 >> 8) & 0xFF) as u8,
-                            (w0 & 0xFF) as u8,
-                            ((w1 >> 24) & 0xFF) as u8,
-                            ((w1 >> 16) & 0xFF) as u8,
-                            ((w1 >> 8) & 0xFF) as u8,
-                            (w1 & 0xFF) as u8,
-                        ];
+                            // Extract up to 6 bytes from the two words
+                            let bytes: [u8; 6] = [
+                                ((w0 >> 8) & 0xFF) as u8,
+                                (w0 & 0xFF) as u8,
+                                ((w1 >> 24) & 0xFF) as u8,
+                                ((w1 >> 16) & 0xFF) as u8,
+                                ((w1 >> 8) & 0xFF) as u8,
+                                (w1 & 0xFF) as u8,
+                            ];
 
-                        let data_bytes = &bytes[..num_bytes.min(6)];
+                            let data_bytes = &bytes[..num_bytes.min(6)];
 
-                        match status {
-                            0x0 => {
-                                // Complete SysEx in one message (1-6 bytes)
-                                sysex_buf.clear();
-                                sysex_buf.push(0xF0);
-                                sysex_buf.extend_from_slice(data_bytes);
-                                sysex_buf.push(0xF7);
-                            }
-                            0x1 => {
-                                // SysEx starts
-                                sysex_buf.clear();
-                                sysex_buf.push(0xF0);
-                                sysex_buf.extend_from_slice(data_bytes);
-                                rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
-                                rx_sysex_in_progress_len.store(sysex_buf.len() as u64, Ordering::Relaxed);
-                                continue;
-                            }
-                            0x2 => {
-                                // SysEx continues
-                                sysex_buf.extend_from_slice(data_bytes);
-                                rx_sysex_in_progress_len.store(sysex_buf.len() as u64, Ordering::Relaxed);
-                                if sysex_buf.len() > 1024 {
-                                    rx_sysex_overflows.fetch_add(1, Ordering::Relaxed);
+                            match status {
+                                0x0 => {
+                                    // Complete SysEx in one message (1-6 bytes)
                                     sysex_buf.clear();
-                                    rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
-                                    rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
+                                    sysex_buf.push(0xF0);
+                                    sysex_buf.extend_from_slice(data_bytes);
+                                    sysex_buf.push(0xF7);
                                 }
-                                continue;
-                            }
-                            0x3 => {
-                                // SysEx ends
-                                sysex_buf.extend_from_slice(data_bytes);
-                                sysex_buf.push(0xF7);
-                            }
-                            _ => {
-                                i += 1;
-                                continue;
-                            }
-                        }
-
-                        // We have a complete SysEx message - decode it
-                        match midi_sysex::decode_superframe(&sysex_buf) {
-                            Ok(Some(sf)) => {
-                                let (cmd, stream) = midi_sysex::split_superframe(&sf);
-                                let generation = rx_gen.load(Ordering::Relaxed);
-                                if rx_queue_tx
-                                    .try_send(RxQueuedPacket { cmd, stream, ts_ms, generation })
-                                    .is_err()
-                                {
-                                    rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                                0x1 => {
+                                    // SysEx starts
+                                    sysex_buf.clear();
+                                    sysex_buf.push(0xF0);
+                                    sysex_buf.extend_from_slice(data_bytes);
+                                    rx_sysex_in_progress_since_ms.store(ts_ms, Ordering::Relaxed);
+                                    rx_sysex_in_progress_len
+                                        .store(sysex_buf.len() as u64, Ordering::Relaxed);
+                                    continue;
+                                }
+                                0x2 => {
+                                    // SysEx continues
+                                    sysex_buf.extend_from_slice(data_bytes);
+                                    rx_sysex_in_progress_len
+                                        .store(sysex_buf.len() as u64, Ordering::Relaxed);
+                                    if sysex_buf.len() > 1024 {
+                                        rx_sysex_overflows.fetch_add(1, Ordering::Relaxed);
+                                        sysex_buf.clear();
+                                        rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
+                                        rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
+                                    }
+                                    continue;
+                                }
+                                0x3 => {
+                                    // SysEx ends
+                                    sysex_buf.extend_from_slice(data_bytes);
+                                    sysex_buf.push(0xF7);
+                                }
+                                _ => {
+                                    i += 1;
+                                    continue;
                                 }
                             }
-                            Ok(None) => {
-                                rx_sysex_decode_skipped.fetch_add(1, Ordering::Relaxed);
-                            }
-                            Err(_err) => {
-                                rx_sysex_decode_errors.fetch_add(1, Ordering::Relaxed);
-                            }
-                        }
 
-                        sysex_buf.clear();
-                        rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
-                        rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
-                    } else {
-                        // Skip non-SysEx messages (determine word count by message type)
-                        let word_count = match msg_type {
-                            0x0 | 0x1 | 0x2 | 0x6 | 0x7 => 1, // 32-bit messages
-                            0x3 | 0x4 | 0x8 | 0x9 | 0xA => 2, // 64-bit messages
-                            0x5 | 0xB | 0xC => 4,             // 128-bit messages
-                            _ => 1,
-                        };
-                        i += word_count;
+                            // We have a complete SysEx message - decode it
+                            match midi_sysex::decode_superframe(&sysex_buf) {
+                                Ok(Some(sf)) => {
+                                    let (cmd, stream) = midi_sysex::split_superframe(&sf);
+                                    let generation = rx_gen.load(Ordering::Relaxed);
+                                    if rx_queue_tx
+                                        .try_send(RxQueuedPacket {
+                                            cmd,
+                                            stream,
+                                            ts_ms,
+                                            generation,
+                                        })
+                                        .is_err()
+                                    {
+                                        rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+                                    }
+                                }
+                                Ok(None) => {
+                                    rx_sysex_decode_skipped.fetch_add(1, Ordering::Relaxed);
+                                }
+                                Err(_err) => {
+                                    rx_sysex_decode_errors.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+
+                            sysex_buf.clear();
+                            rx_sysex_in_progress_since_ms.store(0, Ordering::Relaxed);
+                            rx_sysex_in_progress_len.store(0, Ordering::Relaxed);
+                        } else {
+                            // Skip non-SysEx messages (determine word count by message type)
+                            let word_count = match msg_type {
+                                0x0 | 0x1 | 0x2 | 0x6 | 0x7 => 1, // 32-bit messages
+                                0x3 | 0x4 | 0x8 | 0x9 | 0xA => 2, // 64-bit messages
+                                0x5 | 0xB | 0xC => 4,             // 128-bit messages
+                                _ => 1,
+                            };
+                            i += word_count;
+                        }
                     }
                 }
-            }
-        })
+            },
+        )
         .map_err(|status| anyhow!("CoreMIDI input port init failed: {status}"))?;
 
     Ok(MidiIo {
@@ -1142,8 +1171,12 @@ fn midi_io_init_for_state(_state: &BridgeState) -> Result<MidiIo> {
         match MidiInput::new("emwaver-usb-in") {
             Ok(mut in_) => {
                 in_.ignore(Ignore::None);
-                let out = MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
-                return Ok(MidiIo { midi_in: in_, midi_out: out });
+                let out =
+                    MidiOutput::new("emwaver-usb-out").context("failed to init USB output")?;
+                return Ok(MidiIo {
+                    midi_in: in_,
+                    midi_out: out,
+                });
             }
             Err(err) => {
                 last_err = Some(err.into());
@@ -1162,9 +1195,9 @@ pub fn emwaver_usb_midi_present() -> Result<bool> {
     let ctx = rusb::Context::new().context("failed to init libusb context")?;
     let devices = ctx.devices().context("failed to list libusb devices")?;
     Ok(devices.iter().any(|device| {
-        device
-            .device_descriptor()
-            .is_ok_and(|desc| desc.vendor_id() == EMWAVER_USB_MIDI_VID && desc.product_id() == EMWAVER_USB_MIDI_PID)
+        device.device_descriptor().is_ok_and(|desc| {
+            desc.vendor_id() == EMWAVER_USB_MIDI_VID && desc.product_id() == EMWAVER_USB_MIDI_PID
+        })
     }))
 }
 
@@ -1259,7 +1292,9 @@ async fn midi_list_ports(state: &BridgeState) -> Result<Vec<String>> {
         .collect::<Vec<_>>();
 
     for port in io.midi_out.ports() {
-        let Ok(out_name) = io.midi_out.port_name(&port) else { continue };
+        let Ok(out_name) = io.midi_out.port_name(&port) else {
+            continue;
+        };
         let has_matching_in = in_names.iter().any(|in_name| {
             in_name == &out_name || in_name.contains(&out_name) || out_name.contains(in_name)
         });
@@ -1333,7 +1368,9 @@ fn find_midi_out_port_by_name(
     name: &str,
 ) -> Result<Option<midir::MidiOutputPort>> {
     for port in midi_out.ports() {
-        let Ok(port_name) = midi_out.port_name(&port) else { continue };
+        let Ok(port_name) = midi_out.port_name(&port) else {
+            continue;
+        };
         if port_name == name || port_name.contains(name) {
             return Ok(Some(port));
         }
@@ -1342,9 +1379,14 @@ fn find_midi_out_port_by_name(
 }
 
 #[cfg(not(target_os = "macos"))]
-fn find_midi_in_port_by_name(midi_in: &MidiInput, name: &str) -> Result<Option<midir::MidiInputPort>> {
+fn find_midi_in_port_by_name(
+    midi_in: &MidiInput,
+    name: &str,
+) -> Result<Option<midir::MidiInputPort>> {
     for port in midi_in.ports() {
-        let Ok(port_name) = midi_in.port_name(&port) else { continue };
+        let Ok(port_name) = midi_in.port_name(&port) else {
+            continue;
+        };
         if port_name == name || port_name.contains(name) {
             return Ok(Some(port));
         }
@@ -1409,14 +1451,28 @@ async fn midi_disconnect(state: &BridgeState) -> Result<()> {
 }
 
 fn maybe_update_stream_capture(state: &BridgeState, bytes: &[u8]) {
-    let Ok(mut s) = std::str::from_utf8(bytes).map(|v| v.to_string()) else {
+    // Binary sampler opcodes (Desktop uses packet-only transport).
+    // EMW_OP_SAMPLE (0x60): [0]=op, [1]=sub, [2]=pin (start only)
+    if bytes.len() >= 2 && bytes[0] == 0x60 {
+        match bytes[1] {
+            0x00 => {
+                state.stream_capture.store(true, Ordering::Relaxed);
+                return;
+            }
+            0x01 => {
+                state.stream_capture.store(false, Ordering::Relaxed);
+                return;
+            }
+            _ => {}
+        }
+    }
+
+    // Legacy ASCII commands (kept for backwards compatibility).
+    let Ok(s) = std::str::from_utf8(bytes) else {
         return;
     };
     // Best-effort: treat embedded NULs as terminators (transport pads with zeros).
-    if let Some(idx) = s.find('\0') {
-        s.truncate(idx);
-    }
-    let trimmed = s.trim();
+    let trimmed = s.split('\0').next().unwrap_or("").trim();
     if trimmed.starts_with("sample start") {
         state.stream_capture.store(true, Ordering::Relaxed);
     } else if trimmed.starts_with("sample stop") {
@@ -1465,7 +1521,8 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
 
     let destination = find_coremidi_destination_by_name(&chosen)
         .ok_or_else(|| anyhow!("USB output port not found: {chosen}"))?;
-    let source = find_coremidi_source_by_name(&chosen).ok_or_else(|| anyhow!("USB input port not found: {chosen}"))?;
+    let source = find_coremidi_source_by_name(&chosen)
+        .ok_or_else(|| anyhow!("USB input port not found: {chosen}"))?;
 
     io.input
         .connect_source(&source, ())
@@ -1546,10 +1603,7 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     let in_port = find_midi_in_port_by_name(&io.midi_in, &chosen)?
         .ok_or_else(|| anyhow!("USB input port not found: {chosen}"))?;
 
-    let out_conn = match io
-        .midi_out
-        .connect(&out_port, "emwaver-usb-out-conn")
-    {
+    let out_conn = match io.midi_out.connect(&out_port, "emwaver-usb-out-conn") {
         Ok(v) => v,
         Err(err) => {
             let message = err.to_string();
@@ -1563,26 +1617,33 @@ async fn midi_connect(state: &BridgeState, port_name: Option<String>) -> Result<
     let out = Arc::new(Mutex::new(Some(out_conn)));
 
     let in_conn = match io.midi_in.connect(
-            &in_port,
-            "emwaver-usb-in-conn",
-            move |_stamp, message, _| {
-                rx_raw_last_ts_ms.store(now_ms(), Ordering::Relaxed);
-                rx_raw_packets.fetch_add(1, Ordering::Relaxed);
-                rx_raw_bytes.fetch_add(message.len() as u64, Ordering::Relaxed);
-                let Ok(Some(sf)) = midi_sysex::decode_superframe(message) else { return };
+        &in_port,
+        "emwaver-usb-in-conn",
+        move |_stamp, message, _| {
+            rx_raw_last_ts_ms.store(now_ms(), Ordering::Relaxed);
+            rx_raw_packets.fetch_add(1, Ordering::Relaxed);
+            rx_raw_bytes.fetch_add(message.len() as u64, Ordering::Relaxed);
+            let Ok(Some(sf)) = midi_sysex::decode_superframe(message) else {
+                return;
+            };
 
-                let ts_ms = now_ms();
-                let generation = rx_gen.load(Ordering::Relaxed);
-                let (cmd, stream) = midi_sysex::split_superframe(&sf);
-                if rx_queue_tx
-                    .try_send(RxQueuedPacket { cmd, stream, ts_ms, generation })
-                    .is_err()
-                {
-                    rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
-                }
-            },
-            (),
-        ) {
+            let ts_ms = now_ms();
+            let generation = rx_gen.load(Ordering::Relaxed);
+            let (cmd, stream) = midi_sysex::split_superframe(&sf);
+            if rx_queue_tx
+                .try_send(RxQueuedPacket {
+                    cmd,
+                    stream,
+                    ts_ms,
+                    generation,
+                })
+                .is_err()
+            {
+                rx_queue_dropped.fetch_add(1, Ordering::Relaxed);
+            }
+        },
+        (),
+    ) {
         Ok(v) => v,
         Err(err) => {
             let message = err.to_string();
@@ -1682,7 +1743,9 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     timeout(
         Duration::from_millis(750),
         tokio::task::spawn_blocking(move || {
-            let mut conn = out.lock().map_err(|_| anyhow!("usb output lock poisoned"))?;
+            let mut conn = out
+                .lock()
+                .map_err(|_| anyhow!("usb output lock poisoned"))?;
             let conn = conn.as_mut().ok_or_else(|| anyhow!("not connected"))?;
             conn.send(&sysex).context("failed to send USB packet")?;
             Ok::<(), anyhow::Error>(())
@@ -1774,7 +1837,9 @@ async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result
     timeout(
         Duration::from_millis(750),
         tokio::task::spawn_blocking(move || {
-            let mut conn = out.lock().map_err(|_| anyhow!("usb output lock poisoned"))?;
+            let mut conn = out
+                .lock()
+                .map_err(|_| anyhow!("usb output lock poisoned"))?;
             let conn = conn.as_mut().ok_or_else(|| anyhow!("not connected"))?;
             conn.send(&sysex).context("failed to send USB packet")?;
             Ok::<(), anyhow::Error>(())
@@ -1889,10 +1954,7 @@ async fn send_packet_command_inner(
     while out.len() < want_bytes {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
-            bail!(
-                "timeout waiting for response ({})",
-                timeout_diag(state)
-            );
+            bail!("timeout waiting for response ({})", timeout_diag(state));
         }
 
         // Fast path: response already arrived.
@@ -2089,7 +2151,11 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
         let dropped = state.rx_queue_dropped.load(Ordering::Relaxed);
         if dropped != last_dropped {
             last_dropped = dropped;
-            let _ = emit_event(state.as_ref(), "rx_queue_dropped", json!({ "count": dropped }));
+            let _ = emit_event(
+                state.as_ref(),
+                "rx_queue_dropped",
+                json!({ "count": dropped }),
+            );
         }
 
         let sysex_decode_errors = state.rx_sysex_decode_errors.load(Ordering::Relaxed);
@@ -2105,15 +2171,21 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
         let sysex_overflows = state.rx_sysex_overflows.load(Ordering::Relaxed);
         if sysex_overflows != last_sysex_overflows {
             last_sysex_overflows = sysex_overflows;
-            let _ =
-                emit_event(state.as_ref(), "rx_sysex_overflows", json!({ "count": sysex_overflows }));
+            let _ = emit_event(
+                state.as_ref(),
+                "rx_sysex_overflows",
+                json!({ "count": sysex_overflows }),
+            );
         }
 
         let sysex_restarts = state.rx_sysex_restarts.load(Ordering::Relaxed);
         if sysex_restarts != last_sysex_restarts {
             last_sysex_restarts = sysex_restarts;
-            let _ =
-                emit_event(state.as_ref(), "rx_sysex_restarts", json!({ "count": sysex_restarts }));
+            let _ = emit_event(
+                state.as_ref(),
+                "rx_sysex_restarts",
+                json!({ "count": sysex_restarts }),
+            );
         }
 
         const CMD_MARKER: u8 = 0xA5;
@@ -2140,7 +2212,9 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
 
             if let Ok(mut guard) = state.command_last.lock() {
                 *guard = cmd;
-                state.command_last_ts_ms.store(item.ts_ms, Ordering::Relaxed);
+                state
+                    .command_last_ts_ms
+                    .store(item.ts_ms, Ordering::Relaxed);
                 state.command_gen.fetch_add(1, Ordering::SeqCst);
                 state.command_notify.notify_waiters();
             }
