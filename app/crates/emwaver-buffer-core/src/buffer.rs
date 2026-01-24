@@ -219,11 +219,11 @@ mod tests {
         assert_eq!(rx_packet_count(&buf), 0);
         assert_eq!(buf.rx_ts_ms.len(), 0);
 
-        append_rx_bytes(&mut buf, &[0u8; 54], 222);
+        append_rx_bytes(&mut buf, &[0u8; 8], 222);
         assert_eq!(rx_packet_count(&buf), 1);
         assert_eq!(buf.rx_ts_ms, vec![222]);
 
-        append_rx_bytes(&mut buf, &[0u8; 64], 333);
+        append_rx_bytes(&mut buf, &[0u8; 18], 333);
         assert_eq!(rx_packet_count(&buf), 2);
         assert_eq!(buf.rx_ts_ms, vec![222, 333]);
     }

@@ -242,8 +242,9 @@ export default function ISMFragment() {
         return null;
       }
       const txBytes = tx.map((value) => value & 0xff);
-      const txLen = Math.min(60, txBytes.length);
-      const rxLen = typeof rx === "number" ? Math.max(0, Math.min(62, rx | 0)) : 0;
+      // Mini-frame cmd lane is 18 bytes total: [op, cs, rx_req, tx_len, payload...]
+      const txLen = Math.min(14, txBytes.length);
+      const rxLen = typeof rx === "number" ? Math.max(0, Math.min(17, rx | 0)) : 0;
 
       const pkt = new Uint8Array(4 + txLen);
       pkt[0] = 0x50; // EMW_OP_SPI_XFER
@@ -256,10 +257,10 @@ export default function ISMFragment() {
 
       setCurrentCommand(`spi xfer (bin) cs=${DEFAULT_CC1101_CS} tx=${txLen} rx=${rxLen || txLen}`);
       const resp = await sendPacket(pkt, timeoutMs, 1);
-      if (!resp || resp.length !== 64) {
+      if (!resp || resp.length !== 18) {
         return null;
       }
-      if (resp[0] !== 0x00) {
+      if (resp[0] !== 0x80) {
         return null;
       }
       const want = rxLen > 0 ? rxLen : txLen;

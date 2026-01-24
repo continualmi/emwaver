@@ -892,7 +892,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     }
 
     // Only treat an RX packet as a version response if it follows a VERSION request (opcode 0x01).
-    // Many other command responses start with status=0 and would otherwise be mis-parsed as semver.
+    // Many other command responses start with status=0x80 and would otherwise be mis-parsed as semver.
     let lastVersionTxIndex = -1;
     for (let i = commandEntries.length - 1; i >= 0; i--) {
       const entry = commandEntries[i];
@@ -914,9 +914,9 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
       if (entry.timestamp < txTs) continue;
       if (entry.timestamp - txTs > MAX_VERSION_RTT_MS) break;
 
-      // Expected: [status=0, major, minor, patch, ...]
+      // Expected: [status=0x80, major, minor, patch, ...]
       if (!entry.data || entry.data.length < 4) continue;
-      if (entry.data[0] !== 0) continue;
+      if (entry.data[0] !== 0x80) continue;
       if (!Array.from(entry.data.slice(4)).every((b) => b === 0)) continue;
 
       const major = entry.data[1];

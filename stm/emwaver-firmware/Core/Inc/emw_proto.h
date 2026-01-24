@@ -1,19 +1,20 @@
 #pragma once
 
-// EMWaver binary command protocol (cmd lane: 64 bytes)
+// EMWaver binary command protocol (cmd lane: 18 bytes)
 //
 // Request: [opcode, args...]
 // Response: [status, payload...]
 // - status: 0 = OK, nonzero = error code
 // - payload: command-specific (length is implied by the opcode and/or request)
-// - response frames are marked by setting cmd_lane[63] = EMW_CMD_MARKER (0xA5)
+// - responses are returned in the cmd lane of the next outgoing frame
 
 #include <stdint.h>
 
-#define EMW_RESP_STATUS_OK 0u
-#define EMW_RESP_STATUS_ERR 1u
+// Response status bytes are >= 0x80 so an "empty" cmd lane (all zeros) is unambiguous.
+#define EMW_RESP_STATUS_OK  0x80u
+#define EMW_RESP_STATUS_ERR 0x81u
 
-#define EMW_RESP_MAX_PAYLOAD 62u
+#define EMW_RESP_MAX_PAYLOAD 17u
 
 // System
 #define EMW_OP_VERSION 0x01u

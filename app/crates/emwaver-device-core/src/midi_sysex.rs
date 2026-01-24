@@ -4,10 +4,9 @@ const SYSEX_START: u8 = 0xF0;
 const SYSEX_END: u8 = 0xF7;
 const MFR_NON_COMMERCIAL: u8 = 0x7D;
 const PROTO_MAGIC: [u8; 3] = *b"EMW";
-const PROTO_VERSION: u8 = 0x01;
 
-pub(crate) const LANE_SIZE: usize = 64;
-pub(crate) const SUPERFRAME_SIZE: usize = 128;
+pub(crate) const LANE_SIZE: usize = 18;
+pub(crate) const SUPERFRAME_SIZE: usize = 36;
 
 pub(crate) fn build_superframe(
     cmd_lane: [u8; LANE_SIZE],
@@ -28,12 +27,11 @@ pub(crate) fn split_superframe(sf: &[u8; SUPERFRAME_SIZE]) -> ([u8; LANE_SIZE], 
 }
 
 pub(crate) fn encode_superframe(sf: &[u8; SUPERFRAME_SIZE]) -> Vec<u8> {
-    // Worst-case: 7-bit encoding expands payload by ~8/7.
-    let mut out = Vec::with_capacity(1 + 1 + 3 + 1 + 160 + 1);
+    // Fixed-size encoding: 36 raw bytes -> 42 encoded bytes.
+    let mut out = Vec::with_capacity(48);
     out.push(SYSEX_START);
     out.push(MFR_NON_COMMERCIAL);
     out.extend_from_slice(&PROTO_MAGIC);
-    out.push(PROTO_VERSION);
 
     // 7-byte groups -> 1 prefix + 7 bytes (MSB cleared)
     for chunk in sf.chunks(7) {
@@ -54,20 +52,17 @@ pub(crate) fn encode_superframe(sf: &[u8; SUPERFRAME_SIZE]) -> Vec<u8> {
 }
 
 pub(crate) fn decode_superframe(msg: &[u8]) -> Result<Option<[u8; SUPERFRAME_SIZE]>> {
-    if msg.len() < 8 {
+    if msg.len() < 7 {
         return Ok(None);
     }
     if msg[0] != SYSEX_START || *msg.last().unwrap() != SYSEX_END {
         return Ok(None);
     }
-    if msg[1] != MFR_NON_COMMERCIAL
-        || msg.get(2..5) != Some(&PROTO_MAGIC)
-        || msg[5] != PROTO_VERSION
-    {
+    if msg[1] != MFR_NON_COMMERCIAL || msg.get(2..5) != Some(&PROTO_MAGIC) {
         return Ok(None);
     }
 
-    let encoded = &msg[6..msg.len() - 1];
+    let encoded = &msg[5..msg.len() - 1];
     let mut out = [0u8; SUPERFRAME_SIZE];
     let mut out_pos = 0usize;
     let mut in_pos = 0usize;

@@ -238,7 +238,8 @@ function __emwPayload(resp) {
 
 function __emwAssertOk(resp) {
   var st = __emwStatus(resp);
-  if (st !== 0) {
+  // Mini-frame protocol: 0x80 = OK, 0x81 = ERR.
+  if (st !== 0x80) {
     throw new Error('Device error: ' + st);
   }
   return resp;

@@ -59,7 +59,9 @@ pub fn ble_next_packet_size(
     }
 
     if last_status > profile.buffer_high_threshold {
-        return current_packet_size.saturating_sub(profile.step_large).max(profile.min_packet_size);
+        return current_packet_size
+            .saturating_sub(profile.step_large)
+            .max(profile.min_packet_size);
     }
 
     if last_status < profile.buffer_low_threshold {
@@ -91,10 +93,13 @@ pub struct UsbTxProfile {
 
 impl UsbTxProfile {
     pub const fn default() -> Self {
+        // Retransmit target: 100 kbit/s ~= 12.5 kB/s.
+        // With an 18-byte stream lane, period ~= 18 / 12_500 = 0.00144s.
+        // Use 1.44ms as the baseline and let flow-control adjust as needed.
         Self {
-            packet_size: 64,
-            period_ns: 5_120_000,
-            flow_time_delta_ns: 1_000_000,
+            packet_size: crate::packet::PACKET_SIZE,
+            period_ns: 1_440_000,
+            flow_time_delta_ns: 250_000,
             buffer_high_threshold: 300,
             buffer_low_threshold: 200,
         }
@@ -118,7 +123,10 @@ mod tests {
     #[test]
     fn ble_next_packet_size_uses_max_during_initial_fill() {
         let p = BleTxProfile::default();
-        assert_eq!(ble_next_packet_size(p, 0, p.target_buffer_level, 188), p.max_packet_size);
+        assert_eq!(
+            ble_next_packet_size(p, 0, p.target_buffer_level, 188),
+            p.max_packet_size
+        );
         assert_eq!(
             ble_next_packet_size(p, p.initial_fill_bytes - 1, 0, 128),
             p.max_packet_size
@@ -133,7 +141,12 @@ mod tests {
             168
         );
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, p.buffer_high_threshold + 1, p.min_packet_size),
+            ble_next_packet_size(
+                p,
+                p.initial_fill_bytes,
+                p.buffer_high_threshold + 1,
+                p.min_packet_size
+            ),
             p.min_packet_size
         );
     }
@@ -146,7 +159,12 @@ mod tests {
             192
         );
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, p.buffer_low_threshold - 1, p.max_packet_size),
+            ble_next_packet_size(
+                p,
+                p.initial_fill_bytes,
+                p.buffer_low_threshold - 1,
+                p.max_packet_size
+            ),
             p.max_packet_size
         );
     }

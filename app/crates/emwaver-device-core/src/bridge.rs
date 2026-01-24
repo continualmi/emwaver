@@ -1707,7 +1707,7 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     let ts_ms = now_ms();
     if let Ok(mut guard) = state.transport_tx.lock() {
         let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
-        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let cmd_has_marker = false;
         let stream_has_any = stream_lane.iter().any(|&b| b != 0);
         let stream_is_bs = status::parse_bs(&stream_lane).is_some();
         let kind = (cmd_has_any as u8)
@@ -1758,7 +1758,7 @@ async fn midi_write_packet(state: &BridgeState, bytes: Vec<u8>) -> Result<()> {
     let ts_ms = now_ms();
     if let Ok(mut guard) = state.transport_tx.lock() {
         let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
-        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let cmd_has_marker = false;
         let stream_has_any = stream_lane.iter().any(|&b| b != 0);
         let stream_is_bs = status::parse_bs(&stream_lane).is_some();
         let kind = (cmd_has_any as u8)
@@ -1800,7 +1800,7 @@ async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result
     let ts_ms = now_ms();
     if let Ok(mut guard) = state.transport_tx.lock() {
         let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
-        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let cmd_has_marker = false;
         let stream_has_any = stream_lane.iter().any(|&b| b != 0);
         let stream_is_bs = status::parse_bs(&stream_lane).is_some();
         let kind = (cmd_has_any as u8)
@@ -1852,7 +1852,7 @@ async fn midi_write_stream_packet(state: &BridgeState, bytes: Vec<u8>) -> Result
     let ts_ms = now_ms();
     if let Ok(mut guard) = state.transport_tx.lock() {
         let cmd_has_any = cmd_lane.iter().any(|&b| b != 0);
-        let cmd_has_marker = cmd_lane[PACKET_SIZE - 1] == 0xA5;
+        let cmd_has_marker = false;
         let stream_has_any = stream_lane.iter().any(|&b| b != 0);
         let stream_is_bs = status::parse_bs(&stream_lane).is_some();
         let kind = (cmd_has_any as u8)
@@ -2197,8 +2197,7 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
             );
         }
 
-        const CMD_MARKER: u8 = 0xA5;
-        let cmd_has_marker = item.cmd[PACKET_SIZE - 1] == CMD_MARKER;
+        let cmd_is_resp = (item.cmd[0] & 0x80) != 0;
         let stream_capture = state.stream_capture.load(Ordering::Relaxed);
         let stream_is_bs = status::parse_bs(&item.stream).is_some();
         let cmd_has_any = item.cmd.iter().any(|&b| b != 0);
@@ -2208,19 +2207,16 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
         if let Ok(mut guard) = state.transport_rx.lock() {
             let sf = midi_sysex::build_superframe(item.cmd, item.stream);
             let kind = (cmd_has_any as u8)
-                | ((cmd_has_marker as u8) << 1)
+                | ((cmd_is_resp as u8) << 1)
                 | ((stream_has_any as u8) << 2)
                 | ((stream_is_bs as u8) << 3);
             guard.append(&sf, item.ts_ms, kind);
         }
 
         // Emit RX event first so command/BS listeners don't get blocked by buffer work.
-        if cmd_has_marker {
-            let mut cmd = item.cmd;
-            cmd[PACKET_SIZE - 1] = 0;
-
+        if cmd_is_resp {
             if let Ok(mut guard) = state.command_last.lock() {
-                *guard = cmd;
+                *guard = item.cmd;
                 state
                     .command_last_ts_ms
                     .store(item.ts_ms, Ordering::Relaxed);
@@ -2228,10 +2224,10 @@ async fn rx_queue_worker(state: Arc<BridgeState>, mut rx: mpsc::Receiver<RxQueue
                 state.command_notify.notify_waiters();
             }
             if let Ok(mut guard) = state.command_log.lock() {
-                guard.append(&cmd, item.ts_ms, 2u8); // 2 = RX resp
+                guard.append(&item.cmd, item.ts_ms, 2u8); // 2 = RX resp
             }
 
-            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(cmd);
+            let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(item.cmd);
             let payload = BridgeEvent {
                 event: "rx_bytes",
                 data: json!({ "bytes_b64": bytes_b64, "ts_ms": item.ts_ms }),

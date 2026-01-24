@@ -134,10 +134,15 @@ impl PtyManager {
                     .map(|dir| dir.join("cli/target/release/emwaver"));
 
                 if debug_cli.as_ref().is_some_and(|path| path.exists()) {
-                    cmd.arg(debug_cli.unwrap());
+                    let path = debug_cli.unwrap();
+                    eprintln!("[pty] emwaver_shell: using {}", path.display());
+                    cmd.arg(path);
                 } else if release_cli.as_ref().is_some_and(|path| path.exists()) {
-                    cmd.arg(release_cli.unwrap());
+                    let path = release_cli.unwrap();
+                    eprintln!("[pty] emwaver_shell: using {}", path.display());
+                    cmd.arg(path);
                 } else {
+                    eprintln!("[pty] emwaver_shell: using emwaver from PATH");
                     cmd.arg("emwaver");
                 }
             } else {

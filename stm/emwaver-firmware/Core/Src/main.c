@@ -63,11 +63,11 @@ static GPIO_TypeDef *samplerPort = GPIOA;
 static uint16_t samplerPin = GPIO_PIN_0;
 volatile uint32_t selectedChannel = TIM_CHANNEL_3; // Default to channel 3 for backward compatibility
 
-uint8_t midi_packet[64];
+uint8_t midi_packet[18];
 volatile uint8_t midi_packet_ready = 0;
 
-static uint8_t sampler_buf_a[64];
-static uint8_t sampler_buf_b[64];
+static uint8_t sampler_buf_a[18];
+static uint8_t sampler_buf_b[18];
 volatile uint8_t* bufferA = sampler_buf_a;
 volatile uint8_t* bufferB = sampler_buf_b;
 volatile uint8_t* currentBuffer = NULL;
@@ -109,9 +109,9 @@ void get_device_name(char* buf, size_t max_len) {
 }
 
 #define ISM_BURST_MAX 64u
-#define EMW_LANE_SIZE 64u
-#define EMW_SUPERFRAME_SIZE 128u
-#define EMW_CMD_MARKER 0xA5u
+// Mini-frame lanes (cmd + stream) decoded from a single USB MIDI OUT callback.
+#define EMW_LANE_SIZE 18u
+#define EMW_SUPERFRAME_SIZE 36u
 
 typedef enum {
     ISM_MODE_IDLE = 0,
@@ -173,32 +173,30 @@ static void command_send_status(uint8_t status, const uint8_t *payload, size_t p
     // Binary response format:
     //   lane0[0] = status
     //   lane0[1..] = payload
-    //   lane0[63] = EMW_CMD_MARKER
     if (payload_len > EMW_RESP_MAX_PAYLOAD) {
         payload_len = EMW_RESP_MAX_PAYLOAD;
     }
 
     // Sampling / retransmit mode: only one response lane can be piggybacked.
+    // During sampling/retransmit, a command response is piggybacked onto the next outgoing frame.
     if (ism_mode == ISM_MODE_RAW_SAMPLING || EMW_USB_GetBufferType_FS() == EMW_BUFFER_CIRCULAR) {
         uint8_t lane[EMW_LANE_SIZE] = {0};
         lane[0] = status;
         if (payload && payload_len > 0) {
             memcpy(&lane[1], payload, payload_len);
         }
-        lane[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
         memcpy((void *)pending_cmd_lane, lane, EMW_LANE_SIZE);
         pending_cmd_ready = 1;
         return;
     }
 
-    uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
-    uint8_t *lane0 = &superframe[0];
-    lane0[0] = status;
+    uint8_t frame[EMW_SUPERFRAME_SIZE] = {0};
+    uint8_t *cmd_lane = &frame[0];
+    cmd_lane[0] = status;
     if (payload && payload_len > 0) {
-        memcpy(&lane0[1], payload, payload_len);
+        memcpy(&cmd_lane[1], payload, payload_len);
     }
-    lane0[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), USB_TIMEOUT);
+    (void)EMW_USB_SendResponsePkt_FS(frame, (uint16_t)sizeof(frame), USB_TIMEOUT);
 }
 
 static void command_send_ok(const uint8_t *data, size_t len)
@@ -232,7 +230,7 @@ static void ISR_Sampler_raw(void)
         bitIndex = 0;
         currentByte = 0;
 
-        if (bufferIndex >= 64) {
+        if (bufferIndex >= (int)EMW_LANE_SIZE) {
             transmitBuffer = currentBuffer;
             currentBuffer = (currentBuffer == bufferA) ? bufferB : bufferA;
             bufferIndex = 0;
@@ -475,16 +473,16 @@ static void stop_sampling(void)
 
 static void send_sampling_superframe(const uint8_t *stream_lane)
 {
-    uint8_t superframe[EMW_SUPERFRAME_SIZE] = {0};
+    uint8_t frame[EMW_SUPERFRAME_SIZE] = {0};
     if (pending_cmd_ready) {
-        memcpy(&superframe[0], (const void *)pending_cmd_lane, EMW_LANE_SIZE);
+        memcpy(&frame[0], (const void *)pending_cmd_lane, EMW_LANE_SIZE);
     }
 
     if (stream_lane != NULL) {
-        memcpy(&superframe[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
+        memcpy(&frame[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
     }
 
-    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), USB_TIMEOUT);
+    (void)EMW_USB_SendResponsePkt_FS(frame, (uint16_t)sizeof(frame), USB_TIMEOUT);
     pending_cmd_ready = 0;
 }
 
@@ -1356,11 +1354,13 @@ int main(void)
 
           case EMW_OP_NAME_SET: {
               uint8_t len = midi_packet[1];
+              // Requests are limited to the cmd lane size. Host must not send oversized requests.
+              uint8_t max_len = (uint8_t)(EMW_LANE_SIZE - 2u);
+              if (len > max_len) {
+                  len = max_len;
+              }
               if (len > DEVICE_NAME_MAX_LEN) {
                   len = DEVICE_NAME_MAX_LEN;
-              }
-              if (len > 62u) {
-                  len = 62u;
               }
 
               HAL_FLASH_Unlock();
@@ -1576,8 +1576,9 @@ adc_done_bin:
                   if (timeout_ms == 0u) timeout_ms = 1000u;
 
                   uint8_t tx_len = n_or_len;
-                  if (tx_len > 54u) {
-                      tx_len = 54u;
+                  uint8_t max_tx = (uint8_t)(EMW_LANE_SIZE > 9u ? (EMW_LANE_SIZE - 9u) : 0u);
+                  if (tx_len > max_tx) {
+                      tx_len = max_tx;
                   }
                   size_t written = 0;
                   if (tx_len == 0u) {
@@ -1604,7 +1605,9 @@ adc_done_bin:
                   }
                   if (timeout_ms == 0u) timeout_ms = 250u;
                   uint8_t n = n_or_len;
-                  if (n > 61u) n = 61u;
+                  // Response uses payload[0]=got + up to (EMW_RESP_MAX_PAYLOAD-1) bytes.
+                  uint8_t max_n = (uint8_t)(EMW_RESP_MAX_PAYLOAD > 1u ? (EMW_RESP_MAX_PAYLOAD - 1u) : 0u);
+                  if (n > max_n) n = max_n;
                   if (n == 0u) {
                       command_send_ok(NULL, 0);
                       break;
@@ -1615,8 +1618,8 @@ adc_done_bin:
                       command_send_err(NULL);
                       break;
                   }
-                  if (got > 61u) got = 61u;
-                  uint8_t payload[62] = {0};
+                  if (got > max_n) got = max_n;
+                  uint8_t payload[EMW_RESP_MAX_PAYLOAD] = {0};
                   payload[0] = (uint8_t)got;
                   if (got > 0) {
                       memcpy(&payload[1], rx_buf, got);
@@ -1668,7 +1671,8 @@ adc_done_bin:
                       command_send_ok(NULL, 0);
                       break;
                   }
-                  if (tx_len > 52u) tx_len = 52u;
+                  uint8_t max_tx = (uint8_t)(EMW_LANE_SIZE > 11u ? (EMW_LANE_SIZE - 11u) : 0u);
+                  if (tx_len > max_tx) tx_len = max_tx;
                   if (!i2c1_write_then_maybe_stop(addr, &midi_packet[11], tx_len, true, (uint32_t)timeout_ms)) {
                       command_send_err(NULL);
                       break;
@@ -1679,7 +1683,7 @@ adc_done_bin:
 
               if (sub == EMW_I2C_READ) {
                   uint8_t n = tx_len;
-                  if (n > 62u) n = 62u;
+                  if (n > EMW_RESP_MAX_PAYLOAD) n = (uint8_t)EMW_RESP_MAX_PAYLOAD;
                   if (n == 0u) {
                       command_send_ok(NULL, 0);
                       break;
@@ -1694,8 +1698,9 @@ adc_done_bin:
               }
 
               if (sub == EMW_I2C_XFER) {
-                  if (tx_len > 51u) tx_len = 51u;
-                  if (rx_len > 62u) rx_len = 62u;
+                  uint8_t max_tx = (uint8_t)(EMW_LANE_SIZE > 11u ? (EMW_LANE_SIZE - 11u) : 0u);
+                  if (tx_len > max_tx) tx_len = max_tx;
+                  if (rx_len > EMW_RESP_MAX_PAYLOAD) rx_len = (uint8_t)EMW_RESP_MAX_PAYLOAD;
                   uint8_t rx_buf[64] = {0};
                   if (!i2c1_xfer(addr, &midi_packet[11], tx_len, rx_buf, (size_t)rx_len, (uint32_t)timeout_ms)) {
                       command_send_err(NULL);
@@ -1717,7 +1722,8 @@ adc_done_bin:
                   command_send_err(NULL);
                   break;
               }
-              if (tx_len > 60u) tx_len = 60u;
+              uint8_t max_tx = (uint8_t)(EMW_LANE_SIZE > 4u ? (EMW_LANE_SIZE - 4u) : 0u);
+              if (tx_len > max_tx) tx_len = max_tx;
 
               GPIO_TypeDef *cs_port = NULL;
               uint16_t cs_pin_mask = 0;
@@ -1730,7 +1736,7 @@ adc_done_bin:
               if (requested_rx == 0u) {
                   requested_rx = tx_len;
               }
-              if (requested_rx > 62u) requested_rx = 62u;
+              if (requested_rx > EMW_RESP_MAX_PAYLOAD) requested_rx = (uint8_t)EMW_RESP_MAX_PAYLOAD;
 
               uint8_t xfer_len = tx_len > requested_rx ? tx_len : requested_rx;
               if (xfer_len == 0u || requested_rx == 0u) {
