@@ -40,7 +40,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define CDC_TIMEOUT 100
+#define USB_TIMEOUT 100
 #define EMWAVER_FIRMWARE_VERSION_MAJOR 0u
 #define EMWAVER_FIRMWARE_VERSION_MINOR 1u
 #define EMWAVER_FIRMWARE_VERSION_PATCH 0u
@@ -198,7 +198,7 @@ static void command_send_status(uint8_t status, const uint8_t *payload, size_t p
         memcpy(&lane0[1], payload, payload_len);
     }
     lane0[EMW_LANE_SIZE - 1u] = EMW_CMD_MARKER;
-    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
+    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), USB_TIMEOUT);
 }
 
 static void command_send_ok(const uint8_t *data, size_t len)
@@ -484,7 +484,7 @@ static void send_sampling_superframe(const uint8_t *stream_lane)
         memcpy(&superframe[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
     }
 
-    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), CDC_TIMEOUT);
+    (void)EMW_USB_SendResponsePkt_FS(superframe, (uint16_t)sizeof(superframe), USB_TIMEOUT);
     pending_cmd_ready = 0;
 }
 
