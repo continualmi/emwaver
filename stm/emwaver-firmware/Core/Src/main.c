@@ -1909,6 +1909,18 @@ adc_done_bin:
                   break;
               }
 
+              // Optional configuration (mini-frame):
+              //   [3] duty_percent (1..100, 0 => default)
+              //   [4..7] pwm_hz (u32 LE, 0 => keep current/default)
+              uint8_t duty_percent = midi_packet[3];
+              if (duty_percent == 0u) {
+                  duty_percent = 50u;
+              }
+              if (duty_percent > 100u) {
+                  duty_percent = 100u;
+              }
+              uint32_t pwm_hz = emw_u32_le(&midi_packet[4]);
+
               uint32_t tim_channel = 0;
               uint16_t gpio_pin = 0;
               switch (pin) {
@@ -1919,7 +1931,11 @@ adc_done_bin:
               }
 
               configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
-              setDutyCycle_TIM2(tim_channel, 50);
+
+              if (pwm_hz != 0u) {
+                  (void)tim2_set_pwm_hz(pwm_hz);
+              }
+              setDutyCycle_TIM2(tim_channel, duty_percent);
               selectedChannel = tim_channel;
               (void)HAL_TIM_PWM_Start(&htim2, tim_channel);
 
