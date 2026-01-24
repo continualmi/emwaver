@@ -93,13 +93,13 @@ pub struct UsbTxProfile {
 
 impl UsbTxProfile {
     pub const fn default() -> Self {
-        // Retransmit target: 100 kbit/s ~= 12.5 kB/s.
-        // With an 18-byte stream lane, period ~= 18 / 12_500 = 0.00144s.
-        // Use 1.44ms as the baseline and let flow-control adjust as needed.
+        // Retransmit target (baseline): 200 kbit/s ~= 25 kB/s.
+        // With an 18-byte stream lane, period ~= 18 / 25_000 = 0.00072s.
+        // Use 0.72ms as the baseline and let flow-control adjust as needed.
         Self {
             packet_size: crate::packet::PACKET_SIZE,
-            period_ns: 1_440_000,
-            flow_time_delta_ns: 250_000,
+            period_ns: 720_000,
+            flow_time_delta_ns: 125_000,
             buffer_high_threshold: 300,
             buffer_low_threshold: 200,
         }
@@ -192,11 +192,11 @@ mod tests {
         let p = UsbTxProfile::default();
         assert_eq!(
             usb_adjust_deadline_ns(p, 10_000, p.buffer_high_threshold + 1),
-            1_010_000
+            135_000
         );
         assert_eq!(
             usb_adjust_deadline_ns(p, 10_000, p.buffer_low_threshold - 1),
-            -990_000
+            -115_000
         );
         assert_eq!(
             usb_adjust_deadline_ns(p, 10_000, p.buffer_low_threshold),

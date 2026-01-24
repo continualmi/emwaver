@@ -73,7 +73,7 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef* pcdHandle)
     __HAL_RCC_USB_CLK_ENABLE();
 
     /* Peripheral interrupt init */
-    // TIM3 drives the 10us sampling/retransmit tick and must be able to preempt USB.
+    // TIM3 drives the 5us sampling/retransmit tick and must be able to preempt USB.
     // Keep TIM3 at priority 0 and drop USB below it.
     HAL_NVIC_SetPriority(USB_IRQn, 1, 0);
     HAL_NVIC_EnableIRQ(USB_IRQn);
