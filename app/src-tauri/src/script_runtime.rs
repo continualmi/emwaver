@@ -193,7 +193,7 @@ impl ScriptRuntime {
                                 try {{
                                     cb();
                                 }} catch (e) {{
-                                    try {{ print('[timer] error: ' + e); }} catch (_) {{}}
+                                    try {{ _scriptPrint('[timer] error: ' + e); }} catch (_) {{}}
                                 }}
                             }}
                         }})();
@@ -248,7 +248,7 @@ impl ScriptRuntime {
                                     var argv = Array.isArray(args) ? args : [args];
                                     cb.apply(null, argv);
                                 }} catch (e) {{
-                                    try {{ print('[callback] error: ' + e); }} catch (_) {{}}
+                                    try {{ _scriptPrint('[callback] error: ' + e); }} catch (_) {{}}
                                 }}
                             }}
                         }})();

@@ -6,8 +6,6 @@ title: Console
 
 Output:
 
-- `print(...)`
-- `console.log(...)`, `console.warn(...)`, `console.error(...)`
 - `Console.print(...)`, `Console.println(...)`
 
 Input:
