@@ -31,6 +31,7 @@ type ScriptPreviewPanelProps = {
   state: ScriptPreviewEntry | undefined;
   deviceStatus: string;
   onInvokeCallback: (token: string, args: unknown[]) => void;
+  onStopPreview: (path: string) => void;
 };
 
 export default function ScriptPreviewPanel({
@@ -38,6 +39,7 @@ export default function ScriptPreviewPanel({
   state,
   deviceStatus,
   onInvokeCallback,
+  onStopPreview,
 }: ScriptPreviewPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col select-text">
@@ -45,7 +47,19 @@ export default function ScriptPreviewPanel({
         <div className="min-w-0 truncate text-slate-200" title={path}>
           Preview: {basename(path)}
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-slate-600">{deviceStatus}</div>
+        <div className="flex items-center gap-2">
+          {state?.isRunning ? (
+            <button
+              type="button"
+              onClick={() => onStopPreview(path)}
+              className="rounded border border-rose-300/60 bg-rose-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-500"
+              title="Stop and close preview"
+            >
+              Stop Preview
+            </button>
+          ) : null}
+          <div className="text-[11px] text-slate-600">{deviceStatus}</div>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
