@@ -1326,14 +1326,13 @@ pub fn run() {
                         let chunk = data.get("chunk_len").and_then(|v| v.as_u64()).unwrap_or(0);
                         let pkt = data.get("packet_size").and_then(|v| v.as_u64()).unwrap_or(0);
                         let period_ns = data.get("period_ns").and_then(|v| v.as_i64()).unwrap_or(0);
-                        let sleep_ns = data.get("sleep_ns").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let _sleep_ns = data.get("sleep_ns").and_then(|v| v.as_i64()).unwrap_or(0);
                         let bs = data.get("bs").and_then(|v| v.as_u64()).unwrap_or(last_bs);
                         last_bs = bs;
 
                         let period_ms = (period_ns as f64) / 1_000_000.0;
-                        let sleep_ms = (sleep_ns as f64) / 1_000_000.0;
                         eprintln!(
-                            "TX {pct:>3}% {sent}/{total}B chunk={chunk}B pkt={pkt}B period={period_ms:.2}ms sleep={sleep_ms:.2}ms BS={bs}"
+                            "TX {pct:>3}% {sent}/{total}B chunk={chunk}B pkt={pkt}B period={period_ms:.2}ms BS={bs}"
                         );
                     }
                 }
