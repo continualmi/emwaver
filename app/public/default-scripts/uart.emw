@@ -1,4 +1,4 @@
-// Simple UART test script for STM32F042 (USART1 on PB6/PB7)
+// Simple UART test script for STM32F042 (USART1 on B6/B7)
 let baud = "115200";
 let readLen = 16;
 let writeMode = "text"; // "text" | "hex"
@@ -127,8 +127,8 @@ function render() {
       padding: 16,
       spacing: 12,
       children: [
-        UI.text({ text: "UART (PB6/PB7)", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "Note: PB6/PB7 are shared with I2C1; using UART will switch the pins to USART1.", foregroundColor: "#9CA3AF" }),
+        UI.text({ text: "UART (B6/B7)", font: "title2", fontWeight: "semibold" }),
+        UI.text({ text: "Note: B6/B7 are shared with I2C1; using UART will switch the pins to USART1.", foregroundColor: "#9CA3AF" }),
 
         UI.row({
           spacing: 12,

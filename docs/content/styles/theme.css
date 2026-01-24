@@ -10,20 +10,20 @@
 /*
   Site-wide atmosphere
 
-  Dark-only docs: deep ocean blues + subtle sky glow.
-  Let the background show through Material's layout wrappers.
+  Match the desktop app's dark navy background (#0f172a), but keep a subtle
+  "sky glow" so large pages don't feel flat.
 */
 [data-md-color-scheme="default"],
 [data-md-color-scheme="slate"] {
-  --md-default-bg-color: #061423;
+  --md-default-bg-color: #0f172a;
 }
 
 [data-md-color-scheme="default"] body,
 [data-md-color-scheme="slate"] body {
   background:
-    radial-gradient(1000px 720px at 15% -10%, rgba(56, 189, 248, 0.16), transparent 55%),
-    radial-gradient(900px 680px at 90% 10%, rgba(2, 136, 209, 0.12), transparent 52%),
-    linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
+    radial-gradient(1000px 720px at 15% -10%, rgba(56, 189, 248, 0.12), transparent 55%),
+    radial-gradient(900px 680px at 90% 10%, rgba(2, 136, 209, 0.10), transparent 52%),
+    linear-gradient(180deg, #0b1220 0%, #0f172a 55%, #0b1220 100%);
   background-attachment: fixed;
 }
 
@@ -40,14 +40,14 @@
   --md-primary-fg-color--dark: #01579b;
   --md-accent-fg-color: #38bdf8;
   --md-typeset-a-color: #7dd3fc;
-  --md-default-bg-color: #061423;
+  --md-default-bg-color: #0f172a;
 }
 
 [data-md-color-scheme="slate"] body {
   background:
-    radial-gradient(1000px 720px at 15% -10%, rgba(56, 189, 248, 0.16), transparent 55%),
-    radial-gradient(900px 680px at 90% 10%, rgba(2, 136, 209, 0.12), transparent 52%),
-    linear-gradient(180deg, #020617 0%, #061423 55%, #020617 100%);
+    radial-gradient(1000px 720px at 15% -10%, rgba(56, 189, 248, 0.12), transparent 55%),
+    radial-gradient(900px 680px at 90% 10%, rgba(2, 136, 209, 0.10), transparent 52%),
+    linear-gradient(180deg, #0b1220 0%, #0f172a 55%, #0b1220 100%);
   background-attachment: fixed;
 }
 

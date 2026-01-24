@@ -7,7 +7,7 @@ title: Current Device
 EMWaver is focused on a single current-gen **STM32** device that connects over **USB**.
 
 [PCB (PDF)](../hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf){ .md-button }
-[Pinout](pinout.md){ .md-button }
+[Pinout](pinout/){ .md-button }
 [Order from JLCPCB](../hardware-catalog/hardware.html){ .md-button }
 
 ## What you get

@@ -7,14 +7,14 @@ let statusText = "";
 let lastResponse = "";
 
 const ADC_PINS = [
-  { label: "PA0 / ADC_IN0", value: "0" },
-  { label: "PA1 / ADC_IN1", value: "1" },
-  { label: "PA2 / ADC_IN2", value: "2" },
-  { label: "PA3 / ADC_IN3", value: "3" },
-  { label: "PA4 / ADC_IN4", value: "4" },
-  { label: "PA5 / ADC_IN5", value: "5" },
-  { label: "PA6 / ADC_IN6", value: "6" },
-  { label: "PA7 / ADC_IN7", value: "7" },
+  { label: "A0 / ADC_IN0", value: "0" },
+  { label: "A1 / ADC_IN1", value: "1" },
+  { label: "A2 / ADC_IN2", value: "2" },
+  { label: "A3 / ADC_IN3", value: "3" },
+  { label: "A4 / ADC_IN4", value: "4" },
+  { label: "A5 / ADC_IN5", value: "5" },
+  { label: "A6 / ADC_IN6", value: "6" },
+  { label: "A7 / ADC_IN7", value: "7" },
 ];
 
 const INTERNAL_SOURCES = [
