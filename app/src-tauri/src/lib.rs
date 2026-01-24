@@ -140,6 +140,17 @@ struct ReadPacketsResponse {
 }
 
 #[derive(Clone, Serialize)]
+struct TxProgressEvent {
+    pct: u64,
+    sent_bytes: u64,
+    total_bytes: u64,
+    chunk_len: u64,
+    packet_size: u64,
+    period_ns: i64,
+    bs: u64,
+}
+
+#[derive(Clone, Serialize)]
 struct ReadMonitorResponse {
     data: Vec<u8>,
     ts_ms: Vec<u64>,
@@ -1284,6 +1295,8 @@ pub fn run() {
         .setup(move |app| {
             let handle = app.handle();
 
+            let app_handle_for_events = handle.clone();
+
             // Background device event pump (TX progress, flow control, etc.).
             let mut events_rx = device_state_for_setup.bridge.event_tx.subscribe();
             tauri::async_runtime::spawn(async move {
@@ -1340,6 +1353,19 @@ pub fn run() {
                         let _sleep_ns = data.get("sleep_ns").and_then(|v| v.as_i64()).unwrap_or(0);
                         let bs = data.get("bs").and_then(|v| v.as_u64()).unwrap_or(last_bs);
                         last_bs = bs;
+
+                        let _ = app_handle_for_events.emit(
+                            "tx_progress",
+                            TxProgressEvent {
+                                pct,
+                                sent_bytes: sent,
+                                total_bytes: total,
+                                chunk_len: chunk,
+                                packet_size: pkt,
+                                period_ns,
+                                bs,
+                            },
+                        );
 
                         let period_ms = (period_ns as f64) / 1_000_000.0;
                         last_tx_period_ms = period_ms;
