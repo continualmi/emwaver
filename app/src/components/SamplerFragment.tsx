@@ -341,13 +341,10 @@ function SamplerFragment() {
   const getAdaptiveBins = useCallback(
     (requested: number) => {
       const base = getEffectiveBins(requested);
-      const width = plotRootRef.current?.clientWidth ?? 0;
-      if (!width) {
-        return base;
-      }
-      // Similar intent to Android's fixed `visiblePoints=300`: keep redraw cost bounded.
-      const pixelCap = Math.max(MIN_CHART_BINS, Math.min(MAX_CHART_BINS, Math.floor(width / 2)));
-      return Math.min(base, pixelCap);
+      // Respect user-requested bins (clamped by MAX_CHART_BINS).
+      // The number of rendered points can still be lower when zoomed in (raw bits), and can be
+      // up to ~2x bins when zoomed out (min/max pairs per bin).
+      return base;
     },
     [getEffectiveBins],
   );
@@ -513,8 +510,10 @@ function SamplerFragment() {
       }
       const storedRefresh = Number.parseInt(localStorage.getItem(SETTINGS_REFRESH_KEY) || '50', 10);
       const storedMaxSamples = Number.parseInt(localStorage.getItem(SETTINGS_MAX_SAMPLES_KEY) || '393216', 10);
+      const storedResolution = Number.parseInt(localStorage.getItem(SETTINGS_RESOLUTION_KEY) || '1000', 10);
       setRefreshRate(Number.isNaN(storedRefresh) ? 50 : storedRefresh);
       setMaxSamples(Number.isNaN(storedMaxSamples) ? 393216 : storedMaxSamples);
+      setChartResolution(Number.isNaN(storedResolution) ? 1000 : storedResolution);
     };
 
     window.addEventListener(SETTINGS_EVENT, handler);
@@ -1494,6 +1493,7 @@ function SamplerFragment() {
                   <div>Resolution: 10 µs</div>
                   <div>Points: {chartPointCount}</div>
                   <div>View: {debugViewport.visibleStart}..{debugViewport.visibleEnd}</div>
+                  <div>Target bins: {chartResolution}</div>
                   <div>Bins: {debugViewport.requestedBins}</div>
                   <div>
                     Compression: {formatFinite(getCompressionBitsPerBin(), 2)} bits/bin
@@ -1697,9 +1697,7 @@ function SamplerFragment() {
             </div>
             
             <div className="mb-4 space-y-2">
-              <label className="block text-sm font-medium text-slate-300">
-                Chart Resolution (visible points)
-              </label>
+              <label className="block text-sm font-medium text-slate-300">Chart bins</label>
               <input
                 type="number"
                 value={chartResolution}
@@ -1707,7 +1705,7 @@ function SamplerFragment() {
                 className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 focus:border-blue-500 focus:outline-none"
               />
               <p className="text-xs text-slate-500">
-                Higher values show more detail but may reduce performance.
+                Higher values show more detail but may reduce performance. Rendered points depend on zoom (raw vs compressed).
               </p>
             </div>
 

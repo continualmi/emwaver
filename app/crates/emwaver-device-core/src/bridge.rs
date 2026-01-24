@@ -2052,6 +2052,13 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
     let start = tokio::time::Instant::now();
     let mut sent_at_packets: i64 = 0;
 
+    // Target schedule (relative to `start`) for the next send.
+    //
+    // Note: this is intentionally cumulative so flow-control adjustments actually change the
+    // long-term send rate (effective period). We only apply a nudge when we observed a fresh
+    // BS update in this iteration; otherwise we'd keep accumulating on stale BS values.
+    let mut send_deadline_ns: i64 = 0;
+
     let mut sent_bytes = 0usize;
     let mut last_emitted_progress_pct: i32 = -1;
 
@@ -2093,15 +2100,15 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
         sent_bytes = end;
         sent_at_packets = sent_at_packets.saturating_add(1);
 
-        // Important: adjust relative to the ideal base schedule (non-cumulative), otherwise
-        // repeated "speed up" nudges can run away and burst-send using stale BS values.
-        let mut send_at_ns = sent_at_packets.saturating_mul(profile.period_ns);
-        if have_status {
-            send_at_ns = tx::usb_adjust_deadline_ns(profile, send_at_ns, last_status as i32);
+        let prev_deadline_ns = send_deadline_ns;
+        send_deadline_ns = send_deadline_ns.saturating_add(profile.period_ns);
+        if have_status && saw_bs {
+            send_deadline_ns = tx::usb_adjust_deadline_ns(profile, send_deadline_ns, last_status as i32);
         }
+        let effective_period_ns = send_deadline_ns.saturating_sub(prev_deadline_ns);
 
         let now_ns = start.elapsed().as_nanos() as i64;
-        let sleep_ns = send_at_ns.saturating_sub(now_ns);
+        let sleep_ns = send_deadline_ns.saturating_sub(now_ns);
         if sleep_ns > 0 {
             tokio::time::sleep(Duration::from_nanos(sleep_ns as u64)).await;
         }
@@ -2118,7 +2125,7 @@ async fn midi_transmit_buffer(state: &BridgeState, data: Vec<u8>) -> Result<()> 
                     "pct": pct,
                     "chunk_len": chunk.len(),
                     "packet_size": packet_size,
-                    "period_ns": profile.period_ns,
+                    "period_ns": effective_period_ns,
                     "sleep_ns": sleep_ns.max(0),
                     "bs": last_status
                 }),
