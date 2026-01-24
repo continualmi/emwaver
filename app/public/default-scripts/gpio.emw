@@ -1,258 +1,48 @@
-// Simple GPIO control script
-let selectedTarget = "esp32";
-let selectedPin = "";
-let selectedMode = "out";
-let statusText = "";
-let lastResponse = "";
-
-const TARGETS = [
-    { label: "ESP32-S3", value: "esp32" },
-    { label: "STM32F042", value: "stm32" }
+const PINS = [
+    { label: "A0 (IR_RX)", value: A0 },
+    { label: "A1 (IR_TX)", value: A1 },
+    { label: "A2 (GDO0)", value: A2 },
+    { label: "A3 (GDO2)", value: A3 },
+    { label: "A4 (NSS)", value: A4 },
+    { label: "A5 (SCK)", value: A5 },
+    { label: "A6 (MISO)", value: A6 },
+    { label: "A7 (MOSI)", value: A7 },
+    { label: "A13 (SWCLK)", value: A13 },
+    { label: "A14 (SWDIO)", value: A14 },
+    { label: "B6 (UART TX / I2C SCL)", value: B6 },
+    { label: "B7 (UART RX / I2C SDA)", value: B7 },
 ];
 
-// Keep ESP32 pin labels aligned with the Sampler's ESP32 pin list (Desktop/iOS/Android),
-// including the [F]/[D]/[S] distinctions shown in the UI.
-const ESP32_PIN_LABELS = [
-    "IO1 DIO0[S]/GDO0[F]",
-    "IO2 DIO1[S]/GDO2[F]",
-    "IO3 GPIO3",
-    "IO4 IR TX[F/D]",
-    "IO5 IR RX[F/D]",
-    "IO6 GPIO6",
-    "IO7 GPIO7",
-    "IO8 GPIO8",
-    "IO9 GPIO9",
-    "IO10 GPIO10",
-    "IO11 GPIO11",
-    "IO12 GPIO12",
-    "IO13 GPIO13",
-    "IO14 GPIO14",
-    "IO15 GPIO15",
-    "IO16 GPIO16",
-    "IO17 GPIO17",
-    "IO18 GPIO18",
-    "IO37 IR TX[S]",
-    "IO38 IR RX[S]",
-    "IO39 DIO5[S]",
-    "IO40 DIO4[S]",
-    "IO41 DIO3[S]",
-    "IO42 DIO2[S]",
-    "IO46 GPIO46",
-];
+let pin = PINS[0].value;
 
-// Keep STM32 pin labels aligned with the Sampler's STM32 pin list (Desktop/iOS/Android).
-const STM32_PIN_LABELS = [
-    "A0 (IR_RX)",
-    "A1 (IR_TX)",
-    "A2 (GDO0)",
-    "A3 (GDO2)",
-    "A4 (NSS)",
-    "A5 (SCK)",
-    "A6 (MISO)",
-    "A7 (MOSI)",
-    "A13 (SWCLK)",
-    "A14 (SWDIO)",
-    "B6 (UART TX / I2C SCL)",
-    "B7 (UART RX / I2C SDA)",
-];
-
-function esp32PinValueFromLabel(label) {
-    const match = String(label).match(/\bIO(\d+)\b/);
-    return match ? match[1] : "";
+async function writeHigh() {
+    await pinMode(pin, OUTPUT);
+    await digitalWrite(pin, HIGH);
 }
 
-function stm32PinValueFromLabel(label) {
-    const match = String(label).match(/\bP?([AB])(\d{1,2})\b/);
-    if (!match) return "";
-    const bank = match[1];
-    const pin = parseInt(match[2], 10);
-    if (!Number.isFinite(pin) || pin < 0 || pin > 15) return "";
-    return String(bank === "A" ? pin : 16 + pin);
+async function writeLow() {
+    await pinMode(pin, OUTPUT);
+    await digitalWrite(pin, LOW);
 }
 
-const ESP32_PINS = ESP32_PIN_LABELS
-    .map((label) => ({ label, value: esp32PinValueFromLabel(label) }))
-    .filter((pin) => pin.value !== "");
-
-const STM32_PINS = STM32_PIN_LABELS
-    .map((label) => ({ label, value: stm32PinValueFromLabel(label) }))
-    .filter((pin) => pin.value !== "");
-
-function pinsForTarget(target) {
-    return target === "stm32" ? STM32_PINS : ESP32_PINS;
-}
-
-selectedPin = (pinsForTarget(selectedTarget)[0] || { value: "" }).value;
-
-function gpioRead() {
-    statusText = "Reading...";
-    lastResponse = "";
-    render();
-
-    const pinNumber = Number(selectedPin);
-    if (!Number.isFinite(pinNumber)) {
-        statusText = "Invalid pin";
-        render();
-        return;
-    }
-
-    const done = function (level) {
-        const state = Number(level) ? true : false;
-        const pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
-        const pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-        statusText = pinName + " is " + (state ? "HIGH" : "LOW");
-        lastResponse = "digitalRead(" + String(pinNumber) + ") -> " + (state ? "HIGH" : "LOW");
-        render();
-    };
-
-    try {
-        if (selectedMode === "in") {
-            const r = pinMode(pinNumber, INPUT);
-            if (r && typeof r.then === "function") {
-                r.then(function () {
-                    const resp = digitalRead(pinNumber);
-                    if (resp && typeof resp.then === "function") resp.then(done);
-                    else done(resp);
-                });
-                return;
-            }
-        }
-
-        const resp = digitalRead(pinNumber);
-        if (resp && typeof resp.then === "function") resp.then(done);
-        else done(resp);
-    } catch (e) {
-        statusText = "Read failed: " + String(e && e.message ? e.message : e);
-        render();
-    }
-}
-
-function gpioWriteHigh() {
-    gpioWrite(1);
-}
-
-function gpioWriteLow() {
-    gpioWrite(0);
-}
-
-function gpioWrite(value) {
-    statusText = value ? "Setting HIGH..." : "Setting LOW...";
-    lastResponse = "";
-    render();
-
-    const pinNumber = Number(selectedPin);
-    if (!Number.isFinite(pinNumber)) {
-        statusText = "Invalid pin";
-        render();
-        return;
-    }
-
-    const targetLevel = value ? HIGH : LOW;
-    const pinInfo = pinsForTarget(selectedTarget).find(p => p.value === selectedPin);
-    const pinName = pinInfo ? pinInfo.label : "Pin " + selectedPin;
-
-    const finish = function (readLevel) {
-        const readHigh = Number(readLevel) ? true : false;
-        statusText = "Set " + pinName + " " + (value ? "HIGH" : "LOW") + " (readback: " + (readHigh ? "HIGH" : "LOW") + ")";
-        lastResponse =
-            "pinMode(" + String(pinNumber) + ", OUTPUT)\n" +
-            "digitalWrite(" + String(pinNumber) + ", " + (value ? "HIGH" : "LOW") + ")\n" +
-            "digitalRead(" + String(pinNumber) + ") -> " + (readHigh ? "HIGH" : "LOW");
-        render();
-    };
-
-    try {
-        const pm = pinMode(pinNumber, OUTPUT);
-        const afterPinMode = function () {
-            const w = digitalWrite(pinNumber, targetLevel);
-            const afterWrite = function () {
-                const r = digitalRead(pinNumber);
-                if (r && typeof r.then === "function") r.then(finish);
-                else finish(r);
-            };
-            if (w && typeof w.then === "function") w.then(afterWrite);
-            else afterWrite();
-        };
-        if (pm && typeof pm.then === "function") pm.then(afterPinMode);
-        else afterPinMode();
-    } catch (e) {
-        statusText = "Write failed: " + String(e && e.message ? e.message : e);
-        render();
-    }
-}
-
-function render() {
-    const pins = pinsForTarget(selectedTarget);
-    UI.render(UI.column({
-        padding: 16,
-        spacing: 16,
-        children: [
-            UI.text({ text: "GPIO Control", font: "title2", fontWeight: "semibold" }),
-            UI.text({ text: "Target", fontWeight: "medium" }),
-            UI.picker({
-                style: "menu",
-                selected: selectedTarget,
-                options: TARGETS,
-                onChange: function(value) {
-                    selectedTarget = value;
-                    selectedPin = pinsForTarget(selectedTarget)[0].value;
-                    statusText = "";
-                    render();
-                }
-            }),
-            // Pin selection
-            UI.text({ text: "Select Pin", fontWeight: "medium" }),
-            UI.picker({
-                style: "menu",
-                selected: String(selectedPin),
-                options: pins,
-                onChange: function(value) {
-                    selectedPin = value;
-                }
-            }),
-
-            // Mode selection
-            UI.text({ text: "Mode", fontWeight: "medium" }),
-            UI.picker({
-                style: "menu",
-                selected: selectedMode,
-                options: [
-                    { label: "Output", value: "out" },
-                    { label: "Input", value: "in" }
-                ],
-                onChange: function(value) {
-                    selectedMode = value;
-                }
-            }),
-            
-            // GPIO operations
-            UI.row({
-                spacing: 12,
-                children: [
-                    UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: gpioRead }),
-                    UI.button({ label: "Write HIGH", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: gpioWriteHigh }),
-                    UI.button({ label: "Write LOW", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: gpioWriteLow })
-                ]
-            }),
-            
-            // Result display
-            statusText ? UI.text({
-                text: statusText,
-                backgroundColor: "#111827",
-                foregroundColor: "#FFFFFF",
-                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-                cornerRadius: 8
-            }) : null
-            ,
-            lastResponse ? UI.text({
-                text: lastResponse,
-                backgroundColor: "#0B1220",
-                foregroundColor: "#E5E7EB",
-                padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-                cornerRadius: 8
-            }) : null
-        ]
-    }));
-}
-
-render();
+UI.render(UI.column({
+    padding: 16,
+    spacing: 12,
+    children: [
+        UI.picker({
+            style: "menu",
+            selected: pin,
+            options: PINS,
+            onChange: function (value) {
+                pin = value;
+            },
+        }),
+        UI.row({
+            spacing: 12,
+            children: [
+                UI.button({ label: "High", onTap: writeHigh }),
+                UI.button({ label: "Low", onTap: writeLow }),
+            ],
+        }),
+    ],
+}));

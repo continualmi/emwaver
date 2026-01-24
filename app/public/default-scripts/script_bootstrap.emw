@@ -792,11 +792,54 @@ if (typeof OUTPUT === 'undefined') {
   __scriptGlobal.OUTPUT = OUTPUT;
 }
 
-// Logical board pins (avoid leaking MCU pin names into scripts).
-var __scriptBoardPins = __scriptGlobal.__scriptBoardPins || {
-  CC1101_CS: 4,
-  GDO0: 2,
-};
+// Board pins.
+//
+// Pins are encoded the same way as firmware `decode_encoded_pin`:
+// - A0..A15 => 0..15
+// - B0..B15 => 16..31
+//
+// We expose both MCU-ish names (A0, B6, ...) and board aliases (GDO0, IR_RX, ...)
+// so scripts can use either and they resolve to the same encoded pin.
+var __scriptBoardPins = __scriptGlobal.__scriptBoardPins || {};
+
+function __scriptDefineBoardPin(name, encodedPin) {
+  if (!Object.prototype.hasOwnProperty.call(__scriptBoardPins, name)) {
+    __scriptBoardPins[name] = encodedPin;
+  }
+}
+
+// Sampler pins / board aliases (keep aligned with Desktop Sampler UI pin list).
+__scriptDefineBoardPin('A0', 0);
+__scriptDefineBoardPin('A1', 1);
+__scriptDefineBoardPin('A2', 2);
+__scriptDefineBoardPin('A3', 3);
+__scriptDefineBoardPin('A4', 4);
+__scriptDefineBoardPin('A5', 5);
+__scriptDefineBoardPin('A6', 6);
+__scriptDefineBoardPin('A7', 7);
+__scriptDefineBoardPin('A13', 13);
+__scriptDefineBoardPin('A14', 14);
+__scriptDefineBoardPin('B6', 16 + 6);
+__scriptDefineBoardPin('B7', 16 + 7);
+
+__scriptDefineBoardPin('IR_RX', 0);
+__scriptDefineBoardPin('IR_TX', 1);
+__scriptDefineBoardPin('GDO0', 2);
+__scriptDefineBoardPin('GDO2', 3);
+__scriptDefineBoardPin('NSS', 4);
+__scriptDefineBoardPin('SCK', 5);
+__scriptDefineBoardPin('MISO', 6);
+__scriptDefineBoardPin('MOSI', 7);
+__scriptDefineBoardPin('SWCLK', 13);
+__scriptDefineBoardPin('SWDIO', 14);
+__scriptDefineBoardPin('UART_TX', 16 + 6);
+__scriptDefineBoardPin('UART_RX', 16 + 7);
+__scriptDefineBoardPin('I2C_SCL', 16 + 6);
+__scriptDefineBoardPin('I2C_SDA', 16 + 7);
+
+// Back-compat / convenience.
+__scriptDefineBoardPin('CC1101_CS', 4);
+
 __scriptGlobal.__scriptBoardPins = __scriptBoardPins;
 
 function __scriptResolvePin(pin) {
@@ -810,13 +853,116 @@ function __scriptResolvePin(pin) {
   throw new Error('Invalid pin: ' + String(pin));
 }
 
-if (typeof CC1101_CS === 'undefined') {
-  var CC1101_CS = 'CC1101_CS';
-  __scriptGlobal.CC1101_CS = CC1101_CS;
+// Expose pin constants as globals so scripts can write `pinMode(A0, OUTPUT)`.
+// Values are string keys that resolve through __scriptResolvePin.
+if (typeof A0 === 'undefined') {
+  var A0 = 'A0';
+  __scriptGlobal.A0 = A0;
+}
+if (typeof A1 === 'undefined') {
+  var A1 = 'A1';
+  __scriptGlobal.A1 = A1;
+}
+if (typeof A2 === 'undefined') {
+  var A2 = 'A2';
+  __scriptGlobal.A2 = A2;
+}
+if (typeof A3 === 'undefined') {
+  var A3 = 'A3';
+  __scriptGlobal.A3 = A3;
+}
+if (typeof A4 === 'undefined') {
+  var A4 = 'A4';
+  __scriptGlobal.A4 = A4;
+}
+if (typeof A5 === 'undefined') {
+  var A5 = 'A5';
+  __scriptGlobal.A5 = A5;
+}
+if (typeof A6 === 'undefined') {
+  var A6 = 'A6';
+  __scriptGlobal.A6 = A6;
+}
+if (typeof A7 === 'undefined') {
+  var A7 = 'A7';
+  __scriptGlobal.A7 = A7;
+}
+if (typeof A13 === 'undefined') {
+  var A13 = 'A13';
+  __scriptGlobal.A13 = A13;
+}
+if (typeof A14 === 'undefined') {
+  var A14 = 'A14';
+  __scriptGlobal.A14 = A14;
+}
+if (typeof B6 === 'undefined') {
+  var B6 = 'B6';
+  __scriptGlobal.B6 = B6;
+}
+if (typeof B7 === 'undefined') {
+  var B7 = 'B7';
+  __scriptGlobal.B7 = B7;
+}
+
+if (typeof IR_RX === 'undefined') {
+  var IR_RX = 'IR_RX';
+  __scriptGlobal.IR_RX = IR_RX;
+}
+if (typeof IR_TX === 'undefined') {
+  var IR_TX = 'IR_TX';
+  __scriptGlobal.IR_TX = IR_TX;
 }
 if (typeof GDO0 === 'undefined') {
   var GDO0 = 'GDO0';
   __scriptGlobal.GDO0 = GDO0;
+}
+if (typeof GDO2 === 'undefined') {
+  var GDO2 = 'GDO2';
+  __scriptGlobal.GDO2 = GDO2;
+}
+if (typeof NSS === 'undefined') {
+  var NSS = 'NSS';
+  __scriptGlobal.NSS = NSS;
+}
+if (typeof SCK === 'undefined') {
+  var SCK = 'SCK';
+  __scriptGlobal.SCK = SCK;
+}
+if (typeof MISO === 'undefined') {
+  var MISO = 'MISO';
+  __scriptGlobal.MISO = MISO;
+}
+if (typeof MOSI === 'undefined') {
+  var MOSI = 'MOSI';
+  __scriptGlobal.MOSI = MOSI;
+}
+if (typeof SWCLK === 'undefined') {
+  var SWCLK = 'SWCLK';
+  __scriptGlobal.SWCLK = SWCLK;
+}
+if (typeof SWDIO === 'undefined') {
+  var SWDIO = 'SWDIO';
+  __scriptGlobal.SWDIO = SWDIO;
+}
+if (typeof UART_TX === 'undefined') {
+  var UART_TX = 'UART_TX';
+  __scriptGlobal.UART_TX = UART_TX;
+}
+if (typeof UART_RX === 'undefined') {
+  var UART_RX = 'UART_RX';
+  __scriptGlobal.UART_RX = UART_RX;
+}
+if (typeof I2C_SCL === 'undefined') {
+  var I2C_SCL = 'I2C_SCL';
+  __scriptGlobal.I2C_SCL = I2C_SCL;
+}
+if (typeof I2C_SDA === 'undefined') {
+  var I2C_SDA = 'I2C_SDA';
+  __scriptGlobal.I2C_SDA = I2C_SDA;
+}
+if (typeof CC1101_CS === 'undefined') {
+  var CC1101_CS = 'CC1101_CS';
+  __scriptGlobal.CC1101_CS = CC1101_CS;
 }
 
 function __scriptHexBytes(values) {
