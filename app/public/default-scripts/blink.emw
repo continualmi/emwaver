@@ -5,7 +5,6 @@ let periodMs = 250;
 let isBlinking = false;
 let level = LOW;
 let loopHandle = null;
-let statusText = "";
 
 const PINS = [
   { label: "GDO0 (A2)", value: GDO0 },
@@ -28,7 +27,6 @@ function stopBlink() {
   }
   loopHandle = null;
   isBlinking = false;
-  statusText = "Stopped";
   render();
 }
 
@@ -38,20 +36,24 @@ async function startBlink() {
   const period = Math.max(1, Math.floor(Number(periodMs) || 1));
   periodMs = period;
   level = LOW;
-  statusText = "Starting...";
-  render();
-
   await pinMode(selectedPin, OUTPUT);
   await digitalWrite(selectedPin, level);
 
   isBlinking = true;
-  statusText = "Blinking every " + String(periodMs) + "ms";
   render();
 
   loopHandle = every(periodMs, function () {
     level = level === LOW ? HIGH : LOW;
     digitalWrite(selectedPin, level);
   });
+}
+
+async function toggleBlink() {
+  if (isBlinking) {
+    stopBlink();
+    return;
+  }
+  await startBlink();
 }
 
 function render() {
@@ -62,8 +64,8 @@ function render() {
       children: [
         UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
 
-        UI.text({ text: "Pin", fontWeight: "medium" }),
         UI.picker({
+          id: "blink.pin",
           style: "menu",
           selected: String(selectedPin),
           options: PINS,
@@ -77,13 +79,13 @@ function render() {
           },
         }),
 
-        UI.text({ text: "Period (ms)", fontWeight: "medium" }),
         UI.slider({
+          id: "blink.period",
           value: Number(periodMs),
           min: 1,
           max: 2000,
           step: 1,
-          onChange: function (value) {
+          onSubmit: function (value) {
             periodMs = Math.max(1, Math.floor(Number(value) || 1));
             if (isBlinking) {
               void startBlink();
@@ -93,33 +95,13 @@ function render() {
           },
         }),
 
-        UI.row({
-          spacing: 12,
-          children: [
-            UI.button({
-              label: isBlinking ? "Blinking..." : "Start",
-              backgroundColor: isBlinking ? "#334155" : "#059669",
-              foregroundColor: "#FFFFFF",
-              onTap: startBlink,
-            }),
-            UI.button({
-              label: "Stop",
-              backgroundColor: "#DC2626",
-              foregroundColor: "#FFFFFF",
-              onTap: stopBlink,
-            }),
-          ],
+        UI.button({
+          id: "blink.toggle",
+          label: isBlinking ? "Stop" : "Start",
+          backgroundColor: isBlinking ? "rgba(244, 63, 94, 0.18)" : "rgba(16, 185, 129, 0.18)",
+          foregroundColor: isBlinking ? "#FFE4E6" : "#D1FAE5",
+          onTap: toggleBlink,
         }),
-
-        statusText
-          ? UI.text({
-              text: statusText,
-              backgroundColor: "#111827",
-              foregroundColor: "#FFFFFF",
-              padding: { top: 10, bottom: 10, leading: 12, trailing: 12 },
-              cornerRadius: 8,
-            })
-          : null,
       ],
     }),
   );
