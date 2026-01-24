@@ -1920,18 +1920,18 @@ adc_done_bin:
               EMW_USB_InitRxBuffer_FS();
               EMW_USB_SetBufferType_FS(EMW_BUFFER_CIRCULAR);
 
-              uint32_t start = HAL_GetTick();
-              while (EMW_USB_GetRxBufferBytesAvailable_FS() < 250) {
-                  MIDI_PollTx_FS();
-                  if ((HAL_GetTick() - start) > 2000) {
-                      break;
-                  }
-              }
+               uint32_t start = HAL_GetTick();
+               while (EMW_USB_GetRxBufferBytesAvailable_FS() < 250) {
+                   MIDI_PollTx_FS();
+                   if ((HAL_GetTick() - start) > 2000) {
+                       break;
+                   }
+               }
 
-              HAL_TIM_Base_Start_IT(&htim3);
-              while (EMW_USB_GetRxBufferBytesAvailable_FS() != 0) {
-                  MIDI_PollTx_FS();
-              }
+               HAL_TIM_Base_Start_IT(&htim3);
+               while (EMW_USB_GetRxBufferBytesAvailable_FS() != 0) {
+                   MIDI_PollTx_FS();
+               }
 
               HAL_TIM_Base_Stop_IT(&htim3);
               EMW_USB_SetBufferType_FS(EMW_BUFFER_PACKET);
