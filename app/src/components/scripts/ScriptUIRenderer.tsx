@@ -151,6 +151,14 @@ export default function ScriptUIRenderer({
           }
         };
 
+        const handleCommit = (event: React.SyntheticEvent<HTMLInputElement>) => {
+          if (!handlers.submit || !onInvokeCallback) {
+            return;
+          }
+          const newValue = parseFloat(event.currentTarget.value);
+          onInvokeCallback(handlers.submit, [newValue]);
+        };
+
         return (
           <div className="flex flex-col gap-2">
             {Boolean(props.label) && <label className="text-slate-300 text-sm">{props.label as string}</label>}
@@ -161,6 +169,8 @@ export default function ScriptUIRenderer({
               step={step}
               value={value}
               onChange={handleChange}
+              onMouseUp={handleCommit}
+              onTouchEnd={handleCommit}
               className="w-full accent-blue-600"
             />
             <div className="text-slate-400 text-xs">{value}</div>

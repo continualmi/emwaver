@@ -1661,7 +1661,7 @@ export default function WorkspaceShell({
                         })();
                       }}
                       disabled={!canRunScript || !scriptTargetPath}
-                      className="rounded border border-emerald-300/70 bg-emerald-500 px-2 py-1.5 text-white shadow-sm hover:bg-emerald-400 hover:shadow disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
+                      className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1.5 text-emerald-100 hover:bg-emerald-500/15 disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
                       title={scriptTargetWantsPreview ? "Preview script" : "Run script"}
                     >
                       <span className="flex items-center gap-1.5">
@@ -1676,7 +1676,7 @@ export default function WorkspaceShell({
                         onClick={() => {
                           void stopScriptForPath(scriptTargetPath, { closePreview: false });
                         }}
-                        className="rounded border border-rose-300/60 bg-rose-700 px-2 py-1.5 text-white shadow-sm hover:bg-rose-600 hover:shadow"
+                        className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-2 py-1.5 text-rose-100 hover:bg-rose-500/15"
                         title="Stop script"
                       >
                         <span className="text-[11px] font-semibold">Stop</span>

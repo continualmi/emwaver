@@ -52,7 +52,7 @@ export default function ScriptPreviewPanel({
             <button
               type="button"
               onClick={() => onStopPreview(path)}
-              className="rounded border border-rose-300/60 bg-rose-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-rose-500"
+              className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-2 py-1 text-[11px] font-semibold text-rose-100 hover:bg-rose-500/15"
               title="Stop and close preview"
             >
               Stop Preview
