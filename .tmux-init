@@ -41,5 +41,13 @@ tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
 tmux send-keys -t $SESSION:2.4 'cd docs' C-m
 tmux send-keys -t $SESSION:2.4 'mkdocs serve'
 
-# Focus back on terminal window
-tmux select-window -t $SESSION:1
+# Window 3: Editor (Neovim + NvimTree + open AGENTS.md in the file pane)
+EDITOR_WIN=$(tmux new-window -P -F "#{window_index}" -t "$SESSION" -n 'editor' -c "$PROJECT_DIR")
+
+# Open Neovim, open NvimTree, then jump to the file pane and open AGENTS.md there
+tmux send-keys -t "$SESSION:$EDITOR_WIN" \
+  'nvim -c "NvimTreeOpen" -c "wincmd l" -c "edit AGENTS.md"' C-m
+
+
+tmux select-window -t "$SESSION:$EDITOR_WIN"
+
