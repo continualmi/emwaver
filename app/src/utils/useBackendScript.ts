@@ -29,7 +29,6 @@ import type { ScriptTree } from "./ScriptEngine";
 export interface BackendScriptState {
   tree: ScriptTree | null;
   isRunning: boolean;
-  logs: string[];
   error: string | null;
 }
 
@@ -38,7 +37,6 @@ export interface UseBackendScriptResult {
   execute: (script: string, bootstrap: string) => Promise<void>;
   stop: () => Promise<void>;
   invokeCallback: (token: string, args: unknown[]) => Promise<void>;
-  clearLogs: () => void;
 }
 
 /**
@@ -48,7 +46,6 @@ export function useBackendScript(): UseBackendScriptResult {
   const [state, setState] = useState<BackendScriptState>({
     tree: null,
     isRunning: false,
-    logs: [],
     error: null,
   });
   
@@ -65,15 +62,6 @@ export function useBackendScript(): UseBackendScriptResult {
         setState((prev) => ({ ...prev, tree }));
       });
       unlistenersRef.current.push(unlistenRender);
-
-      // Listen for print events
-      const unlistenPrint = await safeListen<string>("script:print", (event) => {
-        setState((prev) => ({
-          ...prev,
-          logs: [...prev.logs.slice(-99), event.payload], // Keep last 100 logs
-        }));
-      });
-      unlistenersRef.current.push(unlistenPrint);
 
       // Listen for error events
       const unlistenError = await safeListen<string>("script:error", (event) => {
@@ -136,15 +124,10 @@ export function useBackendScript(): UseBackendScriptResult {
     }
   }, []);
 
-  const clearLogs = useCallback(() => {
-    setState((prev) => ({ ...prev, logs: [] }));
-  }, []);
-
   return {
     state,
     execute,
     stop,
     invokeCallback,
-    clearLogs,
   };
 }

@@ -23,33 +23,26 @@ final class ScriptEngine {
     private var context: JSContext?
     private var callbackRegistry: [String: JSValue] = [:]
     private var globalBindings: [String: Any] = [:]
-    private var printHandler: ((String) -> Void)?
     private var renderHandler: ((ScriptTree) -> Void)?
+    private var errorHandler: ((String) -> Void)?
     // Legacy host dialog hook (not part of the public Script API).
     private var dialogHandler: ((String, String) -> Void)?
 
     init() {}
 
-    func setup(printHandler: @escaping (String) -> Void,
-               renderHandler: @escaping (ScriptTree) -> Void,
-               bindings: [String: Any] = [:]) {
-        self.printHandler = printHandler
+    func setup(renderHandler: @escaping (ScriptTree) -> Void,
+               bindings: [String: Any] = [:],
+               errorHandler: ((String) -> Void)? = nil) {
         self.renderHandler = renderHandler
+        self.errorHandler = errorHandler
         self.globalBindings = bindings
         executionQueue.sync {
-            Swift.print("[ScriptEngine] Setup requested")
             let context = JSContext()
             context?.exceptionHandler = { [weak self] _, exception in
                 if let message = exception?.toString() {
-                    self?.printHandler?("Script error: \(message)")
-                    Swift.print("[ScriptEngine] JS exception: \(message)")
+                    self?.errorHandler?("Script error: \(message)")
                 }
             }
-
-            let printBlock: @convention(block) (String) -> Void = { [weak self] message in
-                self?.printHandler?(message)
-            }
-            context?.setObject(printBlock, forKeyedSubscript: "_scriptPrint" as NSString)
 
             let renderBlock: @convention(block) (JSValue) -> Void = { [weak self] value in
                 self?.handleRender(nodeValue: value)
@@ -64,13 +57,9 @@ final class ScriptEngine {
 
             let createByteArrayBlock: @convention(block) (JSValue) -> JSValue? = { [weak self] jsArray in
                 guard let context = jsArray.context else { return nil }
-                self?.printHandler?("[ScriptEngine] createByteArray called")
-                
                 if jsArray.isArray {
                     let length = jsArray.forProperty("length")?.toInt32() ?? 0
                     var bytes: [UInt8] = []
-                    self?.printHandler?("[ScriptEngine] createByteArray input array length: \(length)")
-                    
                     for i in 0..<length {
                         if let element = jsArray.atIndex(Int(i)),
                            element.isNumber {
@@ -81,11 +70,8 @@ final class ScriptEngine {
                     
                     // Create a Data object that JavaScript can use
                     let data = Data(bytes)
-                    self?.printHandler?("[ScriptEngine] createByteArray created Data with \(data.count) bytes: \(data.map { String(format: "%02X", $0) }.joined(separator: " "))")
                     return JSValue(object: data, in: context)
                 }
-                
-                self?.printHandler?("[ScriptEngine] createByteArray called with non-array")
                 return JSValue(undefinedIn: context)
             }
             context?.setObject(createByteArrayBlock, forKeyedSubscript: "_scriptCreateByteArray" as NSString)
@@ -99,11 +85,9 @@ final class ScriptEngine {
                    timeoutValue.isNumber {
                     
                     let timeout = timeoutValue.toInt32()
-                    self?.printHandler?("[BLEServiceWrapper] sendCommand called via manual block with \(command.count) bytes, timeout: \(timeout)")
                     
                     if let result = bleServiceWrapper.sendCommand(command, timeout: Int(timeout)) {
                         let bytes = Array(result)
-                        self?.printHandler?("[BLEServiceWrapper] manual block returning \(bytes.count) bytes: \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))")
                         return JSValue(object: bytes, in: context)
                     }
                 }
@@ -163,7 +147,6 @@ final class ScriptEngine {
 
             let dialogBlock: @convention(block) (String, String) -> Void = { [weak self] title, message in
                 guard let self else { return }
-                self.printHandler?("[ScriptEngine] dialog requested: \(title)")
                 DispatchQueue.main.async {
                     self.dialogHandler?(title, message)
                 }
@@ -173,11 +156,9 @@ final class ScriptEngine {
             if let context {
                 injectDSL(into: context)
                 applyGlobalBindings(to: context)
-                Swift.print("[ScriptEngine] DSL injected during setup")
             }
 
             self.context = context
-            Swift.print("[ScriptEngine] Setup finished: context assigned = \(self.context != nil)")
         }
     }
 
@@ -187,19 +168,10 @@ final class ScriptEngine {
                 return 
             }
             
-            // Debug via print handler so it shows in UI
-            self.printHandler?("DEBUG: execute() called with \(self.globalBindings.keys.count) bindings: \(Array(self.globalBindings.keys))")
-            
             self.callbackRegistry.removeAll()
             self.injectDSL(into: context)
             self.applyGlobalBindings(to: context)  // Apply bindings again after DSL reload
-            
-            // Check if BLEService is available after binding
-            let bleServiceCheck = context.evaluateScript("typeof BLEService")?.toString() ?? "undefined"
-            let sendCommandCheck = context.evaluateScript("typeof BLEService?.sendCommand")?.toString() ?? "undefined"
-            self.printHandler?("DEBUG: After binding - typeof BLEService = \(bleServiceCheck)")
-            self.printHandler?("DEBUG: After binding - typeof BLEService.sendCommand = \(sendCommandCheck)")
-            
+
             context.exception = nil
             let wrappedScript = """
 (() => {
@@ -224,7 +196,7 @@ final class ScriptEngine {
         executionQueue.async { [weak self] in
             guard let self else { return }
             guard let callback = self.callbackRegistry[token] else {
-                self.printHandler?("No callback registered for token \(token)")
+                self.errorHandler?("No callback registered for token \(token)")
                 return
             }
             _ = callback.call(withArguments: arguments)
@@ -240,38 +212,31 @@ final class ScriptEngine {
     }
 
     private func injectDSL(into context: JSContext) {
-        Swift.print("[ScriptEngine] Injecting shared script bootstrap")
-        guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "emw") else {
+        guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "js") else {
             let message = "Script bootstrap missing from app bundle (script_bootstrap.js)"
-            printHandler?(message)
-            Swift.print("[ScriptEngine] \(message)")
+            errorHandler?(message)
             return
         }
 
         do {
             let source = try String(contentsOf: url, encoding: .utf8)
             context.evaluateScript(source)
-            let uiType = context.evaluateScript("typeof UI")?.toString() ?? "undefined"
-            Swift.print("[ScriptEngine] After inject typeof UI = \(uiType)")
         } catch {
             let message = "Failed to load script bootstrap: \(error)"
-            printHandler?(message)
-            Swift.print("[ScriptEngine] \(message)")
+            errorHandler?(message)
         }
     }
 
     private func applyGlobalBindings(to context: JSContext) {
-        printHandler?("DEBUG: Applying \(globalBindings.count) global bindings...")
         for (key, value) in globalBindings {
             context.setObject(value, forKeyedSubscript: key as NSString)
-            printHandler?("DEBUG: Applied binding \(key) = \(type(of: value))")
         }
     }
 
     private func handleRender(nodeValue: JSValue) {
         guard let renderHandler else { return }
         guard let rootNode = buildNode(from: nodeValue) else {
-            printHandler?("Script render received invalid node")
+            errorHandler?("Script render received invalid node")
             return
         }
         let metadataValue = nodeValue.forProperty("metadata")
@@ -281,7 +246,6 @@ final class ScriptEngine {
             metadata = dict
         }
         let tree = ScriptTree(root: rootNode, metadata: metadata)
-        printHandler?("[ScriptEngine] handleRender with root type \(rootNode.type.rawValue)")
         DispatchQueue.main.async {
             renderHandler(tree)
         }

@@ -46,12 +46,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class ScriptEngine {
-    public interface PrintCallback {
-        void onPrint(String message);
-    }
-
     public interface RenderCallback {
         void onRender(ScriptTree tree);
+    }
+
+    public interface ErrorCallback {
+        void onError(String message);
     }
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
@@ -68,8 +68,8 @@ public final class ScriptEngine {
     private volatile boolean initialized;
     private volatile String bootstrapSource = "";
 
-    private PrintCallback printCallback;
     private RenderCallback renderCallback;
+    private ErrorCallback errorCallback;
 
     public void setBootstrapSource(String source) {
         bootstrapSource = source != null ? source : "";
@@ -79,9 +79,9 @@ public final class ScriptEngine {
         this.deviceConnection = deviceConnection;
     }
 
-    public void setup(PrintCallback printCallback, RenderCallback renderCallback, Map<String, Object> bindings) {
-        this.printCallback = printCallback;
+    public void setup(RenderCallback renderCallback, Map<String, Object> bindings, ErrorCallback errorCallback) {
         this.renderCallback = renderCallback;
+        this.errorCallback = errorCallback;
         globalBindings.clear();
         if (bindings != null && !bindings.isEmpty()) {
             globalBindings.putAll(bindings);
@@ -111,8 +111,8 @@ public final class ScriptEngine {
         }
     }
 
-    public void setup(PrintCallback printCallback, RenderCallback renderCallback) {
-        setup(printCallback, renderCallback, Collections.emptyMap());
+    public void setup(RenderCallback renderCallback, Map<String, Object> bindings) {
+        setup(renderCallback, bindings, null);
     }
 
     public void execute(String script, Runnable completion) {
@@ -130,10 +130,10 @@ public final class ScriptEngine {
                     cx.evaluateString(scope, wrapped, "ScriptScript", 1, null);
                 } catch (RhinoException ex) {
                     String summary = "Script error: " + formatRhinoException(ex);
-                    dispatchPrint(summary);
+                    dispatchError(summary);
                 } catch (Exception ex) {
                     String summary = "Script error: " + ex.getMessage();
-                    dispatchPrint(summary);
+                    dispatchError(summary);
                 }
             } finally {
                 Context.exit();
@@ -153,7 +153,7 @@ public final class ScriptEngine {
             Function function = callbackRegistry.get(token);
             if (function == null) {
                 String message = "No callback registered for token " + token;
-                dispatchPrint(message);
+                dispatchError(message);
                 return;
             }
             Context cx = Context.enter();
@@ -166,10 +166,10 @@ public final class ScriptEngine {
                 function.call(cx, scope, scope, jsArgs);
             } catch (RhinoException ex) {
                 String summary = "Script callback error: " + formatRhinoException(ex);
-                dispatchPrint(summary);
+                dispatchError(summary);
             } catch (Exception ex) {
                 String summary = "Script callback error: " + ex.getMessage();
-                dispatchPrint(summary);
+                dispatchError(summary);
             } finally {
                 Context.exit();
             }
@@ -237,23 +237,12 @@ public final class ScriptEngine {
     }
 
     private void installBridge(Scriptable scope) {
-        ScriptableObject.putProperty(scope, "_scriptPrint", new BaseFunction() {
-            @Override
-            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length > 0) {
-                    String message = String.valueOf(args[0]);
-                    dispatchPrint(message);
-                }
-                return Context.getUndefinedValue();
-            }
-        });
-
         ScriptableObject.putProperty(scope, "_scriptRender", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 if (args.length == 0 || !(args[0] instanceof Scriptable)) {
                     String message = "Script render called with invalid node";
-                    dispatchPrint(message);
+                    dispatchError(message);
                     return Context.getUndefinedValue();
                 }
                 ScriptTree tree = buildTreeFromJs((Scriptable) args[0]);
@@ -261,7 +250,7 @@ public final class ScriptEngine {
                     dispatchRender(tree);
                 } else {
                     String message = "Script render received malformed node";
-                    dispatchPrint(message);
+                    dispatchError(message);
                 }
                 return Context.getUndefinedValue();
             }
@@ -629,11 +618,11 @@ public final class ScriptEngine {
         return true;
     }
 
-    private void dispatchPrint(String message) {
-        if (printCallback == null) {
+    private void dispatchError(String message) {
+        if (errorCallback == null) {
             return;
         }
-        mainHandler.post(() -> printCallback.onPrint(message));
+        mainHandler.post(() -> errorCallback.onError(message));
     }
 
     private void dispatchRender(ScriptTree tree) {

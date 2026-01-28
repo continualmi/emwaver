@@ -72,13 +72,12 @@ final class ScriptPreviewManager: ObservableObject {
     @Published var isPreviewVisible = false
     @Published var isRendering = false
     @Published var scriptTree: ScriptTree?
-    @Published var consoleLines: [String] = []
+    @Published var scriptError: String?
     @Published var dialog: Dialog?
     @Published var activeScriptName: String?
 
     private weak var bleManager: USBManager?
     private var scriptEngine: ScriptEngine?
-    private let consoleLimit = 500
 
     func attach(bleManager: USBManager) {
         self.bleManager = bleManager
@@ -101,7 +100,7 @@ final class ScriptPreviewManager: ObservableObject {
         isPreviewVisible = true
         isRendering = true
         scriptTree = nil
-        clearConsole()
+        scriptError = nil
 
         engine.execute(script: trimmed) { [weak self] in
             guard let self else { return }
@@ -113,11 +112,8 @@ final class ScriptPreviewManager: ObservableObject {
         isPreviewVisible = false
         isRendering = false
         scriptTree = nil
+        scriptError = nil
         activeScriptName = nil
-    }
-
-    func clearConsole() {
-        consoleLines.removeAll()
     }
 
     func invoke(token: String, arguments: [Any]) {
@@ -132,19 +128,21 @@ final class ScriptPreviewManager: ObservableObject {
 
         let engine = ScriptEngine()
         engine.setup(
-            printHandler: { [weak self] message in
-                guard let self else { return }
-                Task { @MainActor in
-                    self.appendLine(message)
-                }
-            },
-            renderHandler: { [weak self] tree in
+            renderHandler: { [weak self] (tree: ScriptTree) in
                 guard let self else { return }
                 self.scriptTree = tree
                 self.isRendering = false
                 self.isPreviewVisible = true
             },
-            bindings: buildBindings()
+            bindings: buildBindings(),
+            errorHandler: { [weak self] (message: String) in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.scriptError = message
+                    self.isRendering = false
+                    self.isPreviewVisible = true
+                }
+            }
         )
         scriptEngine = engine
     }
@@ -162,10 +160,4 @@ final class ScriptPreviewManager: ObservableObject {
         return bindings
     }
 
-    private func appendLine(_ line: String) {
-        consoleLines.append(line)
-        if consoleLines.count > consoleLimit {
-            consoleLines.removeFirst(consoleLines.count - consoleLimit)
-        }
-    }
 }

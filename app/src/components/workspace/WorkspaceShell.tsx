@@ -18,22 +18,18 @@
 import { type FormEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
 import { useDevice } from "../../utils/DeviceContext";
 import { ScriptEngine, type ScriptTree } from "../../utils/ScriptEngine";
 import { useBackendScript } from "../../utils/useBackendScript";
-import { readScriptsTabState, writeScriptsTabState } from "../scriptsTabState";
 import ExplorerTree from "./sidebar/ExplorerTree";
 import ScriptAssetsPanel from "./sidebar/ScriptAssetsPanel";
 import WorkspaceTopBar from "./top/WorkspaceTopBar";
 import ScriptPreviewPanel from "./main/ScriptPreviewPanel";
-import WorkspaceBottomPanel from "./terminal/WorkspaceBottomPanel";
 import {
   FolderIcon,
   PanelLeftIcon,
-  PlayIcon,
 } from "./WorkspaceIcons";
 import type {
   DirectoryChildEntry,
@@ -41,38 +37,26 @@ import type {
   ThemeMode,
 } from "./workspaceTypes";
 import {
-  DEFAULT_TERMINAL_HEIGHT,
-  DEFAULT_SIDEBAR_WIDTH,
   SIDEBAR_COLLAPSE_THRESHOLD,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
-  TERMINAL_MAX_HEIGHT,
-  TERMINAL_MIN_HEIGHT,
-  TERMINAL_VIEW_MIN_WIDTH,
   clamp,
   storageKeys,
   readStoredRoot,
   readStoredSidebarCollapsed,
   readStoredSidebarWidth,
-  readStoredTerminalHeight,
-  readStoredAssetScriptsCollapsed,
 } from "./workspaceStorage";
 import {
-  SCRIPT_EXAMPLE_SCRIPTS,
   SCRIPT_ASSET_ROOT,
   SCRIPT_BOOTSTRAP_FILENAME,
   basename,
   defaultIgnoredName,
-  formatConsoleArgs,
-  iconLabelForPath,
   isScriptAssetPath,
   isScriptScriptPath,
   languageForPath,
   readScriptAssetScript,
-  timestampLabel,
   scriptAssetPath,
 } from "./workspaceUtils";
-const CONSOLE_INPUT_TOKEN = "__emw_console_input";
 
 const FILE_AUTO_RELOAD_INTERVAL_MS = 2000;
 
@@ -100,23 +84,19 @@ export default function WorkspaceShell({
   isActive?: boolean;
 }) {
   const keys = storageKeys();
-  const tabStateFileName = "scripts-tabs.json";
-  const readTabState = readScriptsTabState;
-  const writeTabState = writeScriptsTabState;
 
   const [rootDir, setRootDir] = useState<string | null>(() => readStoredRoot(keys));
+  const [scriptLibrary, setScriptLibrary] = useState<"examples" | "local">(() => {
+    if (typeof window === "undefined") return "examples";
+    const stored = window.localStorage.getItem("emwaver.scriptsWorkspace.library");
+    return stored === "local" ? "local" : "examples";
+  });
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
-  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [openFile, setOpenFile] = useState<OpenFile | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const restoringTabsRef = useRef(false);
-  const restoredTabsRootRef = useRef<string | null>(null);
-  const tabsHydratedRef = useRef(false);
-  const tabsRestoreSucceededRef = useRef(false);
-  const tabsUserTouchedRef = useRef(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => readStoredSidebarCollapsed(keys));
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => readStoredSidebarWidth(keys));
   const sidebarLastExpandedWidthRef = useRef<number>(readStoredSidebarWidth(keys));
@@ -126,26 +106,10 @@ export default function WorkspaceShell({
   const explorerResizeStartXRef = useRef(0);
   const explorerResizeStartWidthRef = useRef(0);
 
-  const [isTerminalVisible, setIsTerminalVisible] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState<number>(() => readStoredTerminalHeight(keys));
-  const terminalResizeActiveRef = useRef(false);
-  const terminalResizeStartYRef = useRef(0);
-  const terminalResizeStartHeightRef = useRef(0);
+  const DEFAULT_SCRIPTS_ROOT = "~/Documents/EMWaver/scripts";
 
-  
-
-  const [isAssetScriptsCollapsed, setIsAssetScriptsCollapsed] = useState<boolean>(() => readStoredAssetScriptsCollapsed(keys));
-
-  const terminalPanelRef = useRef<HTMLDivElement | null>(null);
-
-  const [terminalConsoleLines, setTerminalConsoleLines] = useState<string[]>([]);
-  const terminalConsoleAnchorRef = useRef<HTMLDivElement | null>(null);
-  const appendTerminalConsoleLine = useCallback((message: string) => {
-    setTerminalConsoleLines((prev) => [...prev.slice(-499), String(message)]);
-  }, []);
-  const clearTerminalConsole = useCallback(() => {
-    setTerminalConsoleLines([]);
-  }, []);
+  // Scripts are UI-only; no console/terminal output.
+  const handleScriptPrint = useCallback((_message: string) => {}, []);
 
 
   const monaco = useMonaco();
@@ -159,16 +123,24 @@ export default function WorkspaceShell({
     monaco.editor.setTheme(getEmwaverMonacoTheme());
   }, [monaco, theme]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("emwaver.scriptsWorkspace.library", scriptLibrary);
+  }, [scriptLibrary]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (rootDir) window.localStorage.setItem(keys.root, rootDir);
+  }, [keys.root, rootDir]);
+
   const [activeMainTabKind, setActiveMainTabKind] = useState<"file" | "preview">("file");
-  const [activePreviewPath, setActivePreviewPath] = useState<string | null>(null);
-  const [scriptPreviewTabs, setScriptPreviewTabs] = useState<string[]>([]);
   const [scriptPreviewState, setScriptPreviewState] = useState<
     Record<
       string,
       {
         tree: ScriptTree | null;
-        console: string[];
         isRunning: boolean;
+        error: string | null;
       }
     >
   >({});
@@ -180,36 +152,6 @@ export default function WorkspaceShell({
   const backendScript = useBackendScript();
   const activeBackendPathRef = useRef<string | null>(null);
 
-  const submitTerminalConsoleInput = useCallback(
-    (line: string) => {
-      const trimmed = String(line ?? "").trimEnd();
-      if (!trimmed) {
-        return;
-      }
-
-      appendTerminalConsoleLine(`> ${trimmed}`);
-
-      const targetPath = activePreviewPath ?? activeBackendPathRef.current;
-      if (!targetPath) {
-        appendTerminalConsoleLine("(no active script)");
-        return;
-      }
-
-      if (useBackendEngine && activeBackendPathRef.current === targetPath) {
-        void backendScript.invokeCallback(CONSOLE_INPUT_TOKEN, [trimmed]);
-        return;
-      }
-
-      const engine = scriptEngineByPathRef.current.get(targetPath);
-      if (!engine) {
-        appendTerminalConsoleLine("(no frontend engine for active script)");
-        return;
-      }
-      engine.invoke(CONSOLE_INPUT_TOKEN, [trimmed]);
-    },
-    [activePreviewPath, appendTerminalConsoleLine, backendScript, useBackendEngine],
-  );
-  
   // Sync backend script state to preview state
   useEffect(() => {
     const path = activeBackendPathRef.current;
@@ -219,8 +161,8 @@ export default function WorkspaceShell({
       ...prev,
       [path]: {
         tree: backendScript.state.tree,
-        console: backendScript.state.logs,
         isRunning: backendScript.state.isRunning,
+        error: backendScript.state.error,
       },
     }));
   }, [backendScript.state, useBackendEngine]);
@@ -278,12 +220,7 @@ export default function WorkspaceShell({
   );
 
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
-  const activeFile = useMemo(() => {
-    if (!activeFilePath) {
-      return null;
-    }
-    return openFiles.find((file) => file.path === activeFilePath) ?? null;
-  }, [activeFilePath, openFiles]);
+  const activeFile = openFile;
 
   const editorOptions = useMemo(() => {
     if (!activeFile) {
@@ -295,24 +232,10 @@ export default function WorkspaceShell({
     return MONACO_EDITOR_OPTIONS;
   }, [activeFile]);
 
-  const scriptTargetPath = useMemo(() => activeFilePath ?? selectedPath ?? null, [activeFilePath, selectedPath]);
+  const scriptTargetPath = useMemo(() => activeFile?.path ?? selectedPath ?? null, [activeFile?.path, selectedPath]);
 
-  const scriptTargetWantsPreview = useMemo(() => {
-    if (!scriptTargetPath) {
-      return true;
-    }
-    const normalizedPath = scriptTargetPath.replace(/\\/g, "/");
-    const file = openFiles.find((entry) => entry.path.replace(/\\/g, "/") === normalizedPath);
-    if (!file) {
-      return true;
-    }
-
-    // Minimal heuristic: if the script calls UI.render, a preview panel is useful.
-    // If it doesn't render UI, treat it like a terminal/console script.
-    return /\bUI\.render\s*\(/.test(file.content);
-  }, [openFiles, scriptTargetPath]);
   const canRunScript = useMemo(() => {
-    const candidatePath = (activeMainTabKind === "preview" ? activePreviewPath : scriptTargetPath) ?? null;
+    const candidatePath = scriptTargetPath ?? null;
     if (!candidatePath) {
       return false;
     }
@@ -324,13 +247,29 @@ export default function WorkspaceShell({
       return true;
     }
     return Boolean(rootDir);
-  }, [activeMainTabKind, activePreviewPath, rootDir, scriptTargetPath]);
+  }, [rootDir, scriptTargetPath]);
 
-
-  const openFilesRef = useRef<OpenFile[]>(openFiles);
   useEffect(() => {
-    openFilesRef.current = openFiles;
-  }, [openFiles]);
+    if (scriptLibrary !== "local") return;
+    if (rootDir) return;
+    if (!isTauriAvailable()) return;
+
+    void (async () => {
+      try {
+        await safeInvoke<void>("ensure_dir", { payload: { path: DEFAULT_SCRIPTS_ROOT } });
+        setRootDir(DEFAULT_SCRIPTS_ROOT);
+      } catch {
+        // If directory creation fails, keep rootDir null and fall back to examples.
+        setScriptLibrary("examples");
+      }
+    })();
+  }, [rootDir, scriptLibrary]);
+
+
+  const openFileRef = useRef<OpenFile | null>(openFile);
+  useEffect(() => {
+    openFileRef.current = openFile;
+  }, [openFile]);
 
   useEffect(() => {
     if (!isTauriAvailable() || typeof window === "undefined") {
@@ -345,75 +284,38 @@ export default function WorkspaceShell({
         return;
       }
 
-      const snapshot = openFilesRef.current;
-      const candidates = snapshot.filter((file) => !file.isDirty && file.source !== "asset");
-      if (candidates.length === 0) {
-        return;
-      }
-
-      inFlight = true;
-      try {
-        const mtimes = await Promise.all(
-          candidates.map((file) =>
-            safeInvoke<number>("file_modified_ms", { payload: { path: file.path } })
-              .then((value) => value ?? undefined)
-              .catch(() => undefined),
-          ),
-        );
-
-        const initMtimes = new Map<string, number>();
-        const reloads: Array<{ path: string; mtime: number }> = [];
-
-        candidates.forEach((file, idx) => {
-          const mtime = mtimes[idx];
-          if (mtime == null) {
-            return;
-          }
-          if (file.diskMtimeMs == null) {
-            initMtimes.set(file.path, mtime);
-            return;
-          }
-          if (mtime !== file.diskMtimeMs) {
-            reloads.push({ path: file.path, mtime });
-          }
-        });
-
-        const contents = await Promise.all(
-          reloads.map((entry) => safeInvoke<string>("read_file", { payload: { path: entry.path } }).catch(() => null)),
-        );
-
-        if (reloads.length === 0 && initMtimes.size === 0) {
+        const candidate = openFileRef.current;
+        if (!candidate || candidate.isDirty || candidate.source === "asset") {
           return;
         }
 
-        setOpenFiles((prev) =>
-          prev.map((file) => {
-            const initMtime = initMtimes.get(file.path);
-            if (initMtime != null && file.diskMtimeMs == null) {
-              return { ...file, diskMtimeMs: initMtime };
-            }
+      inFlight = true;
+      try {
+          const mtime = await safeInvoke<number>("file_modified_ms", { payload: { path: candidate.path } })
+            .then((value) => value ?? undefined)
+            .catch(() => undefined);
 
-            const reloadIndex = reloads.findIndex((entry) => entry.path === file.path);
-            if (reloadIndex === -1) {
-              return file;
-            }
+          if (mtime == null) return;
 
-            if (file.isDirty) {
-              return file;
-            }
+          if (candidate.diskMtimeMs == null) {
+            setOpenFile((prev) => (prev && prev.path === candidate.path ? { ...prev, diskMtimeMs: mtime } : prev));
+            return;
+          }
 
-            const content = contents[reloadIndex];
-            if (content == null) {
-              return file;
-            }
+          if (mtime === candidate.diskMtimeMs) return;
 
-            return { ...file, content, isDirty: false, diskMtimeMs: reloads[reloadIndex].mtime };
-          }),
-        );
-      } finally {
-        inFlight = false;
-      }
-    };
+          const content = await safeInvoke<string>("read_file", { payload: { path: candidate.path } }).catch(() => null);
+          if (content == null) return;
+
+          setOpenFile((prev) => {
+            if (!prev || prev.path !== candidate.path) return prev;
+            if (prev.isDirty) return prev;
+            return { ...prev, content, isDirty: false, diskMtimeMs: mtime };
+          });
+        } finally {
+          inFlight = false;
+        }
+      };
 
     const intervalId = window.setInterval(() => {
       void tick();
@@ -438,43 +340,7 @@ export default function WorkspaceShell({
     }
   }, [isSidebarCollapsed]);
 
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const isToggle =
-        (event.ctrlKey || event.metaKey) &&
-        !event.shiftKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "j";
-      if (!isToggle) {
-        return;
-      }
-      event.preventDefault();
-      setIsTerminalVisible((prev) => !prev);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-  useEffect(() => {
-    if (!isTauriAvailable()) {
-      return;
-    }
-
-    const unlistenPromise = safeListen<string>("script:print", (event) => {
-      appendTerminalConsoleLine(event.payload);
-    });
-
-    return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [appendTerminalConsoleLine]);
-
-  useEffect(() => {
-    const anchor = terminalConsoleAnchorRef.current;
-    if (!anchor) {
-      return;
-    }
-    anchor.scrollIntoView({ block: "end" });
-  }, [terminalConsoleLines.length]);
+  // No terminal/console.
 
 
   const loadDirectoryChildren = useCallback(
@@ -519,39 +385,6 @@ export default function WorkspaceShell({
     void ensureRootLoaded();
   }, [ensureRootLoaded]);
 
-  const openRoot = useCallback((nextRoot: string | null) => {
-    setRootDir(nextRoot);
-    setSelectedPath(null);
-    setOpenFiles([]);
-    setActiveFilePath(null);
-    setActiveMainTabKind("file");
-    setActivePreviewPath(null);
-    setScriptPreviewTabs([]);
-    setScriptPreviewState({});
-    scriptEngineByPathRef.current.forEach((engine) => engine.shutdown());
-    scriptEngineByPathRef.current.clear();
-    setDirChildren({});
-    setOpenDirs(new Set());
-  }, []);
-
-  const handlePickFolder = useCallback(async () => {
-    const selected = await openDialog({
-      directory: true,
-      multiple: false,
-      title: "Open Folder",
-    });
-
-    if (!selected || Array.isArray(selected)) {
-      return;
-    }
-
-    openRoot(selected);
-  }, [openRoot]);
-
-  const handleCloseFolder = useCallback(() => {
-    openRoot(null);
-  }, [openRoot]);
-
 
   useEffect(() => {
     const handleMove = (event: MouseEvent) => {
@@ -588,31 +421,7 @@ export default function WorkspaceShell({
     };
   }, []);
 
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      if (!terminalResizeActiveRef.current) {
-        return;
-      }
-      const delta = terminalResizeStartYRef.current - event.clientY;
-      setTerminalHeight(clamp(terminalResizeStartHeightRef.current + delta, TERMINAL_MIN_HEIGHT, TERMINAL_MAX_HEIGHT));
-    };
-
-    const handleUp = () => {
-      if (!terminalResizeActiveRef.current) {
-        return;
-      }
-      terminalResizeActiveRef.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  }, []);
+  // No terminal resize handling.
 
   const handleToggleDir = useCallback(
     async (dir: string) => {
@@ -633,18 +442,42 @@ export default function WorkspaceShell({
     [dirChildren, loadDirectoryChildren],
   );
 
+  const cleanupScriptForPath = useCallback(
+    async (path: string) => {
+      const normalizedPath = path.replace(/\\/g, "/");
+      if (useBackendEngine && activeBackendPathRef.current === normalizedPath) {
+        await backendScript.stop();
+        activeBackendPathRef.current = null;
+      }
+      const engine = scriptEngineByPathRef.current.get(normalizedPath);
+      if (engine) {
+        engine.shutdown();
+        scriptEngineByPathRef.current.delete(normalizedPath);
+      }
+      setScriptPreviewState((prev) => {
+        const next = { ...prev };
+        delete next[normalizedPath];
+        return next;
+      });
+    },
+    [backendScript, useBackendEngine],
+  );
+
   const handleOpenFile = useCallback(async (path: string) => {
-    tabsUserTouchedRef.current = true;
     const normalizedPath = path.replace(/\\/g, "/");
     const isAssetPath = normalizedPath.startsWith(`${SCRIPT_ASSET_ROOT}/`);
     const effectivePath = isAssetPath ? normalizedPath : path;
     setActiveMainTabKind("file");
-    setActivePreviewPath(null);
     setSelectedPath(effectivePath);
-    setActiveFilePath(effectivePath);
-    if (openFiles.some((file) => file.path === effectivePath)) {
+    if (openFileRef.current?.path === effectivePath) {
       return;
     }
+
+    const previous = openFileRef.current;
+    if (previous && previous.path !== effectivePath) {
+      await cleanupScriptForPath(previous.path);
+    }
+
     if (openingFilePathsRef.current.has(effectivePath)) {
       return;
     }
@@ -662,7 +495,7 @@ export default function WorkspaceShell({
           isDirty: false,
           source: "asset",
         };
-        setOpenFiles((prev) => (prev.some((file) => file.path === effectivePath) ? prev : [...prev, next]));
+        setOpenFile(next);
         return;
       }
 
@@ -685,72 +518,12 @@ export default function WorkspaceShell({
         diskMtimeMs,
         source: "disk",
       };
-      setOpenFiles((prev) => (prev.some((file) => file.path === path) ? prev : [...prev, next]));
+      setOpenFile(next);
     } finally {
       openingFilePathsRef.current.delete(effectivePath);
       setIsLoadingFile(false);
     }
-  }, [openFiles]);
-
-  const openScriptPreviewTab = useCallback(
-    async (path: string, { activate }: { activate: boolean }) => {
-      await handleOpenFile(path);
-      setScriptPreviewTabs((prev) => (prev.includes(path) ? prev : [...prev, path]));
-      if (activate) {
-        setActiveMainTabKind("preview");
-        setActivePreviewPath(path);
-      }
-    },
-    [handleOpenFile],
-  );
-
-  const closeScriptPreviewTab = useCallback(
-    (path: string) => {
-      setScriptPreviewTabs((prev) => prev.filter((entry) => entry !== path));
-      setScriptPreviewState((prev) => {
-        const next = { ...prev };
-        delete next[path];
-        return next;
-      });
-      const engine = scriptEngineByPathRef.current.get(path);
-      if (engine) {
-        engine.shutdown();
-        scriptEngineByPathRef.current.delete(path);
-      }
-      setActivePreviewPath((prev) => (prev === path ? null : prev));
-      setActiveMainTabKind((prev) => {
-        if (prev !== "preview") {
-          return prev;
-        }
-        if (activePreviewPath !== path) {
-          return prev;
-        }
-        return "file";
-      });
-    },
-    [activePreviewPath],
-  );
-
-  const closeFile = useCallback((path: string) => {
-    tabsUserTouchedRef.current = true;
-    setOpenFiles((prev) => {
-      const next = prev.filter((file) => file.path !== path);
-      setActiveFilePath((prevActive) => {
-        if (prevActive !== path) {
-          return prevActive;
-        }
-        return next.length > 0 ? next[next.length - 1].path : null;
-      });
-      setSelectedPath((prevSelected) => {
-        if (prevSelected !== path) {
-          return prevSelected;
-        }
-        return next.length > 0 ? next[next.length - 1].path : null;
-      });
-      return next;
-    });
-    closeScriptPreviewTab(path);
-  }, [closeScriptPreviewTab]);
+  }, [cleanupScriptForPath]);
 
   const runScriptForPath = useCallback(
     async (path: string) => {
@@ -767,9 +540,9 @@ export default function WorkspaceShell({
       setScriptPreviewState((prev) => ({
         ...prev,
         [normalizedPath]: {
-          tree: prev[normalizedPath]?.tree ?? null,
-          console: [],
+          tree: null,
           isRunning: true,
+          error: null,
         },
       }));
 
@@ -778,9 +551,11 @@ export default function WorkspaceShell({
       }
       
       // Get the script source
-      const openFileSnapshot = openFilesRef.current;
-      const openFileByPath = new Map(openFileSnapshot.map((file) => [file.path, file] as const));
-      const entryFile = openFileByPath.get(normalizedPath);
+      const entryFile = (() => {
+        const candidate = openFileRef.current;
+        if (!candidate) return null;
+        return candidate.path.replace(/\\/g, "/") === normalizedPath ? candidate : null;
+      })();
       const entrySource =
         entryFile?.content ??
         (isAssetPath
@@ -792,7 +567,6 @@ export default function WorkspaceShell({
       // Use backend engine for fast execution (direct USB access, ~2ms per command)
       if (useBackendEngine && isTauriAvailable()) {
         activeBackendPathRef.current = normalizedPath;
-        backendScript.clearLogs();
         await backendScript.execute(entrySource, scriptBootstrapRef.current ?? "");
         return;
       }
@@ -804,24 +578,13 @@ export default function WorkspaceShell({
         const bootstrap = scriptBootstrapRef.current ?? "";
         engine.setBootstrapSource(bootstrap);
         engine.setup(
-          (message: string) => {
-            appendTerminalConsoleLine(message);
-            setScriptPreviewState((prev) => ({
-              ...prev,
-              [normalizedPath]: {
-                tree: prev[normalizedPath]?.tree ?? null,
-                console: [...(prev[normalizedPath]?.console ?? []), String(message)],
-                isRunning: prev[normalizedPath]?.isRunning ?? false,
-              },
-            }));
-          },
           (tree: ScriptTree) => {
             setScriptPreviewState((prev) => ({
               ...prev,
               [normalizedPath]: {
                 tree,
-                console: prev[normalizedPath]?.console ?? [],
                 isRunning: prev[normalizedPath]?.isRunning ?? false,
+                error: prev[normalizedPath]?.error ?? null,
               },
             }));
           },
@@ -866,6 +629,17 @@ export default function WorkspaceShell({
               };
             },
           },
+          (message: string) => {
+            handleScriptPrint(message);
+            setScriptPreviewState((prev) => ({
+              ...prev,
+              [normalizedPath]: {
+                tree: prev[normalizedPath]?.tree ?? null,
+                isRunning: false,
+                error: message,
+              },
+            }));
+          },
         );
         scriptEngineByPathRef.current.set(normalizedPath, engine);
       }
@@ -875,8 +649,8 @@ export default function WorkspaceShell({
           ...prev,
           [normalizedPath]: {
             tree: prev[normalizedPath]?.tree ?? null,
-            console: [...(prev[normalizedPath]?.console ?? []), "Script execution completed."],
             isRunning: false,
+            error: prev[normalizedPath]?.error ?? null,
           },
         }));
       });
@@ -885,8 +659,8 @@ export default function WorkspaceShell({
         ...prev,
         [normalizedPath]: {
           tree: prev[normalizedPath]?.tree ?? null,
-          console: prev[normalizedPath]?.console ?? [],
           isRunning: false,
+          error: prev[normalizedPath]?.error ?? null,
         },
       }));
     },
@@ -912,16 +686,16 @@ export default function WorkspaceShell({
         ...prev,
         [normalizedPath]: {
           tree: prev[normalizedPath]?.tree ?? null,
-          console: prev[normalizedPath]?.console ?? [],
           isRunning: false,
+          error: prev[normalizedPath]?.error ?? null,
         },
       }));
 
       if (closePreview) {
-        closeScriptPreviewTab(normalizedPath);
+        setActiveMainTabKind("file");
       }
     },
-    [backendScript, closeScriptPreviewTab, useBackendEngine],
+    [backendScript, useBackendEngine],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -941,9 +715,7 @@ export default function WorkspaceShell({
       const diskMtimeMs = await safeInvoke<number>("file_modified_ms", { payload: { path: activeFile.path } })
         .then((value) => value ?? undefined)
         .catch(() => undefined);
-      setOpenFiles((prev) =>
-        prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false, diskMtimeMs } : file)),
-      );
+      setOpenFile((prev) => (prev && prev.path === activeFile.path ? { ...prev, isDirty: false, diskMtimeMs } : prev));
     } finally {
       setIsSaving(false);
     }
@@ -956,12 +728,6 @@ export default function WorkspaceShell({
     const unlistenShowPromise = safeListen("menu-show-explorer", () => {
       setIsSidebarCollapsed(false);
     });
-    const unlistenCloseFolderPromise = safeListen("menu-close-folder", () => {
-      handleCloseFolder();
-    });
-    const unlistenOpenFolderPromise = safeListen("menu-open-folder", () => {
-      void handlePickFolder();
-    });
     const unlistenSavePromise = safeListen("menu-save-file", () => {
       void handleSaveFile();
     });
@@ -969,24 +735,16 @@ export default function WorkspaceShell({
     return () => {
       void unlistenTogglePromise.then((unlisten) => unlisten());
       void unlistenShowPromise.then((unlisten) => unlisten());
-      void unlistenCloseFolderPromise.then((unlisten) => unlisten());
-      void unlistenOpenFolderPromise.then((unlisten) => unlisten());
       void unlistenSavePromise.then((unlisten) => unlisten());
     };
-  }, [handleCloseFolder, handlePickFolder, handleSaveFile]);
+  }, [handleSaveFile]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!activeFile) {
         return;
       }
-      const isClose = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "w";
       const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s";
-      if (isClose) {
-        event.preventDefault();
-        closeFile(activeFile.path);
-        return;
-      }
       if (!isSave) {
         return;
       }
@@ -995,48 +753,10 @@ export default function WorkspaceShell({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeFile, closeFile, handleSaveFile]);
-
-  const handleToggleTerminalVisible = useCallback(() => {
-    setIsTerminalVisible((prev) => !prev);
-  }, []);
-
-  const handleTerminalResizeMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      terminalResizeActiveRef.current = true;
-      terminalResizeStartYRef.current = event.clientY;
-      terminalResizeStartHeightRef.current = terminalHeight;
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-    },
-    [terminalHeight],
-  );
-
-
+  }, [activeFile, handleSaveFile]);
 
   return (
     <div className="flex h-full min-h-0 select-none flex-col bg-slate-950 text-slate-100">
-      {false ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-          <div className="mx-auto mb-6 h-24 w-24 overflow-hidden rounded-full bg-slate-900/60 shadow-2xl shadow-sky-500/20 ring-2 ring-sky-500/40">
-            <img src="/emwaver-logo.png" alt="EMWaver" className="h-full w-full object-contain p-4" />
-          </div>
-          <h2 className="text-2xl font-semibold text-slate-100">
-            Open a script project
-          </h2>
-          <p className="mt-2 max-w-lg text-sm text-slate-400">Scripts needs a folder to browse, edit, run, and preview scripts.</p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => void handlePickFolder()}
-              className="min-w-[160px] rounded-md border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition-transform transition-colors duration-150 hover:-translate-y-0.5 hover:border-sky-500/60 hover:bg-slate-900 hover:text-sky-200 cursor-pointer"
-            >
-              Open Folder…
-            </button>
-          </div>
-        </div>
-      ) : (
-
 	      <div className="flex min-h-0 flex-1 overflow-hidden">
 		        {isSidebarCollapsed ? (
               <div className="flex w-9 shrink-0 flex-col border-r border-slate-900 bg-slate-950">
@@ -1063,10 +783,15 @@ export default function WorkspaceShell({
                       <div className="min-w-0 cursor-default">
                         <h2
                           className="truncate text-sm font-semibold text-slate-200"
-                          title={rootDir ?? "Scripts"}
+                          title={scriptLibrary === "local" ? rootDir ?? "My scripts" : "Example scripts"}
                         >
-                          {rootDir ? basename(rootDir) : "SCRIPTS"}
+                          {scriptLibrary === "local" ? "My scripts" : "Example scripts"}
                         </h2>
+                        {scriptLibrary === "local" && rootDir ? (
+                          <div className="mt-1 truncate text-[11px] text-slate-500" title={rootDir}>
+                            {rootDir}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-1">
                         <button
@@ -1079,40 +804,72 @@ export default function WorkspaceShell({
                         </button>
                       </div>
                     </div>
+
+                    <div className="mt-3">
+                      <div className="relative flex rounded-full border border-slate-800 bg-slate-950 p-1">
+                        <div
+                          className={`pointer-events-none absolute inset-y-1 w-1/2 rounded-full bg-slate-900/70 ring-1 ring-inset ring-slate-800 transition-transform ${
+                            scriptLibrary === "local" ? "translate-x-full" : "translate-x-0"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScriptLibrary("examples");
+                            setActiveMainTabKind("file");
+                            if (activeFile) {
+                              void stopScriptForPath(activeFile.path, { closePreview: true });
+                            }
+                          }}
+                          className={`relative z-10 flex-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                            scriptLibrary === "examples" ? "text-slate-100" : "text-slate-500 hover:text-slate-200"
+                          }`}
+                        >
+                          Examples
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScriptLibrary("local");
+                            setActiveMainTabKind("file");
+                            if (activeFile) {
+                              void stopScriptForPath(activeFile.path, { closePreview: true });
+                            }
+                          }}
+                          className={`relative z-10 flex-1 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                            scriptLibrary === "local" ? "text-slate-100" : "text-slate-500 hover:text-slate-200"
+                          }`}
+                        >
+                          My scripts
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="min-h-0 flex-1 overflow-auto p-2">
                     <div className="space-y-2">
-                      {!rootDir ? (
-                        <button
-                          type="button"
-                          onClick={() => void handlePickFolder()}
-                          className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900"
-                          title="Open Folder"
-                        >
-                          Open Folder…
-                        </button>
-                      ) : null}
-                      <ExplorerTree
-                        root={explorerRoot}
-                        dirChildren={dirChildren}
-                        openDirs={openDirs}
-                        selectedPath={selectedPath}
-                        onToggleDir={handleToggleDir}
-                        onOpenFile={handleOpenFile}
-                      />
+                      {scriptLibrary === "local" ? (
+                        explorerRoot ? (
+                          <ExplorerTree
+                            root={explorerRoot}
+                            dirChildren={dirChildren}
+                            openDirs={openDirs}
+                            selectedPath={selectedPath}
+                            onToggleDir={handleToggleDir}
+                            onOpenFile={handleOpenFile}
+                          />
+                        ) : (
+                          <div className="rounded border border-slate-900 bg-slate-950 p-3 text-xs text-slate-500">
+                            No scripts folder configured.
+                          </div>
+                        )
+                      ) : (
+                        <div className="rounded border border-slate-900 bg-slate-950 p-2">
+                          <ScriptAssetsPanel onOpenAsset={(filename) => handleOpenFile(scriptAssetPath(filename))} />
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  {
-                    <div className="border-t border-slate-900 bg-slate-950 p-2">
-                      <ScriptAssetsPanel
-                        isCollapsed={isAssetScriptsCollapsed}
-                        onToggleCollapsed={() => setIsAssetScriptsCollapsed((prev) => !prev)}
-                        onOpenAsset={(filename) => handleOpenFile(scriptAssetPath(filename))}
-                      />
-                    </div>
-                  }
                 </div>
 	            </aside>
 
@@ -1133,102 +890,42 @@ export default function WorkspaceShell({
 	            >
 	              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-900/60 group-hover:bg-slate-700/80" />
 	            </div>
-	          </>
-	        )}
+		          </>
+		        )}
 
-	        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+		            <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <WorkspaceTopBar
             theme={theme}
-            openFiles={openFiles}
-            activeFilePath={activeFilePath}
-            activeFileIsDirty={activeFile?.isDirty ?? false}
+            activeFile={activeFile}
             isLoadingFile={isLoadingFile}
             activeMainTabKind={activeMainTabKind}
-            activePreviewPath={activePreviewPath}
-            scriptPreviewTabs={scriptPreviewTabs}
-            onSelectFile={(path) => {
-              setActiveMainTabKind("file");
-              setActivePreviewPath(null);
-              setActiveFilePath(path);
-              setSelectedPath(path);
+            onSetPreview={(next) => {
+              if (!activeFile) return;
+              if (!canRunScript) return;
+              if (next) {
+                setActiveMainTabKind("preview");
+                void runScriptForPath(activeFile.path);
+              } else {
+                void stopScriptForPath(activeFile.path, { closePreview: true });
+              }
             }}
-            onCloseFile={closeFile}
-            onSelectPreview={(path) => {
-              setActiveMainTabKind("preview");
-              setActivePreviewPath(path);
-            }}
-            onClosePreview={closeScriptPreviewTab}
-            rightActions={
-              <>
-                {activeMainTabKind !== "preview" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const target = scriptTargetPath;
-                        if (!target) return;
-
-                        if (!scriptTargetWantsPreview) {
-                          setIsTerminalVisible(true);
-                        }
-
-                        void (async () => {
-                          if (scriptTargetWantsPreview) {
-                            await openScriptPreviewTab(target, { activate: true });
-                          }
-                          await runScriptForPath(target);
-                        })();
-                      }}
-                      disabled={!canRunScript || !scriptTargetPath}
-                      className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1.5 text-emerald-100 hover:bg-emerald-500/15 disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-400 disabled:opacity-60"
-                      title={scriptTargetWantsPreview ? "Preview script" : "Run script"}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <PlayIcon className="h-4 w-4" />
-                        <span className="text-[11px] font-semibold">{scriptTargetWantsPreview ? "Preview" : "Run"}</span>
-                      </span>
-                    </button>
-
-                    {scriptTargetPath && scriptPreviewState[scriptTargetPath]?.isRunning ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void stopScriptForPath(scriptTargetPath, { closePreview: false });
-                        }}
-                        className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-2 py-1.5 text-rose-100 hover:bg-rose-500/15"
-                        title="Stop script"
-                      >
-                        <span className="text-[11px] font-semibold">Stop</span>
-                      </button>
-                    ) : null}
-                    {scriptTargetPath && scriptPreviewState[scriptTargetPath]?.isRunning ? (
-                      <div className="h-1.5 w-14 overflow-hidden rounded bg-slate-800" title="Running…">
-                        <div className="h-full w-full animate-pulse bg-emerald-400/80" />
-                      </div>
-                    ) : null}
-                  </>
-                ) : null}
-              </>
-            }
+            canRun={Boolean(activeFile) && canRunScript}
+            rightActions={null}
           />
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-              {activeMainTabKind === "preview" && activePreviewPath ? (
+              {activeMainTabKind === "preview" && activeFile ? (
                 <ScriptPreviewPanel
                   theme={theme}
-                  path={activePreviewPath}
-                  state={scriptPreviewState[activePreviewPath]}
-                  deviceStatus={scriptDeviceConnection.connectionStatus()}
+                  state={scriptPreviewState[activeFile.path]}
                   onInvokeCallback={(token, args) => {
-                    if (useBackendEngine && activeBackendPathRef.current === activePreviewPath) {
+                    const path = activeFile.path;
+                    if (useBackendEngine && activeBackendPathRef.current === path) {
                       backendScript.invokeCallback(token, args);
                     } else {
-                      scriptEngineByPathRef.current.get(activePreviewPath)?.invoke(token, args);
+                      scriptEngineByPathRef.current.get(path)?.invoke(token, args);
                     }
-                  }}
-                  onStopPreview={(path) => {
-                    void stopScriptForPath(path, { closePreview: true });
                   }}
                 />
               ) : activeFile ? (
@@ -1243,10 +940,8 @@ export default function WorkspaceShell({
                       if (activeFile.source === "asset") {
                         return;
                       }
-                      setOpenFiles((prev) =>
-                        prev.map((file) =>
-                          file.path === activeFile.path ? { ...file, content: value ?? "", isDirty: true } : file,
-                        ),
+                      setOpenFile((prev) =>
+                        prev && prev.path === activeFile.path ? { ...prev, content: value ?? "", isDirty: true } : prev,
                       );
                     }}
                   />
@@ -1256,23 +951,9 @@ export default function WorkspaceShell({
               )}
             </div>
 
-            <WorkspaceBottomPanel
-              rootDir={rootDir}
-              isVisible={isTerminalVisible}
-              onToggleVisible={handleToggleTerminalVisible}
-              onClosePanel={() => setIsTerminalVisible(false)}
-              consoleLines={terminalConsoleLines}
-              consoleAnchorRef={terminalConsoleAnchorRef}
-              onClearConsole={clearTerminalConsole}
-              onSubmitConsoleInput={submitTerminalConsoleInput}
-              panelRef={terminalPanelRef}
-              height={terminalHeight}
-              onResizeMouseDown={handleTerminalResizeMouseDown}
-            />
           </div>
         </main>
-	      </div>
-      )}
+		      </div>
     </div>
   );
 }

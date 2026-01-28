@@ -21,11 +21,9 @@ import type { ScriptTree } from "../../utils/ScriptEngine";
 
 export default function ScriptUIRenderer({
   tree,
-  consoleOutput = [],
   onInvokeCallback,
 }: {
   tree: ScriptTree;
-  consoleOutput?: string[];
   onInvokeCallback?: (token: string, args: unknown[]) => void;
 }) {
   const [inputValues, setInputValues] = useState<Record<string, any>>({});
@@ -239,22 +237,28 @@ export default function ScriptUIRenderer({
       }
 
       case "logViewer":
+        {
+          const rawText = (props as any).text;
+          const rawLines = (props as any).lines;
+          const text =
+            typeof rawText === "string"
+              ? rawText
+              : Array.isArray(rawLines)
+                ? rawLines.map((v: unknown) => String(v)).join("\n")
+                : "";
         return (
           <div className="w-full rounded-md border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200">
             <div className="mb-2 text-[11px] font-semibold tracking-wide text-slate-400">LOG</div>
             <div className="max-h-48 overflow-y-auto space-y-1 font-mono">
-              {consoleOutput.length === 0 ? (
+              {text.length === 0 ? (
                 <div className="text-slate-500">No output yet.</div>
               ) : (
-                consoleOutput.map((line, idx) => (
-                  <div key={idx} className="whitespace-pre-wrap break-words">
-                    {line}
-                  </div>
-                ))
+                <pre className="whitespace-pre-wrap break-words">{text}</pre>
               )}
             </div>
           </div>
         );
+        }
 
       case "scroll": {
         const height = props.height as string | number | undefined;

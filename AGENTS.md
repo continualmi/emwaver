@@ -138,8 +138,6 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │  │  │  ├─ lib.rs                           # Tauri commands + app state wiring
 │  │  │  ├─ buffer.rs                        # Rust-side buffer plumbing
 │  │  │  ├─ script_runtime.rs                 # Desktop script runtime (host bridges + eval)
-│  │  │  ├─ pty.rs                           # PTY/terminal integration
-│  │  │  ├─ git.rs                           # Git commands exposed to UI/CLI
 │  │  │  └─ desktop_ipc.rs                    # Desktop↔CLI mailbox bridge
 │  │  ├─ capabilities/                       # Tauri capability manifests
 │  │  ├─ resources/                          # Packaged runtime resources (e.g. OTA)
@@ -153,7 +151,6 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │  │  │  └─ src/{midi_sysex,bridge}.rs
 │  │  ├─ emwaver-desktop-ipc/                 # Desktop↔CLI IPC format
 │  │  ├─ emwaver-dfu/                         # DFU/update helpers
-│  │  ├─ emwaver-git/                         # Git integration helpers
 │  │  ├─ emwaver-buffer-ios-ffi/              # iOS FFI wrapper (XCFramework)
 │  │  │  ├─ include/emwaver_buffer_ios.h
 │  │  │  └─ src/lib.rs
@@ -163,8 +160,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │  │  └─ regress/                             # Regex engine crate (used/benchmarked internally)
 │  │
 │  ├─ cli/                                    # Rust CLI (helper; does not own USB)
-│  │  ├─ src/{main,lib,cli,desktop_ipc,repl}.rs
-│  │  ├─ tests/                               # CLI tests
+│  │  ├─ src/{main,lib,cli}.rs                # Minimal: build + flash
 │  │  └─ resources/{ota,vibe}/                # Bundled resources
 │  │
 │  ├─ public/{default-scripts,device-icons}/  # Bundled UI assets (incl starter scripts)
@@ -179,7 +175,6 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │     │  ├─ UsbMidiSysex.java                # USB MIDI SysEx tunnel
 │     │  ├─ NativeBuffer.java                # JNI bridge to Rust buffer core
 │     │  ├─ files/                           # Local file repository (scripts/assets)
-│     │  ├─ github/                           # GitHub auth/cache/diff models + client
 │     │  ├─ scripts/                          # Script runtime + UI tree + renderer
 │     │  │  ├─ ScriptEngine.java             # JS runtime + DSL injection
 │     │  │  ├─ ScriptRenderView.java         # ScriptTree → Android Views
@@ -189,7 +184,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │     │  │  └─ ScriptSignalStore.java        # Reactive signals/state
 │     │  └─ ui/                               # Screens/fragments
 │     │     ├─ sampler/ / packetmode/ / scripts/
-│     │     ├─ emwaver/ / ism/ / rfid/ / git/
+│     │     ├─ emwaver/ / ism/ / rfid/
 │     │     └─ flash/                         # DFU/flash UI
 │     ├─ res/                                 # Layouts/drawables/navigation/etc.
 │     ├─ assets/ota/                           # OTA payload(s)
@@ -203,7 +198,6 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │     │  ├─ USBManager.swift                  # USB lifecycle
 │     │  ├─ UsbMidiSysex.swift                # USB MIDI SysEx tunnel
 │     │  ├─ NativeBufferRust.swift            # Bridge to Rust buffer core
-│     │  ├─ GitService.swift + GitHub*.swift  # Git/GitHub integration
 │     │  └─ FileService.swift / SettingsManager.swift / etc.
 │     ├─ Scripts/
 │     │  ├─ ScriptEngine.swift                # iOS ScriptEngine (DSL + host bridges)
@@ -231,7 +225,7 @@ Fast “where is X?” index:
 - **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `app/crates/emwaver-device-core/src/midi_sysex.rs`
 - **Shared buffer/framing core** → `app/crates/emwaver-buffer-core/`
 
-## Transition Plan: App-First Execution + In-App Agent (Deprecate REPL/CLI/Git)
+## Transition Plan: App-First Execution + In-App Agent (Remove REPL/CLI/Git)
 
 This is the intended migration from today’s “multiple execution modes + CLI + Git integrations” toward a single product model:
 
@@ -245,7 +239,7 @@ This is the intended migration from today’s “multiple execution modes + CLI 
 User-visible:
 - **No REPL**.
 - **No `-c "..."` string execution mode**.
-- **No user-facing CLI**.
+- **No user-facing CLI** (keep only minimal internal/dev tooling like build/flash).
 - **No Git/GitHub inside apps**.
 - Local-first scripts/projects, with optional **cloud sync**.
 
@@ -264,6 +258,13 @@ Still allowed internally (dev/manufacturing/CI only):
 
 ## Phase Plan (recommended order)
 
+Current status (as of 2026-01-28):
+- CLI REPL and `-c` execution removed; CLI reduced to `emwaver build` and `emwaver flash`.
+- Desktop Git UI/commands removed.
+- Android GitHub integration + Git screen removed.
+- iOS GitHub integration + Git tab removed.
+- Desktop Home “emwaver shell” removed (no embedded device shell on Home).
+
 ### Phase 0 — Decide the contracts (1–2 days)
 
 Write down (and keep stable):
@@ -280,8 +281,7 @@ Deliverables:
 Goal: stop supporting a stateful interactive shell.
 
 Steps:
-- In `app/cli/`, mark REPL as **deprecated** and hide from help.
-- Remove REPL-only code paths once the app can do all “quick experiments” via a scratch script.
+- Remove REPL codepaths entirely.
 
 Replacement UX:
 - In-app **Scratchpad Script** (ephemeral) with Run/Stop + logs.
@@ -291,12 +291,12 @@ Definition of done:
 - No REPL in releases.
 - All “REPL use cases” are served by scratch script execution in-app.
 
-### Phase 2 — Deprecate `-c` and converge on “run file”
+### Phase 2 — Deprecate `-c` and converge on “run file” 
 
 Goal: eliminate string-eval execution modes (harder to secure, harder to reproduce).
 
 Steps:
-- Keep `-c` only as a developer-only shortcut (if it must exist), otherwise remove.
+- Remove `-c` entirely.
 - Ensure “run this file” can be called programmatically by the in-app agent.
 
 Definition of done:
@@ -392,11 +392,12 @@ Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps
 
 ## Repo Impact Checklist (when executing this plan)
 
-- Remove/restrict:
-  - `app/cli/src/repl.rs` (REPL)
-  - `-c` code paths (string eval)
-  - `android/.../github/*`, `ios/.../Git*` and any UI flows
-  - Desktop Git commands exposed to UI if not needed
+- Removed:
+  - CLI REPL (`app/cli/src/repl.rs`)
+  - CLI `-c` code paths (string eval)
+  - Android GitHub package and UI entry points
+  - iOS Git/GitHub managers/models/views and UI entry points
+  - Desktop Git UI + backend commands
 
 - Strengthen:
   - Script storage abstraction (local-first + sync-ready)
@@ -518,28 +519,22 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 - Cross-platform Tauri app.
 - Owns device I/O directly (in-process USB MIDI + framing) and runs scripts locally for lowest latency.
-- Exposes a simple local Desktop↔CLI bridge (file-based mailbox) so the CLI can request actions without owning the USB connection.
+- May expose a simple local Desktop↔CLI bridge (file-based mailbox) for internal tooling, but the product does not ship a user-facing CLI workflow.
 - Focus is Scripts authoring + device interaction.
 - Avoid expanding/centering an IDE-style firmware build/flash workflow.
 
 ### CLI (`/cli`)
 
-- Rust crate/binary (`emw` → `emwaver`) that acts as a helper client for the Desktop app.
+- Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use.
 - Shared Rust core lives under `app/crates/`:
   - `app/crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
   - `app/crates/emwaver-buffer-ios-ffi` (iOS)
   - `app/crates/emwaver-buffer-android-jni` (Android)
-- The CLI does not own the USB MIDI connection; it asks the Desktop app to execute scripts and device packet I/O.
+- Current scope: firmware `build` and DFU `flash` only.
 
-#### Script REPL (Packet-Only)
+#### Script REPL
 
-EMWaver's "REPL" is a JavaScript-based evaluator for EMWaver scripts (".emw") with a Python-like workflow.
-
-- It evaluates EMWaver code (ScriptEngine) and relies on host-provided bridge functions.
-- Device I/O from scripts is packet-only via `_scriptSendPacket`.
-- Do not add or re-introduce ASCII command-string transports (no `_scriptSendCommandString`, no `send_command`, no firmware string parsing).
-
-If you need a quick device sanity check, prefer a tiny `.emw` snippet in the REPL (e.g. `await device.version()`), not a bespoke command-string path.
+Removed (scripts are run via the apps).
 
 ### Docs (`/docs`)
 

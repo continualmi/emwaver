@@ -52,8 +52,6 @@ use emwaver_device_core::bridge::{
 pub enum ScriptEvent {
     #[serde(rename = "render")]
     Render { ui: serde_json::Value },
-    #[serde(rename = "print")]
-    Print { message: String },
     #[serde(rename = "error")]
     Error { message: String },
     #[serde(rename = "stopped")]
@@ -190,11 +188,7 @@ impl ScriptRuntime {
                         (function() {{
                             var cb = globalThis.__scriptCallbacks['{}'];
                             if (typeof cb === 'function') {{
-                                try {{
-                                    cb();
-                                }} catch (e) {{
-                                    try {{ _scriptPrint('[timer] error: ' + e); }} catch (_) {{}}
-                                }}
+                                cb();
                             }}
                         }})();
                         "#,
@@ -202,7 +196,7 @@ impl ScriptRuntime {
                     );
 
                     if let Err(e) = context.eval(Source::from_bytes(&invoke_script)) {
-                        let _ = self.event_tx.send(ScriptEvent::Print {
+                        let _ = self.event_tx.send(ScriptEvent::Error {
                             message: format!("Timer callback error: {}", e),
                         });
                     }
@@ -240,16 +234,12 @@ impl ScriptRuntime {
                         (function() {{
                             var cb = globalThis.__scriptCallbacks['{}'];
                             if (typeof cb === 'function') {{
-                                try {{
-                                    var args = {};
-                                    if (args === null || typeof args === 'undefined') {{
-                                        args = [];
-                                    }}
-                                    var argv = Array.isArray(args) ? args : [args];
-                                    cb.apply(null, argv);
-                                }} catch (e) {{
-                                    try {{ _scriptPrint('[callback] error: ' + e); }} catch (_) {{}}
+                                var args = {};
+                                if (args === null || typeof args === 'undefined') {{
+                                    args = [];
                                 }}
+                                var argv = Array.isArray(args) ? args : [args];
+                                cb.apply(null, argv);
                             }}
                         }})();
                         "#,
@@ -260,7 +250,7 @@ impl ScriptRuntime {
                     eprintln!("[script_runtime] Executing invoke script");
                     if let Err(e) = context.eval(Source::from_bytes(&invoke_script)) {
                         eprintln!("[script_runtime] Invoke script error: {}", e);
-                        let _ = self.event_tx.send(ScriptEvent::Print {
+                        let _ = self.event_tx.send(ScriptEvent::Error {
                             message: format!("Callback error: {}", e),
                         });
                     }
@@ -291,24 +281,6 @@ impl ScriptRuntime {
     }
 
     fn register_natives(context: &mut Context, state: Rc<RefCell<RuntimeState>>) -> Result<(), String> {
-        // _scriptPrint
-        let state_print = state.clone();
-        // SAFETY: Closure captures Rc<RefCell> which is safe as long as we don't
-        // escape references across the Boa GC boundary. We only borrow temporarily.
-        let print_fn = unsafe {
-            NativeFunction::from_closure(move |_this, args, ctx| {
-                let msg = args.get_or_undefined(0).to_string(ctx)?;
-                let st = state_print.borrow();
-                let _ = st.event_tx.send(ScriptEvent::Print {
-                    message: msg.to_std_string_escaped(),
-                });
-                Ok(JsValue::undefined())
-            })
-        };
-        context
-            .register_global_builtin_callable(js_string!("_scriptPrint"), 1, print_fn)
-            .map_err(|e| format!("Failed to register _scriptPrint: {}", e))?;
-
         // _scriptRender
         let state_render = state.clone();
         let render_fn = unsafe {
