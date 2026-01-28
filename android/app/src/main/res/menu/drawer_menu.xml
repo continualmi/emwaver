@@ -5,7 +5,7 @@
             android:id="@+id/navigation_emwaver"
             android:icon="@drawable/emwaver_vector"
             android:title="EMWaver" />
-            
+
         <item
             android:id="@+id/navigation_cc1101"
             android:icon="@drawable/chip_svgrepo_com"
@@ -20,11 +20,6 @@
             android:id="@+id/navigation_scripts"
             android:icon="@drawable/ic_console_black_24dp"
             android:title="Scripts" />
-
-        <item
-            android:id="@+id/navigation_flash"
-            android:icon="@drawable/ic_flash_black_24dp"
-            android:title="Flash" />
 
     </group>
 </menu>

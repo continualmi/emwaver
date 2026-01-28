@@ -30,10 +30,5 @@
         android:label="EMWaver"
         tools:layout="@layout/fragment_emwaver" />
 
-    <fragment
-        android:id="@+id/navigation_flash"
-        android:name="com.emwaver.emwaverandroidapp.ui.flash.FlashFragment"
-        android:label="Flash"
-        tools:layout="@layout/fragment_flash" />
 
 </navigation>

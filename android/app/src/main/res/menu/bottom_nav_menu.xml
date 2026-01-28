@@ -4,12 +4,12 @@
         android:id="@+id/navigation_emwaver"
         android:icon="@drawable/emwaver_vector"
         android:title="Home" />
-        
+
     <item
         android:id="@+id/navigation_cc1101"
         android:icon="@drawable/chip_svgrepo_com"
         android:title="ISM" />
-
+         
     <item
         android:id="@+id/navigation_sampler"
         android:icon="@drawable/ic_rawmode_black_24dp"

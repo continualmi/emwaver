@@ -85,8 +85,7 @@ public class MainActivity extends AppCompatActivity {
                 R.id.navigation_cc1101,
                 R.id.navigation_emwaver,
                 R.id.navigation_sampler,
-                R.id.navigation_scripts,
-                R.id.navigation_flash)
+                R.id.navigation_scripts)
                 .setOpenableLayout(drawer)
                 .build();
         

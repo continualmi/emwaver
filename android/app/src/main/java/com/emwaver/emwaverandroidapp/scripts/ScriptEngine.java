@@ -296,30 +296,6 @@ public final class ScriptEngine {
             }
         });
 
-        ScriptableObject.putProperty(scope, "_scriptSendCommandString", new BaseFunction() {
-            @Override
-            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length < 2) {
-                    return Context.getUndefinedValue();
-                }
-                ScriptDeviceConnection connection = deviceConnection;
-                if (connection == null || !connection.isConnected()) {
-                    return null;
-                }
-                String command = String.valueOf(args[0]);
-                int timeoutMs = 2000;
-                Object timeoutObj = args[1];
-                if (timeoutObj instanceof Number) {
-                    timeoutMs = Math.max(0, ((Number) timeoutObj).intValue());
-                }
-                byte[] response = connection.sendCommand(command.getBytes(StandardCharsets.UTF_8), timeoutMs);
-                if (response == null) {
-                    return null;
-                }
-                return Context.javaToJS(response, scope);
-            }
-        });
-
         // Byte-level command variant (used by emw.sendPacket / __emwSendPacket).
         ScriptableObject.putProperty(scope, "_scriptSendPacket", new BaseFunction() {
             @Override

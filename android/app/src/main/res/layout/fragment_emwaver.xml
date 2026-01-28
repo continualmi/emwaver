@@ -1,188 +1,121 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:background="@color/surfaceBackground">
+    android:background="@color/surfaceBackground"
+    android:fillViewport="true">
 
-    <!-- EMWaver Connection Status -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp"
-        android:padding="8dp"
-        android:background="@color/surfaceCard"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Status: "
-            android:textStyle="bold"
-            android:textColor="@color/textSecondary" />
-
-        <TextView
-            android:id="@+id/emwaver_status_text"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="Not connected"
-            android:textColor="#FF0000"
-            android:gravity="center_vertical" />
-
-        <Button
-            android:id="@+id/connect_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:text="Connect"
-            android:layout_marginStart="8dp"
-            android:visibility="visible" />
-
-        <Button
-            android:id="@+id/disconnect_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:text="Disconnect"
-            android:layout_marginStart="8dp"
-            android:visibility="gone" />
-
-    </LinearLayout>
-
-    <!-- Firmware Version -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="8dp"
-        android:padding="8dp"
-        android:background="@color/surfaceCard"
-        android:gravity="center_vertical">
-
-        <ImageView
-            android:id="@+id/device_icon"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginEnd="12dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/emwaver_icon"
-            android:contentDescription="Device icon" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Firmware Version: "
-            android:textStyle="bold"
-            android:textColor="@color/textSecondary" />
-
-        <TextView
-            android:id="@+id/firmware_version_text"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="Unknown"
-            android:textColor="@color/textSecondary"
-            android:gravity="center_vertical" />
-
-        <ImageButton
-            android:id="@+id/check_version_button"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:padding="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_rotate"
-            android:contentDescription="Check firmware version"
-            android:layout_marginStart="8dp"
-            android:tint="?attr/colorOnSurface" />
-
-    </LinearLayout>
-
-    <!-- EMWaver Shell -->
-    <LinearLayout
-        android:id="@+id/shell_card"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:padding="12dp"
         android:orientation="vertical"
-        android:background="@color/surfaceCard">
+        android:padding="16dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="EMWaver Shell"
-            android:textStyle="bold"
-            android:textColor="@color/textPrimary"
-            android:layout_marginBottom="8dp" />
-
-        <ScrollView
-            android:id="@+id/shell_scroll"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:fillViewport="true"
-            android:background="#000000">
-
-            <TextView
-                android:id="@+id/shell_output"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:textColor="#00FF00"
-                android:fontFamily="monospace"
-                android:textSize="14sp"
-                android:textIsSelectable="true" />
-
-        </ScrollView>
-
+        <!-- Connection (Desktop-parity) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:background="#000000"
-            android:padding="4dp">
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp"
+            android:background="@color/surfaceCard">
 
             <TextView
-                android:id="@+id/shell_prompt"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="emw> "
-                android:textColor="#00FF00"
-                android:fontFamily="monospace"
+                android:text="Connection"
                 android:textStyle="bold"
-                android:paddingStart="4dp" />
+                android:textColor="@color/textPrimary"
+                android:textSize="16sp" />
 
-            <EditText
-                android:id="@+id/shell_input"
-                android:layout_width="0dp"
-                android:layout_weight="1"
+            <TextView
+                android:id="@+id/connection_state_text"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@null"
-                android:inputType="textNoSuggestions"
-                android:imeOptions="actionSend"
-                android:textColor="#00FF00"
-                android:fontFamily="monospace"
-                android:singleLine="true"
-                android:padding="4dp" />
+                android:layout_marginTop="8dp"
+                android:text="Searching for device..."
+                android:textStyle="bold"
+                android:textColor="@color/textSecondary"
+                android:textSize="14sp" />
 
-            <ImageButton
-                android:id="@+id/shell_send_button"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_send"
-                android:tint="#00FF00"
-                android:contentDescription="Send Command" />
+            <TextView
+                android:id="@+id/connection_detail_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="connect device or enter Update Mode"
+                android:textColor="@color/textSecondary"
+                android:textSize="12sp" />
         </LinearLayout>
-    </LinearLayout>
 
-</LinearLayout> 
+        <!-- Device Version / Update (Desktop-parity) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:background="@color/surfaceCard">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:id="@+id/device_icon"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_marginEnd="12dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/emwaver_icon"
+                    android:contentDescription="Device icon" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/device_version_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textStyle="bold"
+                        android:textColor="@color/textPrimary"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/device_version_status_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Connect a device to check"
+                        android:textColor="@color/textSecondary"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/update_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Update device emwaver version"
+                android:textColor="@color/textSecondary"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/update_device_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Update device"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
