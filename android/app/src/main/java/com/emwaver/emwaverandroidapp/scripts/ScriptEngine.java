@@ -44,6 +44,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class ScriptEngine {
     public interface RenderCallback {
@@ -59,6 +63,13 @@ public final class ScriptEngine {
         thread.setDaemon(true);
         return thread;
     });
+    private final ScheduledExecutorService timerExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "ScriptEngineTimers");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final AtomicInteger nextTimeoutId = new AtomicInteger(1);
+    private final Map<Integer, ScheduledFuture<?>> timeoutFutures = new ConcurrentHashMap<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Function> callbackRegistry = new ConcurrentHashMap<>();
     private final Map<String, Object> globalBindings = new ConcurrentHashMap<>();
@@ -123,7 +134,13 @@ public final class ScriptEngine {
                 cx.setLanguageVersion(Context.VERSION_ES6);
                 ensureScope(cx);
                 callbackRegistry.clear();
+                clearAllTimeouts();
                 injectDsl(cx, scope);
+
+                if (containsAsyncTokens(script)) {
+                    dispatchError("Script error: async/await is not supported. Scripts must be synchronous.");
+                    return;
+                }
 
                 String wrapped = "(function() {\n" + script + "\n})();";
                 try {
@@ -177,6 +194,8 @@ public final class ScriptEngine {
     }
 
     public void shutdown() {
+        clearAllTimeouts();
+        timerExecutor.shutdownNow();
         executor.shutdownNow();
     }
 
@@ -301,6 +320,37 @@ public final class ScriptEngine {
             }
         });
 
+        // Byte-level command variant (used by emw.sendPacket / __emwSendPacket).
+        ScriptableObject.putProperty(scope, "_scriptSendPacket", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                ScriptDeviceConnection connection = deviceConnection;
+                if (connection == null || !connection.isConnected()) {
+                    return null;
+                }
+
+                int timeoutMs = 2000;
+                if (args.length >= 2 && args[1] instanceof Number) {
+                    timeoutMs = Math.max(0, ((Number) args[1]).intValue());
+                }
+
+                byte[] payload = coerceToByteArray(args[0]);
+                if (payload == null) {
+                    return null;
+                }
+
+                byte[] response = connection.sendPacket(payload, timeoutMs);
+                if (response == null) {
+                    return null;
+                }
+
+                return toJsByteArray(cx, scope, response);
+            }
+        });
+
         ScriptableObject.putProperty(scope, "_scriptSleep", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
@@ -320,6 +370,155 @@ public final class ScriptEngine {
                 return Context.getUndefinedValue();
             }
         });
+
+        // Minimal timer API: setTimeout/clearTimeout.
+        // Important: scheduled callback execution is always marshaled back onto the ScriptEngine executor
+        // so JSContext access stays single-threaded.
+        ScriptableObject.putProperty(scope, "setTimeout", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 2 || !(args[0] instanceof Function)) {
+                    throw new EvaluatorException("setTimeout(fn, ms): fn must be a function");
+                }
+                Function fn = (Function) args[0];
+                long delayMs = 0;
+                if (args[1] instanceof Number) {
+                    delayMs = Math.max(0L, ((Number) args[1]).longValue());
+                }
+
+                Object[] fnArgs = Context.emptyArgs;
+                if (args.length > 2) {
+                    fnArgs = new Object[args.length - 2];
+                    System.arraycopy(args, 2, fnArgs, 0, fnArgs.length);
+                }
+
+                int id = nextTimeoutId.getAndIncrement();
+                ScheduledFuture<?> future = timerExecutor.schedule(() -> executor.execute(() -> {
+                    ScheduledFuture<?> existing = timeoutFutures.remove(id);
+                    if (existing == null || existing.isCancelled()) {
+                        return;
+                    }
+                    Context innerCx = Context.enter();
+                    try {
+                        innerCx.setOptimizationLevel(-1);
+                        innerCx.setLanguageVersion(Context.VERSION_ES6);
+                        ensureScope(innerCx);
+                        fn.call(innerCx, ScriptEngine.this.scope, ScriptEngine.this.scope, fnArgs);
+                    } catch (RhinoException ex) {
+                        dispatchError("Script timer error: " + formatRhinoException(ex));
+                    } catch (Exception ex) {
+                        dispatchError("Script timer error: " + ex.getMessage());
+                    } finally {
+                        Context.exit();
+                    }
+                }), delayMs, TimeUnit.MILLISECONDS);
+
+                timeoutFutures.put(id, future);
+                return id;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "clearTimeout", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length == 0) {
+                    return Context.getUndefinedValue();
+                }
+                int id;
+                Object raw = args[0];
+                if (raw instanceof Number) {
+                    id = ((Number) raw).intValue();
+                } else {
+                    try {
+                        id = Integer.parseInt(String.valueOf(raw));
+                    } catch (NumberFormatException e) {
+                        return Context.getUndefinedValue();
+                    }
+                }
+                ScheduledFuture<?> future = timeoutFutures.remove(id);
+                if (future != null) {
+                    future.cancel(false);
+                }
+                return Context.getUndefinedValue();
+            }
+        });
+    }
+
+    private boolean containsAsyncTokens(String script) {
+        if (script == null || script.isEmpty()) {
+            return false;
+        }
+        // Intentionally simple: reject if any async/await tokens are present.
+        // This may false-positive on strings/comments, but keeps behavior aligned across platforms.
+        return script.contains("await") || script.contains("async");
+    }
+
+    private void clearAllTimeouts() {
+        for (Map.Entry<Integer, ScheduledFuture<?>> entry : timeoutFutures.entrySet()) {
+            ScheduledFuture<?> future = entry.getValue();
+            if (future != null) {
+                future.cancel(false);
+            }
+        }
+        timeoutFutures.clear();
+    }
+
+    private Object toJsByteArray(Context cx, Scriptable scope, byte[] bytes) {
+        if (bytes == null) {
+            return null;
+        }
+        Object[] items = new Object[bytes.length];
+        for (int i = 0; i < bytes.length; i++) {
+            items[i] = (double) (bytes[i] & 0xFF);
+        }
+        return cx.newArray(scope, items);
+    }
+
+    private byte[] coerceToByteArray(Object value) {
+        if (value == null || value == Undefined.instance) {
+            return null;
+        }
+        if (value instanceof Wrapper) {
+            value = ((Wrapper) value).unwrap();
+        }
+        if (value instanceof byte[]) {
+            return (byte[]) value;
+        }
+        if (value instanceof NativeArray) {
+            NativeArray array = (NativeArray) value;
+            int length = (int) array.getLength();
+            byte[] out = new byte[length];
+            for (int i = 0; i < length; i++) {
+                Object v = array.get(i, array);
+                int b = v instanceof Number ? ((Number) v).intValue() : 0;
+                out[i] = (byte) (b & 0xFF);
+            }
+            return out;
+        }
+        if (value instanceof Scriptable) {
+            Scriptable s = (Scriptable) value;
+            Object lenObj = ScriptableObject.getProperty(s, "length");
+            int length = 0;
+            if (lenObj instanceof Number) {
+                length = Math.max(0, ((Number) lenObj).intValue());
+            }
+            byte[] out = new byte[length];
+            for (int i = 0; i < length; i++) {
+                Object v = ScriptableObject.getProperty(s, i);
+                int b = v instanceof Number ? ((Number) v).intValue() : 0;
+                out[i] = (byte) (b & 0xFF);
+            }
+            return out;
+        }
+
+        try {
+            Object converted = Context.jsToJava(value, byte[].class);
+            if (converted instanceof byte[]) {
+                return (byte[]) converted;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private void injectDsl(Context cx, Scriptable scope) {

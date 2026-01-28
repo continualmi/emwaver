@@ -470,6 +470,7 @@ Scripts are user-authored extension bundles (manifest + EMWaver scripts) that pl
 
 - **Parity-first UI DSL**: script UI must render consistently across Android/iOS/Desktop.
 - **Cross-platform semantics**: the Script API and observable runtime behavior must be the same across Android/iOS/Desktop (avoid host-dependent sync/async differences).
+- **Sync-only execution**: scripts and the standard library are strictly synchronous across all platforms (no Promises, no `async`/`await`).
 - **Unified scripting engine**: ScriptEngine is the single runtime.
 - **In-script logging**: scripts surface output through script UI components.
 
