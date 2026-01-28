@@ -203,8 +203,6 @@ public class ScriptsFragment extends Fragment {
         binding = FragmentScriptsBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
-        utils.setContext(requireContext());
-
         setupMenu();
         setupFileLaunchers();
         setupScriptList();

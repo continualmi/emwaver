@@ -20,8 +20,4 @@
         android:icon="@drawable/ic_console_black_24dp"
         android:title="Scripts" />
 
-    <item
-        android:id="@+id/navigation_git"
-        android:icon="@drawable/ic_github_icon"
-        android:title="Git" />
 </menu> 

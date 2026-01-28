@@ -1,6 +1,6 @@
 # EMWaver CLI
 
-Command-line interface for interacting with EMWaver devices.
+Minimal command-line tooling for EMWaver.
 
 ## Installation
 
@@ -44,29 +44,18 @@ cargo install --path app/cli --bin emwaver --force
 ## Usage
 
 ```bash
-# Launch the EMWaver REPL (Python-like)
-emwaver
+# Build the STM32 firmware (updates the bundled bin used by Desktop)
+emwaver build
 
-# Evaluate a one-off snippet and exit (Python-style `-c`)
-emwaver -c "print(await device.version())"
-
-# Run a script file and exit (Python-style `python file.py`)
-emwaver ./hello.emw
-
-# Run a script file, then drop into the REPL (Python-style `-i`)
-emwaver -i ./hello.emw
-
-# Raw device command escape hatch (Desktop owns USB connection)
-emwaver cmd version
+# Flash the bundled firmware to a device in Update Mode (DFU)
+emwaver flash
 ```
 
 ## Development
 
 ### Running Tests
 
-```bash
-cargo test
-```
+No tests (tiny wrapper).
 
 ### Building for Different Platforms
 

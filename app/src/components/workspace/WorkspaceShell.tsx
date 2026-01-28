@@ -19,56 +19,33 @@ import { type FormEvent, type MouseEvent as ReactMouseEvent, useCallback, useEff
 import { Editor as MonacoEditor, useMonaco } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "xterm";
-import "xterm/css/xterm.css";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
 import { useDevice } from "../../utils/DeviceContext";
 import { ScriptEngine, type ScriptTree } from "../../utils/ScriptEngine";
 import { useBackendScript } from "../../utils/useBackendScript";
 import { readScriptsTabState, writeScriptsTabState } from "../scriptsTabState";
-import { useWorkspaceGit } from "./hooks/useWorkspaceGit";
 import ExplorerTree from "./sidebar/ExplorerTree";
-import GitSidebarPanel from "./sidebar/GitSidebarPanel";
 import ScriptAssetsPanel from "./sidebar/ScriptAssetsPanel";
 import WorkspaceTopBar from "./top/WorkspaceTopBar";
-import GitDiffPanel from "./main/GitDiffPanel";
 import ScriptPreviewPanel from "./main/ScriptPreviewPanel";
 import WorkspaceBottomPanel from "./terminal/WorkspaceBottomPanel";
 import {
-  ArrowUpIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CloseIcon,
   FolderIcon,
-  GitIcon,
-  MinusIcon,
   PanelLeftIcon,
   PlayIcon,
-  PlusIcon,
-  RefreshIcon,
-  TerminalIcon,
-  TrashIcon,
 } from "./WorkspaceIcons";
 import type {
   DirectoryChildEntry,
-  GitDiffContents,
-  GitRepoStatus,
   OpenFile,
-  TerminalSession,
   ThemeMode,
 } from "./workspaceTypes";
 import {
   DEFAULT_TERMINAL_HEIGHT,
-  DEFAULT_TERMINAL_LIST_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
   SIDEBAR_COLLAPSE_THRESHOLD,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
-  TERMINAL_LIST_COLLAPSE_THRESHOLD,
-  TERMINAL_LIST_MAX_WIDTH,
-  TERMINAL_LIST_MIN_WIDTH,
   TERMINAL_MAX_HEIGHT,
   TERMINAL_MIN_HEIGHT,
   TERMINAL_VIEW_MIN_WIDTH,
@@ -78,8 +55,6 @@ import {
   readStoredSidebarCollapsed,
   readStoredSidebarWidth,
   readStoredTerminalHeight,
-  readStoredTerminalListCollapsed,
-  readStoredTerminalListWidth,
   readStoredAssetScriptsCollapsed,
 } from "./workspaceStorage";
 import {
@@ -93,13 +68,10 @@ import {
   isScriptAssetPath,
   isScriptScriptPath,
   languageForPath,
-  nextTerminalTitle,
   readScriptAssetScript,
   timestampLabel,
   scriptAssetPath,
 } from "./workspaceUtils";
-
-const DEFAULT_TERMINAL_TITLE = "zsh";
 const CONSOLE_INPUT_TOKEN = "__emw_console_input";
 
 const FILE_AUTO_RELOAD_INTERVAL_MS = 2000;
@@ -120,8 +92,6 @@ const MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   },
 };
 
-let cachedTerminalSessionId: string | null = null;
-
 export default function WorkspaceShell({
   theme = "dark",
   isActive = false,
@@ -138,7 +108,6 @@ export default function WorkspaceShell({
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [dirChildren, setDirChildren] = useState<Record<string, DirectoryChildEntry[]>>({});
   const [openDirs, setOpenDirs] = useState<Set<string>>(() => new Set());
-  const [sidebarPanel, setSidebarPanel] = useState<"explorer" | "git">("explorer");
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [isLoadingFile, setIsLoadingFile] = useState(false);
@@ -153,68 +122,21 @@ export default function WorkspaceShell({
   const sidebarLastExpandedWidthRef = useRef<number>(readStoredSidebarWidth(keys));
   const openingFilePathsRef = useRef<Set<string>>(new Set());
 
-  const {
-    gitStatus,
-    gitError,
-    gitHasChecked,
-    isGitLoading,
-    isGitBusy,
-    gitCommitMessage,
-    setGitCommitMessage,
-    gitSelectedDiff,
-    setGitSelectedDiff,
-    gitDiffContents,
-    isGitDiffLoading,
-    showGitNeedsInitIndicator,
-    refreshGit,
-    handleGitStage,
-    handleGitUnstage,
-    handleGitDiscard,
-    handleGitCommit,
-    handleGitPush,
-    handleGitStageAll,
-    handleGitUnstageAll,
-  } = useWorkspaceGit(rootDir);
-
   const explorerResizeActiveRef = useRef(false);
   const explorerResizeStartXRef = useRef(0);
   const explorerResizeStartWidthRef = useRef(0);
 
   const [isTerminalVisible, setIsTerminalVisible] = useState(false);
-  const [terminalActiveTab, setTerminalActiveTab] = useState<"terminal" | "console">("terminal");
   const [terminalHeight, setTerminalHeight] = useState<number>(() => readStoredTerminalHeight(keys));
   const terminalResizeActiveRef = useRef(false);
   const terminalResizeStartYRef = useRef(0);
   const terminalResizeStartHeightRef = useRef(0);
 
-  const [terminalListWidth, setTerminalListWidth] = useState<number>(() => readStoredTerminalListWidth(keys));
-  const [isTerminalListCollapsed, setIsTerminalListCollapsed] = useState<boolean>(() =>
-    readStoredTerminalListCollapsed(keys),
-  );
-  const terminalListLastExpandedWidthRef = useRef<number>(readStoredTerminalListWidth(keys));
-  const terminalListResizeActiveRef = useRef(false);
-  const terminalListResizeStartXRef = useRef(0);
-  const terminalListResizeStartWidthRef = useRef(0);
+  
 
   const [isAssetScriptsCollapsed, setIsAssetScriptsCollapsed] = useState<boolean>(() => readStoredAssetScriptsCollapsed(keys));
 
-  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
-  const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<string | null>(null);
-  const [isTerminalPickerOpen, setIsTerminalPickerOpen] = useState(false);
-  const terminalPickerAnchorRef = useRef<HTMLDivElement | null>(null);
-
-
-  const sessionsRef = useRef<TerminalSession[]>([]);
-  const didAutoStartTerminalRef = useRef(false);
-  const terminalStartInFlightRef = useRef(false);
-  const closingTerminalSessionsRef = useRef<Set<string>>(new Set());
-
   const terminalPanelRef = useRef<HTMLDivElement | null>(null);
-  const terminalContainerBySessionRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const terminalBySessionRef = useRef<Map<string, Terminal>>(new Map());
-  const fitAddonBySessionRef = useRef<Map<string, FitAddon>>(new Map());
-  const pendingTerminalOutputRef = useRef<Map<string, Uint8Array[]>>(new Map());
-  const outputDecoderRef = useRef(new TextDecoder());
 
   const [terminalConsoleLines, setTerminalConsoleLines] = useState<string[]>([]);
   const terminalConsoleAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -356,10 +278,6 @@ export default function WorkspaceShell({
   );
 
   const explorerRoot = useMemo(() => (rootDir ? rootDir.replace(/\\/g, "/") : null), [rootDir]);
-  const activeTerminalTitle = useMemo(
-    () => terminalSessions.find((session) => session.id === activeTerminalSessionId)?.title ?? DEFAULT_TERMINAL_TITLE,
-    [activeTerminalSessionId, terminalSessions],
-  );
   const activeFile = useMemo(() => {
     if (!activeFilePath) {
       return null;
@@ -509,12 +427,7 @@ export default function WorkspaceShell({
     };
   }, []);
 
-  useEffect(() => {
-    sessionsRef.current = terminalSessions;
-  }, [terminalSessions]);
-
-
-
+  
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -526,69 +439,21 @@ export default function WorkspaceShell({
   }, [isSidebarCollapsed]);
 
   useEffect(() => {
-    if (!isTerminalPickerOpen) {
-      return;
-    }
-
-    const onMouseDown = (event: MouseEvent) => {
-      const anchor = terminalPickerAnchorRef.current;
-      if (!anchor) {
-        setIsTerminalPickerOpen(false);
+    const handler = (event: KeyboardEvent) => {
+      const isToggle =
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "j";
+      if (!isToggle) {
         return;
       }
-      if (event.target instanceof Node && anchor.contains(event.target)) {
-        return;
-      }
-      setIsTerminalPickerOpen(false);
+      event.preventDefault();
+      setIsTerminalVisible((prev) => !prev);
     };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsTerminalPickerOpen(false);
-      }
-    };
-
-    window.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      window.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [isTerminalPickerOpen]);
-
-
-
-  useEffect(() => {
-    const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
-      const payload = event.payload;
-      if (!payload) {
-        return;
-      }
-      if (closingTerminalSessionsRef.current.has(payload.session_id)) {
-        pendingTerminalOutputRef.current.delete(payload.session_id);
-        return;
-      }
-      const bytes = new Uint8Array(payload.data);
-      const decoder = outputDecoderRef.current;
-
-      const terminal = terminalBySessionRef.current.get(payload.session_id);
-      if (terminal) {
-        terminal.write(decoder.decode(bytes, { stream: true }));
-        return;
-      }
-      if (!sessionsRef.current.some((session) => session.id === payload.session_id)) {
-        return;
-      }
-      const buffers = pendingTerminalOutputRef.current.get(payload.session_id) ?? [];
-      buffers.push(bytes);
-      pendingTerminalOutputRef.current.set(payload.session_id, buffers);
-    });
-
-    return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
-
   useEffect(() => {
     if (!isTauriAvailable()) {
       return;
@@ -611,216 +476,6 @@ export default function WorkspaceShell({
     anchor.scrollIntoView({ block: "end" });
   }, [terminalConsoleLines.length]);
 
-  const ensureSessionTerminal = useCallback(
-    (sessionId: string) => {
-      if (!isTauriAvailable()) {
-        return;
-      }
-
-      const container = terminalContainerBySessionRef.current.get(sessionId);
-      if (!container) {
-        return;
-      }
-
-      if (terminalBySessionRef.current.has(sessionId)) {
-        return;
-      }
-
-      const terminal = new Terminal({
-        cursorBlink: true,
-        fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
-        fontSize: 13,
-        theme: {
-          background: "#111c32",
-          foreground: "#f1f5f9",
-          cursor: "#38bdf8",
-        },
-      });
-
-      const fitAddon = new FitAddon();
-      terminal.loadAddon(fitAddon);
-      terminal.open(container);
-
-      terminal.onData((data) => {
-        void safeInvoke<void>("pty_write", {
-          payload: {
-            session_id: sessionId,
-            data,
-          },
-        });
-      });
-
-      terminalBySessionRef.current.set(sessionId, terminal);
-      fitAddonBySessionRef.current.set(sessionId, fitAddon);
-
-      const pending = pendingTerminalOutputRef.current.get(sessionId);
-      if (pending && pending.length > 0) {
-        pendingTerminalOutputRef.current.delete(sessionId);
-        for (const chunk of pending) {
-          terminal.write(outputDecoderRef.current.decode(chunk, { stream: true }));
-        }
-      }
-
-      requestAnimationFrame(() => {
-        fitAddon.fit();
-        void safeInvoke<void>("pty_resize", {
-          payload: {
-            session_id: sessionId,
-            cols: terminal.cols,
-            rows: terminal.rows,
-          },
-        });
-      });
-    },
-    [theme],
-  );
-
-  const focusActiveTerminal = useCallback(() => {
-    if (!activeTerminalSessionId) {
-      return;
-    }
-    terminalBySessionRef.current.get(activeTerminalSessionId)?.focus();
-  }, [activeTerminalSessionId]);
-
-  const closeTerminalSession = useCallback(
-    async (sessionId: string) => {
-      if (!isTauriAvailable()) {
-        return;
-      }
-
-      closingTerminalSessionsRef.current.add(sessionId);
-      try {
-        await safeInvoke<void>("pty_stop", {
-          payload: {
-            session_id: sessionId,
-          },
-        });
-      } finally {
-        terminalBySessionRef.current.get(sessionId)?.dispose();
-        fitAddonBySessionRef.current.get(sessionId)?.dispose();
-        terminalBySessionRef.current.delete(sessionId);
-        fitAddonBySessionRef.current.delete(sessionId);
-        pendingTerminalOutputRef.current.delete(sessionId);
-        terminalContainerBySessionRef.current.delete(sessionId);
-        closingTerminalSessionsRef.current.delete(sessionId);
-
-        setTerminalSessions((prev) => {
-          const next = prev.filter((session) => session.id !== sessionId);
-          setActiveTerminalSessionId((current) => {
-            if (current !== sessionId) {
-              return current;
-            }
-            return next.length > 0 ? next[next.length - 1].id : null;
-          });
-          return next;
-        });
-      }
-    },
-    [],
-  );
-
-  const startTerminalSession = useCallback(
-    async ({ makeActive }: { makeActive: boolean }) => {
-      if (!isTauriAvailable()) {
-        return null;
-      }
-      if (terminalStartInFlightRef.current) {
-        return null;
-      }
-
-      terminalStartInFlightRef.current = true;
-      try {
-        const response = await safeInvoke<{ session_id: string }>("pty_start", {
-          payload: {
-            cwd: rootDir,
-            cols: 120,
-            rows: 30,
-          },
-        });
-        if (!response?.session_id) {
-          return null;
-        }
-
-        const sessionId = response.session_id;
-        const title = nextTerminalTitle(terminalSessions, DEFAULT_TERMINAL_TITLE);
-
-        setTerminalSessions((prev) => [...prev, { id: sessionId, title, createdAt: Date.now() }]);
-        if (makeActive) {
-          setActiveTerminalSessionId(sessionId);
-          setIsTerminalVisible(true);
-          setIsTerminalPickerOpen(false);
-          requestAnimationFrame(() => {
-            ensureSessionTerminal(sessionId);
-            terminalBySessionRef.current.get(sessionId)?.focus();
-          });
-        }
-
-        return sessionId;
-      } finally {
-        terminalStartInFlightRef.current = false;
-      }
-    },
-    [ensureSessionTerminal, rootDir, terminalSessions],
-  );
-
-  useEffect(() => {
-    if (!isTerminalVisible) {
-      return;
-    }
-    const sessionId = activeTerminalSessionId;
-    if (!sessionId) {
-      return;
-    }
-    ensureSessionTerminal(sessionId);
-
-    const terminal = terminalBySessionRef.current.get(sessionId);
-    const fitAddon = fitAddonBySessionRef.current.get(sessionId);
-    if (!terminal || !fitAddon) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-      void safeInvoke<void>("pty_resize", {
-        payload: {
-          session_id: sessionId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        },
-      });
-    });
-  }, [activeTerminalSessionId, ensureSessionTerminal, isTerminalVisible, terminalHeight, terminalListWidth]);
-
-	  useEffect(() => {
-	    const handler = (event: KeyboardEvent) => {
-	      const isToggle = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "j";
-	      if (!isToggle) {
-	        return;
-	      }
-	      event.preventDefault();
-	      setIsTerminalVisible((prev) => {
-	        const next = !prev;
-	        if (next && terminalSessions.length === 0 && !terminalStartInFlightRef.current) {
-	          void startTerminalSession({ makeActive: true });
-	        }
-	        return next;
-	      });
-	    };
-	    window.addEventListener("keydown", handler);
-	    return () => window.removeEventListener("keydown", handler);
-	  }, [startTerminalSession, terminalSessions.length]);
-
-  useEffect(() => {
-    return () => {
-      // Intentionally keep PTYs alive across IDE fragment remounts so sourced env stays warm.
-      terminalBySessionRef.current.forEach((terminal) => terminal.dispose());
-      fitAddonBySessionRef.current.forEach((addon) => addon.dispose());
-      terminalBySessionRef.current.clear();
-      fitAddonBySessionRef.current.clear();
-      terminalContainerBySessionRef.current.clear();
-      pendingTerminalOutputRef.current.clear();
-    };
-  }, []);
 
   const loadDirectoryChildren = useCallback(
     async (dir: string) => {
@@ -877,9 +532,6 @@ export default function WorkspaceShell({
     scriptEngineByPathRef.current.clear();
     setDirChildren({});
     setOpenDirs(new Set());
-    setSidebarPanel("explorer");
-    setGitSelectedDiff(null);
-    setGitCommitMessage("");
   }, []);
 
   const handlePickFolder = useCallback(async () => {
@@ -962,41 +614,6 @@ export default function WorkspaceShell({
     };
   }, []);
 
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      if (!terminalListResizeActiveRef.current) {
-        return;
-      }
-      const delta = terminalListResizeStartXRef.current - event.clientX;
-      const rawWidth = terminalListResizeStartWidthRef.current + delta;
-      if (rawWidth < TERMINAL_LIST_COLLAPSE_THRESHOLD) {
-        terminalListResizeActiveRef.current = false;
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        setIsTerminalListCollapsed(true);
-        return;
-      }
-      setIsTerminalListCollapsed(false);
-      setTerminalListWidth(clamp(rawWidth, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH));
-    };
-
-    const handleUp = () => {
-      if (!terminalListResizeActiveRef.current) {
-        return;
-      }
-      terminalListResizeActiveRef.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  }, []);
-
   const handleToggleDir = useCallback(
     async (dir: string) => {
       setOpenDirs((prev) => {
@@ -1025,7 +642,6 @@ export default function WorkspaceShell({
     setActivePreviewPath(null);
     setSelectedPath(effectivePath);
     setActiveFilePath(effectivePath);
-    setGitSelectedDiff(null);
     if (openFiles.some((file) => file.path === effectivePath)) {
       return;
     }
@@ -1328,11 +944,10 @@ export default function WorkspaceShell({
       setOpenFiles((prev) =>
         prev.map((file) => (file.path === activeFile.path ? { ...file, isDirty: false, diskMtimeMs } : file)),
       );
-      void refreshGit();
     } finally {
       setIsSaving(false);
     }
-  }, [activeFile, refreshGit]);
+  }, [activeFile]);
 
   useEffect(() => {
     const unlistenTogglePromise = safeListen("menu-toggle-explorer", () => {
@@ -1383,14 +998,8 @@ export default function WorkspaceShell({
   }, [activeFile, closeFile, handleSaveFile]);
 
   const handleToggleTerminalVisible = useCallback(() => {
-    setIsTerminalVisible((prev) => {
-      const next = !prev;
-      if (next && terminalSessions.length === 0 && !terminalStartInFlightRef.current) {
-        void startTerminalSession({ makeActive: true });
-      }
-      return next;
-    });
-  }, [startTerminalSession, terminalSessions.length]);
+    setIsTerminalVisible((prev) => !prev);
+  }, []);
 
   const handleTerminalResizeMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1403,22 +1012,6 @@ export default function WorkspaceShell({
     [terminalHeight],
   );
 
-  const handleTerminalListResizeMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      setIsTerminalListCollapsed(false);
-      terminalListResizeActiveRef.current = true;
-      terminalListResizeStartXRef.current = event.clientX;
-      terminalListResizeStartWidthRef.current = terminalListWidth;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    },
-    [terminalListWidth],
-  );
-
-  const handleExpandTerminalList = useCallback(() => {
-    setIsTerminalListCollapsed(false);
-    setTerminalListWidth(clamp(terminalListLastExpandedWidthRef.current, TERMINAL_LIST_MIN_WIDTH, TERMINAL_LIST_MAX_WIDTH));
-  }, []);
 
 
   return (
@@ -1450,30 +1043,15 @@ export default function WorkspaceShell({
                 <button
                   type="button"
                   onClick={() => {
-                    setSidebarPanel("explorer");
                     setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
                     setIsSidebarCollapsed(false);
                   }}
                   className={`flex h-9 items-center justify-center text-slate-500 hover:bg-slate-900/30 hover:text-slate-200 ${
-                    sidebarPanel === "explorer" ? "bg-slate-900/50 text-slate-200" : ""
+						"bg-slate-900/50 text-slate-200"
                   }`}
                   title="Show Explorer (Cmd/Ctrl+B)"
                 >
                   <FolderIcon className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSidebarPanel("git");
-                    setSidebarWidth((prev) => (prev > 0 ? prev : sidebarLastExpandedWidthRef.current));
-                    setIsSidebarCollapsed(false);
-                  }}
-                  className={`relative flex h-9 items-center justify-center text-slate-500 hover:bg-slate-900/30 hover:text-slate-200 ${
-                    sidebarPanel === "git" ? "bg-slate-900/50 text-slate-200" : ""
-                  }`}
-                  title="Show Source Control"
-                >
-                  <GitIcon className="h-4 w-4" />
                 </button>
               </div>
 	        ) : (
@@ -1485,45 +1063,12 @@ export default function WorkspaceShell({
                       <div className="min-w-0 cursor-default">
                         <h2
                           className="truncate text-sm font-semibold text-slate-200"
-                          title={
-                            sidebarPanel === "explorer"
-                              ? rootDir ?? "Scripts"
-                              : "Source Control"
-                          }
+                          title={rootDir ?? "Scripts"}
                         >
-                          {sidebarPanel === "explorer"
-                            ? rootDir
-                              ? basename(rootDir)
-                              : "SCRIPTS"
-                            : "SOURCE CONTROL"}
+                          {rootDir ? basename(rootDir) : "SCRIPTS"}
                         </h2>
-                        {sidebarPanel === "git" ? <p className="mt-1 text-[11px] text-slate-500">Git</p> : null}
                       </div>
                       <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setSidebarPanel("explorer")}
-                          className={`rounded p-1.5 ${
-                            sidebarPanel === "explorer"
-                              ? "bg-slate-900/60 text-slate-200"
-                              : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                          }`}
-                          title="Explorer"
-                        >
-                          <FolderIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSidebarPanel("git")}
-                          className={`rounded p-1.5 ${
-                            sidebarPanel === "git"
-                              ? "bg-slate-900/60 text-slate-200"
-                              : "text-slate-500 hover:bg-slate-900/60 hover:text-slate-200"
-                          }`}
-                          title="Source Control"
-                        >
-                          <GitIcon className="h-4 w-4" />
-                        </button>
                         <button
                           type="button"
                           onClick={() => setIsSidebarCollapsed(true)}
@@ -1537,50 +1082,26 @@ export default function WorkspaceShell({
                   </div>
 
                   <div className="min-h-0 flex-1 overflow-auto p-2">
-                    {sidebarPanel === "explorer" ? (
-                      <div className="space-y-2">
-                        {!rootDir ? (
-                          <button
-                            type="button"
-                            onClick={() => void handlePickFolder()}
-                            className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900"
-                            title="Open Folder"
-                          >
-                            Open Folder…
-                          </button>
-                        ) : null}
-                        <ExplorerTree
-                          root={explorerRoot}
-                          dirChildren={dirChildren}
-                          openDirs={openDirs}
-                          selectedPath={selectedPath}
-                          onToggleDir={handleToggleDir}
-                          onOpenFile={handleOpenFile}
-                        />
-                      </div>
-                    ) : (
-                      <GitSidebarPanel
-                        rootDir={rootDir}
-                        gitStatus={gitStatus}
-                        gitError={gitError}
-                        gitHasChecked={gitHasChecked}
-                        isGitLoading={isGitLoading}
-                        isGitBusy={isGitBusy}
-                        showGitNeedsInitIndicator={showGitNeedsInitIndicator}
-                        gitCommitMessage={gitCommitMessage}
-                        onCommitMessageChange={setGitCommitMessage}
-                        gitSelectedDiff={gitSelectedDiff}
-                        onSelectDiff={setGitSelectedDiff}
-                        onRefresh={refreshGit}
-                        onStage={handleGitStage}
-                        onUnstage={handleGitUnstage}
-                        onDiscard={handleGitDiscard}
-                        onCommit={handleGitCommit}
-                        onPush={handleGitPush}
-                        onStageAll={handleGitStageAll}
-                        onUnstageAll={handleGitUnstageAll}
+                    <div className="space-y-2">
+                      {!rootDir ? (
+                        <button
+                          type="button"
+                          onClick={() => void handlePickFolder()}
+                          className="w-full rounded border border-slate-800 bg-slate-950 px-2 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-900"
+                          title="Open Folder"
+                        >
+                          Open Folder…
+                        </button>
+                      ) : null}
+                      <ExplorerTree
+                        root={explorerRoot}
+                        dirChildren={dirChildren}
+                        openDirs={openDirs}
+                        selectedPath={selectedPath}
+                        onToggleDir={handleToggleDir}
+                        onOpenFile={handleOpenFile}
                       />
-                    )}
+                    </div>
                   </div>
 
                   {
@@ -1635,7 +1156,6 @@ export default function WorkspaceShell({
             onSelectPreview={(path) => {
               setActiveMainTabKind("preview");
               setActivePreviewPath(path);
-              setGitSelectedDiff(null);
             }}
             onClosePreview={closeScriptPreviewTab}
             rightActions={
@@ -1650,7 +1170,6 @@ export default function WorkspaceShell({
 
                         if (!scriptTargetWantsPreview) {
                           setIsTerminalVisible(true);
-                          setTerminalActiveTab("console");
                         }
 
                         void (async () => {
@@ -1695,16 +1214,7 @@ export default function WorkspaceShell({
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1">
-              {gitSelectedDiff ? (
-                <GitDiffPanel
-                  theme={theme}
-                  filePath={gitSelectedDiff.path}
-                  onClose={() => setGitSelectedDiff(null)}
-                  isLoading={isGitDiffLoading}
-                  diffContents={gitDiffContents}
-                  editorOptions={MONACO_EDITOR_OPTIONS as unknown as Record<string, unknown>}
-                />
-              ) : activeMainTabKind === "preview" && activePreviewPath ? (
+              {activeMainTabKind === "preview" && activePreviewPath ? (
                 <ScriptPreviewPanel
                   theme={theme}
                   path={activePreviewPath}
@@ -1747,37 +1257,17 @@ export default function WorkspaceShell({
             </div>
 
             <WorkspaceBottomPanel
-              theme={theme}
               rootDir={rootDir}
-              isTerminalVisible={isTerminalVisible}
-              onToggleTerminalVisible={handleToggleTerminalVisible}
+              isVisible={isTerminalVisible}
+              onToggleVisible={handleToggleTerminalVisible}
               onClosePanel={() => setIsTerminalVisible(false)}
-              terminalActiveTab={terminalActiveTab}
-              onSetTerminalActiveTab={setTerminalActiveTab}
-              terminalConsoleLines={terminalConsoleLines}
-              terminalConsoleAnchorRef={terminalConsoleAnchorRef}
-              onClearTerminalConsole={clearTerminalConsole}
+              consoleLines={terminalConsoleLines}
+              consoleAnchorRef={terminalConsoleAnchorRef}
+              onClearConsole={clearTerminalConsole}
               onSubmitConsoleInput={submitTerminalConsoleInput}
-              terminalPanelRef={terminalPanelRef}
-              terminalHeight={terminalHeight}
-              onTerminalResizeMouseDown={handleTerminalResizeMouseDown}
-              terminalPickerAnchorRef={terminalPickerAnchorRef}
-              activeTerminalTitle={activeTerminalTitle}
-              isTerminalPickerOpen={isTerminalPickerOpen}
-              setIsTerminalPickerOpen={setIsTerminalPickerOpen}
-              terminalSessions={terminalSessions}
-              activeTerminalSessionId={activeTerminalSessionId}
-              setActiveTerminalSessionId={setActiveTerminalSessionId}
-              ensureSessionTerminal={ensureSessionTerminal}
-              focusActiveTerminal={focusActiveTerminal}
-              startTerminalSession={startTerminalSession}
-              closeTerminalSession={closeTerminalSession}
-              terminalContainerBySessionRef={terminalContainerBySessionRef}
-              isTerminalListCollapsed={isTerminalListCollapsed}
-              onExpandTerminalList={handleExpandTerminalList}
-              onCollapseTerminalList={() => setIsTerminalListCollapsed(true)}
-              onTerminalListResizeMouseDown={handleTerminalListResizeMouseDown}
-              terminalListWidth={terminalListWidth}
+              panelRef={terminalPanelRef}
+              height={terminalHeight}
+              onResizeMouseDown={handleTerminalResizeMouseDown}
             />
           </div>
         </main>

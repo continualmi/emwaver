@@ -17,11 +17,6 @@
             android:title="Sampler" />
 
         <item
-            android:id="@+id/navigation_git"
-            android:icon="@drawable/ic_github_icon"
-            android:title="Git" />
-
-        <item
             android:id="@+id/navigation_scripts"
             android:icon="@drawable/ic_console_black_24dp"
             android:title="Scripts" />

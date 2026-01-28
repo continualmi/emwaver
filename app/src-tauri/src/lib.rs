@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-mod git;
-mod pty;
 mod script_runtime;
 mod desktop_ipc;
 
@@ -35,11 +33,6 @@ use tauri::{
     Emitter, State,
 };
 use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
-use git::{
-    git_commit, git_diff_contents, git_discard, git_push, git_stage, git_stage_all, git_status,
-    git_unstage, git_unstage_all,
-};
-use pty::{PtyManager, PtyStartPayload, PtyStartResponse, PtyWritePayload, PtyResizePayload, PtyStopPayload};
 use emwaver_device_core::bridge::{
     BridgeRequest, BridgeState, dispatch_request, send_packet_command_bytes, transmit_buffer_bytes,
     write_bytes,
@@ -834,30 +827,6 @@ async fn reveal_in_finder(payload: RevealInFinderPayload) -> Result<(), String> 
     .await
     .map_err(|error| format!("Failed to reveal in Finder: {error}"))?
 }
-
-// ESP-IDF build/flash removed; IDE uses a minimal shell runner for local workflows.
-
-#[tauri::command]
-async fn pty_start(app: tauri::AppHandle, state: State<'_, Arc<PtyManager>>, payload: PtyStartPayload) -> Result<PtyStartResponse, String> {
-    state
-        .start(app, payload)
-}
-
-#[tauri::command]
-async fn pty_write(state: State<'_, Arc<PtyManager>>, payload: PtyWritePayload) -> Result<(), String> {
-    state.write(payload)
-}
-
-#[tauri::command]
-async fn pty_resize(state: State<'_, Arc<PtyManager>>, payload: PtyResizePayload) -> Result<(), String> {
-    state.resize(payload)
-}
-
-#[tauri::command]
-async fn pty_stop(state: State<'_, Arc<PtyManager>>, payload: PtyStopPayload) -> Result<(), String> {
-    state.stop(payload)
-}
-
 
 // ESP-IDF helper functions removed
 
@@ -1655,7 +1624,6 @@ pub fn run() {
         )
         .manage(device_state)
         .manage(script_state)
-        .manage(Arc::new(PtyManager::new()))
 		        .invoke_handler(tauri::generate_handler![
             read_directory,
             read_directory_children,
@@ -1687,10 +1655,6 @@ pub fn run() {
             rename_path,
             reveal_in_finder,
             run_shell_command,
-            pty_start,
-            pty_write,
-            pty_resize,
-            pty_stop,
             device_write,
             device_send_packet,
             device_transmit_buffer,
@@ -1701,15 +1665,6 @@ pub fn run() {
             device_get_status,
 	            dfu_is_connected,
 	            dfu_flash_embedded,
-	                git_status,
-                git_diff_contents,
-                git_stage,
-                git_stage_all,
-                git_unstage,
-                git_unstage_all,
-                git_discard,
-                git_commit,
-                git_push,
                 script_execute,
                 script_stop,
                 script_callback

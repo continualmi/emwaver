@@ -72,16 +72,6 @@ struct ContentView: View {
                     Text("Scripts")
                 }
                 .tag("Scripts")
-
-                NavigationView {
-                    GitView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Image("TabGit").renderingMode(.template)
-                    Text("Git")
-                }
-                .tag("Git")
             }
             .onAppear {
                 let appearance = UINavigationBarAppearance()

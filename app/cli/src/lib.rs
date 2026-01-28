@@ -16,51 +16,20 @@
  */
 
 mod cli;
-mod desktop_ipc;
-mod repl;
 
 use anyhow::Result;
-use base64::Engine as _;
 use clap::Parser;
+use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::fs;
-use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 
 pub fn run() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    if cli.subcommand.is_some() {
-        if cli.command.is_some() || cli.path.is_some() || cli.interactive {
-            anyhow::bail!("Use either a subcommand (like `cmd`) or Python-style `-c`/FILE/REPL, not both");
-        }
-    }
-
-    match cli.subcommand {
-        Some(cli::Command::Build { clean }) => build_firmware(clean),
-        Some(cli::Command::Flash { verbose, alt }) => flash_firmware(verbose, alt),
-        Some(cli::Command::Cmd {
-            bytes,
-            timeout_ms,
-            packets,
-            verbose,
-            json,
-        }) => cmd_desktop(bytes, timeout_ms, packets, verbose, json),
-        Some(cli::Command::Usb { command }) => match command {
-            cli::MidiCommand::List { json } => usb_list(json),
-            cli::MidiCommand::Connect { port, json } => usb_connect(port, json),
-            cli::MidiCommand::Disconnect => usb_disconnect(),
-            cli::MidiCommand::Status { json } => usb_status(json),
-        },
-        None => {
-            if let Some(code) = cli.command {
-                return repl::run_code(&code);
-            }
-            if let Some(path) = cli.path {
-                return repl::run_file(path, cli.interactive);
-            }
-            repl::run_repl()
-        }
+    match cli.command {
+        cli::Command::Build { clean } => build_firmware(clean),
+        cli::Command::Flash { verbose, alt } => flash_firmware(verbose, alt),
     }
 }
 
@@ -124,8 +93,20 @@ fn build_firmware(clean: bool) -> Result<()> {
     }
     fs::copy(&built_bin, &repo_app_firmware)?;
 
-    println!("ok: {}", built_bin.strip_prefix(&repo_root).unwrap_or(&built_bin).display());
-    println!("ok: {}", repo_app_firmware.strip_prefix(&repo_root).unwrap_or(&repo_app_firmware).display());
+    println!(
+        "ok: {}",
+        built_bin
+            .strip_prefix(&repo_root)
+            .unwrap_or(&built_bin)
+            .display()
+    );
+    println!(
+        "ok: {}",
+        repo_app_firmware
+            .strip_prefix(&repo_root)
+            .unwrap_or(&repo_app_firmware)
+            .display()
+    );
     Ok(())
 }
 
@@ -147,7 +128,10 @@ fn flash_firmware(verbose: bool, alt: Option<u8>) -> Result<()> {
     let (mut device, _discovery) = DfuDevice::open_with_options(
         DEFAULT_USB_VENDOR_ID,
         DEFAULT_USB_PRODUCT_ID,
-        DfuOpenOptions { alt_setting: alt, verbose },
+        DfuOpenOptions {
+            alt_setting: alt,
+            verbose,
+        },
     )
     .map_err(anyhow::Error::msg)?;
 
@@ -155,131 +139,6 @@ fn flash_firmware(verbose: bool, alt: Option<u8>) -> Result<()> {
         .flash(&bytes, 0x0800_0000, |msg| println!("{msg}"))
         .map_err(anyhow::Error::msg)?;
 
-    Ok(())
-}
-
-fn cmd_desktop(
-    bytes: Vec<String>,
-    timeout_ms: u64,
-    packets: u32,
-    verbose: bool,
-    json: bool,
-) -> Result<()> {
-    let spec = bytes.join(" ");
-    let pkt = parse_hex_bytes(&spec)?;
-    let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&pkt);
-    let value = desktop_ipc::rpc_ok(
-        "send_packet_command",
-        serde_json::json!({
-            "bytes_b64": bytes_b64,
-            "timeout_ms": timeout_ms,
-            "packets": packets
-        }),
-        std::time::Duration::from_millis(timeout_ms.saturating_add(5_000).max(1)),
-    )?;
-
-    let resp_b64 = value.get("bytes_b64").and_then(|v| v.as_str()).unwrap_or("");
-    let bytes = desktop_ipc::decode_b64(resp_b64)?;
-
-    if json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "bytes_b64": bytes_b64,
-                "bytes_len": bytes.len()
-            })
-        );
-        return Ok(());
-    }
-
-    if verbose {
-        let mut hex = String::new();
-        for (i, b) in bytes.iter().enumerate() {
-            use std::fmt::Write;
-            let _ = write!(&mut hex, "{:02X}{}", b, if i + 1 == bytes.len() { "" } else { " " });
-        }
-        println!("hex: {hex}");
-    }
-    println!("{}", String::from_utf8_lossy(&bytes).trim_matches(['\0', '\n', '\r']));
-    Ok(())
-}
-
-fn parse_hex_bytes(spec: &str) -> Result<Vec<u8>> {
-    let cleaned: String = spec
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .collect();
-    if cleaned.is_empty() {
-        anyhow::bail!("no bytes provided");
-    }
-    if cleaned.len() % 2 != 0 {
-        anyhow::bail!("hex string must have even length");
-    }
-    let mut out = Vec::with_capacity(cleaned.len() / 2);
-    for i in (0..cleaned.len()).step_by(2) {
-        let b = u8::from_str_radix(&cleaned[i..i + 2], 16)
-            .map_err(|_| anyhow::anyhow!("invalid hex"))?;
-        out.push(b);
-    }
-    Ok(out)
-}
-
-fn usb_list(json: bool) -> Result<()> {
-    let value = desktop_ipc::rpc_ok("midi_list_ports", serde_json::json!({}), std::time::Duration::from_secs(5))?;
-    if json {
-        println!("{value}");
-        return Ok(());
-    }
-    let ports = value
-        .get("ports")
-        .and_then(|v| v.as_array())
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str())
-        .collect::<Vec<_>>();
-    for p in ports {
-        println!("{p}");
-    }
-    Ok(())
-}
-
-fn usb_connect(port: Option<String>, json: bool) -> Result<()> {
-    let value = desktop_ipc::rpc_ok(
-        "midi_connect",
-        serde_json::json!({ "port_name": port }),
-        std::time::Duration::from_secs(10),
-    )?;
-    if json {
-        println!("{value}");
-        return Ok(());
-    }
-    println!("ok");
-    Ok(())
-}
-
-fn usb_disconnect() -> Result<()> {
-    let _ = desktop_ipc::rpc_ok("midi_disconnect", serde_json::json!({}), std::time::Duration::from_secs(5))?;
-    println!("ok");
-    Ok(())
-}
-
-fn usb_status(json: bool) -> Result<()> {
-    let value = desktop_ipc::rpc_ok("midi_status", serde_json::json!({}), std::time::Duration::from_secs(3))?;
-    if json {
-        println!("{value}");
-        return Ok(());
-    }
-    let connected = value.get("connected").and_then(|v| v.as_bool()).unwrap_or(false);
-    let name = value.get("device_name").and_then(|v| v.as_str()).unwrap_or("");
-    if connected {
-        if name.is_empty() {
-            println!("connected");
-        } else {
-            println!("connected: {name}");
-        }
-    } else {
-        println!("disconnected");
-    }
     Ok(())
 }
 

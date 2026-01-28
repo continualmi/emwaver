@@ -17,12 +17,6 @@
 
 export type ThemeMode = "dark";
 
-export type TerminalSession = {
-  id: string;
-  title: string;
-  createdAt: number;
-};
-
 export type DirectoryChildEntry = {
   name: string;
   path: string;
@@ -37,32 +31,6 @@ export type OpenFile = {
   isDirty: boolean;
   diskMtimeMs?: number;
   source?: "disk" | "asset";
-};
-
-export type GitStatusEntry = {
-  path: string;
-  orig_path?: string | null;
-  index_status: string;
-  worktree_status: string;
-  is_untracked: boolean;
-  is_ignored: boolean;
-};
-
-export type GitRepoStatus = {
-  repo_root: string;
-  branch?: string | null;
-  upstream?: string | null;
-  ahead: number;
-  behind: number;
-  staged: GitStatusEntry[];
-  changes: GitStatusEntry[];
-  timestamp_ms: number;
-};
-
-export type GitDiffContents = {
-  original: string;
-  modified: string;
-  is_binary: boolean;
 };
 
 export type NewProjectPayload = {
