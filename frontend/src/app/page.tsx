@@ -13,7 +13,7 @@ export default function HomePage() {
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
                 <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--aqua)]" />
-                Offline-first hardware exploration
+                Script-first hardware exploration
               </div>
 
               <h1 className="text-4xl leading-[1.02] font-semibold tracking-tight text-[color:var(--ink)] md:text-6xl">
@@ -24,15 +24,15 @@ export default function HomePage() {
 
               <p className="max-w-xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
                 EMWaver is a script-centered hardware exploration platform. You iterate fast,
-                build real UIs alongside experiments, and keep the workflow local-first.
+                build real UIs alongside experiments, and ship repeatable tools as scripts.
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
                 <Link
-                  href="/docs/overview"
+                  href="/scripts"
                   className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-[color:var(--paper)] shadow-[0_18px_40px_var(--shadow)] hover:opacity-95"
                 >
-                  Read the docs
+                  Start with scripts
                 </Link>
                 <Link
                   href="/hardware"
@@ -56,6 +56,42 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
+                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]">
+                  <img
+                    src="/landing1.jpeg"
+                    alt="EMWaver in the field"
+                    className="h-28 w-full object-cover transition duration-500 group-hover:scale-[1.03] md:h-32"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3 text-[11px] font-semibold tracking-wide text-[color:var(--ink)]/90">
+                    Build tools
+                  </div>
+                </div>
+                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]">
+                  <img
+                    src="/landing2.jpeg"
+                    alt="Script-driven workflows"
+                    className="h-28 w-full object-cover transition duration-500 group-hover:scale-[1.03] md:h-32"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3 text-[11px] font-semibold tracking-wide text-[color:var(--ink)]/90">
+                    Run experiments
+                  </div>
+                </div>
+                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]">
+                  <img
+                    src="/landing3.jpeg"
+                    alt="Hardware exploration"
+                    className="h-28 w-full object-cover transition duration-500 group-hover:scale-[1.03] md:h-32"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/0 to-black/0" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3 text-[11px] font-semibold tracking-wide text-[color:var(--ink)]/90">
+                    Keep artifacts
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
                   <div className="text-xs font-semibold text-[color:var(--aqua)]">Scripts</div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
@@ -63,15 +99,85 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-                  <div className="text-xs font-semibold text-[color:var(--sky)]">Offline-first</div>
+                  <div className="text-xs font-semibold text-[color:var(--sky)]">Agent loop</div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                    Core workflows work without internet.
+                    Ask for an experiment. Get a script you can run and edit.
                   </div>
                 </div>
                 <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
                   <div className="text-xs font-semibold text-[color:var(--copper)]">Single platform</div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
                     One device + apps that evolve with you.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-5 pb-14">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+            <div className="grid gap-8 md:grid-cols-[1.05fr_0.95fr] md:items-start">
+              <div className="space-y-4">
+                <div className="text-xs font-semibold tracking-wide text-[color:var(--sky)]">
+                  Introducing vibe hardware hacking
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
+                  Prompt → script → run.
+                  <br />
+                  Keep the good ones.
+                </h2>
+                <p className="max-w-xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
+                  The in-app agent helps you turn vague ideas into concrete, runnable scripts with real UI.
+                  You get a starting point fast, then you iterate.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1 text-xs text-[color:var(--ink-dim)]">
+                  <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1">
+                    Generates a script
+                  </div>
+                  <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1">
+                    Adds UI controls
+                  </div>
+                  <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1">
+                    Runs + refines
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">
+                    Example prompts
+                  </div>
+                  <div className="text-[11px] text-[color:var(--ink-dim)]">and what you get back</div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
+                    <div className="font-mono text-[12px] leading-6 text-[color:var(--ink)]">
+                      <div className="text-[color:var(--aqua)]">You</div>
+                      <div>“Make a script UI that captures a signal and replays it.”</div>
+                      <div className="mt-2 text-[color:var(--sky)]">Agent</div>
+                      <div>Creates a capture + replay panel with a named library.</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
+                    <div className="font-mono text-[12px] leading-6 text-[color:var(--ink)]">
+                      <div className="text-[color:var(--aqua)]">You</div>
+                      <div>“Probe this module and tell me what it is.”</div>
+                      <div className="mt-2 text-[color:var(--sky)]">Agent</div>
+                      <div>Scans the bus, tries common IDs, then builds a bring-up UI.</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
+                    <div className="font-mono text-[12px] leading-6 text-[color:var(--ink)]">
+                      <div className="text-[color:var(--aqua)]">You</div>
+                      <div>“Give me a dashboard to sample, label, and export readings.”</div>
+                      <div className="mt-2 text-[color:var(--sky)]">Agent</div>
+                      <div>Builds controls + logs + export so you can share the artifact.</div>
+                    </div>
                   </div>
                 </div>
               </div>

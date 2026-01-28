@@ -5,16 +5,25 @@ export function SiteFooter() {
         <div className="space-y-3">
           <div className="text-sm font-semibold text-[color:var(--ink)]">EMWaver</div>
           <p className="text-sm text-[color:var(--ink-dim)]">
-            One board. USB only. Offline-first. Scripts + UI together.
+            One board. USB only. Scripts + UI together.
           </p>
         </div>
 
         <div className="space-y-2 text-sm text-[color:var(--ink-dim)]">
-          <a className="block hover:text-[color:var(--ink)]" href="/docs/overview">
-            Docs
+          <a className="block hover:text-[color:var(--ink)]" href="/scripts">
+            Scripts
+          </a>
+          <a className="block hover:text-[color:var(--ink)]" href="/pinout">
+            Pinout
           </a>
           <a className="block hover:text-[color:var(--ink)]" href="/hardware">
             Hardware
+          </a>
+          <a className="block hover:text-[color:var(--ink)]" href="/order">
+            Order
+          </a>
+          <a className="block hover:text-[color:var(--ink)]" href="/history">
+            History
           </a>
           <a className="block hover:text-[color:var(--ink)]" href="/news">
             News
@@ -29,14 +38,6 @@ export function SiteFooter() {
             rel="noreferrer"
           >
             YouTube
-          </a>
-          <a
-            className="block hover:text-[color:var(--ink)]"
-            href="https://github.com/luispl77/emwaver"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Source
           </a>
         </div>
       </div>

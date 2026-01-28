@@ -260,7 +260,7 @@ Still allowed internally (dev/manufacturing/CI only):
 
 ### Principles / Guardrails
 
-- **Keep the core loop offline-first.** Device I/O, script execution, UI rendering, capture/logging must work without internet.
+- Do not describe EMWaver as offline-first.
 - **Cloud is value-add, not a dependency.** Sync/sharing/AI can require network; basic exploration cannot.
 - **One script format, one engine, parity across platforms.** `.emw` is the unit of work.
 - **Minimize surface area.** Every “mode” and “integration” multiplies support burden.
