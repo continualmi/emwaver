@@ -461,145 +461,61 @@ function startRefresh() {
   totalLoadSteps =
     CC1101_CONFIG_REGISTERS.length + CC1101_STATUS_REGISTERS.length + CC1101_PA_TABLE_SIZE + RF_PARAMETER_STEPS;
 
-  loadJob = {
-    phase: "init",
-    idx: 0,
-    regs: {},
-    rf: null,
-  };
+  // NOTE: This version intentionally does not yield. It will block UI updates
+  // until all reads finish, and Cancel can't be handled until then.
+  loadJob = null;
   render();
-  setTimeout(runLoadStep, 1);
+  runLoadAll();
 }
 
-function runLoadStep() {
-  if (!isLoading || !loadJob) return;
-  if (abortRequested) {
-    stopLoading("Cancelled.");
-    return;
-  }
-
+function runLoadAll() {
+  if (!isLoading) return;
   try {
-    if (loadJob.phase === "init") {
-      currentCommand = "Probing CC1101...";
-      render();
-      var ok = ensureCc1101Init();
-      if (!ok) {
-        stopLoading(statusMessage || "CC1101 init failed.");
-        return;
-      }
-      loadJob.phase = "config";
-      loadJob.idx = 0;
-      setTimeout(runLoadStep, 1);
+    currentCommand = "Probing CC1101...";
+    var ok = ensureCc1101Init();
+    if (!ok) {
+      stopLoading(statusMessage || "CC1101 init failed.");
       return;
     }
 
-    if (loadJob.phase === "config") {
-      if (loadJob.idx >= CC1101_CONFIG_REGISTERS.length) {
-        loadJob.phase = "status";
-        loadJob.idx = 0;
-        setTimeout(runLoadStep, 1);
-        return;
-      }
-      var name = CC1101_CONFIG_REGISTERS[loadJob.idx];
-      currentCommand = "Reading " + name + "...";
-      var addr = getRegisterAddress(name);
-      var value = readReg(addr);
-      loadJob.regs[name] = toHexByte(value);
-      loadJob.idx += 1;
+    var nextRegs = {};
+
+    for (var i = 0; i < CC1101_CONFIG_REGISTERS.length; i += 1) {
+      currentCommand = "Reading " + CC1101_CONFIG_REGISTERS[i] + "...";
+      var addr = getRegisterAddress(CC1101_CONFIG_REGISTERS[i]);
+      nextRegs[CC1101_CONFIG_REGISTERS[i]] = toHexByte(readReg(addr));
       loadingProgress += 1;
-      render();
-      setTimeout(runLoadStep, 1);
-      return;
     }
 
-    if (loadJob.phase === "status") {
-      if (loadJob.idx >= CC1101_STATUS_REGISTERS.length) {
-        loadJob.phase = "pa";
-        loadJob.idx = 0;
-        setTimeout(runLoadStep, 1);
-        return;
-      }
-      var sname = CC1101_STATUS_REGISTERS[loadJob.idx];
-      currentCommand = "Reading " + sname + "...";
-      var saddr = getRegisterAddress(sname);
-      var sval = readReg(saddr);
-      loadJob.regs[sname] = toHexByte(sval);
-      loadJob.idx += 1;
+    for (var j = 0; j < CC1101_STATUS_REGISTERS.length; j += 1) {
+      currentCommand = "Reading " + CC1101_STATUS_REGISTERS[j] + "...";
+      var saddr = getRegisterAddress(CC1101_STATUS_REGISTERS[j]);
+      nextRegs[CC1101_STATUS_REGISTERS[j]] = toHexByte(readReg(saddr));
       loadingProgress += 1;
-      render();
-      setTimeout(runLoadStep, 1);
-      return;
     }
 
-    if (loadJob.phase === "pa") {
-      currentCommand = "Reading PA_TABLE...";
-      render();
-      var paTable = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
-      for (var i = 0; i < Math.min(paTable.length, CC1101_PA_TABLE_SIZE); i += 1) {
-        loadJob.regs["PA_TABLE" + String(i)] = toHexByte(paTable[i]);
-      }
-      loadingProgress += CC1101_PA_TABLE_SIZE;
-      loadJob.phase = "rf";
-      loadJob.idx = 0;
-      loadJob.rf = {
-        frequencyMHz: 0,
-        dataRate: 0,
-        bandwidth: 0,
-        deviation: 0,
-        modulation: 0,
-        txPower: 0,
-      };
-      render();
-      setTimeout(runLoadStep, 1);
-      return;
+    currentCommand = "Reading PA_TABLE...";
+    var paTable = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+    for (var k = 0; k < Math.min(paTable.length, CC1101_PA_TABLE_SIZE); k += 1) {
+      nextRegs["PA_TABLE" + String(k)] = toHexByte(paTable[k]);
     }
+    loadingProgress += CC1101_PA_TABLE_SIZE;
 
-    if (loadJob.phase === "rf") {
-      if (!loadJob.rf) {
-        loadJob.rf = {
-          frequencyMHz: 0,
-          dataRate: 0,
-          bandwidth: 0,
-          deviation: 0,
-          modulation: 0,
-          txPower: 0,
-        };
-      }
+    var nextRf = {
+      frequencyMHz: cc1101GetFrequencyMHz(),
+      dataRate: cc1101GetDataRate(),
+      bandwidth: cc1101GetBandwidthKHz(),
+      deviation: cc1101GetDeviation(),
+      modulation: cc1101GetModulation(),
+      txPower: cc1101GetPowerLevel(),
+    };
+    loadingProgress += RF_PARAMETER_STEPS;
 
-      if (loadJob.idx === 0) {
-        currentCommand = "Reading frequency...";
-        loadJob.rf.frequencyMHz = cc1101GetFrequencyMHz();
-      } else if (loadJob.idx === 1) {
-        currentCommand = "Reading data rate...";
-        loadJob.rf.dataRate = cc1101GetDataRate();
-      } else if (loadJob.idx === 2) {
-        currentCommand = "Reading bandwidth...";
-        loadJob.rf.bandwidth = cc1101GetBandwidthKHz();
-      } else if (loadJob.idx === 3) {
-        currentCommand = "Reading deviation...";
-        loadJob.rf.deviation = cc1101GetDeviation();
-      } else if (loadJob.idx === 4) {
-        currentCommand = "Reading modulation...";
-        loadJob.rf.modulation = cc1101GetModulation();
-      } else if (loadJob.idx === 5) {
-        currentCommand = "Reading TX power...";
-        loadJob.rf.txPower = cc1101GetPowerLevel();
-      } else {
-        // Done.
-        registers = loadJob.regs;
-        rfParams = loadJob.rf;
-        isLoading = false;
-        currentCommand = "";
-        loadJob = null;
-        render();
-        return;
-      }
-      loadJob.idx += 1;
-      loadingProgress += 1;
-      render();
-      setTimeout(runLoadStep, 1);
-      return;
-    }
+    registers = nextRegs;
+    rfParams = nextRf;
+    isLoading = false;
+    currentCommand = "";
+    render();
   } catch (e) {
     stopLoading("Load failed: " + String(e && e.message ? e.message : e));
   }
