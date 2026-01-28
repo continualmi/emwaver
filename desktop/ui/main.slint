@@ -1,12 +1,35 @@
 import { Button, HorizontalBox, VerticalBox, TextEdit } from "std-widgets.slint";
 
 export global AppState {
+    in-out property <int> page: 0; // 0 = Home, 1 = Editor
+
     in-out property <string> current_path: "";
     in-out property <string> log_text: "";
+
+    in-out property <bool> connected: false;
+    in-out property <string> device_name: "";
+    in-out property <string> app_version: "";
+    in-out property <string> device_version: "";
+    in-out property <bool> dfu_connected: false;
+
+    in-out property <bool> update_modal_open: false;
+    in-out property <bool> update_in_progress: false;
+    in-out property <bool> update_done: false;
+    in-out property <string> update_error: "";
+    in-out property <int> update_progress_pct: 0;
+    in-out property <string> update_progress_message: "";
 
     callback open_file();
     callback save_file();
     callback run_script();
+
+    callback go_home();
+    callback go_editor();
+    callback disconnect();
+
+    callback open_update();
+    callback close_update();
+    callback start_update();
 }
 
 export component AppWindow inherits Window {
@@ -20,37 +43,203 @@ export component AppWindow inherits Window {
         padding: 12px;
         spacing: 10px;
 
+        // Top nav
         HorizontalBox {
-            spacing: 10px;
-            alignment: start;
+            spacing: 8px;
 
-            Button { text: "Open"; clicked => { AppState.open_file(); } }
-            Button { text: "Save"; clicked => { AppState.save_file(); } }
-            Button { text: "Run"; clicked => { AppState.run_script(); } }
+            Button {
+                text: "Home";
+                clicked => { AppState.go_home(); }
+            }
+            Button {
+                text: "Editor";
+                clicked => { AppState.go_editor(); }
+            }
 
-            TextEdit {
-                read-only: true;
-                text: AppState.current_path;
+            Text {
+                text: "  ";
+            }
+
+            Text {
+                text: AppState.connected ? "Connected" : (AppState.dfu_connected ? "Update Mode detected" : "Searching...");
+                color: AppState.connected ? #2ecc71 : (AppState.dfu_connected ? #f39c12 : #95a5a6);
+            }
+
+            Text {
+                text: AppState.device_name;
+                color: #7f8c8d;
                 horizontal-stretch: 1;
+                overflow: elide;
             }
         }
 
-        HorizontalBox {
+        // Home page
+        VerticalBox {
+            visible: AppState.page == 0;
             spacing: 10px;
 
-            TextEdit {
-                text: root.editor_text;
-                wrap: word-wrap;
-                horizontal-stretch: 3;
-                vertical-stretch: 1;
+            Rectangle {
+                background: #0f1114;
+                border-width: 1px;
+                border-color: #2b2f36;
+
+                VerticalBox {
+                    spacing: 6px;
+                    padding: 10px;
+
+                    Text {
+                        text: "Device";
+                        font-size: 18px;
+                        color: #e6e6e6;
+                    }
+
+                    HorizontalBox {
+                        spacing: 12px;
+                        Text { text: "App version:"; color: #a9b1ba; }
+                        Text { text: AppState.app_version; color: #e6e6e6; }
+                    }
+
+                    HorizontalBox {
+                        spacing: 12px;
+                        Text { text: "Device version:"; color: #a9b1ba; }
+                        Text { text: AppState.device_version; color: #e6e6e6; }
+                    }
+
+                    HorizontalBox {
+                        spacing: 10px;
+                        Button {
+                            text: "Disconnect";
+                            enabled: AppState.connected;
+                            clicked => { AppState.disconnect(); }
+                        }
+                        Button {
+                            text: "Update device";
+                            clicked => { AppState.open_update(); }
+                        }
+                    }
+                }
             }
 
             TextEdit {
                 read-only: true;
                 text: AppState.log_text;
                 wrap: word-wrap;
-                horizontal-stretch: 2;
                 vertical-stretch: 1;
+            }
+        }
+
+        // Editor page
+        VerticalBox {
+            visible: AppState.page == 1;
+            spacing: 10px;
+
+            HorizontalBox {
+                spacing: 10px;
+                alignment: start;
+
+                Button { text: "Open"; clicked => { AppState.open_file(); } }
+                Button { text: "Save"; clicked => { AppState.save_file(); } }
+                Button { text: "Run"; clicked => { AppState.run_script(); } }
+
+                TextEdit {
+                    read-only: true;
+                    text: AppState.current_path;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            HorizontalBox {
+                spacing: 10px;
+
+                TextEdit {
+                    text: root.editor_text;
+                    wrap: word-wrap;
+                    horizontal-stretch: 3;
+                    vertical-stretch: 1;
+                }
+
+                TextEdit {
+                    read-only: true;
+                    text: AppState.log_text;
+                    wrap: word-wrap;
+                    horizontal-stretch: 2;
+                    vertical-stretch: 1;
+                }
+            }
+        }
+    }
+
+    // Update modal overlay
+    Rectangle {
+        visible: AppState.update_modal_open;
+        background: #000000aa;
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+
+        Rectangle {
+            width: 520px;
+            height: 320px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: #14181f;
+            border-width: 1px;
+            border-color: #2b2f36;
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+
+                HorizontalBox {
+                    spacing: 10px;
+                    Text { text: "Update EMWaver"; font-size: 18px; color: #e6e6e6; }
+                    Text { text: ""; horizontal-stretch: 1; }
+                    Button { text: "Close"; enabled: !AppState.update_in_progress; clicked => { AppState.close_update(); } }
+                }
+
+                Text {
+                    text: AppState.dfu_connected ? "Device is in Update Mode." : "Put the device into Update Mode, then connect via USB.";
+                    color: #a9b1ba;
+                    wrap: word-wrap;
+                }
+
+                if (AppState.update_error != "") : Text {
+                    text: AppState.update_error;
+                    color: #ff6b6b;
+                    wrap: word-wrap;
+                }
+
+                if (AppState.update_done) : Text {
+                    text: "Update complete. Unplug, switch to Run, and reconnect.";
+                    color: #2ecc71;
+                    wrap: word-wrap;
+                }
+
+                if (AppState.update_in_progress) : VerticalBox {
+                    spacing: 6px;
+                    Text { text: AppState.update_progress_message; color: #e6e6e6; wrap: word-wrap; }
+                    Rectangle {
+                        height: 10px;
+                        background: #2b2f36;
+                        Rectangle {
+                            height: parent.height;
+                            width: parent.width * (AppState.update_progress_pct * 1.0 / 100.0);
+                            background: #4aa3ff;
+                        }
+                    }
+                    Text { text: AppState.update_progress_pct + "%"; color: #a9b1ba; }
+                }
+
+                HorizontalBox {
+                    spacing: 10px;
+                    Text { text: ""; horizontal-stretch: 1; }
+                    Button {
+                        text: "Flash firmware";
+                        enabled: AppState.dfu_connected && !AppState.update_in_progress;
+                        clicked => { AppState.start_update(); }
+                    }
+                }
             }
         }
     }
