@@ -26,7 +26,7 @@ export default function HardwarePage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <Link
-                href="/docs/hardware/device"
+                href="/device"
                 className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
               >
                 <div className="text-xs font-semibold text-[color:var(--aqua)]">Device</div>

@@ -1,10 +1,10 @@
 import Link from "next/link";
 
 const nav = [
+  { href: "/install", label: "Get started" },
   { href: "/pinout", label: "Pinout" },
   { href: "/scripts", label: "Scripts" },
-  { href: "/hardware", label: "Hardware" },
-  { href: "/order", label: "Order" },
+  { href: "/order", label: "Order from JLCPCB" },
   { href: "/history", label: "History" },
   { href: "/news", label: "News" },
 ];
