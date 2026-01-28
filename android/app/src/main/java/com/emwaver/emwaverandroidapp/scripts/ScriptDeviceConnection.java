@@ -24,7 +24,6 @@ import androidx.annotation.Nullable;
 import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.DeviceConnectionService;
 
-import java.nio.charset.StandardCharsets;
 
 /**
  * Script JS bridge for device I/O that routes through DeviceConnectionManager.
@@ -66,24 +65,7 @@ public final class ScriptDeviceConnection {
         return service.sendCommand(command, timeoutMs);
     }
 
-    @Nullable
-    public byte[] sendCommandString(String command, int timeoutMs) {
-        String framed = command != null ? command : "";
-        if (!framed.endsWith("\n")) {
-            framed += "\n";
-        }
-        return sendCommand(framed.getBytes(StandardCharsets.UTF_8), timeoutMs);
-    }
-
-    @Nullable
-    public byte[] sendCommandString(String command) {
-        return sendCommandString(command, 2000);
-    }
-
-    /**
-     * Sends a raw command packet and waits for the response.
-     * This is the byte-level equivalent of sendCommandString(...).
-     */
+    /** Sends a raw command packet and waits for the response. */
     @Nullable
     public byte[] sendPacket(byte[] data, int timeoutMs) {
         return sendCommand(data, timeoutMs);

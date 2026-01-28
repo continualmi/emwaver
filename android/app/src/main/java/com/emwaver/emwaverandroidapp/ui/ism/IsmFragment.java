@@ -64,7 +64,7 @@ import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.DeviceConnectionService;
 import com.emwaver.emwaverandroidapp.Utils;
 
-
+import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -184,11 +184,11 @@ public class IsmFragment extends Fragment {
     private static final int CC1101_PA_TABLE_SIZE = 8;
     private static final byte CC1101_PATABLE_ADDR = (byte) 0x3E;
 
-    // Defaults aligned with CC1101 wiring used elsewhere in the repo (IO10 for NSS).
-    private static final int DEFAULT_CC1101_MISO = 13;
-    private static final int DEFAULT_CC1101_MOSI = 11;
-    private static final int DEFAULT_CC1101_SCK = 12;
-    private static final int DEFAULT_CC1101_CS = 10;
+    // Desktop-parity CC1101 wiring uses encoded CS pin `4`.
+    private static final int DEFAULT_CC1101_CS = 4;
+
+    // Binary protocol opcodes (must match script_bootstrap + firmware).
+    private static final int EMW_OP_SPI_XFER = 0x50;
 
     // CC1101 modulation values (MDMCFG2.MOD_FORMAT)
     private static final int CC1101_MOD_2FSK = 0;
@@ -1422,7 +1422,7 @@ public class IsmFragment extends Fragment {
         }
     }
 
-    // ===== Firmware command helpers =====
+    // ===== Firmware command helpers (binary-only; no command strings) =====
 
     private void notifyCommandObserver(String command) {
         Consumer<String> obs = this.commandObserver;
@@ -1431,34 +1431,50 @@ public class IsmFragment extends Fragment {
         }
     }
 
-    private byte[] sendCommand(String command, int timeoutMs) {
+    private byte[] sendPacket(byte[] payload, int timeoutMs) {
         DeviceConnectionService service = getActiveService();
-        if (service == null) {
+        if (service == null || !service.checkConnection()) {
+            return null;
+        }
+        // Surface something meaningful in the loading dialog.
+        notifyCommandObserver("cmd (bin) len=" + (payload != null ? payload.length : 0));
+        byte[] resp = service.sendCommand(payload, timeoutMs);
+        return resp;
+    }
+
+    private byte[] cc1101SpiXfer(byte[] tx, int rxLen, int timeoutMs) {
+        if (tx == null) {
+            return null;
+        }
+
+        // Mini-frame cmd lane is 18 bytes total: [op, cs, rx_req, tx_len, payload...]
+        int txLen = Math.min(14, tx.length);
+        int rx = Math.max(0, Math.min(17, rxLen));
+
+        byte[] pkt = new byte[4 + txLen];
+        pkt[0] = (byte) (EMW_OP_SPI_XFER & 0xFF);
+        pkt[1] = (byte) (DEFAULT_CC1101_CS & 0xFF);
+        pkt[2] = (byte) (rx & 0xFF);
+        pkt[3] = (byte) (txLen & 0xFF);
+        System.arraycopy(tx, 0, pkt, 4, txLen);
+
+        notifyCommandObserver("spi xfer (bin) cs=" + DEFAULT_CC1101_CS + " tx=" + txLen + " rx=" + (rx > 0 ? rx : txLen));
+        byte[] resp = sendPacket(pkt, timeoutMs);
+        if (resp == null || resp.length < 2) {
+            return null;
+        }
+        // Firmware response is: [status=0x80, payload...]
+        if ((resp[0] & 0xFF) != 0x80) {
+            return null;
+        }
+        int want = (rx > 0 ? rx : txLen);
+        int end = Math.min(resp.length, 1 + want);
+        if (end <= 1) {
             return new byte[0];
         }
-        notifyCommandObserver(command);
-        byte[] resp = service.sendCommand((command + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8), timeoutMs);
-        return resp != null ? resp : new byte[0];
-    }
-
-    private boolean isOkAck(byte[] response) {
-        return response != null && response.length == 1 && (response[0] & 0xFF) == 0x00;
-    }
-
-    private boolean isErr(byte[] response) {
-        return response != null && response.length == 1 && (response[0] & 0xFF) == 0xFF;
-    }
-
-    private byte[] parseRawPayload(byte[] response) {
-        if (response == null || response.length == 0) return new byte[0];
-        if (isOkAck(response) || isErr(response)) return new byte[0];
-        return response;
-    }
-
-    private String parseRawString(byte[] response) {
-        if (isErr(response) || isOkAck(response)) return "";
-        if (response == null || response.length == 0) return "";
-        return new String(response, java.nio.charset.StandardCharsets.UTF_8).trim();
+        byte[] out = new byte[end - 1];
+        System.arraycopy(resp, 1, out, 0, out.length);
+        return out;
     }
 
     private static String bytesToHex(byte[] bytes) {
@@ -1471,53 +1487,84 @@ public class IsmFragment extends Fragment {
     }
 
     private byte readReg(byte addr) {
-        byte[] resp = sendCommand(String.format(Locale.US, "cc1101 read --reg=%d", addr & 0xFF), 1000);
-        if (isErr(resp)) {
+        int a = addr & 0xFF;
+        boolean isStatus = a >= 0x30 && a <= 0x3D;
+        int cmd = (a & 0x3F) | (isStatus ? 0xC0 : 0x80);
+        byte[] resp = cc1101SpiXfer(new byte[]{(byte) (cmd & 0xFF), 0x00}, 2, 1000);
+        if (resp == null || resp.length < 2) {
             return 0;
         }
-        return (resp != null && resp.length > 0) ? resp[0] : 0;
+        return resp[1];
     }
 
     private void writeReg(byte addr, byte value) {
-        sendCommand(String.format(Locale.US, "cc1101 write --reg=%d --val=%d", addr & 0xFF, value & 0xFF), 1000);
+        int a = addr & 0x3F;
+        cc1101SpiXfer(new byte[]{(byte) (a & 0xFF), value}, 0, 1000);
     }
 
     private byte[] cc1101ReadBurstReg(byte addr, int len) {
         if (selectedChip != RadioChip.CC1101) {
             return new byte[0];
         }
-        byte[] resp = sendCommand(
-                String.format(Locale.US, "cc1101 read_burst --reg=%d --len=%d", addr & 0xFF, len),
-                1500
-        );
-        if (isErr(resp)) {
+
+        int want = Math.max(0, Math.min(63, len));
+        if (want == 0) {
             return new byte[0];
         }
-        return parseRawPayload(resp);
+
+        // We can only transfer up to 13 data bytes per mini-frame (txLen <= 14 including the command).
+        ByteArrayOutputStream out = new ByteArrayOutputStream(want);
+        int remaining = want;
+        int base = addr & 0x3F;
+        while (remaining > 0) {
+            int chunk = Math.min(13, remaining);
+            byte[] tx = new byte[1 + chunk];
+            tx[0] = (byte) ((base | 0xC0) & 0xFF);
+            for (int i = 0; i < chunk; i++) {
+                tx[1 + i] = 0;
+            }
+            byte[] resp = cc1101SpiXfer(tx, 0, 1500);
+            if (resp == null || resp.length < 1) {
+                break;
+            }
+            // SPI response includes a status byte first; data begins at index 1.
+            int take = Math.min(chunk, Math.max(0, resp.length - 1));
+            out.write(resp, 1, take);
+            remaining -= take;
+            if (take < chunk) {
+                break;
+            }
+        }
+        return out.toByteArray();
     }
 
     private boolean cc1101WriteBurstReg(byte addr, byte[] data) {
         if (selectedChip != RadioChip.CC1101) {
             return false;
         }
-        String cmd = String.format(
-                Locale.US,
-                "cc1101 write_burst --reg=%d --data=%s",
-                addr & 0xFF,
-                bytesToHexCsv(data)
-        );
-        byte[] resp = sendCommand(cmd, 1500);
-        return isOkAck(resp);
+
+        if (data == null || data.length == 0) {
+            return true;
+        }
+
+        int base = addr & 0x3F;
+        int offset = 0;
+        while (offset < data.length) {
+            int chunk = Math.min(13, data.length - offset);
+            byte[] tx = new byte[1 + chunk];
+            tx[0] = (byte) ((base | 0x40) & 0xFF);
+            System.arraycopy(data, offset, tx, 1, chunk);
+            byte[] resp = cc1101SpiXfer(tx, 0, 1500);
+            if (resp == null) {
+                return false;
+            }
+            offset += chunk;
+        }
+        return true;
     }
 
-    private static String bytesToHexCsv(byte[] bytes) {
-        if (bytes == null || bytes.length == 0) return "0";
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < bytes.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(String.format(Locale.US, "0x%02X", bytes[i] & 0xFF));
-        }
-        return sb.toString();
+    private void cc1101Strobe(int strobe) {
+        cc1101SpiXfer(new byte[]{(byte) (strobe & 0xFF)}, 0, 1000);
     }
 
     // ===== CC1101 RF parameter helpers (firmware-side register access) =====
@@ -1541,8 +1588,8 @@ public class IsmFragment extends Fragment {
         writeReg(CC1101_REG_FREQ2, freq2);
         writeReg(CC1101_REG_FREQ1, freq1);
         writeReg(CC1101_REG_FREQ0, freq0);
-        sendCommand("cc1101 strobe --cmd=54", 1000); // SIDLE
-        sendCommand("cc1101 strobe --cmd=51", 1000); // SCAL
+        cc1101Strobe(54); // SIDLE (0x36)
+        cc1101Strobe(51); // SCAL (0x33)
 
         return Math.abs(cc1101GetFrequencyMHz() - frequencyMHz) < 0.001;
     }
@@ -1877,50 +1924,13 @@ public class IsmFragment extends Fragment {
     private boolean ensureCc1101Open() {
         if (!ensureConnected()) return false;
 
-        // Avoid resetting CC1101 state if it's already initialized (e.g., configured by Packet Mode).
-        // `cc1101 init` on some firmware variants also applies defaults, which would clobber user settings.
-        byte[] probe = sendCommand(String.format(Locale.US, "cc1101 read --reg=%d", 0x31), 1000); // VERSION
-        if (probe != null && probe.length > 0 && !isErr(probe)) {
-            return true;
-        }
-
-        String command = String.format(
-                Locale.US,
-                "cc1101 init --miso=%d --mosi=%d --sck=%d --cs=%d",
-                DEFAULT_CC1101_MISO,
-                DEFAULT_CC1101_MOSI,
-                DEFAULT_CC1101_SCK,
-                DEFAULT_CC1101_CS
-        );
-
-        byte[] resp = sendCommand(command, 1500);
-        if (resp == null || resp.length == 0) {
-            Log.e("IsmFragment", "cc1101 init failed: empty response (timeout?)");
-            showToast("CC1101 init failed: no response");
+        // Probe VERSION status register using the CC1101 SPI protocol.
+        // VERSION is at 0x31 (status); read command becomes 0xF1.
+        byte version = readReg((byte) 0x31);
+        if ((version & 0xFF) == 0x00) {
+            showToast("CC1101 probe failed: no response");
             return false;
         }
-
-        if ((resp[0] & 0xFF) == 0x00) {
-            if (resp.length != 1) {
-                Log.w("IsmFragment", "cc1101 init: ACK with extra bytes (" + resp.length + "): " + bytesToHex(resp));
-            }
-            return true;
-        }
-
-        if (isErr(resp)) {
-            Log.e("IsmFragment", "cc1101 init failed: device returned ERR (0xFF)");
-            showToast("CC1101 init failed: device returned error (0xFF)");
-            return false;
-        }
-
-        if (resp.length >= 2 && (resp[0] == 'o' || resp[0] == 'O') && (resp[1] == 'k' || resp[1] == 'K')) {
-            Log.e("IsmFragment", "cc1101 init failed: device returned legacy ASCII ok/err format: " + bytesToHex(resp));
-            showToast("CC1101 init failed: firmware still on ASCII protocol");
-            return false;
-        }
-
-        Log.e("IsmFragment", "cc1101 init failed: unexpected response (" + resp.length + "): " + bytesToHex(resp));
-        showToast("CC1101 init failed: unexpected response");
-        return false;
+        return true;
     }
 }
