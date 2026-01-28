@@ -218,8 +218,12 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │
 ├─ third_party/coremidi/                      # iOS CoreMIDI third-party bits
 ├─ scripts/align_emwaver_images.py            # Repo helper script(s)
-└─ frontend/                                  # Web/marketing assets
+└─ frontend/                                  # Web site (Next.js) + legacy static assets
+   └─ web/                                    # Next.js app (custom home + custom docs UI)
 ```
+
+Web dev (Next.js):
+- `cd frontend/web && npm run dev`
 
 Generated / not-source-of-truth (common):
 - `**/target/`, `**/node_modules/`, `app/dist/`, `android/app/.cxx/`, `stm/**/Debug/`, `stm/**/Release/`

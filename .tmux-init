@@ -37,9 +37,9 @@ tmux send-keys -t $SESSION:2.2 'emwaver build && emwaver flash'
 tmux send-keys -t $SESSION:2.3 'cd android' C-m
 tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
 
-# Pane 4 (Bottom Right): Docs
-tmux send-keys -t $SESSION:2.4 'cd docs' C-m
-tmux send-keys -t $SESSION:2.4 'mkdocs serve'
+# Pane 4 (Bottom Right): Web (Next.js)
+tmux send-keys -t $SESSION:2.4 'cd frontend/web' C-m
+tmux send-keys -t $SESSION:2.4 'npm run dev'
 
 # Split Pane 4 horizontally to create Pane 5 for backend
 tmux split-window -h -t $SESSION:2.4 -c "$PROJECT_DIR"
