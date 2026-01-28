@@ -30,14 +30,14 @@ function stopBlink() {
   render();
 }
 
-async function startBlink() {
+function startBlink() {
   stopBlink();
 
   const period = Math.max(1, Math.floor(Number(periodMs) || 1));
   periodMs = period;
   level = LOW;
-  await pinMode(selectedPin, OUTPUT);
-  await digitalWrite(selectedPin, level);
+  pinMode(selectedPin, OUTPUT);
+  digitalWrite(selectedPin, level);
 
   isBlinking = true;
   render();
@@ -48,12 +48,12 @@ async function startBlink() {
   });
 }
 
-async function toggleBlink() {
+function toggleBlink() {
   if (isBlinking) {
     stopBlink();
     return;
   }
-  await startBlink();
+  startBlink();
 }
 
 function render() {

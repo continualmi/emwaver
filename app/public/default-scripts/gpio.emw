@@ -15,14 +15,14 @@ const PINS = [
 
 let pin = PINS[0].value;
 
-async function writeHigh() {
-    await pinMode(pin, OUTPUT);
-    await digitalWrite(pin, HIGH);
+function writeHigh() {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
 }
 
-async function writeLow() {
-    await pinMode(pin, OUTPUT);
-    await digitalWrite(pin, LOW);
+function writeLow() {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
 }
 
 UI.render(UI.column({
