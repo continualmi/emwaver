@@ -16,9 +16,6 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "xterm";
-import "xterm/css/xterm.css";
 import type { FragmentType } from "../App";
 import { useDevice } from "../utils/DeviceContext";
 import { isTauriAvailable, safeInvoke, safeListen } from "../utils/tauri";
@@ -165,14 +162,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     };
   }, [dfuConnected, isActive, status.connected]);
 
-  const [shellSessionId, setShellSessionId] = useState<string | null>(null);
-  const shellContainerRef = useRef<HTMLDivElement>(null);
-  const shellTerminalRef = useRef<Terminal | null>(null);
-  const shellFitAddonRef = useRef<FitAddon | null>(null);
-  const shellDecoderRef = useRef(new TextDecoder());
-  const shellSessionIdRef = useRef<string | null>(null);
-  const pendingShellOutputBySessionRef = useRef<Map<string, Uint8Array[]>>(new Map());
-  
   const connectionManagerRef = useRef<{ inFlight: boolean; lastAttemptMs: number }>({
     inFlight: false,
     lastAttemptMs: 0,
@@ -268,183 +257,7 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
     };
   }, [connectMIDI, isActive, isDfuFlashing, listMIDIPorts, status.connected, updateModalOpen]);
 
-  useEffect(() => {
-    shellSessionIdRef.current = shellSessionId;
-  }, [shellSessionId]);
-
-  // Shell output wiring (listen immediately; buffer until we have a terminal + session).
-  useEffect(() => {
-    const unlistenPromise = safeListen<{ session_id: string; data: number[] }>("pty-output", (event) => {
-      const payload = event.payload;
-      if (!payload) return;
-
-      const bytes = new Uint8Array(payload.data);
-      const currentSessionId = shellSessionIdRef.current;
-      const terminal = shellTerminalRef.current;
-
-      if (terminal && currentSessionId && payload.session_id === currentSessionId) {
-        terminal.write(shellDecoderRef.current.decode(bytes, { stream: true }));
-        return;
-      }
-
-      const map = pendingShellOutputBySessionRef.current;
-      const existing = map.get(payload.session_id) ?? [];
-      existing.push(bytes);
-      map.set(payload.session_id, existing);
-    });
-
-    return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isActive) return;
-    if (!isTauriAvailable()) return;
-    if (!shellContainerRef.current) return;
-    if (shellTerminalRef.current) return;
-
-    const terminal = new Terminal({
-      cursorBlink: true,
-      fontFamily: '"Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace',
-      fontSize: 13,
-      theme: {
-        background: "#111c32",
-        foreground: "#f1f5f9",
-        cursor: "#38bdf8",
-      },
-    });
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(shellContainerRef.current);
-
-    terminal.onData((data) => {
-      const currentSessionId = shellSessionIdRef.current;
-      if (!currentSessionId) return;
-      void safeInvoke<void>("pty_write", {
-        payload: {
-          session_id: currentSessionId,
-          data,
-        },
-      });
-    });
-
-    shellTerminalRef.current = terminal;
-    shellFitAddonRef.current = fitAddon;
-
-    const currentSessionId = shellSessionIdRef.current;
-    if (currentSessionId) {
-      const pending = pendingShellOutputBySessionRef.current.get(currentSessionId);
-      if (pending && pending.length > 0) {
-        pendingShellOutputBySessionRef.current.delete(currentSessionId);
-        for (const chunk of pending) {
-          terminal.write(shellDecoderRef.current.decode(chunk, { stream: true }));
-        }
-      }
-    }
-
-    return () => {
-      terminal.dispose();
-      fitAddon.dispose();
-      shellTerminalRef.current = null;
-      shellFitAddonRef.current = null;
-    };
-  }, [isActive, shellSessionId]);
-
-  useEffect(() => {
-    if (!isActive) return;
-    if (!isTauriAvailable()) return;
-    if (!status.connected) return;
-    if (shellSessionId) return;
-
-    let cancelled = false;
-    const start = async () => {
-      try {
-        const response = await safeInvoke<{ session_id: string }>("pty_start", {
-          payload: {
-            cwd: null,
-            cols: 120,
-            rows: 18,
-            emwaver_shell: true,
-          },
-        });
-        if (cancelled) return;
-        if (response?.session_id) {
-          setShellSessionId(response.session_id);
-          // Flush any output that arrived before the session id/state was ready.
-          const terminal = shellTerminalRef.current;
-          const pending = pendingShellOutputBySessionRef.current.get(response.session_id);
-          if (terminal && pending && pending.length > 0) {
-            pendingShellOutputBySessionRef.current.delete(response.session_id);
-            for (const chunk of pending) {
-              terminal.write(shellDecoderRef.current.decode(chunk, { stream: true }));
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Failed to start shell", e);
-      }
-    };
-
-    void start();
-    return () => {
-      cancelled = true;
-    };
-  }, [isActive, shellSessionId, status.connected]);
-
-  useEffect(() => {
-    const fit = () => {
-      const terminal = shellTerminalRef.current;
-      const fitAddon = shellFitAddonRef.current;
-      if (!terminal || !fitAddon || !shellSessionId) return;
-      fitAddon.fit();
-      void safeInvoke<void>("pty_resize", {
-        payload: {
-          session_id: shellSessionId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        },
-      });
-    };
-
-    fit();
-    window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
-  }, [shellSessionId]);
-
-  // Stop shell when leaving Home.
-  useEffect(() => {
-    if (isActive) return;
-    if (!shellSessionId) return;
-
-    let cancelled = false;
-    void safeInvoke<void>("pty_stop", {
-      payload: { session_id: shellSessionId },
-    }).finally(() => {
-      if (!cancelled) setShellSessionId(null);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isActive, shellSessionId]);
-
-  // Stop shell if the device disconnects.
-  useEffect(() => {
-    if (status.connected) return;
-    if (!shellSessionId) return;
-
-    let cancelled = false;
-    void safeInvoke<void>("pty_stop", {
-      payload: { session_id: shellSessionId },
-    }).finally(() => {
-      if (!cancelled) setShellSessionId(null);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shellSessionId, status.connected]);
+ 
 
   // Auto-scroll monitors
   useEffect(() => {
@@ -1139,17 +952,6 @@ export default function HomePage({ onNavigateToFragment, isActive }: HomePagePro
              </div>
            </div>
          </div>
-
-        {/* Shell (emwaver shell) */}
-        <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-semibold text-slate-400">Shell</div>
-            <div className="text-xs text-slate-600">
-              {!status.connected ? "connect device" : shellSessionId ? "ready" : "starting..."}
-            </div>
-          </div>
-          <div ref={shellContainerRef} className="h-40 overflow-hidden bg-slate-900 p-2" />
-        </div>
 
         {devMonitorsEnabled ? (
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 flex flex-col flex-1 min-h-[18rem]">

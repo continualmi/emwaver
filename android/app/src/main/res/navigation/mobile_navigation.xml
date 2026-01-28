@@ -13,14 +13,6 @@
         tools:layout="@layout/fragment_ism" />
 
     <fragment
-        android:id="@+id/navigation_git"
-        android:name="com.emwaver.emwaverandroidapp.ui.git.GitFragment"
-        android:label="Git"
-        tools:layout="@layout/fragment_git" />
-
-
-
-    <fragment
         android:id="@+id/navigation_scripts"
         android:name="com.emwaver.emwaverandroidapp.ui.scripts.ScriptsFragment"
         android:label="Scripts"

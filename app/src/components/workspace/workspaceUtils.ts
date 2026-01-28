@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { DirectoryChildEntry, TerminalSession } from "./workspaceTypes";
+import type { DirectoryChildEntry } from "./workspaceTypes";
 
 export const SCRIPT_ASSET_ROOT = "/default-scripts";
 export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.emw";
@@ -98,13 +98,6 @@ export async function readScriptAssetScript(filename: string): Promise<string> {
   } catch {
     return "";
   }
-}
-
-export function nextTerminalTitle(existing: TerminalSession[], baseTitle: string): string {
-  const taken = existing
-    .map((session) => session.title)
-    .filter((title) => title === baseTitle || title.startsWith(`${baseTitle} `)).length;
-  return taken === 0 ? baseTitle : `${baseTitle} ${taken + 1}`;
 }
 
 export function formatConsoleArgs(args: unknown[]): string {

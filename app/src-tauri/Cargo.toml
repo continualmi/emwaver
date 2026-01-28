@@ -36,14 +36,12 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 futures = "0.3"
 rusb = "0.9"
-portable-pty = "0.9"
 sha2 = "0.10"
 boa_engine = "0.20"
 boa_gc = "0.20"
 emwaver-buffer-core = { path = "../crates/emwaver-buffer-core" }
 emwaver-device-core = { path = "../crates/emwaver-device-core" }
 emwaver-dfu = { path = "../crates/emwaver-dfu" }
-emwaver-git = { path = "../crates/emwaver-git" }
 emwaver-desktop-ipc = { path = "../crates/emwaver-desktop-ipc" }
 
 [patch.crates-io]

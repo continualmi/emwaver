@@ -25,7 +25,6 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -73,9 +72,6 @@ public class MainActivity extends AppCompatActivity {
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         
-        // Handle OAuth callback intent
-        handleOAuthCallback(getIntent());
-
         NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.nav_host_fragment_activity_main);
         if (navHostFragment == null) {
@@ -90,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
                 R.id.navigation_emwaver,
                 R.id.navigation_sampler,
                 R.id.navigation_scripts,
-                R.id.navigation_git,
                 R.id.navigation_flash)
                 .setOpenableLayout(drawer)
                 .build();
@@ -282,10 +277,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        
-        // Handle OAuth callback intent (in case app was already running)
-        handleOAuthCallback(getIntent());
-        
+
         // Register USB device attachment receiver
         IntentFilter usbFilter = new IntentFilter();
         usbFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
@@ -307,17 +299,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleOAuthCallback(intent);
-    }
-    
-    private void handleOAuthCallback(Intent intent) {
-        if (intent == null) return;
-        
-        Uri data = intent.getData();
-        if (data != null && "emwaver".equals(data.getScheme()) && "oauth".equals(data.getHost())) {
-            // OAuth callback - let GitFragment handle it
-            // The fragment will check the intent in onResume
-        }
     }
     
 }

@@ -17,90 +17,39 @@
 
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, MutableRefObject, RefObject } from "react";
 import { useMemo, useState } from "react";
-import { ChevronDownIcon, CloseIcon, PlusIcon, TerminalIcon, TrashIcon } from "../WorkspaceIcons";
-import type { TerminalSession, ThemeMode } from "../workspaceTypes";
-
-type StartTerminalSession = (options: { makeActive: boolean }) => Promise<string | null> | void;
+import { CloseIcon } from "../WorkspaceIcons";
 
 type WorkspaceBottomPanelProps = {
-  theme: ThemeMode;
   rootDir: string | null;
 
-  isTerminalVisible: boolean;
-  onToggleTerminalVisible: () => void;
+  isVisible: boolean;
+  onToggleVisible: () => void;
   onClosePanel: () => void;
 
-  terminalActiveTab: "terminal" | "console";
-  onSetTerminalActiveTab: (tab: "terminal" | "console") => void;
-  terminalConsoleLines: string[];
-  terminalConsoleAnchorRef: MutableRefObject<HTMLDivElement | null>;
-  onClearTerminalConsole: () => void;
+  consoleLines: string[];
+  consoleAnchorRef: MutableRefObject<HTMLDivElement | null>;
+  onClearConsole: () => void;
   onSubmitConsoleInput: (line: string) => void;
 
-  terminalPanelRef: RefObject<HTMLDivElement | null>;
-  terminalHeight: number;
-  onTerminalResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
-
-  terminalPickerAnchorRef: RefObject<HTMLDivElement | null>;
-  activeTerminalTitle: string;
-  isTerminalPickerOpen: boolean;
-  setIsTerminalPickerOpen: (next: boolean) => void;
-
-  terminalSessions: TerminalSession[];
-  activeTerminalSessionId: string | null;
-  setActiveTerminalSessionId: (id: string | null) => void;
-  ensureSessionTerminal: (sessionId: string) => void;
-  focusActiveTerminal: () => void;
-
-  startTerminalSession: StartTerminalSession;
-  closeTerminalSession: (sessionId: string) => void;
-
-  terminalContainerBySessionRef: MutableRefObject<Map<string, HTMLDivElement>>;
-
-  isTerminalListCollapsed: boolean;
-  onExpandTerminalList: () => void;
-  onCollapseTerminalList: () => void;
-  onTerminalListResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  terminalListWidth: number;
+  panelRef: RefObject<HTMLDivElement | null>;
+  height: number;
+  onResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
 };
 
 export default function WorkspaceBottomPanel({
-  theme,
   rootDir,
-  isTerminalVisible,
-  onToggleTerminalVisible,
+  isVisible,
+  onToggleVisible,
   onClosePanel,
-  terminalActiveTab,
-  onSetTerminalActiveTab,
-  terminalConsoleLines,
-  terminalConsoleAnchorRef,
-  onClearTerminalConsole,
+  consoleLines,
+  consoleAnchorRef,
+  onClearConsole,
   onSubmitConsoleInput,
-  terminalPanelRef,
-  terminalHeight,
-  onTerminalResizeMouseDown,
-  terminalPickerAnchorRef,
-  activeTerminalTitle,
-  isTerminalPickerOpen,
-  setIsTerminalPickerOpen,
-  terminalSessions,
-  activeTerminalSessionId,
-  setActiveTerminalSessionId,
-  ensureSessionTerminal,
-  focusActiveTerminal,
-  startTerminalSession,
-  closeTerminalSession,
-  terminalContainerBySessionRef,
-  isTerminalListCollapsed,
-  onExpandTerminalList,
-  onCollapseTerminalList,
-  onTerminalListResizeMouseDown,
-  terminalListWidth,
+  panelRef,
+  height,
+  onResizeMouseDown,
 }: WorkspaceBottomPanelProps) {
-  const isTerminalTab = terminalActiveTab === "terminal";
-  const isConsoleTab = terminalActiveTab === "console";
-
-  const consoleText = useMemo(() => terminalConsoleLines.join("\n"), [terminalConsoleLines]);
+  const consoleText = useMemo(() => consoleLines.join("\n"), [consoleLines]);
   const [consoleInput, setConsoleInput] = useState("");
 
   const submitConsoleInput = () => {
@@ -124,12 +73,12 @@ export default function WorkspaceBottomPanel({
     <div className="border-t border-slate-900 bg-slate-950">
       <button
         type="button"
-        onClick={onToggleTerminalVisible}
-        className={`flex w-full items-center justify-between px-4 py-2 text-left ${isTerminalVisible ? "hidden" : ""}`}
-        title="Toggle terminal (Cmd/Ctrl+J)"
+        onClick={onToggleVisible}
+        className={`flex w-full items-center justify-between px-4 py-2 text-left ${isVisible ? "hidden" : ""}`}
+        title="Toggle console (Cmd/Ctrl+J)"
       >
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-200">Terminal</span>
+          <span className="text-xs font-semibold text-slate-200">Console</span>
           <span className="text-xs text-slate-600">▸</span>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -138,134 +87,32 @@ export default function WorkspaceBottomPanel({
         </div>
       </button>
 
-      <div className={isTerminalVisible ? "" : "hidden"}>
+      <div className={isVisible ? "" : "hidden"}>
         <div
           role="separator"
           aria-orientation="horizontal"
-          title="Drag to resize terminal"
-          onMouseDown={onTerminalResizeMouseDown}
+          title="Drag to resize console"
+          onMouseDown={onResizeMouseDown}
           className="h-2 cursor-row-resize bg-slate-900/50 hover:bg-slate-700/80"
         />
 
         <div
-          ref={terminalPanelRef as unknown as RefObject<HTMLDivElement>}
+          ref={panelRef as unknown as RefObject<HTMLDivElement>}
           className="flex flex-col overflow-hidden bg-slate-950"
-          style={{ height: terminalHeight }}
+          style={{ height }}
         >
           <div className="flex items-center justify-between border-b border-slate-900/70 px-2 py-1 text-xs">
+            <div className="flex items-center gap-2 px-3 py-2 font-semibold tracking-wide text-slate-100">CONSOLE</div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => onSetTerminalActiveTab("terminal")}
-                className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                  isTerminalTab
-                    ? "border-b-2 border-sky-400 text-slate-100"
-                    : "border-b-2 border-transparent text-slate-500 hover:text-slate-200"
-                }`}
-                title="Terminal"
+                onClick={onClearConsole}
+                className="rounded px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
+                title="Clear console output"
               >
-                TERMINAL
+                CLEAR
               </button>
-              <button
-                type="button"
-                onClick={() => onSetTerminalActiveTab("console")}
-                className={`select-none px-3 py-2 font-semibold tracking-wide ${
-                  isConsoleTab
-                    ? "border-b-2 border-sky-400 text-slate-100"
-                    : "border-b-2 border-transparent text-slate-500 hover:text-slate-200"
-                }`}
-                title="Console"
-              >
-                CONSOLE
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {isConsoleTab ? (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={onClearTerminalConsole}
-                    className="rounded px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
-                    title="Clear console output"
-                  >
-                    CLEAR
-                  </button>
-                </div>
-              ) : null}
-
-              {isTerminalTab ? (
-                <div
-                  ref={terminalPickerAnchorRef as unknown as RefObject<HTMLDivElement>}
-                  className="relative flex items-center gap-1"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setIsTerminalPickerOpen(!isTerminalPickerOpen)}
-                    className="inline-flex select-none items-center gap-2 rounded px-2 py-1 text-slate-300 hover:bg-slate-900/70 hover:text-slate-100"
-                    title="Select terminal"
-                  >
-                    <TerminalIcon className="h-4 w-4 text-slate-500" />
-                    <span className="max-w-[12rem] truncate">{activeTerminalTitle}</span>
-                    <ChevronDownIcon className="h-4 w-4 text-slate-500" />
-                  </button>
-
-                  {isTerminalPickerOpen ? (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded border border-slate-800 bg-slate-950 shadow-xl">
-                      <div className="max-h-64 overflow-auto p-1">
-                        {terminalSessions.map((session) => {
-                          const isActive = session.id === activeTerminalSessionId;
-                          return (
-                            <button
-                              key={session.id}
-                              type="button"
-                              onClick={() => {
-                                setIsTerminalPickerOpen(false);
-                                setActiveTerminalSessionId(session.id);
-                                requestAnimationFrame(() => {
-                                  ensureSessionTerminal(session.id);
-                                  focusActiveTerminal();
-                                });
-                              }}
-                              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-                                isActive ? "bg-slate-900/70 text-sky-200" : "text-slate-200 hover:bg-slate-900/50"
-                              }`}
-                            >
-                              <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                              <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    onClick={() => void startTerminalSession({ makeActive: true })}
-                    className="rounded p-1 text-slate-400 hover:bg-slate-900/70 hover:text-slate-100"
-                    title="New terminal"
-                  >
-                    <PlusIcon />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sessionId = activeTerminalSessionId;
-                      if (!sessionId) {
-                        return;
-                      }
-                      void closeTerminalSession(sessionId);
-                    }}
-                    disabled={!activeTerminalSessionId}
-                    className="rounded p-1 text-slate-400 enabled:hover:bg-slate-900/70 enabled:hover:text-slate-100 disabled:opacity-40"
-                    title="Kill active terminal"
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              ) : null}
 
               <button
                 type="button"
@@ -280,138 +127,35 @@ export default function WorkspaceBottomPanel({
 
           <div className="flex min-h-0 flex-1">
             <div className="flex min-w-0 flex-1 flex-col">
-              <div className="relative min-h-0 flex-1 overflow-hidden">
-                {isTerminalTab ? (
-                  <>
-                    {terminalSessions.map((session) => (
-                      <div
-                        key={session.id}
-                        ref={(node) => {
-                          if (!node) {
-                            terminalContainerBySessionRef.current.delete(session.id);
-                            return;
-                          }
-                          terminalContainerBySessionRef.current.set(session.id, node);
-                          if (isTerminalVisible) {
-                            ensureSessionTerminal(session.id);
-                          }
-                        }}
-                        className={`absolute inset-0 select-text px-2 py-2 ${
-                          session.id === activeTerminalSessionId ? "block" : "hidden"
-                        }`}
-                      />
-                    ))}
-                    {terminalSessions.length === 0 ? (
-                      <div className="flex h-full items-center justify-center text-sm text-slate-500">Starting shell…</div>
-                    ) : null}
-                  </>
+              <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs text-slate-200">
+                {consoleLines.length === 0 ? (
+                  <div className="pt-2 text-slate-500">No output yet.</div>
                 ) : (
-                  <div className="absolute inset-0 flex flex-col overflow-hidden">
-                    <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs text-slate-200">
-                      {terminalConsoleLines.length === 0 ? (
-                        <div className="pt-2 text-slate-500">No output yet.</div>
-                      ) : (
-                        <pre className="whitespace-pre-wrap font-mono leading-relaxed">{consoleText}</pre>
-                      )}
-                      <div ref={terminalConsoleAnchorRef} />
-                    </div>
-
-                    <div className="border-t border-slate-900/70 bg-slate-950 px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          value={consoleInput}
-                          onChange={(event) => setConsoleInput(event.target.value)}
-                          onKeyDown={handleConsoleInputKeyDown}
-                          placeholder="Type a line and press Enter… (Console.readLine())"
-                          className="min-w-0 flex-1 rounded border border-slate-800 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:border-slate-600 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={submitConsoleInput}
-                          className="rounded bg-slate-900 px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-200 hover:bg-slate-800"
-                          title="Send (Enter)"
-                        >
-                          SEND
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <pre className="whitespace-pre-wrap font-mono leading-relaxed">{consoleText}</pre>
                 )}
+                <div ref={consoleAnchorRef} />
+              </div>
+
+              <div className="border-t border-slate-900/70 bg-slate-950 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={consoleInput}
+                    onChange={(event) => setConsoleInput(event.target.value)}
+                    onKeyDown={handleConsoleInputKeyDown}
+                    placeholder="Type a line and press Enter… (Console.readLine())"
+                    className="min-w-0 flex-1 rounded border border-slate-800 bg-slate-950 px-2 py-1 font-mono text-xs text-slate-200 placeholder:text-slate-600 focus:border-slate-600 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={submitConsoleInput}
+                    className="rounded bg-slate-900 px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-200 hover:bg-slate-800"
+                    title="Send (Enter)"
+                  >
+                    SEND
+                  </button>
+                </div>
               </div>
             </div>
-
-            {isTerminalTab && isTerminalListCollapsed ? (
-              <button
-                type="button"
-                onClick={onExpandTerminalList}
-                className="flex w-9 shrink-0 items-center justify-center border-l border-slate-900 bg-slate-950 text-slate-500 hover:bg-slate-900/30 hover:text-slate-200"
-                title="Show terminals"
-              >
-                <TerminalIcon className="h-4 w-4" />
-              </button>
-            ) : isTerminalTab ? (
-              <>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  title="Drag to resize right panel"
-                  onDoubleClick={onCollapseTerminalList}
-                  onMouseDown={onTerminalListResizeMouseDown}
-                  className="w-2 cursor-col-resize bg-slate-900/40 hover:bg-slate-700/80"
-                />
-
-                <aside
-                  className="shrink-0 bg-slate-900/15 shadow-[-10px_0_20px_-20px_rgba(0,0,0,0.9)]"
-                  style={{ width: terminalListWidth }}
-                >
-                  <div className="h-full min-h-0 overflow-auto p-2 pt-3">
-                    {terminalSessions.length === 0 ? (
-                      <div className="px-2 py-1 text-xs text-slate-500">No terminals yet. Use the + button.</div>
-                    ) : (
-                      terminalSessions.map((session) => {
-                        const isActive = session.id === activeTerminalSessionId;
-                        return (
-                          <div
-                            key={session.id}
-                            className={`group mb-1 flex items-center gap-2 rounded ${
-                              isActive ? "bg-slate-900/60" : "hover:bg-slate-900/30"
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveTerminalSessionId(session.id);
-                                requestAnimationFrame(() => {
-                                  ensureSessionTerminal(session.id);
-                                  focusActiveTerminal();
-                                });
-                              }}
-                              className={`flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1 text-left text-xs transition-colors ${
-                                isActive ? "text-sky-200" : "text-slate-300"
-                              }`}
-                              title={session.title}
-                            >
-                              <TerminalIcon className={`h-4 w-4 ${isActive ? "text-sky-300" : "text-slate-500"}`} />
-                              <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void closeTerminalSession(session.id)}
-                              className={`rounded px-2 py-1 text-xs text-slate-400 transition-opacity hover:bg-slate-900/70 hover:text-slate-200 ${
-                                isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                              }`}
-                              title="Close terminal"
-                            >
-                              <CloseIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </aside>
-              </>
-            ) : null}
           </div>
         </div>
       </div>

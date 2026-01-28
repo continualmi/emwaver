@@ -16,34 +16,19 @@
  */
 
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
     name = "emwaver",
     version,
-    about = "EMWaver CLI (Desktop-backed)",
-    disable_help_subcommand = true
+    about = "EMWaver tooling",
+    disable_help_subcommand = true,
+    subcommand_required = true,
+    arg_required_else_help = true
 )]
 pub struct Cli {
-    /// Evaluate a snippet and exit (Python-style `-c`).
-    #[arg(
-        short = 'c',
-        value_name = "CODE",
-        conflicts_with_all = ["path", "interactive"]
-    )]
-    pub command: Option<String>,
-
-    /// After running a file, drop into the REPL (Python-style `-i`).
-    #[arg(short = 'i', requires = "path", conflicts_with = "command")]
-    pub interactive: bool,
-
-    /// Run a script file and exit (Python-style `python file.py`).
-    #[arg(value_name = "FILE")]
-    pub path: Option<PathBuf>,
-
     #[command(subcommand)]
-    pub subcommand: Option<Command>,
+    pub command: Command,
 }
 
 #[derive(Debug, Subcommand)]
@@ -63,56 +48,5 @@ pub enum Command {
         /// DFU alt setting to use (defaults to "Internal Flash" if present).
         #[arg(long)]
         alt: Option<u8>,
-    },
-    /// Send a raw packet (bytes) to the connected device (Desktop owns the USB connection).
-    Cmd {
-        /// Hex bytes to send (e.g. `01` or `F100` or `F1 00`).
-        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
-        bytes: Vec<String>,
-        /// Command response timeout in milliseconds.
-        #[arg(long, default_value_t = 1500)]
-        timeout_ms: u64,
-        /// Number of 64-byte packets to read back.
-        #[arg(long, default_value_t = 1)]
-        packets: u32,
-        /// Print both ASCII (trimmed) and raw hex bytes.
-        #[arg(long, conflicts_with = "json")]
-        verbose: bool,
-        /// Output as JSON (includes base64 bytes).
-        #[arg(long)]
-        json: bool,
-    },
-    /// USB transport utilities (Desktop-owned).
-    #[command(name = "usb", alias = "midi")]
-    Usb {
-        #[command(subcommand)]
-        command: MidiCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-pub enum MidiCommand {
-    /// List available USB devices.
-    List {
-        /// Output as JSON.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Connect to a USB device.
-    Connect {
-        /// USB device name to connect to (defaults to the first matching device).
-        #[arg(long)]
-        port: Option<String>,
-        /// Output as JSON.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Disconnect the active USB connection (if any).
-    Disconnect,
-    /// Print current USB connection status.
-    Status {
-        /// Output as JSON.
-        #[arg(long)]
-        json: bool,
     },
 }

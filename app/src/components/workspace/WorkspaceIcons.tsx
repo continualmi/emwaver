@@ -160,23 +160,6 @@ export function FolderIcon({ className }: { className?: string }) {
   );
 }
 
-export function GitIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      className={className ?? "h-4 w-4"}
-      aria-hidden="true"
-    >
-      <path d="M5.2 4.2a2 2 0 104 0 2 2 0 00-4 0z" />
-      <path d="M6.2 6.1v3.8a2 2 0 101.6 0V6.1" strokeLinecap="round" />
-      <path d="M8 10.9h2.6a2 2 0 101.4-3.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export function RefreshIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" className={className ?? "h-4 w-4"}>
@@ -194,4 +177,3 @@ export function ArrowUpIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
