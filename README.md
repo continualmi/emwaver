@@ -11,7 +11,7 @@
   </p>
 </div>
 
-EMWaver is an offline-first hardware hacking platform that treats your phone and PC as part of the “device”.
+EMWaver is a hardware hacking platform that treats your phone and PC as part of the “device”.
 
 **Current direction:** EMWaver is now centered around a single current-gen **STM32** device using **USB** as the one transport across iOS/Android/Desktop. The product is intentionally **Script-first**: scripts + UI evolve without reflashing.
 

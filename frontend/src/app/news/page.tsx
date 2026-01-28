@@ -55,22 +55,22 @@ export default async function NewsPage() {
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-5 py-10">
         <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
-          <div className="flex items-end justify-between gap-6">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
-                News
-              </h1>
-              <p className="pt-2 text-[15px] text-[color:var(--ink-dim)]">
-                Updates, release notes, and platform direction.
-              </p>
+            <div className="flex items-end justify-between gap-6">
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
+                  News
+                </h1>
+                <p className="pt-2 text-[15px] text-[color:var(--ink-dim)]">
+                  Updates, release notes, and platform direction.
+                </p>
+              </div>
+              <Link
+                href="/scripts"
+                className="hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)] md:inline-flex"
+              >
+                Scripts
+              </Link>
             </div>
-            <Link
-              href="/docs/overview"
-              className="hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)] md:inline-flex"
-            >
-              Docs
-            </Link>
-          </div>
 
           <div className="mt-8 grid gap-4">
             {posts.length === 0 ? (

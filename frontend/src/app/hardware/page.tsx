@@ -39,7 +39,7 @@ export default function HardwarePage() {
               </Link>
 
               <Link
-                href="/docs/hardware/pinout"
+                href="/pinout"
                 className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
               >
                 <div className="text-xs font-semibold text-[color:var(--sky)]">Pinout</div>
@@ -98,7 +98,7 @@ export default function HardwarePage() {
               </div>
               <div className="pt-3 space-y-2 text-sm text-[color:var(--ink-dim)]">
                 <div>One platform, consistent behavior</div>
-                <div>Local-first workflows</div>
+                <div>Agent-assisted iteration</div>
                 <div>Scripts + UI as the primary interface</div>
               </div>
             </div>
