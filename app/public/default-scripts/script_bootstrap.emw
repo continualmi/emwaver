@@ -599,6 +599,87 @@ Sampler.__scriptShim = true;
       bufferLenBytes: Sampler.lenBytes(),
     };
   };
+
+  // Desktop-only extensions used by the Sampler UI.
+  // These are implemented by the desktop host/runtime (Rust) and are optional.
+  Sampler.setBytes = function (bytes) {
+    if (typeof _scriptBufferSetBytes !== 'function') {
+      throw new Error('Sampler.setBytes unavailable on this host');
+    }
+    return Number(_scriptBufferSetBytes(bytes));
+  };
+
+  Sampler.saveBytesFile = function (path) {
+    if (typeof _scriptBufferSaveBytesFile !== 'function') {
+      throw new Error('Sampler.saveBytesFile unavailable on this host');
+    }
+    return _scriptBufferSaveBytesFile(String(path || ''));
+  };
+
+  Sampler.buildSignedRawTimings = function (opts) {
+    if (typeof _scriptBufferBuildSignedRawTimings !== 'function') {
+      throw new Error('Sampler.buildSignedRawTimings unavailable on this host');
+    }
+    var samplePeriodUs = opts && typeof opts.samplePeriodUs === 'number' ? (opts.samplePeriodUs | 0) : 0;
+    return String(_scriptBufferBuildSignedRawTimings(samplePeriodUs) || '');
+  };
+
+  Sampler.transmitBufferStart = function (bytes, opts) {
+    if (typeof _scriptDeviceTransmitBufferStart !== 'function') {
+      throw new Error('Sampler.transmitBufferStart unavailable on this host');
+    }
+    var options = opts && typeof opts === 'object' ? opts : {};
+    var onDone = options.onDone;
+    var doneToken = null;
+    if (typeof onDone === 'function') {
+      doneToken = '__tx_done:' + String(Date.now()) + ':' + Math.random().toString(16).slice(2);
+      // Use the same callback registry used by UI events.
+      if (typeof globalThis.__scriptCallbacks === 'object' && globalThis.__scriptCallbacks) {
+        globalThis.__scriptCallbacks[doneToken] = onDone;
+      }
+    }
+    return _scriptDeviceTransmitBufferStart(bytes, doneToken);
+  };
+
+  Sampler.transmitStart = function (opts) {
+    var pin = Number(opts && opts.pin);
+    if (!isFinite(pin) || pin < 0) {
+      throw new Error('Sampler.transmitStart requires opts.pin');
+    }
+    var duty = Number(opts && opts.dutyPercent);
+    if (!isFinite(duty) || duty <= 0) duty = 100;
+    if (duty > 100) duty = 100;
+
+    var freqHz = Number(opts && opts.freqHz);
+    if (!isFinite(freqHz) || freqHz < 0) freqHz = 0;
+    var tickUs = Number(opts && opts.tickUs);
+    if (!isFinite(tickUs) || tickUs <= 0) tickUs = 5;
+    tickUs = Math.max(5, Math.min(255, Math.trunc(tickUs))) & 0xff;
+
+    var hz = (Math.trunc(freqHz) >>> 0);
+    var pkt = new Uint8Array(9);
+    pkt[0] = EMW_OP_TRANSMIT & 0xff;
+    pkt[1] = EMW_TRANSMIT_START & 0xff;
+    pkt[2] = pin & 0xff;
+    pkt[3] = (Math.trunc(duty) & 0xff);
+    pkt[4] = hz & 0xff;
+    pkt[5] = (hz >>> 8) & 0xff;
+    pkt[6] = (hz >>> 16) & 0xff;
+    pkt[7] = (hz >>> 24) & 0xff;
+    pkt[8] = tickUs;
+    __emwSendPacket(pkt, 1500);
+  };
+
+  Sampler.transmitStop = function () {
+    __emwSendPacket(new Uint8Array([EMW_OP_TRANSMIT & 0xff, EMW_TRANSMIT_STOP & 0xff]), 1500);
+  };
+
+  Sampler.onDeviceEvent = function (eventName, fn) {
+    if (typeof _scriptOnDeviceEvent !== 'function') {
+      throw new Error('Sampler.onDeviceEvent unavailable on this host');
+    }
+    return _scriptOnDeviceEvent(String(eventName || ''), fn);
+  };
 })();
 
 __scriptGlobal.Sampler = Sampler;
@@ -1290,6 +1371,11 @@ if (typeof analogWrite !== 'function') {
         { key: 'onTap', type: 'tap' },
         { key: 'onChange', type: 'change' },
         { key: 'onSubmit', type: 'submit' },
+        // Extended event surface (desktop-only nodes can use these).
+        { key: 'onViewportChange', type: 'viewport' },
+        { key: 'onSelectRange', type: 'select' },
+        { key: 'onCursorMove', type: 'cursor' },
+        { key: 'onClose', type: 'close' },
       ];
       events.forEach(function (event) {
         var fn = props[event.key];
@@ -1351,17 +1437,26 @@ if (typeof analogWrite !== 'function') {
       textEditor: function (props) {
         return makeNode('textEditor', props || {});
       },
-      picker: function (props) {
-        return makeNode('picker', props || {});
-      },
-      grid: function (props) {
-        return makeNode('grid', props || {});
-      },
-      spacer: function (props) {
-        return makeNode('spacer', props || {});
-      },
-      divider: function (props) {
-        return makeNode('divider', props || {});
+        picker: function (props) {
+          return makeNode('picker', props || {});
+        },
+        toggle: function (props) {
+          return makeNode('toggle', props || {});
+        },
+        grid: function (props) {
+          return makeNode('grid', props || {});
+        },
+        plot: function (props) {
+          return makeNode('plot', props || {});
+        },
+        modal: function (props) {
+          return makeNode('modal', props || {});
+        },
+        spacer: function (props) {
+          return makeNode('spacer', props || {});
+        },
+        divider: function (props) {
+          return makeNode('divider', props || {});
       },
       progress: function (props) {
         return makeNode('progress', props || {});
@@ -1377,3 +1472,98 @@ if (typeof analogWrite !== 'function') {
 }
 
 __scriptGlobal.UI = UI;
+
+// -----------------------------------------------------------------------------
+// Desktop host helpers (optional)
+// -----------------------------------------------------------------------------
+
+// Minimal filesystem/path helpers.
+// Hosts may choose to restrict access; scripts should treat failures as non-fatal.
+var FS = {};
+FS.__scriptShim = true;
+
+FS.appDataDir = function () {
+  if (typeof _scriptAppDataDir === 'function') {
+    return String(_scriptAppDataDir() || '');
+  }
+  return '';
+};
+
+FS.join = function () {
+  var parts = Array.prototype.slice.call(arguments).map(function (v) {
+    return String(v || '');
+  });
+  if (typeof _scriptPathJoin === 'function') {
+    return String(_scriptPathJoin(parts) || parts.join('/'));
+  }
+  // Best-effort fallback (works on Unix-ish paths).
+  return parts
+    .filter(Boolean)
+    .join('/')
+    .replace(/\\/g, '/');
+};
+
+FS.ensureDir = function (path) {
+  if (typeof _scriptEnsureDir !== 'function') {
+    throw new Error('FS.ensureDir unavailable on this host');
+  }
+  return _scriptEnsureDir(String(path || ''));
+};
+
+FS.readDir = function (path) {
+  if (typeof _scriptReadDir !== 'function') {
+    throw new Error('FS.readDir unavailable on this host');
+  }
+  return _scriptReadDir(String(path || '')) || [];
+};
+
+FS.readText = function (path) {
+  if (typeof _scriptReadFileText !== 'function') {
+    throw new Error('FS.readText unavailable on this host');
+  }
+  return String(_scriptReadFileText(String(path || '')) || '');
+};
+
+FS.writeText = function (path, content) {
+  if (typeof _scriptWriteFileText !== 'function') {
+    throw new Error('FS.writeText unavailable on this host');
+  }
+  return _scriptWriteFileText(String(path || ''), String(content || ''));
+};
+
+FS.readBytes = function (path) {
+  if (typeof _scriptReadFileBytes !== 'function') {
+    throw new Error('FS.readBytes unavailable on this host');
+  }
+  return _scriptReadFileBytes(String(path || ''));
+};
+
+FS.writeBytes = function (path, bytes) {
+  if (typeof _scriptWriteFileBytes !== 'function') {
+    throw new Error('FS.writeBytes unavailable on this host');
+  }
+  return _scriptWriteFileBytes(String(path || ''), bytes);
+};
+
+FS.remove = function (path) {
+  if (typeof _scriptRemovePath !== 'function') {
+    throw new Error('FS.remove unavailable on this host');
+  }
+  return _scriptRemovePath(String(path || ''));
+};
+
+FS.rename = function (from, to) {
+  if (typeof _scriptRenamePath !== 'function') {
+    throw new Error('FS.rename unavailable on this host');
+  }
+  return _scriptRenamePath(String(from || ''), String(to || ''));
+};
+
+FS.reveal = function (path) {
+  if (typeof _scriptRevealInFinder !== 'function') {
+    throw new Error('FS.reveal unavailable on this host');
+  }
+  return _scriptRevealInFinder(String(path || ''));
+};
+
+__scriptGlobal.FS = FS;

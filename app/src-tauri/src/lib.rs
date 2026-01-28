@@ -1160,6 +1160,7 @@ async fn script_execute_impl(
     bootstrap: String,
 ) -> Result<(), String> {
     use tauri::Emitter;
+    use tauri::Manager;
 
     // Stop any existing script first
     {
@@ -1169,8 +1170,13 @@ async fn script_execute_impl(
         }
     }
 
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
+
     // Create the runtime
-    let (runtime, command_tx, mut event_rx) = ScriptRuntime::new(device, bootstrap);
+    let (runtime, command_tx, mut event_rx) = ScriptRuntime::new(device, bootstrap, app_data_dir);
 
     // Store command channel for callbacks
     {

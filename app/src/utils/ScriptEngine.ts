@@ -42,11 +42,14 @@ export interface ScriptTree {
     | 'scroll'
     | 'textField'
     | 'textEditor'
-    | 'picker'
-    | 'grid'
-    | 'spacer'
-    | 'divider'
-    | 'progress';
+      | 'picker'
+      | 'toggle'
+      | 'grid'
+      | 'plot'
+      | 'modal'
+      | 'spacer'
+      | 'divider'
+      | 'progress';
   props?: Record<string, unknown>;
   children?: ScriptTree[];
   handlers?: Record<string, string>;
