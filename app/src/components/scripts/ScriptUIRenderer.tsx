@@ -15,9 +15,300 @@
  * limitations under the License.
  */
 
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ReactNode, WheelEvent as ReactWheelEvent } from "react";
 import type { ScriptTree } from "../../utils/ScriptEngine";
+
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
+
+function ScriptPlot({
+  node,
+  onInvokeCallback,
+}: {
+  node: ScriptTree;
+  onInvokeCallback?: (token: string, args: unknown[]) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const plotRef = useRef<uPlot | null>(null);
+  const lastCursorEmitAtRef = useRef<number>(0);
+  const onInvokeRef = useRef<((token: string, args: unknown[]) => void) | undefined>(undefined);
+  const handlersRef = useRef<{ viewport?: string; select?: string; cursor?: string }>({});
+  const yRangeRef = useRef<{ yMin: number; yMax: number }>({ yMin: -128, yMax: 384 });
+
+  const props = (node.props || {}) as any;
+  const handlers = (node as any).handlers || {};
+
+  const dataX = Array.isArray(props.dataX) ? (props.dataX as number[]) : [];
+  const dataY = Array.isArray(props.dataY) ? (props.dataY as number[]) : [];
+
+  const height = typeof props.height === "number" ? props.height : 400;
+  const yMin = typeof props.yMin === "number" ? props.yMin : -128;
+  const yMax = typeof props.yMax === "number" ? props.yMax : 384;
+  const xMinProp = typeof props.xMin === "number" ? props.xMin : undefined;
+  const xMaxProp = typeof props.xMax === "number" ? props.xMax : undefined;
+
+  const overlayText = typeof props.overlayText === "string" ? props.overlayText : null;
+  const errorText = typeof props.errorText === "string" ? props.errorText : null;
+
+  // Keep uPlot hooks stable across React renders.
+  onInvokeRef.current = onInvokeCallback;
+  handlersRef.current = {
+    viewport: handlers.viewport,
+    select: handlers.select,
+    cursor: handlers.cursor,
+  };
+  yRangeRef.current = { yMin, yMax };
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const plot = new uPlot(
+      {
+        width: 800,
+        height,
+        legend: { show: false },
+        cursor: { focus: { prox: 16 } },
+        select: { show: true, left: 0, top: 0, width: 0, height: 0 },
+        axes: [
+          { stroke: "#cbd5e1", grid: { stroke: "#334155" } },
+          { stroke: "#cbd5e1", grid: { stroke: "#334155" } },
+        ],
+        scales: {
+          x: { time: false },
+          y: {
+            time: false,
+            range: () => {
+              const r = yRangeRef.current;
+              return [r.yMin, r.yMax];
+            },
+          },
+        },
+        series: [
+          {},
+          {
+            label: "Signal",
+            stroke: "#01579B",
+            width: 2,
+          },
+        ],
+        hooks: {
+          setScale: [
+            (u, key) => {
+              if (key !== "x") return;
+              const token = handlersRef.current.viewport;
+              const invoke = onInvokeRef.current;
+              if (!token || !invoke) return;
+              const scale = u.scales.x;
+              invoke(token, [{ min: scale.min, max: scale.max }]);
+            },
+          ],
+          setSelect: [
+            (u) => {
+              const token = handlersRef.current.select;
+              const invoke = onInvokeRef.current;
+              if (!token || !invoke) return;
+              const sel = u.select;
+              if (!sel || sel.width <= 0) return;
+              const left = sel.left;
+              const right = sel.left + sel.width;
+              const min = u.posToVal(left, "x");
+              const max = u.posToVal(right, "x");
+              invoke(token, [{ min, max }]);
+            },
+          ],
+          setCursor: [
+            (u) => {
+              const token = handlersRef.current.cursor;
+              const invoke = onInvokeRef.current;
+              if (!token || !invoke) return;
+              const now = Date.now();
+              if (now - lastCursorEmitAtRef.current < 80) return;
+              lastCursorEmitAtRef.current = now;
+              const idx = u.cursor.idx;
+              if (idx == null || idx < 0) return;
+              const x = u.data[0]?.[idx] as number | undefined;
+              const y = u.data[1]?.[idx] as number | undefined;
+              invoke(token, [{ idx, x, y }]);
+            },
+          ],
+        },
+      },
+      [new Float64Array(), new Float32Array()],
+      root,
+    );
+    plotRef.current = plot;
+
+    const ro = new ResizeObserver(() => {
+      const w = root.clientWidth || 800;
+      const h = root.clientHeight || height;
+      try {
+        plot.setSize({ width: w, height: h });
+      } catch {
+        // ignore
+      }
+    });
+    ro.observe(root);
+
+    return () => {
+      ro.disconnect();
+      try {
+        plot.destroy();
+      } catch {
+        // ignore
+      }
+      plotRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    const xs = new Float64Array(dataX);
+    const ys = new Float32Array(dataY);
+    try {
+      plot.setData([xs, ys]);
+    } catch {
+      // ignore
+    }
+  }, [dataX, dataY]);
+
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    if (xMinProp == null || xMaxProp == null) return;
+    try {
+      plot.setScale("x", { min: xMinProp, max: xMaxProp });
+    } catch {
+      // ignore
+    }
+  }, [xMinProp, xMaxProp]);
+
+  const handleWheelCapture = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const plot = plotRef.current;
+    if (!plot) return;
+
+    // Keep wheel inside the plot (otherwise the surrounding script scroll view wins).
+    event.preventDefault();
+    event.stopPropagation();
+    (event.nativeEvent as any)?.stopImmediatePropagation?.();
+
+    const scale = plot.scales.x;
+    const min0 = typeof scale.min === "number" && Number.isFinite(scale.min) ? scale.min : undefined;
+    const max0 = typeof scale.max === "number" && Number.isFinite(scale.max) ? scale.max : undefined;
+    if (min0 == null || max0 == null || max0 <= min0) return;
+
+    // Exponential zoom feels better on trackpads.
+    const z = Math.exp(event.deltaY * 0.001);
+    const nextRange = (max0 - min0) * z;
+    if (!Number.isFinite(nextRange) || nextRange <= 0) return;
+
+    const rect = (plot.root as HTMLElement).getBoundingClientRect();
+    const xPx = event.clientX - rect.left - plot.bbox.left;
+    const anchor = plot.posToVal(xPx, "x");
+
+    const t = (anchor - min0) / (max0 - min0);
+    const clampedT = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0.5;
+
+    const nextMin = anchor - clampedT * nextRange;
+    const nextMax = nextMin + nextRange;
+    if (!Number.isFinite(nextMin) || !Number.isFinite(nextMax) || nextMax <= nextMin) return;
+
+    try {
+      plot.setScale("x", { min: nextMin, max: nextMax });
+    } catch {
+      // ignore
+    }
+  };
+
+  // Ensure scroll containers can't steal wheel while hovering the plot.
+  // Attaching at window capture is the most reliable in nested layouts.
+  useEffect(() => {
+    const handleWheel: EventListener = (event) => {
+      const plot = plotRef.current;
+      if (!plot) return;
+
+      const e = event as WheelEvent;
+      const target = e.target as Node | null;
+      if (!target || !plot.root || !plot.root.contains(target)) return;
+
+      // Don't block ctrl+wheel page zoom.
+      if (e.ctrlKey) return;
+
+      // Prevent scroll in any ancestor and zoom the plot instead.
+      e.preventDefault();
+      e.stopPropagation();
+      (e as any).stopImmediatePropagation?.();
+
+      const scale = plot.scales.x;
+      const min0 = typeof scale.min === "number" && Number.isFinite(scale.min) ? scale.min : undefined;
+      const max0 = typeof scale.max === "number" && Number.isFinite(scale.max) ? scale.max : undefined;
+      if (min0 == null || max0 == null || max0 <= min0) return;
+
+      const z = Math.exp(e.deltaY * 0.001);
+      const nextRange = (max0 - min0) * z;
+      if (!Number.isFinite(nextRange) || nextRange <= 0) return;
+
+      const rect = (plot.root as HTMLElement).getBoundingClientRect();
+      const xPx = e.clientX - rect.left - plot.bbox.left;
+      const anchor = plot.posToVal(xPx, "x");
+
+      const t = (anchor - min0) / (max0 - min0);
+      const clampedT = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0.5;
+
+      const nextMin = anchor - clampedT * nextRange;
+      const nextMax = nextMin + nextRange;
+      if (!Number.isFinite(nextMin) || !Number.isFinite(nextMax) || nextMax <= nextMin) return;
+
+      try {
+        plot.setScale("x", { min: nextMin, max: nextMax });
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false, capture: true });
+    // Legacy fallback just in case WebView maps trackpad to mousewheel.
+    window.addEventListener("mousewheel", handleWheel as any, { passive: false, capture: true } as any);
+
+    return () => {
+      window.removeEventListener("wheel", handleWheel, { capture: true } as any);
+      window.removeEventListener("mousewheel", handleWheel as any, { capture: true } as any);
+    };
+  }, []);
+
+  useEffect(() => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    try {
+      plot.redraw();
+    } catch {
+      // ignore
+    }
+  }, [yMin, yMax]);
+
+  return (
+    <div className="relative w-full" style={{ height }}>
+      <div
+        ref={rootRef}
+        className="h-full w-full"
+        style={{ touchAction: "none", overscrollBehavior: "contain" }}
+        onWheelCapture={handleWheelCapture}
+      />
+      {errorText ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-950/70 text-slate-200">
+          <p>Chart error: {errorText}</p>
+        </div>
+      ) : null}
+      {overlayText ? (
+        <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-slate-800 bg-slate-950/50 px-2.5 py-1.5 text-[11px] text-slate-200 backdrop-blur">
+          {overlayText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function ScriptUIRenderer({
   tree,
@@ -377,7 +668,10 @@ export default function ScriptUIRenderer({
       case "scroll": {
         const height = props.height as string | number | undefined;
         return (
-          <div className="overflow-y-auto" style={{ maxHeight: height ?? 360, ...paddingStyle }}>
+          <div
+            className="overflow-y-auto"
+            style={{ ...(height != null ? { maxHeight: height } : null), ...paddingStyle }}
+          >
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
@@ -442,6 +736,72 @@ export default function ScriptUIRenderer({
                 </option>
               ))}
             </select>
+          </div>
+        );
+      }
+
+      case "toggle": {
+        const label = (props as any).label as string | undefined;
+        const disabled = Boolean((props as any).disabled);
+        const value =
+          inputValues[nodeId] !== undefined ? Boolean(inputValues[nodeId]) : Boolean((props as any).value ?? (props as any).selected);
+
+        return (
+          <label className={`flex items-center gap-3 ${disabled ? "opacity-60" : ""}`}>
+            <input
+              type="checkbox"
+              checked={value}
+              disabled={disabled}
+              onChange={(event) => {
+                const next = event.target.checked;
+                setInputValues((prev) => ({ ...prev, [nodeId]: next }));
+                if (handlers.change && onInvokeCallback) {
+                  onInvokeCallback(handlers.change, [next]);
+                }
+              }}
+              className="h-4 w-4 accent-blue-600"
+            />
+            {label ? <span className="text-sm text-slate-200">{label}</span> : null}
+          </label>
+        );
+      }
+
+      case "plot": {
+        return <ScriptPlot node={node} onInvokeCallback={onInvokeCallback} />;
+      }
+
+      case "modal": {
+        const open = (props as any).open;
+        const isOpen = typeof open === "boolean" ? open : true;
+        if (!isOpen) return null;
+        const title = (props as any).title as string | undefined;
+        const subtitle = (props as any).subtitle as string | undefined;
+        const canClose = Boolean(handlers.close && onInvokeCallback);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+            <div className="w-full max-w-xl rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl">
+              {(title || subtitle || canClose) && (
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    {title ? <div className="text-lg font-medium text-slate-100">{title}</div> : null}
+                    {subtitle ? <div className="text-xs text-slate-400">{subtitle}</div> : null}
+                  </div>
+                  {canClose ? (
+                    <button
+                      className="rounded bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
+                      onClick={() => onInvokeCallback?.(handlers.close, [])}
+                    >
+                      Close
+                    </button>
+                  ) : null}
+                </div>
+              )}
+              <div className="flex flex-col gap-3">
+                {children.map((child, index) => (
+                  <div key={index}>{renderNode(child)}</div>
+                ))}
+              </div>
+            </div>
           </div>
         );
       }
