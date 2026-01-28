@@ -1,0 +1,57 @@
+import { Button, HorizontalBox, VerticalBox, TextEdit } from "std-widgets.slint";
+
+export global AppState {
+    in-out property <string> current_path: "";
+    in-out property <string> log_text: "";
+
+    callback open_file();
+    callback save_file();
+    callback run_script();
+}
+
+export component AppWindow inherits Window {
+    title: "EMWaver";
+    width: 1100px;
+    height: 720px;
+
+    in-out property <string> editor_text;
+
+    VerticalBox {
+        padding: 12px;
+        spacing: 10px;
+
+        HorizontalBox {
+            spacing: 10px;
+            alignment: start;
+
+            Button { text: "Open"; clicked => { AppState.open_file(); } }
+            Button { text: "Save"; clicked => { AppState.save_file(); } }
+            Button { text: "Run"; clicked => { AppState.run_script(); } }
+
+            TextEdit {
+                read-only: true;
+                text: AppState.current_path;
+                horizontal-stretch: 1;
+            }
+        }
+
+        HorizontalBox {
+            spacing: 10px;
+
+            TextEdit {
+                text: root.editor_text;
+                wrap: word-wrap;
+                horizontal-stretch: 3;
+                vertical-stretch: 1;
+            }
+
+            TextEdit {
+                read-only: true;
+                text: AppState.log_text;
+                wrap: word-wrap;
+                horizontal-stretch: 2;
+                vertical-stretch: 1;
+            }
+        }
+    }
+}
