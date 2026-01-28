@@ -63,7 +63,8 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **STM32 Firmware:** `stm/emwaver-firmware/` (single firmware)
 - **Android:** `android/`
 - **iOS:** `ios/`
-- **Desktop App:** `app/` (Tauri)
+- **Desktop App (current):** `app/` (Tauri)
+- **Desktop App (native, WIP):** `desktop/` (Slint)
 - **CLI:** `app/cli/` (device shell + internal tooling)
 - **Docs:** `docs/` (MkDocs)
 
@@ -165,6 +166,10 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │  │
 │  ├─ public/{default-scripts,device-icons}/  # Bundled UI assets (incl starter scripts)
 │  └─ dist/ / node_modules/ / src-tauri/target/ # Generated build/deps
+
+├─ desktop/                                   # Native desktop app (Slint, WIP)
+│  ├─ src/                                    # Rust entrypoint
+│  └─ ui/                                     # `.slint` UI sources
 │
 ├─ android/
 │  └─ app/src/main/
