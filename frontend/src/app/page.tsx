@@ -35,10 +35,10 @@ export default function HomePage() {
                   Start with scripts
                 </Link>
                 <Link
-                  href="/hardware"
+                  href="/install"
                   className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-3 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
                 >
-                  Explore hardware
+                  Get started
                 </Link>
               </div>
             </div>
@@ -235,6 +235,105 @@ UI.render(UI.column({
                   </pre>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-5 pb-16">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+            <div className="flex items-end justify-between gap-6">
+              <div>
+                <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
+                  Get started
+                </div>
+                <h2 className="pt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
+                  Start with the basics.
+                </h2>
+                <p className="pt-2 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
+                  Install the apps, skim the pinout, then run scripts. Order/build details and history
+                  are here too.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              <Link
+                href="/install"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+              >
+                <div className="text-xs font-semibold text-[color:var(--aqua)]">Installing</div>
+                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                  Installing & using
+                </div>
+                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  Download the apps and connect over USB.
+                </div>
+              </Link>
+
+              <Link
+                href="/scripts"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+              >
+                <div className="text-xs font-semibold text-[color:var(--sky)]">Scripts</div>
+                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                  Run a script
+                </div>
+                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  UI + device APIs, fast iteration.
+                </div>
+              </Link>
+
+              <Link
+                href="/pinout"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+              >
+                <div className="text-xs font-semibold text-[color:var(--copper)]">Pinout</div>
+                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                  Pinout reference
+                </div>
+                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  Headers, GPIO numbering, and key pins.
+                </div>
+              </Link>
+
+              <Link
+                href="/device"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] p-5 hover:bg-[rgba(78,231,199,0.12)]"
+              >
+                <div className="text-xs font-semibold text-[color:var(--aqua)]">Device</div>
+                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                  Current board
+                </div>
+                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  What ships today and what it is optimized for.
+                </div>
+              </Link>
+
+              <Link
+                href="/order"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-5 hover:bg-[rgba(240,166,106,0.14)]"
+              >
+                <div className="text-xs font-semibold text-[color:var(--copper)]">Builder</div>
+                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                  Order from JLCPCB
+                </div>
+                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  Generate fabrication outputs for the current board.
+                </div>
+              </Link>
+
+              <Link
+                href="/history"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+              >
+                <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Archive</div>
+                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                  Board history
+                </div>
+                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  Older boards, photos, and metadata.
+                </div>
+              </Link>
             </div>
           </div>
         </section>
