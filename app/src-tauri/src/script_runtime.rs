@@ -126,6 +126,14 @@ impl ScriptRuntime {
     /// Execute a script script. This blocks until the script completes or is stopped.
     pub fn execute(mut self, script: &str) -> Result<(), String> {
         let rt_handle = tokio::runtime::Handle::current();
+
+        // Desktop Script semantics: sync-only (no async/await, no Promise jobs).
+        // Keep this check lightweight and explicit.
+        if script.contains("await") || script.contains("async ") || script.contains("async\n") || script.contains("async\t") {
+            let msg = "Script error: async/await is not supported on desktop (sync-only scripts)".to_string();
+            let _ = self.event_tx.send(ScriptEvent::Error { message: msg.clone() });
+            return Err(msg);
+        }
         
         // Create shared state
         let state = Rc::new(RefCell::new(RuntimeState {
@@ -165,7 +173,10 @@ impl ScriptRuntime {
             }
         }
 
-        // Event loop: process commands from frontend (keeps context alive for callbacks)
+        // Event loop: process commands from frontend (keeps context alive for callbacks).
+        //
+        // NOTE: Desktop script semantics are synchronous (no async/await, no Promises).
+        // We intentionally do not drain Boa's job queue here.
         eprintln!("[script_runtime] Entering event loop");
         loop {
             match self.command_rx.try_recv() {
@@ -199,9 +210,6 @@ impl ScriptRuntime {
                         let _ = self.event_tx.send(ScriptEvent::Error {
                             message: format!("Timer callback error: {}", e),
                         });
-                    }
-                    for _ in 0..100 {
-                        context.run_jobs();
                     }
 
                     // Reschedule intervals.
@@ -254,17 +262,6 @@ impl ScriptRuntime {
                             message: format!("Callback error: {}", e),
                         });
                     }
-                    // Run Boa's job queue to process Promises from async functions.
-                    // We run it multiple times to drain the queue as each await
-                    // in an async function chain creates new microtasks.
-                    eprintln!("[script_runtime] Running job queue (100 iterations)...");
-                    for i in 0..100 {
-                        context.run_jobs();
-                        if i < 5 {
-                            eprintln!("[script_runtime] run_jobs iteration {}", i);
-                        }
-                    }
-                    eprintln!("[script_runtime] Callback processing done");
                 }
                 Err(mpsc::error::TryRecvError::Empty) => {
                     // No commands, yield briefly

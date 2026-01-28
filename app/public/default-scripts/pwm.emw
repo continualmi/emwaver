@@ -91,7 +91,7 @@ function applyWrite(value, opts) {
   }
 }
 
-async function sweep() {
+function sweep() {
   if (sweeping) {
     sweeping = false;
     statusText = "Stopping sweep...";

@@ -21,7 +21,7 @@ import type { editor } from "monaco-editor";
 import { ensureEmwaverMonacoThemes, getEmwaverMonacoTheme } from "../../utils/monacoTheme";
 import { isTauriAvailable, safeInvoke, safeListen } from "../../utils/tauri";
 import { useDevice } from "../../utils/DeviceContext";
-import { ScriptEngine, type ScriptTree } from "../../utils/ScriptEngine";
+import type { ScriptTree } from "../../utils/ScriptEngine";
 import { useBackendScript } from "../../utils/useBackendScript";
 import ExplorerTree from "./sidebar/ExplorerTree";
 import ScriptAssetsPanel from "./sidebar/ScriptAssetsPanel";
@@ -144,18 +144,18 @@ export default function WorkspaceShell({
       }
     >
   >({});
-  const scriptEngineByPathRef = useRef<Map<string, ScriptEngine>>(new Map());
   const scriptBootstrapRef = useRef<string | null>(null);
   
-  // Backend script execution (fast mode - ~2ms per command instead of ~6-8ms)
-  const [useBackendEngine, setUseBackendEngine] = useState(true);
+  // Backend script execution (desktop script semantics).
+  // Desktop scripts run in the backend runtime to keep execution synchronous
+  // without blocking the UI thread.
   const backendScript = useBackendScript();
   const activeBackendPathRef = useRef<string | null>(null);
 
   // Sync backend script state to preview state
   useEffect(() => {
     const path = activeBackendPathRef.current;
-    if (!path || !useBackendEngine) return;
+    if (!path) return;
     
     setScriptPreviewState((prev) => ({
       ...prev,
@@ -165,7 +165,7 @@ export default function WorkspaceShell({
         error: backendScript.state.error,
       },
     }));
-  }, [backendScript.state, useBackendEngine]);
+  }, [backendScript.state]);
   const scriptDeviceRef = useRef(device);
   const scriptCommandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -445,14 +445,9 @@ export default function WorkspaceShell({
   const cleanupScriptForPath = useCallback(
     async (path: string) => {
       const normalizedPath = path.replace(/\\/g, "/");
-      if (useBackendEngine && activeBackendPathRef.current === normalizedPath) {
+      if (activeBackendPathRef.current === normalizedPath) {
         await backendScript.stop();
         activeBackendPathRef.current = null;
-      }
-      const engine = scriptEngineByPathRef.current.get(normalizedPath);
-      if (engine) {
-        engine.shutdown();
-        scriptEngineByPathRef.current.delete(normalizedPath);
       }
       setScriptPreviewState((prev) => {
         const next = { ...prev };
@@ -460,7 +455,7 @@ export default function WorkspaceShell({
         return next;
       });
     },
-    [backendScript, useBackendEngine],
+    [backendScript],
   );
 
   const handleOpenFile = useCallback(async (path: string) => {
@@ -564,105 +559,22 @@ export default function WorkspaceShell({
             ? ""
             : (await safeInvoke<string>("read_file", { payload: { path: normalizedPath } })) ?? "");
       
-      // Use backend engine for fast execution (direct USB access, ~2ms per command)
-      if (useBackendEngine && isTauriAvailable()) {
+      // Desktop scripts are sync-only and must run in the backend runtime.
+      if (isTauriAvailable()) {
         activeBackendPathRef.current = normalizedPath;
         await backendScript.execute(entrySource, scriptBootstrapRef.current ?? "");
         return;
       }
-      
-      // Fallback to frontend engine (slower, ~6-8ms per command via Tauri IPC)
-      let engine = scriptEngineByPathRef.current.get(normalizedPath);
-      if (!engine) {
-        engine = new ScriptEngine();
-        const bootstrap = scriptBootstrapRef.current ?? "";
-        engine.setBootstrapSource(bootstrap);
-        engine.setup(
-          (tree: ScriptTree) => {
-            setScriptPreviewState((prev) => ({
-              ...prev,
-              [normalizedPath]: {
-                tree,
-                isRunning: prev[normalizedPath]?.isRunning ?? false,
-                error: prev[normalizedPath]?.error ?? null,
-              },
-            }));
-          },
-          {
-            _scriptSendPacket: scriptDeviceConnection.sendPacket,
-            _scriptSleep: async (ms: number) => {
-              const durationMs = Math.max(0, Number(ms) || 0);
-              await new Promise<void>((resolve) => window.setTimeout(resolve, durationMs));
-            },
-            _scriptSamplerBufferGetPacketCount: async () => (await safeInvoke<number>("buffer_get_packet_count")) ?? 0,
-            _scriptSamplerBufferGetLenBytes: async () => (await safeInvoke<number>("buffer_get_len_bytes")) ?? 0,
-            _scriptSamplerBufferGetBytes: async () => {
-              const bytes = (await safeInvoke<number[]>("buffer_get_bytes")) ?? [];
-              return new Uint8Array(bytes);
-            },
-            _scriptSamplerBufferClear: async () => {
-              await safeInvoke<void>("sampler_buffer_clear");
-            },
-            _scriptSamplerBufferSetInvertRx: async (enabled: boolean) => {
-              await safeInvoke<void>("buffer_set_invert_rx", { enabled: !!enabled }).catch(() => {});
-            },
-            _scriptSamplerBufferReadPacketsSince: async (packetIndex: number, maxPackets: number) => {
-              const packet_index = Math.max(0, Math.floor(Number(packetIndex) || 0));
-              const max_packets = Math.max(1, Math.floor(Number(maxPackets) || 256));
-              const resp = await safeInvoke<any>("buffer_read_packets_since", { packet_index, max_packets });
-              const data = new Uint8Array((resp && Array.isArray(resp.data) ? resp.data : []) as number[]);
-              return {
-                data,
-                nextPacketIndex: Number(resp?.next_packet_index ?? 0),
-                availablePackets: Number(resp?.available_packets ?? 0),
-              };
-            },
-            _scriptSamplerBufferCompressViewport: async (startBit: number, endBit: number, bins: number) => {
-              const range_start = Math.max(0, Math.floor(Number(startBit) || 0));
-              const range_end = Math.max(0, Math.floor(Number(endBit) || 0));
-              const number_bins = Math.max(0, Math.floor(Number(bins) || 0));
-              const resp = await safeInvoke<any>("buffer_compress_viewport", { range_start, range_end, number_bins });
-              return {
-                bufferLenBytes: Number(resp?.buffer_len_bytes ?? 0),
-                timeValues: (resp?.time_values ?? []) as number[],
-                dataValues: (resp?.data_values ?? []) as number[],
-              };
-            },
-          },
-          (message: string) => {
-            handleScriptPrint(message);
-            setScriptPreviewState((prev) => ({
-              ...prev,
-              [normalizedPath]: {
-                tree: prev[normalizedPath]?.tree ?? null,
-                isRunning: false,
-                error: message,
-              },
-            }));
-          },
-        );
-        scriptEngineByPathRef.current.set(normalizedPath, engine);
-      }
-
-      engine.execute(entrySource, () => {
-        setScriptPreviewState((prev) => ({
-          ...prev,
-          [normalizedPath]: {
-            tree: prev[normalizedPath]?.tree ?? null,
-            isRunning: false,
-            error: prev[normalizedPath]?.error ?? null,
-          },
-        }));
-      });
 
       setScriptPreviewState((prev) => ({
         ...prev,
         [normalizedPath]: {
           tree: prev[normalizedPath]?.tree ?? null,
           isRunning: false,
-          error: prev[normalizedPath]?.error ?? null,
+          error: "Script runtime unavailable (requires desktop backend runtime)",
         },
       }));
+      return;
     },
     [rootDir, scriptDeviceConnection],
   );
@@ -671,15 +583,9 @@ export default function WorkspaceShell({
     async (path: string, { closePreview }: { closePreview: boolean }) => {
       const normalizedPath = path.replace(/\\/g, "/");
 
-      if (useBackendEngine && activeBackendPathRef.current === normalizedPath) {
+      if (activeBackendPathRef.current === normalizedPath) {
         await backendScript.stop();
         activeBackendPathRef.current = null;
-      } else {
-        const engine = scriptEngineByPathRef.current.get(normalizedPath);
-        if (engine) {
-          engine.shutdown();
-          scriptEngineByPathRef.current.delete(normalizedPath);
-        }
       }
 
       setScriptPreviewState((prev) => ({
@@ -695,7 +601,7 @@ export default function WorkspaceShell({
         setActiveMainTabKind("file");
       }
     },
-    [backendScript, useBackendEngine],
+    [backendScript],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -921,10 +827,8 @@ export default function WorkspaceShell({
                   state={scriptPreviewState[activeFile.path]}
                   onInvokeCallback={(token, args) => {
                     const path = activeFile.path;
-                    if (useBackendEngine && activeBackendPathRef.current === path) {
+                    if (activeBackendPathRef.current === path) {
                       backendScript.invokeCallback(token, args);
-                    } else {
-                      scriptEngineByPathRef.current.get(path)?.invoke(token, args);
                     }
                   }}
                 />

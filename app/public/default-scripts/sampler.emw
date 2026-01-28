@@ -42,9 +42,9 @@ function getSelectedPinNumber() {
   return Number(selectedPin);
 }
 
-async function refreshBufferStats() {
+function refreshBufferStats() {
   try {
-    bytesInBuffer = Number(await Sampler.lenBytes());
+    bytesInBuffer = Number(Sampler.lenBytes());
   } catch (e) {
     // Keep previous value.
   }
@@ -66,7 +66,7 @@ function startPolling() {
   }, 250);
 }
 
-async function startRecording() {
+function startRecording() {
   if (isRecording) return;
   const pin = getSelectedPinNumber();
   if (!Number.isFinite(pin) || pin < 0) {
@@ -79,11 +79,11 @@ async function startRecording() {
   render();
 
   try {
-    const session = await Sampler.start({ pin: pin, clearBefore: true });
+    const session = Sampler.start({ pin: pin, clearBefore: true });
     sessionId = session && session.id ? String(session.id) : null;
     isRecording = true;
     statusText = supportsTimers ? "Recording (live polling on)..." : "Recording (live polling unavailable)...";
-    await refreshBufferStats();
+    refreshBufferStats();
     startPolling();
   } catch (e) {
     sessionId = null;
@@ -94,18 +94,18 @@ async function startRecording() {
   }
 }
 
-async function stopRecording() {
+function stopRecording() {
   if (!isRecording) return;
   statusText = "Stopping sampler...";
   render();
 
   stopPolling();
   try {
-    await Sampler.stop(sessionId);
+    Sampler.stop(sessionId);
     sessionId = null;
     isRecording = false;
     statusText = "Stopped";
-    await refreshBufferStats();
+    refreshBufferStats();
   } catch (e) {
     statusText = "Stop failed: " + String(e && e.message ? e.message : e);
     render();

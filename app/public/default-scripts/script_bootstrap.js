@@ -76,7 +76,13 @@ function __sendPacket(bytes, timeoutMs) {
     throw new Error('Device send unavailable (missing _scriptSendPacket)');
   }
   var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
-  return sender(bytes, timeout);
+
+  var resp = sender(bytes, timeout);
+  // Desktop script semantics are sync-only: host bridge must not return Promises.
+  if (resp && typeof resp.then === 'function') {
+    throw new Error('_scriptSendPacket must be synchronous (Promise not supported)');
+  }
+  return resp;
 }
 
 // Binary protocol opcodes/subcommands (must match firmware `emw_proto.h`).
@@ -163,11 +169,7 @@ function __emwAssertOk(resp) {
 }
 
 function __emwSendPacket(packet, timeoutMs) {
-  var resp = __sendPacket(packet, timeoutMs);
-  if (resp && typeof resp.then === 'function') {
-    return resp.then(__emwAssertOk);
-  }
-  return __emwAssertOk(resp);
+  return __emwAssertOk(__sendPacket(packet, timeoutMs));
 }
 
 // Best-effort: hide host primitives that are not part of the public Script API.
@@ -188,28 +190,16 @@ if (typeof millis === 'undefined') {
 if (typeof delay === 'undefined') {
   var delay = function (ms) {
     var durationMs = Math.max(0, Number(ms) || 0);
-    if (durationMs <= 0) {
-      return Promise.resolve();
-    }
-
-    if (typeof setTimeout === 'function') {
-      return new Promise(function (resolve) {
-        setTimeout(resolve, durationMs);
-      });
-    }
+    if (durationMs <= 0) return;
 
     if (typeof _scriptSleep === 'function') {
-      try {
-        _scriptSleep(durationMs);
-      } catch (e) {}
-      return Promise.resolve();
+      _scriptSleep(durationMs);
+      return;
     }
 
-    return new Promise(function (resolve) {
-      var start = Date.now();
-      while (Date.now() - start < durationMs) {}
-      resolve();
-    });
+    // Last-resort fallback: busy wait.
+    var start = Date.now();
+    while (Date.now() - start < durationMs) {}
   };
 }
 
@@ -254,26 +244,18 @@ if (typeof every === 'undefined') {
     function scheduleNext() {
       if (stopped) return;
 
+      if (typeof setTimeout !== 'function') {
+        throw new Error('every(): host must provide setTimeout');
+      }
+
       if (mode === 'fixedDelay') {
-        timeoutId = typeof setTimeout === 'function' ? setTimeout(runTick, period) : null;
-        if (timeoutId === null) {
-          (async function () {
-            await delay(period);
-            runTick();
-          })();
-        }
+        timeoutId = setTimeout(runTick, period);
         return;
       }
 
       var due = startMs + (tick + 1) * period;
       var waitMs = Math.max(0, due - __scriptClock.millis());
-      timeoutId = typeof setTimeout === 'function' ? setTimeout(runTick, waitMs) : null;
-      if (timeoutId === null) {
-        (async function () {
-          await delay(waitMs);
-          runTick();
-        })();
-      }
+      timeoutId = setTimeout(runTick, waitMs);
     }
 
     function runTick() {
@@ -288,19 +270,16 @@ if (typeof every === 'undefined') {
       running = true;
       tick += 1;
 
-      Promise.resolve()
-        .then(function () {
-          return fn();
-        })
-        .catch(function (error) {
-          // No console stream: ignore periodic callback errors by default.
-          // Scripts can surface errors by re-rendering UI.
-          void error;
-        })
-        .then(function () {
-          running = false;
-          scheduleNext();
-        });
+      try {
+        fn();
+      } catch (error) {
+        // No console stream: ignore periodic callback errors by default.
+        // Scripts can surface errors by re-rendering UI.
+        void error;
+      } finally {
+        running = false;
+        scheduleNext();
+      }
     }
 
     scheduleNext();
@@ -368,27 +347,11 @@ Sampler.__scriptShim = true;
     return data;
   }
 
-  async function __samplerSleep(ms) {
-    var durationMs = Math.max(0, Number(ms) || 0);
-    if (durationMs <= 0) return;
-
-    if (typeof _scriptSleep === 'function') {
-      _scriptSleep(durationMs);
-      return;
-    }
-
-    if (typeof setTimeout === 'function') {
-      await new Promise(function (resolve) {
-        setTimeout(resolve, durationMs);
-      });
-      return;
-    }
-
-    // No async timers available; fall back to a blocking sleep.
-    sleep(durationMs);
+  function __samplerSleep(ms) {
+    delay(ms);
   }
 
-  async function __samplerReadPacketRange(startPacketIndex, endPacketIndex) {
+  function __samplerReadPacketRange(startPacketIndex, endPacketIndex) {
     var start = Math.max(0, Number(startPacketIndex) || 0);
     var end = Math.max(start, Number(endPacketIndex) || 0);
     var cursor = start;
@@ -397,7 +360,7 @@ Sampler.__scriptShim = true;
     while (cursor < end) {
       var remaining = end - cursor;
       var take = Math.max(1, Math.min(256, remaining));
-      var resp = await Sampler.readPacketsSince({ packetIndex: cursor, maxPackets: take });
+      var resp = Sampler.readPacketsSince({ packetIndex: cursor, maxPackets: take });
       if (!resp || !resp.data || resp.data.length === 0) break;
       chunks.push(resp.data);
       var next = Number(resp.nextPacketIndex);
@@ -416,69 +379,69 @@ Sampler.__scriptShim = true;
     return out;
   }
 
-  Sampler.packetCount = async function () {
+  Sampler.packetCount = function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.packetCount === 'function') {
-      return await __scriptHostSampler.buffer.packetCount.call(__scriptHostSampler.buffer);
+      return __scriptHostSampler.buffer.packetCount.call(__scriptHostSampler.buffer);
     }
     if (typeof _scriptSamplerBufferGetPacketCount === 'function') {
-      return Number(await _scriptSamplerBufferGetPacketCount());
+      return Number(_scriptSamplerBufferGetPacketCount());
     }
     throw new Error('Sampler.packetCount unavailable on this host');
   };
 
-  Sampler.lenBytes = async function () {
+  Sampler.lenBytes = function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.lenBytes === 'function') {
-      return Number(await __scriptHostSampler.buffer.lenBytes.call(__scriptHostSampler.buffer));
+      return Number(__scriptHostSampler.buffer.lenBytes.call(__scriptHostSampler.buffer));
     }
     if (typeof _scriptSamplerBufferGetLenBytes === 'function') {
-      return Number(await _scriptSamplerBufferGetLenBytes());
+      return Number(_scriptSamplerBufferGetLenBytes());
     }
     throw new Error('Sampler.lenBytes unavailable on this host');
   };
 
-  Sampler.getBytes = async function () {
+  Sampler.getBytes = function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.getBytes === 'function') {
-      return __samplerToUint8Array(await __scriptHostSampler.buffer.getBytes.call(__scriptHostSampler.buffer));
+      return __samplerToUint8Array(__scriptHostSampler.buffer.getBytes.call(__scriptHostSampler.buffer));
     }
     if (typeof _scriptSamplerBufferGetBytes === 'function') {
-      return __samplerToUint8Array(await _scriptSamplerBufferGetBytes());
+      return __samplerToUint8Array(_scriptSamplerBufferGetBytes());
     }
     throw new Error('Sampler.getBytes unavailable on this host');
   };
 
-  Sampler.clear = async function () {
+  Sampler.clear = function () {
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.clear === 'function') {
-      return await __scriptHostSampler.buffer.clear.call(__scriptHostSampler.buffer);
+      return __scriptHostSampler.buffer.clear.call(__scriptHostSampler.buffer);
     }
     if (typeof _scriptSamplerBufferClear === 'function') {
-      return await _scriptSamplerBufferClear();
+      return _scriptSamplerBufferClear();
     }
     throw new Error('Sampler.clear unavailable on this host');
   };
 
-  Sampler.setInvertRx = async function (enabled) {
+  Sampler.setInvertRx = function (enabled) {
     var flag = !!enabled;
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.setInvertRx === 'function') {
-      return await __scriptHostSampler.buffer.setInvertRx.call(__scriptHostSampler.buffer, flag);
+      return __scriptHostSampler.buffer.setInvertRx.call(__scriptHostSampler.buffer, flag);
     }
     if (typeof _scriptSamplerBufferSetInvertRx === 'function') {
-      return await _scriptSamplerBufferSetInvertRx(flag);
+      return _scriptSamplerBufferSetInvertRx(flag);
     }
     throw new Error('Sampler.setInvertRx unavailable on this host');
   };
 
-  Sampler.readPacketsSince = async function (opts) {
+  Sampler.readPacketsSince = function (opts) {
     var packetIndex = Math.max(0, Number(opts && opts.packetIndex) || 0);
     var maxPackets = Math.max(1, Number(opts && opts.maxPackets) || 256);
 
     var resp = null;
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.readPacketsSince === 'function') {
-      resp = await __scriptHostSampler.buffer.readPacketsSince.call(__scriptHostSampler.buffer, {
+      resp = __scriptHostSampler.buffer.readPacketsSince.call(__scriptHostSampler.buffer, {
         packetIndex: packetIndex,
         maxPackets: maxPackets,
       });
     } else if (typeof _scriptSamplerBufferReadPacketsSince === 'function') {
-      resp = await _scriptSamplerBufferReadPacketsSince(packetIndex, maxPackets);
+      resp = _scriptSamplerBufferReadPacketsSince(packetIndex, maxPackets);
     } else {
       throw new Error('Sampler.readPacketsSince unavailable on this host');
     }
@@ -490,20 +453,20 @@ Sampler.__scriptShim = true;
     };
   };
 
-  Sampler.compressViewport = async function (opts) {
+  Sampler.compressViewport = function (opts) {
     var startBit = Math.max(0, Number(opts && opts.startBit) || 0);
     var endBit = Math.max(0, Number(opts && opts.endBit) || 0);
     var bins = Math.max(0, Number(opts && opts.bins) || 0);
 
     var resp = null;
     if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.compressViewport === 'function') {
-      resp = await __scriptHostSampler.buffer.compressViewport.call(__scriptHostSampler.buffer, {
+      resp = __scriptHostSampler.buffer.compressViewport.call(__scriptHostSampler.buffer, {
         startBit: startBit,
         endBit: endBit,
         bins: bins,
       });
     } else if (typeof _scriptSamplerBufferCompressViewport === 'function') {
-      resp = await _scriptSamplerBufferCompressViewport(startBit, endBit, bins);
+      resp = _scriptSamplerBufferCompressViewport(startBit, endBit, bins);
     } else {
       throw new Error('Sampler.compressViewport unavailable on this host');
     }
@@ -515,33 +478,33 @@ Sampler.__scriptShim = true;
     };
   };
 
-  Sampler.sliceBytes = async function (byteStart, byteEnd) {
+  Sampler.sliceBytes = function (byteStart, byteEnd) {
     var start = Math.max(0, Number(byteStart) || 0);
     var end = Math.max(start, Number(byteEnd) || 0);
     if (end <= start) return new Uint8Array();
 
     var startPacket = Math.floor(start / PACKET_SIZE);
     var endPacket = Math.ceil(end / PACKET_SIZE);
-    var bytes = await __samplerReadPacketRange(startPacket, endPacket);
+    var bytes = __samplerReadPacketRange(startPacket, endPacket);
     var offset = start - startPacket * PACKET_SIZE;
     return bytes.slice(offset, offset + (end - start));
   };
 
-  Sampler.firstBytes = async function (n) {
+  Sampler.firstBytes = function (n) {
     var len = Math.max(0, Number(n) || 0);
     if (len === 0) return new Uint8Array();
-    return await Sampler.sliceBytes(0, len);
+    return Sampler.sliceBytes(0, len);
   };
 
-  Sampler.lastBytes = async function (n) {
+  Sampler.lastBytes = function (n) {
     var len = Math.max(0, Number(n) || 0);
     if (len === 0) return new Uint8Array();
-    var total = await Sampler.lenBytes();
+    var total = Sampler.lenBytes();
     var start = Math.max(0, total - len);
-    return await Sampler.sliceBytes(start, total);
+    return Sampler.sliceBytes(start, total);
   };
 
-  Sampler.start = async function (opts) {
+  Sampler.start = function (opts) {
     var pin = Number(opts && opts.pin);
     if (!isFinite(pin) || pin < 0) {
       throw new Error('Sampler.start requires opts.pin (encoded pin number)');
@@ -574,33 +537,33 @@ Sampler.__scriptShim = true;
     var invert = !!(opts && opts.invert);
 
     if (clearBefore) {
-      await Sampler.clear();
+      Sampler.clear();
     }
-    await Sampler.setInvertRx(invert);
+    Sampler.setInvertRx(invert);
 
-    var startPacket = await Sampler.packetCount();
-    await __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_START, pin & 0xff, periodUs & 0xff]), 1500);
+    var startPacket = Sampler.packetCount();
+    __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_START, pin & 0xff, periodUs & 0xff]), 1500);
 
     var id = __samplerMakeId();
     __samplerActiveSession = { id: id, pin: pin, startPacket: startPacket, periodUs: periodUs };
     return { id: id, startPacket: startPacket, periodUs: periodUs };
   };
 
-  Sampler.stop = async function (id) {
+  Sampler.stop = function (id) {
     if (!__samplerActiveSession) return;
     if (id != null && String(id) !== String(__samplerActiveSession.id)) {
       throw new Error('Sampler.stop id mismatch');
     }
 
     try {
-      await __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_STOP]), 1500);
+      __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_STOP]), 1500);
     } finally {
-      try { await Sampler.setInvertRx(false); } catch (e) {}
+      try { Sampler.setInvertRx(false); } catch (e) {}
       __samplerActiveSession = null;
     }
   };
 
-  Sampler.status = async function (id) {
+  Sampler.status = function (id) {
     var active = !!__samplerActiveSession;
     if (id != null && active && String(id) !== String(__samplerActiveSession.id)) {
       active = false;
@@ -608,12 +571,12 @@ Sampler.__scriptShim = true;
     return {
       active: active,
       pin: active ? __samplerActiveSession.pin : undefined,
-      packetCount: await Sampler.packetCount(),
-      lenBytes: await Sampler.lenBytes(),
+      packetCount: Sampler.packetCount(),
+      lenBytes: Sampler.lenBytes(),
     };
   };
 
-  Sampler.capture = async function (opts) {
+  Sampler.capture = function (opts) {
     var pin = Number(opts && opts.pin);
     var durationMs = Math.max(0, Number(opts && opts.durationMs) || 0);
     var clearBefore = opts && typeof opts.clearBefore === 'boolean' ? !!opts.clearBefore : true;
@@ -621,19 +584,19 @@ Sampler.__scriptShim = true;
 
     var session = null;
     try {
-      session = await Sampler.start({ pin: pin, clearBefore: clearBefore, invert: invert });
-      await __samplerSleep(durationMs);
+      session = Sampler.start({ pin: pin, clearBefore: clearBefore, invert: invert });
+      __samplerSleep(durationMs);
     } finally {
-      try { await Sampler.stop(session && session.id); } catch (e) {}
+      try { Sampler.stop(session && session.id); } catch (e) {}
     }
 
-    var endPacket = await Sampler.packetCount();
-    var bytes = await __samplerReadPacketRange(session ? session.startPacket : 0, endPacket);
+    var endPacket = Sampler.packetCount();
+    var bytes = __samplerReadPacketRange(session ? session.startPacket : 0, endPacket);
     return {
       bytes: bytes,
       startPacket: session ? session.startPacket : 0,
       endPacket: endPacket,
-      bufferLenBytes: await Sampler.lenBytes(),
+      bufferLenBytes: Sampler.lenBytes(),
     };
   };
 })();
@@ -666,21 +629,19 @@ var device = typeof device !== 'undefined' ? device : {};
 if (typeof device.version !== 'function') {
   device.version = function () {
     var pkt = new Uint8Array([EMW_OP_VERSION]);
-    return Promise.resolve(__emwSendPacket(pkt, 1500)).then(function (resp) {
-      var p = __emwPayload(resp);
-      var major = p[0] & 0xff;
-      var minor = p[1] & 0xff;
-      var patch = p[2] & 0xff;
-      return String(major) + '.' + String(minor) + '.' + String(patch);
-    });
+    var resp = __emwSendPacket(pkt, 1500);
+    var p = __emwPayload(resp);
+    var major = p[0] & 0xff;
+    var minor = p[1] & 0xff;
+    var patch = p[2] & 0xff;
+    return String(major) + '.' + String(minor) + '.' + String(patch);
   };
 }
 if (typeof device.reset !== 'function') {
   device.reset = function () {
     var pkt = new Uint8Array([EMW_OP_RESET]);
-    return Promise.resolve(__emwSendPacket(pkt, 1500)).then(function () {
-      return;
-    });
+    __emwSendPacket(pkt, 1500);
+    return;
   };
 }
 __scriptGlobal.device = device;
