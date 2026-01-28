@@ -62,10 +62,36 @@ export default function ScriptUIRenderer({
     const nodeId = (props.id as string) || "node";
     const paddingStyle = resolvePadding((props as any).padding);
 
+    const resolveFontClass = () => {
+      const font = (props as any).font;
+      const fontWeight = (props as any).fontWeight;
+      const fontFamily = (props as any).fontFamily;
+      const monospace = Boolean((props as any).monospace) || fontFamily === "monospace";
+
+      const classes: string[] = [];
+
+      // Lightweight typography mapping (kept intentionally small).
+      if (font === "title" || font === "largeTitle") classes.push("text-2xl");
+      else if (font === "title2") classes.push("text-xl");
+      else if (font === "title3") classes.push("text-lg");
+      else if (font === "caption") classes.push("text-xs");
+      else classes.push("text-sm");
+
+      if (fontWeight === "semibold") classes.push("font-semibold");
+      else if (fontWeight === "medium") classes.push("font-medium");
+      else if (fontWeight === "bold") classes.push("font-bold");
+
+      if (monospace) classes.push("font-mono");
+      return classes.join(" ");
+    };
+
     switch (node.type) {
       case "column": {
         const spacing = (props.spacing as number) || 12;
         const padding = (props.padding as number) || 0;
+        const backgroundColor = props.backgroundColor as string | undefined;
+        const borderColor = (props as any).borderColor as string | undefined;
+        const cornerRadius = (props as any).cornerRadius as number | undefined;
         return (
           <div
             className="flex flex-col"
@@ -73,6 +99,9 @@ export default function ScriptUIRenderer({
               gap: `${spacing}px`,
               padding: `${padding}px`,
               width: "100%",
+              backgroundColor,
+              border: borderColor ? `1px solid ${borderColor}` : undefined,
+              borderRadius: typeof cornerRadius === "number" ? `${cornerRadius}px` : undefined,
             }}
           >
             {children.map((child, index) => (
@@ -84,8 +113,20 @@ export default function ScriptUIRenderer({
 
       case "row": {
         const spacing = (props.spacing as number) || 8;
+        const backgroundColor = props.backgroundColor as string | undefined;
+        const borderColor = (props as any).borderColor as string | undefined;
+        const cornerRadius = (props as any).cornerRadius as number | undefined;
         return (
-          <div className="flex w-full" style={{ gap: `${spacing}px` }}>
+          <div
+            className="flex w-full"
+            style={{
+              gap: `${spacing}px`,
+              backgroundColor,
+              border: borderColor ? `1px solid ${borderColor}` : undefined,
+              borderRadius: typeof cornerRadius === "number" ? `${cornerRadius}px` : undefined,
+              ...paddingStyle,
+            }}
+          >
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
@@ -120,14 +161,87 @@ export default function ScriptUIRenderer({
         );
       }
 
+      case "tile": {
+        const isClickable = Boolean(handlers.tap && onInvokeCallback);
+        const handleClick = () => {
+          if (handlers.tap && onInvokeCallback) {
+            onInvokeCallback(handlers.tap, []);
+          }
+        };
+
+        const title = (props as any).title as string | undefined;
+        const value = (props as any).value as string | undefined;
+        const subtitle = (props as any).subtitle as string | undefined;
+        const disabled = Boolean((props as any).disabled);
+        const monospaceValue = Boolean((props as any).monospaceValue);
+
+        const backgroundColor = props.backgroundColor as string | undefined;
+        const foregroundColor = props.foregroundColor as string | undefined;
+        const cornerRadius = props.cornerRadius as number | undefined;
+
+        const baseClass =
+          "flex w-full flex-col items-start rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-left transition-colors";
+        const hoverClass = isClickable && !disabled ? "hover:border-slate-600" : "";
+
+        const Element: any = isClickable ? "button" : "div";
+
+        return (
+          <Element
+            type={isClickable ? "button" : undefined}
+            onClick={isClickable && !disabled ? handleClick : undefined}
+            disabled={isClickable ? disabled : undefined}
+            className={`${baseClass} ${hoverClass} ${disabled ? "opacity-50" : ""}`}
+            style={{
+              backgroundColor,
+              color: foregroundColor,
+              borderRadius: cornerRadius ? `${cornerRadius}px` : undefined,
+              ...paddingStyle,
+            }}
+          >
+            {title ? <span className="text-[10px] uppercase text-slate-500">{title}</span> : null}
+            {value != null ? (
+              <span className={`${monospaceValue ? "font-mono" : ""} text-sm text-slate-200`}>{value}</span>
+            ) : null}
+            {subtitle ? <span className="mt-0.5 text-[11px] text-slate-500">{subtitle}</span> : null}
+          </Element>
+        );
+      }
+
+      case "card": {
+        const title = (props as any).title as string | undefined;
+        const subtitle = (props as any).subtitle as string | undefined;
+        const spacing = (props.spacing as number) || 12;
+        const padding = (props.padding as number) || 16;
+
+        return (
+          <div
+            className="w-full rounded-lg border border-slate-800 bg-slate-900/60"
+            style={{ padding: `${padding}px`, ...paddingStyle }}
+          >
+            {title ? (
+              <div className="mb-3">
+                <div className="text-sm font-semibold text-slate-200">{title}</div>
+                {subtitle ? <div className="text-xs text-slate-400">{subtitle}</div> : null}
+              </div>
+            ) : null}
+            <div className="flex flex-col" style={{ gap: `${spacing}px` }}>
+              {children.map((child, index) => (
+                <div key={index}>{renderNode(child)}</div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
       case "text":
         return (
           <div
-            className="text-slate-200 text-sm"
+            className={`text-slate-200 ${resolveFontClass()}`}
             style={{
               color: (props.foregroundColor as string | undefined) ?? undefined,
               backgroundColor: props.backgroundColor as string | undefined,
               borderRadius: typeof props.cornerRadius === "number" ? `${props.cornerRadius}px` : undefined,
+              fontSize: typeof (props as any).fontSize === "number" ? `${(props as any).fontSize}px` : undefined,
               ...paddingStyle,
             }}
           >
@@ -334,9 +448,14 @@ export default function ScriptUIRenderer({
 
       case "grid": {
         const columns = Math.max(1, Number(props.columns ?? 2) || 2);
+        const minColumnWidth = (props as any).minColumnWidth as number | undefined;
         const spacing = (props.spacing as number) || 8;
+        const template =
+          typeof minColumnWidth === "number" && Number.isFinite(minColumnWidth) && minColumnWidth > 0
+            ? `repeat(auto-fit, minmax(${Math.floor(minColumnWidth)}px, 1fr))`
+            : `repeat(${columns}, minmax(0, 1fr))`;
         return (
-          <div className="grid w-full" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: spacing }}>
+          <div className="grid w-full" style={{ gridTemplateColumns: template, gap: spacing }}>
             {children.map((child, index) => (
               <div key={index}>{renderNode(child)}</div>
             ))}
