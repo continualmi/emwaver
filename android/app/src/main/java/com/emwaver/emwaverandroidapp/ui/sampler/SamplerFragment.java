@@ -913,8 +913,15 @@ public class SamplerFragment extends Fragment {
                 return;
             }
 
-            String commandStr = "sample start --pin=" + encodedPin;
-            byte[] command = commandStr.getBytes();
+            // Binary: EMW_OP_SAMPLE (0x60) / START (0x00)
+            // [0]=0x60 [1]=0x00 [2]=pin [3]=tickUs
+            final int tickUs = 5;
+            byte[] command = new byte[]{
+                    (byte) 0x60,
+                    (byte) 0x00,
+                    (byte) (encodedPin & 0xFF),
+                    (byte) (tickUs & 0xFF)
+            };
             NativeBuffer.setInvertRx(shouldInvert);
             USBService.write(command);
             
@@ -938,7 +945,8 @@ public class SamplerFragment extends Fragment {
     private void stopRecording() {
         updateDeviceTypeFromConnection();
         if (USBService != null) {
-            byte[] command = "sample stop".getBytes();
+            // Binary: EMW_OP_SAMPLE (0x60) / STOP (0x01)
+            byte[] command = new byte[]{(byte) 0x60, (byte) 0x01};
             USBService.write(command);
         }
 
@@ -981,25 +989,46 @@ public class SamplerFragment extends Fragment {
                 return;
             }
             
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            int freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
+            boolean pwmEnabled = binding.pwmSwitch.isChecked();
             int dutyPercent = getSelectedDutyPercent();
-            if (freqHz < 1) {
-                Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
-                return;
+            int freqHz = 0;
+            if (pwmEnabled) {
+                freqHz = parsePwmIntOrDefault(binding.pwmFreqEdit.getText().toString(), DEFAULT_TX_PWM_FREQ_HZ);
+                if (freqHz < 1) {
+                    Toast.makeText(getContext(), "Invalid PWM frequency", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (dutyPercent < 1 || dutyPercent > 100) {
+                    Toast.makeText(getContext(), "Invalid PWM duty (1-100)", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            } else {
+                dutyPercent = 100;
             }
-            if (dutyPercent < 1 || dutyPercent > 100) {
-                Toast.makeText(getContext(), "Invalid PWM duty (1-100)", Toast.LENGTH_SHORT).show();
-                return;
-            }
+
+            // Persist the current TX PWM settings (desktop parity)
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
             prefs.edit()
-                    .putBoolean(PREF_TX_PWM_ENABLED, true)
+                    .putBoolean(PREF_TX_PWM_ENABLED, pwmEnabled)
                     .putInt(PREF_TX_PWM_FREQ_HZ, freqHz)
                     .putInt(PREF_TX_PWM_DUTY_PERCENT, dutyPercent)
                     .apply();
 
-            String commandStr = "transmit start --pin=" + encodedPin + " --freq=" + freqHz + " --duty=" + dutyPercent;
-            byte[] commandBytes = commandStr.getBytes();
+            // Binary: EMW_OP_TRANSMIT (0x80) / START (0x00)
+            // Mini-frame extension:
+            //   [0]=0x80 [1]=0x00 [2]=pin [3]=duty% [4..7]=freqHz (u32 LE) [8]=tickUs
+            final int tickUs = 5;
+            byte[] commandBytes = new byte[9];
+            commandBytes[0] = (byte) 0x80;
+            commandBytes[1] = (byte) 0x00;
+            commandBytes[2] = (byte) (encodedPin & 0xFF);
+            commandBytes[3] = (byte) (dutyPercent & 0xFF);
+            int hz = freqHz;
+            commandBytes[4] = (byte) (hz & 0xFF);
+            commandBytes[5] = (byte) ((hz >>> 8) & 0xFF);
+            commandBytes[6] = (byte) ((hz >>> 16) & 0xFF);
+            commandBytes[7] = (byte) ((hz >>> 24) & 0xFF);
+            commandBytes[8] = (byte) (tickUs & 0xFF);
             new Thread(() -> {
                 USBService.write(commandBytes);
                 USBService.transmitBuffer();

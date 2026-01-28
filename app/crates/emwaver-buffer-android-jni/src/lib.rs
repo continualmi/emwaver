@@ -30,15 +30,21 @@ struct State {
 static STATE: OnceLock<Mutex<State>> = OnceLock::new();
 
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mutex = STATE.get_or_init(|| Mutex::new(State {
-        buffer: core_buf::Buffer::default(),
-    }));
+    let mutex = STATE.get_or_init(|| {
+        Mutex::new(State {
+            buffer: core_buf::Buffer::default(),
+        })
+    });
     let mut guard = mutex.lock().expect("buffer state lock poisoned");
     f(&mut *guard)
 }
 
 fn now_ms_from_java(ts_ms: jlong) -> u64 {
-    if ts_ms < 0 { 0 } else { ts_ms as u64 }
+    if ts_ms < 0 {
+        0
+    } else {
+        ts_ms as u64
+    }
 }
 
 fn bytes_from_raw(env: &mut JNIEnv<'_>, data: jbyteArray) -> Option<Vec<u8>> {
@@ -140,10 +146,7 @@ fn make_long_object<'a>(env: &mut JNIEnv<'a>, value: u64) -> Option<JObject<'a>>
         .ok()
 }
 
-fn make_object_array<'a>(
-    env: &mut JNIEnv<'a>,
-    len: i32,
-) -> Option<jni::objects::JObjectArray<'a>> {
+fn make_object_array<'a>(env: &mut JNIEnv<'a>, len: i32) -> Option<jni::objects::JObjectArray<'a>> {
     let Ok(object_class) = env.find_class("java/lang/Object") else {
         return None;
     };
@@ -266,7 +269,7 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_setRxCoun
     });
 }
 
-// Returns Object[] { byte[] packet64, Long tsMs } or null if no packet is available.
+// Returns Object[] { byte[] packet, Long tsMs } or null if no packet is available.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_nextRxPacket(
     mut env: JNIEnv<'_>,
@@ -300,10 +303,19 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_readRxSin
     packet_index: jlong,
     max_packets: jint,
 ) -> jobjectArray {
-    let packet_index = if packet_index < 0 { 0 } else { packet_index as u64 };
-    let max_packets = if max_packets < 0 { 0 } else { max_packets as usize };
+    let packet_index = if packet_index < 0 {
+        0
+    } else {
+        packet_index as u64
+    };
+    let max_packets = if max_packets < 0 {
+        0
+    } else {
+        max_packets as usize
+    };
 
-    let resp = with_state(|state| core_buf::read_rx_since(&state.buffer, packet_index, max_packets));
+    let resp =
+        with_state(|state| core_buf::read_rx_since(&state.buffer, packet_index, max_packets));
 
     let Some(data_array) = make_byte_array(&mut env, &resp.data) else {
         return std::ptr::null_mut();
@@ -336,10 +348,19 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_readTxSin
     packet_index: jlong,
     max_packets: jint,
 ) -> jobjectArray {
-    let packet_index = if packet_index < 0 { 0 } else { packet_index as u64 };
-    let max_packets = if max_packets < 0 { 0 } else { max_packets as usize };
+    let packet_index = if packet_index < 0 {
+        0
+    } else {
+        packet_index as u64
+    };
+    let max_packets = if max_packets < 0 {
+        0
+    } else {
+        max_packets as usize
+    };
 
-    let resp = with_state(|state| core_buf::read_tx_since(&state.buffer, packet_index, max_packets));
+    let resp =
+        with_state(|state| core_buf::read_tx_since(&state.buffer, packet_index, max_packets));
 
     let Some(data_array) = make_byte_array(&mut env, &resp.data) else {
         return std::ptr::null_mut();
@@ -373,12 +394,21 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_compressD
     range_end: jint,
     number_bins: jint,
 ) -> jobjectArray {
-    let range_start = if range_start < 0 { 0 } else { range_start as usize };
+    let range_start = if range_start < 0 {
+        0
+    } else {
+        range_start as usize
+    };
     let range_end = if range_end < 0 { 0 } else { range_end as usize };
-    let number_bins = if number_bins < 0 { 0 } else { number_bins as usize };
+    let number_bins = if number_bins < 0 {
+        0
+    } else {
+        number_bins as usize
+    };
 
     let bytes = with_state(|state| core_buf::rx_snapshot(&state.buffer));
-    let (time_values, data_values) = sampler::compress_bits(&bytes, range_start, range_end, number_bins);
+    let (time_values, data_values) =
+        sampler::compress_bits(&bytes, range_start, range_end, number_bins);
 
     let Some(time_array) = make_float_array(&mut env, &time_values) else {
         return std::ptr::null_mut();
@@ -394,7 +424,7 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_compressD
     result.into_raw()
 }
 
-// Returns a 64B-padded packet or throws IllegalArgumentException.
+// Returns an 18B-padded packet or throws IllegalArgumentException.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_makePacket64(
     mut env: JNIEnv<'_>,
@@ -405,7 +435,10 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_makePacke
         return std::ptr::null_mut();
     };
     let Ok(pkt) = packet::make_packet64(&bytes) else {
-        throw_illegal_argument(&mut env, "Command too large (max 64 bytes)");
+        throw_illegal_argument(
+            &mut env,
+            &format!("Command too large (max {} bytes)", packet::PACKET_SIZE),
+        );
         return std::ptr::null_mut();
     };
 
@@ -523,7 +556,11 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleNext
     last_status: jint,
     current_packet_size: jint,
 ) -> jint {
-    let bytes_sent = if bytes_sent < 0 { 0 } else { bytes_sent as usize };
+    let bytes_sent = if bytes_sent < 0 {
+        0
+    } else {
+        bytes_sent as usize
+    };
     let current_packet_size = if current_packet_size < 0 {
         0
     } else {
@@ -565,5 +602,6 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txUsbAdju
     last_status: jint,
 ) -> jlong {
     let deadline_ns = deadline_ns as i64;
-    tx::usb_adjust_deadline_ns(tx::UsbTxProfile::default(), deadline_ns, last_status as i32) as jlong
+    tx::usb_adjust_deadline_ns(tx::UsbTxProfile::default(), deadline_ns, last_status as i32)
+        as jlong
 }
