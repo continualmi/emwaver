@@ -1254,7 +1254,7 @@ if (typeof analogWrite !== 'function') {
   __scriptGlobal.analogWrite = analogWrite;
 }
 
-if (typeof UI === 'undefined') {
+  if (typeof UI === 'undefined') {
   var UI = (function () {
     var idCounter = 0;
 
@@ -1324,11 +1324,17 @@ if (typeof UI === 'undefined') {
       row: function (props) {
         return makeNode('row', props || {});
       },
+      card: function (props) {
+        return makeNode('card', props || {});
+      },
       text: function (props) {
         return makeNode('text', props || {});
       },
       button: function (props) {
         return makeNode('button', props || {});
+      },
+      tile: function (props) {
+        return makeNode('tile', props || {});
       },
       slider: function (props) {
         return makeNode('slider', props || {});

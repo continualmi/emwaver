@@ -30,7 +30,23 @@ export type RenderCallback = (tree: ScriptTree) => void;
 export type ErrorCallback = (message: string) => void;
 
 export interface ScriptTree {
-  type: 'column' | 'row' | 'button' | 'text' | 'logViewer' | 'slider' | 'scroll' | 'textField' | 'textEditor' | 'picker' | 'grid' | 'spacer' | 'divider' | 'progress';
+  type:
+    | 'column'
+    | 'row'
+    | 'button'
+    | 'tile'
+    | 'card'
+    | 'text'
+    | 'logViewer'
+    | 'slider'
+    | 'scroll'
+    | 'textField'
+    | 'textEditor'
+    | 'picker'
+    | 'grid'
+    | 'spacer'
+    | 'divider'
+    | 'progress';
   props?: Record<string, unknown>;
   children?: ScriptTree[];
   handlers?: Record<string, string>;
