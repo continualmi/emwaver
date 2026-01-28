@@ -1,25 +1,57 @@
-# EMWaver Cloud Backend (WIP)
+## EMWaver Backend (Flask)
 
-This folder will host the cloud backend for EMWaver apps.
+This folder hosts a minimal HTTP backend used by the apps for agent chat.
 
-Initial scope (intended):
+Endpoints
 
-- Accounts + sessions (login, refresh)
-- Script storage (projects, scripts, assets)
-- Signal storage (syncable state/snapshots)
-- Chat storage (agent conversations)
-- LLM proxy endpoints (server-side key custody, policy, logging)
+- `GET /health` -> `{ "ok": true }`
+- `POST /api/agent/chat` -> `{ "content": "...", "model": "..." }`
 
-Non-goals (early):
+Environment
 
-- Shipping a required cloud dependency for core device exploration.
-- Realtime collaboration.
+- `OPENROUTER_API_KEY` (required) - server-side key custody
+- `OPENROUTER_MODEL` (optional, default: `x-ai/grok-4.1-fast`)
+- `CORS_ORIGINS` (optional, default: `*`) - comma-separated
+- `PORT` (optional, default: `8787`)
 
-Current status:
+Env loading
 
-- Desktop-only agent chat is wired locally via Tauri backend + OpenRouter.
-- Cloud backend implementation not started yet (this folder is the landing zone).
+- On startup the backend loads `<repo_root>/.env` automatically (and optionally `backend/.env`), without overriding existing environment variables.
 
-LLM model (current):
+Run locally
 
-- `x-ai/grok-4.1-fast` via OpenRouter
+1) Create a venv + install deps:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+2) Export env vars (or use your shell env manager):
+
+```bash
+export OPENROUTER_API_KEY=...
+export CORS_ORIGINS=tauri://localhost,http://localhost
+```
+
+3) Start the server:
+
+```bash
+python app.py
+```
+
+Wire the desktop Agent tab
+
+- Set `VITE_EMWAVER_BACKEND_URL` to point at this server (default is `http://127.0.0.1:8787`).
+
+Example:
+
+```bash
+export VITE_EMWAVER_BACKEND_URL=http://127.0.0.1:8787
+```
+
+Notes
+
+- This is a development-friendly starting point. Auth/accounts/sync/storage are not implemented yet.
+- For Azure later: this app is compatible with `gunicorn` (see `requirements.txt`).
