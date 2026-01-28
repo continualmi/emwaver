@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EMWaver Hardware</title>
+    <meta
+      name="description"
+      content="EMWaver hardware: choose what gets assembled at JLCPCB, then download the right BOM/CPL and case files."
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+            colors: {
+              brand: {
+                400: "#38bdf8", // sky-400
+                500: "#0ea5e9", // sky-500
+                600: "#0284c7", // sky-600
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        /* Lighter blue field behind the cards (header + cards keep their own styles). */
+        background:
+          radial-gradient(1200px 780px at 12% -12%, rgba(56, 189, 248, 0.22), transparent 60%),
+          radial-gradient(1000px 760px at 92% 6%, rgba(14, 165, 233, 0.18), transparent 58%),
+          linear-gradient(180deg, #0b3b63 0%, #072c4b 55%, #062440 100%);
+        color: #e5e7eb;
+      }
+      .noise {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.05;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E");
+      }
+
+      /* Dark-only overrides (kept local to this page). */
+      .bg-white\/70 { background-color: rgba(2, 6, 23, 0.55) !important; }
+      .bg-white\/80 { background-color: rgba(2, 6, 23, 0.45) !important; }
+      .bg-white { background-color: rgba(2, 6, 23, 0.28) !important; }
+      .bg-slate-50 { background-color: rgba(15, 23, 42, 0.55) !important; }
+      .bg-slate-100 { background-color: rgba(15, 23, 42, 0.65) !important; }
+      .border-slate-200 { border-color: rgba(148, 163, 184, 0.18) !important; }
+      .border-white\/40 { border-color: rgba(255, 255, 255, 0.10) !important; }
+      .text-slate-900 { color: rgba(248, 250, 252, 0.96) !important; }
+      .text-slate-700 { color: rgba(226, 232, 240, 0.86) !important; }
+      .text-slate-600 { color: rgba(226, 232, 240, 0.72) !important; }
+      .text-slate-500 { color: rgba(226, 232, 240, 0.60) !important; }
+      .text-slate-400 { color: rgba(226, 232, 240, 0.48) !important; }
+      .text-slate-300 { color: rgba(226, 232, 240, 0.35) !important; }
+      .fade-in {
+        animation: fade 280ms ease-out both;
+      }
+      @keyframes fade {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .badge-pop {
+        transform-origin: center;
+        will-change: transform, filter, box-shadow;
+        animation: badgePop 380ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+
+      .cost-panel-pop {
+        will-change: transform, filter, box-shadow;
+        animation: costPanelPop 420ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+
+      .cost-pop {
+        display: inline-block;
+        transform-origin: center;
+        will-change: transform, filter;
+        animation: costPop 420ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+      }
+
+      @keyframes badgePop {
+        0% {
+          transform: scale(0.78) translateY(1px);
+          filter: brightness(0.95);
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+          background-color: rgba(255, 255, 255, 0.10);
+          border-color: rgba(255, 255, 255, 0.10);
+        }
+        45% {
+          transform: scale(1.22) translateY(-1px);
+          filter: brightness(1.35);
+          box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.18);
+          background-color: rgba(16, 185, 129, 0.26);
+          border-color: rgba(16, 185, 129, 0.55);
+        }
+        75% {
+          transform: scale(0.98) translateY(0);
+          filter: brightness(1.08);
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.10);
+          background-color: rgba(16, 185, 129, 0.18);
+          border-color: rgba(16, 185, 129, 0.42);
+        }
+        100% {
+          transform: scale(1) translateY(0);
+          filter: brightness(1);
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+          background-color: rgba(255, 255, 255, 0.10);
+          border-color: rgba(255, 255, 255, 0.10);
+        }
+      }
+
+      @keyframes costPanelPop {
+        0% {
+          transform: translateY(1px);
+          filter: saturate(1);
+          box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+        }
+        45% {
+          transform: translateY(-1px);
+          filter: saturate(1.08);
+          box-shadow:
+            0 0 0 5px rgba(56, 189, 248, 0.16),
+            0 14px 40px rgba(2, 132, 199, 0.12);
+        }
+        100% {
+          transform: translateY(0);
+          filter: saturate(1);
+          box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+        }
+      }
+
+      @keyframes costPop {
+        0% {
+          transform: scale(0.96);
+          filter: brightness(0.98);
+        }
+        45% {
+          transform: scale(1.08);
+          filter: brightness(1.15) drop-shadow(0 6px 16px rgba(56, 189, 248, 0.25));
+        }
+        100% {
+          transform: scale(1);
+          filter: brightness(1);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .badge-pop {
+          animation: none;
+        }
+
+        .cost-panel-pop {
+          animation: none;
+        }
+
+        .cost-pop {
+          animation: none;
+        }
+      }
+       .clamp-3 {
+         display: -webkit-box;
+         -webkit-box-orient: vertical;
+         -webkit-line-clamp: 3;
+         overflow: hidden;
+       }
+
+       .thumb-row {
+         scrollbar-width: thin;
+       }
+       .board-thumb.is-active {
+         background-color: rgba(2, 6, 23, 0.45);
+       }
+    </style>
+  </head>
+
+  <body class="antialiased selection:bg-brand-500 selection:text-white text-slate-100">
+    <div class="noise"></div>
+
+    <nav class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-md border-b border-white/10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center gap-3">
+            <a
+              href="../"
+               class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-100 hover:text-white transition"
+            >
+		            <img
+		              src="assets/emwaver-logo.png"
+		              alt="EMWaver"
+		              class="w-7 h-7 rounded-lg object-contain bg-white/10"
+		              loading="lazy"
+		            />
+              EMWaver
+            </a>
+             <span class="text-slate-300 hidden sm:inline">/</span>
+	             <span class="text-sm font-medium text-slate-600 hidden sm:inline">Order from JLCPCB</span>
+          </div>
+
+	          <div class="flex items-center gap-4 overflow-x-auto whitespace-nowrap -mr-2 pr-2">
+	            <a
+	              href="../overview/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >Get Started</a
+	            >
+	            <a
+	              href="../hardware/pinout/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >Pinout</a
+	            >
+	            <a
+	              href="../scripts/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >Scripts</a
+	            >
+	            <a
+	              href="../news/"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+	              >News</a
+	            >
+            <a
+              href="catalog.html"
+	              class="text-sm font-medium text-slate-200 hover:text-white transition"
+              >History</a
+            >
+          </div>
+        </div>
+      </div>
+    </nav>
+
+
+
+	    <main class="pt-20 pb-24 relative">
+	      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+
+
+	        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+	          <div class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm">
+	            <div class="p-4">
+	              <div class="rounded-2xl bg-slate-950/10 overflow-hidden h-[320px] sm:h-[380px] lg:h-[420px]">
+	                <img
+	                  id="board-hero"
+	                  src="hardware/emwaver/emwaver_all.png"
+	                  alt="EMWaver board"
+	                  class="block w-full h-full object-cover object-center"
+	                  loading="lazy"
+	                />
+	              </div>
+
+	              <div class="mt-3 flex gap-2 overflow-x-auto thumb-row pb-1" id="board-gallery"></div>
+
+	            </div>
+	          </div>
+
+	          <div class="rounded-2xl border border-slate-200 bg-white/80 overflow-hidden shadow-sm h-full">
+	            <div class="p-4 h-full flex flex-col">
+	              <div class="flex items-center justify-between gap-3">
+	                <div class="text-sm font-semibold text-slate-900">Order from JLCPCB</div>
+	              </div>
+
+	              <div class="mt-3 flex flex-wrap gap-2">
+	                <a
+	                  href="https://www.youtube.com/@EMWavers"
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-red-400/25 bg-red-500/15 hover:bg-red-500/20 text-white/90 hover:text-white font-semibold transition text-sm backdrop-blur-sm"
+	                  >
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+	                    <path d="M10 8.5v7l6-3.5-6-3.5z" fill="currentColor" />
+	                    <path d="M21.6 7.2a3 3 0 0 0-2.1-2.1C17.7 4.6 12 4.6 12 4.6s-5.7 0-7.5.5A3 3 0 0 0 2.4 7.2 31.5 31.5 0 0 0 2 12a31.5 31.5 0 0 0 .4 4.8 3 3 0 0 0 2.1 2.1c1.8.5 7.5.5 7.5.5s5.7 0 7.5-.5a3 3 0 0 0 2.1-2.1A31.5 31.5 0 0 0 22 12a31.5 31.5 0 0 0-.4-4.8z" fill="none" stroke="currentColor" stroke-width="1.6" />
+	                  </svg>
+	                  5-minute tutorial</a>
+	              </div>
+	              <div class="mt-2 text-xs text-slate-500">
+	                Download the PCB/BOM/CPL files here, then upload them on the JLCPCB quote page (PCBA/SMT assembly).
+	              </div>
+
+	              <div class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+	                <label class="flex items-start gap-3 cursor-pointer select-none">
+	                  <input id="opt-customize" type="checkbox" class="mt-1" />
+	                  <span>
+	                    <span class="font-semibold text-slate-900">Customize assembly</span>
+	                    <span class="block text-sm text-slate-600">Show the options for what gets assembled (GPIO/CC1101/IR + USB connectors).</span>
+	                  </span>
+	                </label>
+	              </div>
+
+	              <div class="mt-3 space-y-2 hidden" id="customize-panel">
+	                <div id="feature-group" class="rounded-xl -mx-2 px-2 py-1 transition">
+	                  <label class="flex items-start gap-3">
+	                    <input id="opt-gpio" type="checkbox" class="mt-1" checked />
+	                    <span>
+	                      <span class="font-semibold text-slate-900">GPIO headers</span>
+	                      <span class="block text-sm text-slate-600">Add the 2 GPIO header blocks.</span>
+	                    </span>
+	                  </label>
+	                  <label class="flex items-start gap-3 mt-2">
+	                    <input id="opt-cc1101" type="checkbox" class="mt-1" checked />
+	                    <span>
+	                      <span class="font-semibold text-slate-900">CC1101 + antenna</span>
+	                      <span class="block text-sm text-slate-600">Assemble the Sub-GHz radio section.</span>
+	                    </span>
+	                  </label>
+	                  <label class="flex items-start gap-3 mt-2">
+	                    <input id="opt-ir" type="checkbox" class="mt-1" checked />
+	                    <span>
+	                      <span class="font-semibold text-slate-900">Infrared RX/TX</span>
+	                      <span class="block text-sm text-slate-600">Assemble IR receiver + transmitter section.</span>
+	                    </span>
+	                  </label>
+	                  <div id="feature-group-msg" class="hidden mt-2 text-xs font-semibold text-red-300"></div>
+	                </div>
+	                <div id="usb-group" class="pt-1 rounded-xl -mx-2 px-2 py-1 transition">
+	                  <div class="text-sm font-semibold text-slate-900">USB-C connector</div>
+	                  <div class="text-xs text-slate-500 mt-1">Pick at least one (male and female can both be installed).</div>
+	                  <div class="mt-2 space-y-2">
+	                    <label class="flex items-start gap-3">
+	                      <input id="opt-usb-male" type="checkbox" class="mt-1" checked />
+	                      <span>
+	                        <span class="font-semibold text-slate-900">USB-C male</span>
+	                        <span class="block text-sm text-slate-600">Direct use with phone.</span>
+	                      </span>
+	                    </label>
+	                    <label class="flex items-start gap-3">
+	                      <input id="opt-usb-female" type="checkbox" class="mt-1" checked />
+	                      <span>
+	                        <span class="font-semibold text-slate-900">USB-C female</span>
+	                        <span class="block text-sm text-slate-600">Use with a cable; useful for PC development.</span>
+	                      </span>
+	                    </label>
+	                  </div>
+	                  <div id="usb-group-msg" class="hidden mt-2 text-xs font-semibold text-red-300"></div>
+	                </div>
+	              </div>
+
+	              <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+	                <div class="relative">
+	                  <a id="dl-gerbers" href="hardware/pcb/Gerber_EMWaver_2026-01-21.zip" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-brand-400/25 bg-brand-500/15 hover:bg-brand-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+	                      <path d="M9 7h6M9 11h6M9 15h3" />
+	                      <path d="M15.5 15.5h.01" />
+	                    </svg>
+	                    PCB
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="Gerber ZIP for PCB fabrication (upload to JLCPCB as the PCB file)." aria-label="PCB file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	                <div class="relative">
+	                  <a id="dl-bom" href="hardware/pcb/BOM_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-emerald-400/25 bg-emerald-500/15 hover:bg-emerald-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M8 6h13M8 12h13M8 18h13" />
+	                      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" />
+	                    </svg>
+	                    <span>BOM</span>
+	                    <span
+	                      id="bom-count-badge"
+	                      class="hidden ml-1 px-2 py-0.5 rounded-full text-[11px] leading-none font-semibold bg-white/10 border border-white/10 text-white/90"
+	                      title="Filtered BOM row count"
+	                    ></span>
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="Bill of Materials: the parts list for JLCPCB PCBA (upload as BOM during assembly quoting)." aria-label="BOM file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	                <div class="relative">
+	                  <a id="dl-cpl" href="hardware/pcb/CPL_EMWaver_2026-01-21.csv" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-cyan-300/25 bg-cyan-500/15 hover:bg-cyan-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M4 4h16v16H4z" />
+	                      <path d="M9 9h6v6H9z" />
+	                      <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
+	                    </svg>
+	                    CPL
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="Component Placement List (pick-and-place). JLCPCB uses this to place parts during PCBA." aria-label="CPL file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	                <div class="relative">
+	                  <a id="dl-case" href="hardware/case/emwaver.stl" class="inline-flex w-full items-center justify-start gap-2 pl-3 pr-12 py-2 rounded-xl border border-amber-300/25 bg-amber-500/15 hover:bg-amber-500/20 text-white font-semibold transition text-sm backdrop-blur-sm">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
+	                      <path d="M12 22V12" />
+	                      <path d="M20 6.5l-8 4.5-8-4.5" />
+	                    </svg>
+	                    STL
+	                    <svg class="w-4 h-4 opacity-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+	                      <path d="M7 10l5 5 5-5" />
+	                      <path d="M12 15V3" />
+	                    </svg>
+	                  </a>
+	                  <button type="button" class="dl-info absolute top-1 right-1 w-7 h-7 rounded-lg bg-black/30 hover:bg-black/45 border border-white/10 grid place-items-center" data-info="3D-printable case file (STL)." aria-label="STL file info">
+	                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                      <circle cx="12" cy="12" r="9" />
+	                      <path d="M12 10v6" />
+	                      <path d="M12 7h.01" />
+	                    </svg>
+	                  </button>
+	                </div>
+	              </div>
+
+	              <div id="cost-panel" class="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+	                <div class="text-xs font-semibold text-slate-900">Approx PCBA cost</div>
+	                <div class="mt-2 grid gap-2">
+	                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/80 border border-slate-200/70 px-2 py-1.5">
+	                    <div class="flex items-center gap-2">
+	                      <div class="flex items-center gap-1" aria-hidden="true">
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                      </div>
+	                      <div class="text-xs font-semibold text-slate-900">2 units</div>
+	                    </div>
+	                    <div class="text-xs text-slate-900 font-semibold">
+	                      <span id="cost-2-total">...</span>
+	                      <span class="text-slate-600 font-normal">(<span id="cost-2-each">...</span>/ea)</span>
+	                    </div>
+	                  </div>
+	                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/80 border border-slate-200/70 px-2 py-1.5">
+	                    <div class="flex items-center gap-2">
+	                      <div class="flex items-center gap-1" aria-hidden="true">
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                        <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-600/50"></span>
+	                      </div>
+	                      <div class="text-xs font-semibold text-slate-900">5 units</div>
+	                    </div>
+	                    <div class="text-xs text-slate-900 font-semibold">
+	                      <span id="cost-5-total">...</span>
+	                      <span class="text-slate-600 font-normal">(<span id="cost-5-each">...</span>/ea)</span>
+	                    </div>
+	                  </div>
+	                </div>
+	                <div class="mt-2 text-[11px] leading-snug text-slate-600">
+	                  Rough estimate; mostly driven by per-part setup fees (~$3 per BOM row).
+	                </div>
+	              </div>
+
+	              <div class="mt-3 flex flex-wrap gap-2">
+	                <a
+	                  href="https://jlcpcb.com/quote"
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-blue-400/25 bg-blue-500/15 hover:bg-blue-500/20 text-white font-semibold transition text-sm backdrop-blur-sm"
+	                >
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M3 7h18" />
+	                    <path d="M5 7l1.5 12h11L19 7" />
+	                    <path d="M9 10h6" />
+	                    <path d="M10 3h4l1 4H9l1-4z" />
+	                  </svg>
+	                  JLCPCB
+	                </a>
+	                <a
+	                  href="https://jlc3dp.com/"
+	                  target="_blank"
+	                  rel="noreferrer"
+	                  class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-sky-300/25 bg-sky-500/15 hover:bg-sky-500/20 text-white font-semibold transition text-sm backdrop-blur-sm"
+	                >
+	                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+	                    <path d="M12 2l8 4.5v11L12 22 4 17.5v-11L12 2z" />
+	                    <path d="M12 22V12" />
+	                    <path d="M20 6.5l-8 4.5-8-4.5" />
+	                  </svg>
+	                  JLC3DP
+	                </a>
+	              </div>
+
+	            </div>
+	          </div>
+	        </div>
+
+
+	      </section>
+	      <div
+	        aria-hidden="true"
+	        class="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[#062440]"
+	      ></div>
+	    </main>
+
+    
+
+    <script>
+      const el = {
+	      optCustomize: document.getElementById("opt-customize"),
+	      customizePanel: document.getElementById("customize-panel"),
+        optGpio: document.getElementById("opt-gpio"),
+        optCc1101: document.getElementById("opt-cc1101"),
+        optIr: document.getElementById("opt-ir"),
+        optUsbMale: document.getElementById("opt-usb-male"),
+        optUsbFemale: document.getElementById("opt-usb-female"),
+	      dlBom: document.getElementById("dl-bom"),
+        dlCase: document.getElementById("dl-case"),
+        boardHero: document.getElementById("board-hero"),
+        boardGallery: document.getElementById("board-gallery"),
+        featureGroup: document.getElementById("feature-group"),
+        featureGroupMsg: document.getElementById("feature-group-msg"),
+        usbGroup: document.getElementById("usb-group"),
+        usbGroupMsg: document.getElementById("usb-group-msg"),
+	      bomCountBadge: document.getElementById("bom-count-badge"),
+	      costPanel: document.getElementById("cost-panel"),
+	      cost2Total: document.getElementById("cost-2-total"),
+	      cost2Each: document.getElementById("cost-2-each"),
+	      cost5Total: document.getElementById("cost-5-total"),
+	      cost5Each: document.getElementById("cost-5-each"),
+      };
+
+	  // NOTE: these are starter removal lists. They are intentionally conservative
+	  // (only the obvious parts), and you can refine them as the BOM evolves.
+	  const BOM_REMOVALS = {
+	    ir: new Set([
+	      // IR receiver + IR emitter + supporting passives/driver parts.
+	      "IR_REC1",
+	      "U2",
+	      "C3",
+	      "LED2",
+	      "Q1",
+	      "Q2",
+	      "R1",
+	      "R5",
+	      "R8",
+	      "R10",
+	      "R13",
+	      "R18",
+	    ]),
+	    ism: new Set([
+	      // Sub-GHz module + antenna.
+	      "U1",
+	      "U5",
+	      "LED3",
+	      "R17",
+	    ]),
+	    usbMale: new Set([
+	      // Initial guess: adjust once confirmed.
+	      "USB2",
+	      "R1",
+	    ]),
+	    usbFemale: new Set([
+	      // Initial guess: adjust once confirmed.
+	      "USB-C1",
+	      "R11",
+	      "R12",
+	    ]),
+	    gpio: new Set([
+	      // Two GPIO header blocks.
+	      "CN1",
+	      "U4",
+	    ]),
+	  };
+
+	  const bomState = {
+	    loaded: false,
+	    loading: false,
+	    error: null,
+	    header: [],
+	    rows: [],
+	  };
+	  let bomLoadPromise = null;
+
+	  function attachInfoButtons() {
+	    const buttons = Array.from(document.querySelectorAll("button.dl-info"));
+	    if (buttons.length === 0) return;
+
+	    let pop = document.getElementById("dl-info-pop");
+	    if (!pop) {
+	      pop = document.createElement("div");
+	      pop.id = "dl-info-pop";
+	      pop.className =
+	        "hidden fixed z-[60] max-w-[280px] rounded-xl border border-white/10 bg-slate-950/90 text-slate-100 shadow-lg backdrop-blur-md px-3 py-2 text-xs leading-snug";
+	      pop.setAttribute("role", "dialog");
+	      pop.setAttribute("aria-live", "polite");
+	      document.body.appendChild(pop);
+	    }
+
+	    function hide() {
+	      pop.classList.add("hidden");
+	      pop.textContent = "";
+	    }
+
+	    function showNear(btn, text) {
+	      if (!text) return;
+	      pop.textContent = text;
+	      pop.classList.remove("hidden");
+
+	      const r = btn.getBoundingClientRect();
+	      const pad = 10;
+	
+	      // Prefer to the left of the button, otherwise clamp.
+	      const desiredLeft = r.left - pad - pop.offsetWidth;
+	      const left = Math.max(pad, Math.min(desiredLeft, window.innerWidth - pad - pop.offsetWidth));
+	
+	      // Align vertically with button, but keep on-screen.
+	      const desiredTop = r.top - 2;
+	      const top = Math.max(pad, Math.min(desiredTop, window.innerHeight - pad - pop.offsetHeight));
+
+	      pop.style.left = `${Math.round(left)}px`;
+	      pop.style.top = `${Math.round(top)}px`;
+	    }
+
+	    buttons.forEach((btn) => {
+	      const show = () => {
+	        const text = btn.getAttribute("data-info") || "";
+	        showNear(btn, text);
+	      };
+
+	      btn.addEventListener("mouseenter", show);
+	      btn.addEventListener("focus", show);
+	      btn.addEventListener("mouseleave", hide);
+	      btn.addEventListener("blur", hide);
+
+	      // Touch fallback: tap to show briefly.
+	      btn.addEventListener("pointerup", (e) => {
+	        if (e.pointerType !== "touch") return;
+	        show();
+	        window.setTimeout(hide, 2200);
+	      });
+	    });
+
+	    document.addEventListener("scroll", hide, { passive: true });
+	    document.addEventListener("keydown", (e) => {
+	      if (e.key === "Escape") hide();
+	    });
+	  }
+
+	  function stripQuotes(x) {
+	    const s = String(x ?? "").trim();
+	    if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
+	    return s;
+	  }
+
+	  function parseDesignators(designatorField) {
+	    const raw = stripQuotes(designatorField);
+	    if (!raw) return [];
+	    return raw
+	      .split(",")
+	      .map((x) => x.trim())
+	      .filter(Boolean);
+	  }
+
+	  function decodeUtf16TsvFromArrayBuffer(buf) {
+	    const bytes = new Uint8Array(buf);
+	    let encoding = "utf-16le";
+	    if (bytes.length >= 2) {
+	      const b0 = bytes[0];
+	      const b1 = bytes[1];
+	      if (b0 === 0xfe && b1 === 0xff) encoding = "utf-16be";
+	      if (b0 === 0xff && b1 === 0xfe) encoding = "utf-16le";
+	    }
+	    // TextDecoder supports utf-16le broadly; utf-16be support varies.
+	    // If utf-16be isn't available, this will throw and we'll surface an error.
+	    const decoder = new TextDecoder(encoding);
+	    return decoder.decode(buf);
+	  }
+
+	  function parseBomTsv(text) {
+	    const lines = String(text)
+	      .split(/\r?\n/)
+	      .map((ln) => ln.trim())
+	      .filter(Boolean);
+	    if (lines.length === 0) return { header: [], rows: [] };
+
+	    const header = lines[0].split("\t").map(stripQuotes);
+	    const rows = [];
+	    for (const line of lines.slice(1)) {
+	      const cols = line.split("\t").map(stripQuotes);
+	      const row = {};
+	      for (let i = 0; i < header.length; i++) row[header[i]] = cols[i] ?? "";
+	      rows.push(row);
+	    }
+	    return { header, rows };
+	  }
+
+	  async function ensureBomLoaded() {
+	    if (bomState.loaded) return;
+	    if (bomState.error && !bomState.loading) {
+	      // Allow a best-effort retry (useful if the page was opened before a local
+	      // server started, or a transient fetch error occurred).
+	      bomLoadPromise = null;
+	      bomState.error = null;
+	    }
+	    if (bomLoadPromise) return bomLoadPromise;
+
+	    const url = stripQuotes(el.dlBom?.getAttribute("href") || "");
+	    if (!url) {
+	      bomState.error = "BOM link not found";
+	      return;
+	    }
+
+	    bomState.loading = true;
+	    bomLoadPromise = (async () => {
+	      try {
+	        const res = await fetch(url);
+	        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	        const buf = await res.arrayBuffer();
+	        const text = decodeUtf16TsvFromArrayBuffer(buf);
+	        const parsed = parseBomTsv(text);
+	        bomState.header = parsed.header;
+	        bomState.rows = parsed.rows;
+	        bomState.loaded = true;
+	        bomState.error = null;
+	      } catch (e) {
+	        bomState.error = String(e?.message || e);
+	      } finally {
+	        bomState.loading = false;
+	      }
+	    })();
+
+	    await bomLoadPromise;
+	  }
+
+	  function rowMatchesRemovalSets(row, sets) {
+	    const designators = parseDesignators(row?.Designator);
+	    for (const d of designators) {
+	      for (const s of sets) {
+	        if (s.has(d)) return true;
+	      }
+	    }
+	    return false;
+	  }
+
+	  function computeFilteredBomRows() {
+	    if (!bomState.loaded) return [];
+
+	    const removalSets = [];
+	    if (!el.optIr?.checked) removalSets.push(BOM_REMOVALS.ir);
+	    if (!el.optCc1101?.checked) removalSets.push(BOM_REMOVALS.ism);
+	    if (!el.optUsbMale?.checked) removalSets.push(BOM_REMOVALS.usbMale);
+	    if (!el.optUsbFemale?.checked) removalSets.push(BOM_REMOVALS.usbFemale);
+	    if (!el.optGpio?.checked) removalSets.push(BOM_REMOVALS.gpio);
+
+	    return bomState.rows.filter((r) => !rowMatchesRemovalSets(r, removalSets));
+	  }
+
+	  function computeBomRowsForCost() {
+	    if (!bomState.loaded) return [];
+	    // When customization is OFF, treat the build as fully-populated.
+	    if (!isCustomizeEnabled()) return bomState.rows;
+	    return computeFilteredBomRows();
+	  }
+
+	  const COST_ESTIMATE_MODEL = {
+	    // Calibrated from a real quote:
+	    // Variant: no ISM, no IR, no USB female
+	    // Cost: $40 (2 units), $55 (5 units)
+	    baseVariantKey: "noIsmNoIr__usbMaleOnly",
+	    baseRows: 9,
+	    baseCost2: 40,
+	    baseCost5: 55,
+	    dollarsPerRow: 3,
+	  };
+
+	  function estimateCostFromRowCount(rowCount) {
+	    const n = Number(rowCount || 0);
+	    const delta = n - COST_ESTIMATE_MODEL.baseRows;
+	    const two = COST_ESTIMATE_MODEL.baseCost2 + COST_ESTIMATE_MODEL.dollarsPerRow * delta;
+	    const five = COST_ESTIMATE_MODEL.baseCost5 + COST_ESTIMATE_MODEL.dollarsPerRow * delta;
+	    return {
+	      two: Math.max(0, Math.round(two)),
+	      five: Math.max(0, Math.round(five)),
+	    };
+	  }
+
+	  function renderCostEstimate() {
+	    if (!el.costPanel || !el.cost2Total || !el.cost2Each || !el.cost5Total || !el.cost5Each) return;
+	    if (renderCostEstimate.lastSig === undefined) renderCostEstimate.lastSig = null;
+
+	    const pulse = () => {
+	      // Visible only when customization is enabled.
+	      el.costPanel.classList.remove("cost-panel-pop");
+	      void el.costPanel.offsetWidth;
+	      el.costPanel.classList.add("cost-panel-pop");
+
+	      [el.cost2Total, el.cost2Each, el.cost5Total, el.cost5Each].forEach((node) => {
+	        if (!node) return;
+	        node.classList.remove("cost-pop");
+	        void node.offsetWidth;
+	        node.classList.add("cost-pop");
+	      });
+	    };
+ 
+	    if (bomState.error) {
+	      const nextSig = "error";
+	      el.cost2Total.textContent = "?";
+	      el.cost2Each.textContent = "?";
+	      el.cost5Total.textContent = "?";
+	      el.cost5Each.textContent = "?";
+	      if (isCustomizeEnabled() && renderCostEstimate.lastSig && renderCostEstimate.lastSig !== nextSig) pulse();
+	      renderCostEstimate.lastSig = nextSig;
+	      return;
+	    }
+ 
+	    if (!bomState.loaded) {
+	      const nextSig = "loading";
+	      el.cost2Total.textContent = "...";
+	      el.cost2Each.textContent = "...";
+	      el.cost5Total.textContent = "...";
+	      el.cost5Each.textContent = "...";
+	      renderCostEstimate.lastSig = nextSig;
+	      ensureBomLoaded().then(() => render());
+	      return;
+	    }
+ 
+	    const rows = computeBomRowsForCost();
+	    const est = estimateCostFromRowCount(rows.length);
+	    const nextSig = `${isCustomizeEnabled() ? "custom" : "full"}|${rows.length}|${est.two}|${est.five}`;
+	    el.cost2Total.textContent = `$${est.two}`;
+	    el.cost2Each.textContent = `$${(est.two / 2).toFixed(2)}`;
+	    el.cost5Total.textContent = `$${est.five}`;
+	    el.cost5Each.textContent = `$${(est.five / 5).toFixed(2)}`;
+	    if (isCustomizeEnabled() && renderCostEstimate.lastSig && renderCostEstimate.lastSig !== nextSig) pulse();
+	    renderCostEstimate.lastSig = nextSig;
+	  }
+
+	  function tsvEscapeField(v) {
+	    const s = String(v ?? "");
+	    if (/[\t\r\n"]/g.test(s)) return `"${s.replace(/"/g, '""')}"`;
+	    return s;
+	  }
+
+	  function bomRowsToTsv(header, rows) {
+	    const out = [];
+	    out.push(header.map(tsvEscapeField).join("\t"));
+	    for (const r of rows) {
+	      out.push(header.map((h) => tsvEscapeField(r?.[h] ?? "")).join("\t"));
+	    }
+	    // Keep Windows-friendly newlines.
+	    return out.join("\r\n") + "\r\n";
+	  }
+
+	  function encodeUtf16leWithBom(s) {
+	    // UTF-16LE bytes + BOM (0xFF 0xFE). JLC/Excel-friendly.
+	    const str = String(s ?? "");
+	    const buf = new Uint8Array(2 + str.length * 2);
+	    buf[0] = 0xff;
+	    buf[1] = 0xfe;
+	    for (let i = 0; i < str.length; i++) {
+	      const codeUnit = str.charCodeAt(i);
+	      buf[2 + i * 2] = codeUnit & 0xff;
+	      buf[2 + i * 2 + 1] = (codeUnit >> 8) & 0xff;
+	    }
+	    return buf;
+	  }
+
+	  function downloadBytes({ filename, bytes, mimeType }) {
+	    const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
+	    const url = URL.createObjectURL(blob);
+	    const a = document.createElement("a");
+	    a.href = url;
+	    a.download = filename;
+	    document.body.appendChild(a);
+	    a.click();
+	    a.remove();
+	    // Allow the browser to start the download before revoking.
+	    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+	  }
+
+	  function baseNameFromHref(href) {
+	    const clean = String(href || "").split("?")[0].split("#")[0];
+	    const parts = clean.split("/").filter(Boolean);
+	    return parts[parts.length - 1] || "BOM.csv";
+	  }
+
+	  function splitFileName(name) {
+	    const s = String(name || "");
+	    const idx = s.lastIndexOf(".");
+	    if (idx <= 0) return { stem: s || "BOM", ext: "" };
+	    return { stem: s.slice(0, idx), ext: s.slice(idx) };
+	  }
+
+	  async function downloadFilteredBom() {
+	    const href = stripQuotes(el.dlBom?.getAttribute("href") || "");
+	    if (!href) return;
+
+	    await ensureBomLoaded();
+	    if (bomState.error || !bomState.loaded) {
+	      // Best-effort fallback to the original artifact.
+	      window.location.href = href;
+	      return;
+	    }
+
+	    const variantKey = pickVariantKey();
+	    const baseName = baseNameFromHref(href);
+	    const { stem, ext } = splitFileName(baseName);
+	    const filename = `${stem}__${variantKey}${ext || ".csv"}`;
+
+	    const filtered = computeFilteredBomRows();
+	    const tsv = bomRowsToTsv(bomState.header, filtered);
+	    const bytes = encodeUtf16leWithBom(tsv);
+	    downloadBytes({
+	      filename,
+	      bytes,
+	      mimeType: "text/tab-separated-values;charset=utf-16le",
+	    });
+	  }
+
+	  function renderBomCount() {
+	    if (!el.bomCountBadge) return;
+	    if (renderBomCount.lastText === undefined) renderBomCount.lastText = null;
+	
+	    if (!isCustomizeEnabled()) {
+	      el.bomCountBadge.classList.add("hidden");
+	      el.bomCountBadge.textContent = "";
+	      renderBomCount.lastText = null;
+	      return;
+	    }
+
+	    el.bomCountBadge.classList.remove("hidden");
+	
+	    if (bomState.error) {
+	      const next = "?";
+	      if (renderBomCount.lastText !== next) {
+	        el.bomCountBadge.classList.remove("badge-pop");
+	        void el.bomCountBadge.offsetWidth;
+	        el.bomCountBadge.classList.add("badge-pop");
+	        renderBomCount.lastText = next;
+	      }
+	      el.bomCountBadge.textContent = next;
+	      return;
+	    }
+
+	    if (!bomState.loaded) {
+	      const next = "...";
+	      el.bomCountBadge.textContent = next;
+	      renderBomCount.lastText = next;
+	      ensureBomLoaded().then(() => render());
+	      return;
+	    }
+	
+	    const rows = computeFilteredBomRows();
+	    const next = String(rows.length);
+	    if (renderBomCount.lastText !== next) {
+	      el.bomCountBadge.classList.remove("badge-pop");
+	      void el.bomCountBadge.offsetWidth;
+	      el.bomCountBadge.classList.add("badge-pop");
+	      renderBomCount.lastText = next;
+	    }
+	    el.bomCountBadge.textContent = next;
+	  }
+
+      const BOARD_IMAGES = {
+        all: "hardware/emwaver/emwaver_all.png",
+        allIso: "downloads/emwaver.png",
+        noGpio: "hardware/emwaver/emwaver_no_gpio.png",
+        noIsm: "hardware/emwaver/emwaver_no_ism.png",
+        noIsmNoGpio: "hardware/emwaver/emwaver_no_ism_no_gpio.png",
+        noIr: "hardware/emwaver/emwaver_no_ir.png",
+        noIrNoGpio: "hardware/emwaver/emwaver_no_ir_no_gpio.png",
+        noIrNoIsm: "hardware/emwaver/emwaver_no_ir_no_ism.png",
+
+        noUsbMale: "hardware/emwaver/emwaver_no_usbmale.png",
+        noUsbFemale: "hardware/emwaver/emwaver_no_usbfemale.png",
+
+        noGpioNoUsbMale: "hardware/emwaver/emwaver_no_gpio_no_usbmale.png",
+        noGpioNoUsbFemale: "hardware/emwaver/emwaver_no_gpio_no_usbfemale.png",
+
+        noIsmNoUsbMale: "hardware/emwaver/emwaver_no_ism_no_usbmale.png",
+        noIsmNoUsbFemale: "hardware/emwaver/emwaver_no_ism_no_usbfemale.png",
+
+        noIsmNoGpioNoUsbFemale: "hardware/emwaver/emwaver_no_ism_no_gpio_no_usbfemale.png",
+        noIsmNoGpioNoUsbMale: "hardware/emwaver/emwaver_no_ism_no_gpio_no_usbmale.png",
+
+        noIrNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_usbmale.png",
+        noIrNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_usbfemale.png",
+        // Note: asset name uses "usbmal" (kept as-is).
+        noIrNoGpioNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_gpio_no_usbmal.png",
+        noIrNoGpioNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_gpio_no_usbfemale.png",
+        // Note: asset name uses "no_maleusb" (kept as-is).
+        noIrNoIsmNoUsbMale: "hardware/emwaver/emwaver_no_ir_no_ism_no_maleusb.png",
+        noIrNoIsmNoUsbFemale: "hardware/emwaver/emwaver_no_ir_no_ism_no_usbfemale.png",
+      };
+
+      const ALL_PHOTOSHOOT_IMAGES = [
+	      // Promoted “hero” shots.
+	      "hardware/emwaver_photoshoot/IMG_0149.webp",
+	      "hardware/emwaver_photoshoot/IMG_0150.webp",
+	      "hardware/emwaver_photoshoot/IMG_0153.webp",
+	      "hardware/emwaver_photoshoot/IMG_0142.webp",
+
+	      // Everything else.
+	      "hardware/emwaver_photoshoot/IMG_0130.webp",
+	      "hardware/emwaver_photoshoot/IMG_0143.webp",
+	      "hardware/emwaver_photoshoot/IMG_0146.webp",
+	      "hardware/emwaver_photoshoot/IMG_0147.webp",
+	      "hardware/emwaver_photoshoot/IMG_0148.webp",
+	      "hardware/emwaver_photoshoot/IMG_0151.webp",
+	      "hardware/emwaver_photoshoot/IMG_0152.webp",
+	      "hardware/emwaver_photoshoot/IMG_0154.webp",
+	      "hardware/emwaver_photoshoot/IMG_0156.webp",
+	      "hardware/emwaver_photoshoot/IMG_0160.webp",
+	      "hardware/emwaver_photoshoot/IMG_0162.webp",
+	      "hardware/emwaver_photoshoot/IMG_0164.webp",
+      ];
+
+	  const ALL_PHOTOSHOOT_MODULE_IMAGES = [
+	    "hardware/emwaver_photoshoot_modules/IMG_0178.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0179.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0180.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0181.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0183.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0184.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0185.webp",
+	    "hardware/emwaver_photoshoot_modules/IMG_0186.webp",
+	  ];
+
+      const VARIANT_GALLERY = {
+        // Variant key = `<featureKey>__<usbKey>`.
+        // If a specific key is missing, we fall back to `<featureKey>__usbBoth`.
+        // If that is missing, we fall back to `all__usbBoth`.
+
+        // All features on.
+	    all__usbBoth: [
+	      BOARD_IMAGES.all,
+	      BOARD_IMAGES.allIso,
+	      ...ALL_PHOTOSHOOT_IMAGES,
+	      ...ALL_PHOTOSHOOT_MODULE_IMAGES,
+	    ],
+        all__usbMaleOnly: [BOARD_IMAGES.noUsbFemale],
+        all__usbFemaleOnly: [BOARD_IMAGES.noUsbMale],
+
+        // No GPIO.
+        noGpio__usbBoth: [BOARD_IMAGES.noGpio],
+        noGpio__usbMaleOnly: [BOARD_IMAGES.noGpioNoUsbFemale],
+        noGpio__usbFemaleOnly: [BOARD_IMAGES.noGpioNoUsbMale],
+
+        // No CC1101.
+        noIsm__usbBoth: [BOARD_IMAGES.noIsm],
+        noIsm__usbMaleOnly: [BOARD_IMAGES.noIsmNoUsbFemale],
+        noIsm__usbFemaleOnly: [BOARD_IMAGES.noIsmNoUsbMale],
+
+        // No CC1101 + no GPIO.
+        noIsmNoGpio__usbBoth: [BOARD_IMAGES.noIsmNoGpio],
+        noIsmNoGpio__usbMaleOnly: [BOARD_IMAGES.noIsmNoGpioNoUsbFemale],
+        noIsmNoGpio__usbFemaleOnly: [BOARD_IMAGES.noIsmNoGpioNoUsbMale],
+
+        // No IR.
+        noIr__usbBoth: [BOARD_IMAGES.noIr],
+        noIr__usbMaleOnly: [BOARD_IMAGES.noIrNoUsbFemale],
+        noIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoUsbMale],
+
+        // No IR + no GPIO.
+        noIrNoGpio__usbBoth: [BOARD_IMAGES.noIrNoGpio],
+        noIrNoGpio__usbMaleOnly: [BOARD_IMAGES.noIrNoGpioNoUsbFemale],
+        noIrNoGpio__usbFemaleOnly: [BOARD_IMAGES.noIrNoGpioNoUsbMale],
+
+        // No IR + no CC1101.
+        noIsmNoIr__usbBoth: [BOARD_IMAGES.noIrNoIsm],
+        noIsmNoIr__usbMaleOnly: [BOARD_IMAGES.noIrNoIsmNoUsbFemale],
+        noIsmNoIr__usbFemaleOnly: [BOARD_IMAGES.noIrNoIsmNoUsbMale],
+      };
+
+	  // When customization is OFF, promote real photos first.
+	  // Keep the renders available, just not leading.
+	  const NON_CUSTOMIZE_GALLERY = [
+	    ...ALL_PHOTOSHOOT_IMAGES,
+	    ...ALL_PHOTOSHOOT_MODULE_IMAGES,
+	    BOARD_IMAGES.all,
+	    BOARD_IMAGES.allIso,
+	  ];
+
+      let galleryVariantKey = null;
+      const selectedHeroByVariant = {};
+
+      let clearFeatureGroupFlashTimer = null;
+      let clearUsbGroupFlashTimer = null;
+
+	    function isCustomizeEnabled() {
+	      return !!el.optCustomize?.checked;
+	    }
+
+	    function variantStateKey(variantKey) {
+	      // Separate selection state for customize vs non-customize,
+	      // so the non-customize “photo-first” view doesn't override the
+	      // customize default render-first view.
+	      return isCustomizeEnabled() ? String(variantKey) : `${variantKey}__default`;
+	    }
+
+	    function applyCustomizeVisibility() {
+	      if (!el.customizePanel) return;
+	      const show = isCustomizeEnabled();
+	      el.customizePanel.classList.toggle("hidden", !show);
+	    }
+
+      function flashConstraint(groupEl, msgEl, message, kind) {
+        if (!groupEl || !msgEl) return;
+
+        msgEl.textContent = message;
+        msgEl.classList.remove("hidden");
+        groupEl.classList.add("ring-2");
+
+        if (kind === "usb") {
+          groupEl.classList.add("ring-red-500/70", "bg-red-500/5");
+        } else {
+          groupEl.classList.add("ring-red-500/70", "bg-red-500/5");
+        }
+
+        if (kind === "usb") {
+          if (clearUsbGroupFlashTimer) window.clearTimeout(clearUsbGroupFlashTimer);
+          clearUsbGroupFlashTimer = window.setTimeout(() => {
+            msgEl.classList.add("hidden");
+            groupEl.classList.remove("ring-2", "ring-red-500/70", "bg-red-500/5");
+          }, 1800);
+        } else {
+          if (clearFeatureGroupFlashTimer) window.clearTimeout(clearFeatureGroupFlashTimer);
+          clearFeatureGroupFlashTimer = window.setTimeout(() => {
+            msgEl.classList.add("hidden");
+            groupEl.classList.remove("ring-2", "ring-red-500/70", "bg-red-500/5");
+          }, 1800);
+        }
+      }
+
+      function enforceUsbAtLeastOne(changedEl) {
+        const male = !!el.optUsbMale?.checked;
+        const female = !!el.optUsbFemale?.checked;
+
+        if (!male && !female) {
+          // If the user tries to uncheck the last one, keep it.
+          if (changedEl) changedEl.checked = true;
+          else el.optUsbMale.checked = true;
+
+          flashConstraint(
+            el.usbGroup,
+            el.usbGroupMsg,
+            "Pick at least one USB-C connector (male or female).",
+            "usb",
+          );
+        }
+      }
+
+      function enforceFeaturesAtLeastOne(changedEl) {
+        const gpio = !!el.optGpio?.checked;
+        const cc1101 = !!el.optCc1101?.checked;
+        const ir = !!el.optIr?.checked;
+
+        if (!gpio && !cc1101 && !ir) {
+          if (changedEl) changedEl.checked = true;
+          else el.optIr.checked = true;
+
+          flashConstraint(
+            el.featureGroup,
+            el.featureGroupMsg,
+            "Pick at least one feature: GPIO, CC1101, or Infrared.",
+            "feature",
+          );
+        }
+      }
+
+      function pickFeatureKey() {
+        const gpio = !!el.optGpio?.checked;
+        const cc1101 = !!el.optCc1101?.checked;
+        const ir = !!el.optIr?.checked;
+
+        if (gpio && cc1101 && ir) return "all";
+        if (!gpio && cc1101 && ir) return "noGpio";
+        if (gpio && !cc1101 && ir) return "noIsm";
+        if (!gpio && !cc1101 && ir) return "noIsmNoGpio";
+
+        if (gpio && cc1101 && !ir) return "noIr";
+        if (!gpio && cc1101 && !ir) return "noIrNoGpio";
+        if (gpio && !cc1101 && !ir) return "noIsmNoIr";
+
+        // Disallowed by constraints (and may occur briefly during toggles).
+        return "all";
+      }
+
+      function pickUsbKey() {
+        const male = !!el.optUsbMale?.checked;
+        const female = !!el.optUsbFemale?.checked;
+
+        if (male && female) return "usbBoth";
+        if (male && !female) return "usbMaleOnly";
+        if (!male && female) return "usbFemaleOnly";
+
+        // Should be prevented by constraints.
+        return "usbBoth";
+      }
+
+      function pickVariantKey() {
+	      if (!isCustomizeEnabled()) return "all__usbBoth";
+        const featureKey = pickFeatureKey();
+        const usbKey = pickUsbKey();
+        return `${featureKey}__${usbKey}`;
+      }
+
+      function getGalleryForVariant(variantKey) {
+	      if (!isCustomizeEnabled() && variantKey === "all__usbBoth") return NON_CUSTOMIZE_GALLERY;
+        if (VARIANT_GALLERY[variantKey]) return VARIANT_GALLERY[variantKey];
+
+        const [featureKey] = String(variantKey).split("__");
+        const featureFallback = `${featureKey}__usbBoth`;
+        if (VARIANT_GALLERY[featureFallback]) return VARIANT_GALLERY[featureFallback];
+
+        return VARIANT_GALLERY.all__usbBoth;
+      }
+
+      function pickBoardImageSrc() {
+        const variantKey = pickVariantKey();
+        const stateKey = variantStateKey(variantKey);
+        const gallery = getGalleryForVariant(variantKey);
+        const preferred = selectedHeroByVariant[stateKey];
+        if (preferred && gallery.includes(preferred)) return preferred;
+        return gallery[0] || BOARD_IMAGES.all;
+      }
+
+      function setActiveGalleryImage(src) {
+        if (!el.boardGallery) return;
+        const buttons = el.boardGallery.querySelectorAll("button.board-thumb");
+        buttons.forEach((b) => {
+          const isActive = b.getAttribute("data-src") === src;
+          b.classList.toggle("is-active", isActive);
+        });
+      }
+
+      function ensureGallery(variantKey) {
+        if (!el.boardGallery) return;
+
+        const stateKey = variantStateKey(variantKey);
+
+        if (galleryVariantKey === stateKey) return;
+        galleryVariantKey = stateKey;
+
+        const images = getGalleryForVariant(variantKey);
+
+        el.boardGallery.innerHTML = "";
+
+        images.forEach((src, idx) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className =
+            "board-thumb relative shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-white/5 hover:bg-white/10 transition";
+          btn.setAttribute("data-src", src);
+          btn.setAttribute("aria-label", `Board view ${idx + 1}`);
+          btn.innerHTML = `<img src="${src}" alt="Board view ${idx + 1}" loading="lazy" class="w-full h-full object-cover" />`;
+
+          btn.addEventListener("click", () => {
+            selectedHeroByVariant[stateKey] = src;
+            if (el.boardHero) el.boardHero.setAttribute("src", src);
+            setActiveGalleryImage(src);
+          });
+
+          el.boardGallery.appendChild(btn);
+        });
+      }
+
+      function render() {
+	        applyCustomizeVisibility();
+	        const variantKey = pickVariantKey();
+	        ensureGallery(variantKey);
+
+	        const imgSrc = pickBoardImageSrc();
+	        if (el.boardHero && el.boardHero.getAttribute("src") !== imgSrc) {
+	          el.boardHero.setAttribute("src", imgSrc);
+	        }
+	        setActiveGalleryImage(imgSrc);
+
+	        // Currently: single in-repo artifact set.
+	        // Future: pick per-variant (GPIO/CC1101/IR/USB) BOM/CPL/Case.
+	        if (el.dlCase) {
+	          el.dlCase.removeAttribute("aria-disabled");
+	          el.dlCase.classList.remove("pointer-events-none", "opacity-50");
+	        }
+
+	        renderBomCount();
+	        renderCostEstimate();
+	      }
+
+      function attach() {
+	        // Default is "no customization".
+	        if (el.optCustomize) el.optCustomize.checked = false;
+
+	        if (el.optCustomize) {
+	          el.optCustomize.addEventListener("change", () => {
+	            render();
+	          });
+	        }
+
+	        [el.optGpio, el.optCc1101, el.optIr].forEach((x) =>
+	          x?.addEventListener("change", () => {
+	            if (!isCustomizeEnabled()) return;
+	            enforceFeaturesAtLeastOne(x);
+	            render();
+	          }),
+	        );
+
+        if (el.optUsbMale) {
+          el.optUsbMale.addEventListener("change", () => {
+	            if (!isCustomizeEnabled()) return;
+            enforceUsbAtLeastOne(el.optUsbMale);
+            render();
+          });
+        }
+
+        if (el.optUsbFemale) {
+          el.optUsbFemale.addEventListener("change", () => {
+	            if (!isCustomizeEnabled()) return;
+            enforceUsbAtLeastOne(el.optUsbFemale);
+            render();
+          });
+        }
+
+        // Ensure defaults remain valid even if user enables customization later.
+	        enforceFeaturesAtLeastOne();
+	        enforceUsbAtLeastOne();
+
+	        if (el.dlBom) {
+	          el.dlBom.addEventListener("click", (e) => {
+	            if (!isCustomizeEnabled()) return;
+	            e.preventDefault();
+	            downloadFilteredBom();
+	          });
+	        }
+	    attachInfoButtons();
+        render();
+      }
+
+      attach();
+    </script>
+  </body>
+</html>
