@@ -4,7 +4,6 @@
 // This file is intended to be the single source of truth for the EMWaver Script API surface.
 //
 // Hosts must provide (at minimum) these bridge functions:
-// - _scriptPrint(message: string): void
 // - _scriptRender(node: object): void
 // - _scriptRegisterCallback(token: string, fn: Function): void
 //
@@ -60,90 +59,8 @@ function _scriptJoinArgs(args) {
   return parts.join(' ');
 }
 
-function __scriptPrintLine() {
-  _scriptPrint(_scriptJoinArgs(arguments));
-}
-
-// -----------------------------------------------------------------------------
-// Console API (Arduino Serial Monitor-ish)
-// -----------------------------------------------------------------------------
-
-if (typeof Console === 'undefined') {
-  var Console = (function () {
-    var rxLines = [];
-    var pendingLineResolvers = [];
-
-    function enqueueLine(line) {
-      var text = String(line == null ? '' : line);
-      if (pendingLineResolvers.length > 0) {
-        var resolve = pendingLineResolvers.shift();
-        try {
-          resolve(text);
-        } catch (e) {}
-        return;
-      }
-      rxLines.push(text);
-    }
-
-    function readNow() {
-      if (rxLines.length === 0) return null;
-      return rxLines.shift();
-    }
-
-    function peekNow() {
-      if (rxLines.length === 0) return null;
-      return rxLines[0];
-    }
-
-    function readLine() {
-      if (rxLines.length > 0) {
-        return Promise.resolve(rxLines.shift());
-      }
-      return new Promise(function (resolve) {
-        pendingLineResolvers.push(resolve);
-      });
-    }
-
-    // Host-delivered console input.
-    _scriptRegisterCallback('__emw_console_input', function (payload) {
-      if (typeof payload === 'string') {
-        enqueueLine(payload);
-        return;
-      }
-      if (payload && typeof payload === 'object' && typeof payload.line !== 'undefined') {
-        enqueueLine(payload.line);
-        return;
-      }
-      enqueueLine(payload);
-    });
-
-    return {
-      // Output (print/println are line-oriented in EMWaver today).
-      print: function () {
-        __scriptPrintLine.apply(null, arguments);
-      },
-      println: function () {
-        __scriptPrintLine.apply(null, arguments);
-      },
-
-      // Input (line-oriented).
-      available: function () {
-        return rxLines.length;
-      },
-      read: function () {
-        return readNow();
-      },
-      peek: function () {
-        return peekNow();
-      },
-      readLine: readLine,
-
-      // Internal/testing.
-      _enqueueLine: enqueueLine,
-    };
-  })();
-  __scriptGlobal.Console = Console;
-}
+// NOTE: No Console / print stream.
+// Scripts are expected to communicate exclusively via the UI tree (UI.* + UI.render).
 
 function __scriptIsShim(obj) {
   return !!obj && obj.__scriptShim === true;
@@ -376,9 +293,9 @@ if (typeof every === 'undefined') {
           return fn();
         })
         .catch(function (error) {
-          try {
-            __scriptPrintLine('every() tick error:', error);
-          } catch (e) {}
+          // No console stream: ignore periodic callback errors by default.
+          // Scripts can surface errors by re-rendering UI.
+          void error;
         })
         .then(function () {
           running = false;
@@ -1484,9 +1401,6 @@ if (typeof UI === 'undefined') {
       },
       render: function (node) {
         if (!node || typeof node !== 'object') {
-          try {
-            _scriptPrint('UI.render called with invalid node');
-          } catch (e) {}
           return;
         }
         _scriptRender(node);

@@ -1187,9 +1187,6 @@ async fn script_execute_impl(
                 ScriptEvent::Render { ui } => {
                     let _ = app_clone.emit("script:render", ui);
                 }
-                ScriptEvent::Print { message } => {
-                    let _ = app_clone.emit("script:print", message);
-                }
                 ScriptEvent::Error { message } => {
                     let _ = app_clone.emit("script:error", message);
                 }

@@ -26,8 +26,8 @@
  * - Render callbacks for UI
  */
 
-export type PrintCallback = (message: string) => void;
 export type RenderCallback = (tree: ScriptTree) => void;
+export type ErrorCallback = (message: string) => void;
 
 export interface ScriptTree {
   type: 'column' | 'row' | 'button' | 'text' | 'logViewer' | 'slider' | 'scroll' | 'textField' | 'textEditor' | 'picker' | 'grid' | 'spacer' | 'divider' | 'progress';
@@ -46,21 +46,21 @@ export class ScriptEngine {
   private globalBindings: GlobalBindings = {};
   private bootstrapSource = '';
   
-  private printCallback?: PrintCallback;
   private renderCallback?: RenderCallback;
+  private errorCallback?: ErrorCallback;
   private initialized = false;
 
   /**
    * Setup the engine with callbacks and initial bindings
    */
   setup(
-    printCallback: PrintCallback,
     renderCallback: RenderCallback,
-    bindings: GlobalBindings = {}
+    bindings: GlobalBindings = {},
+    errorCallback?: ErrorCallback,
   ): void {
-    this.printCallback = printCallback;
     this.renderCallback = renderCallback;
     this.globalBindings = { ...bindings };
+    this.errorCallback = errorCallback;
 
     // Use a simple object as context instead of iframe (works better in Tauri)
     // We'll create a sandboxed environment using a proxy
@@ -81,13 +81,8 @@ export class ScriptEngine {
    * Execute an EMWaver script
    */
   execute(script: string, completion?: () => void): void {
-    console.log('[ScriptEngine.execute] Called');
-    console.log('[ScriptEngine.execute] initialized:', this.initialized);
-    console.log('[ScriptEngine.execute] context:', this.context);
-    
     if (!this.initialized || !this.context) {
-      this.printCallback?.('ScriptEngine not initialized');
-      console.log('[ScriptEngine.execute] Early return - not initialized');
+      this.errorCallback?.('ScriptEngine not initialized');
       return;
     }
 
@@ -95,13 +90,9 @@ export class ScriptEngine {
     this.callbackRegistry.clear();
     
     
-    console.log('[ScriptEngine.execute] About to inject DSL');
-
     try {
       // Re-apply bindings for each execution.
       this.applyGlobalBindings();
-      
-      console.log('[ScriptEngine.execute] DSL injected, about to execute script');
 
       // Wrap script in IIFE and execute using Function constructor
       // Bind all sandbox variables to the function scope
@@ -111,33 +102,24 @@ export class ScriptEngine {
       const fullScript = `${this.bootstrapSource}\n${script}`;
 
       const func = new Function(
-        '_scriptPrint',
         '_scriptRender',
         '_scriptRegisterCallback',
         '_scriptSendPacket',
         '_scriptSleep',
         fullScript,
       );
-      
-      console.log('[ScriptEngine.execute] Calling function with context');
-      console.log('[ScriptEngine.execute] ctx.UI:', ctx.UI);
-      console.log('[ScriptEngine.execute] ctx._scriptRender:', typeof ctx._scriptRender);
-      
+
       func.call(
         ctx,
-        ctx._scriptPrint,
         ctx._scriptRender,
         ctx._scriptRegisterCallback,
         (ctx as any)._scriptSendPacket,
         ctx._scriptSleep,
       );
-      
-      console.log('[ScriptEngine.execute] Function executed successfully');
       completion?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error('[ScriptEngine.execute] Error:', error);
-      this.printCallback?.(`Script error: ${message}`);
+      this.errorCallback?.(`Script error: ${message}`);
     }
   }
 
@@ -147,7 +129,7 @@ export class ScriptEngine {
   invoke(token: string, arguments_: unknown[] = []): void {
     const callback = this.callbackRegistry.get(token);
     if (!callback) {
-      this.printCallback?.(`No callback registered for token ${token}`);
+      this.errorCallback?.(`No callback registered for token ${token}`);
       return;
     }
 
@@ -156,14 +138,12 @@ export class ScriptEngine {
       if (result && typeof (result as any).then === "function") {
         (result as Promise<unknown>).catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          this.printCallback?.(`Script callback error: ${message}`);
-          console.error("Script callback error:", error);
+          this.errorCallback?.(`Script callback error: ${message}`);
         });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.printCallback?.(`Script callback error: ${message}`);
-      console.error('Script callback error:', error);
+      this.errorCallback?.(`Script callback error: ${message}`);
     }
   }
 
@@ -184,29 +164,20 @@ export class ScriptEngine {
     this.initialized = false;
   }
 
-  /**
-   * Install bridge functions (_scriptPrint, _scriptRender, etc.)
-   */
+   /**
+    * Install bridge functions (_scriptRender, _scriptRegisterCallback, etc.)
+    */
   private installBridge(): void {
     if (!this.context) return;
-
-    // Print function
-    (this.context as any)._scriptPrint = (message: string) => {
-      this.printCallback?.(String(message));
-    };
 
     // Render function
     (this.context as any)._scriptRender = (nodeValue: unknown) => {
       try {
-        console.log('[_scriptRender] Called with:', nodeValue);
         const tree = this.convertToScriptTree(nodeValue);
-        console.log('[_scriptRender] Converted tree:', tree);
         this.renderCallback?.(tree);
-        console.log('[_scriptRender] Render callback invoked');
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error('[_scriptRender] Error:', error);
-        this.printCallback?.(`Render error: ${message}`);
+        this.errorCallback?.(`Render error: ${message}`);
       }
     };
 

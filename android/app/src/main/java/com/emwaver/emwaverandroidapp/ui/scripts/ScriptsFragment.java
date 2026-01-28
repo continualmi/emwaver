@@ -1576,7 +1576,7 @@ public class ScriptsFragment extends Fragment {
                 scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
             }
             scriptEngine.setDeviceConnection(scriptDeviceConnection);
-            scriptEngine.setup(this::printLog, this::handleScriptTree, buildBindings());
+            scriptEngine.setup(this::handleScriptTree, buildBindings(), this::handleScriptError);
         }
     }
 
@@ -1917,11 +1917,12 @@ public class ScriptsFragment extends Fragment {
         return result.toString(StandardCharsets.UTF_8.name());
     }
 
-    private void printLog(String message) {
-        Log.d(TAG, message);
-        if (message != null && message.startsWith("Script error")) {
-            showToast(message);
+    private void handleScriptError(String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return;
         }
+        Log.e(TAG, message);
+        showToast(message);
     }
 
     private void toggleVisibility(View view) {

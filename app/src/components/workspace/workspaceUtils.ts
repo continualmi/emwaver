@@ -18,7 +18,7 @@
 import type { DirectoryChildEntry } from "./workspaceTypes";
 
 export const SCRIPT_ASSET_ROOT = "/default-scripts";
-export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.emw";
+export const SCRIPT_BOOTSTRAP_FILENAME = "script_bootstrap.js";
 export const SCRIPT_EXAMPLE_SCRIPTS = [
   "hello.emw",
   "blink.emw",

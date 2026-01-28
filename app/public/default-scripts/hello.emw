@@ -1,4 +1,15 @@
-Console.print("hello");
+UI.render(
+  UI.column({
+    padding: 16,
+    spacing: 12,
+    children: [
+      UI.text({
+        text: "hello",
+        foregroundColor: "#E2E8F0",
+      }),
+    ],
+  })
+);
 
 let level = LOW;
 pinMode(GDO0, OUTPUT);
