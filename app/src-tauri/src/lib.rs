@@ -17,6 +17,7 @@
 
 mod script_runtime;
 mod desktop_ipc;
+mod llm;
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1117,6 +1118,8 @@ use script_runtime::{ScriptRuntime, ScriptEvent, ScriptCommand};
 use std::sync::Mutex as StdMutex;
 use tokio::sync::mpsc;
 
+use llm::llm_chat;
+
 /// Global state for the active script runtime.
 struct ScriptState {
     command_tx: StdMutex<Option<mpsc::UnboundedSender<ScriptCommand>>>,
@@ -1662,9 +1665,10 @@ pub fn run() {
             device_get_status,
 	            dfu_is_connected,
 	            dfu_flash_embedded,
-                script_execute,
-                script_stop,
-                script_callback
+                 script_execute,
+                 script_stop,
+				 script_callback,
+				 llm_chat
 	        ])
 	        .run(tauri::generate_context!())
         .expect("error while running tauri application");

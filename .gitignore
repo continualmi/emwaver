@@ -6,6 +6,10 @@
 # OS
 .DS_Store
 
+# Local environment (secrets)
+.env
+.env.*
+
 # ESP-IDF managed components (generated)
 managed_components/
 adapter/managed_components/
