@@ -469,6 +469,7 @@ Throughput target
 Scripts are user-authored extension bundles (manifest + EMWaver scripts) that plug into the Script Engine sandbox.
 
 - **Parity-first UI DSL**: script UI must render consistently across Android/iOS/Desktop.
+- **Cross-platform semantics**: the Script API and observable runtime behavior must be the same across Android/iOS/Desktop (avoid host-dependent sync/async differences).
 - **Unified scripting engine**: ScriptEngine is the single runtime.
 - **In-script logging**: scripts surface output through script UI components.
 
