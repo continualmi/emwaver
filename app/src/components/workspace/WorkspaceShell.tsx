@@ -27,6 +27,7 @@ import ExplorerTree from "./sidebar/ExplorerTree";
 import ScriptAssetsPanel from "./sidebar/ScriptAssetsPanel";
 import WorkspaceTopBar from "./top/WorkspaceTopBar";
 import ScriptPreviewPanel from "./main/ScriptPreviewPanel";
+import AgentChatPane from "./agent/AgentChatPane";
 import {
   FolderIcon,
   PanelLeftIcon,
@@ -134,6 +135,22 @@ export default function WorkspaceShell({
   }, [keys.root, rootDir]);
 
   const [activeMainTabKind, setActiveMainTabKind] = useState<"file" | "preview">("file");
+
+  const [isAgentOpen, setIsAgentOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem("emwaver.scriptsWorkspace.agentChat.open");
+    return stored == null ? true : stored === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("emwaver.scriptsWorkspace.agentChat.open", String(isAgentOpen));
+  }, [isAgentOpen]);
+
+  const agentChatStorageKey = useMemo(() => {
+    const scope = scriptLibrary === "local" && rootDir ? rootDir : "examples";
+    return `emwaver.agent.chat.v1:${scope}`;
+  }, [rootDir, scriptLibrary]);
   const [scriptPreviewState, setScriptPreviewState] = useState<
     Record<
       string,
@@ -816,11 +833,24 @@ export default function WorkspaceShell({
               }
             }}
             canRun={Boolean(activeFile) && canRunScript}
-            rightActions={null}
+            rightActions={
+              <button
+                type="button"
+                onClick={() => setIsAgentOpen((prev) => !prev)}
+                className={
+                  isAgentOpen
+                    ? "rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-[11px] font-semibold text-slate-200 hover:border-slate-700"
+                    : "rounded-full border border-slate-900 bg-slate-950 px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:border-slate-800 hover:text-slate-200"
+                }
+                title={isAgentOpen ? "Hide Agent" : "Show Agent"}
+              >
+                Agent
+              </button>
+            }
           />
 
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">
+          <div className="flex min-h-0 flex-1">
+            <div className="min-h-0 min-w-0 flex-1">
               {activeMainTabKind === "preview" && activeFile ? (
                 <ScriptPreviewPanel
                   theme={theme}
@@ -855,6 +885,11 @@ export default function WorkspaceShell({
               )}
             </div>
 
+            {isAgentOpen ? (
+              <aside className="hidden h-full w-[360px] shrink-0 border-l border-slate-900 md:block">
+                <AgentChatPane storageKey={agentChatStorageKey} />
+              </aside>
+            ) : null}
           </div>
         </main>
 		      </div>
