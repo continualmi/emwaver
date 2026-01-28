@@ -231,6 +231,180 @@ Fast “where is X?” index:
 - **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `app/crates/emwaver-device-core/src/midi_sysex.rs`
 - **Shared buffer/framing core** → `app/crates/emwaver-buffer-core/`
 
+## Transition Plan: App-First Execution + In-App Agent (Deprecate REPL/CLI/Git)
+
+This is the intended migration from today’s “multiple execution modes + CLI + Git integrations” toward a single product model:
+
+- The **EMWaver app is the product** (Android / iOS / Desktop).
+- Users explore hardware via **scripts + UI** inside the app.
+- The only first-class execution primitive is: **“Run a `.emw` script against the connected device.”**
+- The “AI agent” lives **inside the app** and drives that same primitive.
+
+### Target End State (what we’re converging to)
+
+User-visible:
+- **No REPL**.
+- **No `-c "..."` string execution mode**.
+- **No user-facing CLI**.
+- **No Git/GitHub inside apps**.
+- Local-first scripts/projects, with optional **cloud sync**.
+
+Still allowed internally (dev/manufacturing/CI only):
+- A headless runner or harness for automated tests / factory checks.
+- Minimal debug tooling that does not become a supported user workflow.
+
+### Principles / Guardrails
+
+- **Keep the core loop offline-first.** Device I/O, script execution, UI rendering, capture/logging must work without internet.
+- **Cloud is value-add, not a dependency.** Sync/sharing/AI can require network; basic exploration cannot.
+- **One script format, one engine, parity across platforms.** `.emw` is the unit of work.
+- **Minimize surface area.** Every “mode” and “integration” multiplies support burden.
+
+---
+
+## Phase Plan (recommended order)
+
+### Phase 0 — Decide the contracts (1–2 days)
+
+Write down (and keep stable):
+- The **single execution contract**: “run `.emw` file” + standard hooks (device I/O, UI render, logging).
+- A small **Script API surface** that the in-app agent will use (load/save/run/list scripts).
+- A **project storage model**: local repo of scripts + assets; signals/state model.
+
+Deliverables:
+- Documented “Run Script” contract (inputs/outputs/errors) per platform.
+- A canonical script entrypoint convention (e.g. `export default async function(ctx) { ... }`).
+
+### Phase 1 — Remove REPL (first user-visible simplification)
+
+Goal: stop supporting a stateful interactive shell.
+
+Steps:
+- In `app/cli/`, mark REPL as **deprecated** and hide from help.
+- Remove REPL-only code paths once the app can do all “quick experiments” via a scratch script.
+
+Replacement UX:
+- In-app **Scratchpad Script** (ephemeral) with Run/Stop + logs.
+- Optional “Create script from selection” in editor.
+
+Definition of done:
+- No REPL in releases.
+- All “REPL use cases” are served by scratch script execution in-app.
+
+### Phase 2 — Deprecate `-c` and converge on “run file”
+
+Goal: eliminate string-eval execution modes (harder to secure, harder to reproduce).
+
+Steps:
+- Keep `-c` only as a developer-only shortcut (if it must exist), otherwise remove.
+- Ensure “run this file” can be called programmatically by the in-app agent.
+
+Definition of done:
+- The supported contract is “run `.emw` file” only.
+
+### Phase 3 — Make the Desktop app the sole USB owner (formalize)
+
+(You already trend this way: CLI should not own USB.)
+
+Steps:
+- Tighten Desktop↔CLI bridge so the desktop app owns device I/O.
+- If a headless runner is needed, implement it as a **desktop backend mode** (same codepath) rather than a separate transport stack.
+
+Definition of done:
+- One transport implementation per platform.
+- No duplicate “USB stack” split between app and CLI.
+
+### Phase 4 — Remove Git/GitHub from apps (replace with product-native versioning)
+
+Goal: delete the highest-maintenance integration.
+
+Steps:
+- Android: remove `github/` usage and UI entry points.
+- iOS: remove GitHub OAuth + GitService from user-facing flows.
+- Desktop: remove Git UI flows.
+
+Replace with:
+- **Script version history** (linear revisions + restore).
+- **Share links / templates** (copy/fork model).
+- Optional “Publish script” library.
+
+Definition of done:
+- No Git auth tokens in apps.
+- No Git UX in the product.
+
+### Phase 5 — Introduce Cloud Sync (scripts + settings + signals)
+
+Goal: users can move between phone/desktop seamlessly.
+
+Scope (start small):
+- Script files + assets
+- App settings
+- Script “signals” or state snapshots (define what is sync-worthy)
+
+Rules:
+- Offline writes go to local store; sync is eventual.
+- Conflict handling must be simple (timestamp-based + “keep both” option).
+
+Definition of done:
+- Sign-in optional.
+- Sync never blocks running scripts.
+
+### Phase 6 — In-app AI Agent (monetizable layer)
+
+Goal: the agent is the primary “CLI replacement” and drives exploration.
+
+Agent capabilities (minimum):
+- Read device status/version
+- Create/edit scripts
+- Run scripts and observe logs/captures
+- Save results as scripts/projects
+
+Security:
+- Clear boundaries: agent can run scripts, but cannot exfiltrate data silently.
+- Make network use explicit when it matters.
+
+Definition of done:
+- A user can plug device in, ask for an experiment, and the agent iterates via scripts.
+
+### Phase 7 — Optional cloud “services” (only if they add real value)
+
+Be cautious about pushing latency-sensitive primitives into cloud.
+
+Good candidates:
+- Shared script library / marketplace
+- Hosted examples + learning content
+- Optional AI features (summaries, auto-documentation)
+
+Questionable candidates (prefer local-first):
+- IR encode/decode compute (usually cheap locally; cloud adds latency/offline failure)
+
+---
+
+## What to Keep (even if CLI disappears)
+
+To avoid losing engineering leverage, keep a **non-user-facing** automation surface:
+- A **test harness** that can run scripts headlessly against a simulated or real device.
+- Manufacturing sanity check scripts (“run suite, print pass/fail”).
+
+Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps.
+
+---
+
+## Repo Impact Checklist (when executing this plan)
+
+- Remove/restrict:
+  - `app/cli/src/repl.rs` (REPL)
+  - `-c` code paths (string eval)
+  - `android/.../github/*`, `ios/.../Git*` and any UI flows
+  - Desktop Git commands exposed to UI if not needed
+
+- Strengthen:
+  - Script storage abstraction (local-first + sync-ready)
+  - Script execution API (run file; deterministic; logs/captures are first-class)
+  - Script UI parity across Desktop/Android/iOS
+
+---
+
 ## Project Structure & Module Organization
 
 STM32 firmware lives in `stm/` (CubeMX/CubeIDE project). Treat CubeMX-generated output as generated code; keep handwritten logic in intended user-edit regions and prefer regeneration over manual edits to generated layers.
