@@ -78,7 +78,7 @@ function __sendPacket(bytes, timeoutMs) {
   var timeout = typeof timeoutMs === 'number' ? timeoutMs : 2000;
 
   var resp = sender(bytes, timeout);
-  // Desktop script semantics are sync-only: host bridge must not return Promises.
+  // EMWaver script semantics are sync-only: host bridge must not return Promises.
   if (resp && typeof resp.then === 'function') {
     throw new Error('_scriptSendPacket must be synchronous (Promise not supported)');
   }

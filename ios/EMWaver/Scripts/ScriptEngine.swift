@@ -28,6 +28,11 @@ final class ScriptEngine {
     // Legacy host dialog hook (not part of the public Script API).
     private var dialogHandler: ((String, String) -> Void)?
 
+    // Timer support for `every()` (bootstrap uses setTimeout/clearTimeout).
+    // Access only from executionQueue.
+    private var nextTimeoutId: Int = 1
+    private var timeouts: [Int: DispatchWorkItem] = [:]
+
     init() {}
 
     func setup(renderHandler: @escaping (ScriptTree) -> Void,
@@ -153,6 +158,45 @@ final class ScriptEngine {
             }
             context?.setObject(dialogBlock, forKeyedSubscript: "_scriptShowDialog" as NSString)
 
+            // Blocking sleep primitive used by the sync-only bootstrap delay().
+            let sleepBlock: @convention(block) (Double) -> Void = { ms in
+                let durationMs = max(0.0, ms)
+                if durationMs <= 0 { return }
+                Thread.sleep(forTimeInterval: durationMs / 1000.0)
+            }
+            context?.setObject(sleepBlock, forKeyedSubscript: "_scriptSleep" as NSString)
+
+            // Minimal timer API used by every(): setTimeout/clearTimeout.
+            let setTimeoutBlock: @convention(block) (JSValue, Double) -> Int = { [weak self] callback, ms in
+                guard let self else { return 0 }
+                let delayMs = max(0.0, ms)
+                let id = self.nextTimeoutId
+                self.nextTimeoutId += 1
+
+                var item: DispatchWorkItem!
+                item = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    if item.isCancelled { return }
+                    self.timeouts[id] = nil
+                    _ = callback.call(withArguments: [])
+                }
+
+                self.timeouts[id] = item
+                let deadline = DispatchTime.now() + .milliseconds(Int(delayMs.rounded()))
+                self.executionQueue.asyncAfter(deadline: deadline, execute: item)
+                return id
+            }
+            context?.setObject(setTimeoutBlock, forKeyedSubscript: "setTimeout" as NSString)
+
+            let clearTimeoutBlock: @convention(block) (Int) -> Void = { [weak self] id in
+                guard let self else { return }
+                if let item = self.timeouts[id] {
+                    item.cancel()
+                    self.timeouts[id] = nil
+                }
+            }
+            context?.setObject(clearTimeoutBlock, forKeyedSubscript: "clearTimeout" as NSString)
+
             if let context {
                 injectDSL(into: context)
                 applyGlobalBindings(to: context)
@@ -167,7 +211,17 @@ final class ScriptEngine {
             guard let self, let context = self.context else { 
                 return 
             }
-            
+
+            self.cancelAllTimeoutsLocked()
+
+            if self.containsAsyncTokens(script) {
+                self.errorHandler?("Script error: async/await is not supported. Scripts must be synchronous.")
+                if let completion {
+                    DispatchQueue.main.async { completion() }
+                }
+                return
+            }
+             
             self.callbackRegistry.removeAll()
             self.injectDSL(into: context)
             self.applyGlobalBindings(to: context)  // Apply bindings again after DSL reload
@@ -201,6 +255,20 @@ final class ScriptEngine {
             }
             _ = callback.call(withArguments: arguments)
         }
+    }
+
+    private func cancelAllTimeoutsLocked() {
+        // executionQueue only.
+        for (_, item) in timeouts {
+            item.cancel()
+        }
+        timeouts.removeAll()
+    }
+
+    private func containsAsyncTokens(_ script: String) -> Bool {
+        // Intentionally simple: reject if any async/await tokens are present.
+        // This may false-positive on strings/comments, but keeps behavior aligned across platforms.
+        return script.contains("await") || script.contains("async")
     }
 
     func registerGlobalBindings(_ bindings: [String: Any]) {
