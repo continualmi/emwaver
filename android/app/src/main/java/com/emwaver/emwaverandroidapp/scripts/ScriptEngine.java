@@ -391,6 +391,7 @@ public final class ScriptEngine {
                     fnArgs = new Object[args.length - 2];
                     System.arraycopy(args, 2, fnArgs, 0, fnArgs.length);
                 }
+                final Object[] capturedArgs = fnArgs;
 
                 int id = nextTimeoutId.getAndIncrement();
                 ScheduledFuture<?> future = timerExecutor.schedule(() -> executor.execute(() -> {
@@ -403,7 +404,7 @@ public final class ScriptEngine {
                         innerCx.setOptimizationLevel(-1);
                         innerCx.setLanguageVersion(Context.VERSION_ES6);
                         ensureScope(innerCx);
-                        fn.call(innerCx, ScriptEngine.this.scope, ScriptEngine.this.scope, fnArgs);
+                        fn.call(innerCx, ScriptEngine.this.scope, ScriptEngine.this.scope, capturedArgs);
                     } catch (RhinoException ex) {
                         dispatchError("Script timer error: " + formatRhinoException(ex));
                     } catch (Exception ex) {
@@ -524,7 +525,7 @@ public final class ScriptEngine {
     private void injectDsl(Context cx, Scriptable scope) {
         String source = bootstrapSource;
         if (source == null || source.trim().isEmpty()) {
-            throw new EvaluatorException("Script bootstrap not loaded (missing script_bootstrap.js)");
+            throw new EvaluatorException("Script bootstrap not loaded (missing script_bootstrap.emw)");
         }
         cx.evaluateString(scope, source, "ScriptBootstrap", 1, null);
     }
