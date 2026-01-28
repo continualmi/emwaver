@@ -36,6 +36,53 @@ type LlmChatResponse = {
   model: string;
 };
 
+type BackendChatPayload = {
+  messages: LlmMessage[];
+  model?: string;
+  max_tokens?: number;
+  temperature?: number;
+};
+
+const DEFAULT_BACKEND_URL = "http://127.0.0.1:8787";
+
+async function backendChat(payload: BackendChatPayload): Promise<LlmChatResponse> {
+  const baseUrl = import.meta.env.VITE_EMWAVER_BACKEND_URL || DEFAULT_BACKEND_URL;
+  const url = `${String(baseUrl).replace(/\/$/, "")}/api/agent/chat`;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`Backend error (${resp.status}): ${text || resp.statusText}`);
+    }
+
+    const data = (await resp.json()) as LlmChatResponse;
+    if (!data || typeof data.content !== "string" || typeof data.model !== "string") {
+      throw new Error("Backend returned invalid response");
+    }
+
+    return data;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error("Backend request timed out");
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 const SYSTEM_PROMPT: LlmMessage = {
   role: "system",
   content:
@@ -105,19 +152,31 @@ export default function AgentChatPane({
     setDraft("");
 
     try {
-      const res = await safeInvoke<LlmChatResponse>(
-        "llm_chat",
-        {
-          payload: {
-            messages: [...requestMessages, { role: "user", content }],
-            model: "x-ai/grok-4.1-fast",
-          },
-        },
-        { throwOnError: true },
-      );
+      let res: LlmChatResponse | null = null;
 
-      if (!res) {
-        throw new Error("LLM unavailable (not running in desktop backend)");
+      // Prefer the HTTP backend (future Azure deployment).
+      // Fallback to Tauri command for local-only dev if the backend is not running.
+      try {
+        res = await backendChat({
+          messages: [...requestMessages, { role: "user", content }],
+          model: "x-ai/grok-4.1-fast",
+        });
+      } catch (backendErr) {
+        // If fetch backend fails, try the legacy desktop-only path.
+        res = await safeInvoke<LlmChatResponse>(
+          "llm_chat",
+          {
+            payload: {
+              messages: [...requestMessages, { role: "user", content }],
+              model: "x-ai/grok-4.1-fast",
+            },
+          },
+          { throwOnError: true },
+        );
+
+        if (!res) {
+          throw backendErr;
+        }
       }
 
       const assistant: ChatMessage = {

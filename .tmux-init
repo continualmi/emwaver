@@ -41,6 +41,16 @@ tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
 tmux send-keys -t $SESSION:2.4 'cd docs' C-m
 tmux send-keys -t $SESSION:2.4 'mkdocs serve'
 
+# Split Pane 4 horizontally to create Pane 5 for backend
+tmux split-window -h -t $SESSION:2.4 -c "$PROJECT_DIR"
+
+# Pane 5 (New Right): Backend (Flask)
+tmux send-keys -t $SESSION:2.5 'cd backend' C-m
+tmux send-keys -t $SESSION:2.5 'if [ ! -d .venv ]; then python3 -m venv .venv; fi' C-m
+tmux send-keys -t $SESSION:2.5 'source .venv/bin/activate' C-m
+tmux send-keys -t $SESSION:2.5 'pip install -r requirements.txt' C-m
+tmux send-keys -t $SESSION:2.5 'python3 app.py'
+
 # Window 3: Editor (Neovim + NvimTree + open AGENTS.md in the file pane)
 EDITOR_WIN=$(tmux new-window -P -F "#{window_index}" -t "$SESSION" -n 'editor' -c "$PROJECT_DIR")
 
@@ -50,4 +60,3 @@ tmux send-keys -t "$SESSION:$EDITOR_WIN" \
 
 
 tmux select-window -t "$SESSION:$EDITOR_WIN"
-
