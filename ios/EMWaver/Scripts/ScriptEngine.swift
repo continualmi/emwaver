@@ -280,8 +280,8 @@ final class ScriptEngine {
     }
 
     private func injectDSL(into context: JSContext) {
-        guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "js") else {
-            let message = "Script bootstrap missing from app bundle (script_bootstrap.js)"
+        guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "emw") else {
+            let message = "Script bootstrap missing from app bundle (script_bootstrap.emw)"
             errorHandler?(message)
             return
         }

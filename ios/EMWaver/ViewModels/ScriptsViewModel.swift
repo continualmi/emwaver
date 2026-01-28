@@ -62,19 +62,11 @@ final class ScriptsViewModel: ObservableObject {
     private let fileService: FileService
     private let defaults: UserDefaults
 
-    private let scriptExtension = ".js"
+    private let scriptExtension = ".emw"
     private let unsavedKey = "__unsaved__"
     private let lastScriptDefaultsKey = "scripts.last_script_id"
     private let assetIdPrefix = "__asset__"
-    private let assetScriptNames = [
-        "cc1101.js",
-        "gpio.js",
-        "ir_send_saved_signal.js",
-        "packet_mode.js",
-        "rfid.js",
-        "usb.js",
-        "script_demo.js"
-    ]
+    // Asset scripts are discovered dynamically from the app bundle (DefaultScripts/*.emw).
 
     init(
         fileService: FileService = .shared,
@@ -390,7 +382,7 @@ final class ScriptsViewModel: ObservableObject {
 
     private func mergeRemote(_ data: [UserFileData]) {
         var updated: [String: ScriptRecord] = [:]
-        let assetNameSet = Set(assetScriptNames.map { $0.lowercased() })
+        let assetNameSet = Set(assetRecords.values.map { $0.name.lowercased() })
 
         // Preserve unsaved draft if it exists and has content
         if let unsaved = records[unsavedKey], !unsaved.draftContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -435,14 +427,10 @@ final class ScriptsViewModel: ObservableObject {
     private func loadAssetScriptsFromBundle() {
         var updated: [String: AssetRecord] = [:]
 
-        for filename in assetScriptNames {
-            let nameWithoutExt = filename.replacingOccurrences(of: ".js", with: "")
-            var url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js", subdirectory: "DefaultScripts")
-            if url == nil {
-                url = Bundle.main.url(forResource: nameWithoutExt, withExtension: "js")
-            }
-            guard let fileUrl = url,
-                  let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
+        let urls = Bundle.main.urls(forResourcesWithExtension: "emw", subdirectory: "DefaultScripts") ?? []
+        for fileUrl in urls {
+            let filename = fileUrl.lastPathComponent
+            guard let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
                 continue
             }
             let id = assetIdPrefix + filename
@@ -517,8 +505,8 @@ final class ScriptsViewModel: ObservableObject {
 
     private func isModuleScript(name: String, content: String) -> Bool {
         let lowered = name.lowercased()
-        if lowered.hasSuffix(".module.js")
-            || lowered.hasSuffix("_module.js") {
+        if lowered.hasSuffix(".module.emw")
+            || lowered.hasSuffix("_module.emw") {
             return true
         }
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -546,7 +534,7 @@ final class ScriptsViewModel: ObservableObject {
         let existingNames = Set(records.values
             .filter { $0.id != excludeId }
             .map { $0.name.lowercased() })
-            .union(assetScriptNames.map { $0.lowercased() })
+            .union(assetRecords.values.map { $0.name.lowercased() })
 
         if !existingNames.contains(proposed.lowercased()) {
             return proposed

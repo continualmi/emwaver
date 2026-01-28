@@ -44,22 +44,33 @@ android {
     }
 }
 
-def emwaverRepoRootDir = rootProject.projectDir.parentFile
-def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "app/public/default-scripts")
 def emwaverGeneratedScriptAssetsDir = new File(buildDir, "generated/emwaver-scripts/assets")
 
 tasks.register("syncScriptAssets", Copy) {
     group = "emwaver"
     description = "Copies the canonical script asset scripts into generated Android assets."
 
-    from(emwaverSharedScriptAssetsDir) {
-                    include("*.js")    }
     into(emwaverGeneratedScriptAssetsDir)
+
+    // Bootstrap is loaded by name from the asset root.
+    from(emwaverSharedScriptAssetsDir) {
+        include("script_bootstrap.emw")
+    }
+
+    // Default scripts live under DefaultScripts/.
+    from(emwaverSharedScriptAssetsDir) {
+        include("*.emw")
+        exclude("script_bootstrap.emw")
+        into("DefaultScripts")
+    }
 
     doFirst {
         if (!emwaverSharedScriptAssetsDir.exists()) {
             throw new GradleException("Missing canonical script assets dir at: ${emwaverSharedScriptAssetsDir}")
         }
+
+        // Hard cut: only .emw scripts are supported. Wipe any stale copied .js from prior builds.
+        delete emwaverGeneratedScriptAssetsDir
     }
 }
 

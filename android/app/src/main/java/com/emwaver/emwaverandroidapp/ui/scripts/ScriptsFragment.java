@@ -99,8 +99,9 @@ import java.util.function.Consumer;
 public class ScriptsFragment extends Fragment {
 
     private static final String TAG = "ScriptsFragment";
-    private static final String SCRIPT_EXTENSION = ".js";
-    private static final String ASSET_SCRIPT_EXTENSION = ".js";
+    private static final String SCRIPT_EXTENSION = ".emw";
+    private static final String ASSET_SCRIPT_EXTENSION = ".emw";
+    private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
     private FragmentScriptsBinding binding;
     private final List<ScriptMetadata> assetScripts = new ArrayList<>();
@@ -526,8 +527,8 @@ public class ScriptsFragment extends Fragment {
         }
 
         UserFileMetadata metadata = scriptMetadata.getMetadata();
-        String filename = metadata.getName() + ASSET_SCRIPT_EXTENSION;
-        final String content = readAssetText(filename);
+        String assetPath = assetScriptAssetPath(metadata);
+        final String content = readAssetText(assetPath);
 
         TextView codeView = new TextView(requireContext());
         codeView.setText(content);
@@ -544,17 +545,22 @@ public class ScriptsFragment extends Fragment {
         bothAxisScroll.addView(verticalScroll);
 
         new AlertDialog.Builder(requireContext())
-            .setTitle(filename)
+            .setTitle(assetPath)
             .setView(bothAxisScroll)
             .setPositiveButton("Close", null)
             .setNeutralButton("Copy", (dialog, which) -> {
                 ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
                 if (clipboard != null) {
-                    clipboard.setPrimaryClip(ClipData.newPlainText(filename, content));
+                    clipboard.setPrimaryClip(ClipData.newPlainText(assetPath, content));
                     showToast("Copied");
                 }
             })
             .show();
+    }
+
+    private String assetScriptAssetPath(@NonNull UserFileMetadata metadata) {
+        String name = metadata != null ? metadata.getName() : "";
+        return ASSET_SCRIPTS_DIR + "/" + name + ASSET_SCRIPT_EXTENSION;
     }
 
     private String readAssetText(@NonNull String filename) {
@@ -626,19 +632,44 @@ public class ScriptsFragment extends Fragment {
     
     private List<String> getAssetScriptNames() {
         List<String> names = new ArrayList<>();
-        String[] defaultScripts = {
-            "cc1101.js",
-            "packet_mode.js",
-            "rfid.js",
-            "usb.js",
-            "script_demo.js",
-            "gpio.js",
-            "ir_send_saved_signal.js"
-        };
-        for (String filename : defaultScripts) {
-            names.add(filename);
+        for (String filename : listAssetScriptFiles()) {
+            if (filename == null) {
+                continue;
+            }
+            String lower = filename.toLowerCase(Locale.US);
+            if (!lower.endsWith(ASSET_SCRIPT_EXTENSION)) {
+                continue;
+            }
+            names.add(filename.substring(0, filename.length() - ASSET_SCRIPT_EXTENSION.length()));
         }
+        Collections.sort(names, String::compareToIgnoreCase);
         return names;
+    }
+
+    private List<String> listAssetScriptFiles() {
+        List<String> filesOut = new ArrayList<>();
+        if (!isAdded()) {
+            return filesOut;
+        }
+        try {
+            String[] files = requireContext().getAssets().list(ASSET_SCRIPTS_DIR);
+            if (files == null) {
+                return filesOut;
+            }
+            for (String filename : files) {
+                if (filename == null) {
+                    continue;
+                }
+                String lower = filename.toLowerCase(Locale.US);
+                if (lower.endsWith(ASSET_SCRIPT_EXTENSION)) {
+                    filesOut.add(filename);
+                }
+            }
+            Collections.sort(filesOut, String::compareToIgnoreCase);
+        } catch (IOException e) {
+            Log.w(TAG, "Failed to list asset scripts", e);
+        }
+        return filesOut;
     }
     
     private void loadAssetScripts() {
@@ -647,24 +678,16 @@ public class ScriptsFragment extends Fragment {
         }
         
         assetScripts.clear(); // Clear existing asset scripts
-        
-        String[] assetScriptFiles = {
-            "cc1101.js",
-            "packet_mode.js",
-            "rfid.js",
-            "usb.js",
-            "script_demo.js",
-            "gpio.js",
-            "ir_send_saved_signal.js"
-        };
-        
+
+        List<String> assetScriptFiles = listAssetScriptFiles();
         for (String filename : assetScriptFiles) {
             try {
-                InputStream is = requireContext().getAssets().open(filename);
+                String assetPath = ASSET_SCRIPTS_DIR + "/" + filename;
+                InputStream is = requireContext().getAssets().open(assetPath);
                 is.close(); // Just check if it exists
-                
-                String name = filename.replace(ASSET_SCRIPT_EXTENSION, "");
-                String id = "__asset__" + filename; // Special ID prefix for asset scripts
+
+                String name = filename.substring(0, filename.length() - ASSET_SCRIPT_EXTENSION.length());
+                String id = "__asset__" + assetPath; // Special ID prefix for asset scripts
                 UserFileMetadata metadata = new UserFileMetadata(
                     id,
                     name,
@@ -672,7 +695,7 @@ public class ScriptsFragment extends Fragment {
                     "file",
                     "asset", // Special etag for assets
                     0,
-                    "text/javascript"
+                    "text/plain"
                 );
                 assetScripts.add(new ScriptMetadata(metadata, ScriptMetadata.SourceType.ASSET));
             } catch (IOException e) {
@@ -985,10 +1008,10 @@ public class ScriptsFragment extends Fragment {
         
         UserFileMetadata metadata = scriptMetadata.getMetadata();
         String scriptId = metadata.getId();
-        String filename = metadata.getName() + ASSET_SCRIPT_EXTENSION;
+        String assetPath = assetScriptAssetPath(metadata);
         
         try {
-            InputStream is = requireContext().getAssets().open(filename);
+            InputStream is = requireContext().getAssets().open(assetPath);
             String content = readTextFromInputStream(is);
             is.close();
             
@@ -1003,11 +1026,11 @@ public class ScriptsFragment extends Fragment {
             updateDraftState(content, false);
             completePendingPreview(scriptId);
         } catch (IOException e) {
-            Log.e(TAG, "Failed to load asset script: " + filename, e);
+            Log.e(TAG, "Failed to load asset script: " + assetPath, e);
             if (TextUtils.equals(pendingPreviewScriptId, scriptId)) {
                 pendingPreviewScriptId = null;
             }
-            showToast("Failed to load asset script: " + filename);
+            showToast("Failed to load asset script: " + assetPath);
         }
     }
 
@@ -1054,8 +1077,8 @@ public class ScriptsFragment extends Fragment {
             if (content == null || content.trim().isEmpty()) {
                 // Load asset content
                 try {
-                    String filename = currentScriptMetadata.getName() + ASSET_SCRIPT_EXTENSION;
-                    InputStream is = requireContext().getAssets().open(filename);
+                    String assetPath = ASSET_SCRIPTS_DIR + "/" + currentScriptMetadata.getName() + ASSET_SCRIPT_EXTENSION;
+                    InputStream is = requireContext().getAssets().open(assetPath);
                     content = readTextFromInputStream(is);
                     is.close();
                 } catch (IOException e) {
@@ -1099,7 +1122,7 @@ public class ScriptsFragment extends Fragment {
             showNameInputDialog(
                 "Save Script",
                 "Enter a name for the script:",
-                currentScriptName != null ? currentScriptName : "script_script.js",
+                currentScriptName != null ? currentScriptName : "script_script.emw",
                 name -> createScriptWithContent(name, getEditorText(), "Script saved: ")
             );
             return;
@@ -1224,7 +1247,7 @@ public class ScriptsFragment extends Fragment {
         
         // For asset scripts, load directly from assets
         if (scriptMetadata != null && scriptMetadata.isAssetScript()) {
-            String filename = metadata.getName() + ASSET_SCRIPT_EXTENSION;
+            String filename = assetScriptAssetPath(metadata);
             try {
                 InputStream is = requireContext().getAssets().open(filename);
                 content = readTextFromInputStream(is);
@@ -1451,10 +1474,7 @@ public class ScriptsFragment extends Fragment {
                 try {
                     UserFileMetadata assetMeta = scriptMetadata.getMetadata();
                     String baseName = assetMeta != null && assetMeta.getName() != null ? assetMeta.getName() : scriptMetadata.getName();
-                    String ext = assetMeta != null && assetMeta.getExtension() != null && !assetMeta.getExtension().isEmpty()
-                        ? assetMeta.getExtension()
-                        : ASSET_SCRIPT_EXTENSION;
-                    String filename = baseName + ext;
+                    String filename = ASSET_SCRIPTS_DIR + "/" + baseName + ASSET_SCRIPT_EXTENSION;
                     InputStream is = requireContext().getAssets().open(filename);
                     String content = readTextFromInputStream(is);
                     is.close();
@@ -1571,7 +1591,7 @@ public class ScriptsFragment extends Fragment {
         ensureScriptEngineBindings();
         if (scriptEngine == null) {
             scriptEngine = new ScriptEngine();
-            scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.js"));
+            scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.emw"));
             if (scriptDeviceConnection == null && isAdded()) {
                 scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
             }
@@ -2529,7 +2549,7 @@ public class ScriptsFragment extends Fragment {
                 cursor.close();
             }
         }
-        return fileName != null ? fileName : "script.js";
+        return fileName != null ? fileName : "script.emw";
     }
 
     private String buildNewScriptTemplate() {

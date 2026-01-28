@@ -321,7 +321,7 @@ struct ScriptsView: View {
         let initial: String
         switch context {
         case .create:
-            initial = "script_script.js"
+            initial = "script_script.emw"
         case .rename(let id):
             initial = viewModel.scriptName(for: id)
         case .copy(let id):
