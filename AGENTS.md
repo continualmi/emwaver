@@ -67,6 +67,170 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **CLI:** `app/cli/` (device shell + internal tooling)
 - **Docs:** `docs/` (MkDocs)
 
+## Repository Code Map (Deep Tree)
+
+This map is intentionally **code-focused** (so you can find “where the thing lives” quickly). It avoids listing non-code/ops `.md` files and calls out the *actual implementation* locations for the major subsystems (USB transport, buffer core, script engine + UI renderer, DFU, Git, etc.).
+
+> Convention: paths shown here refer to **source-of-truth** locations. Build outputs and vendored deps are called out separately so you don’t go spelunking in `target/`, `node_modules/`, `docs/site/`, etc.
+
+```text
+.
+├─ stm/
+│  └─ emwaver-firmware/                      # THE firmware project (STM32)
+│     ├─ Core/
+│     │  ├─ Inc/
+│     │  │  ├─ emw_proto.h                   # Firmware protocol types/opcodes
+│     │  │  ├─ emwaver_usb_io.h              # USB I/O interface used by app logic
+│     │  │  ├─ main.h                        # CubeMX main header + user glue
+│     │  │  ├─ stm32f0xx_it.h                # IRQ handler declarations
+│     │  │  └─ stm32f0xx_hal_conf.h          # HAL config
+│     │  ├─ Src/
+│     │  │  ├─ main.c                        # Main firmware entry + app loop
+│     │  │  ├─ stm32f0xx_it.c                # IRQ handlers
+│     │  │  ├─ stm32f0xx_hal_msp.c           # HAL MSP init
+│     │  │  ├─ system_stm32f0xx.c            # System clock init
+│     │  │  └─ syscalls.c / sysmem.c         # Newlib stubs
+│     │  └─ Startup/
+│     │     └─ startup_stm32f042g6ux.s       # Startup assembly
+│     ├─ USB_DEVICE/
+│     │  ├─ App/
+│     │  │  ├─ usb_device.c/.h               # USB device init/registration
+│     │  │  ├─ usbd_desc.c/.h                # USB descriptors
+│     │  │  ├─ usbd_midi.c/.h                # USB MIDI class implementation
+│     │  │  └─ usbd_midi_if.c/.h             # MIDI interface glue (SysEx tunnel)
+│     │  └─ Target/
+│     │     └─ usbd_conf.c/.h                # USB low-level config/hooks
+│     ├─ Drivers/                            # STM32 HAL + CMSIS (vendored)
+│     ├─ Middlewares/                        # ST USB Device library (vendored)
+│     ├─ Debug/ Release/                     # Build output dirs (generated)
+│     └─ *.ioc / .settings/                  # CubeMX/CubeIDE project metadata
+│
+├─ app/                                      # Desktop app (Tauri) + shared Rust crates + CLI
+│  ├─ src/                                   # Desktop UI (TypeScript/React)
+│  │  ├─ main.tsx                            # UI bootstrap
+│  │  ├─ App.tsx                             # App shell + routing-ish composition
+│  │  ├─ components/
+│  │  │  ├─ HomePage.tsx                     # Landing/home
+│  │  │  ├─ ErrorBoundary.tsx
+│  │  │  ├─ SamplerFragment.tsx              # Sampler screen
+│  │  │  ├─ ISMFragment.tsx                  # ISM screen
+│  │  │  ├─ ScriptsFragment.tsx              # Scripts screen
+│  │  │  ├─ SettingsFragment.tsx             # Settings screen
+│  │  │  ├─ scripts/
+│  │  │  │  └─ ScriptUIRenderer.tsx          # Script UI renderer (ScriptTree → React)
+│  │  │  └─ workspace/                       # “Workspace” multi-panel UI
+│  │  │     ├─ hooks/                        # Workspace-specific hooks
+│  │  │     ├─ main/                         # Main panel(s) (script editor/preview/etc.)
+│  │  │     ├─ sidebar/                      # File tree + tools sidebar
+│  │  │     ├─ terminal/                     # Terminal/PTY UI components
+│  │  │     └─ top/                          # Top bar + global controls
+│  │  └─ utils/
+│  │     ├─ DeviceContext.tsx                # Device/session context
+│  │     ├─ AppDialogContext.tsx             # Dialog plumbing
+│  │     ├─ ScriptEngine.ts                  # Desktop ScriptEngine (JS sandbox + DSL)
+│  │     ├─ useBackendScript.ts              # Hooks/bridge for backend script execution
+│  │     ├─ tauri.ts                         # Tauri invoke/bridge helpers
+│  │     └─ monacoTheme.ts                   # Editor theming
+│  │
+│  ├─ src-tauri/                              # Desktop native host (Rust, Tauri)
+│  │  ├─ src/
+│  │  │  ├─ main.rs                          # Tauri entrypoint
+│  │  │  ├─ lib.rs                           # Tauri commands + app state wiring
+│  │  │  ├─ buffer.rs                        # Rust-side buffer plumbing
+│  │  │  ├─ script_runtime.rs                 # Desktop script runtime (host bridges + eval)
+│  │  │  ├─ pty.rs                           # PTY/terminal integration
+│  │  │  ├─ git.rs                           # Git commands exposed to UI/CLI
+│  │  │  └─ desktop_ipc.rs                    # Desktop↔CLI mailbox bridge
+│  │  ├─ capabilities/                       # Tauri capability manifests
+│  │  ├─ resources/                          # Packaged runtime resources (e.g. OTA)
+│  │  ├─ firmware/                           # Firmware payload(s) shipped w/ desktop app
+│  │  └─ icons/                              # App icons
+│  │
+│  ├─ crates/                                 # Shared Rust crates (desktop + mobile)
+│  │  ├─ emwaver-buffer-core/                 # 64B framing + RX capture + cursor parsing
+│  │  │  └─ src/{packet,buffer,status,sampler,tx}.rs
+│  │  ├─ emwaver-device-core/                 # Device protocol + SysEx tunnel helpers
+│  │  │  └─ src/{midi_sysex,bridge}.rs
+│  │  ├─ emwaver-desktop-ipc/                 # Desktop↔CLI IPC format
+│  │  ├─ emwaver-dfu/                         # DFU/update helpers
+│  │  ├─ emwaver-git/                         # Git integration helpers
+│  │  ├─ emwaver-buffer-ios-ffi/              # iOS FFI wrapper (XCFramework)
+│  │  │  ├─ include/emwaver_buffer_ios.h
+│  │  │  └─ src/lib.rs
+│  │  ├─ emwaver-buffer-android-jni/          # Android JNI wrapper
+│  │  │  └─ src/lib.rs
+│  │  ├─ coremidi/                            # Rust CoreMIDI bindings
+│  │  └─ regress/                             # Regex engine crate (used/benchmarked internally)
+│  │
+│  ├─ cli/                                    # Rust CLI (helper; does not own USB)
+│  │  ├─ src/{main,lib,cli,desktop_ipc,repl}.rs
+│  │  ├─ tests/                               # CLI tests
+│  │  └─ resources/{ota,vibe}/                # Bundled resources
+│  │
+│  ├─ public/{default-scripts,device-icons}/  # Bundled UI assets (incl starter scripts)
+│  └─ dist/ / node_modules/ / src-tauri/target/ # Generated build/deps
+│
+├─ android/
+│  └─ app/src/main/
+│     ├─ java/com/emwaver/emwaverandroidapp/
+│     │  ├─ MainActivity.java / WelcomeActivity.java
+│     │  ├─ DeviceConnectionManager.java / DeviceConnectionService.java
+│     │  ├─ USBService.java                  # Background USB service
+│     │  ├─ UsbMidiSysex.java                # USB MIDI SysEx tunnel
+│     │  ├─ NativeBuffer.java                # JNI bridge to Rust buffer core
+│     │  ├─ files/                           # Local file repository (scripts/assets)
+│     │  ├─ github/                           # GitHub auth/cache/diff models + client
+│     │  ├─ scripts/                          # Script runtime + UI tree + renderer
+│     │  │  ├─ ScriptEngine.java             # JS runtime + DSL injection
+│     │  │  ├─ ScriptRenderView.java         # ScriptTree → Android Views
+│     │  │  ├─ ScriptTree.java               # Root UI tree
+│     │  │  ├─ ScriptNode.java               # UI node model
+│     │  │  ├─ ScriptNodeType.java           # Node type enum
+│     │  │  └─ ScriptSignalStore.java        # Reactive signals/state
+│     │  └─ ui/                               # Screens/fragments
+│     │     ├─ sampler/ / packetmode/ / scripts/
+│     │     ├─ emwaver/ / ism/ / rfid/ / git/
+│     │     └─ flash/                         # DFU/flash UI
+│     ├─ res/                                 # Layouts/drawables/navigation/etc.
+│     ├─ assets/ota/                           # OTA payload(s)
+│     └─ jniLibs/                              # Prebuilt native libs (if shipped)
+│
+├─ ios/
+│  └─ EMWaver/
+│     ├─ EMWaverApp.swift / ContentView.swift # SwiftUI bootstrap
+│     ├─ JavaScriptEngine.swift               # Lower-level JS runtime wrapper
+│     ├─ Managers/
+│     │  ├─ USBManager.swift                  # USB lifecycle
+│     │  ├─ UsbMidiSysex.swift                # USB MIDI SysEx tunnel
+│     │  ├─ NativeBufferRust.swift            # Bridge to Rust buffer core
+│     │  ├─ GitService.swift + GitHub*.swift  # Git/GitHub integration
+│     │  └─ FileService.swift / SettingsManager.swift / etc.
+│     ├─ Scripts/
+│     │  ├─ ScriptEngine.swift                # iOS ScriptEngine (DSL + host bridges)
+│     │  ├─ ScriptRenderView.swift            # ScriptTree → SwiftUI views
+│     │  ├─ ScriptTypes.swift                 # ScriptTree/Node types
+│     │  └─ ScriptPreviewManager.swift        # Preview/orchestration
+│     ├─ Views/                               # SwiftUI screens
+│     ├─ ViewModels/                          # View models
+│     ├─ Models/                              # Data models
+│     ├─ Native/                              # Helper scripts/build glue for Rust core
+│     ├─ DefaultScripts/                      # Bundled starter scripts
+│     └─ ota/                                 # OTA payload(s)
+│
+├─ third_party/coremidi/                      # iOS CoreMIDI third-party bits
+├─ scripts/align_emwaver_images.py            # Repo helper script(s)
+└─ frontend/                                  # Web/marketing assets
+```
+
+Generated / not-source-of-truth (common):
+- `**/target/`, `**/node_modules/`, `app/dist/`, `android/app/.cxx/`, `stm/**/Debug/`, `stm/**/Release/`
+
+Fast “where is X?” index:
+- **Script engines** → Desktop: `app/src/utils/ScriptEngine.ts`; Android: `.../scripts/ScriptEngine.java`; iOS: `ios/EMWaver/Scripts/ScriptEngine.swift`
+- **Script UI renderers** → Desktop: `app/src/components/scripts/ScriptUIRenderer.tsx`; Android: `.../scripts/ScriptRenderView.java`; iOS: `ios/EMWaver/Scripts/ScriptRenderView.swift`
+- **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `app/crates/emwaver-device-core/src/midi_sysex.rs`
+- **Shared buffer/framing core** → `app/crates/emwaver-buffer-core/`
+
 ## Project Structure & Module Organization
 
 STM32 firmware lives in `stm/` (CubeMX/CubeIDE project). Treat CubeMX-generated output as generated code; keep handwritten logic in intended user-edit regions and prefer regeneration over manual edits to generated layers.
