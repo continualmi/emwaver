@@ -1,0 +1,15 @@
+{
+  "title": "EMW1",
+  "displayTitle": "EMW1",
+  "group": "module",
+  "status": "module",
+  "image": "EMW1.png",
+  "experimental": true,
+  "description": "Connector module (description coming soon).",
+  "designDate": "2024-07-29",
+  "tags": ["EMW1", "module"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}
