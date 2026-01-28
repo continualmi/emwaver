@@ -76,8 +76,8 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private final Object midiLock = new Object();
 
-    // SysEx receive accumulator
-    private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(512);
+    // SysEx receive accumulator (raw MIDI bytes)
+    private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
     private boolean inSysex = false;
 
     // Buffer bridge methods
@@ -114,7 +114,7 @@ public class USBService extends Service implements DeviceConnectionService {
         NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
     }
 
-    private static byte[] makePacket64(byte[] data) {
+    private static byte[] makeLanePacket(byte[] data) {
         if (data == null) return null;
         try {
             return NativeBuffer.makePacket64(data);
@@ -123,23 +123,40 @@ public class USBService extends Service implements DeviceConnectionService {
         }
     }
 
-    private static byte[] makeSuperframe(byte[] cmdLane, byte[] streamLane) {
-        byte[] sf = new byte[128];
-        if (cmdLane != null) {
-            System.arraycopy(cmdLane, 0, sf, 0, Math.min(cmdLane.length, 64));
-        }
-        if (streamLane != null) {
-            System.arraycopy(streamLane, 0, sf, 64, Math.min(streamLane.length, 64));
-        }
-        return sf;
-    }
-
     private static boolean isLaneEmpty(byte[] lane) {
         if (lane == null || lane.length == 0) return true;
         for (byte b : lane) {
             if (b != 0) return false;
         }
         return true;
+    }
+
+    private void writeFrame(byte[] cmdLane18, byte[] streamLane18) {
+        byte[] sysex = UsbMidiSysex.encodeLanes(cmdLane18, streamLane18);
+        if (sysex == null) {
+            Log.e(TAG, "writeFrame: failed to encode SysEx");
+            return;
+        }
+
+        synchronized (midiLock) {
+            if (midiIn == null) {
+                Toast.makeText(this, "No USB device connected", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            try {
+                midiIn.send(sysex, 0, sysex.length, 0);
+
+                // Log non-empty lanes (buffer uses 18B packet size)
+                if (!isLaneEmpty(cmdLane18)) {
+                    logTx(cmdLane18);
+                }
+                if (!isLaneEmpty(streamLane18)) {
+                    logTx(streamLane18);
+                }
+            } catch (IOException e) {
+                Log.e(TAG, "Error writing USB packet", e);
+            }
+        }
     }
 
     public void setUsbDeviceConnection(UsbDeviceConnection connection) {
@@ -202,7 +219,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiReceiver rxReceiver = new MidiReceiver() {
         @Override
         public void onSend(byte[] data, int offset, int count, long timestamp) {
-            // Data can arrive chunked; reconstruct SysEx messages.
+            // Data can arrive chunked; reconstruct fixed-size SysEx messages.
             long tsMs = System.currentTimeMillis();
             for (int i = 0; i < count; i++) {
                 byte b = data[offset + i];
@@ -214,24 +231,32 @@ public class USBService extends Service implements DeviceConnectionService {
                     continue;
                 }
                 sysexBuf.write(b);
+                // Hard cap to avoid unbounded growth on malformed streams.
+                if (sysexBuf.size() > 128) {
+                    sysexBuf.reset();
+                    inSysex = false;
+                    continue;
+                }
                 if (b == (byte) 0xF7) {
                     inSysex = false;
                     byte[] sysex = sysexBuf.toByteArray();
                     sysexBuf.reset();
-                    byte[] superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex);
-                    if (superframe != null) {
-                        byte[] cmdLane = Arrays.copyOfRange(superframe, 0, 64);
-                        byte[] streamLane = Arrays.copyOfRange(superframe, 64, 128);
 
-                        // Demultiplex into the shared buffer.
-                        // Order matters: sendCommand expects response in the next packet.
-                        // The firmware puts the command response in Lane 0.
-                        if (!isLaneEmpty(cmdLane)) {
-                            storeBulkPkt(cmdLane, tsMs);
-                        }
-                        if (!isLaneEmpty(streamLane)) {
-                            storeBulkPkt(streamLane, tsMs);
-                        }
+                    byte[] frame = UsbMidiSysex.decodeSysexToFrame(sysex);
+                    if (frame == null || frame.length != UsbMidiSysex.FRAME_SIZE) {
+                        continue;
+                    }
+
+                    byte[] cmdLane = Arrays.copyOfRange(frame, 0, UsbMidiSysex.LANE_SIZE);
+                    byte[] streamLane = Arrays.copyOfRange(frame, UsbMidiSysex.LANE_SIZE, UsbMidiSysex.FRAME_SIZE);
+
+                    // Demultiplex into the shared buffer.
+                    // Order matters: sendCommand waits for a response packet (status >= 0x80).
+                    if (!isLaneEmpty(cmdLane)) {
+                        storeBulkPkt(cmdLane, tsMs);
+                    }
+                    if (!isLaneEmpty(streamLane)) {
+                        storeBulkPkt(streamLane, tsMs);
                     }
                 }
             }
@@ -307,44 +332,19 @@ public class USBService extends Service implements DeviceConnectionService {
         midiDevice = null;
     }
 
-    private void writeSuperframe(byte[] superframe) {
-        byte[] sysex = UsbMidiSysex.encodeSuperframe(superframe);
-        if (sysex == null) {
-            Log.e(TAG, "write: failed to encode SysEx");
-            return;
-        }
-
-        synchronized (midiLock) {
-            if (midiIn == null) {
-                Toast.makeText(this, "No USB device connected", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            try {
-                midiIn.send(sysex, 0, sysex.length, 0);
-                // Log non-empty lanes for debugging/visualizer
-                byte[] cmdLane = Arrays.copyOfRange(superframe, 0, 64);
-                byte[] streamLane = Arrays.copyOfRange(superframe, 64, 128);
-                if (!isLaneEmpty(cmdLane)) logTx(cmdLane);
-                if (!isLaneEmpty(streamLane)) logTx(streamLane);
-            } catch (IOException e) {
-                Log.e(TAG, "Error writing USB packet", e);
-            }
-        }
-    }
-
     @Override
     public void write(byte[] bytes) {
         if (bytes == null) {
             return;
         }
-        // Treat generic write as a Command Lane injection (Desktop behavior for commands).
-        byte[] packet64 = bytes.length == 64 ? bytes : makePacket64(bytes);
-        if (packet64 == null) {
-            Log.e(TAG, "write: payload too large for packet64");
+        // Treat generic write as a cmd-lane injection.
+        byte[] cmdLane = bytes.length == UsbMidiSysex.LANE_SIZE ? bytes : makeLanePacket(bytes);
+        if (cmdLane == null || cmdLane.length != UsbMidiSysex.LANE_SIZE) {
+            Log.e(TAG, "write: payload too large for cmd lane (max " + UsbMidiSysex.LANE_SIZE + ")");
             return;
         }
-        byte[] superframe = makeSuperframe(packet64, null);
-        writeSuperframe(superframe);
+        byte[] streamLane = new byte[UsbMidiSysex.LANE_SIZE];
+        writeFrame(cmdLane, streamLane);
     }
 
     @Override
@@ -369,7 +369,10 @@ public class USBService extends Service implements DeviceConnectionService {
 
         int nativeBufferSize = samplerBytes.length;
         int[] txProfile = NativeBuffer.txUsbProfile();
-        int packetSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : 64;
+        int packetSize = txProfile != null && txProfile.length > 0 ? txProfile[0] : UsbMidiSysex.LANE_SIZE;
+        if (packetSize <= 0 || packetSize > UsbMidiSysex.LANE_SIZE) {
+            packetSize = UsbMidiSysex.LANE_SIZE;
+        }
         long startTime = System.nanoTime();
         final long period = (txProfile != null && txProfile.length > 1 ? txProfile[1] : 5_120_000L);
 
@@ -390,11 +393,11 @@ public class USBService extends Service implements DeviceConnectionService {
                 }
             }
 
-            byte[] pkt64 = makePacket64(chunk);
-            if (pkt64 != null) {
-                // Send as Stream Lane
-                byte[] superframe = makeSuperframe(null, pkt64);
-                writeSuperframe(superframe);
+            byte[] streamLane = makeLanePacket(chunk);
+            if (streamLane != null && streamLane.length == UsbMidiSysex.LANE_SIZE) {
+                // Send as stream lane (cmd lane empty)
+                byte[] cmdLane = new byte[UsbMidiSysex.LANE_SIZE];
+                writeFrame(cmdLane, streamLane);
             }
 
             startTime = NativeBuffer.txUsbAdjustDeadlineNs(startTime, lastStatus);
@@ -424,28 +427,28 @@ public class USBService extends Service implements DeviceConnectionService {
         // consumed via rx_counter belongs to this command's response.
         NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
 
-        // This calls write(), which sends on Command Lane.
-        byte[] packet = makePacket64(command);
+        // This calls write(), which sends on cmd lane.
+        byte[] packet = makeLanePacket(command);
         if (packet == null) {
-            Log.e(TAG, "Command too large: " + command.length + " bytes (max 64)");
+            Log.e(TAG, "Command too large: " + command.length + " bytes (max " + UsbMidiSysex.LANE_SIZE + ")");
             return null;
         }
 
         write(packet);
 
-        // Wait for exactly one 64B response packet (desktop convention).
-        // Since we Demultiplex received superframes into the single buffer,
-        // the response (from Cmd Lane) will appear here.
+        // Wait for a cmd-lane response packet: response status is >= 0x80.
         long startTime = System.currentTimeMillis();
-        ByteArrayOutputStream collected = new ByteArrayOutputStream(64);
-        while (System.currentTimeMillis() - startTime < timeout && collected.size() < 64) {
+        while (System.currentTimeMillis() - startTime < timeout) {
             Object[] next = NativeBuffer.nextRxPacket();
             if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
                 byte[] pkt = (byte[]) next[0];
-                if (pkt.length >= 64) {
-                    collected.write(pkt, 0, 64);
+                if (pkt.length >= UsbMidiSysex.LANE_SIZE) {
+                    int status = pkt[0] & 0xFF;
+                    if (status >= 0x80) {
+                        return Arrays.copyOf(pkt, UsbMidiSysex.LANE_SIZE);
+                    }
                 }
-                break;
+                // Not a cmd response (likely stream/BS); keep waiting.
             }
             try {
                 Thread.sleep(5);
@@ -453,8 +456,7 @@ public class USBService extends Service implements DeviceConnectionService {
             }
         }
 
-        byte[] response = collected.toByteArray();
-        return response.length == 64 ? response : null;
+        return null;
     }
 
     @Override
@@ -462,9 +464,9 @@ public class USBService extends Service implements DeviceConnectionService {
         if (data == null) {
             return;
         }
-        byte[] packet = makePacket64(data);
+        byte[] packet = makeLanePacket(data);
         if (packet == null) {
-            Log.e(TAG, "Packet too large: " + data.length + " bytes (max 64)");
+            Log.e(TAG, "Packet too large: " + data.length + " bytes (max " + UsbMidiSysex.LANE_SIZE + ")");
             return;
         }
         write(packet);

@@ -30,16 +30,16 @@ public final class NativeBuffer {
     public static native void loadBuffer(byte[] data);
     public static native byte[] getBuffer();
 
-    // Append raw incoming bytes; timestamps are assigned per completed 64B packet.
+    // Append raw incoming bytes; timestamps are assigned per completed 18B packet (mini-frame lane).
     public static native void storeBulkPkt(byte[] data, long tsMs);
 
     // Sampler-only option: invert bits (0↔1) on RX ingest when enabled.
     public static native void setInvertRx(boolean enabled);
 
-    // Append outbound bytes to the TX log as padded 64B packets (one tsMs per 64B packet).
+    // Append outbound bytes to the TX log as padded 18B packets (one tsMs per 18B packet).
     public static native void appendTxBytes(byte[] data, long tsMs);
 
-    // Buffer monitor APIs (64B packets + per-packet timestamps).
+    // Buffer monitor APIs (18B packets + per-packet timestamps).
     // Returns Object[] { byte[] data, long[] tsMs, long nextPacketIndex, long availablePackets }.
     public static native Object[] readRxSince(long packetIndex, int maxPackets);
     public static native Object[] readTxSince(long packetIndex, int maxPackets);
@@ -48,13 +48,13 @@ public final class NativeBuffer {
     public static native long getRxPacketCount();
     public static native long getRxCounter();
     public static native void setRxCounter(long value);
-    // Returns Object[] { byte[] packet64, long tsMs } or null if no packet available.
+    // Returns Object[] { byte[] packet, long tsMs } or null if no packet available.
     public static native Object[] nextRxPacket();
 
     // Sampler compression helper: returns Object[] { float[] timeValues, float[] dataValues }.
     public static native Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
 
-    // Protocol helpers.
+    // Protocol helpers (historical naming: makePacket64 returns an 18B lane packet).
     public static native byte[] makePacket64(byte[] data);
     // Returns -1 when not a BS frame.
     public static native int parseBsStatus(byte[] packet64);

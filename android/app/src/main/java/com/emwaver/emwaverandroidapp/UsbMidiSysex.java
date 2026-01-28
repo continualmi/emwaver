@@ -20,11 +20,14 @@ package com.emwaver.emwaverandroidapp;
 import java.util.Arrays;
 
 /**
- * SysEx codec matching STM32 firmware (usbd_midi_if.c).
+ * SysEx codec matching the STM32 mini-frame tunnel (usb_midi_if.c).
  *
- * Format:
- *   F0 7D 'E' 'M' 'W' 0x01 <7-bit encoded payload> F7
- * where the payload decodes to exactly 128 bytes (Superframe).
+ * Fixed-size SysEx message (48 bytes):
+ *   F0 7D 'E' 'M' 'W' <42 encoded bytes> F7
+ *
+ * The 42 encoded bytes decode to 36 raw bytes split into two 18-byte lanes:
+ *   - cmd lane:   18 bytes
+ *   - stream lane:18 bytes
  */
 public final class UsbMidiSysex {
     private UsbMidiSysex() {}
@@ -34,34 +37,52 @@ public final class UsbMidiSysex {
 
     private static final byte MANUFACTURER_ID = (byte) 0x7D;
     private static final byte[] MAGIC = new byte[] { 'E', 'M', 'W' };
-    private static final byte VERSION = 0x01;
 
-    public static byte[] encodeSuperframe(byte[] superframe) {
-        if (superframe == null || superframe.length != 128) {
+    public static final int LANE_SIZE = 18;
+    public static final int FRAME_SIZE = 36;
+    public static final int ENCODED_BYTES = 42;
+    public static final int SYSEX_BYTES = 48;
+
+    public static byte[] encodeFrame(byte[] frame36) {
+        if (frame36 == null || frame36.length != FRAME_SIZE) {
             return null;
         }
-        byte[] encoded = encodePayload7Bit(superframe);
-        if (encoded == null) {
+
+        byte[] encoded = encodePayload7BitFixed(frame36);
+        if (encoded == null || encoded.length != ENCODED_BYTES) {
             return null;
         }
 
-        byte[] sysex = new byte[1 + 1 + 3 + 1 + encoded.length + 1];
+        byte[] sysex = new byte[SYSEX_BYTES];
         int pos = 0;
         sysex[pos++] = SYSEX_START;
         sysex[pos++] = MANUFACTURER_ID;
         sysex[pos++] = MAGIC[0];
         sysex[pos++] = MAGIC[1];
         sysex[pos++] = MAGIC[2];
-        sysex[pos++] = VERSION;
-        System.arraycopy(encoded, 0, sysex, pos, encoded.length);
-        pos += encoded.length;
+        System.arraycopy(encoded, 0, sysex, pos, ENCODED_BYTES);
+        pos += ENCODED_BYTES;
         sysex[pos] = SYSEX_END;
         return sysex;
     }
 
-    /** Returns decoded 128B superframe or null when not a valid EMWaver SysEx payload. */
-    public static byte[] decodeSysexToSuperframe(byte[] sysex) {
-        if (sysex == null || sysex.length < 8) {
+    public static byte[] encodeLanes(byte[] cmdLane18, byte[] streamLane18) {
+        if (cmdLane18 == null || streamLane18 == null) {
+            return null;
+        }
+        if (cmdLane18.length != LANE_SIZE || streamLane18.length != LANE_SIZE) {
+            return null;
+        }
+
+        byte[] frame = new byte[FRAME_SIZE];
+        System.arraycopy(cmdLane18, 0, frame, 0, LANE_SIZE);
+        System.arraycopy(streamLane18, 0, frame, LANE_SIZE, LANE_SIZE);
+        return encodeFrame(frame);
+    }
+
+    /** Returns decoded 36B frame or null when not a valid EMWaver mini-frame SysEx payload. */
+    public static byte[] decodeSysexToFrame(byte[] sysex) {
+        if (sysex == null || sysex.length != SYSEX_BYTES) {
             return null;
         }
         if (sysex[0] != SYSEX_START || sysex[1] != MANUFACTURER_ID) {
@@ -70,75 +91,74 @@ public final class UsbMidiSysex {
         if (sysex[2] != MAGIC[0] || sysex[3] != MAGIC[1] || sysex[4] != MAGIC[2]) {
             return null;
         }
-        if (sysex[5] != VERSION) {
-            return null;
-        }
-        if (sysex[sysex.length - 1] != SYSEX_END) {
+        if (sysex[SYSEX_BYTES - 1] != SYSEX_END) {
             return null;
         }
 
-        byte[] encoded = Arrays.copyOfRange(sysex, 6, sysex.length - 1);
-        return decodePayload7Bit(encoded);
+        byte[] encoded = Arrays.copyOfRange(sysex, 5, SYSEX_BYTES - 1);
+        if (encoded.length != ENCODED_BYTES) {
+            return null;
+        }
+        return decodePayload7BitFixed(encoded);
     }
 
-    // --- 7-bit payload codec (matches usbd_midi_if.c) ---
+    // --- 7-bit payload codec (fixed-size; matches firmware mini-frame) ---
 
-    private static byte[] decodePayload7Bit(byte[] in) {
-        if (in == null || in.length == 0) {
+    private static byte[] decodePayload7BitFixed(byte[] in42) {
+        if (in42 == null || in42.length != ENCODED_BYTES) {
             return null;
         }
-        byte[] out = new byte[128];
+        byte[] out = new byte[FRAME_SIZE];
         int inPos = 0;
         int outPos = 0;
 
-        while (inPos < in.length && outPos < 128) {
-            int prefix = in[inPos++] & 0x7F;
-            for (int j = 0; j < 7 && outPos < 128; j++) {
-                if (inPos >= in.length) {
+        while (inPos < ENCODED_BYTES && outPos < FRAME_SIZE) {
+            int prefix = in42[inPos++] & 0x7F;
+            for (int bit = 0; bit < 7 && outPos < FRAME_SIZE; bit++) {
+                if (inPos >= ENCODED_BYTES) {
                     return null;
                 }
-                int v = in[inPos++] & 0x7F;
-                if ((prefix & (1 << j)) != 0) {
+                int v = in42[inPos++] & 0x7F;
+                if ((prefix & (1 << bit)) != 0) {
                     v |= 0x80;
                 }
                 out[outPos++] = (byte) v;
             }
         }
 
-        return outPos == 128 ? out : null;
+        return outPos == FRAME_SIZE ? out : null;
     }
 
-    private static byte[] encodePayload7Bit(byte[] in128) {
-        if (in128 == null || in128.length != 128) {
+    private static byte[] encodePayload7BitFixed(byte[] in36) {
+        if (in36 == null || in36.length != FRAME_SIZE) {
             return null;
         }
-        // Worst-case: ceil(128/7) * (1 + 7) = 19 * 8 = 152.
-        byte[] out = new byte[160];
+
+        byte[] out = new byte[ENCODED_BYTES];
         int outPos = 0;
         int inPos = 0;
 
-        while (inPos < 128) {
+        while (inPos < FRAME_SIZE && outPos < ENCODED_BYTES) {
             int prefix = 0;
-            byte[] chunk = new byte[7];
-            int chunkLen = 0;
+            int chunkLen = Math.min(7, FRAME_SIZE - inPos);
+            if (outPos + 1 + chunkLen > ENCODED_BYTES) {
+                return null;
+            }
 
-            for (int j = 0; j < 7 && inPos < 128; j++) {
-                int b = in128[inPos++] & 0xFF;
+            int prefixPos = outPos;
+            outPos += 1;
+
+            for (int j = 0; j < chunkLen; j++) {
+                int b = in36[inPos++] & 0xFF;
                 if ((b & 0x80) != 0) {
                     prefix |= (1 << j);
                 }
-                chunk[j] = (byte) (b & 0x7F);
-                chunkLen++;
+                out[outPos++] = (byte) (b & 0x7F);
             }
 
-            if (outPos + 1 + chunkLen > out.length) {
-                return null;
-            }
-            out[outPos++] = (byte) (prefix & 0x7F);
-            System.arraycopy(chunk, 0, out, outPos, chunkLen);
-            outPos += chunkLen;
+            out[prefixPos] = (byte) (prefix & 0x7F);
         }
 
-        return Arrays.copyOf(out, outPos);
+        return outPos == ENCODED_BYTES ? out : null;
     }
 }
