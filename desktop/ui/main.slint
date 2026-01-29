@@ -132,6 +132,7 @@ export component AppWindow inherits Window {
         // Home page
         if (AppState.page == 0) : VerticalBox {
             spacing: 10px;
+            vertical-stretch: 1;
 
             Rectangle {
                 background: #0f1114;
@@ -186,6 +187,7 @@ export component AppWindow inherits Window {
         // Editor page
         if (AppState.page == 1) : VerticalBox {
             spacing: 10px;
+            vertical-stretch: 1;
 
             HorizontalBox {
                 spacing: 10px;
@@ -225,6 +227,7 @@ export component AppWindow inherits Window {
         // Scripts page
         if (AppState.page == 2) : HorizontalBox {
             spacing: 10px;
+            vertical-stretch: 1;
 
             // Left: bundled script list
             Rectangle {
@@ -232,6 +235,7 @@ export component AppWindow inherits Window {
                 background: #0f1114;
                 border-width: 1px;
                 border-color: #2b2f36;
+                vertical-stretch: 1;
 
                 VerticalBox {
                     padding: 10px;
@@ -268,6 +272,7 @@ export component AppWindow inherits Window {
                 border-width: 1px;
                 border-color: #2b2f36;
                 horizontal-stretch: 1;
+                vertical-stretch: 1;
 
                 VerticalBox {
                     padding: 10px;
@@ -305,9 +310,10 @@ export component AppWindow inherits Window {
                                 if (item.kind == "picker") : VerticalBox {
                                     spacing: 4px;
                                     Text { text: item.text; color: #a9b1ba; }
+                                    property <int> local_index: item.picker_index;
                                     cb := ComboBox {
                                         model: item.options_labels;
-                                        current-index: item.picker_index;
+                                        current-index <=> local_index;
                                         selected(_) => {
                                             if (item.token_change != "") {
                                                 AppState.script_invoke_str(item.token_change, item.options_values[cb.current-index]);
@@ -317,12 +323,13 @@ export component AppWindow inherits Window {
                                 }
                                 if (item.kind == "slider") : VerticalBox {
                                     spacing: 4px;
-                                    Text { text: item.text + ": " + item.value; color: #a9b1ba; }
+                                    property <float> local_value: item.value;
+                                    Text { text: item.text + ": " + local_value; color: #a9b1ba; }
                                     s := Slider {
                                         minimum: item.minimum;
                                         maximum: item.maximum;
                                         step: item.step;
-                                        value: item.value;
+                                        value <=> local_value;
                                         changed(v) => {
                                             if (item.token_change != "") {
                                                 AppState.script_invoke_num(item.token_change, v);
@@ -330,26 +337,28 @@ export component AppWindow inherits Window {
                                         }
                                         released => {
                                             if (item.token_submit != "") {
-                                                AppState.script_invoke_num(item.token_submit, s.value);
+                                                AppState.script_invoke_num(item.token_submit, local_value);
                                             }
                                         }
                                     }
                                 }
                                 if (item.kind == "toggle") : Switch {
+                                    property <bool> local_checked: item.checked;
                                     text: item.text;
-                                    checked: item.checked;
+                                    checked <=> local_checked;
                                     toggled => {
                                         if (item.token_change != "") {
-                                            AppState.script_invoke_bool(item.token_change, self.checked);
+                                            AppState.script_invoke_bool(item.token_change, local_checked);
                                         }
                                     }
                                 }
                                 if (item.kind == "textField") : VerticalBox {
                                     spacing: 4px;
                                     Text { text: item.text; color: #a9b1ba; }
+                                    property <string> local_text: item.input_text;
                                     i := LineEdit {
                                         placeholder-text: item.placeholder;
-                                        text: item.input_text;
+                                        text <=> local_text;
                                         edited(txt) => {
                                             if (item.token_change != "") {
                                                 AppState.script_invoke_str(item.token_change, txt);
@@ -357,7 +366,7 @@ export component AppWindow inherits Window {
                                         }
                                         accepted => {
                                             if (item.token_submit != "") {
-                                                AppState.script_invoke_str(item.token_submit, i.text);
+                                                AppState.script_invoke_str(item.token_submit, local_text);
                                             }
                                         }
                                     }
@@ -365,18 +374,34 @@ export component AppWindow inherits Window {
                                 if (item.kind == "textEditor") : VerticalBox {
                                     spacing: 4px;
                                     Text { text: item.text; color: #a9b1ba; }
+                                    property <string> local_text: item.input_text;
                                     TextEdit {
-                                        text: item.input_text;
+                                        text <=> local_text;
                                         wrap: word-wrap;
                                         height: 120px;
+                                        edited(txt) => {
+                                            if (item.token_change != "") {
+                                                AppState.script_invoke_str(item.token_change, txt);
+                                            }
+                                        }
                                     }
                                     Button {
                                         text: "Submit";
                                         clicked => {
                                             if (item.token_submit != "") {
-                                                AppState.script_invoke_str(item.token_submit, item.input_text);
+                                                AppState.script_invoke_str(item.token_submit, local_text);
                                             }
                                         }
+                                    }
+                                }
+                                if (item.kind == "logViewer") : VerticalBox {
+                                    spacing: 4px;
+                                    Text { text: item.text; color: #a9b1ba; }
+                                    TextEdit {
+                                        read-only: true;
+                                        text: item.input_text;
+                                        wrap: word-wrap;
+                                        height: 220px;
                                     }
                                 }
                                 if (item.kind == "divider") : Rectangle {
