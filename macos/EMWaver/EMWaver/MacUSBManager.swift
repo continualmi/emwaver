@@ -27,8 +27,9 @@ import EMWaverTransport
 /// This is intentionally minimal: enough to power Scripts execution.
 /// It implements `ScriptDevice` for the shared Script runtime.
 final class MacUSBManager: ObservableObject, ScriptDevice {
-    private static let laneSizeBytes: Int = 64
-    private static let superframeSizeBytes: Int = 128
+    // Mini-frame: 18B cmd lane + 18B stream lane.
+    private static let laneSizeBytes: Int = 18
+    private static let superframeSizeBytes: Int = 36
 
     @Published var isConnected: Bool = false
     @Published var connectedPortName: String? = nil
@@ -63,6 +64,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private var waitingForResponse = false
     private var responseSemaphore: DispatchSemaphore? = nil
     private var responseData: Data? = nil
+    private var responsePredicate: ((Data) -> Bool)? = nil
 
     init() {
         midiQueue.setSpecific(key: midiQueueKey, value: ())
@@ -145,17 +147,21 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                 return
             }
 
-            guard let packet64 = Self.makePacket64(data) else {
+            guard let packet = Self.makePacket(data) else {
                 self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.laneSizeBytes))")
                 return
             }
 
-            let sf = Self.makeSuperframe(cmdLane: packet64, streamLane: nil)
+            let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
             self.sendSuperframe(sf)
         }
     }
 
     func sendCommand(_ command: Data, timeout: Int) -> Data? {
+        sendCommandInternal(command, timeout: timeout, responsePredicate: nil)
+    }
+
+    private func sendCommandInternal(_ command: Data, timeout: Int, responsePredicate: ((Data) -> Bool)?) -> Data? {
         guard isTransportConnectedInternal() else {
             setError("Cannot send command: Not connected")
             return nil
@@ -170,6 +176,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             waitingForResponse = true
             responseSemaphore = sem
             responseData = nil
+            self.responsePredicate = responsePredicate
         }
 
         sendPacket(command)
@@ -180,6 +187,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         bufferQueue.sync {
             waitingForResponse = false
             responseSemaphore = nil
+            self.responsePredicate = nil
         }
 
         if waitResult == .timedOut {
@@ -204,8 +212,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         while idx < data.count {
             let end = min(idx + Self.laneSizeBytes, data.count)
             let chunk = data.subdata(in: idx..<end)
-            guard let packet64 = Self.makePacket64(chunk) else { break }
-            let sf = Self.makeSuperframe(cmdLane: nil, streamLane: packet64)
+            guard let packet = Self.makePacket(chunk) else { break }
+            let sf = Self.makeSuperframe(cmdLane: nil, streamLane: packet)
             withMidiQueueSync { self.sendSuperframe(sf) }
             idx = end
             Thread.sleep(forTimeInterval: 0.001)
@@ -310,7 +318,11 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
         // Mirror the desktop app behavior: query the device version automatically on connect.
         DispatchQueue.global(qos: .userInitiated).async {
-            let v = self.queryDeviceVersion(timeoutMs: 1500)
+            var v = self.queryDeviceVersion(timeoutMs: 1500)
+            if v == nil {
+                Thread.sleep(forTimeInterval: 0.25)
+                v = self.queryDeviceVersion(timeoutMs: 1500)
+            }
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
             }
@@ -333,7 +345,15 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private func queryDeviceVersion(timeoutMs: Int) -> String? {
         // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
-        let resp = sendCommand(Data([0x01]), timeout: timeoutMs)
+        let resp = sendCommandInternal(
+            Data([0x01]),
+            timeout: timeoutMs,
+            responsePredicate: { lane64 in
+                if lane64.count < 4 { return false }
+                if lane64[0] != 0x80 { return false }
+                return !lane64.dropFirst(4).contains(where: { $0 != 0 })
+            }
+        )
         guard let resp else { return nil }
         if resp.count < 4 { return nil }
         if resp[0] != 0x80 { return nil }
@@ -458,7 +478,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         return MIDISend(outPort, destination, pktList)
     }
 
-    private static func makePacket64(_ data: Data) -> Data? {
+    private static func makePacket(_ data: Data) -> Data? {
         if data.count > laneSizeBytes { return nil }
         if data.count == laneSizeBytes { return data }
         var out = Data(repeating: 0, count: laneSizeBytes)
@@ -535,13 +555,16 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         return out
     }
 
-    private func storeRxLane(_ lane64: Data) {
+    private func storeRxLane(_ lane: Data) {
         bufferQueue.sync {
-            captureBuffer.append(lane64)
-            rxPackets.append(lane64)
+            captureBuffer.append(lane)
+            rxPackets.append(lane)
 
             if waitingForResponse, responseData == nil {
-                responseData = lane64
+                if let predicate = responsePredicate, !predicate(lane) {
+                    return
+                }
+                responseData = lane
                 responseSemaphore?.signal()
             }
         }

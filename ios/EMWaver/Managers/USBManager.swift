@@ -23,11 +23,12 @@ import os
 /// NOTE: Despite the historical name, this is now a **USB MIDI (CoreMIDI)** transport.
 /// We keep the `USBManager` API surface to minimize churn across the iOS codebase.
 final class USBManager: ObservableObject {
-    private static let laneSizeBytes: Int = 64
-    private static let superframeSizeBytes: Int = 128
+    // Mini-frame: 18B cmd lane + 18B stream lane.
+    private static let laneSizeBytes: Int = 18
+    private static let superframeSizeBytes: Int = 36
     
     // Legacy constant alias for code using it (usually referring to the lane/packet size)
-    private static let packetSizeBytes: Int = 64
+    private static let packetSizeBytes: Int = 18
     
     private static let log = Logger(subsystem: "com.emwaver", category: "usb-midi")
 
@@ -448,7 +449,7 @@ final class USBManager: ObservableObject {
     }
 
     /// Transmits the current buffer content to the connected device.
-    /// For USB MIDI we always send fixed 64B frames (SysEx-tunneled).
+    /// For USB MIDI we always send fixed 18B lane packets (SysEx-tunneled mini-frames).
     @objc func transmitBuffer() {
         guard isConnected else {
             setError("Cannot transmit buffer: Not connected")
