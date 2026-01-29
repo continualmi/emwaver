@@ -63,10 +63,7 @@ struct ContentView: View {
                 }
                 .tag("Sampler")
 
-                NavigationView {
-                    ScriptsView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
+                ScriptsContainerView()
                 .tabItem {
                     Image("TabScripts").renderingMode(.template)
                     Text("Scripts")

@@ -1,6 +1,6 @@
 /*
  * EMWaver
- * Copyright (c) 2026 Luís Marnoto
+ * Copyright (c) 2026 Luis Marnoto
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,37 @@
  */
 
 import SwiftUI
+import EMWaverScriptRuntime
+import EMWaverScriptStorage
+import EMWaverScriptSwiftUI
 
-struct ScriptsView: View {
-    @EnvironmentObject var bleManager: USBManager
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
+public struct ScriptsRootView: View {
     @StateObject private var viewModel = ScriptsViewModel()
     @StateObject private var previewManager = ScriptPreviewManager()
+
+    private let device: (any ScriptDevice)?
+
     @State private var showingEditor = false
     @State private var showingPreview = false
     @State private var currentScriptId: String?
     @State private var editorContent: String = ""
     @State private var lineWrapEnabled = false
-    @State private var consoleExpanded = false
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
     @State private var assetPreview: AssetScriptPreview?
 
-    var body: some View {
+    public init(device: (any ScriptDevice)? = nil) {
+        self.device = device
+    }
+
+    public var body: some View {
         NavigationStack {
             ZStack {
                 if showingEditor {
@@ -40,7 +54,7 @@ struct ScriptsView: View {
                 } else {
                     mainView
                 }
-                
+
                 if viewModel.isPerformingAction {
                     ProgressView()
                         .progressViewStyle(.circular)
@@ -50,8 +64,9 @@ struct ScriptsView: View {
                 }
             }
             .navigationTitle(showingEditor ? (currentScriptName ?? "Script") : (showingPreview ? (currentScriptName ?? "Script Preview") : "Scripts"))
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(showingPreview)
+            #endif
             .toolbar { toolbarContent() }
             .alert(item: $viewModel.notice) { notice in
                 Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
@@ -86,26 +101,22 @@ struct ScriptsView: View {
                 }
             }
             .onAppear {
-                previewManager.attach(bleManager: bleManager)
+                previewManager.attach(device: device)
                 loadScripts()
-            }
-            .onChange(of: bleManager.isConnected) { connected in
-                previewManager.updateConnectionState(isConnected: connected)
             }
         }
     }
-    
+
     private var mainView: some View {
         Group {
             if showingPreview {
-                // Preview mode: full screen preview
                 ZStack {
                     ScriptRenderView(tree: previewManager.scriptTree) { token, args in
                         previewManager.invoke(token: token, arguments: args)
                     }
                     .opacity(previewManager.scriptTree == nil ? 0 : 1)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    
+
                     if previewManager.scriptTree == nil {
                         VStack {
                             if previewManager.isRendering {
@@ -118,9 +129,8 @@ struct ScriptsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(uiColor: .secondarySystemBackground))
+                .background(Self.secondaryBackground)
             } else {
-                // Normal mode: scripts list fills the view
                 if viewModel.assetScripts.isEmpty && viewModel.customScripts.isEmpty {
                     VStack(spacing: 8) {
                         Text("No scripts available")
@@ -166,29 +176,26 @@ struct ScriptsView: View {
                         }
                     }
                     .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                 }
             }
         }
     }
-    
+
     private var editorView: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 if lineWrapEnabled {
-                    // Line wrap enabled: TextEditor fills width, wraps naturally
                     TextEditor(text: $editorContent)
                         .font(.system(.body, design: .monospaced))
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .onChange(of: editorContent) { _, newValue in
+                        .onChange(of: editorContent) { newValue in
                             if let id = currentScriptId {
                                 viewModel.updateDraft(for: id, content: newValue)
                             }
                         }
                 } else {
-                    // Line wrap disabled: Horizontal scrolling with wide TextEditor
                     ScrollView(.horizontal, showsIndicators: true) {
                         HStack(spacing: 0) {
                             TextEditor(text: $editorContent)
@@ -198,7 +205,7 @@ struct ScriptsView: View {
                                 .frame(minHeight: geometry.size.height)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
-                                .onChange(of: editorContent) { _, newValue in
+                                .onChange(of: editorContent) { newValue in
                                     if let id = currentScriptId {
                                         viewModel.updateDraft(for: id, content: newValue)
                                     }
@@ -207,48 +214,34 @@ struct ScriptsView: View {
                         }
                     }
                 }
-                
-                if let id = currentScriptId, viewModel.isScriptDirty(id) {
-                    HStack {
-                        Label("Changes not yet saved", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundColor(.orange)
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                }
             }
-            .background(Color(uiColor: .systemBackground))
+            .background(Self.primaryBackground)
         }
     }
-    
+
     private func calculateTextWidth(_ text: String) -> CGFloat {
         let lines = text.components(separatedBy: .newlines)
         let longestLine = lines.max(by: { $0.count < $1.count }) ?? ""
-        // Approximate width: ~10 pixels per character for monospaced font at body size
-        // Minimum width ensures editor is usable even with short lines
         let calculatedWidth = CGFloat(longestLine.count) * 10 + 200
-        return max(600, calculatedWidth)
+        return max(800, calculatedWidth)
     }
-    
+
     private var currentScriptName: String? {
         guard let id = currentScriptId else { return nil }
         return viewModel.scriptName(for: id)
     }
-    
+
     private func loadScripts() {
         Task {
             await viewModel.loadScripts()
         }
     }
-    
+
     private func previewScript(_ id: String) {
-        // Save current editor content if editing
         if showingEditor, let currentId = currentScriptId {
             viewModel.updateDraft(for: currentId, content: editorContent)
         }
-        
+
         viewModel.selectScript(id: id)
         currentScriptId = id
         Task {
@@ -260,11 +253,10 @@ struct ScriptsView: View {
                 previewManager.render(script: script, name: name, moduleSources: modules)
                 showingPreview = true
                 showingEditor = false
-                consoleExpanded = false
             }
         }
     }
-    
+
     private func openEditor(for id: String) {
         if viewModel.isAssetScript(id) {
             openAssetPreview(for: id)
@@ -281,7 +273,7 @@ struct ScriptsView: View {
             }
         }
     }
-    
+
     private func openNewScriptEditor() {
         viewModel.selectScript(id: viewModel.unsavedIdentifier)
         currentScriptId = viewModel.unsavedIdentifier
@@ -289,20 +281,19 @@ struct ScriptsView: View {
         showingEditor = true
         showingPreview = false
     }
-    
+
     private func exitEditor() {
         showingEditor = false
         currentScriptId = nil
         editorContent = ""
     }
-    
+
     private func exitPreview() {
         showingPreview = false
         currentScriptId = nil
         previewManager.exitPreview()
-        consoleExpanded = false
     }
-    
+
     private func saveCurrentScript() {
         guard let id = currentScriptId else { return }
         if viewModel.isAssetScript(id) {
@@ -316,7 +307,7 @@ struct ScriptsView: View {
             presentNamePrompt(context: .create)
         }
     }
-    
+
     private func presentNamePrompt(context: NamePromptContext) {
         let initial: String
         switch context {
@@ -327,6 +318,7 @@ struct ScriptsView: View {
         case .copy(let id):
             initial = viewModel.scriptName(for: id)
         }
+
         namePrompt = NamePrompt(
             context: context,
             title: context.title,
@@ -336,11 +328,11 @@ struct ScriptsView: View {
             handleName(context: context, name: name)
         }
     }
-    
+
     private func handleName(context: NamePromptContext, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        
+
         Task {
             switch context {
             case .create:
@@ -362,93 +354,57 @@ struct ScriptsView: View {
             }
         }
     }
-    
+
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
         if showingEditor {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("Close") {
-                    exitEditor()
-                }
+            ToolbarItem(placement: .navigation) {
+                Button("Close") { exitEditor() }
             }
-            
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                // Preview button in toolbar
-                Button(action: {
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
                     guard let id = currentScriptId else { return }
-                    // Save editor content before previewing
                     viewModel.updateDraft(for: id, content: editorContent)
                     previewScript(id)
-                }) {
+                } label: {
                     Image(systemName: "play.fill")
                 }
                 .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                
-                // Menu with other actions
+
                 Menu {
-                    Button(action: {
-                        let pasteboard = UIPasteboard.general
-                        pasteboard.string = editorContent
-                    }) {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    
-                    Button(action: {
-                        let pasteboard = UIPasteboard.general
-                        if let string = pasteboard.string {
-                            editorContent = string
+                    Button("Copy") { copyToPasteboard(editorContent) }
+                    Button("Paste") {
+                        if let text = pasteFromPasteboard() {
+                            editorContent = text
                         }
-                    }) {
-                        Label("Paste", systemImage: "doc.on.clipboard")
                     }
-                    
-                    if currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) && !viewModel.isAssetScript(currentScriptId!) {
+
+                    if let currentScriptId, viewModel.isExistingScript(currentScriptId), !viewModel.isAssetScript(currentScriptId) {
                         Divider()
-                        
-                        Button(action: {
-                            guard let id = currentScriptId else { return }
-                            presentNamePrompt(context: .rename(id: id))
-                        }) {
-                            Label("Rename", systemImage: "pencil")
-                        }
-                        
-                        Button(action: {
-                            guard let id = currentScriptId else { return }
-                            presentNamePrompt(context: .copy(id: id))
-                        }) {
-                            Label("Make Copy", systemImage: "doc.on.doc")
-                        }
-                        
-                        Button(role: .destructive, action: {
-                            guard let id = currentScriptId else { return }
-                            deleteTarget = DeletionTarget(id: id, name: viewModel.scriptName(for: id))
+                        Button("Rename") { presentNamePrompt(context: .rename(id: currentScriptId)) }
+                        Button("Make Copy") { presentNamePrompt(context: .copy(id: currentScriptId)) }
+                        Button("Delete", role: .destructive) {
+                            deleteTarget = DeletionTarget(id: currentScriptId, name: viewModel.scriptName(for: currentScriptId))
                             showingDeleteConfirmation = true
-                        }) {
-                            Label("Delete", systemImage: "trash")
                         }
                     }
-                    
+
                     Divider()
-                    
-                    Button(action: {
-                        lineWrapEnabled.toggle()
-                    }) {
-                        Label("Line Wrap", systemImage: lineWrapEnabled ? "text.word.spacing" : "text.alignleft")
-                    }
+                    Button(lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap") { lineWrapEnabled.toggle() }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
-                
-                // Save/Create button
-                Button(currentScriptId != nil && viewModel.isExistingScript(currentScriptId!) ? "Save" : "Create") {
+
+                Button(viewModel.isExistingScript(currentScriptId ?? "") ? "Save" : "Create") {
                     saveCurrentScript()
                 }
             }
         } else if showingPreview {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: {
+            ToolbarItem(placement: .navigation) {
+                Button {
                     exitPreview()
-                }) {
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                         Text("Back")
@@ -456,42 +412,18 @@ struct ScriptsView: View {
                 }
             }
         } else {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button {
-                        openNewScriptEditor()
-                    } label: {
-                        Label("New Script", systemImage: "plus")
-                    }
-                    
-                    Button {
-                        // Open file picker
-                        // TODO: Implement file import
-                    } label: {
-                        Label("Open", systemImage: "folder")
-                    }
-                    
+                    Button("New Script") { openNewScriptEditor() }
+
                     if let selected = viewModel.selectedScriptId, viewModel.isExistingScript(selected) {
                         Divider()
-                        
-                        Button {
-                            presentNamePrompt(context: .copy(id: selected))
-                        } label: {
-                            Label("Make Copy", systemImage: "doc.on.doc")
-                        }
-
+                        Button("Make Copy") { presentNamePrompt(context: .copy(id: selected)) }
                         if !viewModel.isAssetScript(selected) {
-                            Button {
-                                presentNamePrompt(context: .rename(id: selected))
-                            } label: {
-                                Label("Rename", systemImage: "pencil")
-                            }
-                            
-                            Button(role: .destructive) {
+                            Button("Rename") { presentNamePrompt(context: .rename(id: selected)) }
+                            Button("Delete", role: .destructive) {
                                 deleteTarget = DeletionTarget(id: selected, name: viewModel.scriptName(for: selected))
                                 showingDeleteConfirmation = true
-                            } label: {
-                                Label("Delete", systemImage: "trash")
                             }
                         }
                     }
@@ -509,6 +441,46 @@ struct ScriptsView: View {
         let name = viewModel.scriptName(for: id)
         assetPreview = AssetScriptPreview(id: id, name: name, content: content)
     }
+
+    private static var primaryBackground: Color {
+        #if canImport(UIKit)
+        Color(uiColor: .systemBackground)
+        #elseif canImport(AppKit)
+        Color(nsColor: .windowBackgroundColor)
+        #else
+        Color.white
+        #endif
+    }
+
+    private static var secondaryBackground: Color {
+        #if canImport(UIKit)
+        Color(uiColor: .secondarySystemBackground)
+        #elseif canImport(AppKit)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color.gray.opacity(0.08)
+        #endif
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = text
+        #elseif canImport(AppKit)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        #endif
+    }
+
+    private func pasteFromPasteboard() -> String? {
+        #if canImport(UIKit)
+        return UIPasteboard.general.string
+        #elseif canImport(AppKit)
+        return NSPasteboard.general.string(forType: .string)
+        #else
+        return nil
+        #endif
+    }
 }
 
 private struct ScriptRow: View {
@@ -516,7 +488,7 @@ private struct ScriptRow: View {
     let isSelected: Bool
     let onTap: () -> Void
     let onEdit: () -> Void
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -531,7 +503,6 @@ private struct ScriptRow: View {
             Spacer()
             Button(action: onEdit) {
                 Image(systemName: script.isAsset ? "eye" : "pencil")
-                    .foregroundColor(.blue)
             }
             .buttonStyle(.plain)
             .padding(.leading, 8)
@@ -547,26 +518,20 @@ private enum NamePromptContext {
     case create
     case rename(id: String)
     case copy(id: String)
-    
+
     var title: String {
         switch self {
-        case .create:
-            return "Save Script"
-        case .rename:
-            return "Rename Script"
-        case .copy:
-            return "Copy Script"
+        case .create: return "Save Script"
+        case .rename: return "Rename Script"
+        case .copy: return "Copy Script"
         }
     }
-    
+
     var message: String {
         switch self {
-        case .create:
-            return "Enter a name for the new script."
-        case .rename:
-            return "Enter a new name for this script."
-        case .copy:
-            return "Enter a name for the duplicated script."
+        case .create: return "Enter a name for the new script."
+        case .rename: return "Enter a new name for this script."
+        case .copy: return "Enter a name for the duplicated script."
         }
     }
 }
@@ -603,16 +568,23 @@ private struct AssetScriptPreviewSheet: View {
                     .textSelection(.enabled)
                     .padding(16)
             }
-            .background(Color(uiColor: .systemBackground))
             .navigationTitle(preview.name)
+            #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .navigation) {
                     Button("Close") { dismiss() }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Copy") {
+                        #if canImport(UIKit)
                         UIPasteboard.general.string = preview.content
+                        #elseif canImport(AppKit)
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(preview.content, forType: .string)
+                        #endif
                     }
                 }
             }
@@ -624,27 +596,29 @@ private struct NamePromptSheet: View {
     @Environment(\.dismiss) private var dismiss
     let prompt: NamePrompt
     @State private var value: String
-    
+
     init(prompt: NamePrompt) {
         self.prompt = prompt
         _value = State(initialValue: prompt.initialValue)
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text(prompt.message)) {
                     TextField("Script name", text: $value)
+                        #if canImport(UIKit)
                         .textInputAutocapitalization(.none)
                         .autocorrectionDisabled()
+                        #endif
                 }
             }
             .navigationTitle(prompt.title)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .navigation) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Done") {
                         prompt.action(value)
                         dismiss()

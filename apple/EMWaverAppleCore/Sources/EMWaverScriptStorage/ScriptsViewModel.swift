@@ -1,6 +1,6 @@
 /*
  * EMWaver
- * Copyright (c) 2026 Luís Marnoto
+ * Copyright (c) 2026 Luis Marnoto
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,18 +19,18 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class ScriptsViewModel: ObservableObject {
-    struct ScriptListItem: Identifiable, Equatable {
-        let id: String
-        var name: String
-        var isDirty: Bool
-        var isAsset: Bool
+public final class ScriptsViewModel: ObservableObject {
+    public struct ScriptListItem: Identifiable, Equatable {
+        public let id: String
+        public var name: String
+        public var isDirty: Bool
+        public var isAsset: Bool
     }
 
-    struct Notice: Identifiable {
-        let id = UUID()
-        let title: String
-        let message: String
+    public struct Notice: Identifiable {
+        public let id = UUID()
+        public let title: String
+        public let message: String
     }
 
     private struct ScriptRecord {
@@ -49,12 +49,12 @@ final class ScriptsViewModel: ObservableObject {
         let content: String
     }
 
-    @Published private(set) var assetScripts: [ScriptListItem] = []
-    @Published private(set) var customScripts: [ScriptListItem] = []
-    @Published var selectedScriptId: String?
-    @Published var notice: Notice?
-    @Published var isLoading = false
-    @Published var isPerformingAction = false
+    @Published public private(set) var assetScripts: [ScriptListItem] = []
+    @Published public private(set) var customScripts: [ScriptListItem] = []
+    @Published public var selectedScriptId: String?
+    @Published public var notice: Notice?
+    @Published public var isLoading = false
+    @Published public var isPerformingAction = false
 
     private var records: [String: ScriptRecord] = [:]
     private var assetRecords: [String: AssetRecord] = [:]
@@ -66,9 +66,8 @@ final class ScriptsViewModel: ObservableObject {
     private let unsavedKey = "__unsaved__"
     private let lastScriptDefaultsKey = "scripts.last_script_id"
     private let assetIdPrefix = "__asset__"
-    // Asset scripts are discovered dynamically from the app bundle (DefaultScripts/*.emw).
 
-    init(
+    public init(
         fileService: FileService = .shared,
         defaults: UserDefaults = .standard
     ) {
@@ -79,9 +78,7 @@ final class ScriptsViewModel: ObservableObject {
         rebuildScriptItems()
     }
 
-    // MARK: - Loading
-
-    func loadScripts() async {
+    public func loadScripts() async {
         isLoading = true
         defer { isLoading = false }
 
@@ -111,67 +108,41 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Accessors
-
-    func scriptName(for id: String) -> String {
+    public func scriptName(for id: String) -> String {
         if let asset = assetRecords[id] {
             return asset.name
         }
         return records[id]?.name ?? "Unsaved Script"
     }
 
-    var unsavedIdentifier: String { unsavedKey }
+    public var unsavedIdentifier: String { unsavedKey }
 
-    func scriptDraft(for id: String) -> String {
+    public func scriptDraft(for id: String) -> String {
         if let asset = assetRecords[id] {
             return asset.content
         }
         return records[id]?.draftContent ?? ""
     }
 
-    func isScriptDirty(_ id: String) -> Bool {
+    public func isScriptDirty(_ id: String) -> Bool {
         if assetRecords[id] != nil {
             return false
         }
         return records[id]?.isDirty ?? false
     }
 
-    func isExistingScript(_ id: String) -> Bool {
+    public func isExistingScript(_ id: String) -> Bool {
         if assetRecords[id] != nil {
             return true
         }
         return records[id]?.metadata != nil
     }
 
-    func isAssetScript(_ id: String) -> Bool {
+    public func isAssetScript(_ id: String) -> Bool {
         assetRecords[id] != nil
     }
 
-    func draftBinding(for id: String) -> Binding<String> {
-        Binding(
-            get: { [weak self] in self?.scriptDraft(for: id) ?? "" },
-            set: { [weak self] newValue in self?.updateDraft(for: id, content: newValue) }
-        )
-    }
-
-    func moduleSources() -> [String: String] {
-        var modules: [String: String] = [:]
-        for asset in assetRecords.values {
-            guard !asset.content.isEmpty else { continue }
-            if isModuleScript(name: asset.name, content: asset.content) {
-                modules[asset.name] = asset.content
-            }
-        }
-        for record in records.values {
-            guard !record.draftContent.isEmpty else { continue }
-            if isModuleScript(name: record.name, content: record.draftContent) {
-                modules[record.name] = record.draftContent
-            }
-        }
-        return modules
-    }
-
-    func updateDraft(for id: String, content: String) {
+    public func updateDraft(for id: String, content: String) {
         if assetRecords[id] != nil {
             return
         }
@@ -186,7 +157,7 @@ final class ScriptsViewModel: ObservableObject {
         rebuildScriptItems()
     }
 
-    func ensureContent(for id: String) async {
+    public func ensureContent(for id: String) async {
         if assetRecords[id] != nil {
             return
         }
@@ -207,9 +178,7 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    // MARK: - CRUD
-
-    func saveScript(id: String) async {
+    public func saveScript(id: String) async {
         if assetRecords[id] != nil {
             notice = Notice(title: "Read-Only", message: "Asset scripts cannot be modified. Create a copy to edit.")
             return
@@ -217,7 +186,6 @@ final class ScriptsViewModel: ObservableObject {
         guard var record = records[id] else { return }
 
         if record.metadata == nil {
-            // requires creation with explicit name
             showError(message: "Script name required before saving")
             return
         }
@@ -250,7 +218,7 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    func createScript(name rawName: String) async -> String? {
+    public func createScript(name rawName: String) async -> String? {
         let normalized = resolveUniqueScriptName(normalizeScriptName(rawName))
         let content = scriptDraft(for: unsavedKey)
 
@@ -282,7 +250,7 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    func renameScript(id: String, newName rawName: String) async {
+    public func renameScript(id: String, newName rawName: String) async {
         if assetRecords[id] != nil {
             notice = Notice(title: "Read-Only", message: "Asset scripts cannot be renamed. Create a copy to edit.")
             return
@@ -305,7 +273,7 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    func deleteScript(id: String) async {
+    public func deleteScript(id: String) async {
         if assetRecords[id] != nil {
             notice = Notice(title: "Read-Only", message: "Asset scripts cannot be deleted.")
             return
@@ -330,7 +298,7 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    func copyScript(id: String, newName rawName: String) async -> String? {
+    public func copyScript(id: String, newName rawName: String) async -> String? {
         let content: String
         if let asset = assetRecords[id] {
             content = asset.content
@@ -368,23 +336,34 @@ final class ScriptsViewModel: ObservableObject {
         }
     }
 
-
-    // MARK: - Selection
-
-    func selectScript(id: String?) {
+    public func selectScript(id: String?) {
         selectedScriptId = id
         if let id {
             defaults.set(id, forKey: lastScriptDefaultsKey)
         }
     }
 
-    // MARK: - Helpers
+    public func moduleSources() -> [String: String] {
+        var modules: [String: String] = [:]
+        for asset in assetRecords.values {
+            guard !asset.content.isEmpty else { continue }
+            if isModuleScript(name: asset.name, content: asset.content) {
+                modules[asset.name] = asset.content
+            }
+        }
+        for record in records.values {
+            guard !record.draftContent.isEmpty else { continue }
+            if isModuleScript(name: record.name, content: record.draftContent) {
+                modules[record.name] = record.draftContent
+            }
+        }
+        return modules
+    }
 
     private func mergeRemote(_ data: [UserFileData]) {
         var updated: [String: ScriptRecord] = [:]
         let assetNameSet = Set(assetRecords.values.map { $0.name.lowercased() })
 
-        // Preserve unsaved draft if it exists and has content
         if let unsaved = records[unsavedKey], !unsaved.draftContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             updated[unsavedKey] = unsaved
         } else {
@@ -426,7 +405,6 @@ final class ScriptsViewModel: ObservableObject {
 
     private func loadAssetScriptsFromBundle() {
         var updated: [String: AssetRecord] = [:]
-
         let urls = Bundle.main.urls(forResourcesWithExtension: "emw", subdirectory: "DefaultScripts") ?? []
         for fileUrl in urls {
             let filename = fileUrl.lastPathComponent
@@ -436,7 +414,6 @@ final class ScriptsViewModel: ObservableObject {
             let id = assetIdPrefix + filename
             updated[id] = AssetRecord(id: id, name: filename, content: content)
         }
-
         assetRecords = updated
         rebuildScriptItems()
     }
@@ -505,8 +482,7 @@ final class ScriptsViewModel: ObservableObject {
 
     private func isModuleScript(name: String, content: String) -> Bool {
         let lowered = name.lowercased()
-        if lowered.hasSuffix(".module.emw")
-            || lowered.hasSuffix("_module.emw") {
+        if lowered.hasSuffix(".module.emw") || lowered.hasSuffix("_module.emw") {
             return true
         }
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)

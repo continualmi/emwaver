@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		46C17DC72DBB801B00BA6857 /* DGCharts in Frameworks */ = {isa = PBXBuildFile; productRef = 46C17DC62DBB801B00BA6857 /* DGCharts */; };
+		A1E0A1B22F6B4D7C8E9F2007 /* EMWaverScriptsUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F2005 /* EMWaverScriptsUI */; };
+		A1E0A1B22F6B4D7C8E9F2008 /* EMWaverScriptRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F2006 /* EMWaverScriptRuntime */; };
 		A0E0A1B22F6B4D7C8E9F0001 /* ota in Resources */ = {isa = PBXBuildFile; fileRef = A0E0A1B22F6B4D7C8E9F0002 /* ota */; };
 /* End PBXBuildFile section */
 
@@ -86,6 +88,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				46C17DC72DBB801B00BA6857 /* DGCharts in Frameworks */,
+				A1E0A1B22F6B4D7C8E9F2007 /* EMWaverScriptsUI in Frameworks */,
+				A1E0A1B22F6B4D7C8E9F2008 /* EMWaverScriptRuntime in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -168,6 +172,8 @@
 			name = EMWaver;
 			packageProductDependencies = (
 				46C17DC62DBB801B00BA6857 /* DGCharts */,
+				A1E0A1B22F6B4D7C8E9F2005 /* EMWaverScriptsUI */,
+				A1E0A1B22F6B4D7C8E9F2006 /* EMWaverScriptRuntime */,
 			);
 			productName = EMWaver;
 			productReference = 46DC3FDA2DA99FB800423E8A /* EMWaver.app */;
@@ -253,6 +259,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				46C17DBB2DBB7D4A00BA6857 /* XCRemoteSwiftPackageReference "Charts" */,
+				A1E0A1B22F6B4D7C8E9F2004 /* XCLocalSwiftPackageReference "EMWaverAppleCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 46DC3FDB2DA99FB800423E8A /* Products */;
@@ -692,11 +699,28 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		A1E0A1B22F6B4D7C8E9F2004 /* XCLocalSwiftPackageReference "EMWaverAppleCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../apple/EMWaverAppleCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		46C17DC62DBB801B00BA6857 /* DGCharts */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 46C17DBB2DBB7D4A00BA6857 /* XCRemoteSwiftPackageReference "Charts" */;
 			productName = DGCharts;
+		};
+		A1E0A1B22F6B4D7C8E9F2005 /* EMWaverScriptsUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1E0A1B22F6B4D7C8E9F2004 /* XCLocalSwiftPackageReference "EMWaverAppleCore" */;
+			productName = EMWaverScriptsUI;
+		};
+		A1E0A1B22F6B4D7C8E9F2006 /* EMWaverScriptRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1E0A1B22F6B4D7C8E9F2004 /* XCLocalSwiftPackageReference "EMWaverAppleCore" */;
+			productName = EMWaverScriptRuntime;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

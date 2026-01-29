@@ -1,6 +1,6 @@
 /*
  * EMWaver
- * Copyright (c) 2026 Luís Marnoto
+ * Copyright (c) 2026 Luis Marnoto
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +17,16 @@
 
 import Foundation
 
-struct UserFileMetadata: Identifiable, Equatable {
-    let id: String
-    let name: String
-    let fileExtension: String
-    let kind: String
-    let etag: String?
-    let sizeBytes: Int64
-    let contentType: String?
+public struct UserFileMetadata: Identifiable, Equatable {
+    public let id: String
+    public let name: String
+    public let fileExtension: String
+    public let kind: String
+    public let etag: String?
+    public let sizeBytes: Int64
+    public let contentType: String?
 
-    init(
+    public init(
         id: String,
         name: String,
         fileExtension: String,
@@ -44,27 +44,7 @@ struct UserFileMetadata: Identifiable, Equatable {
         self.contentType = contentType
     }
 
-    init(json: [String: Any]) {
-        id = json["id"] as? String ?? ""
-        name = json["name"] as? String ?? ""
-        fileExtension = json["extension"] as? String ?? ""
-        kind = json["kind"] as? String ?? "file"
-        etag = json["etag"] as? String
-        if let value = json["size_bytes"] as? Int64 {
-            sizeBytes = value
-        } else if let value = json["size_bytes"] as? NSNumber {
-            sizeBytes = value.int64Value
-        } else if let value = json["sizeBytes"] as? NSNumber {
-            sizeBytes = value.int64Value
-        } else if let value = json["sizeBytes"] as? Int64 {
-            sizeBytes = value
-        } else {
-            sizeBytes = 0
-        }
-        contentType = json["content_type"] as? String
-    }
-
-    func updating(name: String? = nil, etag: String? = nil, sizeBytes: Int64? = nil) -> UserFileMetadata {
+    public func updating(name: String? = nil, etag: String? = nil, sizeBytes: Int64? = nil) -> UserFileMetadata {
         UserFileMetadata(
             id: id,
             name: name ?? self.name,
