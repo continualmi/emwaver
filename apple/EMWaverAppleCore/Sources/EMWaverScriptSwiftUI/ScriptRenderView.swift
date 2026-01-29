@@ -18,6 +18,14 @@
 import SwiftUI
 import EMWaverScriptModel
 
+#if canImport(AppKit)
+import AppKit
+#endif
+
+#if canImport(UIKit)
+import UIKit
+#endif
+
 public struct ScriptRenderView: View {
     public let tree: ScriptTree?
     public let invokeHandler: (String, [Any]) -> Void
@@ -28,23 +36,29 @@ public struct ScriptRenderView: View {
     }
 
     public var body: some View {
-        renderRoot()
-    }
-
-    private func renderRoot() -> AnyView {
         guard let root = tree?.root else {
             return AnyView(EmptyView())
         }
-        return render(node: root)
+
+        let modals = collectModalNodes(from: root)
+
+        return AnyView(
+            ZStack {
+                renderBase(node: root)
+                ForEach(modals) { modal in
+                    ScriptModalOverlay(node: modal, invokeHandler: invokeHandler, renderChild: renderBase)
+                }
+            }
+        )
     }
 
-    private func render(node: ScriptNode) -> AnyView {
+    private func renderBase(node: ScriptNode) -> AnyView {
         switch node.type {
         case .column:
             return AnyView(
                 VStack(alignment: node.props.alignment ?? .leading, spacing: node.props.spacing) {
                     ForEach(node.children) { child in
-                        render(node: child)
+                        renderBase(node: child)
                     }
                 }
                 .applyScriptModifiers(node.props)
@@ -53,10 +67,15 @@ public struct ScriptRenderView: View {
             return AnyView(
                 HStack(spacing: node.props.spacing) {
                     ForEach(node.children) { child in
-                        render(node: child)
+                        renderBase(node: child)
                     }
                 }
                 .applyScriptModifiers(node.props)
+            )
+        case .card:
+            return AnyView(
+                ScriptCardView(node: node, renderChild: renderBase)
+                    .applyScriptModifiers(node.props)
             )
         case .text:
             var textView = Text(node.props.text ?? "")
@@ -80,6 +99,11 @@ public struct ScriptRenderView: View {
                 ScriptButtonView(node: node, invokeHandler: invokeHandler)
                     .applyScriptModifiers(node.props)
             )
+        case .tile:
+            return AnyView(
+                ScriptTileView(node: node, invokeHandler: invokeHandler)
+                    .applyScriptModifiers(node.props)
+            )
         case .slider:
             return AnyView(
                 ScriptSliderView(node: node, invokeHandler: invokeHandler)
@@ -92,7 +116,7 @@ public struct ScriptRenderView: View {
             )
         case .scroll:
             return AnyView(
-                ScriptScrollView(node: node, renderChild: render)
+                ScriptScrollView(node: node, renderChild: renderBase)
                     .applyScriptModifiers(node.props)
             )
         case .textField:
@@ -110,11 +134,24 @@ public struct ScriptRenderView: View {
                 ScriptPickerView(node: node, invokeHandler: invokeHandler)
                     .applyScriptModifiers(node.props)
             )
-        case .grid:
+        case .toggle:
             return AnyView(
-                ScriptGridView(node: node, renderChild: render)
+                ScriptToggleView(node: node, invokeHandler: invokeHandler)
                     .applyScriptModifiers(node.props)
             )
+        case .grid:
+            return AnyView(
+                ScriptGridView(node: node, renderChild: renderBase)
+                    .applyScriptModifiers(node.props)
+            )
+        case .plot:
+            return AnyView(
+                ScriptPlotView(node: node, invokeHandler: invokeHandler)
+                    .applyScriptModifiers(node.props)
+            )
+        case .modal:
+            // Rendered as a ZStack overlay (see `collectModalNodes`).
+            return AnyView(EmptyView())
         case .spacer:
             return AnyView(
                 Spacer(minLength: node.props.spacerMinLength)
@@ -130,6 +167,17 @@ public struct ScriptRenderView: View {
                     .applyScriptModifiers(node.props)
             )
         }
+    }
+
+    private func collectModalNodes(from node: ScriptNode) -> [ScriptNode] {
+        var modals: [ScriptNode] = []
+        if node.type == .modal {
+            modals.append(node)
+        }
+        for child in node.children {
+            modals.append(contentsOf: collectModalNodes(from: child))
+        }
+        return modals
     }
 }
 
@@ -316,6 +364,109 @@ private struct ScriptLogViewerView: View {
     }
 }
 
+private struct ScriptCardView: View {
+    let node: ScriptNode
+    let renderChild: (ScriptNode) -> AnyView
+
+    var body: some View {
+        let title = node.props.raw["title"] as? String
+        let subtitle = node.props.raw["subtitle"] as? String
+        let spacing = node.props.spacing ?? 12
+        let padding = node.props.padding ?? EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+
+        VStack(alignment: .leading, spacing: 0) {
+            if title != nil || subtitle != nil {
+                VStack(alignment: .leading, spacing: 3) {
+                    if let title {
+                        Text(title)
+                            .font(.headline)
+                    }
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.bottom, 10)
+            }
+
+            VStack(alignment: .leading, spacing: spacing) {
+                ForEach(node.children) { child in
+                    renderChild(child)
+                }
+            }
+        }
+        .padding(padding)
+        .background((node.props.backgroundColor ?? Color.gray.opacity(0.08)))
+        .clipShape(RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous)
+                .stroke(Color.gray.opacity(0.18), lineWidth: 1)
+        )
+    }
+}
+
+private struct ScriptTileView: View {
+    let node: ScriptNode
+    let invokeHandler: (String, [Any]) -> Void
+
+    var body: some View {
+        let title = node.props.raw["title"] as? String
+        let value = node.props.raw["value"] as? String
+        let subtitle = node.props.raw["subtitle"] as? String
+        let disabled = ScriptTileView.bool(from: node.props.raw["disabled"]) ?? false
+        let monospaceValue = ScriptTileView.bool(from: node.props.raw["monospaceValue"]) ?? false
+
+        let canTap = !disabled && node.props.handlerId(for: .tap) != nil
+
+        let content = VStack(alignment: .leading, spacing: 2) {
+            if let title, !title.isEmpty {
+                Text(title.uppercased())
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            if let value {
+                Text(value)
+                    .font(monospaceValue ? .system(.body, design: .monospaced) : .body)
+            }
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background((node.props.backgroundColor ?? Color.gray.opacity(0.06)))
+        .clipShape(RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous)
+                .stroke(Color.gray.opacity(0.18), lineWidth: 1)
+        )
+        .opacity(disabled ? 0.6 : 1)
+
+        if canTap {
+            return AnyView(
+                Button(action: {
+                    if let token = node.props.handlerId(for: .tap) {
+                        invokeHandler(token, [])
+                    }
+                }) {
+                    content
+                }
+                .buttonStyle(PlainButtonStyle())
+            )
+        }
+        return AnyView(content)
+    }
+
+    private static func bool(from value: Any?) -> Bool? {
+        if let b = value as? Bool { return b }
+        if let n = value as? NSNumber { return n.boolValue }
+        return nil
+    }
+}
+
 private struct ScriptScrollView: View {
     let node: ScriptNode
     let renderChild: (ScriptNode) -> AnyView
@@ -339,6 +490,57 @@ private struct ScriptScrollView: View {
                 }
             }
         }
+    }
+}
+
+private struct ScriptToggleView: View {
+    let node: ScriptNode
+    let invokeHandler: (String, [Any]) -> Void
+    @State private var value: Bool
+
+    init(node: ScriptNode, invokeHandler: @escaping (String, [Any]) -> Void) {
+        self.node = node
+        self.invokeHandler = invokeHandler
+        _value = State(initialValue: ScriptToggleView.readValue(from: node.props.raw))
+    }
+
+    var body: some View {
+        let label = node.props.label ?? (node.props.raw["label"] as? String) ?? ""
+        let disabled = ScriptToggleView.bool(from: node.props.raw["disabled"]) ?? false
+
+        return Toggle(isOn: Binding(
+            get: { value },
+            set: { newValue in
+                value = newValue
+                if let token = node.props.handlerId(for: .change) {
+                    invokeHandler(token, [newValue])
+                }
+            }
+        )) {
+            if !label.isEmpty {
+                Text(label)
+            }
+        }
+        .disabled(disabled)
+        .modifier(ScriptOnChange(value: ScriptToggleView.readValue(from: node.props.raw)) { newValue in
+            if newValue != value {
+                value = newValue
+            }
+        })
+    }
+
+    private static func readValue(from raw: [String: Any]) -> Bool {
+        if let b = raw["value"] as? Bool { return b }
+        if let n = raw["value"] as? NSNumber { return n.boolValue }
+        if let b = raw["selected"] as? Bool { return b }
+        if let n = raw["selected"] as? NSNumber { return n.boolValue }
+        return false
+    }
+
+    private static func bool(from value: Any?) -> Bool? {
+        if let b = value as? Bool { return b }
+        if let n = value as? NSNumber { return n.boolValue }
+        return nil
     }
 }
 
@@ -585,12 +787,105 @@ private struct ScriptProgressView: View {
     }
 }
 
+private struct ScriptModalOverlay: View {
+    let node: ScriptNode
+    let invokeHandler: (String, [Any]) -> Void
+    let renderChild: (ScriptNode) -> AnyView
+
+    var body: some View {
+        let isOpen = ScriptModalOverlay.bool(from: node.props.raw["open"]) ?? true
+        if !isOpen {
+            return AnyView(EmptyView())
+        }
+
+        let title = node.props.raw["title"] as? String
+        let subtitle = node.props.raw["subtitle"] as? String
+        let canClose = node.props.handlerId(for: .close) != nil
+
+        return AnyView(
+            ZStack {
+                Color.black.opacity(0.55)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        if let token = node.props.handlerId(for: .close) {
+                            invokeHandler(token, [])
+                        }
+                    }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    if title != nil || subtitle != nil || canClose {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                if let title {
+                                    Text(title)
+                                        .font(.headline)
+                                }
+                                if let subtitle {
+                                    Text(subtitle)
+                                        .font(.footnote)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if canClose {
+                                Button("Close") {
+                                    if let token = node.props.handlerId(for: .close) {
+                                        invokeHandler(token, [])
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: node.props.spacing ?? 12) {
+                        ForEach(node.children) { child in
+                            renderChild(child)
+                        }
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: 560)
+                .background(platformPanelBackgroundColor)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.gray.opacity(0.25), lineWidth: 1)
+                )
+                .shadow(radius: 20)
+                .padding(24)
+            }
+        )
+    }
+
+    private var platformPanelBackgroundColor: Color {
+#if canImport(AppKit)
+        return Color(nsColor: NSColor.windowBackgroundColor)
+#elseif canImport(UIKit)
+        return Color(uiColor: UIColor.systemBackground)
+#else
+        return Color.white
+#endif
+    }
+
+    private static func bool(from value: Any?) -> Bool? {
+        if let b = value as? Bool { return b }
+        if let n = value as? NSNumber { return n.boolValue }
+        return nil
+    }
+}
+
 private struct ScriptGridView: View {
     let node: ScriptNode
     let renderChild: (ScriptNode) -> AnyView
 
     var body: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: node.props.gridSpacing), count: node.props.gridColumns)
+        let columns: [GridItem]
+        if let minWidth = node.props.gridMinColumnWidth, minWidth > 0 {
+            columns = [GridItem(.adaptive(minimum: minWidth), spacing: node.props.gridSpacing)]
+        } else {
+            columns = Array(repeating: GridItem(.flexible(), spacing: node.props.gridSpacing), count: node.props.gridColumns)
+        }
+
         return LazyVGrid(columns: columns, spacing: node.props.gridSpacing) {
             ForEach(node.children) { child in
                 renderChild(child)

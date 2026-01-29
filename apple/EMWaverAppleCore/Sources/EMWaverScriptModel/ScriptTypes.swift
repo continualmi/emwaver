@@ -26,6 +26,8 @@ import UIKit
 public enum ScriptNodeType: String {
     case column
     case row
+    case card
+    case tile
     case text
     case button
     case slider
@@ -34,7 +36,10 @@ public enum ScriptNodeType: String {
     case textField
     case textEditor
     case picker
+    case toggle
     case grid
+    case plot
+    case modal
     case spacer
     case divider
     case progress
@@ -45,6 +50,10 @@ public enum ScriptEventType: String {
     case tap
     case change
     case submit
+    case viewport
+    case select
+    case cursor
+    case close
 }
 
 // Stored properties associated with a script node.
@@ -297,6 +306,10 @@ public struct ScriptNodeProps {
         if let value = raw["columns"] as? Int { return max(1, value) }
         if let number = raw["columns"] as? NSNumber { return max(1, number.intValue) }
         return 2
+    }
+
+    public var gridMinColumnWidth: CGFloat? {
+        ScriptNodeProps.extractCGFloat(raw["minColumnWidth"])
     }
 
     public var gridSpacing: CGFloat {
