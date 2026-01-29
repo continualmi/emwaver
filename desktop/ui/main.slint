@@ -1,14 +1,35 @@
-import { Button, HorizontalBox, VerticalBox, TextEdit, ScrollView } from "std-widgets.slint";
+import { Button, HorizontalBox, VerticalBox, TextEdit, ScrollView, ComboBox, Slider, LineEdit, Switch } from "std-widgets.slint";
 
 export struct ScriptListEntry {
     name: string,
 }
 
 export struct ScriptPreviewItem {
-    kind: string, // "text" | "button" | "progress" | "unknown"
+    kind: string, // "text" | "button" | "progress" | "picker" | "slider" | "toggle" | "textField" | "textEditor" | "divider" | "spacer"
+    id: string,
     text: string,
-    token: string,
+    token_tap: string,
+    token_change: string,
+    token_submit: string,
     progress: float,
+
+    // Picker
+    picker_index: int,
+    options_labels: [string],
+    options_values: [string],
+
+    // Slider
+    value: float,
+    minimum: float,
+    maximum: float,
+    step: float,
+
+    // Toggle
+    checked: bool,
+
+    // Inputs
+    input_text: string,
+    placeholder: string,
 }
 
 export global AppState {
@@ -53,13 +74,19 @@ export global AppState {
     callback scripts_select(name: string);
     callback scripts_run();
     callback scripts_stop();
-    callback script_invoke(token: string);
+    callback script_invoke0(token: string);
+    callback script_invoke_str(token: string, value: string);
+    callback script_invoke_num(token: string, value: float);
+    callback script_invoke_bool(token: string, value: bool);
 }
 
 export component AppWindow inherits Window {
     title: "EMWaver";
-    width: 1100px;
-    height: 720px;
+    // Use preferred size so the user can resize the window.
+    preferred-width: 1100px;
+    preferred-height: 720px;
+    min-width: 860px;
+    min-height: 600px;
 
     in-out property <string> editor_text;
 
@@ -103,8 +130,7 @@ export component AppWindow inherits Window {
         }
 
         // Home page
-        VerticalBox {
-            visible: AppState.page == 0;
+        if (AppState.page == 0) : VerticalBox {
             spacing: 10px;
 
             Rectangle {
@@ -158,8 +184,7 @@ export component AppWindow inherits Window {
         }
 
         // Editor page
-        VerticalBox {
-            visible: AppState.page == 1;
+        if (AppState.page == 1) : VerticalBox {
             spacing: 10px;
 
             HorizontalBox {
@@ -181,7 +206,7 @@ export component AppWindow inherits Window {
                 spacing: 10px;
 
                 TextEdit {
-                    text: root.editor_text;
+                    text <=> root.editor_text;
                     wrap: word-wrap;
                     horizontal-stretch: 3;
                     vertical-stretch: 1;
@@ -198,8 +223,7 @@ export component AppWindow inherits Window {
         }
 
         // Scripts page
-        HorizontalBox {
-            visible: AppState.page == 2;
+        if (AppState.page == 2) : HorizontalBox {
             spacing: 10px;
 
             // Left: bundled script list
@@ -238,38 +262,12 @@ export component AppWindow inherits Window {
                 }
             }
 
-            // Middle: editor
-            Rectangle {
-                background: #0f1114;
-                border-width: 1px;
-                border-color: #2b2f36;
-                horizontal-stretch: 3;
-
-                VerticalBox {
-                    padding: 10px;
-                    spacing: 8px;
-
-                    HorizontalBox {
-                        spacing: 10px;
-                        Text { text: "Editor"; font-size: 16px; color: #e6e6e6; }
-                        Text { text: AppState.current_path; color: #7f8c8d; horizontal-stretch: 1; overflow: elide; }
-                        Button { text: AppState.script_running ? "Stop" : "Run"; clicked => { AppState.script_running ? AppState.scripts_stop() : AppState.scripts_run(); } }
-                    }
-
-                    TextEdit {
-                        text: root.editor_text;
-                        wrap: word-wrap;
-                        vertical-stretch: 1;
-                    }
-                }
-            }
-
-            // Right: preview
+            // Main: preview (dominant) + editor (below)
             Rectangle {
                 background: #14181f;
                 border-width: 1px;
                 border-color: #2b2f36;
-                horizontal-stretch: 2;
+                horizontal-stretch: 1;
 
                 VerticalBox {
                     padding: 10px;
@@ -278,7 +276,8 @@ export component AppWindow inherits Window {
                     HorizontalBox {
                         spacing: 10px;
                         Text { text: "Preview"; font-size: 16px; color: #e6e6e6; }
-                        Text { text: ""; horizontal-stretch: 1; }
+                        Text { text: AppState.current_path; color: #7f8c8d; horizontal-stretch: 1; overflow: elide; }
+                        Button { text: AppState.script_running ? "Stop" : "Run"; clicked => { AppState.script_running ? AppState.scripts_stop() : AppState.scripts_run(); } }
                         Text { text: AppState.script_running ? "Running" : "Idle"; color: AppState.script_running ? #2ecc71 : #a9b1ba; }
                     }
 
@@ -289,7 +288,7 @@ export component AppWindow inherits Window {
                     }
 
                     ScrollView {
-                        vertical-stretch: 1;
+                        vertical-stretch: 3;
                         VerticalBox {
                             spacing: 8px;
                             for item in AppState.script_preview : VerticalBox {
@@ -301,7 +300,92 @@ export component AppWindow inherits Window {
                                 }
                                 if (item.kind == "button") : Button {
                                     text: item.text;
-                                    clicked => { AppState.script_invoke(item.token); }
+                                    clicked => { if (item.token_tap != "") { AppState.script_invoke0(item.token_tap); } }
+                                }
+                                if (item.kind == "picker") : VerticalBox {
+                                    spacing: 4px;
+                                    Text { text: item.text; color: #a9b1ba; }
+                                    cb := ComboBox {
+                                        model: item.options_labels;
+                                        current-index: item.picker_index;
+                                        selected(_) => {
+                                            if (item.token_change != "") {
+                                                AppState.script_invoke_str(item.token_change, item.options_values[cb.current-index]);
+                                            }
+                                        }
+                                    }
+                                }
+                                if (item.kind == "slider") : VerticalBox {
+                                    spacing: 4px;
+                                    Text { text: item.text + ": " + item.value; color: #a9b1ba; }
+                                    s := Slider {
+                                        minimum: item.minimum;
+                                        maximum: item.maximum;
+                                        step: item.step;
+                                        value: item.value;
+                                        changed(v) => {
+                                            if (item.token_change != "") {
+                                                AppState.script_invoke_num(item.token_change, v);
+                                            }
+                                        }
+                                        released => {
+                                            if (item.token_submit != "") {
+                                                AppState.script_invoke_num(item.token_submit, s.value);
+                                            }
+                                        }
+                                    }
+                                }
+                                if (item.kind == "toggle") : Switch {
+                                    text: item.text;
+                                    checked: item.checked;
+                                    toggled => {
+                                        if (item.token_change != "") {
+                                            AppState.script_invoke_bool(item.token_change, self.checked);
+                                        }
+                                    }
+                                }
+                                if (item.kind == "textField") : VerticalBox {
+                                    spacing: 4px;
+                                    Text { text: item.text; color: #a9b1ba; }
+                                    i := LineEdit {
+                                        placeholder-text: item.placeholder;
+                                        text: item.input_text;
+                                        edited(txt) => {
+                                            if (item.token_change != "") {
+                                                AppState.script_invoke_str(item.token_change, txt);
+                                            }
+                                        }
+                                        accepted => {
+                                            if (item.token_submit != "") {
+                                                AppState.script_invoke_str(item.token_submit, i.text);
+                                            }
+                                        }
+                                    }
+                                }
+                                if (item.kind == "textEditor") : VerticalBox {
+                                    spacing: 4px;
+                                    Text { text: item.text; color: #a9b1ba; }
+                                    TextEdit {
+                                        text: item.input_text;
+                                        wrap: word-wrap;
+                                        height: 120px;
+                                    }
+                                    Button {
+                                        text: "Submit";
+                                        clicked => {
+                                            if (item.token_submit != "") {
+                                                AppState.script_invoke_str(item.token_submit, item.input_text);
+                                            }
+                                        }
+                                    }
+                                }
+                                if (item.kind == "divider") : Rectangle {
+                                    height: 1px;
+                                    background: #2b2f36;
+                                }
+                                if (item.kind == "spacer") : Rectangle {
+                                    height: 10px;
+                                    background: transparent;
                                 }
                                 if (item.kind == "progress") : VerticalBox {
                                     spacing: 4px;
@@ -318,6 +402,20 @@ export component AppWindow inherits Window {
                                 }
                             }
                         }
+                    }
+
+                    Rectangle { height: 1px; background: #2b2f36; }
+
+                    HorizontalBox {
+                        spacing: 10px;
+                        Text { text: "Script"; font-size: 14px; color: #a9b1ba; }
+                        Text { text: ""; horizontal-stretch: 1; }
+                    }
+
+                    TextEdit {
+                        text <=> root.editor_text;
+                        wrap: word-wrap;
+                        vertical-stretch: 2;
                     }
 
                     TextEdit {

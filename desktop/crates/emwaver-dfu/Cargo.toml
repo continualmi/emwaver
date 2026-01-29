@@ -1,0 +1,9 @@
+[package]
+name = "emwaver-dfu"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+rusb = { version = "0.9", features = ["vendored"] }
+

@@ -23,7 +23,7 @@ use std::sync::Mutex as StdMutex;
 use slint::{ModelRc, VecModel};
 
 use bundled_scripts::{bundled_script_source, BUNDLED_SCRIPTS, SCRIPT_BOOTSTRAP};
-use script_engine::{ScriptCommand, ScriptEvent, ScriptRuntime};
+use script_engine::{ScriptCallbackArg, ScriptCommand, ScriptEvent, ScriptRuntime};
 use script_preview::flatten_preview;
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
@@ -292,9 +292,38 @@ fn main() -> Result<(), slint::PlatformError> {
     // Invoke UI callback token.
     {
         let script_state = Arc::clone(&script_state);
-        app.global::<AppState>().on_script_invoke(move |token| {
-            let token = token.to_string();
-            invoke_script_callback(Arc::clone(&script_state), token);
+        app.global::<AppState>().on_script_invoke0(move |token| {
+            invoke_script_callback(Arc::clone(&script_state), token.to_string(), None);
+        });
+    }
+    {
+        let script_state = Arc::clone(&script_state);
+        app.global::<AppState>().on_script_invoke_str(move |token, value| {
+            invoke_script_callback(
+                Arc::clone(&script_state),
+                token.to_string(),
+                Some(ScriptCallbackArg::Str(value.to_string())),
+            );
+        });
+    }
+    {
+        let script_state = Arc::clone(&script_state);
+        app.global::<AppState>().on_script_invoke_num(move |token, value| {
+            invoke_script_callback(
+                Arc::clone(&script_state),
+                token.to_string(),
+                Some(ScriptCallbackArg::Num(value as f64)),
+            );
+        });
+    }
+    {
+        let script_state = Arc::clone(&script_state);
+        app.global::<AppState>().on_script_invoke_bool(move |token, value| {
+            invoke_script_callback(
+                Arc::clone(&script_state),
+                token.to_string(),
+                Some(ScriptCallbackArg::Bool(value)),
+            );
         });
     }
 
@@ -634,20 +663,36 @@ fn start_script_runtime(
             match event {
                 ScriptEvent::Render { tree } => {
                     let preview = flatten_preview(&tree);
-                    let items = preview
-                        .into_iter()
-                        .map(|p| ScriptPreviewItem {
-                            kind: p.kind,
-                            text: p.text,
-                            token: p.token,
-                            progress: p.progress,
-                        })
-                        .collect::<Vec<_>>();
-
                     let _ = slint::invoke_from_event_loop({
                         let app_weak = app_weak.clone();
                         move || {
                             if let Some(app) = app_weak.upgrade() {
+                                let items = preview
+                                    .into_iter()
+                                    .map(|p| ScriptPreviewItem {
+                                        kind: p.kind,
+                                        id: p.id,
+                                        text: p.text,
+                                        token_tap: p.token_tap,
+                                        token_change: p.token_change,
+                                        token_submit: p.token_submit,
+                                        progress: p.progress,
+
+                                        picker_index: p.picker_index,
+                                        options_labels: ModelRc::new(VecModel::from(p.options_labels)),
+                                        options_values: ModelRc::new(VecModel::from(p.options_values)),
+
+                                        value: p.value,
+                                        minimum: p.minimum,
+                                        maximum: p.maximum,
+                                        step: p.step,
+
+                                        checked: p.checked,
+
+                                        input_text: p.input_text,
+                                        placeholder: p.placeholder,
+                                    })
+                                    .collect::<Vec<_>>();
                                 app.global::<AppState>()
                                     .set_script_preview(ModelRc::new(VecModel::from(items)));
                             }
@@ -690,10 +735,14 @@ fn stop_script_runtime(script_state: Arc<ScriptState>) {
     }
 }
 
-fn invoke_script_callback(script_state: Arc<ScriptState>, token: String) {
+fn invoke_script_callback(
+    script_state: Arc<ScriptState>,
+    token: String,
+    arg: Option<ScriptCallbackArg>,
+) {
     let guard = script_state.command_tx.lock().expect("script state poisoned");
     if let Some(tx) = guard.as_ref() {
-        let _ = tx.send(ScriptCommand::Callback { token });
+        let _ = tx.send(ScriptCommand::Callback { token, arg });
     }
 }
 

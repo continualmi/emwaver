@@ -20,6 +20,12 @@ use tokio::sync::mpsc;
 use emwaver_device_core::bridge::{send_packet_command_bytes, BridgeState};
 
 #[derive(Debug, Clone)]
+pub struct ScriptOption {
+    pub label: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum ScriptEvent {
     Render { tree: ScriptNode },
     Error { message: String },
@@ -30,7 +36,14 @@ pub enum ScriptEvent {
 pub enum ScriptCommand {
     Stop,
     Timer { id: u64 },
-    Callback { token: String },
+    Callback { token: String, arg: Option<ScriptCallbackArg> },
+}
+
+#[derive(Debug, Clone)]
+pub enum ScriptCallbackArg {
+    Str(String),
+    Num(f64),
+    Bool(bool),
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +53,17 @@ pub struct ScriptNode {
     pub text: Option<String>,
     pub label: Option<String>,
     pub progress_pct: Option<f32>,
+
+    pub value_num: Option<f64>,
+    pub value_str: Option<String>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub step: Option<f64>,
+    pub selected: Option<String>,
+    pub options: Vec<ScriptOption>,
+    pub placeholder: Option<String>,
+    pub checked: Option<bool>,
+
     pub handlers: HashMap<String, String>,
     pub children: Vec<ScriptNode>,
 }
@@ -181,11 +205,35 @@ impl ScriptRuntime {
                         let _ = ctx.eval(Source::from_bytes(&cleanup));
                     }
                 }
-                Ok(ScriptCommand::Callback { token }) => {
-                    let invoke = format!(
-                        "(function() {{ var cb = globalThis.__scriptCallbacks['{}']; if (typeof cb === 'function') {{ cb(); }} }})();",
-                        token.replace('\\', "\\\\").replace('\'', "\\'")
-                    );
+                Ok(ScriptCommand::Callback { token, arg }) => {
+                    let token_escaped = token.replace('\\', "\\\\").replace('\'', "\\'");
+                    let invoke = match arg {
+                        None => format!(
+                            "(function() {{ var cb = globalThis.__scriptCallbacks['{}']; if (typeof cb === 'function') {{ cb(); }} }})();",
+                            token_escaped
+                        ),
+                        Some(ScriptCallbackArg::Str(s)) => {
+                            let arg_escaped = escape_js_string(&s);
+                            format!(
+                                "(function() {{ var cb = globalThis.__scriptCallbacks['{}']; if (typeof cb === 'function') {{ cb('{}'); }} }})();",
+                                token_escaped, arg_escaped
+                            )
+                        }
+                        Some(ScriptCallbackArg::Num(n)) => {
+                            let num = if n.is_finite() { n } else { 0.0 };
+                            format!(
+                                "(function() {{ var cb = globalThis.__scriptCallbacks['{}']; if (typeof cb === 'function') {{ cb({}); }} }})();",
+                                token_escaped, num
+                            )
+                        }
+                        Some(ScriptCallbackArg::Bool(b)) => {
+                            format!(
+                                "(function() {{ var cb = globalThis.__scriptCallbacks['{}']; if (typeof cb === 'function') {{ cb({}); }} }})();",
+                                token_escaped,
+                                if b { "true" } else { "false" }
+                            )
+                        }
+                    };
                     if let Err(e) = ctx.eval(Source::from_bytes(&invoke)) {
                         let _ = self.event_tx.send(ScriptEvent::Error {
                             message: format!("Callback error: {e}"),
@@ -460,6 +508,16 @@ fn parse_script_node(value: &JsValue, ctx: &mut Context) -> JsResult<ScriptNode>
     let mut label: Option<String> = None;
     let mut progress_pct: Option<f32> = None;
 
+    let mut value_num: Option<f64> = None;
+    let mut value_str: Option<String> = None;
+    let mut min: Option<f64> = None;
+    let mut max: Option<f64> = None;
+    let mut step: Option<f64> = None;
+    let mut selected: Option<String> = None;
+    let mut options: Vec<ScriptOption> = Vec::new();
+    let mut placeholder: Option<String> = None;
+    let mut checked: Option<bool> = None;
+
     let props_val = obj.get(js_string!("props"), ctx)?;
     if let Some(props) = props_val.as_object() {
         if let Ok(v) = props.get(js_string!("text"), ctx) {
@@ -474,11 +532,54 @@ fn parse_script_node(value: &JsValue, ctx: &mut Context) -> JsResult<ScriptNode>
         }
         if let Ok(v) = props.get(js_string!("value"), ctx) {
             if v.is_number() {
-                progress_pct = v
-                    .to_number(ctx)
-                    .ok()
+                let n = v.to_number(ctx).ok();
+                value_num = n;
+                progress_pct = n
                     .map(|n| n as f32)
                     .map(|n| n.max(0.0).min(100.0));
+            } else if !(v.is_undefined() || v.is_null()) {
+                value_str = Some(v.to_string(ctx)?.to_std_string_escaped());
+                if v.is_boolean() {
+                    checked = Some(v.to_boolean());
+                }
+            }
+        }
+
+        if let Ok(v) = props.get(js_string!("min"), ctx) {
+            if v.is_number() {
+                min = v.to_number(ctx).ok();
+            }
+        }
+        if let Ok(v) = props.get(js_string!("max"), ctx) {
+            if v.is_number() {
+                max = v.to_number(ctx).ok();
+            }
+        }
+        if let Ok(v) = props.get(js_string!("step"), ctx) {
+            if v.is_number() {
+                step = v.to_number(ctx).ok();
+            }
+        }
+
+        if let Ok(v) = props.get(js_string!("selected"), ctx) {
+            if !(v.is_undefined() || v.is_null()) {
+                selected = Some(v.to_string(ctx)?.to_std_string_escaped());
+            }
+        }
+
+        if let Ok(v) = props.get(js_string!("options"), ctx) {
+            options = parse_options(&v, ctx);
+        }
+
+        if let Ok(v) = props.get(js_string!("placeholder"), ctx) {
+            if !(v.is_undefined() || v.is_null()) {
+                placeholder = Some(v.to_string(ctx)?.to_std_string_escaped());
+            }
+        }
+
+        if let Ok(v) = props.get(js_string!("checked"), ctx) {
+            if v.is_boolean() {
+                checked = Some(v.to_boolean());
             }
         }
     }
@@ -521,7 +622,69 @@ fn parse_script_node(value: &JsValue, ctx: &mut Context) -> JsResult<ScriptNode>
         text,
         label,
         progress_pct,
+
+        value_num,
+        value_str,
+        min,
+        max,
+        step,
+        selected,
+        options,
+        placeholder,
+        checked,
+
         handlers,
         children,
     })
+}
+
+fn parse_options(value: &JsValue, ctx: &mut Context) -> Vec<ScriptOption> {
+    let Some(arr) = value.as_object() else {
+        return Vec::new();
+    };
+
+    let len = arr
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.to_u32(ctx).ok())
+        .unwrap_or(0) as usize;
+
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        let child = match arr.get(i as u32, ctx) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let Some(opt) = child.as_object() else {
+            continue;
+        };
+
+        let label = opt
+            .get(js_string!("label"), ctx)
+            .ok()
+            .filter(|v| !(v.is_undefined() || v.is_null()))
+            .and_then(|v| v.to_string(ctx).ok())
+            .map(|s| s.to_std_string_escaped())
+            .unwrap_or_else(|| format!("Option {}", i + 1));
+
+        let value = opt
+            .get(js_string!("value"), ctx)
+            .ok()
+            .filter(|v| !(v.is_undefined() || v.is_null()))
+            .and_then(|v| v.to_string(ctx).ok())
+            .map(|s| s.to_std_string_escaped())
+            .unwrap_or_default();
+
+        out.push(ScriptOption { label, value });
+    }
+    out
+}
+
+fn escape_js_string(s: &str) -> String {
+    // Escape for single-quoted JS string literal.
+    s.replace('\\', "\\\\")
+        .replace('\'', "\\'")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }
