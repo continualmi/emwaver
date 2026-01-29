@@ -14,17 +14,26 @@ struct EMWaverApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
                 }
         }
         .commands {
-            CommandMenu(
-                device.isConnected
-                    ? "Device (Connected)"
-                    : (firmwareUpdater.dfuConnected ? "Device (Update Mode)" : "Device (Disconnected)")
-            ) {
+            CommandMenu("Device") {
+                if device.isConnected {
+                    Text("Status: Connected")
+                        .foregroundStyle(.secondary)
+                } else if firmwareUpdater.dfuConnected {
+                    Text("Status: Update Mode")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Status: Disconnected")
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
                 Button("Refresh Ports") {
                     device.refreshPorts()
                 }
@@ -59,8 +68,6 @@ struct EMWaverApp: App {
                 Divider()
 
                 Button("Update Firmware…") {
-                    // Mirror the desktop app behavior: disconnect first so the user can enter Update Mode.
-                    device.disconnect()
                     firmwareUpdater.present()
                 }
 
