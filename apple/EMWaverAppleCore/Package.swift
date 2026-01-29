@@ -12,6 +12,9 @@ let package = Package(
         .library(name: "EMWaverTransport", targets: ["EMWaverTransport"]),
         .library(name: "EMWaverScriptModel", targets: ["EMWaverScriptModel"]),
         .library(name: "EMWaverScriptSwiftUI", targets: ["EMWaverScriptSwiftUI"]),
+        .library(name: "EMWaverScriptRuntime", targets: ["EMWaverScriptRuntime"]),
+        .library(name: "EMWaverScriptStorage", targets: ["EMWaverScriptStorage"]),
+        .library(name: "EMWaverScriptsUI", targets: ["EMWaverScriptsUI"]),
     ],
     targets: [
         .target(
@@ -28,6 +31,27 @@ let package = Package(
                 "EMWaverScriptModel",
             ],
             path: "Sources/EMWaverScriptSwiftUI"
+        ),
+        .target(
+            name: "EMWaverScriptRuntime",
+            dependencies: [
+                "EMWaverScriptModel",
+            ],
+            path: "Sources/EMWaverScriptRuntime"
+        ),
+        .target(
+            name: "EMWaverScriptStorage",
+            path: "Sources/EMWaverScriptStorage"
+        ),
+        .target(
+            name: "EMWaverScriptsUI",
+            dependencies: [
+                "EMWaverScriptModel",
+                "EMWaverScriptSwiftUI",
+                "EMWaverScriptRuntime",
+                "EMWaverScriptStorage",
+            ],
+            path: "Sources/EMWaverScriptsUI"
         ),
     ]
 )

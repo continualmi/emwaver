@@ -1,6 +1,6 @@
 /*
  * EMWaver
- * Copyright (c) 2026 Luís Marnoto
+ * Copyright (c) 2026 Luis Marnoto
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import Foundation
+import SwiftUI
+import EMWaverScriptsUI
+import EMWaverScriptRuntime
 
-struct UserFileData {
-    let metadata: UserFileMetadata
-    let textContent: String?
-    let binaryContent: Data?
+struct ScriptsContainerView: View {
+    @EnvironmentObject var bleManager: USBManager
 
-    var hasTextContent: Bool { textContent != nil }
-    var hasBinaryContent: Bool { binaryContent != nil }
+    var body: some View {
+        ScriptsRootView(device: bleManager)
+    }
 }
