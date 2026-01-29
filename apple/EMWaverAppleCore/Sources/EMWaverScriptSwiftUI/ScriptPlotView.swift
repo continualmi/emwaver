@@ -30,6 +30,12 @@ struct ScriptPlotView: View {
     @State private var isInteracting: Bool = false
     @State private var selectionStartX: Double? = nil
     @State private var selection: ClosedRange<Double>? = nil
+#if canImport(AppKit)
+    @State private var isHovering: Bool = false
+    @State private var hoverX: CGFloat = 0
+    @State private var scrollWheelMonitor: Any? = nil
+    @State private var scrollViewportWorkItem: DispatchWorkItem? = nil
+#endif
 
     init(node: ScriptNode, invokeHandler: @escaping (String, [Any]) -> Void) {
         self.node = node
@@ -41,43 +47,49 @@ struct ScriptPlotView: View {
         let config = PlotConfig(node: node)
 
         return GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                Canvas { context, size in
-                    drawPlot(config: config, in: size, context: &context)
-                }
-                .contentShape(Rectangle())
-                .gesture(dragGesture(config: config, size: geo.size))
-                .simultaneousGesture(magnificationGesture(config: config, size: geo.size))
-
+            Canvas { context, size in
+                drawPlot(config: config, in: size, context: &context)
+            }
+            .contentShape(Rectangle())
+            .gesture(dragGesture(config: config, size: geo.size))
+            .simultaneousGesture(magnificationGesture(config: config, size: geo.size))
+            .overlay(alignment: .topLeading) {
                 if let errorText = config.errorText, !errorText.isEmpty {
-                    ZStack {
-                        Color.black.opacity(0.55)
-                        Text("Chart error: \(errorText)")
-                            .font(.footnote)
-                            .foregroundColor(.white)
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .padding(10)
+                    Text("Chart error: \(errorText)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(10)
+                        .allowsHitTesting(false)
                 } else if let overlay = config.overlayText, !overlay.isEmpty {
                     Text(overlay)
                         .font(.caption2)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.35))
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .foregroundStyle(.secondary)
                         .padding(10)
                         .allowsHitTesting(false)
                 }
             }
+#if canImport(AppKit)
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    isHovering = true
+                    hoverX = location.x
+                case .ended:
+                    isHovering = false
+                }
+            }
+            .onAppear {
+                installScrollWheelMonitor(size: geo.size)
+            }
+            .onChange(of: geo.size) { next in
+                installScrollWheelMonitor(size: next)
+            }
+            .onDisappear {
+                removeScrollWheelMonitor()
+            }
+#endif
         }
         .frame(height: config.height)
-        .background(Color.gray.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.gray.opacity(0.18), lineWidth: 1)
-        )
         .onChange(of: PlotDomain.fromProps(node.props.raw)) { next in
             guard let next else { return }
             if !isInteracting {
@@ -119,15 +131,15 @@ struct ScriptPlotView: View {
         }
 
         if didMove {
-            context.stroke(path, with: .color(Color(red: 0.0, green: 0.34, blue: 0.6)), lineWidth: 2)
+            context.stroke(path, with: .color(.primary), lineWidth: 1.5)
         }
 
         if let selection, selection.upperBound > selection.lowerBound {
             let x0 = CGFloat((selection.lowerBound - domain.min) / domainRange) * size.width
             let x1 = CGFloat((selection.upperBound - domain.min) / domainRange) * size.width
             let rect = CGRect(x: min(x0, x1), y: 0, width: abs(x1 - x0), height: size.height)
-            context.fill(Path(rect), with: .color(Color.blue.opacity(0.18)))
-            context.stroke(Path(rect), with: .color(Color.blue.opacity(0.35)), lineWidth: 1)
+            context.fill(Path(rect), with: .color(Color.accentColor.opacity(0.15)))
+            context.stroke(Path(rect), with: .color(Color.accentColor.opacity(0.35)), lineWidth: 1)
         }
     }
 
@@ -210,6 +222,72 @@ struct ScriptPlotView: View {
         let t = min(1, max(0, xPx / max(1, size.width)))
         return domain.min + Double(t) * domainRange
     }
+
+#if canImport(AppKit)
+    private func installScrollWheelMonitor(size: CGSize) {
+        if scrollWheelMonitor != nil {
+            return
+        }
+        scrollWheelMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { event in
+            if isHovering {
+                handleScrollWheel(event, size: size)
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func removeScrollWheelMonitor() {
+        if let scrollWheelMonitor {
+            NSEvent.removeMonitor(scrollWheelMonitor)
+        }
+        scrollWheelMonitor = nil
+        scrollViewportWorkItem?.cancel()
+        scrollViewportWorkItem = nil
+    }
+
+    private func handleScrollWheel(_ event: NSEvent, size: CGSize) {
+        guard size.width > 2 else { return }
+
+        let dy = Double(event.scrollingDeltaY)
+        if dy == 0 || !dy.isFinite {
+            return
+        }
+
+        isInteracting = true
+
+        let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
+        let z = exp(dy * 0.002)
+        let nextRange = max(domainRange * z, 1)
+
+        let t = Double(min(1, max(0, hoverX / max(1, size.width))))
+        let anchor = domain.min + t * domainRange
+
+        let nextMin = anchor - t * nextRange
+        let nextMax = nextMin + nextRange
+        if nextMax > nextMin, nextMin.isFinite, nextMax.isFinite {
+            domain = PlotDomain(min: nextMin, max: nextMax)
+        }
+
+        emitViewportSoon()
+    }
+
+    private func emitViewportSoon() {
+        scrollViewportWorkItem?.cancel()
+
+        let minX = domain.min
+        let maxX = domain.max
+        let token = node.props.handlerId(for: .viewport)
+
+        let work = DispatchWorkItem {
+            isInteracting = false
+            guard let token else { return }
+            invokeHandler(token, [["min": minX, "max": maxX]])
+        }
+        scrollViewportWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+#endif
 }
 
 private struct PlotPoint {
@@ -288,4 +366,3 @@ private struct PlotConfig {
         return []
     }
 }
-

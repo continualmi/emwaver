@@ -197,6 +197,7 @@ public final class ScriptEngine {
         }
         context.setObject(ensureDirBlock, forKeyedSubscript: "_scriptEnsureDir" as NSString)
 
+        // `FS.readDir(dir)` is expected to return `[String]` (names only) across platforms.
         let readDirBlock: @convention(block) (String) -> JSValue = { path in
             let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !p.isEmpty else { return JSValue(object: [], in: context) }
@@ -206,15 +207,8 @@ public final class ScriptEngine {
                     includingPropertiesForKeys: [.isDirectoryKey],
                     options: [.skipsHiddenFiles]
                 )
-                let entries: [[String: Any]] = urls.map { url in
-                    let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                    return [
-                        "name": url.lastPathComponent,
-                        "path": url.path,
-                        "kind": isDir ? "dir" : "file",
-                    ]
-                }
-                return JSValue(object: entries, in: context)
+                let names = urls.map { $0.lastPathComponent }
+                return JSValue(object: names, in: context)
             } catch {
                 return JSValue(object: [], in: context)
             }
