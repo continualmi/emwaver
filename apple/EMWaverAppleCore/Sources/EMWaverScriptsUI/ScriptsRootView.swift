@@ -74,6 +74,19 @@ public struct ScriptsRootView: View {
             .alert(item: $previewManager.dialog) { dialog in
                 Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
             }
+            .alert(
+                "Script Error",
+                isPresented: Binding(
+                    get: { previewManager.scriptError != nil },
+                    set: { presented in
+                        if !presented { previewManager.scriptError = nil }
+                    }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(previewManager.scriptError ?? "")
+            }
             .sheet(item: $namePrompt) { prompt in
                 NamePromptSheet(prompt: prompt)
             }
