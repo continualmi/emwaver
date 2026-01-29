@@ -37,9 +37,149 @@ pub fn flatten_preview(root: &ScriptNode) -> Vec<PreviewItem> {
 
 fn push_node(out: &mut Vec<PreviewItem>, node: &ScriptNode) {
     match node.node_type.as_str() {
-        "column" | "row" | "scroll" | "grid" | "card" | "tile" | "modal" => {
+        "column" | "row" | "scroll" | "grid" => {
             for child in &node.children {
                 push_node(out, child);
+            }
+        }
+        "card" => {
+            let title = node
+                .title
+                .clone()
+                .or_else(|| node.label.clone())
+                .or_else(|| node.text.clone())
+                .unwrap_or_else(|| "Card".to_string());
+            if !title.is_empty() {
+                out.push(PreviewItem {
+                    kind: SharedString::from("text"),
+                    id: SharedString::from(node.id.clone()),
+                    text: SharedString::from(title),
+                    ..Default::default()
+                });
+            }
+            if let Some(sub) = node.subtitle.as_deref() {
+                if !sub.is_empty() {
+                    out.push(PreviewItem {
+                        kind: SharedString::from("text"),
+                        id: SharedString::from(format!("{}:subtitle", node.id)),
+                        text: SharedString::from(sub.to_string()),
+                        ..Default::default()
+                    });
+                }
+            }
+            for child in &node.children {
+                push_node(out, child);
+            }
+            out.push(PreviewItem {
+                kind: SharedString::from("divider"),
+                id: SharedString::from(format!("{}:divider", node.id)),
+                ..Default::default()
+            });
+        }
+        "tile" => {
+            let title = node
+                .title
+                .clone()
+                .or_else(|| node.label.clone())
+                .or_else(|| node.text.clone())
+                .unwrap_or_else(|| "Tile".to_string());
+            let value = node
+                .value_str
+                .clone()
+                .or_else(|| node.value_num.map(|n| format!("{n}")))
+                .unwrap_or_default();
+            let line = if value.is_empty() {
+                title
+            } else {
+                format!("{title}: {value}")
+            };
+            let disabled = node.disabled.unwrap_or(false);
+            let token = node.handlers.get("tap").cloned().unwrap_or_default();
+            if disabled || token.is_empty() {
+                out.push(PreviewItem {
+                    kind: SharedString::from("text"),
+                    id: SharedString::from(node.id.clone()),
+                    text: SharedString::from(line),
+                    ..Default::default()
+                });
+            } else {
+                out.push(PreviewItem {
+                    kind: SharedString::from("button"),
+                    id: SharedString::from(node.id.clone()),
+                    text: SharedString::from(line),
+                    token_tap: SharedString::from(token),
+                    ..Default::default()
+                });
+            }
+        }
+        "modal" => {
+            if node.open.unwrap_or(false) {
+                let title = node
+                    .title
+                    .clone()
+                    .or_else(|| node.label.clone())
+                    .or_else(|| node.text.clone())
+                    .unwrap_or_else(|| "Modal".to_string());
+                out.push(PreviewItem {
+                    kind: SharedString::from("text"),
+                    id: SharedString::from(node.id.clone()),
+                    text: SharedString::from(format!("{title} (modal)")),
+                    ..Default::default()
+                });
+
+                if let Some(close_token) = node.handlers.get("close") {
+                    if !close_token.is_empty() {
+                        out.push(PreviewItem {
+                            kind: SharedString::from("button"),
+                            id: SharedString::from(format!("{}:close", node.id)),
+                            text: SharedString::from("Close"),
+                            token_tap: SharedString::from(close_token.clone()),
+                            ..Default::default()
+                        });
+                    }
+                }
+
+                for child in &node.children {
+                    push_node(out, child);
+                }
+                out.push(PreviewItem {
+                    kind: SharedString::from("divider"),
+                    id: SharedString::from(format!("{}:divider", node.id)),
+                    ..Default::default()
+                });
+            }
+        }
+        "plot" => {
+            let points = node.plot_points.unwrap_or(0);
+            let range = match (node.min, node.max) {
+                (Some(a), Some(b)) => format!(" [{a}..{b}]"),
+                _ => "".to_string(),
+            };
+            out.push(PreviewItem {
+                kind: SharedString::from("text"),
+                id: SharedString::from(node.id.clone()),
+                text: SharedString::from(format!("Plot: {points} points{range}")),
+                ..Default::default()
+            });
+            if let Some(t) = node.overlay_text.as_deref() {
+                if !t.is_empty() {
+                    out.push(PreviewItem {
+                        kind: SharedString::from("text"),
+                        id: SharedString::from(format!("{}:overlay", node.id)),
+                        text: SharedString::from(t.to_string()),
+                        ..Default::default()
+                    });
+                }
+            }
+            if let Some(t) = node.error_text.as_deref() {
+                if !t.is_empty() {
+                    out.push(PreviewItem {
+                        kind: SharedString::from("text"),
+                        id: SharedString::from(format!("{}:error", node.id)),
+                        text: SharedString::from(format!("Error: {t}")),
+                        ..Default::default()
+                    });
+                }
             }
         }
         "text" => {
@@ -175,6 +315,9 @@ fn push_node(out: &mut Vec<PreviewItem>, node: &ScriptNode) {
                 kind: SharedString::from("textEditor"),
                 id: SharedString::from(node.id.clone()),
                 text: SharedString::from(title),
+                token_change: SharedString::from(
+                    node.handlers.get("change").cloned().unwrap_or_default(),
+                ),
                 token_submit: SharedString::from(
                     node.handlers.get("submit").cloned().unwrap_or_default(),
                 ),
@@ -213,7 +356,16 @@ fn push_node(out: &mut Vec<PreviewItem>, node: &ScriptNode) {
             });
         }
         "logViewer" => {
-            // For now, ignore: the scripts page already shows AppState.log_text.
+            let text = node.text.clone().unwrap_or_default();
+            if !text.is_empty() {
+                out.push(PreviewItem {
+                    kind: SharedString::from("logViewer"),
+                    id: SharedString::from(node.id.clone()),
+                    text: SharedString::from("Log"),
+                    input_text: SharedString::from(text),
+                    ..Default::default()
+                });
+            }
         }
         _ => {
             // Keep the preview forgiving: unknown nodes don't crash the renderer.

@@ -1,0 +1,152 @@
+// Simple ADC (analogRead) test script for STM32F042
+let mode = "pin"; // "pin" | "internal"
+let selectedPin = "0";
+let internalSrc = "vrefint"; // "vrefint" | "temp" | "vbat"
+let samples = 1;
+let statusText = "";
+let lastResponse = "";
+
+const ADC_PINS = [
+  { label: "A0 / ADC_IN0", value: "0" },
+  { label: "A1 / ADC_IN1", value: "1" },
+  { label: "A2 / ADC_IN2", value: "2" },
+  { label: "A3 / ADC_IN3", value: "3" },
+  { label: "A4 / ADC_IN4", value: "4" },
+  { label: "A5 / ADC_IN5", value: "5" },
+  { label: "A6 / ADC_IN6", value: "6" },
+  { label: "A7 / ADC_IN7", value: "7" },
+];
+
+const INTERNAL_SOURCES = [
+  { label: "VREFINT (internal reference)", value: "vrefint" },
+  { label: "TEMP (die temperature sensor)", value: "temp" },
+  { label: "VBAT (battery domain)", value: "vbat" },
+];
+
+function readAdc() {
+  statusText = "Reading...";
+  lastResponse = "";
+  render();
+
+  const nSamples = Math.max(1, Math.min(64, Number(samples) | 0));
+
+  let result;
+  let cmd;
+  if (mode === "internal") {
+    cmd = "adc read --src=" + internalSrc + (nSamples !== 1 ? " --samples=" + nSamples : "");
+    if (internalSrc === "vrefint") result = analogReadVrefint({ samples: nSamples });
+    else if (internalSrc === "temp") result = analogReadTemp({ samples: nSamples });
+    else result = analogReadVbat({ samples: nSamples });
+  } else {
+    cmd = "adc read --pin=" + selectedPin + (nSamples !== 1 ? " --samples=" + nSamples : "");
+    result = analogRead(Number(selectedPin), { samples: nSamples });
+  }
+
+  const finalize = function (value) {
+    statusText = "Value: " + String(value) + " (0..4095)";
+    lastResponse = cmd + " -> " + String(value);
+    render();
+  };
+
+  if (result && typeof result.then === "function") {
+    result.then(finalize);
+  } else {
+    finalize(result);
+  }
+}
+
+function render() {
+  UI.render(
+    UI.column({
+      padding: 16,
+      spacing: 16,
+      children: [
+        UI.text({ text: "ADC / analogRead", font: "title2", fontWeight: "semibold" }),
+
+        UI.text({ text: "Source", fontWeight: "medium" }),
+        UI.picker({
+          style: "segmented",
+          selected: mode,
+          options: [
+            { label: "Pin", value: "pin" },
+            { label: "Internal", value: "internal" },
+          ],
+          onChange: function (value) {
+            mode = value;
+            render();
+          },
+        }),
+
+        mode === "pin"
+          ? UI.column({
+              spacing: 8,
+              children: [
+                UI.text({ text: "ADC Pin", fontWeight: "medium" }),
+                UI.picker({
+                  style: "menu",
+                  selected: String(selectedPin),
+                  options: ADC_PINS,
+                  onChange: function (value) {
+                    selectedPin = value;
+                  },
+                }),
+              ],
+            })
+          : UI.column({
+              spacing: 8,
+              children: [
+                UI.text({ text: "Internal Channel", fontWeight: "medium" }),
+                UI.picker({
+                  style: "menu",
+                  selected: String(internalSrc),
+                  options: INTERNAL_SOURCES,
+                  onChange: function (value) {
+                    internalSrc = value;
+                  },
+                }),
+              ],
+            }),
+
+        UI.text({ text: "Samples (averaged)", fontWeight: "medium" }),
+        UI.slider({
+          min: 1,
+          max: 32,
+          step: 1,
+          value: samples,
+          onChange: function (v) {
+            samples = v;
+          },
+        }),
+
+        UI.button({
+          label: "Read",
+          backgroundColor: "#2563EB",
+          foregroundColor: "#FFFFFF",
+          onTap: readAdc,
+        }),
+
+        statusText
+          ? UI.text({
+              text: statusText,
+              backgroundColor: "#111827",
+              foregroundColor: "#FFFFFF",
+              padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+              cornerRadius: 8,
+            })
+          : null,
+
+        lastResponse
+          ? UI.text({
+              text: lastResponse,
+              backgroundColor: "#0B1220",
+              foregroundColor: "#E5E7EB",
+              padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+              cornerRadius: 8,
+            })
+          : null,
+      ],
+    }),
+  );
+}
+
+render();

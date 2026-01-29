@@ -1,6 +1,6 @@
 pub const SCRIPT_BOOTSTRAP: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../app/public/default-scripts/script_bootstrap.emw"
+    "/resources/default-scripts/script_bootstrap.emw"
 ));
 
 pub struct BundledScript {
@@ -13,14 +13,70 @@ pub const BUNDLED_SCRIPTS: &[BundledScript] = &[
         name: "hello.emw",
         source: include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../app/public/default-scripts/hello.emw"
+            "/resources/default-scripts/hello.emw"
         )),
     },
     BundledScript {
         name: "blink.emw",
         source: include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../app/public/default-scripts/blink.emw"
+            "/resources/default-scripts/blink.emw"
+        )),
+    },
+    BundledScript {
+        name: "gpio.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/gpio.emw"
+        )),
+    },
+    BundledScript {
+        name: "adc.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/adc.emw"
+        )),
+    },
+    BundledScript {
+        name: "uart.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/uart.emw"
+        )),
+    },
+    BundledScript {
+        name: "i2c.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/i2c.emw"
+        )),
+    },
+    BundledScript {
+        name: "pwm.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/pwm.emw"
+        )),
+    },
+    BundledScript {
+        name: "cc1101.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/cc1101.emw"
+        )),
+    },
+    BundledScript {
+        name: "ism.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/ism.emw"
+        )),
+    },
+    BundledScript {
+        name: "sampler.emw",
+        source: include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/default-scripts/sampler.emw"
         )),
     },
 ];
