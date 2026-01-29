@@ -9,7 +9,7 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
 - **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
 - **Core UX:** **Script-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
-- **Surface area shipped:** Android app, iOS app, Desktop app, CLI
+- **Surface area shipped:** Android app, iOS app, macOS app, (later) Windows app, CLI
 
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
@@ -64,9 +64,9 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Android:** `android/`
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
-- **macOS App (native):** `macos/` (SwiftUI)
-- **Desktop App (current):** `app/` (Tauri)
-- **Desktop App (native, paused):** `desktop/` (Slint; paused)
+- **macOS App (defacto):** `macos/` (SwiftUI)
+- **Desktop App (legacy/reference):** `app/` (Tauri; keep for reference; Rust crates still live here)
+- **Desktop App (paused):** `desktop/` (Slint; paused)
 - **CLI:** `app/cli/` (device shell + internal tooling)
 - **Docs:** `docs/` (MkDocs)
 
@@ -554,11 +554,10 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 ### Desktop App (`/app`)
 
-- Cross-platform Tauri app.
-- Owns device I/O directly (in-process USB MIDI + framing) and runs scripts locally for lowest latency.
-- May expose a simple local Desktop↔CLI bridge (file-based mailbox) for internal tooling, but the product does not ship a user-facing CLI workflow.
-- Focus is Scripts authoring + device interaction.
-- Avoid expanding/centering an IDE-style firmware build/flash workflow.
+- Legacy/reference Tauri app (not the primary desktop product direction).
+- Keep `app/` around near-term for reference/migration; shared Rust crates still live in `app/crates/`.
+- Desktop priority is now **macOS native** first, then a **dedicated Windows app**.
+- Linux is an afterthought until Windows is in a good place (no dedicated Linux app planned soon; future Qt TBD).
 
 Native-first note:
 
