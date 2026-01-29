@@ -34,6 +34,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var connectedPortName: String? = nil
     @Published var availablePorts: [String] = []
     @Published var lastErrorText: String? = nil
+    @Published var deviceEmwaverVersion: String? = nil
     @Published var autoConnectEnabled: Bool = true {
         didSet {
             if autoConnectEnabled {
@@ -297,6 +298,15 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.connectedPortName = candidate.name
             self.isConnected = true
             self.lastErrorText = nil
+            self.deviceEmwaverVersion = nil
+        }
+
+        // Mirror the desktop app behavior: query the device version automatically on connect.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let v = self.queryDeviceVersion(timeoutMs: 1500)
+            DispatchQueue.main.async {
+                self.deviceEmwaverVersion = v
+            }
         }
     }
 
@@ -310,7 +320,18 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         DispatchQueue.main.async {
             self.isConnected = false
             self.connectedPortName = nil
+            self.deviceEmwaverVersion = nil
         }
+    }
+
+    private func queryDeviceVersion(timeoutMs: Int) -> String? {
+        // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
+        let resp = sendCommand(Data([0x01]), timeout: timeoutMs)
+        guard let resp else { return nil }
+        if resp.count < 4 { return nil }
+        if resp[0] != 0x80 { return nil }
+        if resp.dropFirst(4).contains(where: { $0 != 0 }) { return nil }
+        return "\(resp[1]).\(resp[2]).\(resp[3])"
     }
 
     private func listPortCandidatesInternal() -> [PortCandidate] {
