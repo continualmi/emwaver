@@ -485,6 +485,22 @@ Scripts are user-authored extension bundles (manifest + EMWaver scripts) that pl
 - **Unified scripting engine**: ScriptEngine is the single runtime.
 - **In-script logging**: scripts surface output through script UI components.
 
+### Desktop Native Direction (Slint)
+
+We are converging the Desktop experience toward a **native-only UI** in `desktop/` (Slint) to avoid WebView overhead.
+
+Core motivation:
+
+- WebUI + Rust bridges require cross-boundary transport and often **full UI-tree serialization** (JSON), which becomes a bottleneck for high-frequency UI updates during hardware exploration.
+
+Desktop target architecture (mirrors Android/iOS):
+
+- **One process, shared memory**: Slint UI and the script runtime live in the same address space.
+- **UI thread owns UI**: all UI updates occur on the Slint UI thread.
+- **Script worker thread**: scripts execute on a dedicated worker thread.
+- **In-process scheduling**: communication is via in-process channels/queues (no IPC).
+- **Typed UI model**: avoid JSON UI-tree transport; prefer typed Rust models or small typed “diff” events.
+
 ## Cross-Cutting Practices
 
 - Keep changes scoped and avoid bundling unrelated work.
@@ -535,6 +551,10 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 - May expose a simple local Desktop↔CLI bridge (file-based mailbox) for internal tooling, but the product does not ship a user-facing CLI workflow.
 - Focus is Scripts authoring + device interaction.
 - Avoid expanding/centering an IDE-style firmware build/flash workflow.
+
+Native-first note:
+
+- Treat `app/` (WebUI/Tauri) as legacy for script UI. New work for script rendering and high-frequency UI updates should land in `desktop/` (Slint) to avoid JSON UI-tree serialization and IPC-style bridges.
 
 ### CLI (`/cli`)
 

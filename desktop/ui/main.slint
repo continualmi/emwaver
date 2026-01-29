@@ -1,10 +1,27 @@
-import { Button, HorizontalBox, VerticalBox, TextEdit } from "std-widgets.slint";
+import { Button, HorizontalBox, VerticalBox, TextEdit, ScrollView } from "std-widgets.slint";
+
+export struct ScriptListEntry {
+    name: string,
+}
+
+export struct ScriptPreviewItem {
+    kind: string, // "text" | "button" | "progress" | "unknown"
+    text: string,
+    token: string,
+    progress: float,
+}
 
 export global AppState {
-    in-out property <int> page: 0; // 0 = Home, 1 = Editor
+    in-out property <int> page: 0; // 0 = Home, 1 = Editor, 2 = Scripts
 
     in-out property <string> current_path: "";
     in-out property <string> log_text: "";
+
+    in-out property <[ScriptListEntry]> scripts: [];
+    in-out property <string> selected_script: "";
+    in-out property <bool> script_running: false;
+    in-out property <string> script_error: "";
+    in-out property <[ScriptPreviewItem]> script_preview: [];
 
     in-out property <bool> connected: false;
     in-out property <string> device_name: "";
@@ -25,11 +42,18 @@ export global AppState {
 
     callback go_home();
     callback go_editor();
+    callback go_scripts();
     callback disconnect();
 
     callback open_update();
     callback close_update();
     callback start_update();
+
+    callback scripts_refresh();
+    callback scripts_select(name: string);
+    callback scripts_run();
+    callback scripts_stop();
+    callback script_invoke(token: string);
 }
 
 export component AppWindow inherits Window {
@@ -54,6 +78,11 @@ export component AppWindow inherits Window {
             Button {
                 text: "Editor";
                 clicked => { AppState.go_editor(); }
+            }
+
+            Button {
+                text: "Scripts";
+                clicked => { AppState.go_scripts(); }
             }
 
             Text {
@@ -164,6 +193,139 @@ export component AppWindow inherits Window {
                     wrap: word-wrap;
                     horizontal-stretch: 2;
                     vertical-stretch: 1;
+                }
+            }
+        }
+
+        // Scripts page
+        HorizontalBox {
+            visible: AppState.page == 2;
+            spacing: 10px;
+
+            // Left: bundled script list
+            Rectangle {
+                width: 220px;
+                background: #0f1114;
+                border-width: 1px;
+                border-color: #2b2f36;
+
+                VerticalBox {
+                    padding: 10px;
+                    spacing: 8px;
+
+                    HorizontalBox {
+                        spacing: 10px;
+                        Text { text: "Scripts"; font-size: 16px; color: #e6e6e6; }
+                        Text { text: ""; horizontal-stretch: 1; }
+                        Button { text: "Refresh"; clicked => { AppState.scripts_refresh(); } }
+                    }
+
+                    Text {
+                        text: "Bundled";
+                        color: #a9b1ba;
+                    }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalBox {
+                            spacing: 6px;
+                            for entry in AppState.scripts : Button {
+                                text: (AppState.selected_script == entry.name ? "> " : "") + entry.name;
+                                clicked => { AppState.scripts_select(entry.name); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Middle: editor
+            Rectangle {
+                background: #0f1114;
+                border-width: 1px;
+                border-color: #2b2f36;
+                horizontal-stretch: 3;
+
+                VerticalBox {
+                    padding: 10px;
+                    spacing: 8px;
+
+                    HorizontalBox {
+                        spacing: 10px;
+                        Text { text: "Editor"; font-size: 16px; color: #e6e6e6; }
+                        Text { text: AppState.current_path; color: #7f8c8d; horizontal-stretch: 1; overflow: elide; }
+                        Button { text: AppState.script_running ? "Stop" : "Run"; clicked => { AppState.script_running ? AppState.scripts_stop() : AppState.scripts_run(); } }
+                    }
+
+                    TextEdit {
+                        text: root.editor_text;
+                        wrap: word-wrap;
+                        vertical-stretch: 1;
+                    }
+                }
+            }
+
+            // Right: preview
+            Rectangle {
+                background: #14181f;
+                border-width: 1px;
+                border-color: #2b2f36;
+                horizontal-stretch: 2;
+
+                VerticalBox {
+                    padding: 10px;
+                    spacing: 8px;
+
+                    HorizontalBox {
+                        spacing: 10px;
+                        Text { text: "Preview"; font-size: 16px; color: #e6e6e6; }
+                        Text { text: ""; horizontal-stretch: 1; }
+                        Text { text: AppState.script_running ? "Running" : "Idle"; color: AppState.script_running ? #2ecc71 : #a9b1ba; }
+                    }
+
+                    if (AppState.script_error != "") : Text {
+                        text: AppState.script_error;
+                        color: #ff6b6b;
+                        wrap: word-wrap;
+                    }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalBox {
+                            spacing: 8px;
+                            for item in AppState.script_preview : VerticalBox {
+                                spacing: 6px;
+                                if (item.kind == "text") : Text {
+                                    text: item.text;
+                                    color: #e6e6e6;
+                                    wrap: word-wrap;
+                                }
+                                if (item.kind == "button") : Button {
+                                    text: item.text;
+                                    clicked => { AppState.script_invoke(item.token); }
+                                }
+                                if (item.kind == "progress") : VerticalBox {
+                                    spacing: 4px;
+                                    Text { text: item.text; color: #a9b1ba; }
+                                    Rectangle {
+                                        height: 10px;
+                                        background: #2b2f36;
+                                        Rectangle {
+                                            height: parent.height;
+                                            width: parent.width * (item.progress / 100.0);
+                                            background: #4aa3ff;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    TextEdit {
+                        read-only: true;
+                        text: AppState.log_text;
+                        wrap: word-wrap;
+                        height: 120px;
+                    }
                 }
             }
         }

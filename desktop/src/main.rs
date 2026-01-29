@@ -8,11 +8,23 @@ use std::time::Duration;
 
 slint::include_modules!();
 
+mod bundled_scripts;
+mod script_engine;
+mod script_preview;
+
 use anyhow::{anyhow, Result};
 use emwaver_device_core::bridge::{
     create_bridge_state, dispatch_request, send_packet_command_bytes, BridgeRequest, BridgeState,
 };
 use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
+
+use std::sync::Mutex as StdMutex;
+
+use slint::{ModelRc, VecModel};
+
+use bundled_scripts::{bundled_script_source, BUNDLED_SCRIPTS, SCRIPT_BOOTSTRAP};
+use script_engine::{ScriptCommand, ScriptEvent, ScriptRuntime};
+use script_preview::flatten_preview;
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
 
@@ -20,6 +32,11 @@ static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "
 struct Backend {
     bridge: Arc<BridgeState>,
     next_id: Arc<AtomicU64>,
+}
+
+#[derive(Default)]
+struct ScriptState {
+    command_tx: StdMutex<Option<tokio::sync::mpsc::UnboundedSender<ScriptCommand>>>,
 }
 
 impl Backend {
@@ -87,6 +104,8 @@ fn main() -> Result<(), slint::PlatformError> {
     };
     let backend = Arc::new(backend);
 
+    let script_state = Arc::new(ScriptState::default());
+
     let update_modal_open = Arc::new(AtomicBool::new(false));
     let update_in_progress = Arc::new(AtomicBool::new(false));
 
@@ -103,6 +122,9 @@ fn main() -> Result<(), slint::PlatformError> {
         .set_app_version(env!("CARGO_PKG_VERSION").into());
     app.global::<AppState>().set_page(0);
 
+    // Seed scripts list (bundled).
+    set_bundled_scripts_list(&app);
+
     // Navigation
     {
         let app_weak = app.as_weak();
@@ -117,6 +139,15 @@ fn main() -> Result<(), slint::PlatformError> {
         app.global::<AppState>().on_go_editor(move || {
             if let Some(app) = app_weak.upgrade() {
                 app.global::<AppState>().set_page(1);
+            }
+        });
+    }
+
+    {
+        let app_weak = app.as_weak();
+        app.global::<AppState>().on_go_scripts(move || {
+            if let Some(app) = app_weak.upgrade() {
+                app.global::<AppState>().set_page(2);
             }
         });
     }
@@ -186,15 +217,84 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Run (stub)
+    // Scripts: refresh bundled list.
     {
         let app_weak = app.as_weak();
+        app.global::<AppState>().on_scripts_refresh(move || {
+            if let Some(app) = app_weak.upgrade() {
+                set_bundled_scripts_list(&app);
+            }
+        });
+    }
+
+    // Scripts: select bundled script.
+    {
+        let app_weak = app.as_weak();
+        app.global::<AppState>().on_scripts_select(move |name| {
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            let name = name.to_string();
+            app.global::<AppState>().set_selected_script(name.clone().into());
+            app.global::<AppState>().set_script_error("".into());
+            app.global::<AppState>().set_script_running(false);
+            app.global::<AppState>().set_script_preview(ModelRc::new(VecModel::from(vec![])));
+
+            if let Some(src) = bundled_script_source(&name) {
+                app.set_editor_text(src.into());
+                app.global::<AppState>()
+                    .set_current_path(format!("bundled:{}", name).into());
+                append_log(&app, &format!("Loaded bundled script: {}\n", name));
+            }
+        });
+    }
+
+    // Run (scripts engine).
+    {
+        let app_weak = app.as_weak();
+        let backend = Arc::clone(&backend);
+        let script_state = Arc::clone(&script_state);
+        let handle = rt.handle().clone();
+        app.global::<AppState>().on_scripts_run(move || {
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            let script_text = app.get_editor_text().to_string();
+            start_script_runtime(app.as_weak(), Arc::clone(&backend), Arc::clone(&script_state), handle.clone(), script_text);
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        let backend = Arc::clone(&backend);
+        let script_state = Arc::clone(&script_state);
+        let handle = rt.handle().clone();
         app.global::<AppState>().on_run_script(move || {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
-            let len = app.get_editor_text().as_bytes().len();
-            append_log(&app, &format!("Run (stub): {} bytes\n", len));
+            let script_text = app.get_editor_text().to_string();
+            start_script_runtime(app.as_weak(), Arc::clone(&backend), Arc::clone(&script_state), handle.clone(), script_text);
+        });
+    }
+
+    // Stop script.
+    {
+        let app_weak = app.as_weak();
+        let script_state = Arc::clone(&script_state);
+        app.global::<AppState>().on_scripts_stop(move || {
+            stop_script_runtime(Arc::clone(&script_state));
+            if let Some(app) = app_weak.upgrade() {
+                app.global::<AppState>().set_script_running(false);
+            }
+        });
+    }
+
+    // Invoke UI callback token.
+    {
+        let script_state = Arc::clone(&script_state);
+        app.global::<AppState>().on_script_invoke(move |token| {
+            let token = token.to_string();
+            invoke_script_callback(Arc::clone(&script_state), token);
         });
     }
 
@@ -464,6 +564,137 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     app.run()
+}
+
+fn set_bundled_scripts_list(app: &AppWindow) {
+    let entries = BUNDLED_SCRIPTS
+        .iter()
+        .map(|s| ScriptListEntry {
+            name: s.name.into(),
+        })
+        .collect::<Vec<_>>();
+    app.global::<AppState>()
+        .set_scripts(ModelRc::new(VecModel::from(entries)));
+
+    let selected = app.global::<AppState>().get_selected_script().to_string();
+    if selected.is_empty() {
+        if let Some(first) = BUNDLED_SCRIPTS.first() {
+            app.global::<AppState>()
+                .set_selected_script(first.name.into());
+            app.global::<AppState>()
+                .set_current_path(format!("bundled:{}", first.name).into());
+            app.set_editor_text(first.source.into());
+        }
+    }
+}
+
+fn start_script_runtime(
+    app_weak: slint::Weak<AppWindow>,
+    backend: Arc<Backend>,
+    script_state: Arc<ScriptState>,
+    handle: tokio::runtime::Handle,
+    script: String,
+) {
+    // Stop any existing runtime first.
+    stop_script_runtime(Arc::clone(&script_state));
+
+    let _ = slint::invoke_from_event_loop({
+        let app_weak = app_weak.clone();
+        move || {
+            if let Some(app) = app_weak.upgrade() {
+                app.global::<AppState>().set_script_error("".into());
+                app.global::<AppState>().set_script_running(true);
+                app.global::<AppState>().set_script_preview(ModelRc::new(VecModel::from(vec![])));
+            }
+        }
+    });
+
+    let (runtime, command_tx, mut event_rx) = ScriptRuntime::new(
+        Arc::clone(&backend.bridge),
+        handle.clone(),
+        SCRIPT_BOOTSTRAP.to_string(),
+    );
+
+    {
+        let mut guard = script_state.command_tx.lock().expect("script state poisoned");
+        *guard = Some(command_tx);
+    }
+
+    // Boa runtime runs on its own thread.
+    std::thread::Builder::new()
+        .name("ScriptRuntime".to_string())
+        .spawn(move || {
+            let _ = runtime.execute(&script);
+        })
+        .ok();
+
+    // Forward render/error events back to the Slint UI thread.
+    handle.spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                ScriptEvent::Render { tree } => {
+                    let preview = flatten_preview(&tree);
+                    let items = preview
+                        .into_iter()
+                        .map(|p| ScriptPreviewItem {
+                            kind: p.kind,
+                            text: p.text,
+                            token: p.token,
+                            progress: p.progress,
+                        })
+                        .collect::<Vec<_>>();
+
+                    let _ = slint::invoke_from_event_loop({
+                        let app_weak = app_weak.clone();
+                        move || {
+                            if let Some(app) = app_weak.upgrade() {
+                                app.global::<AppState>()
+                                    .set_script_preview(ModelRc::new(VecModel::from(items)));
+                            }
+                        }
+                    });
+                }
+                ScriptEvent::Error { message } => {
+                    let _ = slint::invoke_from_event_loop({
+                        let app_weak = app_weak.clone();
+                        let msg = message.clone();
+                        move || {
+                            if let Some(app) = app_weak.upgrade() {
+                                app.global::<AppState>().set_script_error(msg.into());
+                                app.global::<AppState>().set_script_running(false);
+                                append_log(&app, &format!("Script error: {}\n", message));
+                            }
+                        }
+                    });
+                }
+                ScriptEvent::Stopped => {
+                    let _ = slint::invoke_from_event_loop({
+                        let app_weak = app_weak.clone();
+                        move || {
+                            if let Some(app) = app_weak.upgrade() {
+                                app.global::<AppState>().set_script_running(false);
+                            }
+                        }
+                    });
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn stop_script_runtime(script_state: Arc<ScriptState>) {
+    let mut guard = script_state.command_tx.lock().expect("script state poisoned");
+    if let Some(tx) = guard.take() {
+        let _ = tx.send(ScriptCommand::Stop);
+    }
+}
+
+fn invoke_script_callback(script_state: Arc<ScriptState>, token: String) {
+    let guard = script_state.command_tx.lock().expect("script state poisoned");
+    if let Some(tx) = guard.as_ref() {
+        let _ = tx.send(ScriptCommand::Callback { token });
+    }
 }
 
 fn append_log(app: &AppWindow, msg: &str) {
