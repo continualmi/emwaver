@@ -41,6 +41,12 @@ public final class ScriptEngine {
         }
     }
 
+    private func appDataRootURL() -> URL? {
+        // Match the app’s existing storage conventions (e.g. iOS SamplerViewModel stores signals
+        // under Application Support/signals, not a bundle-id subfolder).
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    }
+
     private func installHostPrimitives(into context: JSContext) {
         context.exceptionHandler = { [weak self] _, exception in
             if let message = exception?.toString() {
@@ -161,6 +167,329 @@ public final class ScriptEngine {
             }
         }
         context.setObject(clearTimeoutBlock, forKeyedSubscript: "clearTimeout" as NSString)
+
+        // -----------------------------------------------------------------
+        // Minimal filesystem/path API (used by built-in scripts like sampler.emw)
+        // -----------------------------------------------------------------
+
+        let appDataDirBlock: @convention(block) () -> String = { [weak self] in
+            guard let self, let url = self.appDataRootURL() else { return "" }
+            return url.path
+        }
+        context.setObject(appDataDirBlock, forKeyedSubscript: "_scriptAppDataDir" as NSString)
+
+        let pathJoinBlock: @convention(block) (JSValue) -> String = { partsValue in
+            let rawParts = partsValue.toArray() ?? []
+            let parts = rawParts.map { String(describing: $0) }.filter { !$0.isEmpty }
+            return NSString.path(withComponents: parts)
+        }
+        context.setObject(pathJoinBlock, forKeyedSubscript: "_scriptPathJoin" as NSString)
+
+        let ensureDirBlock: @convention(block) (String) -> Void = { [weak self] path in
+            guard let self else { return }
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return }
+            do {
+                try FileManager.default.createDirectory(atPath: p, withIntermediateDirectories: true, attributes: nil)
+            } catch {
+                self.emitError("Script error: FS.ensureDir failed: \(error)")
+            }
+        }
+        context.setObject(ensureDirBlock, forKeyedSubscript: "_scriptEnsureDir" as NSString)
+
+        let readDirBlock: @convention(block) (String) -> JSValue = { path in
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return JSValue(object: [], in: context) }
+            do {
+                let urls = try FileManager.default.contentsOfDirectory(
+                    at: URL(fileURLWithPath: p, isDirectory: true),
+                    includingPropertiesForKeys: [.isDirectoryKey],
+                    options: [.skipsHiddenFiles]
+                )
+                let entries: [[String: Any]] = urls.map { url in
+                    let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                    return [
+                        "name": url.lastPathComponent,
+                        "path": url.path,
+                        "kind": isDir ? "dir" : "file",
+                    ]
+                }
+                return JSValue(object: entries, in: context)
+            } catch {
+                return JSValue(object: [], in: context)
+            }
+        }
+        context.setObject(readDirBlock, forKeyedSubscript: "_scriptReadDir" as NSString)
+
+        let readTextBlock: @convention(block) (String) -> String = { path in
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return "" }
+            return (try? String(contentsOfFile: p, encoding: .utf8)) ?? ""
+        }
+        context.setObject(readTextBlock, forKeyedSubscript: "_scriptReadFileText" as NSString)
+
+        let writeTextBlock: @convention(block) (String, String) -> Void = { [weak self] path, content in
+            guard let self else { return }
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return }
+            do {
+                let url = URL(fileURLWithPath: p)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+                try content.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                self.emitError("Script error: FS.writeText failed: \(error)")
+            }
+        }
+        context.setObject(writeTextBlock, forKeyedSubscript: "_scriptWriteFileText" as NSString)
+
+        let readBytesBlock: @convention(block) (String) -> JSValue = { path in
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return JSValue(object: [], in: context) }
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: p)) else {
+                return JSValue(object: [], in: context)
+            }
+            return JSValue(object: Array(data), in: context)
+        }
+        context.setObject(readBytesBlock, forKeyedSubscript: "_scriptReadFileBytes" as NSString)
+
+        let writeBytesBlock: @convention(block) (String, JSValue) -> Void = { [weak self] path, bytesValue in
+            guard let self else { return }
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return }
+            guard let data = self.dataFromJSBytes(bytesValue) else { return }
+            do {
+                let url = URL(fileURLWithPath: p)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+                try data.write(to: url, options: [.atomic])
+            } catch {
+                self.emitError("Script error: FS.writeBytes failed: \(error)")
+            }
+        }
+        context.setObject(writeBytesBlock, forKeyedSubscript: "_scriptWriteFileBytes" as NSString)
+
+        let removePathBlock: @convention(block) (String) -> Void = { [weak self] path in
+            guard let self else { return }
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return }
+            do {
+                try FileManager.default.removeItem(at: URL(fileURLWithPath: p))
+            } catch {
+                self.emitError("Script error: FS.remove failed: \(error)")
+            }
+        }
+        context.setObject(removePathBlock, forKeyedSubscript: "_scriptRemovePath" as NSString)
+
+        let renamePathBlock: @convention(block) (String, String) -> Void = { [weak self] from, to in
+            guard let self else { return }
+            let src = from.trimmingCharacters(in: .whitespacesAndNewlines)
+            let dst = to.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !src.isEmpty, !dst.isEmpty else { return }
+            do {
+                let srcURL = URL(fileURLWithPath: src)
+                let dstURL = URL(fileURLWithPath: dst)
+                try FileManager.default.createDirectory(at: dstURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+                try FileManager.default.moveItem(at: srcURL, to: dstURL)
+            } catch {
+                self.emitError("Script error: FS.rename failed: \(error)")
+            }
+        }
+        context.setObject(renamePathBlock, forKeyedSubscript: "_scriptRenamePath" as NSString)
+
+        let revealBlock: @convention(block) (String) -> Void = { path in
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return }
+            #if os(macOS)
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            proc.arguments = ["-R", p]
+            try? proc.run()
+            #else
+            _ = p
+            #endif
+        }
+        context.setObject(revealBlock, forKeyedSubscript: "_scriptRevealInFinder" as NSString)
+
+        // -----------------------------------------------------------------
+        // Sampler buffer API (used by sampler.emw via script_bootstrap.emw)
+        // -----------------------------------------------------------------
+
+        let samplerPacketCountBlock: @convention(block) () -> Int = { [weak self] in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return 0 }
+            let len = wrapper.getBuffer().count
+            if len <= 0 { return 0 }
+            return Int((len + 63) / 64)
+        }
+        context.setObject(samplerPacketCountBlock, forKeyedSubscript: "_scriptSamplerBufferGetPacketCount" as NSString)
+
+        let samplerLenBytesBlock: @convention(block) () -> Int = { [weak self] in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return 0 }
+            return wrapper.getBuffer().count
+        }
+        context.setObject(samplerLenBytesBlock, forKeyedSubscript: "_scriptSamplerBufferGetLenBytes" as NSString)
+
+        let samplerGetBytesBlock: @convention(block) () -> JSValue = { [weak self] in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+                return JSValue(object: [], in: context)
+            }
+            return JSValue(object: Array(wrapper.getBuffer()), in: context)
+        }
+        context.setObject(samplerGetBytesBlock, forKeyedSubscript: "_scriptSamplerBufferGetBytes" as NSString)
+
+        let samplerClearBlock: @convention(block) () -> Void = { [weak self] in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return }
+            wrapper.clearBuffer()
+        }
+        context.setObject(samplerClearBlock, forKeyedSubscript: "_scriptSamplerBufferClear" as NSString)
+
+        let samplerInvertBlock: @convention(block) (Bool) -> Void = { _ in
+            // Inversion is applied at capture start (Sampler.start opts.invert).
+            // Keep as a no-op for parity with hosts that expose it.
+        }
+        context.setObject(samplerInvertBlock, forKeyedSubscript: "_scriptSamplerBufferSetInvertRx" as NSString)
+
+        let samplerReadPacketsBlock: @convention(block) (Int, Int) -> JSValue = { [weak self] packetIndex, maxPackets in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+                return JSValue(object: ["data": [], "nextPacketIndex": 0, "availablePackets": 0], in: context)
+            }
+            let data = wrapper.getBuffer()
+            let totalPackets = Int((data.count + 63) / 64)
+            let startPacket = max(0, packetIndex)
+            let availablePackets = max(0, totalPackets - startPacket)
+            let toRead = max(0, min(availablePackets, max(1, maxPackets)))
+
+            let startByte = startPacket * 64
+            let endByte = min(data.count, startByte + toRead * 64)
+            let slice: [UInt8] = startByte < endByte ? Array(data[startByte..<endByte]) : []
+
+            return JSValue(
+                object: [
+                    "data": slice,
+                    "nextPacketIndex": startPacket + toRead,
+                    "availablePackets": availablePackets,
+                ],
+                in: context
+            )
+        }
+        context.setObject(samplerReadPacketsBlock, forKeyedSubscript: "_scriptSamplerBufferReadPacketsSince" as NSString)
+
+        let samplerCompressViewportBlock: @convention(block) (Int, Int, Int) -> JSValue = { [weak self] startBitRaw, endBitRaw, binsRaw in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+                return JSValue(object: ["bufferLenBytes": 0, "timeValues": [], "dataValues": []], in: context)
+            }
+            let data = wrapper.getBuffer()
+            let totalBits = max(0, data.count * 8)
+            if totalBits == 0 {
+                return JSValue(object: ["bufferLenBytes": 0, "timeValues": [], "dataValues": []], in: context)
+            }
+
+            let startBit = max(0, min(totalBits, startBitRaw))
+            let endBit = max(startBit, min(totalBits, endBitRaw))
+            let span = endBit - startBit
+            let bins = max(1, min(span == 0 ? 1 : span, max(1, binsRaw)))
+            if span <= 0 {
+                return JSValue(object: ["bufferLenBytes": data.count, "timeValues": [], "dataValues": []], in: context)
+            }
+
+            func bitAt(_ idx: Int) -> Int {
+                let byteIndex = idx >> 3
+                let bitIndex = idx & 7
+                guard byteIndex >= 0, byteIndex < data.count else { return 0 }
+                return ((data[byteIndex] >> bitIndex) & 1) == 1 ? 1 : 0
+            }
+
+            var timeValues: [Int] = []
+            var dataValues: [Double] = []
+            timeValues.reserveCapacity(bins)
+            dataValues.reserveCapacity(bins)
+
+            for i in 0..<bins {
+                let binStart = startBit + (i * span) / bins
+                let binEnd = startBit + ((i + 1) * span) / bins
+                let effectiveEnd = max(binStart + 1, binEnd)
+                var ones = 0
+                var n = 0
+                for bitIndex in binStart..<effectiveEnd {
+                    ones += bitAt(bitIndex)
+                    n += 1
+                }
+                timeValues.append(binStart)
+                dataValues.append(n > 0 ? Double(ones) / Double(n) : 0.0)
+            }
+
+            return JSValue(
+                object: [
+                    "bufferLenBytes": data.count,
+                    "timeValues": timeValues,
+                    "dataValues": dataValues,
+                ],
+                in: context
+            )
+        }
+        context.setObject(samplerCompressViewportBlock, forKeyedSubscript: "_scriptSamplerBufferCompressViewport" as NSString)
+
+        // -----------------------------------------------------------------
+        // Buffer helpers used by sampler.emw (load/save + timings)
+        // -----------------------------------------------------------------
+
+        let bufferSetBytesBlock: @convention(block) (JSValue) -> Int = { [weak self] bytesValue in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return 0 }
+            guard let data = self.dataFromJSBytes(bytesValue) else { return 0 }
+            wrapper.loadBuffer(data: data)
+            return data.count
+        }
+        context.setObject(bufferSetBytesBlock, forKeyedSubscript: "_scriptBufferSetBytes" as NSString)
+
+        let bufferSaveBytesFileBlock: @convention(block) (String) -> Void = { [weak self] path in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return }
+            let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !p.isEmpty else { return }
+            do {
+                let url = URL(fileURLWithPath: p)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+                try wrapper.getBuffer().write(to: url, options: [.atomic])
+            } catch {
+                self.emitError("Script error: save buffer failed: \(error)")
+            }
+        }
+        context.setObject(bufferSaveBytesFileBlock, forKeyedSubscript: "_scriptBufferSaveBytesFile" as NSString)
+
+        let bufferBuildSignedRawTimingsBlock: @convention(block) (Int) -> String = { [weak self] samplePeriodUsRaw in
+            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return "" }
+            let data = wrapper.getBuffer()
+            if data.isEmpty { return "" }
+
+            let samplePeriodUs = max(1, samplePeriodUsRaw)
+            let totalBits = data.count * 8
+            var components: [String] = []
+            components.reserveCapacity(min(2048, totalBits / 8))
+
+            var currentState = ((data[0] >> 0) & 1) == 1
+            var count = 0
+
+            func appendTiming(state: Bool, count: Int) {
+                guard count > 0 else { return }
+                let microseconds = count * samplePeriodUs
+                let prefix = state ? "" : "-"
+                components.append("\(prefix)\(microseconds)")
+            }
+
+            for index in 0..<totalBits {
+                let byteIndex = index >> 3
+                let bitIndex = index & 7
+                let bit = ((data[byteIndex] >> bitIndex) & 1) == 1
+                if bit == currentState {
+                    count += 1
+                } else {
+                    appendTiming(state: currentState, count: count)
+                    currentState = bit
+                    count = 1
+                }
+            }
+
+            appendTiming(state: currentState, count: count)
+            return components.joined(separator: " ")
+        }
+        context.setObject(bufferBuildSignedRawTimingsBlock, forKeyedSubscript: "_scriptBufferBuildSignedRawTimings" as NSString)
     }
 
     private func dataFromJSBytes(_ bytesValue: JSValue) -> Data? {

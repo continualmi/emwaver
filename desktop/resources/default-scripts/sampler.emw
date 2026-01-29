@@ -164,7 +164,6 @@ var chartError = "";
 var viewport = { min: 0, max: 10000 };
 var pulseMeasure = null;
 
-var refreshRateMs = 50;
 var chartBins = 1000;
 var maxSamplesBytes = 393216;
 var samplePeriodUs = 10;
@@ -192,8 +191,6 @@ var textDialogValue = "";
 var timingsText = "";
 var timingsLoading = false;
 
-var chartTimerId = null;
-
 function prefsPath() {
   try {
     var root = FS.appDataDir();
@@ -212,7 +209,6 @@ function loadPrefs() {
     if (!text) return;
     var obj = JSON.parse(text);
     if (obj && typeof obj === "object") {
-      if (typeof obj.refreshRateMs === "number") refreshRateMs = obj.refreshRateMs | 0;
       if (typeof obj.chartBins === "number") chartBins = obj.chartBins | 0;
       if (typeof obj.maxSamplesBytes === "number") maxSamplesBytes = obj.maxSamplesBytes | 0;
       if (typeof obj.samplePeriodUs === "number") samplePeriodUs = obj.samplePeriodUs | 0;
@@ -232,14 +228,13 @@ function savePrefs() {
   var path = prefsPath();
   if (!path) return;
   try {
-    FS.writeText(
-      path,
-      JSON.stringify({
-        refreshRateMs: refreshRateMs,
-        chartBins: chartBins,
-        maxSamplesBytes: maxSamplesBytes,
-        samplePeriodUs: samplePeriodUs,
-        invertCapture: invertCapture,
+      FS.writeText(
+        path,
+        JSON.stringify({
+          chartBins: chartBins,
+          maxSamplesBytes: maxSamplesBytes,
+          samplePeriodUs: samplePeriodUs,
+          invertCapture: invertCapture,
         pwmEnabled: pwmEnabled,
         pwmFreqHz: pwmFreqHz,
         pwmDutyPercent: pwmDutyPercent,
@@ -334,20 +329,7 @@ function refreshStats() {
   render();
 }
 
-function scheduleChartLoop() {
-  if (chartTimerId != null) {
-    try { clearInterval(chartTimerId); } catch (e) {}
-  }
-  chartTimerId = null;
-  var period = Math.max(20, Math.min(1000, refreshRateMs | 0));
-  chartTimerId = setInterval(function () {
-    try {
-      refreshChart();
-    } catch (e2) {}
-  }, period);
-}
-
-function refreshChart() {
+function computeChart() {
   try {
     var len = Number(Sampler.lenBytes()) || 0;
     bufferLenBytes = len;
@@ -376,6 +358,10 @@ function refreshChart() {
     __chartDataY = [];
     chartPointCount = 0;
   }
+}
+
+function refreshChart() {
+  computeChart();
   render();
 }
 
@@ -398,8 +384,7 @@ function startRecording() {
     isRecording = true;
     hasUnsavedChanges = true;
     viewport = { min: 0, max: Math.max(10000, (Sampler.lenBytes() || 0) * 8) };
-    scheduleChartLoop();
-    refreshChart();
+    computeChart();
   } catch (e) {
     statusText = "Start failed: " + String(e && e.message ? e.message : e);
     isRecording = false;
@@ -421,6 +406,7 @@ function stopRecording() {
     statusText = "Stop failed: " + String(e && e.message ? e.message : e);
   }
   savePrefs();
+  computeChart();
   render();
 }
 
@@ -974,6 +960,12 @@ function render() {
                   foregroundColor: "#FFFFFF",
                   onTap: stopRecording,
                 }),
+                UI.button({
+                  label: "Refresh chart",
+                  backgroundColor: "#1F2937",
+                  foregroundColor: "#E5E7EB",
+                  onTap: refreshChart,
+                }),
               ],
             }),
             UI.button({
@@ -1122,17 +1114,6 @@ function render() {
             render();
           },
           children: [
-            UI.textField({
-              id: "settings_refresh",
-              label: "Refresh rate (ms)",
-              value: String(refreshRateMs),
-              onSubmit: function (v) {
-                refreshRateMs = Math.max(20, parsePwmIntOrDefault(String(v), 50));
-                scheduleChartLoop();
-                savePrefs();
-                render();
-              },
-            }),
             UI.textField({
               id: "settings_bins",
               label: "Target bins",
@@ -1354,7 +1335,6 @@ try {
   // ignore
 }
 initDeviceEvents();
-scheduleChartLoop();
 refreshStats();
-refreshChart();
+computeChart();
 render();
