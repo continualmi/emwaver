@@ -25,8 +25,9 @@ use std::{
     fs,
     io,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Child, ChildStdin, Command, Stdio},
     sync::Arc,
+    time::Duration,
 };
 use tauri::{
     async_runtime::spawn_blocking,
@@ -40,6 +41,161 @@ use emwaver_device_core::bridge::{
 };
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
+
+// -----------------------------------------------------------------------------
+// Slint panel PoC (side-by-side docked window)
+// -----------------------------------------------------------------------------
+
+#[derive(Clone)]
+struct SlintPanelState {
+    child: Arc<std::sync::Mutex<Option<Child>>>,
+    stdin: Arc<std::sync::Mutex<Option<ChildStdin>>>,
+    alive: Arc<std::sync::atomic::AtomicBool>,
+}
+
+fn slint_panel_exe_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?.to_path_buf();
+    let name = if cfg!(windows) { "emwaver-panel.exe" } else { "emwaver-panel" };
+    Some(dir.join(name))
+}
+
+fn slint_panel_compute_bounds(main_window: &tauri::WebviewWindow) -> Option<(i32, i32, u32, u32)> {
+    let pos = main_window.outer_position().ok()?;
+    let size = main_window.outer_size().ok()?;
+
+    let gap: i32 = 8;
+    let panel_w: u32 = 420;
+    let panel_h: u32 = size.height;
+
+    let mut x = pos.x + (size.width as i32) + gap;
+    let y = pos.y;
+
+    if let Ok(Some(monitor)) = main_window.current_monitor() {
+        let mpos = monitor.position();
+        let msize = monitor.size();
+        let max_x = mpos.x + (msize.width as i32) - (panel_w as i32);
+        if x > max_x {
+            x = max_x;
+        }
+        if x < mpos.x {
+            x = mpos.x;
+        }
+    }
+
+    Some((x, y, panel_w, panel_h))
+}
+
+fn slint_panel_send(state: &SlintPanelState, msg: &serde_json::Value) {
+    let line = match serde_json::to_string(msg) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let mut guard = match state.stdin.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    let Some(stdin) = guard.as_mut() else {
+        return;
+    };
+
+    use std::io::Write;
+    let _ = stdin.write_all(line.as_bytes());
+    let _ = stdin.write_all(b"\n");
+    let _ = stdin.flush();
+}
+
+fn slint_panel_start_dock_pump(panel: SlintPanelState, main_window: tauri::WebviewWindow) {
+    // Polling avoids the resize "event storm" and reduces twitch.
+    tauri::async_runtime::spawn(async move {
+        let mut last: Option<(i32, i32, u32, u32)> = None;
+        while panel
+            .alive
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            if let Some(bounds) = slint_panel_compute_bounds(&main_window) {
+                if last != Some(bounds) {
+                    last = Some(bounds);
+                    let (x, y, w, h) = bounds;
+                    slint_panel_send(
+                        &panel,
+                        &serde_json::json!({ "type": "bounds", "x": x, "y": y, "w": w, "h": h }),
+                    );
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(33)).await;
+        }
+    });
+}
+
+fn slint_panel_spawn(main_window: &tauri::WebviewWindow) -> Option<SlintPanelState> {
+    // Gate behind env var so this PoC doesn't surprise normal users.
+    let enabled = std::env::var("EMWAVER_SLINT_PANEL").ok().as_deref() == Some("1");
+    if !enabled {
+        return None;
+    }
+
+    let exe = slint_panel_exe_path()?;
+    if !exe.exists() {
+        // Dev-mode convenience: build the panel on-demand.
+        // (The Tauri dev runner only builds the default bin.)
+        if cfg!(debug_assertions) {
+            let manifest_dir = env!("CARGO_MANIFEST_DIR");
+            let status = Command::new("cargo")
+                .current_dir(manifest_dir)
+                .arg("build")
+                .arg("-p")
+                .arg("emwaver")
+                .arg("--bin")
+                .arg("emwaver-panel")
+                .status();
+            if status.as_ref().map(|s| s.success()).unwrap_or(false) && exe.exists() {
+                // ok
+            } else {
+                eprintln!("[slint-panel] missing panel binary at {}", exe.display());
+                return None;
+            }
+        } else {
+            eprintln!("[slint-panel] missing panel binary at {}", exe.display());
+            return None;
+        }
+    }
+
+    let (x, y, w, h) = slint_panel_compute_bounds(main_window)?;
+
+    let mut cmd = Command::new(exe);
+    cmd.arg("--x")
+        .arg(x.to_string())
+        .arg("--y")
+        .arg(y.to_string())
+        .arg("--w")
+        .arg(w.to_string())
+        .arg("--h")
+        .arg(h.to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    let mut child = cmd.spawn().ok()?;
+    let stdin = child.stdin.take();
+
+    let state = SlintPanelState {
+        child: Arc::new(std::sync::Mutex::new(Some(child))),
+        stdin: Arc::new(std::sync::Mutex::new(stdin)),
+        alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+    };
+
+    slint_panel_send(
+        &state,
+        &serde_json::json!({
+            "type": "set_text",
+            "header": "Script UI (Slint placeholder)",
+            "sub": "PoC: docked panel window driven by the Tauri app.",
+        }),
+    );
+
+    Some(state)
+}
 
 // ESP-IDF functionality removed - desktop app focuses on hardware interaction and scripts
 const MENU_CLOSE_FOLDER_EVENT: &str = "menu-close-folder";
@@ -1536,14 +1692,34 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.restore_state(window_state_flags);
 
+                // Spawn the native Slint panel (PoC) and keep it docked.
+                let panel_state = slint_panel_spawn(&main_window);
+                if let Some(panel) = panel_state.clone() {
+                    slint_panel_start_dock_pump(panel, main_window.clone());
+                }
+
                 let app_handle = app.handle().clone();
                 let save_seq_for_events =
                     std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
                 let save_flags = window_state_flags;
 
+                let panel_state_for_events = panel_state.clone();
+                let main_window_for_events = main_window.clone();
                 main_window.on_window_event(move |event| match event {
                     tauri::WindowEvent::CloseRequested { .. } => {
                         let _ = app_handle.save_window_state(save_flags);
+
+                        if let Some(panel) = panel_state_for_events.as_ref() {
+                            panel
+                                .alive
+                                .store(false, std::sync::atomic::Ordering::Relaxed);
+                            slint_panel_send(panel, &serde_json::json!({ "type": "quit" }));
+                            if let Ok(mut guard) = panel.child.lock() {
+                                if let Some(mut child) = guard.take() {
+                                    let _ = child.kill();
+                                }
+                            }
+                        }
                     }
                     tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
                         let seq = save_seq_for_events
@@ -1557,6 +1733,9 @@ pub fn run() {
                                 let _ = app_handle.save_window_state(save_flags);
                             }
                         });
+
+                        // Bounds updates are handled by the dock pump.
+                        let _ = &main_window_for_events;
                     }
                     _ => {}
                 });

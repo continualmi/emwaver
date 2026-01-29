@@ -5,10 +5,15 @@ description = "A Tauri App"
 authors = ["Luís Marnoto"]
 edition = "2021"
 license = "Apache-2.0"
+default-run = "EMWaver"
 
 [[bin]]
 name = "EMWaver"
 path = "src/main.rs"
+
+[[bin]]
+name = "emwaver-panel"
+path = "src/panel_main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -45,6 +50,9 @@ emwaver-buffer-core = { path = "../crates/emwaver-buffer-core" }
 emwaver-device-core = { path = "../crates/emwaver-device-core" }
 emwaver-dfu = { path = "../crates/emwaver-dfu" }
 emwaver-desktop-ipc = { path = "../crates/emwaver-desktop-ipc" }
+
+# Native placeholder UI panel (PoC).
+slint = "1"
 
 [patch.crates-io]
 regress = { path = "../crates/regress" }
