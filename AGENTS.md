@@ -488,6 +488,7 @@ Throughput target
 Scripts are user-authored extension bundles (manifest + EMWaver scripts) that plug into the Script Engine sandbox.
 
 - **Functional parity, native rendering**: the same `.emw` script must be functionally equivalent across Android/iOS/Desktop, but UI is rendered using platform-native controls and platform-default styling. Visual parity is not a goal (and differences are expected).
+- **Share core logic when possible**: prefer shared implementation of protocol/buffering/compression (e.g. Rust buffer core), shared `.emw` scripts + bootstrap, and shared DFU/bootloader tooling when feasible, to keep script behavior and device semantics aligned across platforms.
 - **Cross-platform semantics**: the Script API and observable runtime behavior must be the same across Android/iOS/Desktop (avoid host-dependent sync/async differences).
 - **Sync-only execution**: scripts and the standard library are strictly synchronous across all platforms (no Promises, no `async`/`await`).
 - **Unified scripting engine**: ScriptEngine is the single runtime.
