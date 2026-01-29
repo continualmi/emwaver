@@ -20,10 +20,12 @@ use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB
 
 use std::sync::Mutex as StdMutex;
 
+use tokio::sync::mpsc as tokio_mpsc;
+
 use slint::{ModelRc, VecModel};
 
 use bundled_scripts::{bundled_script_source, BUNDLED_SCRIPTS, SCRIPT_BOOTSTRAP};
-use script_engine::{ScriptCallbackArg, ScriptCommand, ScriptEvent, ScriptRuntime};
+use script_engine::{ScriptCallbackArg, ScriptCommand, ScriptEvent, ScriptNode, ScriptRuntime};
 use script_preview::flatten_preview;
 
 static BUNDLED_FIRMWARE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/emwaver.bin"));
@@ -104,6 +106,46 @@ fn main() -> Result<(), slint::PlatformError> {
     };
     let backend = Arc::new(backend);
 
+    // Log aggregation: avoid O(n) string copies + relayout on every append.
+    let (log_tx, mut log_rx) = tokio_mpsc::unbounded_channel::<String>();
+    {
+        let app_weak = app.as_weak();
+        rt.handle().spawn(async move {
+            const MAX_CHARS: usize = 120_000;
+            const FLUSH_MS: u64 = 75;
+
+            let mut buf = String::new();
+            let mut dirty = false;
+
+            loop {
+                tokio::select! {
+                    msg = log_rx.recv() => {
+                        let Some(msg) = msg else { break; };
+                        buf.push_str(&msg);
+                        if buf.len() > MAX_CHARS {
+                            let keep_from = buf.len().saturating_sub(MAX_CHARS);
+                            buf.drain(..keep_from);
+                        }
+                        dirty = true;
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(FLUSH_MS)) => {
+                        if !dirty { continue; }
+                        dirty = false;
+                        let snapshot = buf.clone();
+                        let _ = slint::invoke_from_event_loop({
+                            let app_weak = app_weak.clone();
+                            move || {
+                                if let Some(app) = app_weak.upgrade() {
+                                    app.global::<AppState>().set_log_text(snapshot.into());
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+    }
+
     let script_state = Arc::new(ScriptState::default());
 
     let update_modal_open = Arc::new(AtomicBool::new(false));
@@ -112,9 +154,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let current_path = std::rc::Rc::new(std::cell::RefCell::new(None::<PathBuf>));
     let log_text = app.global::<AppState>().get_log_text();
     if log_text.trim().is_empty() {
-        app.global::<AppState>().set_log_text(
-            "EMWaver native desktop (Slint)\n\n- Home: auto-connect + update\n- Editor: open/save scripts\n"
-                .into(),
+        let _ = log_tx.send(
+            "EMWaver native desktop (Slint)\n\n- Home: auto-connect + update\n- Editor: open/save scripts\n".to_string(),
         );
     }
 
@@ -156,6 +197,7 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let app_weak = app.as_weak();
         let current_path = current_path.clone();
+        let log_tx = log_tx.clone();
         app.global::<AppState>().on_open_file(move || {
             let Some(app) = app_weak.upgrade() else {
                 return;
@@ -173,10 +215,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     app.set_editor_text(contents.into());
                     app.global::<AppState>()
                         .set_current_path(display_path(&file).into());
-                    append_log(&app, &format!("Opened {}\n", display_path(&file)));
+                    let _ = log_tx.send(format!("Opened {}\n", display_path(&file)));
                 }
                 Err(err) => {
-                    append_log(&app, &format!("Open failed: {err}\n"));
+                    let _ = log_tx.send(format!("Open failed: {err}\n"));
                 }
             }
         });
@@ -186,6 +228,7 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let app_weak = app.as_weak();
         let current_path = current_path.clone();
+        let log_tx = log_tx.clone();
         app.global::<AppState>().on_save_file(move || {
             let Some(app) = app_weak.upgrade() else {
                 return;
@@ -206,14 +249,14 @@ fn main() -> Result<(), slint::PlatformError> {
             };
 
             if let Err(err) = write_text_atomic(&target, &editor_text) {
-                append_log(&app, &format!("Save failed: {err}\n"));
+                let _ = log_tx.send(format!("Save failed: {err}\n"));
                 return;
             }
 
             *current_path.borrow_mut() = Some(target.clone());
             app.global::<AppState>()
                 .set_current_path(display_path(&target).into());
-            append_log(&app, &format!("Saved {}\n", display_path(&target)));
+            let _ = log_tx.send(format!("Saved {}\n", display_path(&target)));
         });
     }
 
@@ -230,6 +273,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Scripts: select bundled script.
     {
         let app_weak = app.as_weak();
+        let log_tx = log_tx.clone();
         app.global::<AppState>().on_scripts_select(move |name| {
             let Some(app) = app_weak.upgrade() else {
                 return;
@@ -244,7 +288,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 app.set_editor_text(src.into());
                 app.global::<AppState>()
                     .set_current_path(format!("bundled:{}", name).into());
-                append_log(&app, &format!("Loaded bundled script: {}\n", name));
+                let _ = log_tx.send(format!("Loaded bundled script: {}\n", name));
             }
         });
     }
@@ -255,12 +299,20 @@ fn main() -> Result<(), slint::PlatformError> {
         let backend = Arc::clone(&backend);
         let script_state = Arc::clone(&script_state);
         let handle = rt.handle().clone();
+        let log_tx = log_tx.clone();
         app.global::<AppState>().on_scripts_run(move || {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
             let script_text = app.get_editor_text().to_string();
-            start_script_runtime(app.as_weak(), Arc::clone(&backend), Arc::clone(&script_state), handle.clone(), script_text);
+            start_script_runtime(
+                app.as_weak(),
+                Arc::clone(&backend),
+                Arc::clone(&script_state),
+                handle.clone(),
+                log_tx.clone(),
+                script_text,
+            );
         });
     }
     {
@@ -268,12 +320,20 @@ fn main() -> Result<(), slint::PlatformError> {
         let backend = Arc::clone(&backend);
         let script_state = Arc::clone(&script_state);
         let handle = rt.handle().clone();
+        let log_tx = log_tx.clone();
         app.global::<AppState>().on_run_script(move || {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
             let script_text = app.get_editor_text().to_string();
-            start_script_runtime(app.as_weak(), Arc::clone(&backend), Arc::clone(&script_state), handle.clone(), script_text);
+            start_script_runtime(
+                app.as_weak(),
+                Arc::clone(&backend),
+                Arc::clone(&script_state),
+                handle.clone(),
+                log_tx.clone(),
+                script_text,
+            );
         });
     }
 
@@ -492,6 +552,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let update_modal_open = Arc::clone(&update_modal_open);
         let update_in_progress = Arc::clone(&update_in_progress);
         let handle = rt.handle().clone();
+        let log_tx = log_tx.clone();
         handle.spawn(async move {
             let mut last_device_name: Option<String> = None;
             loop {
@@ -550,12 +611,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     if let Ok(ports) = backend.midi_list_ports().await {
                         if let Some(first) = ports.into_iter().next() {
                             let _ = backend.midi_connect(first.clone()).await;
-                            let app_weak2 = app_weak.clone();
-                            let _ = slint::invoke_from_event_loop(move || {
-                                if let Some(app) = app_weak2.upgrade() {
-                                    append_log(&app, "Connecting...\n");
-                                }
-                            });
+                            let _ = log_tx.send("Connecting...\n".to_string());
                             continue;
                         }
                     }
@@ -622,6 +678,7 @@ fn start_script_runtime(
     backend: Arc<Backend>,
     script_state: Arc<ScriptState>,
     handle: tokio::runtime::Handle,
+    log_tx: tokio_mpsc::UnboundedSender<String>,
     script: String,
 ) {
     // Stop any existing runtime first.
@@ -659,55 +716,76 @@ fn start_script_runtime(
 
     // Forward render/error events back to the Slint UI thread.
     handle.spawn(async move {
+        // Coalesce renders (ISM/Sampler can render on timers/device events).
+        let pending_tree: Arc<tokio::sync::Mutex<Option<ScriptNode>>> =
+            Arc::new(tokio::sync::Mutex::new(None));
+        let flush_scheduled = Arc::new(AtomicBool::new(false));
+
         while let Some(event) = event_rx.recv().await {
             match event {
                 ScriptEvent::Render { tree } => {
-                    let preview = flatten_preview(&tree);
-                    let _ = slint::invoke_from_event_loop({
-                        let app_weak = app_weak.clone();
-                        move || {
-                            if let Some(app) = app_weak.upgrade() {
-                                let items = preview
-                                    .into_iter()
-                                    .map(|p| ScriptPreviewItem {
-                                        kind: p.kind,
-                                        id: p.id,
-                                        text: p.text,
-                                        token_tap: p.token_tap,
-                                        token_change: p.token_change,
-                                        token_submit: p.token_submit,
-                                        progress: p.progress,
+                    {
+                        let mut guard = pending_tree.lock().await;
+                        *guard = Some(tree);
+                    }
 
-                                        picker_index: p.picker_index,
-                                        options_labels: ModelRc::new(VecModel::from(p.options_labels)),
-                                        options_values: ModelRc::new(VecModel::from(p.options_values)),
+                    if !flush_scheduled.swap(true, Ordering::Relaxed) {
+                        let app_weak2 = app_weak.clone();
+                        let pending_tree2 = Arc::clone(&pending_tree);
+                        let flush_scheduled2 = Arc::clone(&flush_scheduled);
+                        tokio::spawn(async move {
+                            // ~30 fps max.
+                            tokio::time::sleep(Duration::from_millis(33)).await;
+                            let tree = { pending_tree2.lock().await.take() };
+                            flush_scheduled2.store(false, Ordering::Relaxed);
+                            let Some(tree) = tree else { return; };
 
-                                        value: p.value,
-                                        minimum: p.minimum,
-                                        maximum: p.maximum,
-                                        step: p.step,
+                            let preview = flatten_preview(&tree);
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(app) = app_weak2.upgrade() {
+                                    let items = preview
+                                        .into_iter()
+                                        .map(|p| ScriptPreviewItem {
+                                            kind: p.kind,
+                                            id: p.id,
+                                            text: p.text,
+                                            token_tap: p.token_tap,
+                                            token_change: p.token_change,
+                                            token_submit: p.token_submit,
+                                            progress: p.progress,
 
-                                        checked: p.checked,
+                                            picker_index: p.picker_index,
+                                            options_labels: ModelRc::new(VecModel::from(p.options_labels)),
+                                            options_values: ModelRc::new(VecModel::from(p.options_values)),
 
-                                        input_text: p.input_text,
-                                        placeholder: p.placeholder,
-                                    })
-                                    .collect::<Vec<_>>();
-                                app.global::<AppState>()
-                                    .set_script_preview(ModelRc::new(VecModel::from(items)));
-                            }
-                        }
-                    });
+                                            value: p.value,
+                                            minimum: p.minimum,
+                                            maximum: p.maximum,
+                                            step: p.step,
+
+                                            checked: p.checked,
+
+                                            input_text: p.input_text,
+                                            placeholder: p.placeholder,
+                                        })
+                                        .collect::<Vec<_>>();
+                                    app.global::<AppState>()
+                                        .set_script_preview(ModelRc::new(VecModel::from(items)));
+                                }
+                            });
+                        });
+                    }
                 }
                 ScriptEvent::Error { message } => {
                     let _ = slint::invoke_from_event_loop({
                         let app_weak = app_weak.clone();
                         let msg = message.clone();
+                        let log_tx = log_tx.clone();
                         move || {
                             if let Some(app) = app_weak.upgrade() {
                                 app.global::<AppState>().set_script_error(msg.into());
                                 app.global::<AppState>().set_script_running(false);
-                                append_log(&app, &format!("Script error: {}\n", message));
+                                let _ = log_tx.send(format!("Script error: {}\n", message));
                             }
                         }
                     });
@@ -744,13 +822,6 @@ fn invoke_script_callback(
     if let Some(tx) = guard.as_ref() {
         let _ = tx.send(ScriptCommand::Callback { token, arg });
     }
-}
-
-fn append_log(app: &AppWindow, msg: &str) {
-    let state = app.global::<AppState>();
-    let mut cur = state.get_log_text().to_string();
-    cur.push_str(msg);
-    state.set_log_text(cur.into());
 }
 
 fn display_path(path: &Path) -> String {

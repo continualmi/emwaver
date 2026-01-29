@@ -1,4 +1,4 @@
-import { Button, HorizontalBox, VerticalBox, TextEdit, ScrollView, ComboBox, Slider, LineEdit, Switch } from "std-widgets.slint";
+import { Button, HorizontalBox, VerticalBox, TextEdit, ScrollView, ListView, ComboBox, Slider, LineEdit, Switch } from "std-widgets.slint";
 
 export struct ScriptListEntry {
     name: string,
@@ -179,7 +179,8 @@ export component AppWindow inherits Window {
             TextEdit {
                 read-only: true;
                 text: AppState.log_text;
-                wrap: word-wrap;
+                // Logs can grow large; wrapping is expensive.
+                wrap: no-wrap;
                 vertical-stretch: 1;
             }
         }
@@ -217,7 +218,7 @@ export component AppWindow inherits Window {
                 TextEdit {
                     read-only: true;
                     text: AppState.log_text;
-                    wrap: word-wrap;
+                    wrap: no-wrap;
                     horizontal-stretch: 2;
                     vertical-stretch: 1;
                 }
@@ -253,14 +254,12 @@ export component AppWindow inherits Window {
                         color: #a9b1ba;
                     }
 
-                    ScrollView {
+                    // ListView virtualizes; ScrollView+for instantiates everything.
+                    ListView {
                         vertical-stretch: 1;
-                        VerticalBox {
-                            spacing: 6px;
-                            for entry in AppState.scripts : Button {
-                                text: (AppState.selected_script == entry.name ? "> " : "") + entry.name;
-                                clicked => { AppState.scripts_select(entry.name); }
-                            }
+                        for entry in AppState.scripts : Button {
+                            text: (AppState.selected_script == entry.name ? "> " : "") + entry.name;
+                            clicked => { AppState.scripts_select(entry.name); }
                         }
                     }
                 }
@@ -292,12 +291,11 @@ export component AppWindow inherits Window {
                         wrap: word-wrap;
                     }
 
-                    ScrollView {
+                    // ListView virtualizes; ScrollView+for instantiates everything.
+                    ListView {
                         vertical-stretch: 3;
-                        VerticalBox {
-                            spacing: 8px;
-                            for item in AppState.script_preview : VerticalBox {
-                                spacing: 6px;
+                        for item in AppState.script_preview : VerticalBox {
+                            spacing: 6px;
                                 if (item.kind == "text") : Text {
                                     text: item.text;
                                     color: #e6e6e6;
@@ -425,7 +423,6 @@ export component AppWindow inherits Window {
                                         }
                                     }
                                 }
-                            }
                         }
                     }
 
@@ -446,7 +443,7 @@ export component AppWindow inherits Window {
                     TextEdit {
                         read-only: true;
                         text: AppState.log_text;
-                        wrap: word-wrap;
+                        wrap: no-wrap;
                         height: 120px;
                     }
                 }
