@@ -1,1340 +1,406 @@
-// Sampler - Script implementation of the Desktop Sampler fragment UI.
-// NOTE: This script includes a safe fallback UI if the host does not support desktop-only UI nodes.
+'use strict';
 
-// Keep STM32 pin labels aligned with Desktop Sampler UI.
-var STM32_PIN_LABELS = [
-  "A0 (IR_RX)",
-  "A1 (IR_TX)",
-  "A2 (GDO0)",
-  "A3 (GDO2)",
-  "A4 (NSS)",
-  "A5 (SCK)",
-  "A6 (MISO)",
-  "A7 (MOSI)",
-  "A13 (SWCLK)",
-  "A14 (SWDIO)",
-  "B6 (UART TX / I2C SCL)",
-  "B7 (UART RX / I2C SDA)",
+var PINS = [
+  { label: 'A0 (IR_RX)', value: '0' },
+  { label: 'A1 (IR_TX)', value: '1' },
+  { label: 'A2 (GDO0)', value: '2' },
+  { label: 'A3 (GDO2)', value: '3' },
+  { label: 'A4 (NSS)', value: '4' },
+  { label: 'A5 (SCK)', value: '5' },
+  { label: 'A6 (MISO)', value: '6' },
+  { label: 'A7 (MOSI)', value: '7' },
+  { label: 'A13 (SWCLK)', value: '13' },
+  { label: 'A14 (SWDIO)', value: '14' },
+  { label: 'B6 (UART TX / I2C SCL)', value: String(16 + 6) },
+  { label: 'B7 (UART RX / I2C SDA)', value: String(16 + 7) },
 ];
 
-function stm32PinValueFromLabel(label) {
-  var match = String(label).match(/\bP?([AB])(\d{1,2})\b/);
-  if (!match) return -1;
-  var bank = match[1];
-  var pin = parseInt(match[2], 10);
-  if (!isFinite(pin) || pin < 0 || pin > 15) return -1;
-  return bank === "A" ? pin : 16 + pin;
+function i(v, d) {
+  var n = parseInt(String(v || '').trim(), 10);
+  return isFinite(n) ? n : d;
 }
 
-var STM32_PINS = STM32_PIN_LABELS.map(function (label) {
-  var v = stm32PinValueFromLabel(label);
-  return { label: label, value: String(v) };
-}).filter(function (p) {
-  return p.value !== "-1";
-});
-
-function normalizeSignalName(rawName, fallback, ext) {
-  var e = ext || ".raw";
-  var trimmed = String(rawName || "").trim();
-  var baseName = trimmed || String(fallback || "signal1.raw");
-  var lower = baseName.toLowerCase();
-  if (lower.endsWith(e)) return baseName;
-  return baseName + e;
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
 }
 
-function parsePwmIntOrDefault(raw, fallback) {
-  var t = String(raw || "").trim();
-  if (!t) return fallback;
-  var n = parseInt(t, 10);
-  return isFinite(n) ? n : fallback;
+function ends(s, suf) {
+  return String(s || '').toLowerCase().endsWith(String(suf || '').toLowerCase());
 }
 
-function getBitLSB(bytes, bitIndex) {
-  var byteIndex = bitIndex >> 3;
-  if (byteIndex < 0 || byteIndex >= bytes.length) return 0;
-  var mask = 1 << (bitIndex & 7);
-  return (bytes[byteIndex] & mask) !== 0 ? 1 : 0;
+function baseName(s) {
+  var name = String(s || '').trim();
+  if (!name) return 'signal1';
+  name = name.replace(/[\\/]/g, '_').replace(/\s+/g, '_');
+  return name.replace(/\.(raw|txt)$/i, '');
 }
 
-function computeSinglePulseWidthUs(bytes, rangeStartBit, rangeEndBitExclusive, samplePeriodUs) {
-  var start = Math.max(0, rangeStartBit | 0);
-  var end = Math.max(start + 1, rangeEndBitExclusive | 0);
-  if (end - start < 2) return null;
+function signalsDir() {
+  var root = FS.appDataDir();
+  return root ? FS.join(root, 'signals') : '';
+}
 
-  var cur = getBitLSB(bytes, start);
-  var transitions = [];
-  for (var i = start + 1; i < end; i += 1) {
-    var bit = getBitLSB(bytes, i);
-    if (bit !== cur) {
-      transitions.push(i);
-      cur = bit;
-      if (transitions.length > 2) return null;
+var status = '';
+var rxPin = '0';
+var invert = false;
+var recording = false;
+var recordId = null;
+
+var samplePeriodUsText = '10';
+var maxBytesText = '393216';
+var binsText = '900';
+
+var bufLen = 0;
+var xMin = 0;
+var xMax = 10000;
+var dataX = [];
+var dataY = [];
+var chartErr = '';
+
+var files = [];
+var selectedFile = '';
+var saveName = 'signal1.raw';
+
+function listFiles() {
+  files = [];
+  selectedFile = selectedFile || '';
+  var dir = signalsDir();
+  if (!dir) return;
+  try { FS.ensureDir(dir); } catch (e) {}
+  try {
+    var names = FS.readDir(dir) || [];
+    files = names
+      .map(function (n) { return String(n || ''); })
+      .filter(function (n) { return ends(n, '.raw') || ends(n, '.txt'); })
+      .sort();
+    if (files.length && !selectedFile) selectedFile = files[0];
+  } catch (e2) {}
+}
+
+function refreshPlot() {
+  chartErr = '';
+  dataX = [];
+  dataY = [];
+  try {
+    bufLen = Sampler.lenBytes();
+    var maxBits = Math.max(0, bufLen * 8);
+    if (maxBits <= 0) return;
+
+    var bins = clamp(i(binsText, 900), 64, 6000);
+    var start = clamp(i(xMin, 0), 0, maxBits);
+    var end = clamp(i(xMax, 10000), 0, maxBits);
+    if (end <= start) {
+      start = 0;
+      end = Math.min(10000, maxBits);
     }
-  }
-  if (transitions.length !== 2) return null;
-  var startBit = getBitLSB(bytes, start);
-  var endBit = getBitLSB(bytes, end - 1);
-  if (startBit !== endBit) return null;
 
-  var t1 = transitions[0];
-  var t2 = transitions[1];
-  if (t1 <= start || t2 >= end - 1) return null;
-  var widthBits = t2 - t1;
-  var widthUs = Math.max(0, widthBits * Math.max(1, samplePeriodUs | 0));
-  var level = getBitLSB(bytes, t1) === 1 ? "high" : "low";
-  return { widthUs: widthUs, level: level };
+    xMin = start;
+    xMax = end;
+
+    var v = Sampler.compressViewport({ startBit: start, endBit: end, bins: bins });
+    dataX = v.timeValues || [];
+    dataY = v.dataValues || [];
+  } catch (e) {
+    chartErr = String(e && e.message ? e.message : e);
+  }
 }
 
-function parseSignedTimingsText(text) {
-  var tokens = String(text || "").split(/\s+/g);
-  var out = [];
-  for (var i = 0; i < tokens.length; i += 1) {
-    var token = String(tokens[i] || "").trim();
-    if (!token) continue;
-    token = token.replace(/,+$/, "");
-    var value = parseInt(token, 10);
-    if (isFinite(value)) out.push(value);
+function start() {
+  chartErr = '';
+  status = '';
+  try {
+    var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
+    var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
+    var s = Sampler.start({ pin: Number(rxPin), clearBefore: true, invert: invert, periodUs: periodUs, maxBytes: maxBytes });
+    recordId = s && s.id != null ? String(s.id) : null;
+    recording = true;
+    status = 'Recording…';
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function stop() {
+  try { Sampler.stop(recordId); } catch (e) {}
+  recording = false;
+  recordId = null;
+  refreshPlot();
+  render();
+}
+
+function parseTimings(text) {
+  return String(text || '')
+    .split(/[\s,]+/g)
+    .map(function (t) { return parseInt(t, 10); })
+    .filter(function (n) { return isFinite(n) && n !== 0; });
+}
+
+function timingsToBytes(pulsesUs, periodUs, maxBytes) {
+  var maxBits = maxBytes * 8;
+  var total = 0;
+  for (var i0 = 0; i0 < pulsesUs.length; i0 += 1) {
+    total += Math.max(0, Math.round(Math.abs(pulsesUs[i0]) / periodUs));
+    if (total >= maxBits) { total = maxBits; break; }
+  }
+  var out = new Uint8Array(Math.ceil(total / 8));
+  var bit = 0;
+  for (var i1 = 0; i1 < pulsesUs.length && bit < total; i1 += 1) {
+    var us = pulsesUs[i1];
+    var high = us > 0;
+    var run = Math.max(0, Math.round(Math.abs(us) / periodUs));
+    run = Math.min(run, total - bit);
+    if (high) {
+      for (var j = 0; j < run; j += 1) {
+        var idx = bit + j;
+        out[idx >> 3] |= 1 << (idx & 7);
+      }
+    }
+    bit += run;
   }
   return out;
 }
 
-function timingsToRawBufferBytes(pulsesUs, options) {
-  var samplePeriodUs = Math.max(1, (options && options.samplePeriodUs ? options.samplePeriodUs : 10) | 0);
-  var maxBytes = Math.max(1, (options && options.maxBytes ? options.maxBytes : 393216) | 0);
-  var maxBits = maxBytes * 8;
+function loadSelected() {
+  status = '';
+  chartErr = '';
+  var name = String(selectedFile || '');
+  if (!name) return render();
+  var dir = signalsDir();
+  var path = dir ? FS.join(dir, name) : '';
+  if (!path) return render();
 
-  var totalSamples = 0;
-  for (var i = 0; i < pulsesUs.length; i += 1) {
-    var pulse = pulsesUs[i] | 0;
-    var samples = Math.round(Math.abs(pulse) / samplePeriodUs);
-    if (samples > 0) {
-      totalSamples += samples;
-      if (totalSamples >= maxBits) {
-        totalSamples = maxBits;
-        break;
-      }
-    }
-  }
-
-  var bytesLen = Math.ceil(totalSamples / 8);
-  var data = new Uint8Array(bytesLen);
-  var bitCursor = 0;
-  var truncated = false;
-
-  for (var j = 0; j < pulsesUs.length; j += 1) {
-    if (bitCursor >= totalSamples) {
-      truncated = true;
-      break;
-    }
-    var p = pulsesUs[j] | 0;
-    var isHigh = p > 0;
-    var runSamples = Math.round(Math.abs(p) / samplePeriodUs);
-    if (runSamples <= 0) continue;
-    var remaining = totalSamples - bitCursor;
-    var run = Math.min(runSamples, remaining);
-    if (isHigh) {
-      for (var k = 0; k < run; k += 1) {
-        var idx = bitCursor + k;
-        data[idx >> 3] |= 1 << (idx & 7);
-      }
-    }
-    bitCursor += run;
-  }
-
-  return { data: data, totalSamples: totalSamples, truncated: truncated };
-}
-
-// -----------------------------------------------------------------------------
-// State
-// -----------------------------------------------------------------------------
-
-var DEFAULT_PWM_FREQ_HZ = 38000;
-var DEFAULT_PWM_DUTY_PERCENT = 100;
-
-var statusText = "";
-
-var selectedPin = (STM32_PINS[0] || { value: "0" }).value;
-var isRecording = false;
-var recordSessionId = null;
-
-var bufferLenBytes = 0;
-var chartPointCount = 0;
-var chartError = "";
-
-var viewport = { min: 0, max: 10000 };
-var pulseMeasure = null;
-
-var chartBins = 1000;
-var maxSamplesBytes = 393216;
-var samplePeriodUs = 10;
-var invertCapture = false;
-
-var pwmEnabled = false;
-var pwmFreqHz = DEFAULT_PWM_FREQ_HZ;
-var pwmDutyPercent = DEFAULT_PWM_DUTY_PERCENT;
-
-var isRetransmitting = false;
-var txProgress = { pct: 0, sent_bytes: 0, total_bytes: 0 };
-
-var signalsDir = "";
-var signalEntries = []; // { name, path }
-var selectedSignalName = null;
-var hasUnsavedChanges = false;
-
-var showSettings = false;
-var showSaveDialog = false;
-var showRenameDialog = false;
-var showImportDialog = false;
-var showTimingsDialog = false;
-
-var textDialogValue = "";
-var timingsText = "";
-var timingsLoading = false;
-
-function prefsPath() {
   try {
-    var root = FS.appDataDir();
-    if (!root) return "";
-    return FS.join(root, "sampler_prefs.json");
+    if (ends(name, '.raw')) {
+      Sampler.setBytes(FS.readBytes(path));
+      saveName = baseName(name) + '.raw';
+    } else {
+      var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
+      var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
+      var pulses = parseTimings(FS.readText(path));
+      Sampler.setBytes(timingsToBytes(pulses, periodUs, maxBytes));
+      saveName = baseName(name) + '.raw';
+    }
+    refreshPlot();
+    status = 'Loaded ' + name;
   } catch (e) {
-    return "";
+    status = String(e && e.message ? e.message : e);
   }
+  render();
 }
 
-function loadPrefs() {
-  var path = prefsPath();
-  if (!path) return;
+function saveRaw() {
+  status = '';
+  var dir = signalsDir();
+  if (!dir) return render();
+  var name = baseName(saveName) + '.raw';
+  var path = FS.join(dir, name);
   try {
-    var text = FS.readText(path);
-    if (!text) return;
-    var obj = JSON.parse(text);
-    if (obj && typeof obj === "object") {
-      if (typeof obj.chartBins === "number") chartBins = obj.chartBins | 0;
-      if (typeof obj.maxSamplesBytes === "number") maxSamplesBytes = obj.maxSamplesBytes | 0;
-      if (typeof obj.samplePeriodUs === "number") samplePeriodUs = obj.samplePeriodUs | 0;
-      if (typeof obj.invertCapture === "boolean") invertCapture = !!obj.invertCapture;
-      if (typeof obj.pwmEnabled === "boolean") pwmEnabled = !!obj.pwmEnabled;
-      if (typeof obj.pwmFreqHz === "number") pwmFreqHz = obj.pwmFreqHz | 0;
-      if (typeof obj.pwmDutyPercent === "number") pwmDutyPercent = obj.pwmDutyPercent | 0;
-      if (typeof obj.selectedPin === "string") selectedPin = obj.selectedPin;
-      if (typeof obj.selectedSignalName === "string") selectedSignalName = obj.selectedSignalName;
-    }
-  } catch (e2) {
-    // ignore
-  }
-}
-
-function savePrefs() {
-  var path = prefsPath();
-  if (!path) return;
-  try {
-      FS.writeText(
-        path,
-        JSON.stringify({
-          chartBins: chartBins,
-          maxSamplesBytes: maxSamplesBytes,
-          samplePeriodUs: samplePeriodUs,
-          invertCapture: invertCapture,
-        pwmEnabled: pwmEnabled,
-        pwmFreqHz: pwmFreqHz,
-        pwmDutyPercent: pwmDutyPercent,
-        selectedPin: selectedPin,
-        selectedSignalName: selectedSignalName,
-      }),
-    );
-  } catch (e) {
-    // ignore
-  }
-}
-
-function ensureSignalsDir() {
-  if (signalsDir) return signalsDir;
-  try {
-    var root = FS.appDataDir();
-    if (!root) return "";
-    var dir = FS.join(root, "signals");
     FS.ensureDir(dir);
-    signalsDir = dir;
-    return dir;
-  } catch (e) {
-    return "";
-  }
-}
-
-function refreshSignalList() {
-  try {
-    var dir = ensureSignalsDir();
-    if (!dir) {
-      signalEntries = [];
-      render();
-      return;
-    }
-    var entries = FS.readDir(dir) || [];
-    var out = [];
-    for (var i = 0; i < entries.length; i += 1) {
-      var ent = entries[i];
-      if (!ent || ent.kind !== "file") continue;
-      var name = String(ent.name || "");
-      if (!name) continue;
-      var lower = name.toLowerCase();
-      if (!lower.endsWith(".raw") && !lower.endsWith(".txt")) continue;
-      out.push({ name: name, path: String(ent.path || "") });
-    }
-    out.sort(function (a, b) {
-      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-    });
-    signalEntries = out;
-    render();
-  } catch (e2) {
-    statusText = "Failed to refresh signals.";
-    render();
-  }
-}
-
-function generateNewSignalName() {
-  var counter = 1;
-  var candidate = "signal" + String(counter) + ".raw";
-  while (signalEntries.some(function (e) { return e.name === candidate; })) {
-    counter += 1;
-    candidate = "signal" + String(counter) + ".raw";
-  }
-  return candidate;
-}
-
-function clearBuffer() {
-  try {
-    Sampler.stop(recordSessionId);
-  } catch (e) {}
-  try {
-    Sampler.setInvertRx(false);
-  } catch (e2) {}
-  try {
-    Sampler.clear();
-  } catch (e3) {}
-  recordSessionId = null;
-  isRecording = false;
-  bufferLenBytes = 0;
-  chartPointCount = 0;
-  chartError = "";
-  pulseMeasure = null;
-  hasUnsavedChanges = false;
-  viewport = { min: 0, max: 10000 };
-  render();
-}
-
-function refreshStats() {
-  try {
-    bufferLenBytes = Number(Sampler.lenBytes()) || 0;
-  } catch (e) {}
-  render();
-}
-
-function computeChart() {
-  try {
-    var len = Number(Sampler.lenBytes()) || 0;
-    bufferLenBytes = len;
-    var maxBits = Math.max(0, len * 8);
-    var min = Math.max(0, Math.floor(Number(viewport.min) || 0));
-    var max = Math.max(min + 1, Math.floor(Number(viewport.max) || 0));
-    if (maxBits > 0) {
-      if (max > maxBits) max = maxBits;
-      if (min > maxBits) min = Math.max(0, maxBits - 1);
-    } else {
-      min = 0;
-      max = Math.max(10000, max);
-    }
-
-    var bins = Math.max(100, Math.min(5000, chartBins | 0));
-    var resp = Sampler.compressViewport({ startBit: min, endBit: max, bins: bins });
-    var xs = (resp && resp.timeValues) || [];
-    var ys = (resp && resp.dataValues) || [];
-    chartPointCount = Math.min(xs.length, ys.length);
-    chartError = "";
-    __chartDataX = xs;
-    __chartDataY = ys;
-  } catch (e) {
-    chartError = String(e && e.message ? e.message : e);
-    __chartDataX = [];
-    __chartDataY = [];
-    chartPointCount = 0;
-  }
-}
-
-function refreshChart() {
-  computeChart();
-  render();
-}
-
-function startRecording() {
-  if (isRecording) return;
-  statusText = "";
-  pulseMeasure = null;
-  chartError = "";
-  try {
-    var pin = parseInt(String(selectedPin), 10);
-    if (!isFinite(pin) || pin < 0) {
-      statusText = "Invalid pin";
-      render();
-      return;
-    }
-
-    var tickUs = Math.max(5, Math.min(255, Math.trunc(samplePeriodUs) || 5));
-    var session = Sampler.start({ pin: pin, clearBefore: true, invert: invertCapture, periodUs: tickUs });
-    recordSessionId = session && session.id ? String(session.id) : null;
-    isRecording = true;
-    hasUnsavedChanges = true;
-    viewport = { min: 0, max: Math.max(10000, (Sampler.lenBytes() || 0) * 8) };
-    computeChart();
-  } catch (e) {
-    statusText = "Start failed: " + String(e && e.message ? e.message : e);
-    isRecording = false;
-    recordSessionId = null;
-  }
-  savePrefs();
-  render();
-}
-
-function stopRecording() {
-  if (!isRecording) return;
-  statusText = "";
-  try {
-    Sampler.stop(recordSessionId);
-    recordSessionId = null;
-    isRecording = false;
-    Sampler.setInvertRx(false);
-  } catch (e) {
-    statusText = "Stop failed: " + String(e && e.message ? e.message : e);
-  }
-  savePrefs();
-  computeChart();
-  render();
-}
-
-function openSaveDialog() {
-  if ((Sampler.lenBytes() || 0) === 0) {
-    statusText = "Buffer is empty";
-    render();
-    return;
-  }
-  showSaveDialog = true;
-  textDialogValue = selectedSignalName && selectedSignalName.toLowerCase().endsWith(".raw") ? selectedSignalName : generateNewSignalName();
-  render();
-}
-
-function saveSignalToStorage(name) {
-  try {
-    var len = Number(Sampler.lenBytes()) || 0;
-    if (len === 0) {
-      statusText = "Buffer is empty";
-      render();
-      return;
-    }
-    var dir = ensureSignalsDir();
-    if (!dir) {
-      statusText = "Signals storage unavailable";
-      render();
-      return;
-    }
-    var defaultName = selectedSignalName && selectedSignalName.toLowerCase().endsWith(".raw") ? selectedSignalName : generateNewSignalName();
-    var fileName = normalizeSignalName(name || defaultName, defaultName, ".raw");
-    var path = FS.join(dir, fileName);
     Sampler.saveBytesFile(path);
-    selectedSignalName = fileName;
-    hasUnsavedChanges = false;
-    showSaveDialog = false;
-    statusText = "Signal saved: " + fileName;
-    refreshSignalList();
-    savePrefs();
-    render();
+    listFiles();
+    selectedFile = name;
+    status = 'Saved ' + name;
   } catch (e) {
-    statusText = "Save failed: " + String(e && e.message ? e.message : e);
-    render();
-  }
-}
-
-function loadSignal(name) {
-  try {
-    var dir = ensureSignalsDir();
-    if (!dir) {
-      statusText = "Signals storage unavailable";
-      render();
-      return;
-    }
-    var entry = null;
-    for (var i = 0; i < signalEntries.length; i += 1) {
-      if (signalEntries[i].name === name) {
-        entry = signalEntries[i];
-        break;
-      }
-    }
-    if (!entry) {
-      statusText = "Signal file not found";
-      render();
-      return;
-    }
-    var lower = entry.name.toLowerCase();
-    if (lower.endsWith(".txt")) {
-      var text = FS.readText(entry.path);
-      var pulses = parseSignedTimingsText(text);
-      if (!pulses.length) {
-        statusText = "No timings found";
-        render();
-        return;
-      }
-      var converted = timingsToRawBufferBytes(pulses, { samplePeriodUs: 10, maxBytes: maxSamplesBytes });
-      if (!converted.data || converted.data.length === 0) {
-        statusText = "Timings decode produced empty buffer";
-        render();
-        return;
-      }
-      Sampler.setBytes(converted.data);
-      selectedSignalName = entry.name;
-      hasUnsavedChanges = false;
-      statusText = converted.truncated ? "Loaded (truncated)." : "Loaded.";
-      viewport = { min: 0, max: Math.max(10000, (Sampler.lenBytes() || 0) * 8) };
-      refreshChart();
-      savePrefs();
-      render();
-      return;
-    }
-
-    var bytes = FS.readBytes(entry.path);
-    if (!bytes || bytes.length === 0) {
-      statusText = "Signal file is empty";
-      render();
-      return;
-    }
-    Sampler.setBytes(bytes);
-    selectedSignalName = entry.name;
-    hasUnsavedChanges = false;
-    statusText = "Loaded.";
-    viewport = { min: 0, max: Math.max(10000, (Sampler.lenBytes() || 0) * 8) };
-    refreshChart();
-    savePrefs();
-    render();
-  } catch (e) {
-    statusText = "Load failed: " + String(e && e.message ? e.message : e);
-    render();
-  }
-}
-
-function createNewSignal() {
-  clearBuffer();
-  selectedSignalName = null;
-  hasUnsavedChanges = false;
-  statusText = "New signal";
-  savePrefs();
-  render();
-}
-
-function deleteSignal() {
-  try {
-    if (!selectedSignalName) {
-      statusText = "No signal loaded";
-      render();
-      return;
-    }
-    var entry = null;
-    for (var i = 0; i < signalEntries.length; i += 1) {
-      if (signalEntries[i].name === selectedSignalName) {
-        entry = signalEntries[i];
-        break;
-      }
-    }
-    if (!entry) {
-      statusText = "Signal file not found";
-      render();
-      return;
-    }
-    FS.remove(entry.path);
-    statusText = "Signal deleted";
-    selectedSignalName = null;
-    refreshSignalList();
-    savePrefs();
-    render();
-  } catch (e) {
-    statusText = "Delete failed: " + String(e && e.message ? e.message : e);
-    render();
-  }
-}
-
-function revealSignalsFolder() {
-  try {
-    var dir = ensureSignalsDir();
-    if (!dir) {
-      statusText = "Signals storage unavailable";
-      render();
-      return;
-    }
-    FS.reveal(dir);
-  } catch (e) {
-    statusText = "Reveal failed";
-    render();
-  }
-}
-
-function revealCurrentSignal() {
-  try {
-    if (!selectedSignalName) {
-      statusText = "No signal selected";
-      render();
-      return;
-    }
-    var entry = null;
-    for (var i = 0; i < signalEntries.length; i += 1) {
-      if (signalEntries[i].name === selectedSignalName) {
-        entry = signalEntries[i];
-        break;
-      }
-    }
-    if (entry && entry.path) {
-      FS.reveal(entry.path);
-    } else {
-      var dir = ensureSignalsDir();
-      FS.reveal(FS.join(dir, selectedSignalName));
-    }
-  } catch (e) {
-    statusText = "Reveal failed";
-    render();
-  }
-}
-
-function openRenameDialog() {
-  if (!selectedSignalName) {
-    statusText = "No signal loaded";
-    render();
-    return;
-  }
-  showRenameDialog = true;
-  textDialogValue = String(selectedSignalName).replace(/\.(raw|txt)$/i, "");
-  render();
-}
-
-function renameSignalToStorage(name) {
-  try {
-    if (!selectedSignalName) {
-      statusText = "No signal loaded";
-      render();
-      return;
-    }
-    var entry = null;
-    for (var i = 0; i < signalEntries.length; i += 1) {
-      if (signalEntries[i].name === selectedSignalName) {
-        entry = signalEntries[i];
-        break;
-      }
-    }
-    if (!entry) {
-      statusText = "Signal file not found";
-      render();
-      return;
-    }
-    var ext = selectedSignalName.toLowerCase().endsWith(".txt") ? ".txt" : ".raw";
-    var normalized = normalizeSignalName(name, selectedSignalName, ext);
-    if (normalized === selectedSignalName) {
-      statusText = "Name unchanged";
-      showRenameDialog = false;
-      render();
-      return;
-    }
-    if (signalEntries.some(function (e) { return e.name === normalized; })) {
-      statusText = "Name exists";
-      render();
-      return;
-    }
-    var dir = ensureSignalsDir();
-    var target = FS.join(dir, normalized);
-    FS.rename(entry.path, target);
-    selectedSignalName = normalized;
-    showRenameDialog = false;
-    statusText = "Signal renamed";
-    refreshSignalList();
-    savePrefs();
-    render();
-  } catch (e) {
-    statusText = "Rename failed";
-    render();
-  }
-}
-
-function openTimingsDialog() {
-  showTimingsDialog = true;
-  timingsText = "";
-  timingsLoading = true;
-  render();
-  try {
-    var out = Sampler.buildSignedRawTimings({ samplePeriodUs: Math.max(5, Math.min(255, samplePeriodUs | 0)) });
-    timingsText = String(out || "").trim();
-    timingsLoading = false;
-  } catch (e) {
-    timingsText = "";
-    timingsLoading = false;
-    statusText = "Failed to build timings";
+    status = String(e && e.message ? e.message : e);
   }
   render();
 }
 
-function saveTimingsToStorage() {
+function saveTimings() {
+  status = '';
+  var dir = signalsDir();
+  if (!dir) return render();
+  var name = baseName(saveName) + '.txt';
+  var path = FS.join(dir, name);
   try {
-    var content = String(timingsText || "").trim().replace(/\s+/g, " ");
-    if (!content) {
-      statusText = "No timings";
-      render();
-      return;
-    }
-    var dir = ensureSignalsDir();
-    if (!dir) {
-      statusText = "Signals storage unavailable";
-      render();
-      return;
-    }
-    var base = selectedSignalName ? String(selectedSignalName).replace(/\.(raw|txt)$/i, "") : "signal";
-    var fileName = base + ".timings.txt";
-    var path = FS.join(dir, fileName);
-    FS.writeText(path, content + "\n");
-    statusText = "Timings saved: " + fileName;
-    refreshSignalList();
-    render();
+    FS.ensureDir(dir);
+    var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
+    FS.writeText(path, Sampler.buildSignedRawTimings({ samplePeriodUs: periodUs }));
+    listFiles();
+    selectedFile = name;
+    status = 'Saved ' + name;
   } catch (e) {
-    statusText = "Failed to save timings";
-    render();
-  }
-}
-
-function retransmitSignal() {
-  if (isRetransmitting) return;
-  statusText = "";
-  try {
-    var bytes = Sampler.getBytes();
-    if (!bytes || bytes.length === 0) {
-      statusText = "Buffer is empty";
-      render();
-      return;
-    }
-    var pin = parseInt(String(selectedPin), 10);
-    if (!isFinite(pin) || pin < 0) {
-      statusText = "Invalid pin";
-      render();
-      return;
-    }
-    var duty = 100;
-    var hz = 0;
-    if (pwmEnabled) {
-      hz = parsePwmIntOrDefault(String(pwmFreqHz), DEFAULT_PWM_FREQ_HZ);
-      duty = parsePwmIntOrDefault(String(pwmDutyPercent), DEFAULT_PWM_DUTY_PERCENT);
-      if (hz < 1) {
-        statusText = "Invalid PWM frequency";
-        render();
-        return;
-      }
-      if (duty < 1 || duty > 100) {
-        statusText = "Invalid PWM duty";
-        render();
-        return;
-      }
-    }
-    var tickUs = Math.max(5, Math.min(255, Math.trunc(samplePeriodUs) || 5));
-
-    // Start transmit on device (host extension fields match Desktop Sampler).
-    if (typeof Sampler.transmitStart === "function") {
-      Sampler.transmitStart({ pin: pin, dutyPercent: duty, freqHz: hz, tickUs: tickUs });
-    }
-
-    isRetransmitting = true;
-    txProgress = { pct: 0, sent_bytes: 0, total_bytes: bytes.length };
-    render();
-
-    Sampler.transmitBufferStart(bytes, {
-      onDone: function () {
-        isRetransmitting = false;
-        render();
-      },
-    });
-  } catch (e) {
-    isRetransmitting = false;
-    statusText = "Retransmit failed: " + String(e && e.message ? e.message : e);
-    render();
-  }
-}
-
-function handlePlotViewportChange(payload) {
-  if (!payload) return;
-  viewport = { min: payload.min, max: payload.max };
-  refreshChart();
-}
-
-function handlePlotSelect(payload) {
-  try {
-    if (!payload) return;
-    var min = Math.floor(Number(payload.min) || 0);
-    var max = Math.floor(Number(payload.max) || 0);
-    if (max <= min) return;
-    var byteStart = Math.max(0, Math.floor(min / 8));
-    var byteEnd = Math.max(byteStart, Math.ceil(max / 8));
-    var slice = Sampler.sliceBytes(byteStart, byteEnd);
-    var startBit = min - byteStart * 8;
-    var endBit = max - byteStart * 8;
-    var pm = computeSinglePulseWidthUs(slice, startBit, endBit, Math.max(1, samplePeriodUs | 0));
-    pulseMeasure = pm;
-  } catch (e) {
-    pulseMeasure = null;
+    status = String(e && e.message ? e.message : e);
   }
   render();
 }
 
-function initDeviceEvents() {
+function removeSelected() {
+  status = '';
+  var name = String(selectedFile || '');
+  if (!name) return render();
+  var dir = signalsDir();
+  var path = dir ? FS.join(dir, name) : '';
+  if (!path) return render();
   try {
-    Sampler.onDeviceEvent("tx_progress", function (payload) {
-      if (!isRetransmitting) return;
-      if (!payload || typeof payload !== "object") return;
-      txProgress = payload;
-      render();
-    });
+    FS.remove(path);
+    listFiles();
+    status = 'Deleted ' + name;
   } catch (e) {
-    // ignore
+    status = String(e && e.message ? e.message : e);
   }
-}
-
-// -----------------------------------------------------------------------------
-// UI
-// -----------------------------------------------------------------------------
-
-var __chartDataX = [];
-var __chartDataY = [];
-
-function renderFallback() {
-  UI.render(
-    UI.column({
-      padding: 16,
-      spacing: 12,
-      children: [
-        UI.text({ text: "Sampler", font: "title2", fontWeight: "semibold" }),
-        UI.text({
-          text: "This Sampler UI requires the desktop script host (plot/modal/toggle nodes).",
-          foregroundColor: "#94A3B8",
-        }),
-        UI.button({
-          label: "Start (simple)",
-          backgroundColor: "#059669",
-          foregroundColor: "#FFFFFF",
-          onTap: startRecording,
-        }),
-        UI.button({
-          label: "Stop",
-          backgroundColor: "#DC2626",
-          foregroundColor: "#FFFFFF",
-          onTap: stopRecording,
-        }),
-        UI.text({ text: "Buffer: " + String(bufferLenBytes) + " bytes", foregroundColor: "#E5E7EB" }),
-      ],
-    }),
-  );
+  render();
 }
 
 function render() {
-  if (typeof UI.plot !== "function" || typeof UI.modal !== "function" || typeof UI.toggle !== "function") {
-    renderFallback();
-    return;
-  }
-
-  var titleSub = selectedSignalName ? selectedSignalName + (hasUnsavedChanges ? "*" : "") : "No signal";
-  var maxBits = Math.max(0, bufferLenBytes * 8);
-  var hdrButtons = UI.grid({
-    minColumnWidth: 120,
-    spacing: 8,
-    children: [
-      UI.button({ label: "New", backgroundColor: "#0B1220", foregroundColor: "#E5E7EB", onTap: createNewSignal }),
-      UI.button({ label: "Save", backgroundColor: "#0B1220", foregroundColor: "#E5E7EB", onTap: openSaveDialog }),
-      UI.button({ label: "Timings", backgroundColor: "#0B1220", foregroundColor: "#E5E7EB", onTap: openTimingsDialog }),
-      UI.button({
-        label: "Show File",
-        backgroundColor: "#0B1220",
-        foregroundColor: "#E5E7EB",
-        onTap: revealCurrentSignal,
-      }),
-      UI.button({
-        label: "Show Folder",
-        backgroundColor: "#0B1220",
-        foregroundColor: "#E5E7EB",
-        onTap: revealSignalsFolder,
-      }),
-      UI.button({ label: "Rename", backgroundColor: "#0B1220", foregroundColor: "#E5E7EB", onTap: openRenameDialog }),
-      UI.button({ label: "Delete", backgroundColor: "#0B1220", foregroundColor: "#E5E7EB", onTap: deleteSignal }),
-      UI.button({
-        label: "Import",
-        backgroundColor: "#0B1220",
-        foregroundColor: "#E5E7EB",
-        onTap: function () {
-          showImportDialog = true;
-          textDialogValue = "";
-          render();
-        },
-      }),
-      UI.button({ label: "Clear", backgroundColor: "#0B1220", foregroundColor: "#E5E7EB", onTap: clearBuffer }),
-      UI.button({
-        label: "Settings",
-        backgroundColor: "#0B1220",
-        foregroundColor: "#E5E7EB",
-        onTap: function () {
-          showSettings = true;
-          render();
-        },
-      }),
-    ],
-  });
-
-  var signalPickerOptions = [{ label: "(none)", value: "" }].concat(
-    signalEntries.map(function (e) {
-      return { label: e.name, value: e.name };
-    }),
+  var maxBits = Math.max(0, bufLen * 8);
+  var picker = [{ label: '(none)', value: '' }].concat(
+    files.map(function (n) { return { label: n, value: n }; })
   );
 
   UI.render(
     UI.scroll({
       padding: 16,
-      spacing: 16,
+      spacing: 14,
       children: [
         UI.column({
           spacing: 4,
           children: [
-            UI.text({ text: "Sampler", font: "title2", fontWeight: "semibold" }),
-            UI.text({ text: titleSub, foregroundColor: "#94A3B8", font: "caption" }),
+            UI.text({ text: 'Sampler', font: 'title2', fontWeight: 'semibold' }),
+            status ? UI.text({ text: status, font: 'caption' }) : null,
           ],
         }),
 
-        hdrButtons,
+        UI.divider({}),
 
-        UI.card({
-          title: "Chart",
+        UI.text({ text: 'Capture', fontWeight: 'semibold' }),
+        UI.row({
+          spacing: 10,
           children: [
-            UI.text({
-              text:
-                "Bytes: " +
-                String(bufferLenBytes) +
-                " | Samples: " +
-                String(maxBits) +
-                " | Resolution: " +
-                String(samplePeriodUs) +
-                "us" +
-                " | Points: " +
-                String(chartPointCount) +
-                " | View: " +
-                String(Math.floor(viewport.min)) +
-                ".." +
-                String(Math.floor(viewport.max)) +
-                " | Target bins: " +
-                String(chartBins),
-              foregroundColor: "#94A3B8",
-              font: "caption",
-            }),
-            UI.plot({
-              id: "sampler_plot",
-              height: 400,
-              dataX: __chartDataX,
-              dataY: __chartDataY,
-              xMin: viewport.min,
-              xMax: viewport.max,
-              overlayText: pulseMeasure ? "Pulse: " + String(Math.round(pulseMeasure.widthUs)) + " us (" + pulseMeasure.level + ")" : "",
-              errorText: chartError,
-              onViewportChange: handlePlotViewportChange,
-              onSelectRange: handlePlotSelect,
-            }),
-          ],
-        }),
-
-        UI.card({
-          title: "Actions",
-          children: [
-            UI.row({
-              spacing: 12,
+            UI.column({
+              spacing: 6,
               children: [
-                UI.button({
-                  label: isRecording ? "Recording..." : "Record",
-                  backgroundColor: isRecording ? "#334155" : "#0EA5E9",
-                  foregroundColor: "#FFFFFF",
-                  onTap: startRecording,
-                }),
-                UI.button({
-                  label: "Stop",
-                  backgroundColor: "#DC2626",
-                  foregroundColor: "#FFFFFF",
-                  onTap: stopRecording,
-                }),
-                UI.button({
-                  label: "Refresh chart",
-                  backgroundColor: "#1F2937",
-                  foregroundColor: "#E5E7EB",
-                  onTap: refreshChart,
+                UI.text({ text: 'Pin', font: 'caption', fontWeight: 'medium' }),
+                UI.picker({
+                  style: 'menu',
+                  selected: String(rxPin),
+                  options: PINS,
+                  onChange: function (v) { rxPin = String(v); render(); },
                 }),
               ],
             }),
+            UI.spacer({}),
             UI.button({
-              label: isRetransmitting ? "Retransmitting..." : "Retransmit",
-              backgroundColor: isRetransmitting ? "#334155" : "#059669",
-              foregroundColor: "#FFFFFF",
-              onTap: retransmitSignal,
+              label: 'Invert: ' + (invert ? 'On' : 'Off'),
+              onTap: function () { invert = !invert; render(); },
             }),
-            isRetransmitting
-              ? UI.progress({ value: Math.max(0, Math.min(1, Number(txProgress.pct || 0) / 100.0)) })
-              : null,
-            isRetransmitting
-              ? UI.text({
-                  text:
-                    String(Math.max(0, Math.min(100, Math.round(txProgress.pct || 0)))) +
-                    "% (" +
-                    String(txProgress.sent_bytes || 0) +
-                    "/" +
-                    String(txProgress.total_bytes || 0) +
-                    "B)",
-                  foregroundColor: "#94A3B8",
-                  font: "caption",
-                })
-              : null,
+          ],
+        }),
+        UI.row({
+          spacing: 10,
+          children: [
+            UI.textField({
+              value: samplePeriodUsText,
+              placeholder: 'Period us',
+              onChange: function (v) { samplePeriodUsText = String(v); },
+              onSubmit: function () { render(); },
+            }),
+            UI.textField({
+              value: maxBytesText,
+              placeholder: 'Max bytes',
+              onChange: function (v) { maxBytesText = String(v); },
+              onSubmit: function () { render(); },
+            }),
+            UI.textField({
+              value: binsText,
+              placeholder: 'Bins',
+              onChange: function (v) { binsText = String(v); },
+              onSubmit: function () { refreshPlot(); render(); },
+            }),
+          ],
+        }),
+        UI.row({
+          spacing: 10,
+          children: [
+            UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
+            UI.button({ label: 'Stop', onTap: stop }),
+            UI.button({ label: 'Refresh', onTap: function () { refreshPlot(); render(); } }),
           ],
         }),
 
-        UI.card({
-          title: "Controls",
+        UI.divider({}),
+
+        UI.text({ text: 'Preview', fontWeight: 'semibold' }),
+        UI.text({
+          text:
+            'Bytes: ' + String(bufLen) +
+            (maxBits ? ' • Samples: ' + String(maxBits) : '') +
+            ' • View: ' + String(xMin) + '…' + String(xMax),
+          font: 'caption',
+        }),
+        UI.plot({
+          height: 280,
+          dataX: dataX,
+          dataY: dataY,
+          xMin: xMin,
+          xMax: xMax,
+          errorText: chartErr,
+          onViewportChange: function (r) {
+            var min = r && r.min != null ? r.min : r && r[0] && r[0].min;
+            var max = r && r.max != null ? r.max : r && r[0] && r[0].max;
+            xMin = Math.floor(Number(min) || 0);
+            xMax = Math.floor(Number(max) || 0);
+            refreshPlot();
+            render();
+          },
+        }),
+        UI.row({
+          spacing: 10,
           children: [
-            UI.picker({
-              id: "pin_select",
-              label: "Pin",
-              selected: String(selectedPin),
-              options: STM32_PINS,
-              onChange: function (v) {
-                selectedPin = String(v);
-                savePrefs();
-                render();
-              },
-            }),
-
-            UI.toggle({
-              id: "invert_capture",
-              label: "Invert capture during recording",
-              value: invertCapture,
-              onChange: function (v) {
-                invertCapture = !!v;
-                savePrefs();
-                render();
-              },
-            }),
-
-            UI.textField({
-              id: "sample_period_us",
-              label: "Sample period (us)",
-              value: String(samplePeriodUs),
-              onSubmit: function (v) {
-                samplePeriodUs = parsePwmIntOrDefault(String(v), 10);
-                if (samplePeriodUs < 5) samplePeriodUs = 5;
-                if (samplePeriodUs > 255) samplePeriodUs = 255;
-                savePrefs();
-                render();
-              },
-            }),
-
-            UI.divider({}),
-
-            UI.text({ text: "TX PWM", fontWeight: "semibold" }),
-            UI.text({ text: "Used for retransmit carrier settings.", foregroundColor: "#94A3B8", font: "caption" }),
-            UI.toggle({
-              id: "pwm_enabled",
-              label: "Enable TX PWM",
-              value: pwmEnabled,
-              onChange: function (v) {
-                pwmEnabled = !!v;
-                savePrefs();
-                render();
-              },
-            }),
-            UI.textField({
-              id: "pwm_freq",
-              label: "Frequency (Hz)",
-              value: String(pwmFreqHz),
-              onSubmit: function (v) {
-                pwmFreqHz = parsePwmIntOrDefault(String(v), DEFAULT_PWM_FREQ_HZ);
-                savePrefs();
-                render();
-              },
-            }),
-            UI.textField({
-              id: "pwm_duty",
-              label: "Duty (%)",
-              value: String(pwmDutyPercent),
-              onSubmit: function (v) {
-                pwmDutyPercent = parsePwmIntOrDefault(String(v), DEFAULT_PWM_DUTY_PERCENT);
-                savePrefs();
-                render();
-              },
-            }),
-
-            UI.divider({}),
-
-            UI.picker({
-              id: "signal_picker",
-              label: "Signals",
-              selected: selectedSignalName ? String(selectedSignalName) : "",
-              options: signalPickerOptions,
-              onChange: function (v) {
-                var name = String(v || "");
-                if (!name) {
-                  selectedSignalName = null;
-                  savePrefs();
-                  render();
-                  return;
-                }
-                loadSignal(name);
-              },
-            }),
             UI.button({
-              label: "Refresh signal list",
-              backgroundColor: "#1F2937",
-              foregroundColor: "#E5E7EB",
-              onTap: refreshSignalList,
-            }),
-          ],
-        }),
-
-        statusText
-          ? UI.text({
-              text: statusText,
-              backgroundColor: "#111827",
-              foregroundColor: "#FFFFFF",
-              padding: { top: 10, bottom: 10, leading: 12, trailing: 12 },
-              cornerRadius: 8,
-            })
-          : null,
-
-        UI.modal({
-          open: showSettings,
-          title: "Settings",
-          subtitle: "Capture + chart settings",
-          onClose: function () {
-            showSettings = false;
-            savePrefs();
-            render();
-          },
-          children: [
-            UI.textField({
-              id: "settings_bins",
-              label: "Target bins",
-              value: String(chartBins),
-              onSubmit: function (v) {
-                chartBins = Math.max(100, Math.min(5000, parsePwmIntOrDefault(String(v), 1000)));
-                savePrefs();
-                refreshChart();
-              },
-            }),
-            UI.textField({
-              id: "settings_max",
-              label: "Max samples (bytes)",
-              value: String(maxSamplesBytes),
-              onSubmit: function (v) {
-                maxSamplesBytes = Math.max(1, parsePwmIntOrDefault(String(v), 393216));
-                savePrefs();
+              label: 'Reset view',
+              onTap: function () {
+                xMin = 0;
+                xMax = 10000;
+                refreshPlot();
                 render();
               },
             }),
           ],
         }),
 
-        UI.modal({
-          open: showSaveDialog,
-          title: "Save Signal",
-          subtitle: "Write current buffer to signals folder",
-          onClose: function () {
-            showSaveDialog = false;
-            render();
-          },
+        UI.divider({}),
+
+        UI.text({ text: 'Signals', fontWeight: 'semibold' }),
+        UI.picker({
+          style: 'menu',
+          selected: String(selectedFile || ''),
+          options: picker,
+          onChange: function (v) { selectedFile = String(v || ''); render(); },
+        }),
+        UI.row({
+          spacing: 10,
           children: [
-            UI.textField({
-              id: "save_name",
-              label: "Filename",
-              value: String(textDialogValue || ""),
-              onChange: function (v) {
-                textDialogValue = String(v);
+            UI.button({ label: 'Load', onTap: loadSelected }),
+            UI.button({ label: 'Delete', onTap: removeSelected }),
+            UI.button({
+              label: 'Refresh list',
+              onTap: function () {
+                listFiles();
+                render();
               },
-            }),
-            UI.row({
-              spacing: 12,
-              children: [
-                UI.button({
-                  label: "Cancel",
-                  backgroundColor: "#111827",
-                  foregroundColor: "#CBD5E1",
-                  onTap: function () {
-                    showSaveDialog = false;
-                    render();
-                  },
-                }),
-                UI.button({
-                  label: "Save",
-                  backgroundColor: "#2563EB",
-                  foregroundColor: "#FFFFFF",
-                  onTap: function () {
-                    saveSignalToStorage(textDialogValue);
-                  },
-                }),
-              ],
             }),
           ],
         }),
-
-        UI.modal({
-          open: showRenameDialog,
-          title: "Rename Signal",
-          subtitle: "Rename the selected file",
-          onClose: function () {
-            showRenameDialog = false;
-            render();
-          },
-          children: [
-            UI.textField({
-              id: "rename_name",
-              label: "New name",
-              value: String(textDialogValue || ""),
-              onChange: function (v) {
-                textDialogValue = String(v);
-              },
-            }),
-            UI.row({
-              spacing: 12,
-              children: [
-                UI.button({
-                  label: "Cancel",
-                  backgroundColor: "#111827",
-                  foregroundColor: "#CBD5E1",
-                  onTap: function () {
-                    showRenameDialog = false;
-                    render();
-                  },
-                }),
-                UI.button({
-                  label: "Rename",
-                  backgroundColor: "#2563EB",
-                  foregroundColor: "#FFFFFF",
-                  onTap: function () {
-                    renameSignalToStorage(textDialogValue);
-                  },
-                }),
-              ],
-            }),
-          ],
+        UI.textField({
+          value: saveName,
+          placeholder: 'signal1.raw',
+          onChange: function (v) { saveName = String(v); },
+          onSubmit: function () { render(); },
         }),
-
-        UI.modal({
-          open: showImportDialog,
-          title: "Import",
-          subtitle: "Paste signed timings (us) to import into buffer",
-          onClose: function () {
-            showImportDialog = false;
-            render();
-          },
+        UI.row({
+          spacing: 10,
           children: [
-            UI.textEditor({
-              id: "import_timings",
-              label: "Timings",
-              value: String(textDialogValue || ""),
-              rows: 8,
-              onChange: function (v) {
-                textDialogValue = String(v);
-              },
-            }),
-            UI.row({
-              spacing: 12,
-              children: [
-                UI.button({
-                  label: "Cancel",
-                  backgroundColor: "#111827",
-                  foregroundColor: "#CBD5E1",
-                  onTap: function () {
-                    showImportDialog = false;
-                    render();
-                  },
-                }),
-                UI.button({
-                  label: "Import",
-                  backgroundColor: "#2563EB",
-                  foregroundColor: "#FFFFFF",
-                  onTap: function () {
-                    try {
-                      var pulses = parseSignedTimingsText(textDialogValue);
-                      var converted = timingsToRawBufferBytes(pulses, { samplePeriodUs: 10, maxBytes: maxSamplesBytes });
-                      Sampler.setBytes(converted.data);
-                      showImportDialog = false;
-                      hasUnsavedChanges = true;
-                      viewport = { min: 0, max: Math.max(10000, (Sampler.lenBytes() || 0) * 8) };
-                      refreshChart();
-                      statusText = converted.truncated ? "Imported (truncated)." : "Imported.";
-                    } catch (e) {
-                      statusText = "Import failed";
-                    }
-                    render();
-                  },
-                }),
-              ],
-            }),
-          ],
-        }),
-
-        UI.modal({
-          open: showTimingsDialog,
-          title: "Timings",
-          subtitle: timingsLoading ? "Building..." : "Signed timings (us)",
-          onClose: function () {
-            showTimingsDialog = false;
-            render();
-          },
-          children: [
-            UI.textEditor({
-              id: "timings_text",
-              value: String(timingsText || ""),
-              rows: 8,
-              onChange: function (v) {
-                timingsText = String(v);
-              },
-            }),
-            UI.row({
-              spacing: 12,
-              children: [
-                UI.button({
-                  label: "Save timings",
-                  backgroundColor: "#1F2937",
-                  foregroundColor: "#E5E7EB",
-                  onTap: saveTimingsToStorage,
-                }),
-                UI.button({
-                  label: "Close",
-                  backgroundColor: "#111827",
-                  foregroundColor: "#CBD5E1",
-                  onTap: function () {
-                    showTimingsDialog = false;
-                    render();
-                  },
-                }),
-              ],
-            }),
+            UI.button({ label: 'Save .raw', onTap: saveRaw }),
+            UI.button({ label: 'Save .txt', onTap: saveTimings }),
           ],
         }),
       ],
-    }),
+    })
   );
 }
 
-// -----------------------------------------------------------------------------
-// Boot
-// -----------------------------------------------------------------------------
-
-loadPrefs();
-ensureSignalsDir();
-refreshSignalList();
-try {
-  if (selectedSignalName && signalEntries.some(function (e) { return e.name === selectedSignalName; })) {
-    loadSignal(selectedSignalName);
-  }
-} catch (e) {
-  // ignore
-}
-initDeviceEvents();
-refreshStats();
-computeChart();
+listFiles();
+refreshPlot();
 render();
