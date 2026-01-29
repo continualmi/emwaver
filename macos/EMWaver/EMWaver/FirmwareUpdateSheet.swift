@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FirmwareUpdateSheet: View {
-    let device: MacUSBManager
+    @ObservedObject var device: MacUSBManager
     @ObservedObject var updater: FirmwareUpdateManager
 
     var body: some View {
@@ -19,6 +19,37 @@ struct FirmwareUpdateSheet: View {
                     updater.dismiss()
                 }
                 .disabled(updater.isFlashing)
+            }
+
+            if device.isConnected, !updater.updateDone {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Device connected in Run mode.")
+                        .font(.subheadline.weight(.semibold))
+
+                    if let v = device.deviceEmwaverVersion, !v.isEmpty {
+                        Text("Detected version: EMWaver \(v)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("To update: disconnect/unplug, flip the Update switch to Update, reconnect, and wait for EMWaver to detect Update Mode.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        Button("Disconnect") {
+                            device.disconnect()
+                        }
+                        .disabled(updater.isFlashing)
+
+                        Spacer()
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.secondary.opacity(0.08))
+                )
             }
 
             if !updater.dfuConnected && !updater.updateDone {
@@ -120,8 +151,6 @@ struct FirmwareUpdateSheet: View {
         .padding(16)
         .frame(minWidth: 520, minHeight: 360)
         .onAppear {
-            // Mirror the desktop behavior: disconnect first so Update Mode can be entered.
-            device.disconnect()
             updater.refreshDfuPresence()
         }
     }

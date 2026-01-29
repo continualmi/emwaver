@@ -81,6 +81,13 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
     }
 
+    private func isTransportConnectedInternal() -> Bool {
+        if DispatchQueue.getSpecific(key: midiQueueKey) != nil {
+            return connectedSource != 0 && connectedDestination != 0
+        }
+        return midiQueue.sync { connectedSource != 0 && connectedDestination != 0 }
+    }
+
     // MARK: - ScriptDevice (buffer)
 
     func getBuffer() -> Data {
@@ -125,7 +132,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private func autoConnectIfNeededInternal() {
         guard autoConnectEnabled else { return }
-        guard !isConnected else { return }
+        guard !isTransportConnectedInternal() else { return }
         connectToFirstPortInternal()
     }
 
@@ -133,7 +140,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     func sendPacket(_ data: Data) {
         midiQueue.async {
-            guard self.isConnected, self.connectedDestination != 0 else {
+            guard self.connectedDestination != 0 else {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
@@ -149,7 +156,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     }
 
     func sendCommand(_ command: Data, timeout: Int) -> Data? {
-        guard isConnected else {
+        guard isTransportConnectedInternal() else {
             setError("Cannot send command: Not connected")
             return nil
         }
@@ -183,7 +190,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     }
 
     func transmitBuffer() {
-        guard isConnected else {
+        guard isTransportConnectedInternal() else {
             setError("Cannot transmit buffer: Not connected")
             return
         }
