@@ -461,8 +461,6 @@ function startRefresh() {
   totalLoadSteps =
     CC1101_CONFIG_REGISTERS.length + CC1101_STATUS_REGISTERS.length + CC1101_PA_TABLE_SIZE + RF_PARAMETER_STEPS;
 
-  // NOTE: This version intentionally does not yield. It will block UI updates
-  // until all reads finish, and Cancel can't be handled until then.
   loadJob = null;
   render();
   runLoadAll();
@@ -472,6 +470,7 @@ function runLoadAll() {
   if (!isLoading) return;
   try {
     currentCommand = "Probing CC1101...";
+    render();
     var ok = ensureCc1101Init();
     if (!ok) {
       stopLoading(statusMessage || "CC1101 init failed.");
@@ -480,11 +479,13 @@ function runLoadAll() {
 
     var nextRegs = {};
 
+    // Render between register reads so progress updates are visible.
     for (var i = 0; i < CC1101_CONFIG_REGISTERS.length; i += 1) {
       currentCommand = "Reading " + CC1101_CONFIG_REGISTERS[i] + "...";
       var addr = getRegisterAddress(CC1101_CONFIG_REGISTERS[i]);
       nextRegs[CC1101_CONFIG_REGISTERS[i]] = toHexByte(readReg(addr));
       loadingProgress += 1;
+      render();
     }
 
     for (var j = 0; j < CC1101_STATUS_REGISTERS.length; j += 1) {
@@ -492,15 +493,20 @@ function runLoadAll() {
       var saddr = getRegisterAddress(CC1101_STATUS_REGISTERS[j]);
       nextRegs[CC1101_STATUS_REGISTERS[j]] = toHexByte(readReg(saddr));
       loadingProgress += 1;
+      render();
     }
 
     currentCommand = "Reading PA_TABLE...";
+    render();
     var paTable = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
     for (var k = 0; k < Math.min(paTable.length, CC1101_PA_TABLE_SIZE); k += 1) {
       nextRegs["PA_TABLE" + String(k)] = toHexByte(paTable[k]);
     }
     loadingProgress += CC1101_PA_TABLE_SIZE;
+    render();
 
+    currentCommand = "Reading RF parameters...";
+    render();
     var nextRf = {
       frequencyMHz: cc1101GetFrequencyMHz(),
       dataRate: cc1101GetDataRate(),
