@@ -63,8 +63,10 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **STM32 Firmware:** `stm/emwaver-firmware/` (single firmware)
 - **Android:** `android/`
 - **iOS:** `ios/`
+- **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
+- **macOS App (native):** `macos/` (SwiftUI)
 - **Desktop App (current):** `app/` (Tauri)
-- **Desktop App (native, WIP):** `desktop/` (Slint)
+- **Desktop App (native, paused):** `desktop/` (Slint; paused)
 - **CLI:** `app/cli/` (device shell + internal tooling)
 - **Docs:** `docs/` (MkDocs)
 
@@ -167,7 +169,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │  ├─ public/{default-scripts,device-icons}/  # Bundled UI assets (incl starter scripts)
 │  └─ dist/ / node_modules/ / src-tauri/target/ # Generated build/deps
 
-├─ desktop/                                   # Native desktop app (Slint, WIP)
+├─ desktop/                                   # Native desktop app (Slint, paused)
 │  ├─ src/                                    # Rust entrypoint
 │  └─ ui/                                     # `.slint` UI sources
 │
@@ -215,6 +217,12 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │     ├─ Native/                              # Helper scripts/build glue for Rust core
 │     ├─ DefaultScripts/                      # Bundled starter scripts
 │     └─ ota/                                 # OTA payload(s)
+│
+├─ apple/                                     # Shared Apple code (iOS + macOS)
+│  └─ EMWaverAppleCore/                        # SwiftPM: transport + script UI model/renderer
+│
+├─ macos/                                     # macOS native app (SwiftUI)
+│  └─ EMWaver/                                # Xcode project
 │
 ├─ third_party/coremidi/                      # iOS CoreMIDI third-party bits
 ├─ scripts/align_emwaver_images.py            # Repo helper script(s)
@@ -485,21 +493,21 @@ Scripts are user-authored extension bundles (manifest + EMWaver scripts) that pl
 - **Unified scripting engine**: ScriptEngine is the single runtime.
 - **In-script logging**: scripts surface output through script UI components.
 
-### Desktop Native Direction (Slint)
+### Apple Desktop Direction (macOS SwiftUI)
 
-We are converging the Desktop experience toward a **native-only UI** in `desktop/` (Slint) to avoid WebView overhead.
+We are converging the Desktop experience (starting with macOS) toward a **native-only UI** to avoid WebView overhead and IPC/serialization bottlenecks.
 
 Core motivation:
 
 - WebUI + Rust bridges require cross-boundary transport and often **full UI-tree serialization** (JSON), which becomes a bottleneck for high-frequency UI updates during hardware exploration.
 
-Desktop target architecture (mirrors Android/iOS):
+Apple target architecture (mirrors Android/iOS):
 
-- **One process, shared memory**: Slint UI and the script runtime live in the same address space.
-- **UI thread owns UI**: all UI updates occur on the Slint UI thread.
-- **Script worker thread**: scripts execute on a dedicated worker thread.
-- **In-process scheduling**: communication is via in-process channels/queues (no IPC).
-- **Typed UI model**: avoid JSON UI-tree transport; prefer typed Rust models or small typed “diff” events.
+- **One process**: SwiftUI renderer + JavaScriptCore runtime + CoreMIDI transport in-process.
+- **UI thread owns UI**: all UI updates occur on the SwiftUI main thread.
+- **Script worker**: scripts execute off-main; only minimal UI events are marshaled to the main thread.
+- **Typed UI model**: avoid JSON UI-tree transport; prefer typed models or small typed “diff” events.
+- **Shared Apple code**: keep iOS + macOS parity via Swift packages in `apple/`.
 
 ## Cross-Cutting Practices
 
@@ -554,7 +562,7 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 Native-first note:
 
-- Treat `app/` (WebUI/Tauri) as legacy for script UI. New work for script rendering and high-frequency UI updates should land in `desktop/` (Slint) to avoid JSON UI-tree serialization and IPC-style bridges.
+- Treat `app/` (WebUI/Tauri) as legacy for script UI. New work for script rendering and high-frequency UI updates should land in native apps (macOS: `macos/` + shared `apple/`) to avoid JSON UI-tree serialization and IPC-style bridges.
 
 ### CLI (`/cli`)
 
