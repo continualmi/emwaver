@@ -775,9 +775,7 @@ function render() {
                       foregroundColor: "#94A3B8",
                       font: "caption",
                     }),
-                    statusMessage
-                      ? UI.text({ text: statusMessage, foregroundColor: "#FBBF24", font: "caption" })
-                      : null,
+                    statusMessage ? UI.text({ text: statusMessage, foregroundColor: "#FBBF24", font: "caption" }) : null,
                   ],
                 }),
 

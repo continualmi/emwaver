@@ -881,9 +881,9 @@ private struct ScriptGridView: View {
     var body: some View {
         let columns: [GridItem]
         if let minWidth = node.props.gridMinColumnWidth, minWidth > 0 {
-            columns = [GridItem(.adaptive(minimum: minWidth), spacing: node.props.gridSpacing)]
+            columns = [GridItem(.adaptive(minimum: minWidth), spacing: node.props.gridSpacing, alignment: .topLeading)]
         } else {
-            columns = Array(repeating: GridItem(.flexible(), spacing: node.props.gridSpacing), count: node.props.gridColumns)
+            columns = Array(repeating: GridItem(.flexible(), spacing: node.props.gridSpacing, alignment: .topLeading), count: node.props.gridColumns)
         }
 
         return LazyVGrid(columns: columns, spacing: node.props.gridSpacing) {
