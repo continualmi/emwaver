@@ -264,6 +264,46 @@ function render() {
 
         UI.divider({}),
 
+        UI.text({
+          text:
+            'Bytes: ' + String(bufLen) +
+            (maxBits ? ' • Samples: ' + String(maxBits) : '') +
+            ' • View: ' + String(xMin) + '…' + String(xMax),
+          font: 'caption',
+        }),
+        UI.plot({
+          height: 320,
+          dataX: dataX,
+          dataY: dataY,
+          xMin: xMin,
+          xMax: xMax,
+          errorText: chartErr,
+          onViewportChange: function (r) {
+            var min = r && r.min != null ? r.min : r && r[0] && r[0].min;
+            var max = r && r.max != null ? r.max : r && r[0] && r[0].max;
+            xMin = Math.floor(Number(min) || 0);
+            xMax = Math.floor(Number(max) || 0);
+            refreshPlot();
+            render();
+          },
+        }),
+        UI.row({
+          spacing: 10,
+          children: [
+            UI.button({
+              label: 'Reset view',
+              onTap: function () {
+                xMin = 0;
+                xMax = 10000;
+                refreshPlot();
+                render();
+              },
+            }),
+          ],
+        }),
+
+        UI.divider({}),
+
         UI.text({ text: 'Capture', fontWeight: 'semibold' }),
         UI.row({
           spacing: 10,
@@ -316,47 +356,6 @@ function render() {
             UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
             UI.button({ label: 'Stop', onTap: stop }),
             UI.button({ label: 'Refresh', onTap: function () { refreshPlot(); render(); } }),
-          ],
-        }),
-
-        UI.divider({}),
-
-        UI.text({ text: 'Preview', fontWeight: 'semibold' }),
-        UI.text({
-          text:
-            'Bytes: ' + String(bufLen) +
-            (maxBits ? ' • Samples: ' + String(maxBits) : '') +
-            ' • View: ' + String(xMin) + '…' + String(xMax),
-          font: 'caption',
-        }),
-        UI.plot({
-          height: 280,
-          dataX: dataX,
-          dataY: dataY,
-          xMin: xMin,
-          xMax: xMax,
-          errorText: chartErr,
-          onViewportChange: function (r) {
-            var min = r && r.min != null ? r.min : r && r[0] && r[0].min;
-            var max = r && r.max != null ? r.max : r && r[0] && r[0].max;
-            xMin = Math.floor(Number(min) || 0);
-            xMax = Math.floor(Number(max) || 0);
-            refreshPlot();
-            render();
-          },
-        }),
-        UI.row({
-          spacing: 10,
-          children: [
-            UI.button({
-              label: 'Reset view',
-              onTap: function () {
-                xMin = 0;
-                xMax = 10000;
-                refreshPlot();
-                render();
-              },
-            }),
           ],
         }),
 

@@ -391,23 +391,68 @@ public final class ScriptEngine {
                 return ((data[byteIndex] >> bitIndex) & 1) == 1 ? 1 : 0
             }
 
-            var timeValues: [Int] = []
+            // Match `emwaver-buffer-core` `compress_bits` behavior:
+            // - Small ranges: emit raw points (0/255) for every sample.
+            // - Large ranges: emit up to 2 points per bin representing low/high presence.
+            var timeValues: [Double] = []
             var dataValues: [Double] = []
-            timeValues.reserveCapacity(bins)
-            dataValues.reserveCapacity(bins)
 
-            for i in 0..<bins {
-                let binStart = startBit + (i * span) / bins
-                let binEnd = startBit + ((i + 1) * span) / bins
-                let effectiveEnd = max(binStart + 1, binEnd)
-                var ones = 0
-                var n = 0
-                for bitIndex in binStart..<effectiveEnd {
-                    ones += bitAt(bitIndex)
-                    n += 1
+            if span <= bins * 2 {
+                timeValues.reserveCapacity(span)
+                dataValues.reserveCapacity(span)
+                for i in startBit..<endBit {
+                    timeValues.append(Double(i))
+                    dataValues.append(bitAt(i) == 1 ? 255.0 : 0.0)
                 }
-                timeValues.append(binStart)
-                dataValues.append(n > 0 ? Double(ones) / Double(n) : 0.0)
+            } else {
+                let binWidth = Double(span) / Double(bins)
+                timeValues.reserveCapacity(bins * 2)
+                dataValues.reserveCapacity(bins * 2)
+
+                for bin in 0..<bins {
+                    let binStart = Int(floor(Double(startBit) + Double(bin) * binWidth))
+                    var binEnd = Int(floor(Double(binStart) + binWidth))
+                    if binEnd > endBit { binEnd = endBit }
+                    if binEnd <= binStart { continue }
+
+                    var hasLow = false
+                    var hasHigh = false
+
+                    var i = binStart
+                    while i < binEnd {
+                        let byteIndex = i >> 3
+                        if byteIndex >= data.count { break }
+
+                        if (i & 7) == 0, i + 8 <= binEnd {
+                            let byteVal = data[byteIndex]
+                            if byteVal == 0 {
+                                hasLow = true
+                            } else if byteVal == 255 {
+                                hasHigh = true
+                            } else {
+                                hasLow = true
+                                hasHigh = true
+                            }
+                            i += 8
+                        } else {
+                            if bitAt(i) == 1 {
+                                hasHigh = true
+                            } else {
+                                hasLow = true
+                            }
+                            i += 1
+                        }
+
+                        if hasLow, hasHigh { break }
+                    }
+
+                    if hasLow || hasHigh {
+                        timeValues.append(Double(binStart))
+                        dataValues.append(hasLow ? 0.0 : 255.0)
+                        timeValues.append(Double(max(binStart, binEnd - 1)))
+                        dataValues.append(hasHigh ? 255.0 : 0.0)
+                    }
+                }
             }
 
             return JSValue(
