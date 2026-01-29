@@ -1,0 +1,13 @@
+[package]
+name = "emwaver-buffer-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[dependencies]
+serde = { version = "1", optional = true, features = ["derive"] }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
