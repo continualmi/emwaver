@@ -53,7 +53,7 @@ final class CoreMidiSysexLoopbackTests: XCTestCase {
 
         XCTAssertEqual(MIDIDestinationCreate(client, "emwaver-test-dest" as CFString, readProc, refCon, &destination), noErr)
 
-        let expected = Data((0..<128).map { UInt8($0 & 0xFF) })
+        let expected = Data((0..<36).map { UInt8($0 & 0xFF) })
         let sysex = UsbMidiSysex.encodeSuperframe(expected)!
 
         let capacity = 2048

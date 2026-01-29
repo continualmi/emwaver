@@ -18,7 +18,8 @@
 import Foundation
 
 final class NativeBufferRust {
-    static let packetSizeBytes: Int = 64
+    // PACKET_SIZE from Rust buffer core (emwaver-buffer-core): fixed 18B.
+    static let packetSizeBytes: Int = 18
 
     private init() {}
 
