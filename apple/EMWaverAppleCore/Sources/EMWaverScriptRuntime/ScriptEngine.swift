@@ -34,6 +34,157 @@ public final class ScriptEngine {
 
     public init() {}
 
+    private func emitError(_ message: String) {
+        guard let errorHandler else { return }
+        DispatchQueue.main.async {
+            errorHandler(message)
+        }
+    }
+
+    private func installHostPrimitives(into context: JSContext) {
+        context.exceptionHandler = { [weak self] _, exception in
+            if let message = exception?.toString() {
+                self?.emitError("Script error: \(message)")
+            }
+        }
+
+        let renderBlock: @convention(block) (JSValue) -> Void = { [weak self] value in
+            self?.handleRender(nodeValue: value)
+        }
+        context.setObject(renderBlock, forKeyedSubscript: "_scriptRender" as NSString)
+
+        let registerBlock: @convention(block) (String, JSValue) -> Void = { [weak self] token, callback in
+            guard let self, !token.isEmpty else { return }
+            self.callbackRegistry[token] = callback
+        }
+        context.setObject(registerBlock, forKeyedSubscript: "_scriptRegisterCallback" as NSString)
+
+        let createByteArrayBlock: @convention(block) (JSValue) -> JSValue? = { jsArray in
+            guard let context = jsArray.context else { return nil }
+            guard jsArray.isArray else { return JSValue(undefinedIn: context) }
+            let length = jsArray.forProperty("length")?.toInt32() ?? 0
+            var bytes: [UInt8] = []
+            bytes.reserveCapacity(Int(length))
+            for i in 0..<length {
+                if let element = jsArray.atIndex(Int(i)), element.isNumber {
+                    bytes.append(UInt8(element.toInt32() & 0xFF))
+                }
+            }
+            return JSValue(object: Data(bytes), in: context)
+        }
+        context.setObject(createByteArrayBlock, forKeyedSubscript: "_scriptCreateByteArray" as NSString)
+
+        // Manual command helper (bridges to ScriptDeviceWrapper when present).
+        let sendCommandBlock: @convention(block) (JSValue, JSValue) -> JSValue? = { [weak self] commandValue, timeoutValue in
+            guard let self, let context = commandValue.context else { return nil }
+            guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+                return JSValue(nullIn: context)
+            }
+            guard let command = commandValue.toObject() as? Data, timeoutValue.isNumber else {
+                return JSValue(nullIn: context)
+            }
+            let timeout = timeoutValue.toInt32()
+            guard let result = wrapper.sendCommand(command, timeout: Int(timeout)) else {
+                return JSValue(nullIn: context)
+            }
+            return JSValue(object: Array(result), in: context)
+        }
+        context.setObject(sendCommandBlock, forKeyedSubscript: "_manualSendCommand" as NSString)
+
+        // Android parity: DeviceConnection.sendCommandString appends newline.
+        let sendCommandStringBlock: @convention(block) (String, Int) -> JSValue? = { [weak self] command, timeout in
+            guard let self else { return nil }
+            guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+                return JSValue(nullIn: context)
+            }
+
+            var framed = command
+            if !framed.hasSuffix("\n") {
+                framed += "\n"
+            }
+            guard let result = wrapper.sendCommand(Data(framed.utf8), timeout: timeout) else {
+                return JSValue(nullIn: context)
+            }
+            return JSValue(object: Array(result), in: context)
+        }
+        context.setObject(sendCommandStringBlock, forKeyedSubscript: "_scriptSendCommandString" as NSString)
+
+        // Byte-level packet variant.
+        let sendPacketBlock: @convention(block) (JSValue, Int) -> JSValue? = { [weak self] bytesValue, timeout in
+            guard let self else { return nil }
+            guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+                return JSValue(nullIn: context)
+            }
+            guard let data = self.dataFromJSBytes(bytesValue) else { return JSValue(nullIn: context) }
+            guard let result = wrapper.sendCommand(data, timeout: timeout) else {
+                return JSValue(nullIn: context)
+            }
+            return JSValue(object: Array(result), in: context)
+        }
+        context.setObject(sendPacketBlock, forKeyedSubscript: "_scriptSendPacket" as NSString)
+
+        // Blocking sleep primitive used by the sync-only bootstrap delay().
+        let sleepBlock: @convention(block) (Double) -> Void = { ms in
+            let durationMs = max(0.0, ms)
+            if durationMs <= 0 { return }
+            Thread.sleep(forTimeInterval: durationMs / 1000.0)
+        }
+        context.setObject(sleepBlock, forKeyedSubscript: "_scriptSleep" as NSString)
+
+        // Minimal timer API used by every(): setTimeout/clearTimeout.
+        let setTimeoutBlock: @convention(block) (JSValue, Double) -> Int = { [weak self] callback, ms in
+            guard let self else { return 0 }
+            let delayMs = max(0.0, ms)
+            let id = self.nextTimeoutId
+            self.nextTimeoutId += 1
+
+            var item: DispatchWorkItem!
+            item = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                if item.isCancelled { return }
+                self.timeouts[id] = nil
+                _ = callback.call(withArguments: [])
+            }
+
+            self.timeouts[id] = item
+            let deadline = DispatchTime.now() + .milliseconds(Int(delayMs.rounded()))
+            self.executionQueue.asyncAfter(deadline: deadline, execute: item)
+            return id
+        }
+        context.setObject(setTimeoutBlock, forKeyedSubscript: "setTimeout" as NSString)
+
+        let clearTimeoutBlock: @convention(block) (Int) -> Void = { [weak self] id in
+            guard let self else { return }
+            if let item = self.timeouts[id] {
+                item.cancel()
+                self.timeouts[id] = nil
+            }
+        }
+        context.setObject(clearTimeoutBlock, forKeyedSubscript: "clearTimeout" as NSString)
+    }
+
+    private func dataFromJSBytes(_ bytesValue: JSValue) -> Data? {
+        if let direct = bytesValue.toObject() as? Data {
+            return direct
+        }
+
+        // JS arrays or typed arrays (Uint8Array etc.) are "array-like": they have a numeric `length`
+        // and indexable elements. JavaScriptCore's `isArray` is false for typed arrays.
+        let lengthValue = bytesValue.forProperty("length")
+        guard let lengthValue, lengthValue.isNumber else { return nil }
+
+        let length = Int(lengthValue.toInt32())
+        if length <= 0 { return Data() }
+
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(length)
+        for i in 0..<length {
+            guard let element = bytesValue.atIndex(i), element.isNumber else { return nil }
+            bytes.append(UInt8(element.toInt32() & 0xFF))
+        }
+        return Data(bytes)
+    }
+
     public func setup(
         renderHandler: @escaping (ScriptTree) -> Void,
         bindings: [String: Any] = [:],
@@ -44,151 +195,10 @@ public final class ScriptEngine {
         self.globalBindings = bindings
 
         executionQueue.sync {
-            let context = JSContext()
-
-            context?.exceptionHandler = { [weak self] _, exception in
-                if let message = exception?.toString() {
-                    self?.errorHandler?("Script error: \(message)")
-                }
-            }
-
-            let renderBlock: @convention(block) (JSValue) -> Void = { [weak self] value in
-                self?.handleRender(nodeValue: value)
-            }
-            context?.setObject(renderBlock, forKeyedSubscript: "_scriptRender" as NSString)
-
-            let registerBlock: @convention(block) (String, JSValue) -> Void = { [weak self] token, callback in
-                guard let self, !token.isEmpty else { return }
-                self.callbackRegistry[token] = callback
-            }
-            context?.setObject(registerBlock, forKeyedSubscript: "_scriptRegisterCallback" as NSString)
-
-            let createByteArrayBlock: @convention(block) (JSValue) -> JSValue? = { jsArray in
-                guard let context = jsArray.context else { return nil }
-                guard jsArray.isArray else { return JSValue(undefinedIn: context) }
-                let length = jsArray.forProperty("length")?.toInt32() ?? 0
-                var bytes: [UInt8] = []
-                bytes.reserveCapacity(Int(length))
-                for i in 0..<length {
-                    if let element = jsArray.atIndex(Int(i)), element.isNumber {
-                        bytes.append(UInt8(element.toInt32() & 0xFF))
-                    }
-                }
-                return JSValue(object: Data(bytes), in: context)
-            }
-            context?.setObject(createByteArrayBlock, forKeyedSubscript: "_scriptCreateByteArray" as NSString)
-
-            // Manual command helper (bridges to ScriptDeviceWrapper when present).
-            let sendCommandBlock: @convention(block) (JSValue, JSValue) -> JSValue? = { [weak self] commandValue, timeoutValue in
-                guard let self, let context = commandValue.context else { return nil }
-                guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
-                    return JSValue(nullIn: context)
-                }
-                guard let command = commandValue.toObject() as? Data, timeoutValue.isNumber else {
-                    return JSValue(nullIn: context)
-                }
-                let timeout = timeoutValue.toInt32()
-                guard let result = wrapper.sendCommand(command, timeout: Int(timeout)) else {
-                    return JSValue(nullIn: context)
-                }
-                return JSValue(object: Array(result), in: context)
-            }
-            context?.setObject(sendCommandBlock, forKeyedSubscript: "_manualSendCommand" as NSString)
-
-            // Android parity: DeviceConnection.sendCommandString appends newline.
-            let sendCommandStringBlock: @convention(block) (String, Int) -> JSValue? = { [weak self] command, timeout in
-                guard let self, let context else { return nil }
-                guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
-                    return JSValue(nullIn: context)
-                }
-
-                var framed = command
-                if !framed.hasSuffix("\n") {
-                    framed += "\n"
-                }
-                guard let result = wrapper.sendCommand(Data(framed.utf8), timeout: timeout) else {
-                    return JSValue(nullIn: context)
-                }
-                return JSValue(object: Array(result), in: context)
-            }
-            context?.setObject(sendCommandStringBlock, forKeyedSubscript: "_scriptSendCommandString" as NSString)
-
-            // Byte-level packet variant.
-            let sendPacketBlock: @convention(block) (JSValue, Int) -> JSValue? = { [weak self] bytesValue, timeout in
-                guard let self, let context else { return nil }
-                guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
-                    return JSValue(nullIn: context)
-                }
-
-                let data: Data?
-                if let direct = bytesValue.toObject() as? Data {
-                    data = direct
-                } else if bytesValue.isArray {
-                    let length = bytesValue.forProperty("length")?.toInt32() ?? 0
-                    var bytes: [UInt8] = []
-                    bytes.reserveCapacity(Int(length))
-                    for i in 0..<length {
-                        if let element = bytesValue.atIndex(Int(i)), element.isNumber {
-                            bytes.append(UInt8(element.toInt32() & 0xFF))
-                        }
-                    }
-                    data = Data(bytes)
-                } else {
-                    data = nil
-                }
-
-                guard let data else { return JSValue(nullIn: context) }
-                guard let result = wrapper.sendCommand(data, timeout: timeout) else {
-                    return JSValue(nullIn: context)
-                }
-                return JSValue(object: Array(result), in: context)
-            }
-            context?.setObject(sendPacketBlock, forKeyedSubscript: "_scriptSendPacket" as NSString)
-
-            // Blocking sleep primitive used by the sync-only bootstrap delay().
-            let sleepBlock: @convention(block) (Double) -> Void = { ms in
-                let durationMs = max(0.0, ms)
-                if durationMs <= 0 { return }
-                Thread.sleep(forTimeInterval: durationMs / 1000.0)
-            }
-            context?.setObject(sleepBlock, forKeyedSubscript: "_scriptSleep" as NSString)
-
-            // Minimal timer API used by every(): setTimeout/clearTimeout.
-            let setTimeoutBlock: @convention(block) (JSValue, Double) -> Int = { [weak self] callback, ms in
-                guard let self else { return 0 }
-                let delayMs = max(0.0, ms)
-                let id = self.nextTimeoutId
-                self.nextTimeoutId += 1
-
-                var item: DispatchWorkItem!
-                item = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
-                    if item.isCancelled { return }
-                    self.timeouts[id] = nil
-                    _ = callback.call(withArguments: [])
-                }
-
-                self.timeouts[id] = item
-                let deadline = DispatchTime.now() + .milliseconds(Int(delayMs.rounded()))
-                self.executionQueue.asyncAfter(deadline: deadline, execute: item)
-                return id
-            }
-            context?.setObject(setTimeoutBlock, forKeyedSubscript: "setTimeout" as NSString)
-
-            let clearTimeoutBlock: @convention(block) (Int) -> Void = { [weak self] id in
-                guard let self else { return }
-                if let item = self.timeouts[id] {
-                    item.cancel()
-                    self.timeouts[id] = nil
-                }
-            }
-            context?.setObject(clearTimeoutBlock, forKeyedSubscript: "clearTimeout" as NSString)
-
-            if let context {
-                injectDSL(into: context)
-                applyGlobalBindings(to: context)
-            }
-
+            guard let context = JSContext() else { return }
+            self.installHostPrimitives(into: context)
+            self.injectDSL(into: context)
+            self.applyGlobalBindings(to: context)
             self.context = context
         }
     }
@@ -199,7 +209,7 @@ public final class ScriptEngine {
 
             self.cancelAllTimeoutsLocked()
             if self.containsAsyncTokens(script) {
-                self.errorHandler?("Script error: async/await is not supported. Scripts must be synchronous.")
+                self.emitError("Script error: async/await is not supported. Scripts must be synchronous.")
                 if let completion {
                     DispatchQueue.main.async { completion() }
                 }
@@ -207,6 +217,9 @@ public final class ScriptEngine {
             }
 
             self.callbackRegistry.removeAll()
+            // Bootstrap hides host primitives (e.g. `_scriptSendPacket`) after capturing them.
+            // Re-install on each run so re-injecting bootstrap continues to work.
+            self.installHostPrimitives(into: context)
             self.injectDSL(into: context)
             self.applyGlobalBindings(to: context)
 
@@ -228,7 +241,7 @@ public final class ScriptEngine {
         executionQueue.async { [weak self] in
             guard let self else { return }
             guard let callback = self.callbackRegistry[token] else {
-                self.errorHandler?("No callback registered for token \(token)")
+                self.emitError("No callback registered for token \(token)")
                 return
             }
             _ = callback.call(withArguments: arguments)
@@ -259,7 +272,7 @@ public final class ScriptEngine {
 
     private func injectDSL(into context: JSContext) {
         guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "emw") else {
-            errorHandler?("Script bootstrap missing from app bundle (script_bootstrap.emw)")
+            emitError("Script bootstrap missing from app bundle (script_bootstrap.emw)")
             return
         }
 
@@ -267,7 +280,7 @@ public final class ScriptEngine {
             let source = try String(contentsOf: url, encoding: .utf8)
             context.evaluateScript(source)
         } catch {
-            errorHandler?("Failed to load script bootstrap: \(error)")
+            emitError("Failed to load script bootstrap: \(error)")
         }
     }
 
@@ -280,7 +293,7 @@ public final class ScriptEngine {
     private func handleRender(nodeValue: JSValue) {
         guard let renderHandler else { return }
         guard let rootNode = buildNode(from: nodeValue) else {
-            errorHandler?("Script render received invalid node")
+            emitError("Script render received invalid node")
             return
         }
 
