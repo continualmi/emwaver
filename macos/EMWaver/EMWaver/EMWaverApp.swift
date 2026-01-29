@@ -10,13 +10,21 @@ import SwiftUI
 @main
 struct EMWaverApp: App {
     @StateObject private var device = MacUSBManager()
+    @StateObject private var firmwareUpdater = FirmwareUpdateManager()
 
     var body: some Scene {
         WindowGroup {
             ContentView(device: device)
+                .sheet(isPresented: $firmwareUpdater.isPresented) {
+                    FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
+                }
         }
         .commands {
-            CommandMenu(device.isConnected ? "USB (Connected)" : "USB (Disconnected)") {
+            CommandMenu(
+                device.isConnected
+                    ? "Device (Connected)"
+                    : (firmwareUpdater.dfuConnected ? "Device (Update Mode)" : "Device (Disconnected)")
+            ) {
                 Button("Refresh Ports") {
                     device.refreshPorts()
                 }
@@ -50,11 +58,35 @@ struct EMWaverApp: App {
 
                 Divider()
 
+                Button("Update Firmware…") {
+                    // Mirror the desktop app behavior: disconnect first so the user can enter Update Mode.
+                    device.disconnect()
+                    firmwareUpdater.present()
+                }
+
+                Button("Refresh Update Mode") {
+                    firmwareUpdater.refreshDfuPresence()
+                }
+
+                if firmwareUpdater.dfuConnected {
+                    Text("Update Mode: Detected")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Update Mode: Not detected")
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
                 if device.isConnected {
                     Text("Status: Connected")
                         .foregroundStyle(.secondary)
                     if let name = device.connectedPortName {
                         Text(name)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let v = device.deviceEmwaverVersion {
+                        Text("EMWaver \(v)")
                             .foregroundStyle(.secondary)
                     }
                 } else {
