@@ -52,6 +52,17 @@ target/
 target-*/
 **/target-*/
 
+# SwiftPM build output (generated)
+.build/
+**/.build/
+.swiftpm/
+**/.swiftpm/
+
+# Xcode user/build output (generated)
+DerivedData/
+**/xcuserdata/
+*.xcuserstate
+
 # STM32 USB device target sources (not Rust build output)
 !stm/emwaver-firmware/USB_DEVICE/Target/
 !stm/emwaver-firmware/USB_DEVICE/Target/**
