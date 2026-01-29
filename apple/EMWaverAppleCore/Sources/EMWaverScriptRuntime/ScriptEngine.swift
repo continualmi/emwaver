@@ -384,6 +384,27 @@ public final class ScriptEngine {
                 return JSValue(object: ["bufferLenBytes": data.count, "timeValues": [], "dataValues": []], in: context)
             }
 
+#if canImport(Darwin)
+            let rs = Int32(min(startBit, Int(Int32.max)))
+            let re = Int32(min(endBit, Int(Int32.max)))
+            let nb = Int32(min(bins, Int(Int32.max)))
+            if let (timeValues, dataValues) = RustBufferCore.compressViewport(
+                bufferBytes: data,
+                rangeStart: rs,
+                rangeEnd: re,
+                numberBins: nb
+            ) {
+                return JSValue(
+                    object: [
+                        "bufferLenBytes": data.count,
+                        "timeValues": timeValues,
+                        "dataValues": dataValues,
+                    ],
+                    in: context
+                )
+            }
+#endif
+
             func bitAt(_ idx: Int) -> Int {
                 let byteIndex = idx >> 3
                 let bitIndex = idx & 7
