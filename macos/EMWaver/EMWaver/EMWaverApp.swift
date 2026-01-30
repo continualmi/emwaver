@@ -11,15 +11,30 @@ import SwiftUI
 struct EMWaverApp: App {
     @StateObject private var device = MacUSBManager()
     @StateObject private var firmwareUpdater = FirmwareUpdateManager()
+    @StateObject private var auth = AuthenticationManager()
 
     var body: some Scene {
         WindowGroup {
             ContentView(device: device, firmwareUpdater: firmwareUpdater)
+                .environmentObject(auth)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
                 }
         }
         .commands {
+            CommandMenu("Account") {
+                if auth.isSignedIn {
+                    Button("Sign Out") {
+                        Task { await auth.signOut() }
+                    }
+                } else {
+                    Button("Sign In…") {
+                        auth.isSignInSheetPresented = true
+                    }
+                    .disabled(!auth.canSignInWithGoogle)
+                }
+            }
+
             CommandMenu("Device") {
                 if device.isConnected {
                     Text("Status: Connected")
