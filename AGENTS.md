@@ -368,6 +368,38 @@ Definition of done:
 - Sign-in optional.
 - Sync never blocks running scripts.
 
+#### Cloud Sync + Auth Implementation Notes (2026-01-30)
+
+Current decision for implementation planning:
+
+- **Login is optional**: EMWaver must remain usable without sign-in.
+- **Local-first always**: scripts/signals are always stored locally; when signed in, the app syncs/backs up to cloud.
+- **Auth**: Firebase Authentication, **Google sign-in only** (no email/password in v1).
+- **Platform order**: start with **macOS** only; expand to iOS/Android later.
+- **Backend hosting**: deploy the Python backend under `backend/` to **Azure**.
+- **Cloud storage**: use Azure-managed storage (initially Azure Postgres for metadata + content; optionally Azure Blob for large assets later).
+
+Auth contract (backend):
+
+- Clients call authenticated endpoints with `Authorization: Bearer <firebase_id_token>`.
+- Backend verifies the Firebase ID token (JWT) and derives a stable user identity from `uid`.
+- Backend owns authorization (user scoping); clients never pass `user_id`.
+
+Storage contract (backend):
+
+- Prefer a single generic file API for scripts and signals (user-scoped): `kind=script|signal`.
+- Concurrency uses `etag` with optimistic locking; conflicts return HTTP 409.
+- Sync must never block the ability to run scripts locally.
+
+Backend v1 endpoints (proposed):
+
+- `GET /v1/files?kind=script&ext=.emw&include_content=0|1`
+- `GET /v1/files/<id>`
+- `POST /v1/files` (create)
+- `PUT /v1/files/<id>` (update; requires `etag`)
+- `POST /v1/files/<id>/rename`
+- `DELETE /v1/files/<id>` (delete; requires `etag`)
+
 ### Phase 6 — In-app AI Agent (monetizable layer)
 
 Goal: the agent is the primary “CLI replacement” and drives exploration.
