@@ -1,18 +1,7 @@
 /*
  * EMWaver
  * Copyright (c) 2026 Luís Marnoto
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * All rights reserved.
  */
 
 use emwaver_buffer_core::{buffer as core_buf, packet, sampler, status, tx};
@@ -25,9 +14,11 @@ struct State {
 static STATE: OnceLock<Mutex<State>> = OnceLock::new();
 
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mutex = STATE.get_or_init(|| Mutex::new(State {
-        buffer: core_buf::Buffer::default(),
-    }));
+    let mutex = STATE.get_or_init(|| {
+        Mutex::new(State {
+            buffer: core_buf::Buffer::default(),
+        })
+    });
     let mut guard = mutex.lock().expect("buffer state lock poisoned");
     f(&mut *guard)
 }
@@ -353,7 +344,11 @@ pub extern "C" fn emw_buffer_compress_data_bits(
     out_data_ptr: *mut *mut f32,
     out_data_len: *mut usize,
 ) {
-    let start = if range_start < 0 { 0 } else { range_start as usize };
+    let start = if range_start < 0 {
+        0
+    } else {
+        range_start as usize
+    };
     let end = if range_end < 0 { 0 } else { range_end as usize };
     let bins = if number_bins < 0 {
         0
@@ -406,7 +401,11 @@ pub extern "C" fn emw_tx_ble_next_packet_size(
     last_status: i32,
     current_packet_size: i32,
 ) -> i32 {
-    let bytes_sent = if bytes_sent < 0 { 0 } else { bytes_sent as usize };
+    let bytes_sent = if bytes_sent < 0 {
+        0
+    } else {
+        bytes_sent as usize
+    };
     let current_packet_size = if current_packet_size < 0 {
         0
     } else {
