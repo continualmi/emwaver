@@ -17,7 +17,7 @@ export function SiteFooter() {
             Pinout
           </a>
           <a className="block hover:text-[color:var(--ink)]" href="/order">
-            Order from JLCPCB
+            Order
           </a>
           <a className="block hover:text-[color:var(--ink)]" href="/history">
             History

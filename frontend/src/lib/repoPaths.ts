@@ -1,5 +1,6 @@
 import path from "path";
 
 // Next project root is repo-root/frontend.
-export const REPO_ROOT = path.resolve(process.cwd(), "..");
-export const DOCS_CONTENT_DIR = path.join(REPO_ROOT, "docs", "content");
+export const FRONTEND_ROOT = process.cwd();
+export const PUBLIC_DIR = path.join(FRONTEND_ROOT, "public");
+export const NEWS_POSTS_DIR = path.join(PUBLIC_DIR, "news", "posts");

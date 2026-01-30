@@ -59,10 +59,10 @@ export default function HardwarePage() {
                   Builder
                 </div>
                 <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-                  Order from JLCPCB
+                  Order
                 </div>
                 <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                  Generate fabrication outputs for the current board.
+                  Device orders coming soon.
                 </div>
               </Link>
 

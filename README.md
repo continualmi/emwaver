@@ -1,12 +1,11 @@
 <div align="center">
-  <img src="docs/content/banner.jpeg" alt="EMWaver Banner" width="100%">
+  <img src="frontend/public/banner.jpeg" alt="EMWaver Banner" width="100%">
 </div>
 
 <div align="center">
   <p>
-    <a href="https://luispl77.github.io/emwaver/"><strong>Docs</strong></a> ·
+    <a href="https://luispl77.github.io/emwaver/"><strong>Website</strong></a> ·
     <a href="https://www.youtube.com/@EMWavers"><strong>YouTube</strong></a> ·
-    <a href="https://luispl77.github.io/emwaver/hardware-catalog/hardware.html"><strong>Hardware Catalog</strong></a> ·
     <a href="https://github.com/luispl77/emwaver/releases"><strong>Releases</strong></a>
   </p>
 </div>
@@ -21,19 +20,15 @@ EMWaver is a hardware hacking platform that treats your phone and PC as part of 
 
 <div align="center">
   <a href="https://play.google.com/store/apps/details?id=com.emwaver.app">
-    <img src="docs/content/badges/google-play.png" alt="Get it on Google Play" height="52">
+    <img src="frontend/public/badges/google-play.png" alt="Get it on Google Play" height="52">
   </a>
   <a href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-Android.apk">
-    <img src="docs/content/badges/android-apk.png" alt="Download APK" height="52">
+    <img src="frontend/public/badges/android-apk.png" alt="Download APK" height="52">
   </a>
   <a href="https://apps.apple.com/app/emwaver">
-    <img src="docs/content/badges/app-store.png" alt="Download on the App Store" height="52">
+    <img src="frontend/public/badges/app-store.png" alt="Download on the App Store" height="52">
   </a>
 </div>
-
-### Flashing Guides (if you need them)
-
-- STM32 (current board): `https://luispl77.github.io/emwaver/flashing-firmware/stm32/`
 
 ## Apps & Tools
 
@@ -49,11 +44,9 @@ EMWaver is a hardware hacking platform that treats your phone and PC as part of 
 
 - STM32 firmware (single firmware): `stm/emwaver-firmware/`
 
-## Documentation
+## Website
 
-- Docs site: `https://luispl77.github.io/emwaver/`
-- Technical reference hub: `https://luispl77.github.io/emwaver/documentation/`
-- Hardware catalog: `https://luispl77.github.io/emwaver/hardware-catalog/`
+- Next.js site: `frontend/` (run `cd frontend && npm run dev`)
 
 ## License
 

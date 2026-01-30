@@ -69,13 +69,13 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Internal tooling (not shipped):** `cli/` (firmware build + DFU flash)
 - **Shared assets:** `assets/` (default scripts, etc.)
 - **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`)
-- **Docs:** `docs/` (MkDocs)
+- **Website:** `frontend/` (Next.js)
 
 ## Repository Code Map (Deep Tree)
 
 This map is intentionally **code-focused** (so you can find “where the thing lives” quickly). It avoids listing non-code/ops `.md` files and calls out the *actual implementation* locations for the major subsystems (USB transport, buffer core, script engine + UI renderer, DFU, Git, etc.).
 
-> Convention: paths shown here refer to **source-of-truth** locations. Build outputs and vendored deps are called out separately so you don’t go spelunking in `target/`, `node_modules/`, `docs/site/`, etc.
+> Convention: paths shown here refer to **source-of-truth** locations. Build outputs and vendored deps are called out separately so you don’t go spelunking in `target/`, `node_modules/`, etc.
 
 ```text
 .
@@ -410,7 +410,7 @@ Apps live under `android/`, `ios/`, and `macos/`. Legacy desktop references live
 
 ## Transport / Buffer Model
 
-EMWaver uses **fixed 64-byte framing** over a USB MIDI SysEx tunnel, with an append-only RX capture and cursor parsing model described in `docs/content/documentation/buffer.md`.
+EMWaver uses **fixed 64-byte framing** over a USB MIDI SysEx tunnel, with an append-only RX capture and cursor parsing model implemented in `crates/emwaver-buffer-core/`.
 
 Keep on-wire semantics stable:
 
@@ -544,22 +544,19 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 Removed (scripts are run via the apps).
 
-### Docs (`/docs`)
+### Website (`/frontend`)
 
-- MkDocs-based docs.
-- Keep docs aligned with: STM32-only (current product), USB MIDI-only, Script-first.
+- Next.js website.
+- This is the only public-facing documentation surface (we no longer ship MkDocs from `docs/`).
 
-#### Hardware docs: Builder vs History
+#### Hardware pages: Order vs History
 
-Docs includes a hardware UX under `docs/content/hardware-catalog/`.
-
-- **Builder / Designer** (`docs/content/hardware-catalog/hardware.html`): only for the **single current EMWaver board**.
-  - Allowed: JLCPCB-ready downloads (Gerber/BOM/CPL/PCB PDF) and **Onshape casing links** per variant.
-  - Variants are **population/placement options on the same PCB** (IR / ISM / GPIO / etc.).
-  - Disallowed: schematics/electronics CAD exposure.
-- **Board history / catalog** (`docs/content/hardware-catalog/catalog.html`, `docs/content/hardware-catalog/device.html`): archive only.
-  - Allowed: description, photo gallery, and basic metadata (name, release date, MCU family like `stm32`/`esp32`, lifecycle).
-  - Disallowed: any fabrication or schematic artifacts (no Gerbers/BOM/CPL/schematics), and no external hardware project links (OSHW/EasyEDA/etc.).
+- **Order** (`/order`): placeholder UX for device ordering.
+  - No vendor branding.
+  - **No fabrication/manufacturing artifacts** are published (no Gerbers/BOM/CPL/pick-and-place/case STLs/CAD exports).
+- **Board history** (`/history`): archive only.
+  - Allowed: description, photo gallery, and basic metadata.
+  - Disallowed: schematics/electronics CAD/fabrication artifacts and external hardware project links.
 
 ## Agent Workflow Guardrails
 

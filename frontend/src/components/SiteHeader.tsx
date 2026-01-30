@@ -4,7 +4,7 @@ const nav = [
   { href: "/install", label: "Get started" },
   { href: "/pinout", label: "Pinout" },
   { href: "/scripts", label: "Scripts" },
-  { href: "/order", label: "Order from JLCPCB" },
+  { href: "/order", label: "Order" },
   { href: "/history", label: "History" },
   { href: "/news", label: "News" },
 ];
