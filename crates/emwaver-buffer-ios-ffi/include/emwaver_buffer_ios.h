@@ -28,7 +28,7 @@ extern "C" {
 // Shared buffer core (Rust) for iOS. This is a pure logic library:
 // CoreBluetooth/USB transport and UI remain native; framing/buffering/status/compression live here.
 
-// --- Global state (desktop/Android parity) ---
+// --- Global state (platform parity) ---
 
 void emw_buffer_clear_all(void);
 size_t emw_buffer_rx_len_bytes(void);
