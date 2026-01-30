@@ -1,18 +1,7 @@
 /*
  * EMWaver
  * Copyright (c) 2026 Luís Marnoto
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * All rights reserved.
  */
 
 pub fn compress_bits(
@@ -23,7 +12,10 @@ pub fn compress_bits(
 ) -> (Vec<f32>, Vec<f32>) {
     let time_per_sample: f32 = 1.0;
     let total_bits = buffer.len().saturating_mul(8);
-    if buffer.is_empty() || range_start >= range_end || range_start >= total_bits || number_bins == 0
+    if buffer.is_empty()
+        || range_start >= range_end
+        || range_start >= total_bits
+        || number_bins == 0
     {
         return (Vec::new(), Vec::new());
     }

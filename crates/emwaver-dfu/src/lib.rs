@@ -1,18 +1,7 @@
 /*
  * EMWaver
  * Copyright (c) 2026 Luís Marnoto
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * All rights reserved.
  */
 
 use rusb::{Context, DeviceHandle, Direction, Recipient, RequestType, UsbContext};
@@ -80,7 +69,9 @@ impl DfuDevice {
         let ctx = Context::new().map_err(|e| format!("Failed to init USB context: {e}"))?;
         let handle = ctx
             .open_device_with_vid_pid(vendor_id, product_id)
-            .ok_or_else(|| format!("No DFU device found (VID 0x{vendor_id:04x}, PID 0x{product_id:04x})"))?;
+            .ok_or_else(|| {
+                format!("No DFU device found (VID 0x{vendor_id:04x}, PID 0x{product_id:04x})")
+            })?;
 
         let mut device = Self {
             _ctx: ctx,
@@ -90,16 +81,17 @@ impl DfuDevice {
 
         let _ = device.handle.set_auto_detach_kernel_driver(true);
 
-        let mut discovery = discover_dfu_interface(&mut device, options.verbose).unwrap_or_else(|err| {
-            if options.verbose {
-                eprintln!("DFU discovery failed; falling back to interface 0: {err}");
-            }
-            DfuDiscoveryInfo {
-                interface_number: 0,
-                alt_settings: Vec::new(),
-                selected_alt_setting: None,
-            }
-        });
+        let mut discovery =
+            discover_dfu_interface(&mut device, options.verbose).unwrap_or_else(|err| {
+                if options.verbose {
+                    eprintln!("DFU discovery failed; falling back to interface 0: {err}");
+                }
+                DfuDiscoveryInfo {
+                    interface_number: 0,
+                    alt_settings: Vec::new(),
+                    selected_alt_setting: None,
+                }
+            });
 
         device.interface = discovery.interface_number as u16;
 
@@ -140,7 +132,10 @@ impl DfuDevice {
                 Ok(()) => {
                     discovery.selected_alt_setting = Some(alt);
                     if options.verbose {
-                        eprintln!("Using DFU alt setting {alt} on interface {}", discovery.interface_number);
+                        eprintln!(
+                            "Using DFU alt setting {alt} on interface {}",
+                            discovery.interface_number
+                        );
                     }
                 }
                 Err(err) => {
@@ -299,7 +294,10 @@ impl DfuDevice {
         loop {
             let status = self.get_status()?;
             if status[0] != STATUS_OK || status[4] == STATE_DFU_ERROR {
-                return Err(format!("Mass erase failed (status={})", format_status(status)));
+                return Err(format!(
+                    "Mass erase failed (status={})",
+                    format_status(status)
+                ));
             }
 
             match status[4] {
@@ -452,10 +450,16 @@ impl DfuDevice {
         emit(step_index, "Starting mass erase...".to_string());
         self.mass_erase()?;
         step_index = step_index.saturating_add(1);
-        emit(step_index, "Mass erase complete. Setting address pointer...".to_string());
+        emit(
+            step_index,
+            "Mass erase complete. Setting address pointer...".to_string(),
+        );
         self.set_address_pointer(address)?;
         step_index = step_index.saturating_add(1);
-        emit(step_index, "Address pointer set. Starting flash write...".to_string());
+        emit(
+            step_index,
+            "Address pointer set. Starting flash write...".to_string(),
+        );
 
         let mut block_num: u16 = 2;
         let mut read_buffer = vec![0u8; BLOCK_SIZE];
@@ -483,14 +487,20 @@ impl DfuDevice {
                 ));
             }
             if buf != chunk {
-                return Err(format!("Error verifying block {}", block_num.saturating_sub(2)));
+                return Err(format!(
+                    "Error verifying block {}",
+                    block_num.saturating_sub(2)
+                ));
             }
 
             step_index = step_index.saturating_add(1);
             block_num = block_num.wrapping_add(1);
         }
 
-        emit(total_steps, "Flash write completed successfully.".to_string());
+        emit(
+            total_steps,
+            "Flash write completed successfully.".to_string(),
+        );
         Ok(())
     }
 }
@@ -506,7 +516,10 @@ fn format_status(status: [u8; 6]) -> String {
     )
 }
 
-fn discover_dfu_interface(device: &mut DfuDevice, verbose: bool) -> Result<DfuDiscoveryInfo, String> {
+fn discover_dfu_interface(
+    device: &mut DfuDevice,
+    verbose: bool,
+) -> Result<DfuDiscoveryInfo, String> {
     let dev = device.handle.device();
     let config = dev
         .active_config_descriptor()
