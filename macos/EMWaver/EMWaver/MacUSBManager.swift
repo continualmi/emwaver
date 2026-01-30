@@ -31,6 +31,11 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private static let laneSizeBytes: Int = 18
     private static let superframeSizeBytes: Int = 36
 
+    private enum EmwOpcode {
+        static let version: UInt8 = 0x01
+        static let enterDfu: UInt8 = 0x06
+    }
+
     @Published var isConnected: Bool = false
     @Published var connectedPortName: String? = nil
     @Published var availablePorts: [String] = []
@@ -55,6 +60,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private var connectedSource: MIDIEndpointRef = 0
     private var connectedDestination: MIDIEndpointRef = 0
+
+    private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
 
     private var sysexAccumulator = UsbMidiSysexAccumulator()
 
@@ -129,6 +136,25 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     func disconnect() {
         midiQueue.async {
             self.disconnectInternal()
+        }
+    }
+
+    func requestEnterUpdateMode() {
+        // Fire-and-forget. The device will erase the initial flash pages and reset,
+        // then enumerate as DFU (0483:DF11).
+        midiQueue.async {
+            guard self.connectedDestination != 0 else {
+                self.setError("Cannot enter Update Mode: Not connected")
+                return
+            }
+
+            guard let pkt = Self.makePacket(Data([EmwOpcode.enterDfu])) else {
+                self.setError("Cannot enter Update Mode: packet build failed")
+                return
+            }
+
+            let sf = Self.makeSuperframe(cmdLane: pkt, streamLane: nil)
+            self.sendSuperframe(sf)
         }
     }
 
@@ -263,7 +289,26 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private func refreshPortsInternal() {
         let candidates = listPortCandidatesInternal()
-        let ports = candidates.map { $0.name }
+
+        var nameCounts: [String: Int] = [:]
+        nameCounts.reserveCapacity(candidates.count)
+
+        var ports: [String] = []
+        ports.reserveCapacity(candidates.count)
+
+        var map: [String: PortCandidate] = [:]
+        map.reserveCapacity(candidates.count)
+
+        for c in candidates {
+            let base = c.name
+            let n = (nameCounts[base] ?? 0) + 1
+            nameCounts[base] = n
+            let display = (n == 1) ? base : "\(base) (\(n))"
+            ports.append(display)
+            map[display] = c
+        }
+
+        self.portCandidatesByDisplayName = map
         DispatchQueue.main.async {
             self.availablePorts = ports
         }
@@ -277,19 +322,28 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         guard let chosen else {
             return
         }
-        connectInternal(candidate: chosen)
+
+        let display = portCandidatesByDisplayName.first(where: { $0.value.source == chosen.source && $0.value.destination == chosen.destination })?.key
+        connectInternal(candidate: chosen, displayName: display)
     }
 
     private func connectInternal(portName: String) {
-        let candidates = listPortCandidatesInternal()
-        guard let chosen = candidates.first(where: { $0.name == portName }) else {
-            setError("No matching port: \(portName)")
+        if let chosen = portCandidatesByDisplayName[portName] {
+            connectInternal(candidate: chosen, displayName: portName)
             return
         }
-        connectInternal(candidate: chosen)
+
+        // Fallback (shouldn't happen; display names are built from candidates).
+        let candidates = listPortCandidatesInternal()
+        if let chosen = candidates.first(where: { $0.name == portName }) {
+            connectInternal(candidate: chosen, displayName: portName)
+            return
+        }
+
+        setError("No matching port: \(portName)")
     }
 
-    private func connectInternal(candidate: PortCandidate) {
+    private func connectInternal(candidate: PortCandidate, displayName: String?) {
         disconnectInternal()
 
         bufferQueue.sync {
@@ -310,7 +364,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
 
         DispatchQueue.main.async {
-            self.connectedPortName = candidate.name
+            self.connectedPortName = displayName ?? candidate.name
             self.isConnected = true
             self.lastErrorText = nil
             self.deviceEmwaverVersion = nil
@@ -325,6 +379,10 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             }
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
+                if v == nil {
+                    self.lastErrorText = "Connected port did not respond like an EMWaver device"
+                    self.disconnect()
+                }
             }
         }
     }
@@ -346,7 +404,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private func queryDeviceVersion(timeoutMs: Int) -> String? {
         // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
         let resp = sendCommandInternal(
-            Data([0x01]),
+            Data([EmwOpcode.version]),
             timeout: timeoutMs,
             responsePredicate: { lane64 in
                 if lane64.count < 4 { return false }
@@ -582,6 +640,12 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         guard let refCon else { return }
         let mgr = Unmanaged<MacUSBManager>.fromOpaque(refCon).takeUnretainedValue()
         mgr.midiQueue.async {
+            if mgr.connectedSource != 0, mgr.isOffline(MIDIObjectRef(mgr.connectedSource)) {
+                mgr.disconnectInternal()
+            }
+            if mgr.connectedDestination != 0, mgr.isOffline(MIDIObjectRef(mgr.connectedDestination)) {
+                mgr.disconnectInternal()
+            }
             mgr.refreshPortsInternal()
             mgr.autoConnectIfNeededInternal()
         }

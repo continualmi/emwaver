@@ -44,6 +44,10 @@
 #define EMWAVER_FIRMWARE_VERSION_MAJOR 0u
 #define EMWAVER_FIRMWARE_VERSION_MINOR 1u
 #define EMWAVER_FIRMWARE_VERSION_PATCH 0u
+
+// Internal dev toggle: force ROM DFU on boot by erasing the initial flash pages.
+// Keep disabled in normal firmware builds.
+#define EMW_FORCE_DFU_ON_BOOT 0u
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -105,6 +109,68 @@ static void MX_SPI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+typedef void (*emw_pfn_void)(void);
+
+__attribute__((noreturn, noinline, section(".RamFunc"))) static void emw_enter_rom_dfu_by_erasing_flash(void)
+{
+    __disable_irq();
+
+    // Stop SysTick (startup/HAL may have configured it).
+    SysTick->CTRL = 0u;
+    SysTick->LOAD = 0u;
+    SysTick->VAL = 0u;
+
+    // Disable and clear pending IRQs.
+    NVIC->ICER[0] = 0xFFFFFFFFu;
+    NVIC->ICPR[0] = 0xFFFFFFFFu;
+
+    // --- Erase initial flash pages so the ROM empty-check passes (AN2606, STM32F04xxx) ---
+    // WARNING: this destroys the running application (including the vector table).
+    // This routine runs entirely from SRAM.
+    const uint32_t page0_addr = 0x08000000u;
+    const uint32_t page_size = 0x400u; // 1 KB on STM32F042
+    const uint32_t pages_to_erase = 4u;
+
+    // Unlock flash if needed.
+    if ((FLASH->CR & FLASH_CR_LOCK) != 0u) {
+        FLASH->KEYR = 0x45670123u;
+        FLASH->KEYR = 0xCDEF89ABu;
+    }
+
+    // Clear error flags and EOP (write 1 to clear).
+    FLASH->SR |= (FLASH_SR_EOP | FLASH_SR_WRPERR | FLASH_SR_PGERR);
+
+    // Wait for idle.
+    while ((FLASH->SR & FLASH_SR_BSY) != 0u) {
+    }
+
+    for (uint32_t i = 0; i < pages_to_erase; i++) {
+        const uint32_t addr = page0_addr + (i * page_size);
+
+        // Wait for idle.
+        while ((FLASH->SR & FLASH_SR_BSY) != 0u) {
+        }
+
+        // Page erase at addr.
+        FLASH->CR |= FLASH_CR_PER;
+        FLASH->AR = addr;
+        FLASH->CR |= FLASH_CR_STRT;
+        while ((FLASH->SR & FLASH_SR_BSY) != 0u) {
+        }
+        FLASH->SR |= FLASH_SR_EOP;
+        FLASH->CR &= ~FLASH_CR_PER;
+    }
+
+    // Lock flash again.
+    FLASH->CR |= FLASH_CR_LOCK;
+
+    // --- Reset ---
+    // With the initial flash erased, the ROM bootloader's empty-check will fall
+    // through to system memory bootloader (DFU) on the next reset.
+    NVIC_SystemReset();
+    while (1) { }
+}
 
 #define USER_DATA_FLASH_ADDR 0x08007C00
 #define DEVICE_NAME_MAX_LEN 32
@@ -1342,12 +1408,14 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
+  /* USER CODE BEGIN Init */
+#if EMW_FORCE_DFU_ON_BOOT
+  emw_enter_rom_dfu_by_erasing_flash();
+#endif
+  /* USER CODE END Init */
+
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
@@ -1422,6 +1490,16 @@ int main(void)
               midi_packet_consume();
               HAL_Delay(10);
               NVIC_SystemReset();
+              while (1) {}
+          }
+
+          case EMW_OP_ENTER_DFU: {
+              // Enter ROM DFU bootloader (STM32F042: erase initial pages, then reset).
+              // This is destructive by design: the device will be in DFU until re-flashed.
+              command_send_ok(NULL, 0);
+              midi_packet_consume();
+              HAL_Delay(5);
+              emw_enter_rom_dfu_by_erasing_flash();
               while (1) {}
           }
 

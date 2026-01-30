@@ -1,7 +1,6 @@
 import Foundation
 import Combine
 
-@MainActor
 final class FirmwareUpdateManager: ObservableObject {
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
@@ -40,43 +39,109 @@ final class FirmwareUpdateManager: ObservableObject {
         isPresented = false
     }
 
-    func startUpdate() {
+    func startUpdate(device: MacUSBManager) {
         updateError = nil
         updateDone = false
         progressPct = 0
         progressMessage = "Preparing update..."
 
-        if !dfuConnected {
-            updateError = "Connect the device in Update Mode first (unplug, flip the Update switch to Update, plug in, then wait for EMWaver to detect it)."
+        if isFlashing {
             return
         }
 
-        do {
-            try runFlash()
-        } catch {
-            updateError = String(describing: error)
+        // If DFU is already present, flash immediately.
+        if dfuConnected {
+            do {
+                try runFlash()
+            } catch {
+                updateError = String(describing: error)
+            }
+            return
+        }
+
+        // Otherwise, ask the connected device to enter DFU.
+        if device.isConnected {
+            progressMessage = "Switching device to Update Mode..."
+            device.requestEnterUpdateMode()
+            device.disconnect()
+        } else {
+            updateError = "Connect a device in Run mode, then retry the update."
+            return
+        }
+
+        // Poll for DFU presence with a short timeout.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+
+            let deadline = Date().addingTimeInterval(8.0)
+            var lastErr: String? = nil
+            var detected = false
+
+            while Date() < deadline {
+                do {
+                    let (code, stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
+                    if code == 0 {
+                        detected = true
+                        break
+                    }
+                    if code != 1 {
+                        let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !msg.isEmpty { lastErr = msg }
+                    }
+                } catch {
+                    lastErr = String(describing: error)
+                }
+
+                Thread.sleep(forTimeInterval: 0.25)
+            }
+
+            DispatchQueue.main.async {
+                self.dfuConnected = detected
+
+                if !detected {
+                    self.progressMessage = ""
+                    self.updateError = lastErr ?? "Failed to enter Update Mode (DFU not detected)."
+                    return
+                }
+
+                self.progressMessage = "Preparing update..."
+                do {
+                    try self.runFlash()
+                } catch {
+                    self.updateError = String(describing: error)
+                    self.isFlashing = false
+                }
+            }
         }
     }
 
     func refreshDfuPresence() {
         if isFlashing { return }
-        do {
-            let (code, stderr) = try runHelperAndWait(arguments: ["is-connected"])
-            switch code {
-            case 0:
-                dfuConnected = true
-            case 1:
-                dfuConnected = false
-            default:
-                dfuConnected = false
-                let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !msg.isEmpty {
-                    updateError = msg
+
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            guard let self else { return }
+            do {
+                let (code, stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
+                DispatchQueue.main.async {
+                    switch code {
+                    case 0:
+                        self.dfuConnected = true
+                    case 1:
+                        self.dfuConnected = false
+                    default:
+                        self.dfuConnected = false
+                        let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !msg.isEmpty {
+                            self.updateError = msg
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.dfuConnected = false
+                    self.updateError = String(describing: error)
                 }
             }
-        } catch {
-            dfuConnected = false
-            updateError = String(describing: error)
         }
     }
 
