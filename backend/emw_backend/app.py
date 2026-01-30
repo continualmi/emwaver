@@ -1,0 +1,24 @@
+from flask import Flask
+from flask_cors import CORS
+
+from emw_backend.config import Config
+from emw_backend.db import init_db
+from emw_backend.routes.agent import agent_bp
+from emw_backend.routes.files import files_bp
+from emw_backend.routes.health import health_bp
+
+
+def create_app() -> Flask:
+    config = Config.from_env()
+
+    app = Flask(__name__)
+    app.config["EMWAVER_CONFIG"] = config
+
+    CORS(app, resources={r"/*": {"origins": config.cors_origins}})
+    init_db(config.database_url)
+
+    app.register_blueprint(health_bp)
+    app.register_blueprint(agent_bp)
+    app.register_blueprint(files_bp)
+
+    return app

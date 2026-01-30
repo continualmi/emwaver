@@ -2,3 +2,10 @@ Flask==3.0.0
 flask-cors==4.0.0
 requests==2.31.0
 gunicorn==21.2.0
+
+# Storage (Azure Postgres in prod; SQLite for dev)
+SQLAlchemy==2.0.25
+psycopg2-binary==2.9.9
+
+# Auth (Firebase ID token verification)
+google-auth==2.26.2
