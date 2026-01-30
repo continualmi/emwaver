@@ -14,13 +14,13 @@ export default function PinoutPage() {
       <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
         <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)]">
           <img
-            src="/_docs/hardware-catalog/hardware/emwaver_photoshoot/IMG_0150.webp"
+            src="/hardware-catalog/hardware/emwaver_photoshoot/IMG_0150.webp"
             alt="EMWaver device"
             className="h-auto w-full object-cover"
           />
         </div>
         <a
-          href="/_docs/hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf"
+          href="/hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf"
           target="_blank"
           rel="noreferrer"
           className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"

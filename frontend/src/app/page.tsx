@@ -309,18 +309,18 @@ UI.render(UI.column({
                 </div>
               </Link>
 
-              <Link
-                href="/order"
-                className="group rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-5 hover:bg-[rgba(240,166,106,0.14)]"
-              >
-                <div className="text-xs font-semibold text-[color:var(--copper)]">Builder</div>
-                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-                  Order from JLCPCB
-                </div>
-                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                  Generate fabrication outputs for the current board.
-                </div>
-              </Link>
+                <Link
+                  href="/order"
+                  className="group rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-5 hover:bg-[rgba(240,166,106,0.14)]"
+                >
+                  <div className="text-xs font-semibold text-[color:var(--copper)]">Builder</div>
+                  <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+                    Order
+                  </div>
+                  <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                    Device orders coming soon.
+                  </div>
+                </Link>
 
               <Link
                 href="/history"

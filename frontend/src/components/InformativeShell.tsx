@@ -12,7 +12,7 @@ const NAV: NavItem[] = [
   { href: "/device", label: "Device" },
   { href: "/pinout", label: "Pinout" },
   { href: "/scripts", label: "Scripts" },
-  { href: "/order", label: "Order from JLCPCB" },
+  { href: "/order", label: "Order" },
   { href: "/history", label: "History" },
 ];
 

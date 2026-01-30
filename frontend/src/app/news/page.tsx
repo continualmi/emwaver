@@ -3,7 +3,7 @@ import path from "path";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
-import { DOCS_CONTENT_DIR } from "@/lib/repoPaths";
+import { NEWS_POSTS_DIR } from "@/lib/repoPaths";
 
 type Post = {
   href: string;
@@ -17,12 +17,11 @@ function pick(regex: RegExp, text: string): string | null {
 }
 
 async function loadPosts(): Promise<Post[]> {
-  const postsDir = path.join(DOCS_CONTENT_DIR, "news", "posts");
-  const names = (await fs.readdir(postsDir)).filter((n) => n.endsWith(".html"));
+  const names = (await fs.readdir(NEWS_POSTS_DIR)).filter((n) => n.endsWith(".html"));
 
   const posts: Post[] = [];
   for (const name of names) {
-    const filePath = path.join(postsDir, name);
+    const filePath = path.join(NEWS_POSTS_DIR, name);
     const raw = await fs.readFile(filePath, "utf-8");
 
     const title =
@@ -35,7 +34,7 @@ async function loadPosts(): Promise<Post[]> {
     ) ?? "";
 
     posts.push({
-      href: `/raw/news/posts/${name}`,
+      href: `/news/posts/${name}`,
       title: title.replace(/\s+-\s+EMWaver News\s*$/i, ""),
       date,
     });
