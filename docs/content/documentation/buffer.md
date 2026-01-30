@@ -57,7 +57,8 @@ mutating the underlying capture buffer).
 Client implementations:
 
 - Shared Rust buffer core (framing + capture + cursor parsing): [`crates/emwaver-buffer-core/src/buffer.rs`](https://github.com/luispl77/emwaver/blob/main/crates/emwaver-buffer-core/src/buffer.rs)
-- Android native receive buffer capture: [`android/app/src/main/cpp/native-lib.cpp`](https://github.com/luispl77/emwaver/blob/main/android/app/src/main/cpp/native-lib.cpp)
+- Android bridge (Java) + implementation (Rust/JNI): [`android/app/src/main/java/com/emwaver/emwaverandroidapp/NativeBuffer.java`](https://github.com/luispl77/emwaver/blob/main/android/app/src/main/java/com/emwaver/emwaverandroidapp/NativeBuffer.java), [`crates/emwaver-buffer-android-jni/src/lib.rs`](https://github.com/luispl77/emwaver/blob/main/crates/emwaver-buffer-android-jni/src/lib.rs)
+- iOS bridge (Swift) + implementation (Rust/FFI): [`ios/EMWaver/Managers/NativeBufferRust.swift`](https://github.com/luispl77/emwaver/blob/main/ios/EMWaver/Managers/NativeBufferRust.swift), [`crates/emwaver-buffer-ios-ffi/src/lib.rs`](https://github.com/luispl77/emwaver/blob/main/crates/emwaver-buffer-ios-ffi/src/lib.rs)
 
 ### Sampler record (dual buffer / ping-pong)
 
