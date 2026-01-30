@@ -3,7 +3,7 @@ set -euo pipefail
 
 export PATH="${HOME}/.cargo/bin:${PATH}"
 
-CRATE_DIR="${SRCROOT}/../../app/crates/emwaver-buffer-ios-ffi"
+CRATE_DIR="${SRCROOT}/../../crates/emwaver-buffer-ios-ffi"
 OUT_LIB="${TARGET_TEMP_DIR}/libemwaver_buffer_ios.a"
 
 if ! command -v cargo >/dev/null 2>&1; then
@@ -84,4 +84,3 @@ fi
 
 ls -la "${OUT_LIB}"
 echo "[emwaver-buffer] wrote ${OUT_LIB}"
-

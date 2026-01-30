@@ -1,8 +1,8 @@
 ---
-title: Installing & Using EMWaver Apps (Android, iOS, Desktop)
+title: Installing & Using EMWaver Apps (Android, iOS, macOS, Windows)
 ---
 
-# Installing & Using EMWaver Apps (Android, iOS, Desktop)
+# Installing & Using EMWaver Apps (Android, iOS, macOS, Windows)
 
 ## Download The Apps
 
@@ -33,9 +33,4 @@ Mobile apps are the primary UI for connecting to devices and running workflows.
     <img src="../logos/apple.svg" alt="macOS">
     <span>Download for macOS</span>
   </a>
-  <a class="emw-platform-button emw-platform-button--linux" href="https://github.com/luispl77/emwaver/releases/latest/download/EMWaver-Linux.AppImage" target="_blank" rel="noopener">
-    <img src="../logos/ubuntu.svg" alt="Linux">
-    <span>Download for Linux</span>
-  </a>
 </div>
-

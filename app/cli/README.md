@@ -1,31 +1,8 @@
 # EMWaver CLI
 
-Minimal command-line tooling for EMWaver.
+Internal command-line tooling for EMWaver (not shipped).
 
-## Installation
-
-### Manual Installation (Recommended)
-
-1. Go to [Releases](https://github.com/luispl77/emwaver/releases) and download the binary for your platform:
-   - **Linux**: `emwaver-cli-linux-x86_64`
-   - **macOS Intel**: `emwaver-cli-macos-x86_64`
-   - **macOS Apple Silicon**: `emwaver-cli-macos-aarch64`
-   - **Windows**: `emwaver-cli-windows-x86_64.exe`
-
-2. **Linux/macOS**: Make it executable and install:
-   ```bash
-   chmod +x emwaver-cli-linux-x86_64  # or macos version
-   mkdir -p ~/.local/bin
-   mv emwaver-cli-linux-x86_64 ~/.local/bin/emwaver
-   # Add to PATH (add to ~/.bashrc or ~/.zshrc):
-   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-   source ~/.bashrc
-   ```
-
-3. **Windows**: Add the `.exe` file to your PATH or run it directly.
-
-
-### Building from Source
+## Building from source
 
 ```bash
 cd app/cli
@@ -51,34 +28,10 @@ emwaver build
 emwaver flash
 ```
 
-## Development
+## Notes
 
-### Running Tests
-
-No tests (tiny wrapper).
-
-### Building for Different Platforms
-
-```bash
-# Linux x86_64
-cargo build --release --target x86_64-unknown-linux-gnu
-
-# macOS (Intel)
-cargo build --release --target x86_64-apple-darwin
-
-# macOS (Apple Silicon)
-cargo build --release --target aarch64-apple-darwin
-
-# Windows
-cargo build --release --target x86_64-pc-windows-msvc
-```
-
-## Requirements
-
-- Rust 1.78+ (for Cargo.lock v4 support)
-- Linux: `pkg-config` + `libusb` headers may be required (DFU flashing)
-- macOS: No additional dependencies
-- Windows: No additional dependencies
+- Desktop support targets are macOS + Windows only (no Linux).
+- No tests (tiny wrapper).
 
 ### STM32 Firmware Requirements
 

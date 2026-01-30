@@ -3,7 +3,7 @@ set -euo pipefail
 
 here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 crate_dir="${here}"
-repo_root="$(cd -- "${here}/../../.." && pwd)"
+repo_root="$(cd -- "${here}/../.." && pwd)"
 
 out_dir="${repo_root}/ios/EMWaver/Native"
 xcframework_path="${out_dir}/EmwaverBufferCore.xcframework"
@@ -37,4 +37,3 @@ xcodebuild -create-xcframework \
   -output "${xcframework_path}"
 
 echo "Built: ${xcframework_path}"
-
