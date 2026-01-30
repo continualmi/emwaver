@@ -6,6 +6,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py ./
+COPY emw_backend ./emw_backend
 
 ENV PORT=8787
 EXPOSE 8787

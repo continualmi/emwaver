@@ -1,0 +1,69 @@
+EMWaver Backend - Run Instructions
+
+Local dev (recommended)
+
+1) Create venv + install deps:
+
+  cd backend
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+
+2) Configure env:
+
+  # Local dev without auth (bypasses Firebase token checks)
+  export EMWAVER_AUTH_MODE=disabled
+
+  # Optional: CORS
+  export CORS_ORIGINS=*
+
+  # Optional: DB (defaults to sqlite:///./emwaver.db)
+  export DATABASE_URL=sqlite:///./emwaver.db
+
+  # Agent chat (required if you call /api/agent/chat)
+  export OPENROUTER_API_KEY=...
+
+3) Start:
+
+  python app.py
+
+4) Smoke tests:
+
+  curl http://127.0.0.1:8787/health
+
+  # In dev auth-bypass mode, this should return an empty list initially.
+  curl "http://127.0.0.1:8787/v1/files?kind=script&ext=.emw&include_content=0"
+
+
+Auth (Firebase) mode
+
+- For real auth, the backend expects:
+  Authorization: Bearer <firebase_id_token>
+
+- Required env:
+  export EMWAVER_AUTH_MODE=firebase
+  export FIREBASE_PROJECT_ID=...  # Firebase project id
+
+
+Docker
+
+  cd backend
+  docker build -t emwaver-backend .
+
+  # Local dev without auth
+  docker run --rm -p 8787:8787 \
+    -e EMWAVER_AUTH_MODE=disabled \
+    -e CORS_ORIGINS='*' \
+    emwaver-backend
+
+  # With agent chat enabled
+  docker run --rm -p 8787:8787 \
+    -e EMWAVER_AUTH_MODE=disabled \
+    -e OPENROUTER_API_KEY=... \
+    emwaver-backend
+
+
+Azure Postgres (later)
+
+- Point DATABASE_URL at your Azure Postgres instance:
+  export DATABASE_URL='postgresql+psycopg2://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require'
