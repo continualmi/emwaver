@@ -11,6 +11,7 @@ import EMWaverScriptsUI
 struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
+    @EnvironmentObject private var auth: AuthenticationManager
 
     var body: some View {
         ScriptsRootView(device: device)
@@ -31,10 +32,40 @@ struct ContentView: View {
                         }
                     }
                 }
+
+                ToolbarItem(placement: .automatic) {
+                    if auth.isSignedIn {
+                        Menu {
+                            if let email = auth.session?.email, !email.isEmpty {
+                                Text(email)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Divider()
+
+                            Button("Sign Out") {
+                                Task { await auth.signOut() }
+                            }
+                        } label: {
+                            Label(auth.userLabel, systemImage: "person.crop.circle")
+                        }
+                    } else {
+                        Button {
+                            auth.isSignInSheetPresented = true
+                        } label: {
+                            Label("Sign In", systemImage: "person.crop.circle.badge.plus")
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $auth.isSignInSheetPresented) {
+                SignInSheet()
+                    .environmentObject(auth)
             }
     }
 }
 
 #Preview {
     ContentView(device: MacUSBManager(), firmwareUpdater: FirmwareUpdateManager())
+        .environmentObject(AuthenticationManager())
 }
