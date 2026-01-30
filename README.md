@@ -37,7 +37,6 @@ EMWaver is a hardware hacking platform that treats your phone and PC as part of 
 - macOS app: `macos/`
 - Shared Apple code (iOS + macOS): `apple/`
 - Shared Rust crates: `crates/`
-- Legacy desktop references (observation-only): `desktop/` (Slint)
 - Internal tooling (not shipped): `cli/`
 
 ## Firmware

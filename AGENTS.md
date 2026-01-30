@@ -65,7 +65,6 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
 - **macOS App (defacto):** `macos/` (SwiftUI)
-- **Desktop App (legacy/reference):** `desktop/` (Slint; observation-only; keep for reference)
 - **Internal tooling (not shipped):** `cli/` (firmware build + DFU flash)
 - **Shared assets:** `assets/` (default scripts, etc.)
 - **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`)
@@ -114,10 +113,6 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 ├─ cli/                                       # Internal CLI (build + flash)
 ├─ firmware/                                  # Bundled firmware payloads (e.g. emwaver.bin)
 
-├─ desktop/                                   # Legacy desktop app (Slint; observation-only)
-│  ├─ src/                                    # Rust entrypoint
-│  └─ ui/                                     # `.slint` UI sources
-│
 ├─ android/
 │  └─ app/src/main/
 │     ├─ java/com/emwaver/emwaverandroidapp/
@@ -186,7 +181,7 @@ Generated / not-source-of-truth (common):
 Fast “where is X?” index:
 - **Script engines** → Android: `.../scripts/ScriptEngine.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift`
 - **Script UI renderers** → Android: `.../scripts/ScriptRenderView.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverScriptSwiftUI/ScriptRenderView.swift`
-- **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `crates/emwaver-device-core/src/midi_sysex.rs`
+- **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverTransport/UsbMidiSysex.swift`
 - **Shared buffer/framing core** → `crates/emwaver-buffer-core/`
 
 ## Transition Plan: App-First Execution + In-App Agent (Remove REPL/CLI/Git)
@@ -406,7 +401,7 @@ Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps
 
 STM32 firmware lives in `stm/` (CubeMX/CubeIDE project). Treat CubeMX-generated output as generated code; keep handwritten logic in intended user-edit regions and prefer regeneration over manual edits to generated layers.
 
-Apps live under `android/`, `ios/`, and `macos/`. Legacy desktop references live under `desktop/`.
+Apps live under `android/`, `ios/`, and `macos/`.
 
 ## Transport / Buffer Model
 
@@ -564,9 +559,6 @@ Removed (scripts are run via the apps).
 ├─ crates/                                   # Shared Rust crates (used by apps)
 │  ├─ emwaver-buffer-core/                    # 64B framing + RX capture + cursor parsing
 │  │  └─ src/{packet,buffer,status,sampler,tx}.rs
-│  ├─ emwaver-device-core/                    # Device protocol + SysEx tunnel helpers
-│  │  └─ src/{midi_sysex,bridge}.rs
-│  ├─ emwaver-desktop-ipc/                    # Desktop↔CLI IPC format (legacy)
 │  ├─ emwaver-dfu/                            # DFU/update helpers
 │  ├─ emwaver-dfu-helper/                     # DFU helper binary (used by macOS app)
 │  ├─ emwaver-buffer-ios-ffi/                 # iOS FFI wrapper (staticlib)
@@ -574,5 +566,5 @@ Removed (scripts are run via the apps).
 │  │  └─ src/lib.rs
 │  ├─ emwaver-buffer-android-jni/             # Android JNI wrapper (cdylib)
 │  │  └─ src/lib.rs
-│  ├─ coremidi/                               # Rust CoreMIDI bindings
+│  
 │  └─ regress/                                # Regex engine crate (used/benchmarked internally)
