@@ -71,6 +71,14 @@ struct EMWaverApp: App {
                     firmwareUpdater.present()
                 }
 
+                if device.isConnected {
+                    Button("Enter Update Mode") {
+                        device.requestEnterUpdateMode()
+                        device.disconnect()
+                        firmwareUpdater.refreshDfuPresence()
+                    }
+                }
+
                 Button("Refresh Update Mode") {
                     firmwareUpdater.refreshDfuPresence()
                 }
@@ -80,24 +88,6 @@ struct EMWaverApp: App {
                         .foregroundStyle(.secondary)
                 } else {
                     Text("Update Mode: Not detected")
-                        .foregroundStyle(.secondary)
-                }
-
-                Divider()
-
-                if device.isConnected {
-                    Text("Status: Connected")
-                        .foregroundStyle(.secondary)
-                    if let name = device.connectedPortName {
-                        Text(name)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let v = device.deviceEmwaverVersion {
-                        Text("EMWaver \(v)")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Text("Status: Disconnected")
                         .foregroundStyle(.secondary)
                 }
 

@@ -32,16 +32,11 @@ struct FirmwareUpdateSheet: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Text("To update: disconnect/unplug, flip the Update switch to Update, reconnect, and wait for EMWaver to detect Update Mode.")
+                    Text("To update: EMWaver will switch the device into Update Mode automatically (no switch needed).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     HStack {
-                        Button("Disconnect") {
-                            device.disconnect()
-                        }
-                        .disabled(updater.isFlashing)
-
                         Spacer()
                     }
                 }
@@ -57,12 +52,12 @@ struct FirmwareUpdateSheet: View {
                     Text("Put the device into Update Mode")
                         .font(.subheadline.weight(.semibold))
 
-                    Text("Unplug, flip the Update switch to Update, plug back in, and wait for EMWaver to detect it.")
+                    Text("Click Update device. The firmware will erase the initial flash pages and reboot into the STM32 ROM DFU bootloader.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     HStack(spacing: 10) {
-                        Label("Update mode", systemImage: "gearshape")
+                        Label("Update mode", systemImage: "arrow.triangle.2.circlepath")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text("|")
@@ -122,7 +117,7 @@ struct FirmwareUpdateSheet: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(Color.green)
-                    Text("Update complete. Unplug the device, flip the Update switch to Run, and reconnect.")
+                    Text("Update complete. Reconnect the device to use it.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -139,11 +134,9 @@ struct FirmwareUpdateSheet: View {
                 Spacer()
                 if !updater.updateDone {
                     Button("Update device") {
-                        // Ensure we are not holding the MIDI device while entering Update Mode.
-                        device.disconnect()
-                        updater.startUpdate()
+                        updater.startUpdate(device: device)
                     }
-                    .disabled(!updater.dfuConnected || updater.isFlashing)
+                    .disabled((!device.isConnected && !updater.dfuConnected) || updater.isFlashing)
                     .keyboardShortcut(.defaultAction)
                 }
             }
