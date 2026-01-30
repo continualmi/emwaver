@@ -9,7 +9,7 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
 - **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
 - **Core UX:** **Script-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
-- **Surface area shipped:** Android app, iOS app, macOS app, (later) Windows app, CLI
+- **Surface area shipped:** Android app, iOS app, macOS app, Windows app, CLI
 
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
@@ -65,7 +65,7 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
 - **macOS App (defacto):** `macos/` (SwiftUI)
-- **Desktop App (legacy/reference):** `app/` (Tauri; keep for reference; Rust crates still live here)
+- **Desktop App (legacy/reference):** `app/` (Tauri; observation-only; keep for reference; Rust crates still live here)
 - **Desktop App (paused):** `desktop/` (Slint; paused)
 - **CLI:** `app/cli/` (device shell + internal tooling)
 - **Docs:** `docs/` (MkDocs)
@@ -589,9 +589,9 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 ### Desktop App (`/app`)
 
 - Legacy/reference Tauri app (not the primary desktop product direction).
-- Keep `app/` around near-term for reference/migration; shared Rust crates still live in `app/crates/`.
-- Desktop priority is now **macOS native** first, then a **dedicated Windows app**.
-- Linux is an afterthought until Windows is in a good place (no dedicated Linux app planned soon; future Qt TBD).
+- **Observation-only:** do not add new product features to `app/`; keep it for reference/migration.
+- Shared Rust crates still live in `app/crates/`.
+- Desktop support targets are **macOS** and **Windows** only (no Linux support).
 
 Native-first note:
 
