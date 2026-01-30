@@ -1,0 +1,8 @@
+# Visual Studio / MSBuild outputs
+.vs/
+**/bin/
+**/obj/
+
+# WinUI packaging outputs
+**/AppPackages/
+**/BundleArtifacts/

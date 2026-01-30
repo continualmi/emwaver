@@ -482,6 +482,18 @@ Apple target architecture (mirrors Android/iOS):
 - **Typed UI model**: avoid JSON UI-tree transport; prefer typed models or small typed “diff” events.
 - **Shared Apple code**: keep iOS + macOS parity via Swift packages in `apple/`.
 
+### Windows Desktop Direction (WinUI 3, Windows 11)
+
+We want a **Windows-only, native** desktop app that runs extremely well on **Windows 11**.
+
+Windows target architecture (mirrors Android/iOS/macOS):
+
+- **One process**: WinUI 3 renderer + embedded script runtime + Windows MIDI transport in-process.
+- **UI thread owns UI**: UI updates remain on the WinUI dispatcher thread.
+- **Script worker**: scripts execute off-UI-thread; only UI events/state deltas are marshaled onto the UI thread.
+- **Shared Rust buffer core**: reuse `crates/emwaver-buffer-core` via a Windows FFI DLL (C ABI) so buffering/status/sampler compression and TX pacing policy stay identical across platforms.
+- **Transport remains native**: USB MIDI SysEx I/O is implemented with Windows APIs; Rust is used for pure logic only.
+
 ## Cross-Cutting Practices
 
 - Keep changes scoped and avoid bundling unrelated work.
@@ -526,13 +538,20 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 > **Agent Note:** Don’t run `xcodebuild`; leave builds to Xcode.
 
+### Windows (`/windows`)
+
+- Native Windows 11 app (WinUI 3).
+- Keep the same `.emw` script semantics as Android/iOS/macOS (sync-only).
+- USB MIDI SysEx transport is native Windows; shared buffering/compression/pacing uses `crates/emwaver-buffer-core` via `crates/emwaver-buffer-windows-ffi`.
+
 ### CLI (`/cli`)
 
 - Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use (not shipped).
 - Shared Rust core lives under `crates/`:
-  - `crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
+  - `crates/emwaver-buffer-core` (fixed-size lanes, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
   - `crates/emwaver-buffer-ios-ffi` (iOS)
   - `crates/emwaver-buffer-android-jni` (Android)
+  - `crates/emwaver-buffer-windows-ffi` (Windows)
 - Current scope: firmware `build` and DFU `flash` only.
 
 #### Script REPL
@@ -565,6 +584,9 @@ Removed (scripts are run via the apps).
 │  │  ├─ include/emwaver_buffer_ios.h
 │  │  └─ src/lib.rs
 │  ├─ emwaver-buffer-android-jni/             # Android JNI wrapper (cdylib)
+│  │  └─ src/lib.rs
+│  ├─ emwaver-buffer-windows-ffi/             # Windows FFI wrapper (cdylib)
+│  │  ├─ include/emwaver_buffer_windows.h
 │  │  └─ src/lib.rs
 │  
 │  └─ regress/                                # Regex engine crate (used/benchmarked internally)

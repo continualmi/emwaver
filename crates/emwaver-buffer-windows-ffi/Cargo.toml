@@ -1,0 +1,12 @@
+[package]
+name = "emwaver-buffer-windows-ffi"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+name = "emwaver_buffer_windows"
+crate-type = ["cdylib"]
+
+[dependencies]
+emwaver-buffer-core = { path = "../emwaver-buffer-core" }
