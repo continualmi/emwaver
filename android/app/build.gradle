@@ -3,7 +3,7 @@ plugins {
 }
 
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
-def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "app/public/default-scripts")
+def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "assets/default-scripts")
 
 android {
     namespace 'com.emwaver.emwaverandroidapp'

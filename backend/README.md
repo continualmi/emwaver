@@ -49,7 +49,7 @@ pip install -r requirements.txt
 
 ```bash
 export OPENROUTER_API_KEY=...
-export CORS_ORIGINS=tauri://localhost,http://localhost
+export CORS_ORIGINS=http://localhost,http://127.0.0.1
 ```
 
 3) Start the server:
@@ -58,15 +58,9 @@ export CORS_ORIGINS=tauri://localhost,http://localhost
 python app.py
 ```
 
-Wire the desktop Agent tab
+Client integration (optional)
 
-- Set `VITE_EMWAVER_BACKEND_URL` to point at this server (default is `http://127.0.0.1:8787`).
-
-Example:
-
-```bash
-export VITE_EMWAVER_BACKEND_URL=http://127.0.0.1:8787
-```
+- Point your client at `http://127.0.0.1:8787`.
 
 Notes
 

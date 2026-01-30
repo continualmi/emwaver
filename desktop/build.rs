@@ -10,7 +10,7 @@ fn main() {
         .expect("Expected desktop/ to have a repo root at ..")
         .to_path_buf();
 
-    let firmware_repo_path = repo_root.join("app/src-tauri/firmware/emwaver.bin");
+    let firmware_repo_path = repo_root.join("firmware/emwaver.bin");
     println!("cargo:rerun-if-changed={}", firmware_repo_path.display());
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR missing"));
