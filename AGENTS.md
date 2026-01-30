@@ -65,9 +65,10 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
 - **macOS App (defacto):** `macos/` (SwiftUI)
-- **Desktop App (legacy/reference):** `app/` (Tauri; observation-only; keep for reference)
 - **Desktop App (legacy/reference):** `desktop/` (Slint; observation-only; keep for reference)
-- **Internal tooling (not shipped):** `app/cli/` (firmware build + DFU flash)
+- **Internal tooling (not shipped):** `cli/` (firmware build + DFU flash)
+- **Shared assets:** `assets/` (default scripts, etc.)
+- **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`)
 - **Docs:** `docs/` (MkDocs)
 
 ## Repository Code Map (Deep Tree)
@@ -108,51 +109,10 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │     ├─ Debug/ Release/                     # Build output dirs (generated)
 │     └─ *.ioc / .settings/                  # CubeMX/CubeIDE project metadata
 │
-├─ app/                                      # Legacy desktop app (Tauri) + internal CLI
-│  ├─ src/                                   # Desktop UI (TypeScript/React)
-│  │  ├─ main.tsx                            # UI bootstrap
-│  │  ├─ App.tsx                             # App shell + routing-ish composition
-│  │  ├─ components/
-│  │  │  ├─ HomePage.tsx                     # Landing/home
-│  │  │  ├─ ErrorBoundary.tsx
-│  │  │  ├─ SamplerFragment.tsx              # Sampler screen
-│  │  │  ├─ ISMFragment.tsx                  # ISM screen
-│  │  │  ├─ ScriptsFragment.tsx              # Scripts screen
-│  │  │  ├─ SettingsFragment.tsx             # Settings screen
-│  │  │  ├─ scripts/
-│  │  │  │  └─ ScriptUIRenderer.tsx          # Script UI renderer (ScriptTree → React)
-│  │  │  └─ workspace/                       # “Workspace” multi-panel UI
-│  │  │     ├─ hooks/                        # Workspace-specific hooks
-│  │  │     ├─ main/                         # Main panel(s) (script editor/preview/etc.)
-│  │  │     ├─ sidebar/                      # File tree + tools sidebar
-│  │  │     ├─ terminal/                     # Terminal/PTY UI components
-│  │  │     └─ top/                          # Top bar + global controls
-│  │  └─ utils/
-│  │     ├─ DeviceContext.tsx                # Device/session context
-│  │     ├─ AppDialogContext.tsx             # Dialog plumbing
-│  │     ├─ ScriptEngine.ts                  # Desktop ScriptEngine (JS sandbox + DSL)
-│  │     ├─ useBackendScript.ts              # Hooks/bridge for backend script execution
-│  │     ├─ tauri.ts                         # Tauri invoke/bridge helpers
-│  │     └─ monacoTheme.ts                   # Editor theming
-│  │
-│  ├─ src-tauri/                              # Desktop native host (Rust, Tauri)
-│  │  ├─ src/
-│  │  │  ├─ main.rs                          # Tauri entrypoint
-│  │  │  ├─ lib.rs                           # Tauri commands + app state wiring
-│  │  │  ├─ buffer.rs                        # Rust-side buffer plumbing
-│  │  │  ├─ script_runtime.rs                 # Desktop script runtime (host bridges + eval)
-│  │  │  └─ desktop_ipc.rs                    # Desktop↔CLI mailbox bridge
-│  │  ├─ capabilities/                       # Tauri capability manifests
-│  │  ├─ resources/                          # Packaged runtime resources (e.g. OTA)
-│  │  ├─ firmware/                           # Firmware payload(s) shipped w/ desktop app
-│  │  └─ icons/                              # App icons
-│  │
-│  ├─ cli/                                    # Rust CLI (internal tooling)
-│  │  ├─ src/{main,lib,cli}.rs                # Minimal: build + flash
-│  │  └─ resources/{ota,vibe}/                # Bundled resources
-│  │
-│  ├─ public/{default-scripts,device-icons}/  # Bundled UI assets (incl starter scripts)
-│  └─ dist/ / node_modules/ / src-tauri/target/ # Generated build/deps
+├─ assets/
+│  └─ default-scripts/                        # Canonical built-in .emw scripts
+├─ cli/                                       # Internal CLI (build + flash)
+├─ firmware/                                  # Bundled firmware payloads (e.g. emwaver.bin)
 
 ├─ desktop/                                   # Legacy desktop app (Slint; observation-only)
 │  ├─ src/                                    # Rust entrypoint
@@ -221,11 +181,11 @@ Web dev (Next.js):
 - `cd frontend && npm run dev`
 
 Generated / not-source-of-truth (common):
-- `**/target/`, `**/node_modules/`, `app/dist/`, `android/app/.cxx/`, `stm/**/Debug/`, `stm/**/Release/`
+- `**/target/`, `**/node_modules/`, `android/app/.cxx/`, `stm/**/Debug/`, `stm/**/Release/`
 
 Fast “where is X?” index:
-- **Script engines** → Desktop: `app/src/utils/ScriptEngine.ts`; Android: `.../scripts/ScriptEngine.java`; iOS: `ios/EMWaver/Scripts/ScriptEngine.swift`
-- **Script UI renderers** → Desktop: `app/src/components/scripts/ScriptUIRenderer.tsx`; Android: `.../scripts/ScriptRenderView.java`; iOS: `ios/EMWaver/Scripts/ScriptRenderView.swift`
+- **Script engines** → Android: `.../scripts/ScriptEngine.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift`
+- **Script UI renderers** → Android: `.../scripts/ScriptRenderView.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverScriptSwiftUI/ScriptRenderView.swift`
 - **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `crates/emwaver-device-core/src/midi_sysex.rs`
 - **Shared buffer/framing core** → `crates/emwaver-buffer-core/`
 
@@ -429,7 +389,7 @@ Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps
 ## Repo Impact Checklist (when executing this plan)
 
 - Removed:
-  - CLI REPL (`app/cli/src/repl.rs`)
+  - CLI REPL (removed; scripts are run via the apps)
   - CLI `-c` code paths (string eval)
   - Android GitHub package and UI entry points
   - iOS Git/GitHub managers/models/views and UI entry points
@@ -446,7 +406,7 @@ Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps
 
 STM32 firmware lives in `stm/` (CubeMX/CubeIDE project). Treat CubeMX-generated output as generated code; keep handwritten logic in intended user-edit regions and prefer regeneration over manual edits to generated layers.
 
-Apps live under `android/`, `ios/`, and `macos/`. Legacy desktop references live under `app/` and `desktop/`.
+Apps live under `android/`, `ios/`, and `macos/`. Legacy desktop references live under `desktop/`.
 
 ## Transport / Buffer Model
 
@@ -570,16 +530,6 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 - Treat iOS as first-class: iPhone USB‑C works directly; Lightning works via Apple’s USB host adapter.
 
 > **Agent Note:** Don’t run `xcodebuild`; leave builds to Xcode.
-
-### Desktop App (`/app`)
-
-- Legacy/reference Tauri app (not the primary desktop product direction).
-- **Observation-only:** do not add new product features to `app/`; keep it for reference/migration.
-- Desktop support targets are **macOS** and **Windows** only (no Linux support).
-
-Native-first note:
-
-- Treat `app/` (WebUI/Tauri) as legacy for script UI. New work for script rendering and high-frequency UI updates should land in native apps (macOS: `macos/` + shared `apple/`) to avoid JSON UI-tree serialization and IPC-style bridges.
 
 ### CLI (`/cli`)
 

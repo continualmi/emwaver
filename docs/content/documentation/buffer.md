@@ -56,8 +56,7 @@ mutating the underlying capture buffer).
 
 Client implementations:
 
-- Desktop/Tauri buffer type + counter: [`app/src-tauri/src/buffer.rs`](https://github.com/luispl77/emwaver/blob/main/app/src-tauri/src/buffer.rs)
-- Desktop/Tauri wiring that shares the buffer across subsystems: [`app/src-tauri/src/lib.rs`](https://github.com/luispl77/emwaver/blob/main/app/src-tauri/src/lib.rs)
+- Shared Rust buffer core (framing + capture + cursor parsing): [`crates/emwaver-buffer-core/src/buffer.rs`](https://github.com/luispl77/emwaver/blob/main/crates/emwaver-buffer-core/src/buffer.rs)
 - Android native receive buffer capture: [`android/app/src/main/cpp/native-lib.cpp`](https://github.com/luispl77/emwaver/blob/main/android/app/src/main/cpp/native-lib.cpp)
 
 ### Sampler record (dual buffer / ping-pong)
