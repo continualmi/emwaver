@@ -46,14 +46,14 @@ boa_engine = "0.20"
 boa_gc = "0.20"
 dotenvy = "0.15"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-emwaver-buffer-core = { path = "../crates/emwaver-buffer-core" }
-emwaver-device-core = { path = "../crates/emwaver-device-core" }
-emwaver-dfu = { path = "../crates/emwaver-dfu" }
-emwaver-desktop-ipc = { path = "../crates/emwaver-desktop-ipc" }
+emwaver-buffer-core = { path = "../../crates/emwaver-buffer-core" }
+emwaver-device-core = { path = "../../crates/emwaver-device-core" }
+emwaver-dfu = { path = "../../crates/emwaver-dfu" }
+emwaver-desktop-ipc = { path = "../../crates/emwaver-desktop-ipc" }
 
 # Native placeholder UI panel (PoC).
 slint = "1"
 
 [patch.crates-io]
-regress = { path = "../crates/regress" }
-coremidi = { path = "../crates/coremidi" }
+regress = { path = "../../crates/regress" }
+coremidi = { path = "../../crates/coremidi" }

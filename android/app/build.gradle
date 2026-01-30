@@ -93,7 +93,7 @@ tasks.register("syncBundledFirmware", Copy) {
 }
 
 def rustAndroidLibName = "emwaver_buffer_android"
-def rustAndroidManifestPath = "${rootProject.projectDir}/../app/crates/emwaver-buffer-android-jni/Cargo.toml"
+def rustAndroidManifestPath = "${rootProject.projectDir}/../crates/emwaver-buffer-android-jni/Cargo.toml"
 def rustAndroidJniLibsDir = "${projectDir}/src/main/jniLibs"
 
 tasks.register("rustAndroidBuild", Exec) {

@@ -9,7 +9,7 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
 - **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
 - **Core UX:** **Script-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
-- **Surface area shipped:** Android app, iOS app, macOS app, Windows app, CLI
+- **Surface area shipped:** Android app, iOS app, macOS app, Windows app
 
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
@@ -65,9 +65,9 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
 - **macOS App (defacto):** `macos/` (SwiftUI)
-- **Desktop App (legacy/reference):** `app/` (Tauri; observation-only; keep for reference; Rust crates still live here)
-- **Desktop App (paused):** `desktop/` (Slint; paused)
-- **CLI:** `app/cli/` (device shell + internal tooling)
+- **Desktop App (legacy/reference):** `app/` (Tauri; observation-only; keep for reference)
+- **Desktop App (legacy/reference):** `desktop/` (Slint; observation-only; keep for reference)
+- **Internal tooling (not shipped):** `app/cli/` (firmware build + DFU flash)
 - **Docs:** `docs/` (MkDocs)
 
 ## Repository Code Map (Deep Tree)
@@ -108,7 +108,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │     ├─ Debug/ Release/                     # Build output dirs (generated)
 │     └─ *.ioc / .settings/                  # CubeMX/CubeIDE project metadata
 │
-├─ app/                                      # Desktop app (Tauri) + shared Rust crates + CLI
+├─ app/                                      # Legacy desktop app (Tauri) + internal CLI
 │  ├─ src/                                   # Desktop UI (TypeScript/React)
 │  │  ├─ main.tsx                            # UI bootstrap
 │  │  ├─ App.tsx                             # App shell + routing-ish composition
@@ -147,29 +147,14 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │  │  ├─ firmware/                           # Firmware payload(s) shipped w/ desktop app
 │  │  └─ icons/                              # App icons
 │  │
-│  ├─ crates/                                 # Shared Rust crates (desktop + mobile)
-│  │  ├─ emwaver-buffer-core/                 # 64B framing + RX capture + cursor parsing
-│  │  │  └─ src/{packet,buffer,status,sampler,tx}.rs
-│  │  ├─ emwaver-device-core/                 # Device protocol + SysEx tunnel helpers
-│  │  │  └─ src/{midi_sysex,bridge}.rs
-│  │  ├─ emwaver-desktop-ipc/                 # Desktop↔CLI IPC format
-│  │  ├─ emwaver-dfu/                         # DFU/update helpers
-│  │  ├─ emwaver-buffer-ios-ffi/              # iOS FFI wrapper (XCFramework)
-│  │  │  ├─ include/emwaver_buffer_ios.h
-│  │  │  └─ src/lib.rs
-│  │  ├─ emwaver-buffer-android-jni/          # Android JNI wrapper
-│  │  │  └─ src/lib.rs
-│  │  ├─ coremidi/                            # Rust CoreMIDI bindings
-│  │  └─ regress/                             # Regex engine crate (used/benchmarked internally)
-│  │
-│  ├─ cli/                                    # Rust CLI (helper; does not own USB)
+│  ├─ cli/                                    # Rust CLI (internal tooling)
 │  │  ├─ src/{main,lib,cli}.rs                # Minimal: build + flash
 │  │  └─ resources/{ota,vibe}/                # Bundled resources
 │  │
 │  ├─ public/{default-scripts,device-icons}/  # Bundled UI assets (incl starter scripts)
 │  └─ dist/ / node_modules/ / src-tauri/target/ # Generated build/deps
 
-├─ desktop/                                   # Native desktop app (Slint, paused)
+├─ desktop/                                   # Legacy desktop app (Slint; observation-only)
 │  ├─ src/                                    # Rust entrypoint
 │  └─ ui/                                     # `.slint` UI sources
 │
@@ -241,8 +226,8 @@ Generated / not-source-of-truth (common):
 Fast “where is X?” index:
 - **Script engines** → Desktop: `app/src/utils/ScriptEngine.ts`; Android: `.../scripts/ScriptEngine.java`; iOS: `ios/EMWaver/Scripts/ScriptEngine.swift`
 - **Script UI renderers** → Desktop: `app/src/components/scripts/ScriptUIRenderer.tsx`; Android: `.../scripts/ScriptRenderView.java`; iOS: `ios/EMWaver/Scripts/ScriptRenderView.swift`
-- **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `app/crates/emwaver-device-core/src/midi_sysex.rs`
-- **Shared buffer/framing core** → `app/crates/emwaver-buffer-core/`
+- **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; iOS: `Managers/UsbMidiSysex.swift`; Desktop: `crates/emwaver-device-core/src/midi_sysex.rs`
+- **Shared buffer/framing core** → `crates/emwaver-buffer-core/`
 
 ## Transition Plan: App-First Execution + In-App Agent (Remove REPL/CLI/Git)
 
@@ -461,7 +446,7 @@ Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps
 
 STM32 firmware lives in `stm/` (CubeMX/CubeIDE project). Treat CubeMX-generated output as generated code; keep handwritten logic in intended user-edit regions and prefer regeneration over manual edits to generated layers.
 
-Apps live under `android/`, `ios/`, and `app/`. The Rust CLI lives under `app/cli/`.
+Apps live under `android/`, `ios/`, and `macos/`. Legacy desktop references live under `app/` and `desktop/`.
 
 ## Transport / Buffer Model
 
@@ -590,7 +575,6 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 - Legacy/reference Tauri app (not the primary desktop product direction).
 - **Observation-only:** do not add new product features to `app/`; keep it for reference/migration.
-- Shared Rust crates still live in `app/crates/`.
 - Desktop support targets are **macOS** and **Windows** only (no Linux support).
 
 Native-first note:
@@ -599,11 +583,11 @@ Native-first note:
 
 ### CLI (`/cli`)
 
-- Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use.
-- Shared Rust core lives under `app/crates/`:
-  - `app/crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
-  - `app/crates/emwaver-buffer-ios-ffi` (iOS)
-  - `app/crates/emwaver-buffer-android-jni` (Android)
+- Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use (not shipped).
+- Shared Rust core lives under `crates/`:
+  - `crates/emwaver-buffer-core` (64B framing, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
+  - `crates/emwaver-buffer-ios-ffi` (iOS)
+  - `crates/emwaver-buffer-android-jni` (Android)
 - Current scope: firmware `build` and DFU `flash` only.
 
 #### Script REPL
@@ -630,3 +614,18 @@ Docs includes a hardware UX under `docs/content/hardware-catalog/`.
 ## Agent Workflow Guardrails
 
 - Do **not** `git commit` or `git push` unless explicitly requested.
+├─ crates/                                   # Shared Rust crates (used by apps)
+│  ├─ emwaver-buffer-core/                    # 64B framing + RX capture + cursor parsing
+│  │  └─ src/{packet,buffer,status,sampler,tx}.rs
+│  ├─ emwaver-device-core/                    # Device protocol + SysEx tunnel helpers
+│  │  └─ src/{midi_sysex,bridge}.rs
+│  ├─ emwaver-desktop-ipc/                    # Desktop↔CLI IPC format (legacy)
+│  ├─ emwaver-dfu/                            # DFU/update helpers
+│  ├─ emwaver-dfu-helper/                     # DFU helper binary (used by macOS app)
+│  ├─ emwaver-buffer-ios-ffi/                 # iOS FFI wrapper (staticlib)
+│  │  ├─ include/emwaver_buffer_ios.h
+│  │  └─ src/lib.rs
+│  ├─ emwaver-buffer-android-jni/             # Android JNI wrapper (cdylib)
+│  │  └─ src/lib.rs
+│  ├─ coremidi/                               # Rust CoreMIDI bindings
+│  └─ regress/                                # Regex engine crate (used/benchmarked internally)

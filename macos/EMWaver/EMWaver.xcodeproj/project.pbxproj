@@ -277,8 +277,8 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/../../app/src-tauri/firmware/emwaver.bin",
-				"$(SRCROOT)/../../app/crates/emwaver-dfu-helper/Cargo.toml",
-				"$(SRCROOT)/../../app/crates/emwaver-dfu-helper/src/main.rs",
+				"$(SRCROOT)/../../crates/emwaver-dfu-helper/Cargo.toml",
+				"$(SRCROOT)/../../crates/emwaver-dfu-helper/src/main.rs",
 			);
 			name = "Bundle Firmware + DFU Helper";
 			outputPaths = (
@@ -287,7 +287,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\ndst_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ndst_firmware=\"${SCRIPT_OUTPUT_FILE_0:-${dst_root}/emwaver.bin}\"\ndst_helper=\"${SCRIPT_OUTPUT_FILE_1:-${dst_root}/emwaver-dfu-helper}\"\n\nfirmware_src=\"${SRCROOT}/../../app/src-tauri/firmware/emwaver.bin\"\nhelper_manifest=\"${SRCROOT}/../../app/crates/emwaver-dfu-helper/Cargo.toml\"\n\necho \"[Bundle Firmware + DFU Helper] firmware_src=${firmware_src}\"\necho \"[Bundle Firmware + DFU Helper] helper_manifest=${helper_manifest}\"\necho \"[Bundle Firmware + DFU Helper] dst_root=${dst_root}\"\n\ntest -f \"${firmware_src}\" || (echo \"Missing bundled firmware at: ${firmware_src} (run `emwaver build`)\" >&2; exit 1)\n\nmkdir -p \"$(dirname \"${dst_firmware}\")\"\ncp -f \"${firmware_src}\" \"${dst_firmware}\"\n\n# Build the DFU helper (Rust) and place it in the app bundle resources.\n# This keeps the flashing implementation aligned with the existing Rust DFU crate.\ncommand -v cargo >/dev/null 2>&1 || (echo \"Missing cargo in PATH. Install Rust to build the DFU helper.\" >&2; exit 1)\n\ncargo build --manifest-path \"${helper_manifest}\" --release\n\nhelper_root=\"$(cd \"$(dirname \"${helper_manifest}\")\" && pwd)\"\nhelper_bin=\"${helper_root}/target/release/emwaver-dfu-helper\"\n\ntest -f \"${helper_bin}\" || (echo \"Missing helper binary at: ${helper_bin}\" >&2; exit 1)\ncp -f \"${helper_bin}\" \"${dst_helper}\"\nchmod +x \"${dst_helper}\"\n";
+			shellScript = "set -e\n\ndst_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ndst_firmware=\"${SCRIPT_OUTPUT_FILE_0:-${dst_root}/emwaver.bin}\"\ndst_helper=\"${SCRIPT_OUTPUT_FILE_1:-${dst_root}/emwaver-dfu-helper}\"\n\nfirmware_src=\"${SRCROOT}/../../app/src-tauri/firmware/emwaver.bin\"\nhelper_manifest=\"${SRCROOT}/../../crates/emwaver-dfu-helper/Cargo.toml\"\n\necho \"[Bundle Firmware + DFU Helper] firmware_src=${firmware_src}\"\necho \"[Bundle Firmware + DFU Helper] helper_manifest=${helper_manifest}\"\necho \"[Bundle Firmware + DFU Helper] dst_root=${dst_root}\"\n\ntest -f \"${firmware_src}\" || (echo \"Missing bundled firmware at: ${firmware_src} (run `emwaver build`)\" >&2; exit 1)\n\nmkdir -p \"$(dirname \"${dst_firmware}\")\"\ncp -f \"${firmware_src}\" \"${dst_firmware}\"\n\n# Build the DFU helper (Rust) and place it in the app bundle resources.\n# This keeps the flashing implementation aligned with the existing Rust DFU crate.\ncommand -v cargo >/dev/null 2>&1 || (echo \"Missing cargo in PATH. Install Rust to build the DFU helper.\" >&2; exit 1)\n\ncargo build --manifest-path \"${helper_manifest}\" --release\n\nhelper_root=\"$(cd \"$(dirname \"${helper_manifest}\")\" && pwd)\"\nhelper_bin=\"${helper_root}/target/release/emwaver-dfu-helper\"\n\ntest -f \"${helper_bin}\" || (echo \"Missing helper binary at: ${helper_bin}\" >&2; exit 1)\ncp -f \"${helper_bin}\" \"${dst_helper}\"\nchmod +x \"${dst_helper}\"\n";
 		};
 		A9B1C2D3E4F5061728394A5C /* Build Rust Buffer Core */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -297,7 +297,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/Native/build-rust-buffer-core.sh",
-				"$(SRCROOT)/../../app/crates/emwaver-buffer-ios-ffi/Cargo.toml",
+				"$(SRCROOT)/../../crates/emwaver-buffer-ios-ffi/Cargo.toml",
 			);
 			name = "Build Rust Buffer Core";
 			outputPaths = (
