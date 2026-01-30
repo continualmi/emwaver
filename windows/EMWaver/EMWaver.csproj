@@ -21,12 +21,21 @@
   <ItemGroup>
     <Page Include="App.xaml" />
     <Page Include="MainWindow.xaml" />
+    <Page Include="Pages\\ScriptsPage.xaml" />
+    <Page Include="Pages\\DevicePage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="Native\\*.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\\..\\assets\\default-scripts\\*.emw">
+      <Link>Assets\\DefaultScripts\\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
