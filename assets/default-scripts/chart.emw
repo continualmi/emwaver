@@ -2,6 +2,8 @@
 
 // Synthetic chart debug script.
 // Generates a large square wave and renders it via UI.plot.
+// Uses the Rust sampler buffer core's viewport compressor (if available)
+// so charts stay responsive even with very large signals.
 
 function i(v, d) {
   var n = parseInt(String(v || '').trim(), 10);
@@ -27,9 +29,11 @@ function __parseViewportRange(r) {
 
 var sampleCountText = '200000';
 var periodText = '200';
+var binsText = '900';
 
+var bufLen = 0;
 var xMin = 0;
-var xMax = 5000;
+var xMax = 10000;
 
 var dataX = [];
 var dataY = [];
@@ -39,15 +43,16 @@ var __pendingViewport = null;
 var __viewportTimer = null;
 
 function __applyViewport(min, max) {
-  var maxX = Math.max(0, dataX.length ? Number(dataX[dataX.length - 1]) : 0);
-  if (!isFinite(maxX) || maxX <= 0) return;
+  var maxBits = Math.max(0, bufLen * 8);
+  if (maxBits <= 0) return;
 
-  var lo = clamp(Math.round(Number(min) || 0), 0, maxX);
-  var hi = clamp(Math.round(Number(max) || 0), 0, maxX);
+  var lo = clamp(Math.round(Number(min) || 0), 0, maxBits);
+  var hi = clamp(Math.round(Number(max) || 0), 0, maxBits);
   if (hi <= lo) return;
 
   xMin = lo;
   xMax = hi;
+  refreshPlot();
   render();
 }
 
@@ -71,27 +76,72 @@ function __scheduleViewport(min, max) {
   }, 60);
 }
 
-function generate() {
+function __makeSquareWaveBytes(bitCount, periodBits) {
+  var bits = Math.max(0, Number(bitCount) || 0);
+  var period = Math.max(2, Number(periodBits) || 2);
+  var half = Math.max(1, Math.floor(period / 2));
+
+  var out = new Uint8Array(Math.ceil(bits / 8));
+  for (var b = 0; b < bits; b += 1) {
+    if ((b % period) < half) {
+      out[b >> 3] |= 1 << (b & 7);
+    }
+  }
+  return out;
+}
+
+function refreshPlot() {
   err = '';
   dataX = [];
   dataY = [];
 
   try {
-    var n = clamp(i(sampleCountText, 200000), 1, 500000);
-    var period = clamp(i(periodText, 200), 2, 100000);
-    var half = Math.max(1, Math.floor(period / 2));
+    bufLen = Sampler.lenBytes();
+    var maxBits = Math.max(0, bufLen * 8);
+    if (maxBits <= 0) return;
 
-    dataX = new Array(n);
-    dataY = new Array(n);
-    for (var k = 0; k < n; k += 1) {
-      dataX[k] = k;
-      dataY[k] = (k % period) < half ? 255 : 0;
+    var bins = clamp(i(binsText, 900), 64, 12000);
+    var start = clamp(i(xMin, 0), 0, maxBits);
+    var end = clamp(i(xMax, 10000), 0, maxBits);
+    if (end <= start) {
+      start = 0;
+      end = Math.min(10000, maxBits);
     }
 
-    xMin = 0;
-    xMax = Math.min(5000, n);
+    xMin = start;
+    xMax = end;
+
+    var v = Sampler.compressViewport({ startBit: start, endBit: end, bins: bins });
+    dataX = v.timeValues || [];
+    dataY = v.dataValues || [];
   } catch (e) {
     err = String(e && e.message ? e.message : e);
+  }
+}
+
+function generate() {
+  err = '';
+  try {
+    if (!Sampler || typeof Sampler.setBytes !== 'function' || typeof Sampler.compressViewport !== 'function') {
+      throw new Error('Sampler.setBytes/compressViewport unavailable on this host');
+    }
+
+    var bitCount = clamp(i(sampleCountText, 200000), 1, 2000000);
+    var period = clamp(i(periodText, 200), 2, 100000);
+    var bytes = __makeSquareWaveBytes(bitCount, period);
+    Sampler.setBytes(bytes);
+
+    bufLen = Sampler.lenBytes();
+    xMin = 0;
+    xMax = Math.min(10000, bufLen * 8);
+    refreshPlot();
+  } catch (e) {
+    err = String(e && e.message ? e.message : e);
+    try {
+      bufLen = typeof Sampler.lenBytes === 'function' ? Sampler.lenBytes() : 0;
+    } catch (e2) {
+      bufLen = 0;
+    }
   }
 }
 
@@ -107,7 +157,8 @@ function render() {
             UI.text({ text: 'Chart Debug', font: 'title2', fontWeight: 'semibold' }),
             UI.text({
               text:
-                'Samples: ' + String(dataY.length) +
+                'Bits: ' + String(bufLen * 8) +
+                ' • Points: ' + String(dataY.length) +
                 ' • Period: ' + String(periodText) +
                 ' • View: ' + String(xMin) + '…' + String(xMax),
               font: 'caption',
@@ -121,6 +172,8 @@ function render() {
           dataY: dataY,
           xMin: xMin,
           xMax: xMax,
+          xBoundsMin: 0,
+          xBoundsMax: bufLen * 8,
           yMin: 0,
           yMax: 255,
           errorText: err,
@@ -138,7 +191,8 @@ function render() {
               label: 'Reset view',
               onTap: function () {
                 xMin = 0;
-                xMax = Math.min(5000, dataY.length);
+                xMax = Math.min(10000, bufLen * 8);
+                refreshPlot();
                 render();
               },
             }),
@@ -166,6 +220,12 @@ function render() {
               placeholder: 'Period (e.g. 200)',
               onChange: function (v) { periodText = String(v); },
               onSubmit: function () { generate(); render(); },
+            }),
+            UI.textField({
+              value: binsText,
+              placeholder: 'Bins (e.g. 900)',
+              onChange: function (v) { binsText = String(v); },
+              onSubmit: function () { refreshPlot(); render(); },
             }),
           ],
         }),
