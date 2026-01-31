@@ -236,3 +236,204 @@ public struct EmwCodeEditor: NSViewRepresentable {
 }
 
 #endif
+
+#if canImport(UIKit)
+import UIKit
+
+/// Native iOS code editor using UITextView with basic syntax highlighting.
+public struct EmwCodeEditor: UIViewRepresentable {
+    @Binding private var text: String
+    private let isEditable: Bool
+    private let wrapLines: Bool
+
+    public init(text: Binding<String>, isEditable: Bool = true, wrapLines: Bool = false) {
+        _text = text
+        self.isEditable = isEditable
+        self.wrapLines = wrapLines
+    }
+
+    public func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.backgroundColor = .clear
+        view.font = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        view.textColor = .label
+        view.textContainerInset = UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
+        view.autocorrectionType = .no
+        view.autocapitalizationType = .none
+        view.smartDashesType = .no
+        view.smartQuotesType = .no
+        view.smartInsertDeleteType = .no
+        view.keyboardDismissMode = .interactive
+        view.delegate = context.coordinator
+
+        context.coordinator.configure(textView: view, isEditable: isEditable, wrapLines: wrapLines)
+        context.coordinator.setTextIfNeeded(text)
+        return view
+    }
+
+    public func updateUIView(_ uiView: UITextView, context: Context) {
+        context.coordinator.configure(textView: uiView, isEditable: isEditable, wrapLines: wrapLines)
+        context.coordinator.setTextIfNeeded(text)
+    }
+
+    public func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, isEditable: isEditable, wrapLines: wrapLines)
+    }
+
+    public final class Coordinator: NSObject, UITextViewDelegate {
+        @Binding private var text: String
+        var isEditable: Bool
+        var wrapLines: Bool
+        var lastKnownText: String
+        weak var textView: UITextView?
+
+        private var isApplyingHighlight = false
+        private var pendingHighlightWorkItem: DispatchWorkItem?
+
+        private static let defaultFont = UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+        private static let keywordRegex = try? NSRegularExpression(
+            pattern: "\\b(break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|false|finally|for|function|if|import|in|instanceof|let|new|null|return|super|switch|this|throw|true|try|typeof|undefined|var|void|while|with)\\b",
+            options: []
+        )
+        private static let numberRegex = try? NSRegularExpression(pattern: "\\b\\d+(?:\\.\\d+)?\\b", options: [])
+        private static let lineCommentRegex = try? NSRegularExpression(pattern: "//.*", options: [])
+        private static let blockCommentRegex = try? NSRegularExpression(pattern: "/\\*[\\s\\S]*?\\*/", options: [])
+        private static let stringRegex = try? NSRegularExpression(
+            pattern: "(?:'([^'\\\\]|\\\\.)*'|\"([^\"\\\\]|\\\\.)*\"|`([^`\\\\]|\\\\.)*`)",
+            options: []
+        )
+
+        init(text: Binding<String>, isEditable: Bool, wrapLines: Bool) {
+            _text = text
+            self.isEditable = isEditable
+            self.wrapLines = wrapLines
+            self.lastKnownText = text.wrappedValue
+        }
+
+        func configure(textView: UITextView, isEditable: Bool, wrapLines: Bool) {
+            self.isEditable = isEditable
+            self.wrapLines = wrapLines
+            self.textView = textView
+
+            textView.isEditable = isEditable
+            textView.isSelectable = true
+
+            if wrapLines {
+                textView.textContainer.lineBreakMode = .byWordWrapping
+                textView.textContainer.widthTracksTextView = true
+                textView.showsHorizontalScrollIndicator = false
+            } else {
+                textView.textContainer.lineBreakMode = .byClipping
+                textView.textContainer.widthTracksTextView = false
+                textView.textContainer.size = CGSize(
+                    width: CGFloat.greatestFiniteMagnitude,
+                    height: CGFloat.greatestFiniteMagnitude
+                )
+                textView.showsHorizontalScrollIndicator = true
+            }
+        }
+
+        func setTextIfNeeded(_ newText: String) {
+            guard let textView else { return }
+            if textView.text == newText {
+                lastKnownText = newText
+                return
+            }
+
+            lastKnownText = newText
+            let selected = textView.selectedRange
+            let offset = textView.contentOffset
+            textView.text = newText
+            textView.selectedRange = selected
+            textView.setContentOffset(offset, animated: false)
+            scheduleHighlight()
+        }
+
+        public func textViewDidChange(_ textView: UITextView) {
+            let newText = textView.text ?? ""
+            guard lastKnownText != newText else { return }
+            lastKnownText = newText
+            text = newText
+            scheduleHighlight()
+        }
+
+        private func scheduleHighlight() {
+            pendingHighlightWorkItem?.cancel()
+            let work = DispatchWorkItem { [weak self] in
+                self?.applyHighlighting()
+            }
+            pendingHighlightWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03, execute: work)
+        }
+
+        private func applyHighlighting() {
+            guard let textView else { return }
+            guard !isApplyingHighlight else { return }
+
+            isApplyingHighlight = true
+            defer { isApplyingHighlight = false }
+
+            let rawText = textView.text ?? ""
+            let nsText = rawText as NSString
+            let fullRange = NSRange(location: 0, length: nsText.length)
+
+            let baseAttrs: [NSAttributedString.Key: Any] = [
+                .font: Self.defaultFont,
+                .foregroundColor: UIColor.label
+            ]
+            let attributed = NSMutableAttributedString(string: rawText, attributes: baseAttrs)
+
+            let commentAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: UIColor.secondaryLabel
+            ]
+            let stringAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: UIColor.systemRed
+            ]
+            let keywordAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: UIColor.systemBlue
+            ]
+            let numberAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: UIColor.systemPurple
+            ]
+
+            if let re = Self.blockCommentRegex {
+                for match in re.matches(in: rawText, range: fullRange) {
+                    attributed.addAttributes(commentAttrs, range: match.range)
+                }
+            }
+
+            if let re = Self.lineCommentRegex {
+                for match in re.matches(in: rawText, range: fullRange) {
+                    attributed.addAttributes(commentAttrs, range: match.range)
+                }
+            }
+
+            if let re = Self.stringRegex {
+                for match in re.matches(in: rawText, range: fullRange) {
+                    attributed.addAttributes(stringAttrs, range: match.range)
+                }
+            }
+
+            if let re = Self.numberRegex {
+                for match in re.matches(in: rawText, range: fullRange) {
+                    attributed.addAttributes(numberAttrs, range: match.range)
+                }
+            }
+
+            if let re = Self.keywordRegex {
+                for match in re.matches(in: rawText, range: fullRange) {
+                    attributed.addAttributes(keywordAttrs, range: match.range)
+                }
+            }
+
+            let selected = textView.selectedRange
+            let offset = textView.contentOffset
+            textView.attributedText = attributed
+            textView.selectedRange = selected
+            textView.setContentOffset(offset, animated: false)
+        }
+    }
+}
+
+#endif
