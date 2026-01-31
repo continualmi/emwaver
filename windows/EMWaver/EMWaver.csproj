@@ -2,27 +2,25 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
     <Platforms>x64</Platforms>
     <UseWinUI>true</UseWinUI>
+    <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240311000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
   </ItemGroup>
 
   <ItemGroup>
     <Manifest Include="app.manifest" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Include="App.xaml" />
-    <Page Include="MainWindow.xaml" />
-    <Page Include="Pages\\ScriptsPage.xaml" />
-    <Page Include="Pages\\DevicePage.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -32,10 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\\..\\assets\\default-scripts\\*.emw">
+    <None Include="..\\..\\assets\\default-scripts\\*.emw">
       <Link>Assets\\DefaultScripts\\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
   </ItemGroup>
 
 </Project>

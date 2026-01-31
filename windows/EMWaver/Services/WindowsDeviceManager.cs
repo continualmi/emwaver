@@ -125,7 +125,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private DispatcherQueue? _ui;
 
     private MidiInPort? _inPort;
-    private MidiOutPort? _outPort;
+    private IMidiOutPort? _outPort;
 
     private readonly object _rxLock = new();
     private TaskCompletionSource<byte[]?>? _responseTcs;
@@ -144,7 +144,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             action();
             return;
         }
-        _ = ui.TryEnqueue(action);
+        _ = ui.TryEnqueue(() => action());
     }
 
     internal async Task RefreshPortsAsync()
@@ -324,7 +324,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
         var resp = await SendCommandAsync(
-            commandLane: stackalloc byte[] { EmwOpcode.Version },
+            commandLane: new byte[] { EmwOpcode.Version },
             timeoutMs: timeoutMs,
             responsePredicate: lane18 =>
             {
@@ -346,7 +346,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         return $"{resp[1]}.{resp[2]}.{resp[3]}";
     }
 
-    private async Task<byte[]?> SendCommandAsync(ReadOnlySpan<byte> commandLane, int timeoutMs, Func<byte[], bool> responsePredicate)
+    private async Task<byte[]?> SendCommandAsync(byte[] commandLane, int timeoutMs, Func<byte[], bool> responsePredicate)
     {
         if (_outPort == null || _inPort == null)
         {
@@ -469,11 +469,11 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         var sf = new byte[SuperframeSizeBytes];
         if (cmdLane != null)
         {
-            Buffer.BlockCopy(cmdLane, 0, sf, 0, Math.Min(cmdLane.Length, LaneSizeBytes));
+            System.Buffer.BlockCopy(cmdLane, 0, sf, 0, Math.Min(cmdLane.Length, LaneSizeBytes));
         }
         if (streamLane != null)
         {
-            Buffer.BlockCopy(streamLane, 0, sf, LaneSizeBytes, Math.Min(streamLane.Length, LaneSizeBytes));
+            System.Buffer.BlockCopy(streamLane, 0, sf, LaneSizeBytes, Math.Min(streamLane.Length, LaneSizeBytes));
         }
         return sf;
     }
