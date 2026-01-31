@@ -42,84 +42,82 @@ public struct ScriptsRootView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            ZStack {
-                #if os(macOS)
-                HStack(spacing: 0) {
-                    primaryContent
-                        .frame(minWidth: 520)
-
-                    if showingAgentPanel {
-                        Divider()
-                        AgentChatPanelView(viewModel: agentViewModel)
-                            .frame(width: 380)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
-                }
-                .animation(.easeInOut(duration: 0.22), value: showingAgentPanel)
-                #else
+        ZStack {
+            #if os(macOS)
+            HStack(spacing: 0) {
                 primaryContent
-                #endif
+                    .frame(minWidth: 520)
 
-                if viewModel.isPerformingAction {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .padding(24)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .shadow(radius: 12)
+                if showingAgentPanel {
+                    Divider()
+                    AgentChatPanelView(viewModel: agentViewModel)
+                        .frame(width: 380)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
-            .navigationTitle(showingEditor ? (currentScriptName ?? "Script") : (showingPreview ? (currentScriptName ?? "Script Preview") : "Scripts"))
-            #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
+            .animation(.easeInOut(duration: 0.22), value: showingAgentPanel)
+            #else
+            primaryContent
             #endif
-            .toolbar { toolbarContent() }
-            .alert(item: $viewModel.notice) { notice in
-                Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
+
+            if viewModel.isPerformingAction {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .padding(24)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(radius: 12)
             }
-            .alert(item: $previewManager.dialog) { dialog in
-                Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
-            }
-            .alert(
-                "Script Error",
-                isPresented: Binding(
-                    get: { previewManager.scriptError != nil },
-                    set: { presented in
-                        if !presented { previewManager.scriptError = nil }
-                    }
-                )
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(previewManager.scriptError ?? "")
-            }
-            .sheet(item: $namePrompt) { prompt in
-                NamePromptSheet(prompt: prompt)
-            }
-            .confirmationDialog(
-                "Delete script?",
-                isPresented: $showingDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive) {
-                    guard let target = deleteTarget else { return }
-                    Task {
-                        await viewModel.deleteScript(id: target.id)
-                    }
-                    deleteTarget = nil
+        }
+        .navigationTitle(showingEditor ? (currentScriptName ?? "Script") : (showingPreview ? (currentScriptName ?? "Script Preview") : "EMWaver"))
+        #if canImport(UIKit)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar { toolbarContent() }
+        .alert(item: $viewModel.notice) { notice in
+            Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
+        }
+        .alert(item: $previewManager.dialog) { dialog in
+            Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
+        }
+        .alert(
+            "Script Error",
+            isPresented: Binding(
+                get: { previewManager.scriptError != nil },
+                set: { presented in
+                    if !presented { previewManager.scriptError = nil }
                 }
-                Button("Cancel", role: .cancel) {
-                    deleteTarget = nil
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(previewManager.scriptError ?? "")
+        }
+        .sheet(item: $namePrompt) { prompt in
+            NamePromptSheet(prompt: prompt)
+        }
+        .confirmationDialog(
+            "Delete script?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                guard let target = deleteTarget else { return }
+                Task {
+                    await viewModel.deleteScript(id: target.id)
                 }
-            } message: {
-                if let target = deleteTarget {
-                    Text("Are you sure you want to delete \(target.name)?")
-                }
+                deleteTarget = nil
             }
-            .onAppear {
-                previewManager.attach(device: device)
-                loadScripts()
+            Button("Cancel", role: .cancel) {
+                deleteTarget = nil
             }
+        } message: {
+            if let target = deleteTarget {
+                Text("Are you sure you want to delete \(target.name)?")
+            }
+        }
+        .onAppear {
+            previewManager.attach(device: device)
+            loadScripts()
         }
     }
 
@@ -172,7 +170,7 @@ public struct ScriptsRootView: View {
                 } else {
                     List {
                         if !viewModel.assetScripts.isEmpty {
-                            Section("Example scripts") {
+                            Section {
                                 ForEach(viewModel.assetScripts) { script in
                                     ScriptRow(
                                         script: script,
@@ -187,7 +185,7 @@ public struct ScriptsRootView: View {
                         }
 
                         if !viewModel.customScripts.isEmpty {
-                            Section("Custom Scripts") {
+                            Section("Scripts") {
                                 ForEach(viewModel.customScripts) { script in
                                     ScriptRow(
                                         script: script,
