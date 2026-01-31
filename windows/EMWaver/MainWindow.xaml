@@ -44,10 +44,26 @@
                 </MenuBarItem>
             </MenuBar>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
-                <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <TextBlock x:Name="DeviceBufferText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
+                    <AppBarButton x:Name="ScriptNewButton" Label="New" Icon="Add" Click="OnScriptNewClick" />
+                    <AppBarButton x:Name="ScriptSaveButton" Label="Save" Icon="Save" Click="OnScriptSaveClick" IsEnabled="False" />
+                    <AppBarButton x:Name="ScriptCopyButton" Label="Copy" Icon="Copy" Click="OnScriptCopyClick" IsEnabled="False" />
+                    <AppBarButton x:Name="ScriptRenameButton" Label="Rename" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
+                    <AppBarButton x:Name="ScriptDeleteButton" Label="Delete" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
+                    <AppBarButton x:Name="ScriptRefreshButton" Label="Refresh" Icon="Refresh" Click="OnScriptRefreshClick" />
+                    <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="Agent" Click="OnScriptAgentToggleClick">
+                        <AppBarToggleButton.Icon>
+                            <SymbolIcon Symbol="Message" />
+                        </AppBarToggleButton.Icon>
+                    </AppBarToggleButton>
+                </CommandBar>
+
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
+                    <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock x:Name="DeviceBufferText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
             </StackPanel>
             </Grid>
         </Border>

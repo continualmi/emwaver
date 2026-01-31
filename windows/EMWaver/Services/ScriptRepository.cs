@@ -36,29 +36,43 @@ internal sealed class ScriptRepository
     {
         Directory.CreateDirectory(LocalScriptsDir);
 
-        var local = Directory
+        var localRaw = Directory
             .EnumerateFiles(LocalScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
             .Where(p => EmwExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-            .Select(p => new ScriptInfo(Path.GetFileNameWithoutExtension(p), p, IsBundled: false))
             .ToList();
 
-        var bundled = new List<ScriptInfo>();
+        var bundledRaw = new List<string>();
         if (Directory.Exists(BundledScriptsDir))
         {
-            bundled = Directory
+            bundledRaw = Directory
                 .EnumerateFiles(BundledScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
                 .Where(p => EmwExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-                .Select(p => new ScriptInfo(Path.GetFileNameWithoutExtension(p), p, IsBundled: true))
+                // script_bootstrap.emw is an internal runtime dependency, not a user-facing script.
+                .Where(p => !string.Equals(Path.GetFileNameWithoutExtension(p), "script_bootstrap", StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
 
-        // If a local script has the same name as a bundled one, prefer local.
-        var localNames = new HashSet<string>(local.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
-        bundled = bundled.Where(s => !localNames.Contains(s.Name)).ToList();
+        var bundledNames = new HashSet<string>(
+            bundledRaw.Select(p => Path.GetFileNameWithoutExtension(p)),
+            StringComparer.OrdinalIgnoreCase
+        );
 
-        var scripts = local
-            .Concat(bundled)
-            .OrderByDescending(s => s.IsBundled == false) // local first
+        var local = localRaw
+            .Select(p =>
+            {
+                var name = Path.GetFileNameWithoutExtension(p);
+                return new ScriptInfo(name, p, IsBundled: false, ShadowsBundled: bundledNames.Contains(name));
+            })
+            .ToList();
+
+        var bundled = bundledRaw
+            .Select(p => new ScriptInfo(Path.GetFileNameWithoutExtension(p), p, IsBundled: true, ShadowsBundled: false))
+            .ToList();
+
+        // Show bundled scripts first (macOS parity) and keep any local copies visible.
+        var scripts = bundled
+            .Concat(local)
+            .OrderByDescending(s => s.IsBundled)
             .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -98,7 +112,7 @@ internal sealed class ScriptRepository
         }
 
         await File.WriteAllTextAsync(fullPath, content ?? string.Empty);
-        return new ScriptInfo(Path.GetFileNameWithoutExtension(fullPath), fullPath, IsBundled: false);
+        return new ScriptInfo(Path.GetFileNameWithoutExtension(fullPath), fullPath, IsBundled: false, ShadowsBundled: false);
     }
 
     internal async Task<ScriptInfo> CopyToLocalAsync(ScriptInfo source, string newName)
@@ -144,7 +158,7 @@ internal sealed class ScriptRepository
         }
 
         File.Move(script.FullPath, dest);
-        return Task.FromResult(new ScriptInfo(Path.GetFileNameWithoutExtension(dest), dest, IsBundled: false));
+        return Task.FromResult(new ScriptInfo(Path.GetFileNameWithoutExtension(dest), dest, IsBundled: false, ShadowsBundled: false));
     }
 
     private static string SanitizeFileName(string name)

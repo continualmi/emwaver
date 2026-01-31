@@ -1,0 +1,11 @@
+namespace EMWaver.Models;
+
+public sealed record ScriptToolbarState(bool HasSelection, bool IsBundled, bool IsDirty)
+{
+    public bool CanSave => HasSelection && !IsBundled && IsDirty;
+    public bool CanCopy => HasSelection;
+    public bool CanRename => HasSelection && !IsBundled;
+    public bool CanDelete => HasSelection && !IsBundled;
+    public bool CanRefresh => true;
+    public bool CanAgent => true;
+}

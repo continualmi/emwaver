@@ -11,6 +11,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Foundation;
 
@@ -35,8 +36,21 @@ public sealed partial class ScriptsPage : Page
     private readonly ScriptEngine _scriptEngine = new();
     private readonly ScriptRenderer _scriptRenderer;
 
+    private ScriptTree? _pendingRenderTree;
+    private int _renderQueued;
+    private DispatcherQueueTimer? _renderTimer;
+
     private readonly Dictionary<string, ContentDialog> _modalDialogs = new(StringComparer.Ordinal);
     private readonly HashSet<string> _shownModalIds = new(StringComparer.Ordinal);
+
+    private bool _hasLastScintillaBounds;
+    private int _lastScintillaX;
+    private int _lastScintillaY;
+    private int _lastScintillaW;
+    private int _lastScintillaH;
+
+    public event Action<ScriptToolbarState>? ToolbarStateChanged;
+    public ScriptToolbarState CurrentToolbarState { get; private set; } = new(false, false, false);
 
     public ScriptsPage()
     {
@@ -52,7 +66,7 @@ public sealed partial class ScriptsPage : Page
         _scriptEngine.Setup(
             renderHandler: tree =>
             {
-                _ = DispatcherQueue.TryEnqueue(() => RenderPreview(tree));
+                ScheduleRender(tree);
             },
             sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
             errorHandler: message =>
@@ -173,7 +187,7 @@ public sealed partial class ScriptsPage : Page
         StartDirtyPoll();
 
         // Keep the native window hidden until a script is selected.
-        if (_current == null || EditorTabs.SelectedIndex == 1)
+        if (_current == null)
         {
             HideScintilla();
         }
@@ -241,28 +255,10 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
-    private void OnAgentToggleClick(object sender, RoutedEventArgs e)
+    private void SetAgentPaneVisibility(bool show)
     {
-        var show = AgentToggleButton.IsChecked == true;
         AgentPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         AgentColumn.Width = show ? new GridLength(380) : new GridLength(0);
-    }
-
-    private void OnEditorTabsSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        // Editor tab = 0, Preview tab = 1.
-        var previewSelected = EditorTabs.SelectedIndex == 1;
-        if (previewSelected)
-        {
-            HideScintilla();
-            return;
-        }
-
-        if (_current != null)
-        {
-            ShowScintilla();
-            FocusEditorNative();
-        }
     }
 
     private void OnAgentSendClick(object sender, RoutedEventArgs e)
@@ -413,18 +409,6 @@ public sealed partial class ScriptsPage : Page
 
     private async void OnRunClick(object sender, RoutedEventArgs e)
     {
-        if (_current == null)
-        {
-            return;
-        }
-
-        EditorTabs.SelectedIndex = 1;
-        PreviewHint.Visibility = Visibility.Visible;
-        PreviewHost.Children.Clear();
-
-        var scriptText = GetEditorTextRaw();
-        _scriptEngine.Execute(scriptText);
-
         await Task.CompletedTask;
     }
 
@@ -498,16 +482,17 @@ public sealed partial class ScriptsPage : Page
 
             EditorTitleText.Text = script.FileName;
             EditorSubtitleText.Text = script.KindLabel;
+            EditorSubtitleText.Visibility = string.IsNullOrWhiteSpace(script.KindLabel)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
 
             EmptyHint.Visibility = Visibility.Collapsed;
             EditorHost.Visibility = Visibility.Visible;
 
-            EditorTabs.SelectedIndex = 0;
-
             EnsureScintillaCreated();
             ConfigureScintillaIfNeeded();
-            SetEditorReadOnly(script.IsBundled);
             SetEditorText(text);
+            SetEditorReadOnly(script.IsBundled);
             MarkEditorSaved();
             ShowScintilla();
 
@@ -515,8 +500,13 @@ public sealed partial class ScriptsPage : Page
 
             FocusEditorNative();
 
+            PreviewHost.Children.Clear();
+            PreviewHint.Visibility = Visibility.Visible;
+
             await Task.CompletedTask;
         });
+
+        _scriptEngine.Execute(text);
     }
 
     private void ClearEditor()
@@ -536,6 +526,7 @@ public sealed partial class ScriptsPage : Page
 
             EditorTitleText.Text = "Select a script";
             EditorSubtitleText.Text = string.Empty;
+            EditorSubtitleText.Visibility = Visibility.Collapsed;
             EditorHost.Visibility = Visibility.Collapsed;
             HideScintilla();
             EmptyHint.Visibility = Visibility.Visible;
@@ -555,17 +546,58 @@ public sealed partial class ScriptsPage : Page
         });
     }
 
+    private void ScheduleRender(ScriptTree tree)
+    {
+        _pendingRenderTree = tree;
+        if (Interlocked.Exchange(ref _renderQueued, 1) == 1)
+        {
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            Interlocked.Exchange(ref _renderQueued, 0);
+
+            _renderTimer ??= DispatcherQueue.CreateTimer();
+            _renderTimer.Interval = TimeSpan.FromMilliseconds(33);
+            _renderTimer.Tick -= OnRenderTimerTick;
+            _renderTimer.Tick += OnRenderTimerTick;
+            if (!_renderTimer.IsRunning)
+            {
+                _renderTimer.Start();
+            }
+        });
+    }
+
+    private void OnRenderTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        var latest = _pendingRenderTree;
+        if (latest != null)
+        {
+            RenderPreview(latest);
+        }
+    }
+
     private void UpdateCommandStates()
     {
         var has = _current != null;
         var isBundled = _current?.IsBundled == true;
 
-        SaveButton.IsEnabled = has && !isBundled && _isDirty;
-        MakeCopyButton.IsEnabled = has;
-        RenameButton.IsEnabled = has && !isBundled;
-        DeleteButton.IsEnabled = has && !isBundled;
+        var newState = new ScriptToolbarState(has, isBundled, _isDirty);
+        CurrentToolbarState = newState;
+        ToolbarStateChanged?.Invoke(newState);
+    }
 
-        RunButton.IsEnabled = has;
+    internal void HandleToolbarNew() => OnNewClick(this, new RoutedEventArgs());
+    internal void HandleToolbarSave() => OnSaveClick(this, new RoutedEventArgs());
+    internal void HandleToolbarMakeCopy() => OnMakeCopyClick(this, new RoutedEventArgs());
+    internal void HandleToolbarRename() => OnRenameClick(this, new RoutedEventArgs());
+    internal void HandleToolbarDelete() => OnDeleteClick(this, new RoutedEventArgs());
+    internal void HandleToolbarRefresh() => OnRefreshClick(this, new RoutedEventArgs());
+    internal void HandleToolbarAgentToggle(bool show)
+    {
+        SetAgentPaneVisibility(show);
     }
 
     private Task RunOnUiAsync(Func<Task> action)
@@ -919,6 +951,21 @@ public sealed partial class ScriptsPage : Page
 
         var pt = new ScintillaWin32.POINT { x = x, y = y };
         _ = ScintillaWin32.ClientToScreen(hwndOwner, ref pt);
+
+        if (_hasLastScintillaBounds
+            && pt.x == _lastScintillaX
+            && pt.y == _lastScintillaY
+            && w == _lastScintillaW
+            && h == _lastScintillaH)
+        {
+            return;
+        }
+
+        _hasLastScintillaBounds = true;
+        _lastScintillaX = pt.x;
+        _lastScintillaY = pt.y;
+        _lastScintillaW = w;
+        _lastScintillaH = h;
 
         _ = ScintillaWin32.SetWindowPos(
             _scintillaHwnd,
