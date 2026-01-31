@@ -235,13 +235,7 @@ public struct ScriptsRootView: View {
 
     private var editorTextView: some View {
         Group {
-            #if canImport(AppKit)
             EmwCodeEditor(text: $editorContent, isEditable: !editorIsReadOnly, wrapLines: lineWrapEnabled)
-            #else
-            TextEditor(text: $editorContent)
-                .font(.system(.body, design: .monospaced))
-                .scrollContentBackground(.hidden)
-            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: editorContent) { newValue in
