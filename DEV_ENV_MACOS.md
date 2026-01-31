@@ -143,12 +143,20 @@ This is the fast project switcher (bound to Ctrl+f). It will:
 
 ### Install the script
 
-Create `/usr/local/bin/tmux-sessionizer` (and make it executable):
+This is configured at `/usr/local/bin/tmux-sessionizer`.
+
+To (re)create it, create `/usr/local/bin/tmux-sessionizer` (and make it executable):
 
 ```bash
 sudo mkdir -p /usr/local/bin
 sudo $EDITOR /usr/local/bin/tmux-sessionizer
 sudo chmod +x /usr/local/bin/tmux-sessionizer
+```
+
+Verify it is discoverable on your PATH:
+
+```bash
+command -v tmux-sessionizer
 ```
 
 Script contents:
@@ -158,33 +166,10 @@ Script contents:
 
 set -euo pipefail
 
-# Update this list if you keep multiple checkouts.
-PROJECT_ROOTS=(
-  "$HOME/emwaver"
-)
-
-pick_project() {
-  local candidates=()
-  for p in "${PROJECT_ROOTS[@]}"; do
-    [[ -d "$p" ]] && candidates+=("$p")
-  done
-
-  if [[ ${#candidates[@]} -eq 0 ]]; then
-    echo "No projects found. Edit PROJECT_ROOTS in tmux-sessionizer." >&2
-    exit 1
-  fi
-
-  if [[ ${#candidates[@]} -eq 1 ]]; then
-    printf '%s\n' "${candidates[0]}"
-    return
-  fi
-
-  printf '%s\n' "${candidates[@]}" | fzf
-}
-
 selected="${1:-}"
 if [[ -z "$selected" ]]; then
-  selected="$(pick_project)"
+  # Keep this intentionally tight: only jump into EMWaver.
+  selected=$(find ~/emwaver -mindepth 0 -maxdepth 0 -type d 2>/dev/null | fzf)
 fi
 
 if [[ -z "$selected" ]]; then
