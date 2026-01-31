@@ -16,6 +16,9 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Dark-mode only (Windows app).
+        RootGrid.RequestedTheme = ElementTheme.Dark;
+
         AppServices.Device.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
         AppServices.Device.PropertyChanged += OnDevicePropertyChanged;
 
