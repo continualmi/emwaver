@@ -57,6 +57,58 @@ var dataX = [];
 var dataY = [];
 var chartErr = '';
 
+var __pendingViewport = null;
+var __viewportTimer = null;
+
+function __parseViewportRange(r) {
+  if (!r) return null;
+  // Some hosts may pass `[ {min,max} ]`.
+  if (Array.isArray(r) && r.length) {
+    r = r[0];
+  }
+  if (!r || typeof r !== 'object') return null;
+  var min = r.min != null ? Number(r.min) : NaN;
+  var max = r.max != null ? Number(r.max) : NaN;
+  if (!isFinite(min) || !isFinite(max)) return null;
+  return { min: min, max: max };
+}
+
+function __applyViewportRange(min, max) {
+  var maxBits = Math.max(0, bufLen * 8);
+  if (maxBits <= 0) return;
+
+  var lo = clamp(Math.round(Number(min) || 0), 0, maxBits);
+  var hi = clamp(Math.round(Number(max) || 0), 0, maxBits);
+  if (hi <= lo) return;
+
+  xMin = lo;
+  xMax = hi;
+  refreshPlot();
+  render();
+}
+
+function __scheduleViewport(min, max) {
+  __pendingViewport = { min: min, max: max };
+
+  // Avoid doing a full recompress+render on every pixel of pan/zoom.
+  if (__viewportTimer) return;
+
+  if (typeof setTimeout !== 'function') {
+    var p0 = __pendingViewport;
+    __pendingViewport = null;
+    __applyViewportRange(p0.min, p0.max);
+    return;
+  }
+
+  __viewportTimer = setTimeout(function () {
+    __viewportTimer = null;
+    var p = __pendingViewport;
+    __pendingViewport = null;
+    if (!p) return;
+    __applyViewportRange(p.min, p.max);
+  }, 60);
+}
+
 var files = [];
 var selectedFile = '';
 var saveName = 'signal1.raw';
@@ -277,14 +329,13 @@ function render() {
           dataY: dataY,
           xMin: xMin,
           xMax: xMax,
+          yMin: 0,
+          yMax: 255,
           errorText: chartErr,
           onViewportChange: function (r) {
-            var min = r && r.min != null ? r.min : r && r[0] && r[0].min;
-            var max = r && r.max != null ? r.max : r && r[0] && r[0].max;
-            xMin = Math.floor(Number(min) || 0);
-            xMax = Math.floor(Number(max) || 0);
-            refreshPlot();
-            render();
+            var range = __parseViewportRange(r);
+            if (!range) return;
+            __scheduleViewport(range.min, range.max);
           },
         }),
         UI.row({
