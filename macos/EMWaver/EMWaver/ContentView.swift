@@ -14,54 +14,56 @@ struct ContentView: View {
     @EnvironmentObject private var auth: AuthenticationManager
 
     var body: some View {
-        ScriptsRootView(device: device)
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    HStack(spacing: 8) {
-                        if device.isConnected {
-                            Label("Connected", systemImage: "cable.connector")
-                        } else if firmwareUpdater.dfuConnected {
-                            Label("Update Mode", systemImage: "arrow.triangle.2.circlepath")
-                        } else {
-                            Label("Disconnected", systemImage: "cable.connector.slash")
-                        }
+        NavigationStack {
+            ScriptsRootView(device: device)
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                HStack(spacing: 8) {
+                    if device.isConnected {
+                        Label("Connected", systemImage: "cable.connector")
+                    } else if firmwareUpdater.dfuConnected {
+                        Label("Update Mode", systemImage: "arrow.triangle.2.circlepath")
+                    } else {
+                        Label("Disconnected", systemImage: "cable.connector.slash")
+                    }
 
-                        if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
-                            Text("EMWaver \(v)")
+                    if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
+                        Text("EMWaver \(v)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            ToolbarItem(placement: .automatic) {
+                if auth.isSignedIn {
+                    Menu {
+                        if let email = auth.session?.email, !email.isEmpty {
+                            Text(email)
                                 .foregroundStyle(.secondary)
                         }
+
+                        Divider()
+
+                        Button("Sign Out") {
+                            Task { await auth.signOut() }
+                        }
+                    } label: {
+                        Label(auth.userLabel, systemImage: "person.crop.circle")
                     }
-                }
-
-                ToolbarItem(placement: .automatic) {
-                    if auth.isSignedIn {
-                        Menu {
-                            if let email = auth.session?.email, !email.isEmpty {
-                                Text(email)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Divider()
-
-                            Button("Sign Out") {
-                                Task { await auth.signOut() }
-                            }
-                        } label: {
-                            Label(auth.userLabel, systemImage: "person.crop.circle")
-                        }
-                    } else {
-                        Button {
-                            auth.isSignInSheetPresented = true
-                        } label: {
-                            Label("Sign In", systemImage: "person.crop.circle.badge.plus")
-                        }
+                } else {
+                    Button {
+                        auth.isSignInSheetPresented = true
+                    } label: {
+                        Label("Sign In", systemImage: "person.crop.circle.badge.plus")
                     }
                 }
             }
-            .sheet(isPresented: $auth.isSignInSheetPresented) {
-                SignInSheet()
-                    .environmentObject(auth)
-            }
+        }
+        .sheet(isPresented: $auth.isSignInSheetPresented) {
+            SignInSheet()
+                .environmentObject(auth)
+        }
     }
 }
 

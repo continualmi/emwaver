@@ -14,74 +14,76 @@ struct ScriptsContainerView: View {
     @State private var showingAgentChat = false
 
     var body: some View {
-        ScriptsRootView(device: bleManager)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(connectionStatusColor)
-                            .frame(width: 8, height: 8)
-                        Text(connectionStatusText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button("Agent") {
-                            showingAgentChat = true
-                        }
-
-                        Divider()
-
-                        Button("Refresh Ports") {
-                            bleManager.refreshPorts()
-                        }
-
-                        if bleManager.isConnected {
-                            Button("Disconnect", role: .destructive) {
-                                bleManager.disconnect()
-                            }
-                        } else {
-                            Button(bleManager.isScanning ? "Scanning…" : "Connect") {
-                                bleManager.startScan()
-                            }
-                            .disabled(bleManager.isScanning)
-                        }
-
-                        if let port = bleManager.connectedPortName, !port.isEmpty {
-                            Divider()
-                            Text(port)
+        NavigationStack {
+            ScriptsRootView(device: bleManager)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(connectionStatusColor)
+                                .frame(width: 8, height: 8)
+                            Text(connectionStatusText)
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
+                        .accessibilityElement(children: .combine)
+                    }
 
-                        if let err = bleManager.lastErrorText, !err.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Menu {
+                            Button("Agent") {
+                                showingAgentChat = true
+                            }
+
                             Divider()
-                            Text(err)
-                                .foregroundStyle(.secondary)
+
+                            Button("Refresh Ports") {
+                                bleManager.refreshPorts()
+                            }
+
+                            if bleManager.isConnected {
+                                Button("Disconnect", role: .destructive) {
+                                    bleManager.disconnect()
+                                }
+                            } else {
+                                Button(bleManager.isScanning ? "Scanning…" : "Connect") {
+                                    bleManager.startScan()
+                                }
+                                .disabled(bleManager.isScanning)
+                            }
+
+                            if let port = bleManager.connectedPortName, !port.isEmpty {
+                                Divider()
+                                Text(port)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let err = bleManager.lastErrorText, !err.isEmpty {
+                                Divider()
+                                Text(err)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } label: {
+                            Image(systemName: "cable.connector")
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
                     }
                 }
-            }
-            .sheet(isPresented: $showingAgentChat) {
-                NavigationStack {
-                    AgentChatPanelView(viewModel: agentViewModel)
-                        .navigationTitle("Agent")
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") { showingAgentChat = false }
-                            }
+        }
+        .sheet(isPresented: $showingAgentChat) {
+            NavigationStack {
+                AgentChatPanelView(viewModel: agentViewModel)
+                    .navigationTitle("Agent")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showingAgentChat = false }
                         }
-                }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
+                    }
             }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var connectionStatusText: String {
