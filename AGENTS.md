@@ -69,6 +69,7 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Shared assets:** `assets/` (default scripts, etc.)
 - **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`)
 - **Website:** `frontend/` (Next.js)
+- **Personal dev env (macOS):** `DEV_ENV_MACOS.md` (my preferred local setup; not product docs)
 
 ## Repository Code Map (Deep Tree)
 

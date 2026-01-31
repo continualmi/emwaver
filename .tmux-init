@@ -10,40 +10,44 @@ tmux clear-history -t $SESSION:1
 tmux rename-window -t $SESSION:1 'terminal'
 tmux split-window -h -t $SESSION:1 -c "$PROJECT_DIR"
 tmux send-keys -t $SESSION:1.2 'lazygit' C-m
-
-# Pane 3: Editor (below LazyGit)
-tmux split-window -v -p 30 -t $SESSION:1.2 -c "$PROJECT_DIR"
-tmux send-keys -t $SESSION:1.3 'vi .' C-m
 tmux select-pane -t $SESSION:1.1
 
-# Window 2: Build Operations (2x2 Grid)
-# Explicitly set the directory for the new window
-tmux new-window -t $SESSION -n 'build-ops' -c "$PROJECT_DIR"
+# Window 2: Dev Ops (Editor + 2x2 Grid)
+# Left 1/3: vi
+# Right 2/3: Backend/Firmware/Android/Web in a 2x2 grid (equal panes)
 
-# 1. Split window horizontally -> Left(1) | Right(2)
-tmux split-window -h -t $SESSION:2 -c "$PROJECT_DIR"
+# Use pane_id capture so we don't depend on tmux's pane numbering.
+PANE_EDITOR=$(tmux new-window -t $SESSION -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# 2. Split Left pane vertically -> Top-Left(1) / Bottom-Left(2) | Right(3)
-tmux split-window -v -t $SESSION:2.1 -c "$PROJECT_DIR"
+# Split horizontally: Left (~1/6) | Right (~5/6)
+# -p is the percentage size of the *new* pane.
+PANE_RIGHT=$(tmux split-window -h -p 84 -t "$PANE_EDITOR" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# 3. Split Right pane (now pane 3) vertically -> Top-Left(1) / Bottom-Left(2) | Top-Right(3) / Bottom-Right(4)
-tmux split-window -v -t $SESSION:2.3 -c "$PROJECT_DIR"
+# Left: Editor
+tmux send-keys -t "$PANE_EDITOR" 'vi .' C-m
 
-# Pane 1 (Top Left): Backend (Flask)
-tmux send-keys -t $SESSION:2.1 'cd backend' C-m
-tmux send-keys -t $SESSION:2.1 'python app.py'
+# Right: make a 2x2 grid with equal halves
+# Order matters: split right pane into top/bottom, then split each row into left/right.
+PANE_RIGHT_BOTTOM=$(tmux split-window -v -p 50 -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_RIGHT_TOP_RIGHT=$(tmux split-window -h -p 50 -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_RIGHT_BOTTOM_RIGHT=$(tmux split-window -h -p 50 -t "$PANE_RIGHT_BOTTOM" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# Pane 2 (Bottom Left): Firmware
-tmux send-keys -t $SESSION:2.2 'cd stm/emwaver-firmware' C-m
-tmux send-keys -t $SESSION:2.2 'emwaver build && emwaver flash'
+# Assign commands
+# Top-left of right grid: Backend (Flask)
+tmux send-keys -t "$PANE_RIGHT" 'cd backend' C-m
+tmux send-keys -t "$PANE_RIGHT" 'python app.py'
 
-# Pane 3 (Top Right): Android
-tmux send-keys -t $SESSION:2.3 'cd android' C-m
-tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
+# Top-right of right grid: Android
+tmux send-keys -t "$PANE_RIGHT_TOP_RIGHT" 'cd android' C-m
+tmux send-keys -t "$PANE_RIGHT_TOP_RIGHT" './gradlew installDebug'
 
-# Pane 4 (Bottom Right): Web (Next.js)
-tmux send-keys -t $SESSION:2.4 'cd frontend' C-m
-tmux send-keys -t $SESSION:2.4 'npm run dev'
+# Bottom-left of right grid: Firmware
+tmux send-keys -t "$PANE_RIGHT_BOTTOM" 'cd stm/emwaver-firmware' C-m
+tmux send-keys -t "$PANE_RIGHT_BOTTOM" 'emwaver build && emwaver flash'
+
+# Bottom-right of right grid: Web (Next.js)
+tmux send-keys -t "$PANE_RIGHT_BOTTOM_RIGHT" 'cd frontend' C-m
+tmux send-keys -t "$PANE_RIGHT_BOTTOM_RIGHT" 'npm run dev'
 
 # Start on terminal window, pane 1
 tmux select-window -t "$SESSION:1"
