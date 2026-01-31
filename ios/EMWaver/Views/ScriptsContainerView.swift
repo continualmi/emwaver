@@ -18,26 +18,7 @@ struct ScriptsContainerView: View {
             ScriptsRootView(device: bleManager)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(connectionStatusColor)
-                                .frame(width: 8, height: 8)
-                            Text(connectionStatusText)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-
-                    ToolbarItem(placement: .navigationBarTrailing) {
                         Menu {
-                            Button("Agent") {
-                                showingAgentChat = true
-                            }
-
-                            Divider()
-
                             Button("Refresh Ports") {
                                 bleManager.refreshPorts()
                             }
@@ -47,7 +28,7 @@ struct ScriptsContainerView: View {
                                     bleManager.disconnect()
                                 }
                             } else {
-                                Button(bleManager.isScanning ? "Scanning…" : "Connect") {
+                                Button(bleManager.isScanning ? "Scanning..." : "Connect") {
                                     bleManager.startScan()
                                 }
                                 .disabled(bleManager.isScanning)
@@ -65,7 +46,22 @@ struct ScriptsContainerView: View {
                                     .foregroundStyle(.secondary)
                             }
                         } label: {
-                            Image(systemName: "cable.connector")
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(connectionStatusColor)
+                                    .frame(width: 8, height: 8)
+                                Image(systemName: "cable.connector")
+                            }
+                            .contentShape(Rectangle())
+                            .accessibilityLabel(connectionStatusText)
+                        }
+                    }
+
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showingAgentChat = true
+                        } label: {
+                            Image(systemName: "sparkles")
                         }
                     }
                 }
