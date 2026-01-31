@@ -39,6 +39,8 @@ internal sealed class ScriptRepository
         var localRaw = Directory
             .EnumerateFiles(LocalScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
             .Where(p => EmwExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
+            // Hide script_bootstrap from local list too (may exist from old versions that copied bundled scripts).
+            .Where(p => !string.Equals(Path.GetFileNameWithoutExtension(p), "script_bootstrap", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         var bundledRaw = new List<string>();
