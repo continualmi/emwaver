@@ -208,7 +208,8 @@ struct ScriptPlotView: View {
                 let dx = value.translation.width
                 let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
                 let deltaX = Double(-dx / plotFrame.width) * domainRange
-                domain = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
+                let next = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
+                domain = clampDomain(next, bounds: config.xBounds)
             }
             .onEnded { value in
                 defer {
@@ -308,7 +309,8 @@ struct ScriptPlotView: View {
                 let dx = value.translation.width
                 let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
                 let deltaX = Double(-dx / size.width) * domainRange
-                domain = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
+                let next = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
+                domain = clampDomain(next, bounds: config.xBounds)
             }
             .onEnded { value in
                 defer {
@@ -343,7 +345,8 @@ struct ScriptPlotView: View {
                 let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
                 let center = (domain.min + domain.max) * 0.5
                 let nextRange = max(domainRange / Double(scale), 1)
-                domain = PlotDomain(min: center - nextRange * 0.5, max: center + nextRange * 0.5)
+                let next = PlotDomain(min: center - nextRange * 0.5, max: center + nextRange * 0.5)
+                domain = clampDomain(next, bounds: config.xBounds)
             }
             .onEnded { _ in
                 isInteracting = false
@@ -417,7 +420,9 @@ struct ScriptPlotView: View {
         let nextMin = anchor - t * nextRange
         let nextMax = nextMin + nextRange
         if nextMax > nextMin, nextMin.isFinite, nextMax.isFinite {
-            domain = PlotDomain(min: nextMin, max: nextMax)
+            let next = PlotDomain(min: nextMin, max: nextMax)
+            let bounds = PlotDomain.boundsFromProps(node.props.raw)
+            domain = clampDomain(next, bounds: bounds)
         }
 
         emitViewportSoon()
@@ -439,6 +444,45 @@ struct ScriptPlotView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
 #endif
+
+    private func clampDomain(_ proposed: PlotDomain, bounds: PlotDomain?) -> PlotDomain {
+        guard proposed.min.isFinite, proposed.max.isFinite, proposed.max > proposed.min else {
+            return domain
+        }
+        guard let bounds, bounds.min.isFinite, bounds.max.isFinite, bounds.max > bounds.min else {
+            return proposed
+        }
+
+        let boundsRange = bounds.max - bounds.min
+        let range = proposed.max - proposed.min
+        if range >= boundsRange {
+            return bounds
+        }
+
+        var minV = proposed.min
+        var maxV = proposed.max
+        if minV < bounds.min {
+            let delta = bounds.min - minV
+            minV += delta
+            maxV += delta
+        }
+        if maxV > bounds.max {
+            let delta = maxV - bounds.max
+            minV -= delta
+            maxV -= delta
+        }
+
+        if minV < bounds.min {
+            minV = bounds.min
+        }
+        if maxV > bounds.max {
+            maxV = bounds.max
+        }
+        if maxV <= minV {
+            return bounds
+        }
+        return PlotDomain(min: minV, max: maxV)
+    }
 }
 
 private struct PlotPoint: Identifiable {
@@ -462,7 +506,17 @@ private struct PlotDomain: Equatable {
         return PlotDomain(min: min, max: max)
     }
 
-    private static func extractDouble(_ value: Any?) -> Double? {
+    static func boundsFromProps(_ raw: [String: Any]) -> PlotDomain? {
+        let min = extractDouble(raw["xBoundsMin"]) ?? extractDouble(raw["xDomainMin"])
+        let max = extractDouble(raw["xBoundsMax"]) ?? extractDouble(raw["xDomainMax"])
+        guard let min, let max else { return nil }
+        if !min.isFinite || !max.isFinite || max <= min {
+            return nil
+        }
+        return PlotDomain(min: min, max: max)
+    }
+
+    fileprivate static func extractDouble(_ value: Any?) -> Double? {
         if let n = value as? NSNumber { return n.doubleValue }
         if let d = value as? Double { return d }
         if let i = value as? Int { return Double(i) }
@@ -475,6 +529,7 @@ private struct PlotConfig {
     let height: CGFloat
     let yMin: Double
     let yMax: Double
+    let xBounds: PlotDomain?
     let overlayText: String?
     let errorText: String?
     let points: [PlotPoint]
@@ -485,6 +540,7 @@ private struct PlotConfig {
         height = CGFloat((raw["height"] as? NSNumber)?.doubleValue ?? 400)
         yMin = (raw["yMin"] as? NSNumber)?.doubleValue ?? -128
         yMax = (raw["yMax"] as? NSNumber)?.doubleValue ?? 384
+        xBounds = PlotDomain.boundsFromProps(raw)
         overlayText = raw["overlayText"] as? String
         errorText = raw["errorText"] as? String
 

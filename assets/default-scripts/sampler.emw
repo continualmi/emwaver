@@ -329,6 +329,8 @@ function render() {
           dataY: dataY,
           xMin: xMin,
           xMax: xMax,
+          xBoundsMin: 0,
+          xBoundsMax: maxBits,
           yMin: 0,
           yMax: 255,
           errorText: chartErr,
