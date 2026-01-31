@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "EMWaverAppleCore",
     platforms: [
-        .iOS(.v16),
+        .iOS(.v17),
         .macOS(.v13),
     ],
     products: [
@@ -29,6 +29,7 @@ let package = Package(
             name: "EMWaverScriptSwiftUI",
             dependencies: [
                 "EMWaverScriptModel",
+                "EMWaverScriptRuntime",
             ],
             path: "Sources/EMWaverScriptSwiftUI"
         ),

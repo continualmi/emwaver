@@ -53,8 +53,6 @@ var binsText = '900';
 var bufLen = 0;
 var xMin = 0;
 var xMax = 10000;
-var dataX = [];
-var dataY = [];
 var chartErr = '';
 
 var __pendingViewport = null;
@@ -83,7 +81,6 @@ function __applyViewportRange(min, max) {
 
   xMin = lo;
   xMax = hi;
-  refreshPlot();
   render();
 }
 
@@ -131,14 +128,10 @@ function listFiles() {
 
 function refreshPlot() {
   chartErr = '';
-  dataX = [];
-  dataY = [];
   try {
     bufLen = Sampler.lenBytes();
     var maxBits = Math.max(0, bufLen * 8);
     if (maxBits <= 0) return;
-
-    var bins = clamp(i(binsText, 900), 64, 6000);
     var start = clamp(i(xMin, 0), 0, maxBits);
     var end = clamp(i(xMax, 10000), 0, maxBits);
     if (end <= start) {
@@ -148,10 +141,6 @@ function refreshPlot() {
 
     xMin = start;
     xMax = end;
-
-    var v = Sampler.compressViewport({ startBit: start, endBit: end, bins: bins });
-    dataX = v.timeValues || [];
-    dataY = v.dataValues || [];
   } catch (e) {
     chartErr = String(e && e.message ? e.message : e);
   }
@@ -325,12 +314,10 @@ function render() {
         }),
         UI.plot({
           height: 320,
-          dataX: dataX,
-          dataY: dataY,
+          source: 'samplerBits',
+          bins: clamp(i(binsText, 900), 64, 6000),
           xMin: xMin,
           xMax: xMax,
-          xBoundsMin: 0,
-          xBoundsMax: maxBits,
           yMin: 0,
           yMax: 255,
           errorText: chartErr,
@@ -348,7 +335,6 @@ function render() {
               onTap: function () {
                 xMin = 0;
                 xMax = 10000;
-                refreshPlot();
                 render();
               },
             }),

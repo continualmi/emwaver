@@ -3,7 +3,7 @@ import Foundation
 #if canImport(Darwin)
 import Darwin
 
-enum RustBufferCore {
+public enum RustBufferCore {
     typealias LoadRxBytesFn = @convention(c) (UnsafePointer<UInt8>?, Int) -> Void
     typealias CompressDataBitsFn = @convention(c) (
         Int32,
@@ -27,13 +27,18 @@ enum RustBufferCore {
     private static let compressDataBits: CompressDataBitsFn? = sym("emw_buffer_compress_data_bits", as: CompressDataBitsFn.self)
     private static let freeF32: FreeF32Fn? = sym("emw_free_f32", as: FreeF32Fn.self)
 
-    static func compressViewport(
+    private static let lock = NSLock()
+
+    public static func compressViewport(
         bufferBytes: Data,
         rangeStart: Int32,
         rangeEnd: Int32,
         numberBins: Int32
     ) -> (timeValues: [Double], dataValues: [Double])? {
         guard let loadRxBytes, let compressDataBits, let freeF32 else { return nil }
+
+        lock.lock()
+        defer { lock.unlock() }
 
         bufferBytes.withUnsafeBytes { raw in
             loadRxBytes(raw.bindMemory(to: UInt8.self).baseAddress, bufferBytes.count)
@@ -66,4 +71,3 @@ enum RustBufferCore {
     }
 }
 #endif
-

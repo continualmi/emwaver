@@ -453,31 +453,6 @@ Sampler.__scriptShim = true;
     };
   };
 
-  Sampler.compressViewport = function (opts) {
-    var startBit = Math.max(0, Number(opts && opts.startBit) || 0);
-    var endBit = Math.max(0, Number(opts && opts.endBit) || 0);
-    var bins = Math.max(0, Number(opts && opts.bins) || 0);
-
-    var resp = null;
-    if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.compressViewport === 'function') {
-      resp = __scriptHostSampler.buffer.compressViewport.call(__scriptHostSampler.buffer, {
-        startBit: startBit,
-        endBit: endBit,
-        bins: bins,
-      });
-    } else if (typeof _scriptSamplerBufferCompressViewport === 'function') {
-      resp = _scriptSamplerBufferCompressViewport(startBit, endBit, bins);
-    } else {
-      throw new Error('Sampler.compressViewport unavailable on this host');
-    }
-
-    return {
-      bufferLenBytes: Number(resp && (resp.bufferLenBytes != null ? resp.bufferLenBytes : resp.buffer_len_bytes)),
-      timeValues: (resp && (resp.timeValues || resp.time_values)) || [],
-      dataValues: (resp && (resp.dataValues || resp.data_values)) || [],
-    };
-  };
-
   Sampler.sliceBytes = function (byteStart, byteEnd) {
     var start = Math.max(0, Number(byteStart) || 0);
     var end = Math.max(start, Number(byteEnd) || 0);
@@ -1472,6 +1447,17 @@ if (typeof analogWrite !== 'function') {
 }
 
 __scriptGlobal.UI = UI;
+
+// Create a native-side plot buffer and return an id.
+// This avoids embedding large arrays into the UI tree.
+if (__scriptGlobal.UI) {
+  __scriptGlobal.UI.buffer = function (bytes) {
+    if (typeof _scriptPlotBufferSet !== 'function') {
+      throw new Error('UI.buffer unavailable on this host');
+    }
+    return String(_scriptPlotBufferSet(bytes) || '');
+  };
+}
 
 // -----------------------------------------------------------------------------
 // Desktop host helpers (optional)
