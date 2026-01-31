@@ -13,7 +13,7 @@
         android:id="@+id/asset_scripts_title"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Asset Scripts (Read-Only)"
+        android:text="Example scripts"
         android:textStyle="bold"
         android:textSize="15sp"
         android:padding="8dp"
