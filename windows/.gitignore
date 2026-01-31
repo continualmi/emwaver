@@ -6,3 +6,6 @@
 # WinUI packaging outputs
 **/AppPackages/
 **/BundleArtifacts/
+
+# Local Rust buffer core DLL (generated)
+EMWaver/Native/*.dll

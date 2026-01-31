@@ -27,6 +27,8 @@
   <ItemGroup>
     <None Include="Native\\*.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <!-- Place native DLLs in the app root so DllImport can find them. -->
+      <TargetPath>%(Filename)%(Extension)</TargetPath>
     </None>
   </ItemGroup>
 

@@ -1,3 +1,4 @@
+using EMWaver.Interop;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -99,6 +100,17 @@ public sealed partial class MainWindow : Window
         DeviceVersionText.Text = device.IsConnected && !string.IsNullOrWhiteSpace(device.DeviceEmwaverVersion)
             ? $"EMWaver {device.DeviceEmwaverVersion}"
             : string.Empty;
+
+        if (device.IsConnected && NativeBufferRust.IsAvailable)
+        {
+            var rx = NativeBufferRust.GetRxPacketCount();
+            var tx = NativeBufferRust.GetTxPacketCount();
+            DeviceBufferText.Text = $"RX {rx} TX {tx}";
+        }
+        else
+        {
+            DeviceBufferText.Text = string.Empty;
+        }
 
         AutoConnectMenuItem.IsChecked = device.AutoConnectEnabled;
         UpdateModeStatusItem.Text = device.DfuConnected ? "Update Mode: Detected" : "Update Mode: Not detected";
