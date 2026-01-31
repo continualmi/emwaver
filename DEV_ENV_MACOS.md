@@ -240,6 +240,9 @@ else
 fi
 ```
 
+Note:
+- The script uses `set -euo pipefail`; outside tmux, `TMUX` is usually unset, so use `"${TMUX:-}"` (not `$TMUX`) to avoid an "unbound variable" error.
+
 ### Bind Ctrl+f (zsh)
 
 Add to `~/.zshrc`:
