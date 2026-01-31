@@ -10,6 +10,7 @@ import EMWaverScriptRuntime
 
 struct ScriptsContainerView: View {
     @EnvironmentObject var bleManager: USBManager
+    @EnvironmentObject private var auth: AuthenticationManager
     @StateObject private var agentViewModel = AgentChatViewModel()
     @State private var showingAgentChat = false
 
@@ -57,7 +58,30 @@ struct ScriptsContainerView: View {
                         }
                     }
 
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        if auth.isSignedIn {
+                            Menu {
+                                if let email = auth.session?.email, !email.isEmpty {
+                                    Text(email)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Divider()
+
+                                Button("Sign Out") {
+                                    Task { await auth.signOut() }
+                                }
+                            } label: {
+                                Image(systemName: "person.crop.circle")
+                            }
+                        } else {
+                            Button {
+                                auth.isSignInSheetPresented = true
+                            } label: {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                            }
+                        }
+
                         Button {
                             showingAgentChat = true
                         } label: {
@@ -79,6 +103,12 @@ struct ScriptsContainerView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $auth.isSignInSheetPresented) {
+            SignInSheet()
+                .environmentObject(auth)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
     }
 

@@ -44,6 +44,7 @@ import java.util.List;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
 import com.emwaver.emwaverandroidapp.ui.agent.AgentChatBottomSheetDialogFragment;
+import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -108,6 +109,11 @@ public class MainActivity extends AppCompatActivity {
                 if (menuItem.getItemId() == R.id.action_agent) {
                     AgentChatBottomSheetDialogFragment dialog = new AgentChatBottomSheetDialogFragment();
                     dialog.show(getSupportFragmentManager(), "AgentChat");
+                    return true;
+                }
+                if (menuItem.getItemId() == R.id.action_sign_in) {
+                    SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
+                    dialog.show(getSupportFragmentManager(), "SignIn");
                     return true;
                 }
                 return false;
