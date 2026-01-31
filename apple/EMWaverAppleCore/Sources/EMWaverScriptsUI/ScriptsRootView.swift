@@ -18,6 +18,7 @@ import AppKit
 public struct ScriptsRootView: View {
     @StateObject private var viewModel = ScriptsViewModel()
     @StateObject private var previewManager = ScriptPreviewManager()
+    @StateObject private var agentViewModel = AgentChatViewModel()
 
     private let device: (any ScriptDevice)?
 
@@ -32,6 +33,10 @@ public struct ScriptsRootView: View {
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
 
+    #if os(macOS)
+    @State private var showingAgentPanel = false
+    #endif
+
     public init(device: (any ScriptDevice)? = nil) {
         self.device = device
     }
@@ -39,11 +44,22 @@ public struct ScriptsRootView: View {
     public var body: some View {
         NavigationStack {
             ZStack {
-                if showingEditor {
-                    editorView
-                } else {
-                    mainView
+                #if os(macOS)
+                HStack(spacing: 0) {
+                    primaryContent
+                        .frame(minWidth: 520)
+
+                    if showingAgentPanel {
+                        Divider()
+                        AgentChatPanelView(viewModel: agentViewModel)
+                            .frame(width: 380)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
                 }
+                .animation(.easeInOut(duration: 0.22), value: showingAgentPanel)
+                #else
+                primaryContent
+                #endif
 
                 if viewModel.isPerformingAction {
                     ProgressView()
@@ -103,6 +119,16 @@ public struct ScriptsRootView: View {
             .onAppear {
                 previewManager.attach(device: device)
                 loadScripts()
+            }
+        }
+    }
+
+    private var primaryContent: some View {
+        Group {
+            if showingEditor {
+                editorView
+            } else {
+                mainView
             }
         }
     }
@@ -373,6 +399,17 @@ public struct ScriptsRootView: View {
 
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
+        #if os(macOS)
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showingAgentPanel.toggle()
+            } label: {
+                Image(systemName: "sidebar.right")
+            }
+            .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
+        }
+        #endif
+
         if showingEditor {
             ToolbarItem(placement: .navigation) {
                 Button("Close") { exitEditor() }
@@ -412,11 +449,7 @@ public struct ScriptsRootView: View {
                     Image(systemName: "ellipsis.circle")
                 }
 
-                if editorIsReadOnly, let currentScriptId {
-                    Button("Make Copy") {
-                        presentNamePrompt(context: .copy(id: currentScriptId))
-                    }
-                } else {
+                if !editorIsReadOnly {
                     Button(viewModel.isExistingScript(currentScriptId ?? "") ? "Save" : "Create") {
                         saveCurrentScript()
                     }
