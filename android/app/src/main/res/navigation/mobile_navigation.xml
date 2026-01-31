@@ -3,32 +3,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/mobile_navigation"
-    app:startDestination="@+id/navigation_emwaver">
-
-
-    <fragment
-        android:id="@+id/navigation_cc1101"
-        android:name="com.emwaver.emwaverandroidapp.ui.ism.IsmFragment"
-        android:label="ISM"
-        tools:layout="@layout/fragment_ism" />
+    app:startDestination="@+id/navigation_scripts">
 
     <fragment
         android:id="@+id/navigation_scripts"
         android:name="com.emwaver.emwaverandroidapp.ui.scripts.ScriptsFragment"
-        android:label="Scripts"
-        tools:layout="@layout/fragment_scripts" />
-
-    <fragment
-        android:id="@+id/navigation_sampler"
-        android:name="com.emwaver.emwaverandroidapp.ui.sampler.SamplerFragment"
-        android:label="Sampler"
-        tools:layout="@layout/fragment_sampler" />
-
-    <fragment
-        android:id="@+id/navigation_emwaver"
-        android:name="com.emwaver.emwaverandroidapp.ui.emwaver.EMWaverFragment"
         android:label="EMWaver"
-        tools:layout="@layout/fragment_emwaver" />
-
-
+        tools:layout="@layout/fragment_scripts" />
 </navigation>
