@@ -23,6 +23,7 @@ public struct ScriptsRootView: View {
 
     @State private var showingEditor = false
     @State private var showingPreview = false
+    @State private var previewLaunchedFromEditor = false
     @State private var currentScriptId: String?
     @State private var editorContent: String = ""
     @State private var editorIsReadOnly = false
@@ -245,6 +246,8 @@ public struct ScriptsRootView: View {
     }
 
     private func previewScript(_ id: String) {
+        // Track whether we launched from the editor or main screen
+        let wasInEditor = showingEditor
         if showingEditor, let currentId = currentScriptId {
             viewModel.updateDraft(for: currentId, content: editorContent)
         }
@@ -258,6 +261,7 @@ public struct ScriptsRootView: View {
                 let name = viewModel.scriptName(for: id)
                 let modules = viewModel.moduleSources()
                 previewManager.render(script: script, name: name, moduleSources: modules)
+                previewLaunchedFromEditor = wasInEditor
                 showingPreview = true
                 showingEditor = false
             }
@@ -296,7 +300,13 @@ public struct ScriptsRootView: View {
 
     private func exitPreview() {
         showingPreview = false
-        currentScriptId = nil
+        // If launched from editor, go back to editor; otherwise go to main screen
+        if previewLaunchedFromEditor {
+            showingEditor = true
+        } else {
+            currentScriptId = nil
+        }
+        previewLaunchedFromEditor = false
         previewManager.exitPreview()
     }
 
