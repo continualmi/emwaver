@@ -1,6 +1,5 @@
 using EMWaver.Models;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -86,7 +85,7 @@ public sealed partial class ScriptsPage : Page
         LineNumbersTransform.Y = -_editorScrollViewer.VerticalOffset;
     }
 
-    private void OnEditorTextChanged(object sender, RoutedEventArgs e)
+    private void OnEditorTextChanged(object sender, TextChangedEventArgs e)
     {
         if (_suppressEditorChange)
         {
@@ -103,7 +102,8 @@ public sealed partial class ScriptsPage : Page
         UpdateCommandStates();
 
         UpdateLineNumbers();
-        ScheduleHighlight();
+        // Disabled for now: RichEditBox formatting-based highlighting caused
+        // unacceptable scroll snapping (viewport jumps back to caret while scrolling).
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
@@ -455,10 +455,8 @@ public sealed partial class ScriptsPage : Page
         _suppressEditorChange = true;
         try
         {
-            var normalized = NormalizeLineEndings(text ?? string.Empty);
-            var richText = normalized.Replace("\n", "\r");
-            EditorBox.Document.SetText(TextSetOptions.None, richText);
-            EditorBox.Document.Selection.SetRange(0, 0);
+            EditorBox.Text = NormalizeLineEndings(text ?? string.Empty);
+            EditorBox.Select(0, 0);
         }
         finally
         {
@@ -468,8 +466,7 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextRaw()
     {
-        EditorBox.Document.GetText(TextGetOptions.None, out var text);
-        return text ?? string.Empty;
+        return EditorBox.Text ?? string.Empty;
     }
 
     private string GetEditorTextNormalized()
@@ -507,23 +504,7 @@ public sealed partial class ScriptsPage : Page
 
     private void ScheduleHighlight(bool immediate = false)
     {
-        if (_isScrolling)
-        {
-            return;
-        }
-
-        if (immediate)
-        {
-            ApplySyntaxHighlighting();
-            return;
-        }
-
-        _highlightTimer ??= DispatcherQueue.CreateTimer();
-        _highlightTimer.Stop();
-        _highlightTimer.Interval = TimeSpan.FromMilliseconds(160);
-        _highlightTimer.Tick -= OnHighlightTimerTick;
-        _highlightTimer.Tick += OnHighlightTimerTick;
-        _highlightTimer.Start();
+        // Disabled: see comment in OnEditorTextChanged.
     }
 
     private void OnHighlightTimerTick(DispatcherQueueTimer sender, object args)
@@ -534,90 +515,7 @@ public sealed partial class ScriptsPage : Page
 
     private void ApplySyntaxHighlighting()
     {
-        if (_suppressHighlight)
-        {
-            return;
-        }
-
-        // Never highlight while scrolling; RichEditBox will try to keep the caret visible
-        // and we do not want the viewport to snap back to the cursor.
-        if (_isScrolling)
-        {
-            return;
-        }
-
-        var text = GetEditorTextRaw();
-        if (text.Length == 0)
-        {
-            return;
-        }
-
-        // Keep highlighting lightweight.
-        if (text.Length > 250_000)
-        {
-            return;
-        }
-
-        var tokens = TokenizeJavaScript(text);
-        if (tokens.Count > 30_000)
-        {
-            return;
-        }
-
-        var doc = EditorBox.Document;
-
-        // Preserve scroll position; applying lots of formatting can make RichEditBox
-        // auto-scroll to keep the caret visible.
-        var sv = _editorScrollViewer;
-        var prevV = sv?.VerticalOffset ?? 0.0;
-        var prevH = sv?.HorizontalOffset ?? 0.0;
- 
-        _suppressHighlight = true;
-        try
-        {
-            // Base style.
-            var all = doc.GetRange(0, text.Length);
-            all.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4);
-            all.CharacterFormat.Bold = FormatEffect.Off;
-
-            foreach (var t in tokens)
-            {
-                var end = t.Start + t.Length;
-                if (t.Start < 0 || t.Length <= 0) continue;
-                if (end > text.Length) continue;
-
-                var r = doc.GetRange(t.Start, end);
-                switch (t.Kind)
-                {
-                    case JsTokenKind.Keyword:
-                        r.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0xC5, 0x86, 0xC0);
-                        r.CharacterFormat.Bold = FormatEffect.On;
-                        break;
-                    case JsTokenKind.String:
-                        r.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0xCE, 0x91, 0x78);
-                        break;
-                    case JsTokenKind.Comment:
-                        r.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0x6A, 0x99, 0x55);
-                        break;
-                    case JsTokenKind.Number:
-                        r.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0xB5, 0xCE, 0xA8);
-                        break;
-                }
-            }
-
-            if (sv != null)
-            {
-                sv.ChangeView(prevH, prevV, null, disableAnimation: true);
-            }
-        }
-        catch
-        {
-            // Best-effort highlighting.
-        }
-        finally
-        {
-            _suppressHighlight = false;
-        }
+        // Intentionally no-op (see comment in OnEditorTextChanged).
     }
 
     private enum JsTokenKind
