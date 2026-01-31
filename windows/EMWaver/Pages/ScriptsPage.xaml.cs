@@ -1,5 +1,6 @@
 using EMWaver.Models;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -25,10 +26,12 @@ public sealed partial class ScriptsPage : Page
     private bool _suppressEditorChange;
     private bool _suppressSelectionChange;
 
-    private DispatcherQueueTimer? _highlightTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _highlightTimer;
     private ScrollViewer? _editorScrollViewer;
+    private readonly List<ScrollViewer> _editorScrollViewers = new();
     private bool _suppressHighlight;
     private bool _isScrolling;
+    private bool _suppressEditorViewChanged;
 
     private static readonly SolidColorBrush BaseBrush = new(Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4));
     private static readonly SolidColorBrush KeywordBrush = new(Color.FromArgb(0xFF, 0xC5, 0x86, 0xC0));
@@ -41,10 +44,11 @@ public sealed partial class ScriptsPage : Page
         InitializeComponent();
         ScriptsList.ItemsSource = _scripts;
         AgentMessagesList.ItemsSource = _agentMessages;
-
+ 
         EditorBox.TextChanged += OnEditorTextChanged;
         EditorBox.Loaded += OnEditorLoaded;
-
+        EditorBox.KeyDown += OnEditorKeyDown;
+ 
         Loaded += OnLoaded;
     }
 
@@ -56,19 +60,23 @@ public sealed partial class ScriptsPage : Page
 
     private void OnEditorLoaded(object sender, RoutedEventArgs e)
     {
-        _editorScrollViewer ??= FindDescendantScrollViewer(EditorBox);
-        if (_editorScrollViewer == null)
-        {
-            return;
-        }
-
-        _editorScrollViewer.ViewChanged -= OnEditorViewChanged;
-        _editorScrollViewer.ViewChanged += OnEditorViewChanged;
+        AttachEditorScrollViewers();
         UpdateLineNumbersTransform();
     }
 
     private void OnEditorViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
+        if (sender is ScrollViewer sv)
+        {
+            _editorScrollViewer = sv;
+        }
+
+        if (_suppressEditorViewChanged)
+        {
+            UpdateLineNumbersTransform();
+            return;
+        }
+
         _isScrolling = e.IsIntermediate;
 
         if (_isScrolling)
@@ -90,13 +98,17 @@ public sealed partial class ScriptsPage : Page
     {
         if (_editorScrollViewer == null)
         {
-            return;
+            AttachEditorScrollViewers();
+            if (_editorScrollViewer == null)
+            {
+                return;
+            }
         }
 
         LineNumbersTransform.Y = -_editorScrollViewer.VerticalOffset;
     }
 
-    private void OnEditorTextChanged(object sender, TextChangedEventArgs e)
+    private void OnEditorTextChanged(object sender, RoutedEventArgs e)
     {
         if (_suppressEditorChange)
         {
@@ -465,8 +477,8 @@ public sealed partial class ScriptsPage : Page
         _suppressEditorChange = true;
         try
         {
-            EditorBox.Text = NormalizeLineEndings(text ?? string.Empty);
-            EditorBox.Select(0, 0);
+            EditorBox.Document.SetText(TextSetOptions.None, NormalizeLineEndings(text ?? string.Empty));
+            EditorBox.Document.Selection.SetRange(0, 0);
         }
         finally
         {
@@ -476,7 +488,8 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextRaw()
     {
-        return EditorBox.Text ?? string.Empty;
+        EditorBox.Document.GetText(TextGetOptions.None, out var text);
+        return text ?? string.Empty;
     }
 
     private string GetEditorTextNormalized()
@@ -488,6 +501,24 @@ public sealed partial class ScriptsPage : Page
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
         return text.Replace("\r\n", "\n").Replace("\r", "\n");
+    }
+
+    private void OnEditorKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Tab)
+        {
+            return;
+        }
+
+        if (_current == null || _current.IsBundled || EditorBox.IsReadOnly)
+        {
+            return;
+        }
+
+        // RichEditBox doesn't have AcceptsTab; handle tab insertion ourselves.
+        var sel = EditorBox.Document.Selection;
+        sel.Text = "\t";
+        e.Handled = true;
     }
 
     private void UpdateLineNumbers()
@@ -514,10 +545,6 @@ public sealed partial class ScriptsPage : Page
 
     private void ScheduleHighlight(bool immediate = false)
     {
-        // WinUI 3 TextBox doesn't expose TextHighlighters in this SDK, and the
-        // overlay approach proved too visually glitchy. Keep editing stable.
-        return;
-
         if (_isScrolling)
         {
             return;
@@ -537,7 +564,7 @@ public sealed partial class ScriptsPage : Page
         _highlightTimer.Start();
     }
 
-    private void OnHighlightTimerTick(DispatcherQueueTimer sender, object args)
+    private void OnHighlightTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
     {
         sender.Stop();
         ApplySyntaxHighlighting();
@@ -545,9 +572,6 @@ public sealed partial class ScriptsPage : Page
 
     private void ApplySyntaxHighlighting()
     {
-        // See ScheduleHighlight(): syntax highlighting is currently disabled on Windows.
-        return;
-
         if (_suppressHighlight)
         {
             return;
@@ -562,18 +586,80 @@ public sealed partial class ScriptsPage : Page
         // Keep it responsive.
         if (text.Length > 200_000)
         {
+            ResetSyntaxHighlighting();
             return;
         }
 
         var tokens = TokenizeJavaScript(text);
         if (tokens.Count > 25_000)
         {
+            ResetSyntaxHighlighting();
             return;
         }
 
         _suppressHighlight = true;
-        try { }
-        finally { _suppressHighlight = false; }
+        try
+        {
+            var sv = _editorScrollViewer;
+            var keepH = sv?.HorizontalOffset;
+            var keepV = sv?.VerticalOffset;
+
+            _suppressEditorViewChanged = true;
+
+            ResetSyntaxHighlighting();
+
+            foreach (var t in tokens)
+            {
+                var start = t.Start;
+                var end = start + t.Length;
+                if (start >= text.Length)
+                {
+                    continue;
+                }
+
+                if (end > text.Length)
+                {
+                    end = text.Length;
+                }
+                if (start < 0 || end <= start)
+                {
+                    continue;
+                }
+
+                var range = EditorBox.Document.GetRange(start, end);
+                range.CharacterFormat.ForegroundColor = t.Kind switch
+                {
+                    JsTokenKind.Keyword => KeywordBrush.Color,
+                    JsTokenKind.String => StringBrush.Color,
+                    JsTokenKind.Comment => CommentBrush.Color,
+                    JsTokenKind.Number => NumberBrush.Color,
+                    _ => BaseBrush.Color,
+                };
+            }
+
+            // Applying formatting can cause RichEditBox to snap the viewport back
+            // to the caret/selection. Restore the user's scroll position.
+            if (sv != null && keepH != null && keepV != null)
+            {
+                sv.ChangeView(keepH.Value, keepV.Value, zoomFactor: null, disableAnimation: true);
+            }
+        }
+        finally
+        {
+            _suppressHighlight = false;
+            _ = DispatcherQueue.TryEnqueue(() => _suppressEditorViewChanged = false);
+        }
+    }
+
+    private void ResetSyntaxHighlighting()
+    {
+        // Clear previous formatting back to the control's Foreground (when possible)
+        // so deleting tokens doesn't leave stale colors behind.
+        var baseColor = (EditorBox.Foreground as SolidColorBrush)?.Color ?? BaseBrush.Color;
+        EditorBox.Document.GetText(TextGetOptions.None, out var currentText);
+        var len = (currentText ?? string.Empty).Length;
+        var full = EditorBox.Document.GetRange(0, len);
+        full.CharacterFormat.ForegroundColor = baseColor;
     }
 
     private enum JsTokenKind
@@ -726,16 +812,35 @@ public sealed partial class ScriptsPage : Page
         return tokens;
     }
 
-    private static ScrollViewer? FindDescendantScrollViewer(DependencyObject root)
+    private void AttachEditorScrollViewers()
     {
+        foreach (var sv in _editorScrollViewers)
+        {
+            sv.ViewChanged -= OnEditorViewChanged;
+        }
+        _editorScrollViewers.Clear();
+
+        foreach (var sv in FindDescendantScrollViewers(EditorBox))
+        {
+            sv.ViewChanged += OnEditorViewChanged;
+            _editorScrollViewers.Add(sv);
+        }
+
+        _editorScrollViewer ??= _editorScrollViewers.FirstOrDefault();
+    }
+
+    private static List<ScrollViewer> FindDescendantScrollViewers(DependencyObject root)
+    {
+        var list = new List<ScrollViewer>(capacity: 2);
         var q = new Queue<DependencyObject>();
         q.Enqueue(root);
+
         while (q.Count > 0)
         {
             var cur = q.Dequeue();
             if (cur is ScrollViewer sv)
             {
-                return sv;
+                list.Add(sv);
             }
 
             var count = VisualTreeHelper.GetChildrenCount(cur);
@@ -745,7 +850,7 @@ public sealed partial class ScriptsPage : Page
             }
         }
 
-        return null;
+        return list;
     }
 
     private async Task<bool> ConfirmAsync(string title, string message, string primaryButtonText, string closeButtonText)
