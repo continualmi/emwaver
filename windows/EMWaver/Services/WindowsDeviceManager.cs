@@ -153,8 +153,12 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             LastErrorText = null;
 
-            var inDevsTask = DeviceInformation.FindAllAsync(MidiInPort.GetDeviceSelector()).AsTask();
-            var outDevsTask = DeviceInformation.FindAllAsync(MidiOutPort.GetDeviceSelector()).AsTask();
+            // Pair MIDI IN/OUT by container id (same physical USB device) rather than
+            // relying on exact Name matches, which are not stable across drivers.
+            var props = new[] { "System.Devices.ContainerId" };
+
+            var inDevsTask = DeviceInformation.FindAllAsync(MidiInPort.GetDeviceSelector(), props).AsTask();
+            var outDevsTask = DeviceInformation.FindAllAsync(MidiOutPort.GetDeviceSelector(), props).AsTask();
             var dfuTask = IsDfuPresentAsync();
 
             await Task.WhenAll(inDevsTask, outDevsTask, dfuTask);
@@ -162,13 +166,48 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var inDevs = inDevsTask.Result;
             var outDevs = outDevsTask.Result;
 
+            static string? ContainerIdOf(DeviceInformation d)
+            {
+                if (d.Properties == null) return null;
+                if (!d.Properties.TryGetValue("System.Devices.ContainerId", out var v)) return null;
+                return v?.ToString();
+            }
+
+            var outByContainerId = outDevs
+                .Select(d => new { Dev = d, Cid = ContainerIdOf(d) })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Cid))
+                .GroupBy(x => x.Cid!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Dev, StringComparer.OrdinalIgnoreCase);
+
             var pairs = inDevs
-                .Select(i => new { In = i, Out = outDevs.FirstOrDefault(o => o.Name == i.Name) })
-                .Where(p => p.Out != null)
+                .Select(i =>
+                {
+                    var cid = ContainerIdOf(i);
+                    if (!string.IsNullOrWhiteSpace(cid) && outByContainerId.TryGetValue(cid!, out var o))
+                    {
+                        return new { In = i, Out = o };
+                    }
+
+                    // Fallback: best-effort match by name.
+                    var byName = outDevs.FirstOrDefault(o => o.Name == i.Name);
+                    if (byName != null)
+                    {
+                        return new { In = i, Out = byName };
+                    }
+
+                    // Last fallback: case-insensitive contains match (helps when IN/OUT
+                    // ports include suffixes like "(MIDI In)" / "(MIDI Out)").
+                    var byContains = outDevs.FirstOrDefault(o =>
+                        o.Name.Contains(i.Name, StringComparison.OrdinalIgnoreCase)
+                        || i.Name.Contains(o.Name, StringComparison.OrdinalIgnoreCase));
+
+                    return byContains == null ? null : new { In = i, Out = byContains };
+                })
+                .Where(p => p != null)
                 .Select(p => new DevicePort(
-                    DisplayName: p.In.Name,
+                    DisplayName: p!.In.Name,
                     InDeviceId: p.In.Id,
-                    OutDeviceId: p.Out!.Id
+                    OutDeviceId: p.Out.Id
                 ))
                 .OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
