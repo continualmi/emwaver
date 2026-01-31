@@ -29,6 +29,8 @@ public sealed partial class ScriptsPage : Page
     private DispatcherQueueTimer? _highlightTimer;
     private ScrollViewer? _editorScrollViewer;
     private bool _suppressHighlight;
+    private bool _isScrolling;
+    private bool _pendingHighlightAfterScroll;
 
     public ScriptsPage()
     {
@@ -63,7 +65,21 @@ public sealed partial class ScriptsPage : Page
 
     private void OnEditorViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
+        _isScrolling = e.IsIntermediate;
+
+        if (_isScrolling)
+        {
+            // Avoid any heavy work while the user scrolls.
+            _highlightTimer?.Stop();
+        }
+
         UpdateLineNumbersTransform();
+
+        if (!_isScrolling && _pendingHighlightAfterScroll)
+        {
+            _pendingHighlightAfterScroll = false;
+            ScheduleHighlight();
+        }
     }
 
     private void UpdateLineNumbersTransform()
@@ -438,135 +454,16 @@ public sealed partial class ScriptsPage : Page
         return tcs.Task;
     }
 
-    /* private static string GetEditorHtml()
-    {
-        // Matches macOS EmwCodeEditor.swift, but uses WebView2 messaging.
-        return """
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset=\"UTF-8\">
-  <meta http-equiv=\"Content-Security-Policy\" content=\"default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;\">
-  <style>
-    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#1e1e1e; }
-    #container { width:100%; height:100%; }
-  </style>
-  <script src=\"https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js\"></script>
-</head>
-<body>
-  <div id=\"container\"></div>
-  <script>
-    const post = (obj) => {
-      try { window.chrome.webview.postMessage(obj); } catch (e) {}
-    };
 
-    require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' }});
-
-    window.MonacoEnvironment = {
-      getWorkerUrl: function(workerId, label) {
-        return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
-          self.MonacoEnvironment = { baseUrl: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/' };
-          importScripts('https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/base/worker/workerMain.js');
-        `)}`;
-      }
-    };
-
-    window.emw_setText = function(text) {
-      if (window.editor) window.editor.setValue(text ?? '');
-    };
-    window.emw_getText = function() {
-      if (!window.editor) return '';
-      return window.editor.getValue();
-    };
-    window.emw_setReadOnly = function(readOnly) {
-      if (window.editor) window.editor.updateOptions({ readOnly: !!readOnly });
-    };
-    window.emw_focus = function() {
-      if (window.editor) window.editor.focus();
-    };
-
-    require(['vs/editor/editor.main'], function() {
-      window.editor = monaco.editor.create(document.getElementById('container'), {
-        value: '',
-        language: 'javascript',
-        theme: 'vs-dark',
-        automaticLayout: true,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        fontSize: 13,
-        fontFamily: 'Consolas, SF Mono, Monaco, Menlo, monospace',
-        lineNumbers: 'on',
-        roundedSelection: true,
-        renderLineHighlight: 'line',
-        wordWrap: 'off',
-        readOnly: false,
-        contextmenu: true,
-        smoothScrolling: true,
-        cursorBlinking: 'smooth',
-        cursorSmoothCaretAnimation: 'on',
-        bracketPairColorization: { enabled: true },
-        guides: { bracketPairs: true, indentation: true }
-      });
-
-      post({ kind: 'ready' });
-
-      window.editor.onDidChangeModelContent(function() {
-        post({ kind: 'change', text: window.editor.getValue() });
-      });
-    });
-  </script>
-</body>
-</html>
-""";
-    }
-
-    private Task EditorSetTextAsync(string text)
-    {
-        if (!_editorReady) return Task.CompletedTask;
-        var json = JsonSerializer.Serialize(text ?? string.Empty);
-        return EditorWebView.ExecuteScriptAsync($"window.emw_setText({json});").AsTask();
-    }
-
-    private Task EditorSetReadOnlyAsync(bool readOnly)
-    {
-        if (!_editorReady) return Task.CompletedTask;
-        var js = readOnly ? "true" : "false";
-        return EditorWebView.ExecuteScriptAsync($"window.emw_setReadOnly({js});").AsTask();
-    }
-
-    private Task EditorFocusAsync()
-    {
-        if (!_editorReady) return Task.CompletedTask;
-        return EditorWebView.ExecuteScriptAsync("window.emw_focus();").AsTask();
-    }
-
-    private async Task<string> EditorGetTextAsync()
-    {
-        if (!_editorReady)
-        {
-            return _pendingEditorText;
-        }
-
-        var resultJson = await EditorWebView.ExecuteScriptAsync("window.emw_getText();");
-        // ExecuteScriptAsync returns a JSON-encoded string.
-        try
-        {
-            return JsonSerializer.Deserialize<string>(resultJson) ?? string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-*/
 
     private void SetEditorText(string text)
     {
         _suppressEditorChange = true;
         try
         {
-            EditorBox.Document.SetText(TextSetOptions.None, text ?? string.Empty);
+            var normalized = NormalizeLineEndings(text ?? string.Empty);
+            var richText = normalized.Replace("\n", "\r");
+            EditorBox.Document.SetText(TextSetOptions.None, richText);
             EditorBox.Document.Selection.SetRange(0, 0);
         }
         finally
@@ -583,10 +480,7 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextNormalized()
     {
-        // RichEditBox often includes a trailing \r; normalize and remove the trailing terminator.
-        var raw = GetEditorTextRaw();
-        var normalized = NormalizeLineEndings(raw);
-        return normalized.TrimEnd('\r');
+        return NormalizeLineEndings(GetEditorTextRaw()).TrimEnd('\n');
     }
 
     private static string NormalizeLineEndings(string text)
@@ -597,11 +491,11 @@ public sealed partial class ScriptsPage : Page
 
     private void UpdateLineNumbers()
     {
-        var raw = GetEditorTextRaw();
+        var normalized = GetEditorTextNormalized();
         var lineCount = 1;
-        for (var i = 0; i < raw.Length; i++)
+        for (var i = 0; i < normalized.Length; i++)
         {
-            if (raw[i] == '\n') lineCount++;
+            if (normalized[i] == '\n') lineCount++;
         }
 
         if (lineCount < 1) lineCount = 1;
@@ -610,7 +504,7 @@ public sealed partial class ScriptsPage : Page
         for (var i = 1; i <= lineCount; i++)
         {
             sb.Append(i);
-            if (i != lineCount) sb.Append('\n');
+            if (i != lineCount) sb.Append("\r\n");
         }
 
         LineNumbersText.Text = sb.ToString();
@@ -619,6 +513,12 @@ public sealed partial class ScriptsPage : Page
 
     private void ScheduleHighlight(bool immediate = false)
     {
+        if (_isScrolling)
+        {
+            _pendingHighlightAfterScroll = true;
+            return;
+        }
+
         if (immediate)
         {
             ApplySyntaxHighlighting();
@@ -665,13 +565,11 @@ public sealed partial class ScriptsPage : Page
         }
 
         var doc = EditorBox.Document;
-        var selection = doc.Selection;
-        var selStart = selection.StartPosition;
-        var selEnd = selection.EndPosition;
 
         _suppressHighlight = true;
         try
         {
+            // Base style.
             var all = doc.GetRange(0, text.Length);
             all.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4);
             all.CharacterFormat.Bold = FormatEffect.Off;
@@ -707,14 +605,6 @@ public sealed partial class ScriptsPage : Page
         }
         finally
         {
-            try
-            {
-                doc.Selection.SetRange(selStart, selEnd);
-            }
-            catch
-            {
-                // Ignore selection restore issues.
-            }
             _suppressHighlight = false;
         }
     }
@@ -762,7 +652,7 @@ public sealed partial class ScriptsPage : Page
             {
                 var start = i;
                 i += 2;
-                while (i < text.Length && text[i] != '\n') i++;
+                while (i < text.Length && text[i] != '\n' && text[i] != '\r') i++;
                 tokens.Add(new JsToken(start, i - start, JsTokenKind.Comment));
                 continue;
             }
@@ -800,7 +690,7 @@ public sealed partial class ScriptsPage : Page
                         continue;
                     }
 
-                    if (quote != '`' && ch == '\n')
+                    if (quote != '`' && (ch == '\n' || ch == '\r'))
                     {
                         break;
                     }

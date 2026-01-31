@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:EMWaver.Pages">
 
-    <Grid Padding="16" RowSpacing="12">
+    <Grid Padding="16" RowSpacing="12" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -35,7 +35,7 @@
                 <ColumnDefinition x:Name="AgentColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="8">
+            <Border Grid.Column="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <ListView x:Name="ScriptsList" SelectionMode="Single" SelectionChanged="OnSelectionChanged">
                     <ListView.ItemTemplate>
                         <DataTemplate>
@@ -48,7 +48,7 @@
                 </ListView>
             </Border>
 
-            <Border Grid.Column="1" Margin="12,0,0,0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+            <Border Grid.Column="1" Margin="12,0,0,0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <Grid RowSpacing="10">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -71,7 +71,7 @@
                                 Grid.Column="0"
                                 BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
                                 BorderThickness="0,0,1,0"
-                                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                 CornerRadius="6,0,0,6"
                                 Padding="8,10,8,10">
                                 <ScrollViewer
@@ -82,7 +82,6 @@
                                         x:Name="LineNumbersText"
                                         FontFamily="Consolas"
                                         FontSize="13"
-                                        LineHeight="18"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         TextAlignment="Right">
                                         <TextBlock.RenderTransform>
@@ -121,6 +120,7 @@
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="12"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     Visibility="Collapsed">
                     <Grid RowSpacing="10">
                         <Grid.RowDefinitions>
@@ -139,7 +139,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBox x:Name="AgentInput" PlaceholderText="Ask the agent…" />
+                            <TextBox x:Name="AgentInput" PlaceholderText="Ask the agent..." />
                             <Button Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
                         </Grid>
                     </Grid>
