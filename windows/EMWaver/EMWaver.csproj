@@ -13,10 +13,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- CI/dev shells may not have full VC toolchain installed; avoid vcmeta-based fingerprinting. -->
+    <UseVCMetaManaged>false</UseVCMetaManaged>
+    <XAMLFingerprint>false</XAMLFingerprint>
+    <!-- Use in-proc XAML compiler (avoids net472 XamlCompiler.exe). -->
+    <UseXamlCompilerExecutable>false</UseXamlCompilerExecutable>
+
+    <!-- Help WinUI XamlCompiler find VC toolchain (for GenXbf). -->
+    <!-- Use ProgramW6432 so this works under 32-bit MSBuild too. -->
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and Exists('$(ProgramW6432)\Microsoft Visual Studio\18\Community')">$(ProgramW6432)\Microsoft Visual Studio\18\Community</VsInstallRoot>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
+    <!-- Required for WinUI XAML compiler tasks under dotnet msbuild. -->
+    <PackageReference Include="System.Security.Permissions" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>

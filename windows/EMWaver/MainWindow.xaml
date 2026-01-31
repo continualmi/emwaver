@@ -5,13 +5,18 @@
     xmlns:local="using:EMWaver"
     Title="EMWaver">
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Padding="10,6">
+        <Border
+            Grid.Row="0"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1">
+            <Grid Padding="10,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -44,7 +49,8 @@
                 <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock x:Name="DeviceBufferText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
-        </Grid>
+            </Grid>
+        </Border>
 
         <Frame x:Name="ContentFrame" Grid.Row="1" />
     </Grid>
