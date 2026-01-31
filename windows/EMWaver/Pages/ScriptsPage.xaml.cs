@@ -74,12 +74,6 @@ public sealed partial class ScriptsPage : Page
         }
 
         UpdateLineNumbersTransform();
-
-        if (!_isScrolling && _pendingHighlightAfterScroll)
-        {
-            _pendingHighlightAfterScroll = false;
-            ScheduleHighlight();
-        }
     }
 
     private void UpdateLineNumbersTransform()
@@ -515,7 +509,6 @@ public sealed partial class ScriptsPage : Page
     {
         if (_isScrolling)
         {
-            _pendingHighlightAfterScroll = true;
             return;
         }
 
@@ -546,6 +539,13 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
+        // Never highlight while scrolling; RichEditBox will try to keep the caret visible
+        // and we do not want the viewport to snap back to the cursor.
+        if (_isScrolling)
+        {
+            return;
+        }
+
         var text = GetEditorTextRaw();
         if (text.Length == 0)
         {
@@ -566,6 +566,12 @@ public sealed partial class ScriptsPage : Page
 
         var doc = EditorBox.Document;
 
+        // Preserve scroll position; applying lots of formatting can make RichEditBox
+        // auto-scroll to keep the caret visible.
+        var sv = _editorScrollViewer;
+        var prevV = sv?.VerticalOffset ?? 0.0;
+        var prevH = sv?.HorizontalOffset ?? 0.0;
+ 
         _suppressHighlight = true;
         try
         {
@@ -597,6 +603,11 @@ public sealed partial class ScriptsPage : Page
                         r.CharacterFormat.ForegroundColor = Color.FromArgb(0xFF, 0xB5, 0xCE, 0xA8);
                         break;
                 }
+            }
+
+            if (sv != null)
+            {
+                sv.ChangeView(prevH, prevV, null, disableAnimation: true);
             }
         }
         catch
