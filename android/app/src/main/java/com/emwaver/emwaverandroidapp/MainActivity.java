@@ -17,18 +17,20 @@ import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.os.IBinder;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
-import android.view.View;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
+
+import android.app.AlertDialog;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.app.ActivityCompat;
 import androidx.navigation.NavController;
 import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
@@ -36,13 +38,12 @@ import androidx.navigation.ui.NavigationUI;
 import androidx.core.view.MenuProvider;
 import androidx.lifecycle.Lifecycle;
 
-import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
-import com.google.android.material.navigation.NavigationView;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
+import com.emwaver.emwaverandroidapp.ui.agent.AgentChatBottomSheetDialogFragment;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -53,6 +54,12 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private DeviceConnectionManager connectionManager;
     private NavController navController;
+
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private Runnable uiTick;
+    private MenuItem connectionMenuItem;
+
+    private long lastAutoConnectAttemptMs = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,36 +75,39 @@ public class MainActivity extends AppCompatActivity {
         }
         navController = navHostFragment.getNavController();
         
-        // Set up the AppBarConfiguration with drawer layout
-        androidx.drawerlayout.widget.DrawerLayout drawer = binding.drawerLayout;
-        appBarConfiguration = new AppBarConfiguration.Builder(
-                R.id.navigation_cc1101,
-                R.id.navigation_emwaver,
-                R.id.navigation_sampler,
-                R.id.navigation_scripts)
-                .setOpenableLayout(drawer)
-                .build();
+        appBarConfiguration = new AppBarConfiguration.Builder(R.id.navigation_scripts).build();
         
         NavigationUI.setupActionBarWithNavController(this, navController, appBarConfiguration);
-        
-        // Set up BottomNavigationView
-        BottomNavigationView bottomNavView = binding.navViewBottom;
-        NavigationUI.setupWithNavController(bottomNavView, navController);
-        
-        // Set up NavigationView (drawer)
-        NavigationView navigationView = binding.navView;
-        NavigationUI.setupWithNavController(navigationView, navController);
+
+        navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
+            if (getSupportActionBar() != null && destination.getId() == R.id.navigation_scripts) {
+                // ScriptsFragment may override title when previewing/editing.
+                if (getSupportActionBar().getTitle() == null || "".contentEquals(getSupportActionBar().getTitle())) {
+                    getSupportActionBar().setTitle("EMWaver");
+                }
+            }
+        });
 
         addMenuProvider(new MenuProvider() {
             @Override
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
-                menuInflater.inflate(R.menu.main_overflow_menu, menu);
+                menuInflater.inflate(R.menu.main_top_menu, menu);
+                connectionMenuItem = menu.findItem(R.id.action_connection);
             }
 
             @Override
             public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
                 if (menuItem.getItemId() == R.id.action_open_settings) {
                     startActivity(new Intent(MainActivity.this, SettingsActivity.class));
+                    return true;
+                }
+                if (menuItem.getItemId() == R.id.action_connection) {
+                    showConnectionActionsDialog();
+                    return true;
+                }
+                if (menuItem.getItemId() == R.id.action_agent) {
+                    AgentChatBottomSheetDialogFragment dialog = new AgentChatBottomSheetDialogFragment();
+                    dialog.show(getSupportFragmentManager(), "AgentChat");
                     return true;
                 }
                 return false;
@@ -111,6 +121,104 @@ public class MainActivity extends AppCompatActivity {
         requestAllRequiredPermissions();
         
         // Services will be initialized after permissions are granted
+    }
+
+    private void startUiTicking() {
+        stopUiTicking();
+        uiTick = new Runnable() {
+            @Override
+            public void run() {
+                updateConnectionUiOnce();
+                uiHandler.postDelayed(this, 900);
+            }
+        };
+        uiHandler.post(uiTick);
+    }
+
+    private void stopUiTicking() {
+        if (uiTick != null) {
+            uiHandler.removeCallbacks(uiTick);
+            uiTick = null;
+        }
+    }
+
+    private void updateConnectionUiOnce() {
+        if (connectionManager == null) {
+            connectionManager = DeviceConnectionManager.getInstance(this);
+        }
+        boolean connected = connectionManager != null && connectionManager.isConnected();
+        USBService usbService = connectionManager != null ? connectionManager.getUsbService() : null;
+        boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
+
+        long now = System.currentTimeMillis();
+        if (!connected && !dfuConnected && connectionManager != null) {
+            if (now - lastAutoConnectAttemptMs > 1200) {
+                lastAutoConnectAttemptMs = now;
+                connectionManager.checkForUsbDevices();
+            }
+        }
+
+        String subtitle;
+        int tint;
+        if (connected) {
+            subtitle = "Connected";
+            tint = ContextCompat.getColor(this, android.R.color.holo_green_dark);
+        } else if (dfuConnected) {
+            subtitle = "Update Mode";
+            tint = ContextCompat.getColor(this, android.R.color.holo_orange_dark);
+        } else {
+            subtitle = "Searching";
+            tint = ContextCompat.getColor(this, android.R.color.holo_red_dark);
+        }
+
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle("EMWaver");
+            getSupportActionBar().setSubtitle(subtitle);
+        }
+
+        if (connectionMenuItem != null && connectionMenuItem.getIcon() != null) {
+            connectionMenuItem.getIcon().setTint(tint);
+        }
+    }
+
+    private void showConnectionActionsDialog() {
+        if (connectionManager == null) {
+            connectionManager = DeviceConnectionManager.getInstance(this);
+        }
+        final boolean connected = connectionManager != null && connectionManager.isConnected();
+        final USBService usbService = connectionManager != null ? connectionManager.getUsbService() : null;
+        final boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
+
+        List<String> actions = new ArrayList<>();
+        actions.add("Search for device");
+        if (connected) {
+            actions.add("Disconnect");
+        }
+        actions.add("Update device...");
+
+        String status = connected ? "Connected" : (dfuConnected ? "Update Mode detected" : "Disconnected");
+
+        new AlertDialog.Builder(this)
+            .setTitle("Connection")
+            .setMessage(status)
+            .setItems(actions.toArray(new String[0]), (dialog, which) -> {
+                String selected = actions.get(which);
+                if ("Search for device".equals(selected)) {
+                    if (connectionManager != null) {
+                        connectionManager.checkForUsbDevices();
+                    }
+                } else if ("Disconnect".equals(selected)) {
+                    if (connectionManager != null) {
+                        connectionManager.disconnect();
+                    }
+                } else if ("Update device...".equals(selected)) {
+                    com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
+                        new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+                    update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
+                }
+            })
+            .setNegativeButton("Close", null)
+            .show();
     }
 
     private void requestAllRequiredPermissions() {
@@ -180,6 +288,8 @@ public class MainActivity extends AppCompatActivity {
         if (hasRequiredPermissions() && connectionManager != null) {
             connectionManager.initialize();
         }
+
+        startUiTicking();
     }
     
     private boolean hasRequiredPermissions() {
@@ -196,6 +306,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
+        stopUiTicking();
         // Note: We don't cleanup connectionManager here as it should persist
         // across activity lifecycle. Cleanup happens in onDestroy if needed.
     }

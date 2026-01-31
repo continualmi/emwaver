@@ -4,49 +4,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
-        android:title="Sampler Settings"
-        app:iconSpaceReserved="false">
-
-        <SwitchPreferenceCompat
-            android:key="sampler_invert_recording"
-            android:title="Invert Capture During Recording"
-            android:summary="Only affects Sampler while recording (0↔1)."
-            android:defaultValue="false"
-            app:iconSpaceReserved="false" />
-
-        <ListPreference
-            android:key="sampler_invert_recording_targets"
-            android:title="Invert Capture Applies To"
-            android:summary="Choose which devices are affected"
-            android:defaultValue="stm32"
-            android:entries="@array/sampler_invert_targets_entries"
-            android:entryValues="@array/sampler_invert_targets_values"
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true" />
-
-        <ListPreference
-            android:key="refresh_time"
-            android:title="Refresh Time"
-            android:summary="Select the refresh time interval for the sampler"
-            android:defaultValue="50"
-            android:entries="@array/refresh_time_entries"
-            android:entryValues="@array/refresh_time_values"
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true" />
-
-        <ListPreference
-            android:key="buffer_size_limit"
-            android:title="Buffer Size Limit"
-            android:summary="Set maximum buffer size for sampling (each sample is 10µs)"
-            android:defaultValue="393216"
-            android:entries="@array/buffer_size_limit_entries"
-            android:entryValues="@array/buffer_size_limit_values"
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
         android:title="Support &amp; Information"
         app:iconSpaceReserved="false">
 

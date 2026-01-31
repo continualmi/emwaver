@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_connection"
+        android:icon="@drawable/ai_usb"
+        android:title="Connection"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_agent"
+        android:icon="@drawable/llm"
+        android:title="Agent"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_open_settings"
+        android:title="@string/action_open_settings"
+        app:showAsAction="never" />
+
+</menu>
