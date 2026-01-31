@@ -76,6 +76,49 @@ public sealed partial class ScriptsPage : Page
         );
  
         Loaded += OnLoaded;
+
+        // Default view: Preview.
+        PreviewPane.Visibility = Visibility.Visible;
+        EditorPane.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnViewModeChanged(object sender, RoutedEventArgs e)
+    {
+        // This event can fire during XAML InitializeComponent while fields are still null.
+        if (EditorPane == null || PreviewPane == null)
+        {
+            return;
+        }
+
+        var edit = false;
+
+        // Prefer using the sender so we don't depend on field init order.
+        if (sender is RadioButton rb)
+        {
+            edit = string.Equals(rb.Name, "EditModeButton", StringComparison.Ordinal);
+        }
+        else if (EditModeButton != null)
+        {
+            edit = EditModeButton.IsChecked == true;
+        }
+
+        EditorPane.Visibility = edit ? Visibility.Visible : Visibility.Collapsed;
+        PreviewPane.Visibility = edit ? Visibility.Collapsed : Visibility.Visible;
+
+        if (edit)
+        {
+            if (_current != null)
+            {
+                EnsureScintillaCreated();
+                ConfigureScintillaIfNeeded();
+                ShowScintilla();
+                _ = DispatcherQueue.TryEnqueue(UpdateScintillaBounds);
+            }
+        }
+        else
+        {
+            HideScintilla();
+        }
     }
 
     private void RenderPreview(ScriptTree tree)
@@ -494,11 +537,23 @@ public sealed partial class ScriptsPage : Page
             SetEditorText(text);
             SetEditorReadOnly(script.IsBundled);
             MarkEditorSaved();
-            ShowScintilla();
+
+            if (EditModeButton.IsChecked == true)
+            {
+                ShowScintilla();
+                _ = DispatcherQueue.TryEnqueue(UpdateScintillaBounds);
+            }
+            else
+            {
+                HideScintilla();
+            }
 
             UpdateCommandStates();
 
-            FocusEditorNative();
+            if (EditModeButton.IsChecked == true)
+            {
+                FocusEditorNative();
+            }
 
             PreviewHost.Children.Clear();
             PreviewHint.Visibility = Visibility.Visible;
@@ -639,7 +694,13 @@ public sealed partial class ScriptsPage : Page
         }
 
         // Make sure SciLexer.dll is loaded so the Scintilla window class exists.
-        _ = ScintillaWin32.LoadLibraryW("SciLexer.dll");
+        // In packaged/app-hosted scenarios, relying on the process CWD can fail.
+        var sciLexerPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SciLexer.dll");
+        var hMod = ScintillaWin32.LoadLibraryW(sciLexerPath);
+        if (hMod == IntPtr.Zero)
+        {
+            _ = ScintillaWin32.LoadLibraryW("SciLexer.dll");
+        }
 
         var hwndOwner = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
         if (hwndOwner == IntPtr.Zero)
@@ -910,7 +971,7 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        if (EditorHost.Visibility != Visibility.Visible)
+        if (EditorPane.Visibility != Visibility.Visible || EditorHost.Visibility != Visibility.Visible)
         {
             return;
         }
