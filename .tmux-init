@@ -25,9 +25,12 @@ tmux split-window -v -t $SESSION:2.1 -c "$PROJECT_DIR"
 # 3. Split Right pane (now pane 3) vertically -> Top-Left(1) / Bottom-Left(2) | Top-Right(3) / Bottom-Right(4)
 tmux split-window -v -t $SESSION:2.3 -c "$PROJECT_DIR"
 
-# Pane 1 (Top Left): Tauri App
-tmux send-keys -t $SESSION:2.1 'cd app' C-m
-tmux send-keys -t $SESSION:2.1 'npm run tauri dev'
+# Pane 1 (Top Left): Backend (Flask)
+tmux send-keys -t $SESSION:2.1 'cd backend' C-m
+tmux send-keys -t $SESSION:2.1 'if [ ! -d .venv ]; then python3 -m venv .venv; fi' C-m
+tmux send-keys -t $SESSION:2.1 'source .venv/bin/activate' C-m
+tmux send-keys -t $SESSION:2.1 'pip install -r requirements.txt' C-m
+tmux send-keys -t $SESSION:2.1 'python3 app.py'
 
 # Pane 2 (Bottom Left): Firmware
 tmux send-keys -t $SESSION:2.2 'cd stm/emwaver-firmware' C-m
@@ -40,16 +43,6 @@ tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
 # Pane 4 (Bottom Right): Web (Next.js)
 tmux send-keys -t $SESSION:2.4 'cd frontend' C-m
 tmux send-keys -t $SESSION:2.4 'npm run dev'
-
-# Split Pane 4 horizontally to create Pane 5 for backend
-tmux split-window -h -t $SESSION:2.4 -c "$PROJECT_DIR"
-
-# Pane 5 (New Right): Backend (Flask)
-tmux send-keys -t $SESSION:2.5 'cd backend' C-m
-tmux send-keys -t $SESSION:2.5 'if [ ! -d .venv ]; then python3 -m venv .venv; fi' C-m
-tmux send-keys -t $SESSION:2.5 'source .venv/bin/activate' C-m
-tmux send-keys -t $SESSION:2.5 'pip install -r requirements.txt' C-m
-tmux send-keys -t $SESSION:2.5 'python3 app.py'
 
 # Window 3: Editor (Neovim + NvimTree + open AGENTS.md in the file pane)
 EDITOR_WIN=$(tmux new-window -P -F "#{window_index}" -t "$SESSION" -n 'editor' -c "$PROJECT_DIR")
