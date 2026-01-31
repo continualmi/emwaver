@@ -149,7 +149,7 @@
                 android:padding="16dp"
                 android:inputType="textMultiLine|textNoSuggestions"
                 android:scrollHorizontally="false"
-                android:textColor="@color/codeText"
+                android:textColor="@color/textPrimary"
                 android:textColorHint="@color/textSecondary"
                 android:textSize="12sp" />
 
@@ -172,7 +172,7 @@
                 android:padding="16dp"
                 android:inputType="textMultiLine|textNoSuggestions"
                 android:scrollHorizontally="true"
-                android:textColor="@color/codeText"
+                android:textColor="@color/textPrimary"
                 android:textColorHint="@color/textSecondary"
                 android:textSize="12sp" />
 

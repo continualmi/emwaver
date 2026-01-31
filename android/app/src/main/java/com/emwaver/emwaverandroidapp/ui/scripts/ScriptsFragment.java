@@ -23,8 +23,10 @@ import android.provider.OpenableColumns;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.graphics.Typeface;
 import android.util.Log;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.method.KeyListener;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -135,6 +137,13 @@ public class ScriptsFragment extends Fragment {
     private EditText scriptEditorContentWrap;
     private boolean lineWrapEnabled = false;
     private AlertDialog loadingDialog;
+
+    private final Handler syntaxHandler = new Handler(Looper.getMainLooper());
+    private Runnable syntaxRunnable;
+    private boolean suppressEditorSync;
+    private ScriptSyntaxHighlighter syntaxHighlighter;
+    private KeyListener originalEditorKeyListener;
+    private KeyListener originalEditorWrapKeyListener;
 
     private String getCurrentRecordId() {
         if (currentScriptMetadata != null && currentScriptMetadata.getId() != null) {
@@ -377,6 +386,20 @@ public class ScriptsFragment extends Fragment {
         editorScrollViewWrap = binding.editorScrollViewWrap;
         editorScrollViewNoWrap = binding.editorScrollViewNowrap;
         scriptEditorContentWrap = binding.scriptEditorContentWrap;
+
+        if (scriptEditorContent != null) {
+            originalEditorKeyListener = scriptEditorContent.getKeyListener();
+        }
+        if (scriptEditorContentWrap != null) {
+            originalEditorWrapKeyListener = scriptEditorContentWrap.getKeyListener();
+        }
+
+        syntaxHighlighter = new ScriptSyntaxHighlighter(
+                ContextCompat.getColor(requireContext(), R.color.codeKeyword),
+                ContextCompat.getColor(requireContext(), R.color.codeString),
+                ContextCompat.getColor(requireContext(), R.color.codeNumber),
+                ContextCompat.getColor(requireContext(), R.color.codeComment)
+        );
         
         // Set up text watcher for both EditTexts
         scriptEditorContent.addTextChangedListener(new TextWatcher() {
@@ -385,13 +408,19 @@ public class ScriptsFragment extends Fragment {
             
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (suppressEditorSync) {
+                    return;
+                }
                 String updated = s != null ? s.toString() : "";
                 setEditorText(updated);
                 updateDraftState(updated, true);
                 // Sync to wrap version
-                if (scriptEditorContentWrap != null && !scriptEditorContentWrap.getText().toString().equals(updated)) {
+                if (scriptEditorContentWrap != null && !TextUtils.equals(scriptEditorContentWrap.getText(), updated)) {
+                    suppressEditorSync = true;
                     scriptEditorContentWrap.setText(updated);
+                    suppressEditorSync = false;
                 }
+                scheduleSyntaxHighlight();
             }
             
             @Override
@@ -405,13 +434,19 @@ public class ScriptsFragment extends Fragment {
                 
                 @Override
                 public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    if (suppressEditorSync) {
+                        return;
+                    }
                     String updated = s != null ? s.toString() : "";
                     setEditorText(updated);
                     updateDraftState(updated, true);
                     // Sync to no-wrap version
-                    if (scriptEditorContent != null && !scriptEditorContent.getText().toString().equals(updated)) {
+                    if (scriptEditorContent != null && !TextUtils.equals(scriptEditorContent.getText(), updated)) {
+                        suppressEditorSync = true;
                         scriptEditorContent.setText(updated);
+                        suppressEditorSync = false;
                     }
+                    scheduleSyntaxHighlight();
                 }
                 
                 @Override
@@ -419,22 +454,43 @@ public class ScriptsFragment extends Fragment {
             });
         }
         
-        scriptEditorContent.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String updated = s != null ? s.toString() : "";
-                setEditorText(updated);
-                updateDraftState(updated, true);
-            }
-            
-            @Override
-            public void afterTextChanged(Editable s) {}
-        });
-        
         updateLineWrap();
+    }
+
+    private void scheduleSyntaxHighlight() {
+        if (syntaxHighlighter == null) {
+            return;
+        }
+        if (syntaxRunnable != null) {
+            syntaxHandler.removeCallbacks(syntaxRunnable);
+        }
+        syntaxRunnable = () -> {
+            if (!isAdded()) {
+                return;
+            }
+            applySyntaxHighlightNow();
+        };
+        syntaxHandler.postDelayed(syntaxRunnable, 90);
+    }
+
+    private void applySyntaxHighlightNow() {
+        if (syntaxHighlighter == null) {
+            return;
+        }
+        EditText active = lineWrapEnabled ? scriptEditorContentWrap : scriptEditorContent;
+        if (active == null || active.getText() == null) {
+            return;
+        }
+        int selStart = active.getSelectionStart();
+        int selEnd = active.getSelectionEnd();
+        try {
+            syntaxHighlighter.applyTo(active.getText());
+        } finally {
+            int len = active.getText().length();
+            if (selStart >= 0 && selEnd >= 0) {
+                active.setSelection(Math.min(selStart, len), Math.min(selEnd, len));
+            }
+        }
     }
 
     private void refreshScriptList() {
@@ -486,7 +542,7 @@ public class ScriptsFragment extends Fragment {
                     editButton.setContentDescription(getString(R.string.view));
                     editButton.setOnClickListener(v -> {
                         v.setPressed(false);
-                        showAssetScriptViewDialog(scriptMetadata);
+                        showScriptEditorDialog(scriptMetadata);
                     });
                 } else {
                     editButton.setVisibility(View.VISIBLE);
@@ -508,40 +564,8 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void showAssetScriptViewDialog(@NonNull ScriptMetadata scriptMetadata) {
-        if (!isAdded() || scriptMetadata == null || !scriptMetadata.isAssetScript()) {
-            return;
-        }
-
-        UserFileMetadata metadata = scriptMetadata.getMetadata();
-        String assetPath = assetScriptAssetPath(metadata);
-        final String content = readAssetText(assetPath);
-
-        TextView codeView = new TextView(requireContext());
-        codeView.setText(content);
-        codeView.setTextIsSelectable(true);
-        codeView.setTypeface(Typeface.MONOSPACE);
-        codeView.setHorizontallyScrolling(true);
-        int padding = (int) (16 * requireContext().getResources().getDisplayMetrics().density);
-        codeView.setPadding(padding, padding, padding, padding);
-
-        ScrollView verticalScroll = new ScrollView(requireContext());
-        verticalScroll.addView(codeView);
-
-        HorizontalScrollView bothAxisScroll = new HorizontalScrollView(requireContext());
-        bothAxisScroll.addView(verticalScroll);
-
-        new AlertDialog.Builder(requireContext())
-            .setTitle(assetPath)
-            .setView(bothAxisScroll)
-            .setPositiveButton("Close", null)
-            .setNeutralButton("Copy", (dialog, which) -> {
-                ClipboardManager clipboard = (ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
-                if (clipboard != null) {
-                    clipboard.setPrimaryClip(ClipData.newPlainText(assetPath, content));
-                    showToast("Copied");
-                }
-            })
-            .show();
+        // Deprecated: asset scripts now open in the full-screen editor (read-only).
+        showScriptEditorDialog(scriptMetadata);
     }
 
     private String assetScriptAssetPath(@NonNull UserFileMetadata metadata) {
@@ -1300,8 +1324,36 @@ public class ScriptsFragment extends Fragment {
             scriptEditorContent.setText(content);
             scriptEditorContent.setSelection(content.length());
         }
+
+        boolean readOnly = scriptMetadata != null && scriptMetadata.isAssetScript();
+        applyEditorReadOnly(readOnly);
+
         updateLineWrap();
         updateViewMode();
+        applySyntaxHighlightNow();
+    }
+
+    private void applyEditorReadOnly(boolean readOnly) {
+        applyEditorReadOnly(scriptEditorContent, readOnly);
+        applyEditorReadOnly(scriptEditorContentWrap, readOnly);
+    }
+
+    private void applyEditorReadOnly(@Nullable EditText editText, boolean readOnly) {
+        if (editText == null) {
+            return;
+        }
+        if (readOnly) {
+            editText.setKeyListener(null);
+            editText.setTextIsSelectable(true);
+        } else {
+            // Restore editable behavior.
+            if (editText == scriptEditorContent) {
+                editText.setKeyListener(originalEditorKeyListener);
+            } else if (editText == scriptEditorContentWrap) {
+                editText.setKeyListener(originalEditorWrapKeyListener);
+            }
+            editText.setTextIsSelectable(true);
+        }
     }
 
     private void showDeleteConfirmationDialog(ScriptMetadata scriptMetadata) {
