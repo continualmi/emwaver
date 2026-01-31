@@ -52,7 +52,10 @@ let package = Package(
                 "EMWaverScriptRuntime",
                 "EMWaverScriptStorage",
             ],
-            path: "Sources/EMWaverScriptsUI"
+            path: "Sources/EMWaverScriptsUI",
+            linkerSettings: [
+                .linkedFramework("WebKit", .when(platforms: [.macOS, .iOS]))
+            ]
         ),
     ]
 )
