@@ -550,6 +550,55 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 - Keep the same `.emw` script semantics as Android/iOS/macOS (sync-only).
 - USB MIDI SysEx transport is native Windows; shared buffering/compression/pacing uses `crates/emwaver-buffer-core` via `crates/emwaver-buffer-windows-ffi`.
 
+Windows code map (navigate fast)
+
+Workspace / project
+
+- Solution: `windows/EMWaver.sln`
+- App project: `windows/EMWaver/EMWaver.csproj`
+  - Bundled scripts are linked from `assets/default-scripts/*.emw` into the app output as `Assets/DefaultScripts/*.emw`.
+  - Native DLLs under `windows/EMWaver/Native/*.dll` are copied to the app root (so `DllImport` can find them).
+
+App bootstrap + shell
+
+- Entry: `windows/EMWaver/Program.cs`
+- App object: `windows/EMWaver/App.xaml`, `windows/EMWaver/App.xaml.cs`
+- Main window + top command bar: `windows/EMWaver/MainWindow.xaml`, `windows/EMWaver/MainWindow.xaml.cs`
+  - Hosts the page frame (`ContentFrame`) and wires toolbar state from pages.
+
+Pages
+
+- Scripts (main UX): `windows/EMWaver/Pages/ScriptsPage.xaml`, `windows/EMWaver/Pages/ScriptsPage.xaml.cs`
+  - Script list + preview renderer + native editor host.
+  - Preview and editor are mutually exclusive (toggle in the page).
+- Device: `windows/EMWaver/Pages/DevicePage.xaml`, `windows/EMWaver/Pages/DevicePage.xaml.cs`
+
+Script storage
+
+- Repository: `windows/EMWaver/Services/ScriptRepository.cs`
+  - Local scripts dir: `%LocalAppData%\EMWaver\Scripts`
+  - Bundled scripts dir (in app output): `Assets/DefaultScripts`
+  - Bundled scripts are read-only; users can copy them to local.
+
+Scripting runtime + UI renderer
+
+- JS runtime + host bridges: `windows/EMWaver/Scripting/ScriptEngine.cs` (Jint)
+- Script UI model: `windows/EMWaver/Scripting/ScriptModel.cs`
+- Renderer: `windows/EMWaver/Scripting/Render/ScriptRenderer.cs`
+- Plot + helpers: `windows/EMWaver/Scripting/Render/ScriptPlotControl.cs`, `windows/EMWaver/Scripting/Render/ScriptPropParsers.cs`, `windows/EMWaver/Scripting/PlotBufferStore.cs`
+
+Transport / device
+
+- Device manager (high-level): `windows/EMWaver/Services/WindowsDeviceManager.cs`
+- USB MIDI SysEx tunnel: `windows/EMWaver/Services/UsbMidiSysex.cs`
+- Service singleton wiring: `windows/EMWaver/Services/AppServices.cs`
+
+Native interop
+
+- Rust buffer DLL bridge: `windows/EMWaver/Interop/NativeBufferRust.cs`, `windows/EMWaver/Interop/EmwBufferNative.cs`
+  - Generated DLL (do not commit): `windows/EMWaver/Native/emwaver_buffer_windows.dll`
+- Native editor host (Scintilla HWND): `windows/EMWaver/Interop/ScintillaWin32.cs`
+
 > **Agent Note:** In this agent environment on Windows, avoid running builds (MSBuild/WinUI XAML compilation). After code changes, wait for the user to build/run locally; this environment frequently hits file locks/permission issues.
 
 Windows dev prerequisites (Rust buffer core)

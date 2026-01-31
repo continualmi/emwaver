@@ -53,44 +53,51 @@
                         <TextBlock x:Name="EditorSubtitleText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
                     </StackPanel>
 
-                    <Grid Grid.Row="1" RowSpacing="12">
+                    <Grid Grid.Row="1" RowSpacing="10">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
-                            <Grid
-                                x:Name="EditorHost"
-                                Visibility="Collapsed"
-                                Loaded="OnEditorHostLoaded"
-                                Unloaded="OnEditorHostUnloaded"
-                                LayoutUpdated="OnEditorHostLayoutUpdated"
-                                SizeChanged="OnEditorHostSizeChanged"
-                                PointerPressed="OnEditorHostPointerPressed">
-                                <!-- Native Scintilla editor is hosted as an owned HWND positioned over this panel. -->
-                                <Border Background="#1E1E1E" CornerRadius="6" />
-                            </Grid>
-
-                            <TextBlock
-                                x:Name="EmptyHint"
-                                Text="Pick a script to view/edit."
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Center" />
-                        </Grid>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                            <RadioButton x:Name="PreviewModeButton" Content="Preview" GroupName="ScriptViewMode" IsChecked="True" Checked="OnViewModeChanged" />
+                            <RadioButton x:Name="EditModeButton" Content="Edit" GroupName="ScriptViewMode" Checked="OnViewModeChanged" />
+                        </StackPanel>
 
                         <Grid Grid.Row="1">
-                            <ScrollViewer>
-                                <StackPanel x:Name="PreviewHost" />
-                            </ScrollViewer>
+                            <Grid x:Name="EditorPane" Visibility="Collapsed">
+                                <Grid
+                                    x:Name="EditorHost"
+                                    Visibility="Collapsed"
+                                    Loaded="OnEditorHostLoaded"
+                                    Unloaded="OnEditorHostUnloaded"
+                                    LayoutUpdated="OnEditorHostLayoutUpdated"
+                                    SizeChanged="OnEditorHostSizeChanged"
+                                    PointerPressed="OnEditorHostPointerPressed">
+                                    <!-- Native Scintilla editor is hosted as an owned HWND positioned over this panel. -->
+                                    <Border Background="#1E1E1E" CornerRadius="6" />
+                                </Grid>
 
-                            <TextBlock
-                                x:Name="PreviewHint"
-                                Text="Select a script to preview its UI."
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                VerticalAlignment="Center"
-                                HorizontalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="EmptyHint"
+                                    Text="Pick a script to view/edit."
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center" />
+                            </Grid>
+
+                            <Grid x:Name="PreviewPane" Visibility="Visible">
+                                <ScrollViewer>
+                                    <StackPanel x:Name="PreviewHost" />
+                                </ScrollViewer>
+
+                                <TextBlock
+                                    x:Name="PreviewHint"
+                                    Text="Select a script to preview its UI."
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center" />
+                            </Grid>
                         </Grid>
                     </Grid>
                 </Grid>

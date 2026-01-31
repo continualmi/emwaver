@@ -57,6 +57,13 @@ internal sealed class ScriptRepository
             StringComparer.OrdinalIgnoreCase
         );
 
+        var bundledByName = bundledRaw
+            .GroupBy(p => Path.GetFileNameWithoutExtension(p), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        // If a local script is an exact byte-for-byte copy of a bundled script with the same name,
+        // treat it as redundant and prefer showing the bundled script (avoids confusing duplicates
+        // created by old/buggy bootstrapping behavior).
         var local = localRaw
             .Select(p =>
             {
@@ -65,12 +72,55 @@ internal sealed class ScriptRepository
             })
             .ToList();
 
-        var bundled = bundledRaw
+        var redundantLocalFullPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in local)
+        {
+            if (!s.ShadowsBundled)
+            {
+                continue;
+            }
+
+            if (!bundledByName.TryGetValue(s.Name, out var bundledPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var localBytes = File.ReadAllBytes(s.FullPath);
+                var bundledBytes = File.ReadAllBytes(bundledPath);
+                if (localBytes.SequenceEqual(bundledBytes))
+                {
+                    redundantLocalFullPaths.Add(s.FullPath);
+                }
+            }
+            catch
+            {
+                // If we can't read/compare, keep the local script visible.
+            }
+        }
+
+        if (redundantLocalFullPaths.Count > 0)
+        {
+            local = local
+                .Where(s => !redundantLocalFullPaths.Contains(s.FullPath))
+                .ToList();
+        }
+
+        var localNames = new HashSet<string>(
+            local.Select(s => s.Name),
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        // If a local script exists with the same name, treat it as an override and don't show
+        // the bundled one as a separate entry (avoids confusing duplicates).
+        var bundledVisible = bundledRaw
             .Select(p => new ScriptInfo(Path.GetFileNameWithoutExtension(p), p, IsBundled: true, ShadowsBundled: false))
+            .Where(s => !localNames.Contains(s.Name))
             .ToList();
 
-        // Show bundled scripts first (macOS parity) and keep any local copies visible.
-        var scripts = bundled
+        // Show bundled scripts first (macOS parity).
+        var scripts = bundledVisible
             .Concat(local)
             .OrderByDescending(s => s.IsBundled)
             .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
