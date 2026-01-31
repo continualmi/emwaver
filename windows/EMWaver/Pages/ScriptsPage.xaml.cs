@@ -1,16 +1,16 @@
 using EMWaver.Models;
+using EMWaver.Interop;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using Windows.UI;
+using Windows.Foundation;
 
 namespace EMWaver.Pages;
 
@@ -26,29 +26,16 @@ public sealed partial class ScriptsPage : Page
     private bool _suppressEditorChange;
     private bool _suppressSelectionChange;
 
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _highlightTimer;
-    private ScrollViewer? _editorScrollViewer;
-    private readonly List<ScrollViewer> _editorScrollViewers = new();
-    private bool _suppressHighlight;
-    private bool _isScrolling;
-    private bool _suppressEditorViewChanged;
-
-    private static readonly SolidColorBrush BaseBrush = new(Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4));
-    private static readonly SolidColorBrush KeywordBrush = new(Color.FromArgb(0xFF, 0xC5, 0x86, 0xC0));
-    private static readonly SolidColorBrush StringBrush = new(Color.FromArgb(0xFF, 0xCE, 0x91, 0x78));
-    private static readonly SolidColorBrush CommentBrush = new(Color.FromArgb(0xFF, 0x6A, 0x99, 0x55));
-    private static readonly SolidColorBrush NumberBrush = new(Color.FromArgb(0xFF, 0xB5, 0xCE, 0xA8));
+    private IntPtr _scintillaHwnd = IntPtr.Zero;
+    private bool _scintillaConfigured;
+    private DispatcherQueueTimer? _dirtyPollTimer;
 
     public ScriptsPage()
     {
         InitializeComponent();
         ScriptsList.ItemsSource = _scripts;
         AgentMessagesList.ItemsSource = _agentMessages;
- 
-        EditorBox.TextChanged += OnEditorTextChanged;
-        EditorBox.Loaded += OnEditorLoaded;
-        EditorBox.KeyDown += OnEditorKeyDown;
- 
+
         Loaded += OnLoaded;
     }
 
@@ -58,74 +45,40 @@ public sealed partial class ScriptsPage : Page
         await RefreshAsync();
     }
 
-    private void OnEditorLoaded(object sender, RoutedEventArgs e)
+    // EditorHost handlers (native Scintilla child HWND)
+    private void OnEditorHostLoaded(object sender, RoutedEventArgs e)
     {
-        AttachEditorScrollViewers();
-        UpdateLineNumbersTransform();
-    }
+        EnsureScintillaCreated();
+        UpdateScintillaBounds();
+        StartDirtyPoll();
 
-    private void OnEditorViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-    {
-        if (sender is ScrollViewer sv)
+        // Keep the native window hidden until a script is selected.
+        if (_current == null)
         {
-            _editorScrollViewer = sv;
-        }
-
-        if (_suppressEditorViewChanged)
-        {
-            UpdateLineNumbersTransform();
-            return;
-        }
-
-        _isScrolling = e.IsIntermediate;
-
-        if (_isScrolling)
-        {
-            // Avoid any heavy work while the user scrolls.
-            _highlightTimer?.Stop();
-        }
-
-        UpdateLineNumbersTransform();
-
-        if (!_isScrolling)
-        {
-            // Keep highlight overlay aligned when scrolling ends.
-            ScheduleHighlight();
+            HideScintilla();
         }
     }
 
-    private void UpdateLineNumbersTransform()
+    private void OnEditorHostUnloaded(object sender, RoutedEventArgs e)
     {
-        if (_editorScrollViewer == null)
-        {
-            AttachEditorScrollViewers();
-            if (_editorScrollViewer == null)
-            {
-                return;
-            }
-        }
-
-        LineNumbersTransform.Y = -_editorScrollViewer.VerticalOffset;
+        StopDirtyPoll();
+        DestroyScintilla();
     }
 
-    private void OnEditorTextChanged(object sender, RoutedEventArgs e)
+    private void OnEditorHostSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_suppressEditorChange)
-        {
-            return;
-        }
+        UpdateScintillaBounds();
+    }
 
-        if (_current == null || _current.IsBundled)
-        {
-            return;
-        }
+    private void OnEditorHostLayoutUpdated(object sender, object e)
+    {
+        // SizeChanged won't fire for pure layout moves (e.g. column resize, pane toggle).
+        UpdateScintillaBounds();
+    }
 
-        var normalized = GetEditorTextNormalized();
-        _isDirty = !string.Equals(normalized, _loadedTextNormalized, StringComparison.Ordinal);
-        UpdateCommandStates();
-
-        UpdateLineNumbers();
-        ScheduleHighlight();
+    private void OnEditorHostPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        FocusEditorNative();
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
@@ -222,6 +175,7 @@ public sealed partial class ScriptsPage : Page
             await AppServices.Scripts.SaveScriptTextAsync(_current, currentText);
             _loadedTextNormalized = currentText;
             _isDirty = false;
+            MarkEditorSaved();
             UpdateCommandStates();
         }
         catch (Exception ex)
@@ -399,12 +353,16 @@ public sealed partial class ScriptsPage : Page
             EmptyHint.Visibility = Visibility.Collapsed;
             EditorHost.Visibility = Visibility.Visible;
 
-            EditorBox.IsReadOnly = script.IsBundled;
+            EnsureScintillaCreated();
+            ConfigureScintillaIfNeeded();
+            SetEditorReadOnly(script.IsBundled);
             SetEditorText(text);
-            UpdateLineNumbers();
-            ScheduleHighlight(immediate: true);
+            MarkEditorSaved();
+            ShowScintilla();
 
             UpdateCommandStates();
+
+            FocusEditorNative();
 
             await Task.CompletedTask;
         });
@@ -419,13 +377,16 @@ public sealed partial class ScriptsPage : Page
         _ = RunOnUiAsync(async () =>
         {
             _suppressEditorChange = true;
+            EnsureScintillaCreated();
             SetEditorText(string.Empty);
-            EditorBox.IsReadOnly = true;
+            SetEditorReadOnly(true);
+            MarkEditorSaved();
             _suppressEditorChange = false;
 
             EditorTitleText.Text = "Select a script";
             EditorSubtitleText.Text = string.Empty;
             EditorHost.Visibility = Visibility.Collapsed;
+            HideScintilla();
             EmptyHint.Visibility = Visibility.Visible;
             UpdateCommandStates();
 
@@ -472,24 +433,237 @@ public sealed partial class ScriptsPage : Page
 
 
 
-    private void SetEditorText(string text)
+    // Native editor (Scintilla)
+    private void EnsureScintillaCreated()
     {
-        _suppressEditorChange = true;
+        if (_scintillaHwnd != IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (App.MainWindow == null)
+        {
+            return;
+        }
+
+        // Make sure SciLexer.dll is loaded so the Scintilla window class exists.
+        _ = ScintillaWin32.LoadLibraryW("SciLexer.dll");
+
+        var hwndOwner = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+        if (hwndOwner == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _scintillaHwnd = ScintillaWin32.CreateWindowExW(
+            dwExStyle: 0,
+            lpClassName: "Scintilla",
+            lpWindowName: string.Empty,
+            // NOTE: WinUI's XAML surface can cover WS_CHILD HWNDs. Use an owned
+            // popup window so the editor is always visible above XAML.
+            dwStyle: ScintillaWin32.WS_POPUP | ScintillaWin32.WS_VISIBLE | ScintillaWin32.WS_TABSTOP,
+            x: 0,
+            y: 0,
+            nWidth: 10,
+            nHeight: 10,
+            hWndParent: hwndOwner,
+            hMenu: IntPtr.Zero,
+            hInstance: IntPtr.Zero,
+            lpParam: IntPtr.Zero
+        );
+
+        if (_scintillaHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // Best-effort: ask Windows to treat this control as dark-themed
+        // (helps with native scrollbars being light/white).
         try
         {
-            EditorBox.Document.SetText(TextSetOptions.None, NormalizeLineEndings(text ?? string.Empty));
-            EditorBox.Document.Selection.SetRange(0, 0);
+            var dark = 1;
+            _ = ScintillaWin32.DwmSetWindowAttribute(_scintillaHwnd, ScintillaWin32.DWMWA_USE_IMMERSIVE_DARK_MODE_20, ref dark, sizeof(int));
+            _ = ScintillaWin32.DwmSetWindowAttribute(_scintillaHwnd, ScintillaWin32.DWMWA_USE_IMMERSIVE_DARK_MODE_19, ref dark, sizeof(int));
+            _ = ScintillaWin32.SetWindowTheme(_scintillaHwnd, "DarkMode_Explorer", null);
+        }
+        catch
+        {
+            // Ignore theming failures; editor still works.
+        }
+
+        HideScintilla();
+    }
+
+    private void DestroyScintilla()
+    {
+        if (_scintillaHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = ScintillaWin32.DestroyWindow(_scintillaHwnd);
+        _scintillaHwnd = IntPtr.Zero;
+        _scintillaConfigured = false;
+    }
+
+    private void ConfigureScintillaIfNeeded()
+    {
+        if (_scintillaConfigured || _scintillaHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETCODEPAGE, ScintillaWin32.SC_CP_UTF8, 0);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETLEXER, ScintillaWin32.SCLEX_CPP, 0);
+
+        // Dark theme-ish colors.
+        var back = ScintillaWin32.Rgb(0x1E, 0x1E, 0x1E);
+        var fore = ScintillaWin32.Rgb(0xD4, 0xD4, 0xD4);
+        var keyword = ScintillaWin32.Rgb(0xC5, 0x86, 0xC0);
+        var str = ScintillaWin32.Rgb(0xCE, 0x91, 0x78);
+        var comment = ScintillaWin32.Rgb(0x6A, 0x99, 0x55);
+        var number = ScintillaWin32.Rgb(0xB5, 0xCE, 0xA8);
+        var caret = ScintillaWin32.Rgb(0xAE, 0xAF, 0xAD);
+        var selBack = ScintillaWin32.Rgb(0x26, 0x4F, 0x78);
+
+        // Base style.
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETBACK, ScintillaWin32.STYLE_DEFAULT, back);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.STYLE_DEFAULT, fore);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETSIZE, ScintillaWin32.STYLE_DEFAULT, 13);
+        SetScintillaFont("Consolas");
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLECLEARALL, 0, 0);
+
+        // C-like lexer styles.
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_WORD, keyword);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETBOLD, ScintillaWin32.SCE_C_WORD, 0);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_STRING, str);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_CHARACTER, str);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_NUMBER, number);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_COMMENT, comment);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_COMMENTLINE, comment);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFORE, ScintillaWin32.SCE_C_COMMENTDOC, comment);
+
+        // Selection + caret.
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETCARETFORE, caret, 0);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETSELFORE, 1, fore);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETSELBACK, 1, selBack);
+
+        // No margin/line numbers.
+        for (var i = 0; i < 5; i++)
+        {
+            ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETMARGINTYPEN, i, 0);
+            ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETMARGINWIDTHN, i, 0);
+        }
+
+        // Disable caret line highlight (keeps UI calmer).
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETCARETLINEVISIBLE, 0, 0);
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETCARETLINEBACK, back, 0);
+
+        SetScintillaKeywords("break case catch class const continue debugger default delete do else export extends finally for function if import in instanceof let new return super switch this throw try typeof var void while with yield await async true false null undefined");
+
+        _scintillaConfigured = true;
+    }
+
+    private void SetScintillaFont(string fontName)
+    {
+        var bytes = Encoding.UTF8.GetBytes(fontName + "\0");
+        var ptr = Marshal.AllocHGlobal(bytes.Length);
+        try
+        {
+            Marshal.Copy(bytes, 0, ptr, bytes.Length);
+            ScintillaWin32.SendPtr(_scintillaHwnd, ScintillaWin32.SCI_STYLESETFONT, ScintillaWin32.STYLE_DEFAULT, ptr);
         }
         finally
         {
-            _suppressEditorChange = false;
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
+
+    private void SetScintillaKeywords(string keywords)
+    {
+        var bytes = Encoding.UTF8.GetBytes(keywords + "\0");
+        var ptr = Marshal.AllocHGlobal(bytes.Length);
+        try
+        {
+            Marshal.Copy(bytes, 0, ptr, bytes.Length);
+            ScintillaWin32.SendPtr(_scintillaHwnd, ScintillaWin32.SCI_SETKEYWORDS, 0, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
+        }
+    }
+
+    private void SetEditorReadOnly(bool readOnly)
+    {
+        if (_scintillaHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETREADONLY, readOnly ? 1 : 0, 0);
+    }
+
+    private void MarkEditorSaved()
+    {
+        if (_scintillaHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        ScintillaWin32.Send(_scintillaHwnd, ScintillaWin32.SCI_SETSAVEPOINT, 0, 0);
+    }
+
+    private void SetEditorText(string text)
+    {
+        EnsureScintillaCreated();
+        ConfigureScintillaIfNeeded();
+
+        if (_scintillaHwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var normalized = NormalizeLineEndings(text ?? string.Empty);
+        var bytes = Encoding.UTF8.GetBytes(normalized + "\0");
+        var ptr = Marshal.AllocHGlobal(bytes.Length);
+        try
+        {
+            Marshal.Copy(bytes, 0, ptr, bytes.Length);
+            ScintillaWin32.SendPtr(_scintillaHwnd, ScintillaWin32.SCI_SETTEXT, 0, ptr);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ptr);
         }
     }
 
     private string GetEditorTextRaw()
     {
-        EditorBox.Document.GetText(TextGetOptions.None, out var text);
-        return text ?? string.Empty;
+        if (_scintillaHwnd == IntPtr.Zero)
+        {
+            return string.Empty;
+        }
+
+        var len = (int)ScintillaWin32.SendMessageW(_scintillaHwnd, ScintillaWin32.SCI_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
+        if (len <= 0)
+        {
+            return string.Empty;
+        }
+
+        // SCI_GETTEXT expects buffer size including trailing NUL.
+        var buf = Marshal.AllocHGlobal(len + 1);
+        try
+        {
+            _ = ScintillaWin32.SendMessageW(_scintillaHwnd, ScintillaWin32.SCI_GETTEXT, new IntPtr(len + 1), buf);
+            var bytes = new byte[len];
+            Marshal.Copy(buf, bytes, 0, len);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buf);
+        }
     }
 
     private string GetEditorTextNormalized()
@@ -503,354 +677,132 @@ public sealed partial class ScriptsPage : Page
         return text.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
-    private void OnEditorKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    private void ShowScintilla()
     {
-        if (e.Key != Windows.System.VirtualKey.Tab)
+        if (_scintillaHwnd == IntPtr.Zero)
         {
             return;
         }
 
-        if (_current == null || _current.IsBundled || EditorBox.IsReadOnly)
+        _ = ScintillaWin32.ShowWindow(_scintillaHwnd, ScintillaWin32.SW_SHOW);
+        UpdateScintillaBounds();
+    }
+
+    private void HideScintilla()
+    {
+        if (_scintillaHwnd == IntPtr.Zero)
         {
             return;
         }
 
-        // RichEditBox doesn't have AcceptsTab; handle tab insertion ourselves.
-        var sel = EditorBox.Document.Selection;
-        sel.Text = "\t";
-        e.Handled = true;
+        _ = ScintillaWin32.ShowWindow(_scintillaHwnd, ScintillaWin32.SW_HIDE);
     }
 
-    private void UpdateLineNumbers()
+    private void FocusEditorNative()
     {
-        var normalized = GetEditorTextNormalized();
-        var lineCount = 1;
-        for (var i = 0; i < normalized.Length; i++)
-        {
-            if (normalized[i] == '\n') lineCount++;
-        }
-
-        if (lineCount < 1) lineCount = 1;
-
-        var sb = new StringBuilder(capacity: Math.Max(16, lineCount * 4));
-        for (var i = 1; i <= lineCount; i++)
-        {
-            sb.Append(i);
-            if (i != lineCount) sb.Append("\r\n");
-        }
-
-        LineNumbersText.Text = sb.ToString();
-        UpdateLineNumbersTransform();
-    }
-
-    private void ScheduleHighlight(bool immediate = false)
-    {
-        if (_isScrolling)
+        if (_scintillaHwnd == IntPtr.Zero)
         {
             return;
         }
 
-        if (immediate)
+        _ = DispatcherQueue.TryEnqueue(() =>
         {
-            ApplySyntaxHighlighting();
-            return;
-        }
-
-        _highlightTimer ??= DispatcherQueue.CreateTimer();
-        _highlightTimer.Stop();
-        _highlightTimer.Interval = TimeSpan.FromMilliseconds(120);
-        _highlightTimer.Tick -= OnHighlightTimerTick;
-        _highlightTimer.Tick += OnHighlightTimerTick;
-        _highlightTimer.Start();
+            _ = ScintillaWin32.SetFocus(_scintillaHwnd);
+        });
     }
 
-    private void OnHighlightTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    private void UpdateScintillaBounds()
     {
-        sender.Stop();
-        ApplySyntaxHighlighting();
-    }
-
-    private void ApplySyntaxHighlighting()
-    {
-        if (_suppressHighlight)
+        if (_scintillaHwnd == IntPtr.Zero)
         {
             return;
         }
 
-        if (_isScrolling)
+        if (EditorHost.Visibility != Visibility.Visible)
         {
             return;
         }
 
-        var text = GetEditorTextRaw();
-        // Keep it responsive.
-        if (text.Length > 200_000)
+        if (XamlRoot == null || App.MainWindow == null)
         {
-            ResetSyntaxHighlighting();
             return;
         }
 
-        var tokens = TokenizeJavaScript(text);
-        if (tokens.Count > 25_000)
+        // Get bounds in window coordinates, then convert to screen pixels.
+        var p = EditorHost.TransformToVisual(null).TransformPoint(new Point(0, 0));
+        var scale = XamlRoot.RasterizationScale;
+
+        var x = (int)Math.Round(p.X * scale);
+        var y = (int)Math.Round(p.Y * scale);
+        var w = (int)Math.Round(EditorHost.ActualWidth * scale);
+        var h = (int)Math.Round(EditorHost.ActualHeight * scale);
+
+        // Visual padding around the native control.
+        var inset = (int)Math.Round(8 * scale);
+        if (inset > 0)
         {
-            ResetSyntaxHighlighting();
+            x += inset;
+            y += inset;
+            w -= inset * 2;
+            h -= inset * 2;
+        }
+        if (w < 4 || h < 4)
+        {
             return;
         }
 
-        _suppressHighlight = true;
-        try
+        var hwndOwner = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+        if (hwndOwner == IntPtr.Zero)
         {
-            var sv = _editorScrollViewer;
-            var keepH = sv?.HorizontalOffset;
-            var keepV = sv?.VerticalOffset;
-
-            _suppressEditorViewChanged = true;
-
-            ResetSyntaxHighlighting();
-
-            foreach (var t in tokens)
-            {
-                var start = t.Start;
-                var end = start + t.Length;
-                if (start >= text.Length)
-                {
-                    continue;
-                }
-
-                if (end > text.Length)
-                {
-                    end = text.Length;
-                }
-                if (start < 0 || end <= start)
-                {
-                    continue;
-                }
-
-                var range = EditorBox.Document.GetRange(start, end);
-                range.CharacterFormat.ForegroundColor = t.Kind switch
-                {
-                    JsTokenKind.Keyword => KeywordBrush.Color,
-                    JsTokenKind.String => StringBrush.Color,
-                    JsTokenKind.Comment => CommentBrush.Color,
-                    JsTokenKind.Number => NumberBrush.Color,
-                    _ => BaseBrush.Color,
-                };
-            }
-
-            // Applying formatting can cause RichEditBox to snap the viewport back
-            // to the caret/selection. Restore the user's scroll position.
-            if (sv != null && keepH != null && keepV != null)
-            {
-                sv.ChangeView(keepH.Value, keepV.Value, zoomFactor: null, disableAnimation: true);
-            }
+            return;
         }
-        finally
-        {
-            _suppressHighlight = false;
-            _ = DispatcherQueue.TryEnqueue(() => _suppressEditorViewChanged = false);
-        }
+
+        var pt = new ScintillaWin32.POINT { x = x, y = y };
+        _ = ScintillaWin32.ClientToScreen(hwndOwner, ref pt);
+
+        _ = ScintillaWin32.SetWindowPos(
+            _scintillaHwnd,
+            ScintillaWin32.HWND_TOP,
+            pt.x,
+            pt.y,
+            w,
+            h,
+            ScintillaWin32.SWP_NOACTIVATE
+        );
     }
 
-    private void ResetSyntaxHighlighting()
+    private void StartDirtyPoll()
     {
-        // Clear previous formatting back to the control's Foreground (when possible)
-        // so deleting tokens doesn't leave stale colors behind.
-        var baseColor = (EditorBox.Foreground as SolidColorBrush)?.Color ?? BaseBrush.Color;
-        EditorBox.Document.GetText(TextGetOptions.None, out var currentText);
-        var len = (currentText ?? string.Empty).Length;
-        var full = EditorBox.Document.GetRange(0, len);
-        full.CharacterFormat.ForegroundColor = baseColor;
+        _dirtyPollTimer ??= DispatcherQueue.CreateTimer();
+        _dirtyPollTimer.Interval = TimeSpan.FromMilliseconds(120);
+        _dirtyPollTimer.Tick -= OnDirtyPollTick;
+        _dirtyPollTimer.Tick += OnDirtyPollTick;
+        _dirtyPollTimer.Start();
     }
 
-    private enum JsTokenKind
+    private void StopDirtyPoll()
     {
-        Keyword,
-        String,
-        Comment,
-        Number,
+        _dirtyPollTimer?.Stop();
     }
 
-    private readonly struct JsToken
+    private void OnDirtyPollTick(DispatcherQueueTimer sender, object args)
     {
-        public readonly int Start;
-        public readonly int Length;
-        public readonly JsTokenKind Kind;
-
-        public JsToken(int start, int length, JsTokenKind kind)
+        if (_suppressEditorChange)
         {
-            Start = start;
-            Length = length;
-            Kind = kind;
-        }
-    }
-
-    private static readonly HashSet<string> JsKeywords = new(StringComparer.Ordinal)
-    {
-        "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete",
-        "do", "else", "export", "extends", "finally", "for", "function", "if", "import", "in",
-        "instanceof", "let", "new", "return", "super", "switch", "this", "throw", "try", "typeof",
-        "var", "void", "while", "with", "yield", "await", "async", "true", "false", "null", "undefined",
-    };
-
-    private static List<JsToken> TokenizeJavaScript(string text)
-    {
-        var tokens = new List<JsToken>(capacity: 2048);
-        var i = 0;
-        while (i < text.Length)
-        {
-            var c = text[i];
-
-            // Line comment
-            if (c == '/' && i + 1 < text.Length && text[i + 1] == '/')
-            {
-                var start = i;
-                i += 2;
-                while (i < text.Length && text[i] != '\n' && text[i] != '\r') i++;
-                tokens.Add(new JsToken(start, i - start, JsTokenKind.Comment));
-                continue;
-            }
-
-            // Block comment
-            if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
-            {
-                var start = i;
-                i += 2;
-                while (i + 1 < text.Length)
-                {
-                    if (text[i] == '*' && text[i + 1] == '/')
-                    {
-                        i += 2;
-                        break;
-                    }
-                    i++;
-                }
-                tokens.Add(new JsToken(start, i - start, JsTokenKind.Comment));
-                continue;
-            }
-
-            // Strings
-            if (c == '\'' || c == '"' || c == '`')
-            {
-                var quote = c;
-                var start = i;
-                i++;
-                while (i < text.Length)
-                {
-                    var ch = text[i];
-                    if (ch == '\\')
-                    {
-                        i += 2;
-                        continue;
-                    }
-
-                    if (quote != '`' && (ch == '\n' || ch == '\r'))
-                    {
-                        break;
-                    }
-
-                    if (ch == quote)
-                    {
-                        i++;
-                        break;
-                    }
-
-                    i++;
-                }
-
-                tokens.Add(new JsToken(start, i - start, JsTokenKind.String));
-                continue;
-            }
-
-            // Numbers
-            if ((c >= '0' && c <= '9') || (c == '.' && i + 1 < text.Length && text[i + 1] >= '0' && text[i + 1] <= '9'))
-            {
-                var start = i;
-                i++;
-                while (i < text.Length)
-                {
-                    var ch = text[i];
-                    if ((ch >= '0' && ch <= '9') || ch == '.' || ch == 'x' || ch == 'X' || ch == 'b' || ch == 'B' || ch == 'o' || ch == 'O'
-                        || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F') || ch == '_')
-                    {
-                        i++;
-                        continue;
-                    }
-                    break;
-                }
-                tokens.Add(new JsToken(start, i - start, JsTokenKind.Number));
-                continue;
-            }
-
-            // Identifiers / keywords
-            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '$')
-            {
-                var start = i;
-                i++;
-                while (i < text.Length)
-                {
-                    var ch = text[i];
-                    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '$')
-                    {
-                        i++;
-                        continue;
-                    }
-                    break;
-                }
-
-                var ident = text.Substring(start, i - start);
-                if (JsKeywords.Contains(ident))
-                {
-                    tokens.Add(new JsToken(start, i - start, JsTokenKind.Keyword));
-                }
-
-                continue;
-            }
-
-            i++;
+            return;
         }
 
-        return tokens;
-    }
-
-    private void AttachEditorScrollViewers()
-    {
-        foreach (var sv in _editorScrollViewers)
+        if (_current == null || _current.IsBundled || _scintillaHwnd == IntPtr.Zero)
         {
-            sv.ViewChanged -= OnEditorViewChanged;
-        }
-        _editorScrollViewers.Clear();
-
-        foreach (var sv in FindDescendantScrollViewers(EditorBox))
-        {
-            sv.ViewChanged += OnEditorViewChanged;
-            _editorScrollViewers.Add(sv);
+            return;
         }
 
-        _editorScrollViewer ??= _editorScrollViewers.FirstOrDefault();
-    }
-
-    private static List<ScrollViewer> FindDescendantScrollViewers(DependencyObject root)
-    {
-        var list = new List<ScrollViewer>(capacity: 2);
-        var q = new Queue<DependencyObject>();
-        q.Enqueue(root);
-
-        while (q.Count > 0)
+        var modified = ScintillaWin32.SendMessageW(_scintillaHwnd, ScintillaWin32.SCI_GETMODIFY, IntPtr.Zero, IntPtr.Zero) != IntPtr.Zero;
+        if (modified != _isDirty)
         {
-            var cur = q.Dequeue();
-            if (cur is ScrollViewer sv)
-            {
-                list.Add(sv);
-            }
-
-            var count = VisualTreeHelper.GetChildrenCount(cur);
-            for (var i = 0; i < count; i++)
-            {
-                q.Enqueue(VisualTreeHelper.GetChild(cur, i));
-            }
+            _isDirty = modified;
+            UpdateCommandStates();
         }
-
-        return list;
     }
 
     private async Task<bool> ConfirmAsync(string title, string message, string primaryButtonText, string closeButtonText)
