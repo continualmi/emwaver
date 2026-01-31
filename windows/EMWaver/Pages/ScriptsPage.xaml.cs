@@ -111,8 +111,15 @@ public sealed partial class ScriptsPage : Page
             {
                 EnsureScintillaCreated();
                 ConfigureScintillaIfNeeded();
+                // Re-set text in case the editor wasn't created when the script was first opened.
+                if (!string.IsNullOrEmpty(_loadedTextNormalized))
+                {
+                    SetEditorText(_loadedTextNormalized);
+                }
+                SetEditorReadOnly(_current.IsBundled);
                 ShowScintilla();
                 _ = DispatcherQueue.TryEnqueue(UpdateScintillaBounds);
+                FocusEditorNative();
             }
         }
         else
