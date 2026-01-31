@@ -92,7 +92,7 @@
                             </Border>
 
                             <Grid Grid.Column="1">
-                                <TextBox
+                                <RichEditBox
                                     x:Name="EditorBox"
                                     FontFamily="Consolas"
                                     FontSize="13"
@@ -101,7 +101,6 @@
                                     Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                     SelectionHighlightColor="{ThemeResource SystemAccentColor}"
                                     TextWrapping="NoWrap"
-                                    AcceptsReturn="True"
                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                     IsSpellCheckEnabled="False"
