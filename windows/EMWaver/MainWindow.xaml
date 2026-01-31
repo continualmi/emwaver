@@ -42,6 +42,7 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                 <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
                 <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="DeviceBufferText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
         </Grid>
 

@@ -1,4 +1,5 @@
 using EMWaver.Models;
+using EMWaver.Interop;
 using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.ObjectModel;
@@ -246,6 +247,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = null;
             DeviceEmwaverVersion = null;
 
+            // Keep parity with iOS/macOS: clear shared buffer state on connect.
+            NativeBufferRust.ClearAll();
+
             _inPort = await MidiInPort.FromIdAsync(port.InDeviceId);
             _outPort = await MidiOutPort.FromIdAsync(port.OutDeviceId);
 
@@ -324,6 +328,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         ConnectedPort = null;
         DeviceEmwaverVersion = null;
+
+        // Keep parity with iOS/macOS: avoid stale capture across sessions.
+        NativeBufferRust.ClearAll();
     }
 
     internal void RequestEnterUpdateMode()
@@ -444,11 +451,20 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
+            var tsMs = NowMs();
             var cmdLane = superframe.Take(LaneSizeBytes).ToArray();
             var streamLane = superframe.Skip(LaneSizeBytes).Take(LaneSizeBytes).ToArray();
 
-            if (!IsAllZero(cmdLane)) HandleLane(cmdLane);
-            if (!IsAllZero(streamLane)) HandleLane(streamLane);
+            if (!IsAllZero(cmdLane))
+            {
+                NativeBufferRust.StoreBulkPkt(cmdLane, tsMs);
+                HandleLane(cmdLane);
+            }
+            if (!IsAllZero(streamLane))
+            {
+                NativeBufferRust.StoreBulkPkt(streamLane, tsMs);
+                HandleLane(streamLane);
+            }
         }
         catch
         {
@@ -487,8 +503,16 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return;
         }
 
+        // Log TX for buffer parity/debugging (Rust buffer core chunks to 18B packets).
+        NativeBufferRust.AppendTxBytes(superframe36, NowMs());
+
         var msg = new MidiSystemExclusiveMessage(BufferFromBytes(sysex));
         _outPort.SendMessage(msg);
+    }
+
+    private static ulong NowMs()
+    {
+        return (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
     private static byte[] MakeLanePacket(ReadOnlySpan<byte> laneBytes)
