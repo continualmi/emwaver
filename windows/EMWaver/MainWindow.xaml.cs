@@ -1,8 +1,8 @@
-using EMWaver.Pages;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -18,42 +18,33 @@ public sealed partial class MainWindow : Window
         AppServices.Device.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
         AppServices.Device.PropertyChanged += OnDevicePropertyChanged;
 
-        AutoConnectToggle.IsChecked = AppServices.Device.AutoConnectEnabled;
+        AppServices.Device.AvailablePorts.CollectionChanged += OnPortsCollectionChanged;
 
-        ConnectFlyout.Opening += OnConnectFlyoutOpening;
-
-        ContentFrame.Navigate(typeof(ScriptsPage));
+        ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
+
+        // Initial UI state.
+        RunOnUi(() =>
+        {
+            UpdateDeviceStatus();
+            RebuildConnectMenu();
+        });
     }
 
-    private void OnConnectFlyoutOpening(object sender, object e)
+    private void RunOnUi(Action action)
     {
-        // Rebuild each time so it stays in sync with refresh/connect.
-        ConnectFlyout.Items.Clear();
-
-        var ports = AppServices.Device.AvailablePorts.ToList();
-        if (ports.Count == 0)
+        if (DispatcherQueue.HasThreadAccess)
         {
-            var item = new MenuFlyoutItem { Text = "No ports" };
-            item.IsEnabled = false;
-            ConnectFlyout.Items.Add(item);
+            action();
             return;
         }
 
-        foreach (var p in ports)
-        {
-            var isCurrent = AppServices.Device.IsConnected && AppServices.Device.ConnectedPort?.DisplayName == p.DisplayName;
-            var item = new MenuFlyoutItem { Text = p.DisplayName };
-            if (isCurrent)
-            {
-                item.Icon = new SymbolIcon(Symbol.Accept);
-            }
-            item.Click += async (_, __) =>
-            {
-                await AppServices.Device.ConnectAsync(p);
-            };
-            ConnectFlyout.Items.Add(item);
-        }
+        _ = DispatcherQueue.TryEnqueue(() => action());
+    }
+
+    private void OnPortsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        RunOnUi(RebuildConnectMenu);
     }
 
     private async Task BootstrapAsync()
@@ -70,12 +61,23 @@ public sealed partial class MainWindow : Window
         }
 
         UpdateDeviceStatus();
+        RebuildConnectMenu();
     }
 
     private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Keep the top bar status fresh.
-        UpdateDeviceStatus();
+        // Device manager can raise PropertyChanged off-UI-thread.
+        RunOnUi(() =>
+        {
+            UpdateDeviceStatus();
+
+            if (e.PropertyName == nameof(AppServices.Device.AutoConnectEnabled)
+                || e.PropertyName == nameof(AppServices.Device.ConnectedPort)
+                || e.PropertyName == nameof(AppServices.Device.IsConnected))
+            {
+                RebuildConnectMenu();
+            }
+        });
     }
 
     private void UpdateDeviceStatus()
@@ -98,31 +100,64 @@ public sealed partial class MainWindow : Window
             ? $"EMWaver {device.DeviceEmwaverVersion}"
             : string.Empty;
 
-        AutoConnectToggle.IsChecked = device.AutoConnectEnabled;
+        AutoConnectMenuItem.IsChecked = device.AutoConnectEnabled;
+        UpdateModeStatusItem.Text = device.DfuConnected ? "Update Mode: Detected" : "Update Mode: Not detected";
+
+        if (!string.IsNullOrWhiteSpace(device.LastErrorText))
+        {
+            LastErrorMenuItem.Text = device.LastErrorText;
+            LastErrorMenuItem.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            LastErrorMenuItem.Text = string.Empty;
+            LastErrorMenuItem.Visibility = Visibility.Collapsed;
+        }
     }
 
-    private void OnScriptsClick(object sender, RoutedEventArgs e)
+    private void RebuildConnectMenu()
     {
-        ScriptsToggle.IsChecked = true;
-        DeviceToggle.IsChecked = false;
-        ContentFrame.Navigate(typeof(ScriptsPage));
-    }
+        ConnectSubmenu.Items.Clear();
 
-    private void OnDeviceClick(object sender, RoutedEventArgs e)
-    {
-        ScriptsToggle.IsChecked = false;
-        DeviceToggle.IsChecked = true;
-        ContentFrame.Navigate(typeof(DevicePage));
+        var ports = AppServices.Device.AvailablePorts.ToList();
+        if (ports.Count == 0)
+        {
+            var item = new MenuFlyoutItem { Text = "No ports", IsEnabled = false };
+            ConnectSubmenu.Items.Add(item);
+            return;
+        }
+
+        foreach (var p in ports)
+        {
+            var isCurrent = AppServices.Device.IsConnected
+                && AppServices.Device.ConnectedPort?.DisplayName == p.DisplayName;
+
+            var item = new MenuFlyoutItem { Text = p.DisplayName };
+            if (isCurrent)
+            {
+                item.Icon = new SymbolIcon(Symbol.Accept);
+            }
+
+            item.Click += async (_, __) =>
+            {
+                await AppServices.Device.ConnectAsync(p);
+                UpdateDeviceStatus();
+                RebuildConnectMenu();
+            };
+
+            ConnectSubmenu.Items.Add(item);
+        }
     }
 
     private async void OnRefreshPortsClick(object sender, RoutedEventArgs e)
     {
         await AppServices.Device.RefreshPortsAsync();
+        RunOnUi(RebuildConnectMenu);
     }
 
     private void OnAutoConnectClick(object sender, RoutedEventArgs e)
     {
-        AppServices.Device.AutoConnectEnabled = AutoConnectToggle.IsChecked == true;
+        AppServices.Device.AutoConnectEnabled = AutoConnectMenuItem.IsChecked;
     }
 
     private void OnDisconnectClick(object sender, RoutedEventArgs e)
