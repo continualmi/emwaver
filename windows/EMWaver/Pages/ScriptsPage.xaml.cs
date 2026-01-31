@@ -29,7 +29,12 @@ public sealed partial class ScriptsPage : Page
     private ScrollViewer? _editorScrollViewer;
     private bool _suppressHighlight;
     private bool _isScrolling;
-    private bool _pendingHighlightAfterScroll;
+
+    private static readonly SolidColorBrush BaseBrush = new(Color.FromArgb(0xFF, 0xD4, 0xD4, 0xD4));
+    private static readonly SolidColorBrush KeywordBrush = new(Color.FromArgb(0xFF, 0xC5, 0x86, 0xC0));
+    private static readonly SolidColorBrush StringBrush = new(Color.FromArgb(0xFF, 0xCE, 0x91, 0x78));
+    private static readonly SolidColorBrush CommentBrush = new(Color.FromArgb(0xFF, 0x6A, 0x99, 0x55));
+    private static readonly SolidColorBrush NumberBrush = new(Color.FromArgb(0xFF, 0xB5, 0xCE, 0xA8));
 
     public ScriptsPage()
     {
@@ -73,6 +78,12 @@ public sealed partial class ScriptsPage : Page
         }
 
         UpdateLineNumbersTransform();
+
+        if (!_isScrolling)
+        {
+            // Keep highlight overlay aligned when scrolling ends.
+            ScheduleHighlight();
+        }
     }
 
     private void UpdateLineNumbersTransform()
@@ -102,8 +113,7 @@ public sealed partial class ScriptsPage : Page
         UpdateCommandStates();
 
         UpdateLineNumbers();
-        // Disabled for now: RichEditBox formatting-based highlighting caused
-        // unacceptable scroll snapping (viewport jumps back to caret while scrolling).
+        ScheduleHighlight();
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
@@ -504,7 +514,27 @@ public sealed partial class ScriptsPage : Page
 
     private void ScheduleHighlight(bool immediate = false)
     {
-        // Disabled: see comment in OnEditorTextChanged.
+        // WinUI 3 TextBox doesn't expose TextHighlighters in this SDK, and the
+        // overlay approach proved too visually glitchy. Keep editing stable.
+        return;
+
+        if (_isScrolling)
+        {
+            return;
+        }
+
+        if (immediate)
+        {
+            ApplySyntaxHighlighting();
+            return;
+        }
+
+        _highlightTimer ??= DispatcherQueue.CreateTimer();
+        _highlightTimer.Stop();
+        _highlightTimer.Interval = TimeSpan.FromMilliseconds(120);
+        _highlightTimer.Tick -= OnHighlightTimerTick;
+        _highlightTimer.Tick += OnHighlightTimerTick;
+        _highlightTimer.Start();
     }
 
     private void OnHighlightTimerTick(DispatcherQueueTimer sender, object args)
@@ -515,7 +545,35 @@ public sealed partial class ScriptsPage : Page
 
     private void ApplySyntaxHighlighting()
     {
-        // Intentionally no-op (see comment in OnEditorTextChanged).
+        // See ScheduleHighlight(): syntax highlighting is currently disabled on Windows.
+        return;
+
+        if (_suppressHighlight)
+        {
+            return;
+        }
+
+        if (_isScrolling)
+        {
+            return;
+        }
+
+        var text = GetEditorTextRaw();
+        // Keep it responsive.
+        if (text.Length > 200_000)
+        {
+            return;
+        }
+
+        var tokens = TokenizeJavaScript(text);
+        if (tokens.Count > 25_000)
+        {
+            return;
+        }
+
+        _suppressHighlight = true;
+        try { }
+        finally { _suppressHighlight = false; }
     }
 
     private enum JsTokenKind
