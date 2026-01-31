@@ -146,7 +146,7 @@ public struct ScriptsRootView: View {
                 } else {
                     List {
                         if !viewModel.assetScripts.isEmpty {
-                            Section("Asset Scripts (Read-Only)") {
+                            Section("Example scripts") {
                                 ForEach(viewModel.assetScripts) { script in
                                     ScriptRow(
                                         script: script,
