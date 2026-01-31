@@ -25,11 +25,11 @@ public struct ScriptsRootView: View {
     @State private var showingPreview = false
     @State private var currentScriptId: String?
     @State private var editorContent: String = ""
+    @State private var editorIsReadOnly = false
     @State private var lineWrapEnabled = false
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
-    @State private var assetPreview: AssetScriptPreview?
 
     public init(device: (any ScriptDevice)? = nil) {
         self.device = device
@@ -78,9 +78,6 @@ public struct ScriptsRootView: View {
             }
             .sheet(item: $namePrompt) { prompt in
                 NamePromptSheet(prompt: prompt)
-            }
-            .sheet(item: $assetPreview) { preview in
-                AssetScriptPreviewSheet(preview: preview)
             }
             .confirmationDialog(
                 "Delete script?",
@@ -154,7 +151,7 @@ public struct ScriptsRootView: View {
                                         script: script,
                                         isSelected: script.id == viewModel.selectedScriptId,
                                         onTap: { previewScript(script.id) },
-                                        onEdit: { openAssetPreview(for: script.id) }
+                                        onEdit: { openEditor(for: script.id) }
                                     )
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
@@ -184,40 +181,48 @@ public struct ScriptsRootView: View {
     }
 
     private var editorView: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                if lineWrapEnabled {
-                    TextEditor(text: $editorContent)
-                        .font(.system(.body, design: .monospaced))
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .onChange(of: editorContent) { newValue in
-                            if let id = currentScriptId {
-                                viewModel.updateDraft(for: id, content: newValue)
+        VStack(spacing: 0) {
+                if editorIsReadOnly {
+                    HStack(spacing: 10) {
+                        Label("Example script (read-only)", systemImage: "lock")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Button("Make Copy") {
+                            if let currentScriptId {
+                                presentNamePrompt(context: .copy(id: currentScriptId))
                             }
                         }
-                } else {
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        HStack(spacing: 0) {
-                            TextEditor(text: $editorContent)
-                                .font(.system(.body, design: .monospaced))
-                                .scrollContentBackground(.hidden)
-                                .frame(width: calculateTextWidth(editorContent))
-                                .frame(minHeight: geometry.size.height)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .onChange(of: editorContent) { newValue in
-                                    if let id = currentScriptId {
-                                        viewModel.updateDraft(for: id, content: newValue)
-                                    }
-                                }
-                            Spacer(minLength: 0)
-                        }
+                        .buttonStyle(.bordered)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Self.secondaryBackground)
                 }
+
+                editorTextView
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Self.primaryBackground)
+    }
+
+    private var editorTextView: some View {
+        Group {
+            #if canImport(AppKit)
+            EmwCodeEditor(text: $editorContent, isEditable: !editorIsReadOnly, wrapLines: lineWrapEnabled)
+            #else
+            TextEditor(text: $editorContent)
+                .font(.system(.body, design: .monospaced))
+                .scrollContentBackground(.hidden)
+            #endif
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: editorContent) { newValue in
+            if let id = currentScriptId {
+                viewModel.updateDraft(for: id, content: newValue)
+            }
         }
     }
 
@@ -260,12 +265,9 @@ public struct ScriptsRootView: View {
     }
 
     private func openEditor(for id: String) {
-        if viewModel.isAssetScript(id) {
-            openAssetPreview(for: id)
-            return
-        }
         viewModel.selectScript(id: id)
         currentScriptId = id
+        editorIsReadOnly = viewModel.isAssetScript(id)
         Task {
             await viewModel.ensureContent(for: id)
             await MainActor.run {
@@ -280,6 +282,7 @@ public struct ScriptsRootView: View {
         viewModel.selectScript(id: viewModel.unsavedIdentifier)
         currentScriptId = viewModel.unsavedIdentifier
         editorContent = viewModel.scriptDraft(for: viewModel.unsavedIdentifier)
+        editorIsReadOnly = false
         showingEditor = true
         showingPreview = false
     }
@@ -288,6 +291,7 @@ public struct ScriptsRootView: View {
         showingEditor = false
         currentScriptId = nil
         editorContent = ""
+        editorIsReadOnly = false
     }
 
     private func exitPreview() {
@@ -398,8 +402,14 @@ public struct ScriptsRootView: View {
                     Image(systemName: "ellipsis.circle")
                 }
 
-                Button(viewModel.isExistingScript(currentScriptId ?? "") ? "Save" : "Create") {
-                    saveCurrentScript()
+                if editorIsReadOnly, let currentScriptId {
+                    Button("Make Copy") {
+                        presentNamePrompt(context: .copy(id: currentScriptId))
+                    }
+                } else {
+                    Button(viewModel.isExistingScript(currentScriptId ?? "") ? "Save" : "Create") {
+                        saveCurrentScript()
+                    }
                 }
             }
         } else if showingPreview {
@@ -436,13 +446,6 @@ public struct ScriptsRootView: View {
         }
     }
 
-    private func openAssetPreview(for id: String) {
-        viewModel.selectScript(id: id)
-        currentScriptId = id
-        let content = viewModel.scriptDraft(for: id)
-        let name = viewModel.scriptName(for: id)
-        assetPreview = AssetScriptPreview(id: id, name: name, content: content)
-    }
 
     private static var primaryBackground: Color {
         #if canImport(UIKit)
@@ -550,48 +553,6 @@ private struct NamePrompt: Identifiable {
 private struct DeletionTarget: Identifiable {
     let id: String
     let name: String
-}
-
-private struct AssetScriptPreview: Identifiable {
-    let id: String
-    let name: String
-    let content: String
-}
-
-private struct AssetScriptPreviewSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let preview: AssetScriptPreview
-
-    var body: some View {
-        NavigationStack {
-            ScrollView([.vertical, .horizontal]) {
-                Text(preview.content)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(16)
-            }
-            .navigationTitle(preview.name)
-            #if canImport(UIKit)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button("Close") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Copy") {
-                        #if canImport(UIKit)
-                        UIPasteboard.general.string = preview.content
-                        #elseif canImport(AppKit)
-                        let pb = NSPasteboard.general
-                        pb.clearContents()
-                        pb.setString(preview.content, forType: .string)
-                        #endif
-                    }
-                }
-            }
-        }
-    }
 }
 
 private struct NamePromptSheet: View {
