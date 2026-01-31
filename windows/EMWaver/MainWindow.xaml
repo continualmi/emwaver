@@ -11,32 +11,39 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <CommandBar Grid.Row="0" DefaultLabelPosition="Right">
-            <AppBarToggleButton x:Name="ScriptsToggle" Label="Scripts" IsChecked="True" Click="OnScriptsClick" />
-            <AppBarToggleButton x:Name="DeviceToggle" Label="Device" Click="OnDeviceClick" />
+        <Grid Grid.Row="0" Padding="10,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-            <CommandBar.SecondaryCommands>
-                <AppBarButton Label="Refresh Ports" Click="OnRefreshPortsClick" />
-                <AppBarToggleButton x:Name="AutoConnectToggle" Label="Auto-connect" Click="OnAutoConnectClick" />
+            <MenuBar>
+                <MenuBarItem Title="Device">
+                    <MenuFlyoutItem Text="Refresh Ports" Click="OnRefreshPortsClick" />
+                    <ToggleMenuFlyoutItem x:Name="AutoConnectMenuItem" Text="Auto-connect" Click="OnAutoConnectClick" />
 
-                <AppBarButton x:Name="ConnectButton" Label="Connect">
-                    <AppBarButton.Flyout>
-                        <MenuFlyout x:Name="ConnectFlyout" />
-                    </AppBarButton.Flyout>
-                </AppBarButton>
+                    <MenuFlyoutSeparator />
 
-                <AppBarButton Label="Disconnect" Click="OnDisconnectClick" />
-                <AppBarButton Label="Enter Update Mode" Click="OnEnterUpdateModeClick" />
-                <AppBarButton Label="Refresh Update Mode" Click="OnRefreshUpdateModeClick" />
-            </CommandBar.SecondaryCommands>
+                    <MenuFlyoutSubItem x:Name="ConnectSubmenu" Text="Connect" />
+                    <MenuFlyoutItem Text="Disconnect" Click="OnDisconnectClick" />
 
-            <CommandBar.Content>
-                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                    <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
-                    <TextBlock x:Name="DeviceVersionText" Foreground="Gray" />
-                </StackPanel>
-            </CommandBar.Content>
-        </CommandBar>
+                    <MenuFlyoutSeparator />
+
+                    <MenuFlyoutItem Text="Enter Update Mode" Click="OnEnterUpdateModeClick" />
+                    <MenuFlyoutItem Text="Refresh Update Mode" Click="OnRefreshUpdateModeClick" />
+                    <MenuFlyoutItem x:Name="UpdateModeStatusItem" Text="Update Mode: Not detected" IsEnabled="False" />
+
+                    <MenuFlyoutSeparator />
+
+                    <MenuFlyoutItem x:Name="LastErrorMenuItem" Text="" IsEnabled="False" Visibility="Collapsed" />
+                </MenuBarItem>
+            </MenuBar>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
+                <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </Grid>
 
         <Frame x:Name="ContentFrame" Grid.Row="1" />
     </Grid>
