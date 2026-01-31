@@ -158,22 +158,18 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        String subtitle;
         int tint;
         if (connected) {
-            subtitle = "Connected";
             tint = ContextCompat.getColor(this, android.R.color.holo_green_dark);
         } else if (dfuConnected) {
-            subtitle = "Update Mode";
             tint = ContextCompat.getColor(this, android.R.color.holo_orange_dark);
         } else {
-            subtitle = "Searching";
             tint = ContextCompat.getColor(this, android.R.color.holo_red_dark);
         }
 
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle("EMWaver");
-            getSupportActionBar().setSubtitle(subtitle);
+            getSupportActionBar().setSubtitle(null);
         }
 
         if (connectionMenuItem != null && connectionMenuItem.getIcon() != null) {

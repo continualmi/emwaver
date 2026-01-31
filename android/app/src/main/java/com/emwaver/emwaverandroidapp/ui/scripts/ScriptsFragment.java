@@ -89,19 +89,34 @@ public class ScriptsFragment extends Fragment {
 
     private static final String TAG = "ScriptsFragment";
     private static final String SCRIPT_EXTENSION = ".emw";
+    private static final String SCRIPT_DISPLAY_EXTENSION = ".emw";
     private static final String ASSET_SCRIPT_EXTENSION = ".emw";
     private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
     private FragmentScriptsBinding binding;
     private final List<ScriptMetadata> assetScripts = new ArrayList<>();
     private final List<ScriptMetadata> customScripts = new ArrayList<>();
-    private ScriptListAdapter assetScriptAdapter;
-    private ScriptListAdapter customScriptAdapter;
+    private final List<ScriptMetadata> scripts = new ArrayList<>();
+    private ScriptListAdapter scriptAdapter;
     private ScriptMetadata currentScriptMetadata;
     private String currentScriptName;
     private String currentScriptEtag;
     private String currentDraftContent;
     private String pendingPreviewScriptId;
+
+    private String displayScriptName(@Nullable String name, boolean includeExtension) {
+        if (name == null) {
+            return "";
+        }
+        if (!includeExtension) {
+            return name;
+        }
+        String lower = name.toLowerCase(Locale.US);
+        if (lower.endsWith(SCRIPT_DISPLAY_EXTENSION)) {
+            return name;
+        }
+        return name + SCRIPT_DISPLAY_EXTENSION;
+    }
 
     private ScriptsViewModel viewModel;
     private FileRepositoryLocal fileRepository;
@@ -128,10 +143,7 @@ public class ScriptsFragment extends Fragment {
 
     private ActivityResultLauncher<String[]> openFileLauncher;
 
-    private TextView assetScriptsTitle;
-    private CardView assetScriptsCard;
-    private TextView customScriptsTitle;
-    private CardView customScriptsCard;
+    private CardView scriptsCard;
     private ScrollView editorScrollViewWrap;
     private HorizontalScrollView editorScrollViewNoWrap;
     private EditText scriptEditorContentWrap;
@@ -203,7 +215,6 @@ public class ScriptsFragment extends Fragment {
         setupFileLaunchers();
         setupScriptList();
         setupEditorSection();
-        setupCollapsibleSections();
         showingPreview = false;
         updateViewMode();
         updateScriptPlaceholder();
@@ -327,57 +338,28 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void setupScriptList() {
-        // Setup asset scripts list
-        assetScriptsCard = binding.assetScriptsCard;
-        assetScriptAdapter = new ScriptListAdapter(assetScripts);
-        binding.assetScriptsListView.setAdapter(assetScriptAdapter);
+        scriptsCard = binding.scriptsCard;
+        scriptAdapter = new ScriptListAdapter(scripts);
+        binding.scriptsListView.setAdapter(scriptAdapter);
 
-        binding.assetScriptsListView.setOnItemClickListener((parent, view, position, id) -> {
-            if (position >= 0 && position < assetScripts.size()) {
-                previewScript(assetScripts.get(position));
+        binding.scriptsListView.setOnItemClickListener((parent, view, position, id) -> {
+            if (position >= 0 && position < scripts.size()) {
+                previewScript(scripts.get(position));
             }
         });
 
-        binding.assetScriptsListView.setOnItemLongClickListener((parent, view, position, id) -> {
+        binding.scriptsListView.setOnItemLongClickListener((parent, view, position, id) -> {
+            if (position < 0 || position >= scripts.size()) {
+                return true;
+            }
+            ScriptMetadata meta = scripts.get(position);
+            if (meta != null && meta.isCustomScript()) {
+                showScriptOptionsDialog(meta);
+                return true;
+            }
             showToast("Asset scripts are read-only. Create a copy to edit.");
             return true;
         });
-
-        // Setup custom scripts list
-        customScriptsCard = binding.customScriptsCard;
-        customScriptAdapter = new ScriptListAdapter(customScripts);
-        binding.customScriptsListView.setAdapter(customScriptAdapter);
-
-        binding.customScriptsListView.setOnItemClickListener((parent, view, position, id) -> {
-            if (position >= 0 && position < customScripts.size()) {
-                previewScript(customScripts.get(position));
-            }
-        });
-
-        binding.customScriptsListView.setOnItemLongClickListener((parent, view, position, id) -> {
-            if (position >= 0 && position < customScripts.size()) {
-                showScriptOptionsDialog(customScripts.get(position));
-            }
-            return true;
-        });
-
-        // Setup collapsible sections
-        assetScriptsTitle = binding.assetScriptsTitle;
-        customScriptsTitle = binding.customScriptsTitle;
-        
-        assetScriptsTitle.setOnClickListener(v -> {
-            toggleVisibility(assetScriptsCard);
-            updateArrow(assetScriptsTitle, assetScriptsCard.getVisibility() == View.VISIBLE);
-        });
-        
-        customScriptsTitle.setOnClickListener(v -> {
-            toggleVisibility(customScriptsCard);
-            updateArrow(customScriptsTitle, customScriptsCard.getVisibility() == View.VISIBLE);
-        });
-        
-        // Initialize arrows
-        updateArrow(assetScriptsTitle, assetScriptsCard.getVisibility() == View.VISIBLE);
-        updateArrow(customScriptsTitle, customScriptsCard.getVisibility() == View.VISIBLE);
     }
 
     private void setupEditorSection() {
@@ -494,13 +476,9 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void refreshScriptList() {
-        if (assetScriptAdapter != null) {
-            Log.d(TAG, "refreshScriptList: notifying asset adapter with " + assetScripts.size() + " items");
-            assetScriptAdapter.notifyDataSetChanged();
-        }
-        if (customScriptAdapter != null) {
-            Log.d(TAG, "refreshScriptList: notifying custom adapter with " + customScripts.size() + " items");
-            customScriptAdapter.notifyDataSetChanged();
+        if (scriptAdapter != null) {
+            Log.d(TAG, "refreshScriptList: notifying adapter with " + scripts.size() + " items");
+            scriptAdapter.notifyDataSetChanged();
         }
     }
 
@@ -533,7 +511,7 @@ public class ScriptsFragment extends Fragment {
             ImageButton editButton = view.findViewById(R.id.script_edit_button);
             ScriptMetadata scriptMetadata = getItem(position);
             if (scriptMetadata != null) {
-                nameView.setText(scriptMetadata.getName());
+                nameView.setText(displayScriptName(scriptMetadata.getName(), true));
                 if (scriptMetadata.isAssetScript()) {
                     editButton.setVisibility(View.VISIBLE);
                     editButton.setEnabled(true);
@@ -622,11 +600,8 @@ public class ScriptsFragment extends Fragment {
                 // Sort custom scripts alphabetically
                 Collections.sort(customScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
                 
-                refreshScriptList();
-                List<ScriptMetadata> allScripts = new ArrayList<>();
-                allScripts.addAll(assetScripts);
-                allScripts.addAll(customScripts);
-                primeScriptCache(allScripts, ScriptsFragment.this::handlePostListLoad);
+                rebuildCombinedScripts();
+                primeScriptCache(new ArrayList<>(scripts), ScriptsFragment.this::handlePostListLoad);
             }
 
             @Override
@@ -638,6 +613,14 @@ public class ScriptsFragment extends Fragment {
                 handlePostListLoad();
             }
         });
+    }
+
+    private void rebuildCombinedScripts() {
+        scripts.clear();
+        scripts.addAll(assetScripts);
+        scripts.addAll(customScripts);
+        Collections.sort(scripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        refreshScriptList();
     }
     
     private List<String> getAssetScriptNames() {
@@ -778,11 +761,7 @@ public class ScriptsFragment extends Fragment {
             return;
         }
 
-        List<ScriptMetadata> allScripts = new ArrayList<>();
-        allScripts.addAll(assetScripts);
-        allScripts.addAll(customScripts);
-
-        if (allScripts.isEmpty()) {
+        if (scripts.isEmpty()) {
             if (binding != null) {
                 String content = null;
                 boolean dirty = false;
@@ -812,8 +791,8 @@ public class ScriptsFragment extends Fragment {
                 target = findScriptById(lastId);
             }
         }
-        if (target == null && !allScripts.isEmpty()) {
-            target = allScripts.get(0);
+        if (target == null && !scripts.isEmpty()) {
+            target = scripts.get(0);
         }
         if (target != null) {
             loadScript(target);
@@ -824,14 +803,8 @@ public class ScriptsFragment extends Fragment {
         if (id == null) {
             return null;
         }
-        // Check asset scripts first
-        for (ScriptMetadata scriptMetadata : assetScripts) {
-            if (scriptMetadata != null && TextUtils.equals(id, scriptMetadata.getId())) {
-                return scriptMetadata;
-            }
-        }
-        // Then check custom scripts
-        for (ScriptMetadata scriptMetadata : customScripts) {
+        // Check unified list
+        for (ScriptMetadata scriptMetadata : scripts) {
             if (scriptMetadata != null && TextUtils.equals(id, scriptMetadata.getId())) {
                 return scriptMetadata;
             }
@@ -858,7 +831,7 @@ public class ScriptsFragment extends Fragment {
             // Sort the target list
             Collections.sort(targetList, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
         }
-        refreshScriptList();
+        rebuildCombinedScripts();
     }
 
     private void removeMetadataById(String id) {
@@ -866,7 +839,7 @@ public class ScriptsFragment extends Fragment {
         for (int i = 0; i < customScripts.size(); i++) {
             if (customScripts.get(i).getId().equals(id)) {
                 customScripts.remove(i);
-                refreshScriptList();
+                rebuildCombinedScripts();
                 return;
             }
         }
@@ -874,7 +847,7 @@ public class ScriptsFragment extends Fragment {
         for (int i = 0; i < assetScripts.size(); i++) {
             if (assetScripts.get(i).getId().equals(id)) {
                 assetScripts.remove(i);
-                refreshScriptList();
+                rebuildCombinedScripts();
                 return;
             }
         }
@@ -1416,7 +1389,7 @@ public class ScriptsFragment extends Fragment {
                     if (remaining.decrementAndGet() == 0) {
                         // All custom scripts deleted
                         hideLoadingDialog();
-                        refreshScriptList();
+                        rebuildCombinedScripts();
                         if (viewModel != null) {
                             viewModel.clearAll();
                         }
@@ -1593,7 +1566,7 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void setupCollapsibleSections() {
-        // Asset and custom scripts sections are set up in setupScriptList()
+        // Collapsible sections removed: asset/custom scripts share a single list.
     }
 
     private void renderScript(String script) {
@@ -1736,17 +1709,8 @@ public class ScriptsFragment extends Fragment {
             backPressedCallback.setEnabled(hideMainView);
         }
         
-        if (assetScriptsTitle != null) {
-            assetScriptsTitle.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
-        }
-        if (assetScriptsCard != null) {
-            assetScriptsCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
-        }
-        if (customScriptsTitle != null) {
-            customScriptsTitle.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
-        }
-        if (customScriptsCard != null) {
-            customScriptsCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
+        if (scriptsCard != null) {
+            scriptsCard.setVisibility(hideMainView ? View.GONE : View.VISIBLE);
         }
         binding.scriptContainer.setVisibility(showingPreview ? View.VISIBLE : View.GONE);
         scriptEditorContainer.setVisibility(showingEditor ? View.VISIBLE : View.GONE);
@@ -1756,7 +1720,14 @@ public class ScriptsFragment extends Fragment {
             if (activity.getSupportActionBar() != null) {
                 if (hideMainView) {
                     // Show back button when previewing or editing
-                    String title = currentScriptName != null ? currentScriptName : "Script Preview";
+                    String title;
+                    if (currentScriptMetadata != null && currentScriptName != null) {
+                        title = displayScriptName(currentScriptName, true);
+                    } else if (currentScriptName != null) {
+                        title = currentScriptName;
+                    } else {
+                        title = "Script Preview";
+                    }
                     activity.getSupportActionBar().setTitle(title);
                     activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
                     activity.getSupportActionBar().setHomeButtonEnabled(true);
