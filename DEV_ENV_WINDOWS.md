@@ -167,9 +167,9 @@ OpenCode is the primary assistant tool in this workflow.
 
 Install (one-time):
 
-```bat
-npm install -g opencode
-```
+- Windows: use the OpenCode Desktop (GUI).
+- Authenticate with an OpenAI account (ChatGPT Plus subscription).
+- Model: `openai/gpt-5.2` (GPT 5.2).
 
-Custom commands (typical location):
-- `%USERPROFILE%\.opencode\commands\`
+Install OpenCode Desktop from:
+- https://opencode.ai

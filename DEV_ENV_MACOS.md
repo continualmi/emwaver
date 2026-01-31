@@ -104,14 +104,21 @@ Configure in: System Settings -> Keyboard -> Keyboard Shortcuts -> Screenshots.
 ## 2.2) AI Tooling (optional)
 
 - OpenCode is the primary assistant tool in this workflow.
-- If you use custom OpenCode commands, they typically live at `~/.opencode/commands/`.
 
 Install (one-time):
+
+- macOS: use the OpenCode TUI (terminal `opencode` command).
+- Authenticate with an OpenAI account (ChatGPT Plus subscription).
+- Model: `openai/gpt-5.2` (GPT 5.2).
+
+Install the OpenCode TUI (CLI):
 
 ```bash
 # If you already have Node installed
 npm install -g opencode
 ```
+
+If you use custom OpenCode commands (CLI), they typically live at `~/.opencode/commands/`.
 
 Example custom command (`~/.opencode/commands/explain.md`):
 
