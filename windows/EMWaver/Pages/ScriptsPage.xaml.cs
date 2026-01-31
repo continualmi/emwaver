@@ -118,7 +118,7 @@ public sealed partial class ScriptsPage : Page
                 }
                 SetEditorReadOnly(_current.IsBundled);
                 ShowScintilla();
-                _ = DispatcherQueue.TryEnqueue(UpdateScintillaBounds);
+                UpdateScintillaBounds();
                 FocusEditorNative();
             }
         }
@@ -530,12 +530,6 @@ public sealed partial class ScriptsPage : Page
             _loadedTextNormalized = NormalizeLineEndings(text);
             _isDirty = false;
 
-            EditorTitleText.Text = script.FileName;
-            EditorSubtitleText.Text = script.KindLabel;
-            EditorSubtitleText.Visibility = string.IsNullOrWhiteSpace(script.KindLabel)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-
             EmptyHint.Visibility = Visibility.Collapsed;
             EditorHost.Visibility = Visibility.Visible;
 
@@ -548,7 +542,8 @@ public sealed partial class ScriptsPage : Page
             if (EditModeButton.IsChecked == true)
             {
                 ShowScintilla();
-                _ = DispatcherQueue.TryEnqueue(UpdateScintillaBounds);
+                UpdateScintillaBounds();
+                FocusEditorNative();
             }
             else
             {
@@ -586,9 +581,6 @@ public sealed partial class ScriptsPage : Page
             MarkEditorSaved();
             _suppressEditorChange = false;
 
-            EditorTitleText.Text = "Select a script";
-            EditorSubtitleText.Text = string.Empty;
-            EditorSubtitleText.Visibility = Visibility.Collapsed;
             EditorHost.Visibility = Visibility.Collapsed;
             HideScintilla();
             EmptyHint.Visibility = Visibility.Visible;
