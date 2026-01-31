@@ -6,6 +6,17 @@ Scope:
 - macOS only (no Ubuntu/Linux section)
 - Developer workflows (this is not end-user/product documentation)
 
+What you can develop from a Mac:
+- macOS app (Xcode)
+- iOS app (Xcode)
+- Android app (Android Studio / Gradle)
+- Website (Next.js / Node / npm)
+- Backend (Python)
+- STM32 firmware (CubeIDE toolchain via internal CLI)
+
+What you cannot develop from a Mac:
+- Windows app (requires Windows 11 + Visual Studio 2022; see `DEV_ENV_WINDOWS.md`)
+
 ## 0) Quick Start (after tools are installed)
 
 From the repo root:
@@ -94,6 +105,13 @@ Configure in: System Settings -> Keyboard -> Keyboard Shortcuts -> Screenshots.
 
 - OpenCode is the primary assistant tool in this workflow.
 - If you use custom OpenCode commands, they typically live at `~/.opencode/commands/`.
+
+Install (one-time):
+
+```bash
+# If you already have Node installed
+npm install -g opencode
+```
 
 Example custom command (`~/.opencode/commands/explain.md`):
 
@@ -633,10 +651,19 @@ npm install
 npm run dev
 ```
 
+Notes:
+- Frontend build tooling is `npm`-driven (Next.js).
+- If you prefer a different Node version manager (fnm/nvm), that's fine; keep Node 20+.
+
 ### Android (Android Studio)
 
 - Install Android Studio.
 - Install an SDK + platform tools from within Android Studio.
+
+Notes:
+- Android builds use Gradle via the repo's wrapper: `android/gradlew`.
+- In practice, prefer Android Studio for normal iteration; `./gradlew` is still useful for CI-style builds.
+- You'll typically want a modern JDK (Android Studio bundles one).
 
 Repo note:
 - Avoid running Gradle builds from the CLI unless you specifically need to; use Android Studio for normal iteration.
@@ -651,6 +678,14 @@ Important:
 
 If `emwaver build` fails due to missing `arm-none-eabi-gcc` or `arm-none-eabi-objcopy`, update the hardcoded path in:
 - `cli/src/lib.rs`
+
+### Windows (not on macOS)
+
+Windows app development is Windows-only:
+- Windows 11
+- Visual Studio 2022 (WinUI 3 / Windows App SDK)
+
+See: `DEV_ENV_WINDOWS.md`
 
 ## 8) Repo-local conveniences
 
