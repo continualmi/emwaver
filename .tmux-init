@@ -41,5 +41,7 @@ tmux send-keys -t $SESSION:2.3 './gradlew installDebug'
 tmux send-keys -t $SESSION:2.4 'cd frontend' C-m
 tmux send-keys -t $SESSION:2.4 'npm run dev'
 
-# Stay on build-ops
-tmux select-window -t "$SESSION:2"
+# Start on terminal window, pane 1
+tmux select-window -t "$SESSION:1"
+tmux select-pane -t "$SESSION:1.1"
+tmux send-keys -t "$SESSION:1.1" 'opencode' C-m
