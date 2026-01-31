@@ -1,5 +1,7 @@
 using EMWaver.Models;
 using EMWaver.Interop;
+using EMWaver.Scripting;
+using EMWaver.Scripting.Render;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -30,13 +32,131 @@ public sealed partial class ScriptsPage : Page
     private bool _scintillaConfigured;
     private DispatcherQueueTimer? _dirtyPollTimer;
 
+    private readonly ScriptEngine _scriptEngine = new();
+    private readonly ScriptRenderer _scriptRenderer;
+
+    private readonly Dictionary<string, ContentDialog> _modalDialogs = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _shownModalIds = new(StringComparer.Ordinal);
+
     public ScriptsPage()
     {
         InitializeComponent();
         ScriptsList.ItemsSource = _scripts;
         AgentMessagesList.ItemsSource = _agentMessages;
 
+        _scriptRenderer = new ScriptRenderer((token, args) =>
+        {
+            _scriptEngine.Invoke(token, args);
+        });
+
+        _scriptEngine.Setup(
+            renderHandler: tree =>
+            {
+                _ = DispatcherQueue.TryEnqueue(() => RenderPreview(tree));
+            },
+            sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
+            errorHandler: message =>
+            {
+                _ = DispatcherQueue.TryEnqueue(async () => await ShowInfoAsync("Script Error", message));
+            }
+        );
+ 
         Loaded += OnLoaded;
+    }
+
+    private void RenderPreview(ScriptTree tree)
+    {
+        PreviewHost.Children.Clear();
+        PreviewHost.Children.Add(_scriptRenderer.Render(tree));
+        PreviewHint.Visibility = Visibility.Collapsed;
+
+        UpdateModals(tree);
+    }
+
+    private void UpdateModals(ScriptTree tree)
+    {
+        var root = tree.Root;
+        var modals = ScriptRenderer.CollectModalNodes(root);
+        var wanted = new HashSet<string>(modals.Select(m => m.Id), StringComparer.Ordinal);
+
+        // Close dialogs that are no longer present.
+        foreach (var existingId in _modalDialogs.Keys.ToList())
+        {
+            if (!wanted.Contains(existingId))
+            {
+                try { _modalDialogs[existingId].Hide(); } catch { }
+                _modalDialogs.Remove(existingId);
+                _shownModalIds.Remove(existingId);
+            }
+        }
+
+        foreach (var modal in modals)
+        {
+            var raw = modal.Props.Raw;
+            var open = true;
+            if (raw.TryGetValue("open", out var openObj) && openObj is bool b)
+            {
+                open = b;
+            }
+
+            var title = raw.TryGetValue("title", out var t) ? t?.ToString() : null;
+            if (string.IsNullOrWhiteSpace(title)) title = "Dialog";
+            var subtitle = raw.TryGetValue("subtitle", out var st) ? st?.ToString() : null;
+
+            var closeToken = modal.Props.HandlerId(ScriptEventType.Close);
+
+            if (!_modalDialogs.TryGetValue(modal.Id, out var dialog))
+            {
+                var modalId = modal.Id;
+                var closeTokenCaptured = closeToken;
+
+                dialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot,
+                    Title = title,
+                    CloseButtonText = "Close",
+                };
+
+                dialog.Closed += (_, __) =>
+                {
+                    _shownModalIds.Remove(modalId);
+                    if (!string.IsNullOrWhiteSpace(closeTokenCaptured))
+                    {
+                        _scriptEngine.Invoke(closeTokenCaptured!, Array.Empty<object?>());
+                    }
+                };
+
+                _modalDialogs[modalId] = dialog;
+            }
+
+            // Update dialog content.
+            var panel = new StackPanel { Orientation = Orientation.Vertical, Spacing = ScriptPropParsers.GetSpacing(raw, fallback: 12) };
+            if (!string.IsNullOrWhiteSpace(subtitle))
+            {
+                panel.Children.Add(new TextBlock { Text = subtitle, FontSize = 12, Opacity = 0.75 });
+            }
+            foreach (var child in modal.Children)
+            {
+                panel.Children.Add(_scriptRenderer.RenderNodeElement(child));
+            }
+            dialog.Content = panel;
+
+            if (!open)
+            {
+                if (_shownModalIds.Contains(modal.Id))
+                {
+                    try { dialog.Hide(); } catch { }
+                    _shownModalIds.Remove(modal.Id);
+                }
+                continue;
+            }
+
+            if (!_shownModalIds.Contains(modal.Id))
+            {
+                _shownModalIds.Add(modal.Id);
+                _ = dialog.ShowAsync();
+            }
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -53,7 +173,7 @@ public sealed partial class ScriptsPage : Page
         StartDirtyPoll();
 
         // Keep the native window hidden until a script is selected.
-        if (_current == null)
+        if (_current == null || EditorTabs.SelectedIndex == 1)
         {
             HideScintilla();
         }
@@ -126,6 +246,23 @@ public sealed partial class ScriptsPage : Page
         var show = AgentToggleButton.IsChecked == true;
         AgentPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         AgentColumn.Width = show ? new GridLength(380) : new GridLength(0);
+    }
+
+    private void OnEditorTabsSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // Editor tab = 0, Preview tab = 1.
+        var previewSelected = EditorTabs.SelectedIndex == 1;
+        if (previewSelected)
+        {
+            HideScintilla();
+            return;
+        }
+
+        if (_current != null)
+        {
+            ShowScintilla();
+            FocusEditorNative();
+        }
     }
 
     private void OnAgentSendClick(object sender, RoutedEventArgs e)
@@ -276,7 +413,19 @@ public sealed partial class ScriptsPage : Page
 
     private async void OnRunClick(object sender, RoutedEventArgs e)
     {
-        await ShowInfoAsync("Run", "Script preview/run is not wired up on Windows yet.");
+        if (_current == null)
+        {
+            return;
+        }
+
+        EditorTabs.SelectedIndex = 1;
+        PreviewHint.Visibility = Visibility.Visible;
+        PreviewHost.Children.Clear();
+
+        var scriptText = GetEditorTextRaw();
+        _scriptEngine.Execute(scriptText);
+
+        await Task.CompletedTask;
     }
 
     private async Task RefreshAsync(string? selectFullPath = null)
@@ -353,6 +502,8 @@ public sealed partial class ScriptsPage : Page
             EmptyHint.Visibility = Visibility.Collapsed;
             EditorHost.Visibility = Visibility.Visible;
 
+            EditorTabs.SelectedIndex = 0;
+
             EnsureScintillaCreated();
             ConfigureScintillaIfNeeded();
             SetEditorReadOnly(script.IsBundled);
@@ -388,6 +539,16 @@ public sealed partial class ScriptsPage : Page
             EditorHost.Visibility = Visibility.Collapsed;
             HideScintilla();
             EmptyHint.Visibility = Visibility.Visible;
+
+            PreviewHost.Children.Clear();
+            PreviewHint.Visibility = Visibility.Visible;
+
+            foreach (var d in _modalDialogs.Values)
+            {
+                try { d.Hide(); } catch { }
+            }
+            _modalDialogs.Clear();
+            _shownModalIds.Clear();
             UpdateCommandStates();
 
             await Task.CompletedTask;
@@ -404,8 +565,7 @@ public sealed partial class ScriptsPage : Page
         RenameButton.IsEnabled = has && !isBundled;
         DeleteButton.IsEnabled = has && !isBundled;
 
-        // Placeholder until ScriptEngine + renderer are implemented on Windows.
-        RunButton.IsEnabled = false;
+        RunButton.IsEnabled = has;
     }
 
     private Task RunOnUiAsync(Func<Task> action)

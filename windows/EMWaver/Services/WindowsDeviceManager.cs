@@ -472,6 +472,39 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
+    internal byte[]? SendPacket(byte[] payload, int timeoutMs)
+    {
+        try
+        {
+            return SendPacketAsync(payload, timeoutMs).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            LastErrorText = ex.Message;
+            return null;
+        }
+    }
+
+    internal async Task<byte[]?> SendPacketAsync(byte[] payload, int timeoutMs)
+    {
+        if (payload == null)
+        {
+            return null;
+        }
+
+        // Protocol rule: requests must fit within a single 18-byte command lane.
+        if (payload.Length > LaneSizeBytes)
+        {
+            throw new ArgumentOutOfRangeException(nameof(payload), $"Packet too large (max {LaneSizeBytes})");
+        }
+
+        return await SendCommandAsync(
+            commandLane: payload,
+            timeoutMs: timeoutMs,
+            responsePredicate: lane18 => lane18.Length > 0 && (lane18[0] == 0x80 || lane18[0] == 0x81)
+        );
+    }
+
     private void HandleLane(byte[] lane18)
     {
         lock (_rxLock)
