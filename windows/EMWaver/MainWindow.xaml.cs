@@ -1,7 +1,10 @@
 using EMWaver.Interop;
+using EMWaver.Models;
+using EMWaver.Pages;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -12,6 +15,8 @@ namespace EMWaver;
 
 public sealed partial class MainWindow : Window
 {
+    private ScriptsPage? _scriptsPage;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -24,6 +29,7 @@ public sealed partial class MainWindow : Window
 
         AppServices.Device.AvailablePorts.CollectionChanged += OnPortsCollectionChanged;
 
+        ContentFrame.Navigated += OnContentNavigated;
         ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
 
@@ -33,6 +39,26 @@ public sealed partial class MainWindow : Window
             UpdateDeviceStatus();
             RebuildConnectMenu();
         });
+    }
+
+    private void OnContentNavigated(object sender, NavigationEventArgs e)
+    {
+        if (_scriptsPage != null)
+        {
+            _scriptsPage.ToolbarStateChanged -= OnScriptsToolbarStateChanged;
+        }
+
+        _scriptsPage = e.Content as ScriptsPage;
+        if (_scriptsPage != null)
+        {
+            _scriptsPage.ToolbarStateChanged += OnScriptsToolbarStateChanged;
+            OnScriptsToolbarStateChanged(_scriptsPage.CurrentToolbarState);
+            ScriptsCommandBar.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ScriptsCommandBar.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void RunOnUi(Action action)
@@ -130,6 +156,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnScriptsToolbarStateChanged(ScriptToolbarState state)
+    {
+        ScriptSaveButton.IsEnabled = state.CanSave;
+        ScriptCopyButton.IsEnabled = state.CanCopy;
+        ScriptRenameButton.IsEnabled = state.CanRename;
+        ScriptDeleteButton.IsEnabled = state.CanDelete;
+    }
+
     private void RebuildConnectMenu()
     {
         ConnectSubmenu.Items.Clear();
@@ -190,5 +224,40 @@ public sealed partial class MainWindow : Window
     private async void OnRefreshUpdateModeClick(object sender, RoutedEventArgs e)
     {
         await AppServices.Device.RefreshDfuPresenceAsync();
+    }
+
+    private void OnScriptNewClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarNew();
+    }
+
+    private void OnScriptSaveClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarSave();
+    }
+
+    private void OnScriptCopyClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarMakeCopy();
+    }
+
+    private void OnScriptRenameClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarRename();
+    }
+
+    private void OnScriptDeleteClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarDelete();
+    }
+
+    private void OnScriptRefreshClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarRefresh();
+    }
+
+    private void OnScriptAgentToggleClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarAgentToggle(ScriptAgentToggleButton.IsChecked == true);
     }
 }
