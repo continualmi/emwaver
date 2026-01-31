@@ -174,7 +174,6 @@ public class USBService extends Service implements DeviceConnectionService {
     public void checkForConnectedDevices() {
         UsbDevice dev = findUsbMidiDevice();
         if (dev == null) {
-            Toast.makeText(this, "No EMWaver USB device found", Toast.LENGTH_SHORT).show();
             return;
         }
 

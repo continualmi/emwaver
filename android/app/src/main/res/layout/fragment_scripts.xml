@@ -8,79 +8,20 @@
     android:background="@color/surfaceBackground"
     tools:context=".ui.scripts.ScriptsFragment">
 
-    <!-- Asset Scripts Section -->
-    <TextView
-        android:id="@+id/asset_scripts_title"
+    <androidx.cardview.widget.CardView
+        android:id="@+id/scripts_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Example scripts"
-        android:textStyle="bold"
-        android:textSize="15sp"
-        android:padding="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="4dp"
-        android:drawableEnd="@drawable/ic_arrow_down_black"
-        android:drawablePadding="8dp"
-        android:textColor="@color/textPrimary"
-        android:drawableTint="?attr/colorOnSurface"
-        android:background="?attr/selectableItemBackground"
+        android:maxHeight="260dp"
+        app:cardElevation="2dp"
+        app:cardCornerRadius="4dp"
+        app:cardBackgroundColor="@color/surfaceCard"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <androidx.cardview.widget.CardView
-        android:id="@+id/asset_scripts_card"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:maxHeight="200dp"
-        app:cardElevation="2dp"
-        app:cardCornerRadius="4dp"
-        app:cardBackgroundColor="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/asset_scripts_title"
-        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
         <ListView
-            android:id="@+id/asset_scripts_list_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@color/surfaceCard" />
-    </androidx.cardview.widget.CardView>
-
-    <!-- Custom Scripts Section -->
-    <TextView
-        android:id="@+id/custom_scripts_title"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Custom Scripts"
-        android:textStyle="bold"
-        android:textSize="15sp"
-        android:padding="8dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="4dp"
-        android:drawableEnd="@drawable/ic_arrow_down_black"
-        android:drawablePadding="8dp"
-        android:textColor="@color/textPrimary"
-        android:drawableTint="?attr/colorOnSurface"
-        android:background="?attr/selectableItemBackground"
-        app:layout_constraintTop_toBottomOf="@id/asset_scripts_card"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <androidx.cardview.widget.CardView
-        android:id="@+id/custom_scripts_card"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:maxHeight="200dp"
-        app:cardElevation="2dp"
-        app:cardCornerRadius="4dp"
-        app:cardBackgroundColor="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/custom_scripts_title"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <ListView
-            android:id="@+id/custom_scripts_list_view"
+            android:id="@+id/scripts_list_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="@color/surfaceCard" />
@@ -95,7 +36,7 @@
         android:layout_marginBottom="8dp"
         android:visibility="gone"
         android:background="@color/surfaceCard"
-        app:layout_constraintTop_toBottomOf="@id/custom_scripts_card"
+        app:layout_constraintTop_toBottomOf="@id/scripts_card"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -162,19 +103,31 @@
             android:fillViewport="true"
             android:scrollbars="horizontal">
 
-            <EditText
-                android:id="@+id/script_editor_content"
+            <!--
+                HorizontalScrollView does not provide vertical fling.
+                Wrap the editor in a ScrollView so vertical scrolling has momentum.
+            -->
+            <ScrollView
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:minWidth="280dp"
-                android:gravity="top|start"
-                android:fontFamily="monospace"
-                android:padding="16dp"
-                android:inputType="textMultiLine|textNoSuggestions"
-                android:scrollHorizontally="true"
-                android:textColor="@color/textPrimary"
-                android:textColorHint="@color/textSecondary"
-                android:textSize="12sp" />
+                android:fillViewport="true"
+                android:scrollbars="vertical">
+
+                <EditText
+                    android:id="@+id/script_editor_content"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="280dp"
+                    android:gravity="top|start"
+                    android:fontFamily="monospace"
+                    android:padding="16dp"
+                    android:inputType="textMultiLine|textNoSuggestions"
+                    android:scrollHorizontally="true"
+                    android:textColor="@color/textPrimary"
+                    android:textColorHint="@color/textSecondary"
+                    android:textSize="12sp" />
+
+            </ScrollView>
 
         </HorizontalScrollView>
 
