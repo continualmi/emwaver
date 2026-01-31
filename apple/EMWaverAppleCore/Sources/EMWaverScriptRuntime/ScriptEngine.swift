@@ -355,126 +355,26 @@ public final class ScriptEngine {
         }
         context.setObject(samplerReadPacketsBlock, forKeyedSubscript: "_scriptSamplerBufferReadPacketsSince" as NSString)
 
-        let samplerCompressViewportBlock: @convention(block) (Int, Int, Int) -> JSValue = { [weak self] startBitRaw, endBitRaw, binsRaw in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
-                return JSValue(object: ["bufferLenBytes": 0, "timeValues": [], "dataValues": []], in: context)
+        // -----------------------------------------------------------------
+        // Plot buffer sources (used by UI.plot internal compression)
+        // -----------------------------------------------------------------
+
+        // Register the live sampler buffer as a plot source.
+        if let wrapper = globalBindings["BLEService"] as? ScriptDeviceWrapper {
+            PlotBufferStore.shared.setProvider(id: "samplerBits") {
+                wrapper.getBuffer()
             }
-            let data = wrapper.getBuffer()
-            let totalBits = max(0, data.count * 8)
-            if totalBits == 0 {
-                return JSValue(object: ["bufferLenBytes": 0, "timeValues": [], "dataValues": []], in: context)
-            }
-
-            let startBit = max(0, min(totalBits, startBitRaw))
-            let endBit = max(startBit, min(totalBits, endBitRaw))
-            let span = endBit - startBit
-            let bins = max(1, min(span == 0 ? 1 : span, max(1, binsRaw)))
-            if span <= 0 {
-                return JSValue(object: ["bufferLenBytes": data.count, "timeValues": [], "dataValues": []], in: context)
-            }
-
-#if canImport(Darwin)
-            let rs = Int32(min(startBit, Int(Int32.max)))
-            let re = Int32(min(endBit, Int(Int32.max)))
-            let nb = Int32(min(bins, Int(Int32.max)))
-            if let (timeValues, dataValues) = RustBufferCore.compressViewport(
-                bufferBytes: data,
-                rangeStart: rs,
-                rangeEnd: re,
-                numberBins: nb
-            ) {
-                return JSValue(
-                    object: [
-                        "bufferLenBytes": data.count,
-                        "timeValues": timeValues,
-                        "dataValues": dataValues,
-                    ],
-                    in: context
-                )
-            }
-#endif
-
-            func bitAt(_ idx: Int) -> Int {
-                let byteIndex = idx >> 3
-                let bitIndex = idx & 7
-                guard byteIndex >= 0, byteIndex < data.count else { return 0 }
-                return ((data[byteIndex] >> bitIndex) & 1) == 1 ? 1 : 0
-            }
-
-            // Match `emwaver-buffer-core` `compress_bits` behavior:
-            // - Small ranges: emit raw points (0/255) for every sample.
-            // - Large ranges: emit up to 2 points per bin representing low/high presence.
-            var timeValues: [Double] = []
-            var dataValues: [Double] = []
-
-            if span <= bins * 2 {
-                timeValues.reserveCapacity(span)
-                dataValues.reserveCapacity(span)
-                for i in startBit..<endBit {
-                    timeValues.append(Double(i))
-                    dataValues.append(bitAt(i) == 1 ? 255.0 : 0.0)
-                }
-            } else {
-                let binWidth = Double(span) / Double(bins)
-                timeValues.reserveCapacity(bins * 2)
-                dataValues.reserveCapacity(bins * 2)
-
-                for bin in 0..<bins {
-                    let binStart = Int(floor(Double(startBit) + Double(bin) * binWidth))
-                    var binEnd = Int(floor(Double(binStart) + binWidth))
-                    if binEnd > endBit { binEnd = endBit }
-                    if binEnd <= binStart { continue }
-
-                    var hasLow = false
-                    var hasHigh = false
-
-                    var i = binStart
-                    while i < binEnd {
-                        let byteIndex = i >> 3
-                        if byteIndex >= data.count { break }
-
-                        if (i & 7) == 0, i + 8 <= binEnd {
-                            let byteVal = data[byteIndex]
-                            if byteVal == 0 {
-                                hasLow = true
-                            } else if byteVal == 255 {
-                                hasHigh = true
-                            } else {
-                                hasLow = true
-                                hasHigh = true
-                            }
-                            i += 8
-                        } else {
-                            if bitAt(i) == 1 {
-                                hasHigh = true
-                            } else {
-                                hasLow = true
-                            }
-                            i += 1
-                        }
-
-                        if hasLow, hasHigh { break }
-                    }
-
-                    if hasLow || hasHigh {
-                        timeValues.append(Double(binStart))
-                        dataValues.append(hasLow ? 0.0 : 255.0)
-                        timeValues.append(Double(max(binStart, binEnd - 1)))
-                        dataValues.append(hasHigh ? 255.0 : 0.0)
-                    }
-                }
-            }
-
-            return JSValue(
-                object: [
-                    "bufferLenBytes": data.count,
-                    "timeValues": timeValues,
-                    "dataValues": dataValues,
-                ],
-                in: context
-            )
         }
-        context.setObject(samplerCompressViewportBlock, forKeyedSubscript: "_scriptSamplerBufferCompressViewport" as NSString)
+
+        // Allow scripts to store an in-memory byte buffer and reference it by id.
+        let plotBufferSetBlock: @convention(block) (JSValue) -> String = { [weak self] bytesValue in
+            guard let self else { return "" }
+            guard let data = self.dataFromJSBytes(bytesValue) else { return "" }
+            let id = "buf:" + UUID().uuidString
+            PlotBufferStore.shared.setBuffer(id: id, data: data)
+            return id
+        }
+        context.setObject(plotBufferSetBlock, forKeyedSubscript: "_scriptPlotBufferSet" as NSString)
 
         // -----------------------------------------------------------------
         // Buffer helpers used by sampler.emw (load/save + timings)

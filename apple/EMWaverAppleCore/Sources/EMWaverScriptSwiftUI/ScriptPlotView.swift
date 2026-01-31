@@ -6,6 +6,7 @@
 
 import SwiftUI
 import EMWaverScriptModel
+import EMWaverScriptRuntime
 
 #if canImport(Charts)
 import Charts
@@ -23,6 +24,9 @@ struct ScriptPlotView: View {
     @State private var isInteracting: Bool = false
     @State private var selectionStartX: Double? = nil
     @State private var selection: ClosedRange<Double>? = nil
+    @State private var internalPoints: [PlotPoint] = []
+    @State private var internalBounds: PlotDomain? = nil
+    @State private var recomputeWorkItem: DispatchWorkItem? = nil
 #if canImport(Charts)
     @State private var plotAreaFrame: CGRect = .zero
 #endif
@@ -41,18 +45,20 @@ struct ScriptPlotView: View {
 
     var body: some View {
         let config = PlotConfig(node: node)
+        let boundsForInteractions = config.xBounds ?? internalBounds
+        let points = config.sourceId != nil ? internalPoints : config.points
 
         return GeometryReader { geo in
             ZStack(alignment: .topLeading) {
 #if canImport(Charts)
-                chartPlot(config: config, size: geo.size)
+                chartPlot(config: config, size: geo.size, points: points, bounds: boundsForInteractions)
 #else
                 Canvas { context, size in
-                    drawPlot(config: config, in: size, context: &context)
+                    drawPlot(config: config, points: points, in: size, context: &context)
                 }
                 .contentShape(Rectangle())
-                .gesture(dragGesture(config: config, size: geo.size))
-                .simultaneousGesture(magnificationGesture(config: config, size: geo.size))
+                .gesture(dragGesture(config: config, bounds: boundsForInteractions, size: geo.size))
+                .simultaneousGesture(magnificationGesture(config: config, bounds: boundsForInteractions, size: geo.size))
 #endif
 
                 if let errorText = config.errorText, !errorText.isEmpty {
@@ -91,6 +97,7 @@ struct ScriptPlotView: View {
             }
             .onAppear {
                 installScrollWheelMonitor(size: geo.size)
+                scheduleInternalRecompute(config: config, immediate: true)
             }
             .onChange(of: geo.size) { next in
                 installScrollWheelMonitor(size: next)
@@ -101,6 +108,15 @@ struct ScriptPlotView: View {
 #endif
         }
         .frame(height: config.height)
+        .onChange(of: config.sourceKey) { _ in
+            scheduleInternalRecompute(config: config, immediate: true)
+        }
+        .onChange(of: config.bins) { _ in
+            scheduleInternalRecompute(config: config, immediate: true)
+        }
+        .onChange(of: domain) { _ in
+            scheduleInternalRecompute(config: config, immediate: false)
+        }
         .onChange(of: PlotDomain.fromProps(node.props.raw)) { next in
             guard let next else { return }
             if !isInteracting {
@@ -110,8 +126,7 @@ struct ScriptPlotView: View {
     }
 
 #if canImport(Charts)
-    private func chartPlot(config: PlotConfig, size: CGSize) -> some View {
-        let points = config.points
+    private func chartPlot(config: PlotConfig, size: CGSize, points: [PlotPoint], bounds: PlotDomain?) -> some View {
         let displayPoints = decimate(points: points, width: size.width)
 
         return Chart(displayPoints) { p in
@@ -142,8 +157,8 @@ struct ScriptPlotView: View {
                     .onChange(of: plotFrame) { next in
                         plotAreaFrame = next
                     }
-                    .gesture(dragGestureUsingPlotArea(config: config, size: geo.size, plotFrame: plotFrame))
-                    .simultaneousGesture(magnificationGesture(config: config, size: plotFrame.size))
+                    .gesture(dragGestureUsingPlotArea(config: config, bounds: bounds, size: geo.size, plotFrame: plotFrame))
+                    .simultaneousGesture(magnificationGesture(config: config, bounds: bounds, size: plotFrame.size))
                     .overlay {
                         selectionOverlay(plotFrame: plotFrame)
                     }
@@ -187,7 +202,7 @@ struct ScriptPlotView: View {
         }
     }
 
-    private func dragGestureUsingPlotArea(config: PlotConfig, size: CGSize, plotFrame: CGRect) -> some Gesture {
+    private func dragGestureUsingPlotArea(config: PlotConfig, bounds: PlotDomain?, size: CGSize, plotFrame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 guard plotFrame.width > 2 else { return }
@@ -209,7 +224,7 @@ struct ScriptPlotView: View {
                 let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
                 let deltaX = Double(-dx / plotFrame.width) * domainRange
                 let next = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
-                domain = clampDomain(next, bounds: config.xBounds)
+                domain = clampDomain(next, bounds: bounds)
             }
             .onEnded { value in
                 defer {
@@ -243,8 +258,7 @@ struct ScriptPlotView: View {
     }
 #endif
 
-    private func drawPlot(config: PlotConfig, in size: CGSize, context: inout GraphicsContext) {
-        let points = config.points
+    private func drawPlot(config: PlotConfig, points: [PlotPoint], in size: CGSize, context: inout GraphicsContext) {
         if points.isEmpty || size.width <= 2 || size.height <= 2 {
             return
         }
@@ -288,7 +302,7 @@ struct ScriptPlotView: View {
         }
     }
 
-    private func dragGesture(config: PlotConfig, size: CGSize) -> some Gesture {
+    private func dragGesture(config: PlotConfig, bounds: PlotDomain?, size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 guard size.width > 2 else { return }
@@ -310,7 +324,7 @@ struct ScriptPlotView: View {
                 let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
                 let deltaX = Double(-dx / size.width) * domainRange
                 let next = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
-                domain = clampDomain(next, bounds: config.xBounds)
+                domain = clampDomain(next, bounds: bounds)
             }
             .onEnded { value in
                 defer {
@@ -337,7 +351,7 @@ struct ScriptPlotView: View {
             }
     }
 
-    private func magnificationGesture(config: PlotConfig, size: CGSize) -> some Gesture {
+    private func magnificationGesture(config: PlotConfig, bounds: PlotDomain?, size: CGSize) -> some Gesture {
         MagnificationGesture()
             .onChanged { scale in
                 guard scale.isFinite else { return }
@@ -346,7 +360,7 @@ struct ScriptPlotView: View {
                 let center = (domain.min + domain.max) * 0.5
                 let nextRange = max(domainRange / Double(scale), 1)
                 let next = PlotDomain(min: center - nextRange * 0.5, max: center + nextRange * 0.5)
-                domain = clampDomain(next, bounds: config.xBounds)
+                domain = clampDomain(next, bounds: bounds)
             }
             .onEnded { _ in
                 isInteracting = false
@@ -421,7 +435,7 @@ struct ScriptPlotView: View {
         let nextMax = nextMin + nextRange
         if nextMax > nextMin, nextMin.isFinite, nextMax.isFinite {
             let next = PlotDomain(min: nextMin, max: nextMax)
-            let bounds = PlotDomain.boundsFromProps(node.props.raw)
+            let bounds = PlotDomain.boundsFromProps(node.props.raw) ?? internalBounds
             domain = clampDomain(next, bounds: bounds)
         }
 
@@ -444,6 +458,160 @@ struct ScriptPlotView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
 #endif
+
+    private func scheduleInternalRecompute(config: PlotConfig, immediate: Bool) {
+        guard let sourceId = config.sourceId, !sourceId.isEmpty else {
+            internalPoints = []
+            internalBounds = nil
+            return
+        }
+
+        recomputeWorkItem?.cancel()
+        let work = DispatchWorkItem {
+            recomputeInternalPoints(sourceId: sourceId, bins: config.bins)
+        }
+        recomputeWorkItem = work
+
+        let delay: Double
+        if immediate {
+            delay = 0
+        } else if isInteracting {
+            delay = 0.06
+        } else {
+            delay = 0.02
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func recomputeInternalPoints(sourceId: String, bins: Int) {
+        let bytes = PlotBufferStore.shared.getBytes(id: sourceId)
+        let totalBits = max(0, bytes.count * 8)
+        if totalBits <= 0 {
+            internalBounds = nil
+            internalPoints = []
+            return
+        }
+
+        if PlotDomain.boundsFromProps(node.props.raw) == nil {
+            internalBounds = PlotDomain(min: 0, max: Double(totalBits))
+        }
+
+        let startBit = max(0, min(totalBits, Int(floor(domain.min))))
+        let endBit = max(startBit, min(totalBits, Int(ceil(domain.max))))
+        let span = max(0, endBit - startBit)
+        if span <= 0 {
+            internalPoints = []
+            return
+        }
+
+        let clampedBins = max(1, min(max(1, bins), max(1, span)))
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let (xs, ys) = Self.compressBits(bytes: bytes, startBit: startBit, endBit: endBit, bins: clampedBins)
+            let count = min(xs.count, ys.count)
+            var out: [PlotPoint] = []
+            out.reserveCapacity(count)
+            for i in 0..<count {
+                out.append(PlotPoint(id: i, x: xs[i], y: ys[i]))
+            }
+            DispatchQueue.main.async {
+                internalPoints = out
+            }
+        }
+    }
+
+    private static func compressBits(bytes: Data, startBit: Int, endBit: Int, bins: Int) -> ([Double], [Double]) {
+#if canImport(Darwin)
+        let rs = Int32(min(startBit, Int(Int32.max)))
+        let re = Int32(min(endBit, Int(Int32.max)))
+        let nb = Int32(min(bins, Int(Int32.max)))
+        if let (timeValues, dataValues) = RustBufferCore.compressViewport(
+            bufferBytes: bytes,
+            rangeStart: rs,
+            rangeEnd: re,
+            numberBins: nb
+        ) {
+            return (timeValues, dataValues)
+        }
+#endif
+
+        // Fallback: match `emwaver-buffer-core` `compress_bits` behavior.
+        let span = max(0, endBit - startBit)
+        if span <= 0 {
+            return ([], [])
+        }
+
+        func bitAt(_ idx: Int) -> Int {
+            let byteIndex = idx >> 3
+            let bitIndex = idx & 7
+            guard byteIndex >= 0, byteIndex < bytes.count else { return 0 }
+            let byte = bytes[bytes.index(bytes.startIndex, offsetBy: byteIndex)]
+            return ((byte >> bitIndex) & 1) == 1 ? 1 : 0
+        }
+
+        var timeValues: [Double] = []
+        var dataValues: [Double] = []
+
+        if span <= bins * 2 {
+            timeValues.reserveCapacity(span)
+            dataValues.reserveCapacity(span)
+            for i in startBit..<endBit {
+                timeValues.append(Double(i))
+                dataValues.append(bitAt(i) == 1 ? 255.0 : 0.0)
+            }
+            return (timeValues, dataValues)
+        }
+
+        let binWidth = Double(span) / Double(bins)
+        timeValues.reserveCapacity(bins * 2)
+        dataValues.reserveCapacity(bins * 2)
+
+        for bin in 0..<bins {
+            let binStart = Int(floor(Double(startBit) + Double(bin) * binWidth))
+            var binEnd = Int(floor(Double(binStart) + binWidth))
+            if binEnd > endBit { binEnd = endBit }
+            if binEnd <= binStart { continue }
+
+            var hasLow = false
+            var hasHigh = false
+
+            var i = binStart
+            while i < binEnd {
+                let byteIndex = i >> 3
+                if byteIndex >= bytes.count { break }
+
+                if (i & 7) == 0, i + 8 <= binEnd {
+                    let byte = bytes[bytes.index(bytes.startIndex, offsetBy: byteIndex)]
+                    if byte == 0 {
+                        hasLow = true
+                    } else if byte == 255 {
+                        hasHigh = true
+                    } else {
+                        hasLow = true
+                        hasHigh = true
+                    }
+                    i += 8
+                } else {
+                    if bitAt(i) == 1 {
+                        hasHigh = true
+                    } else {
+                        hasLow = true
+                    }
+                    i += 1
+                }
+
+                if hasLow, hasHigh { break }
+            }
+
+            if hasLow || hasHigh {
+                timeValues.append(Double(binStart))
+                dataValues.append(hasLow ? 0.0 : 255.0)
+                timeValues.append(Double(max(binStart, binEnd - 1)))
+                dataValues.append(hasHigh ? 255.0 : 0.0)
+            }
+        }
+        return (timeValues, dataValues)
+    }
 
     private func clampDomain(_ proposed: PlotDomain, bounds: PlotDomain?) -> PlotDomain {
         guard proposed.min.isFinite, proposed.max.isFinite, proposed.max > proposed.min else {
@@ -530,6 +698,9 @@ private struct PlotConfig {
     let yMin: Double
     let yMax: Double
     let xBounds: PlotDomain?
+    let bins: Int
+    let sourceId: String?
+    let sourceKey: String
     let overlayText: String?
     let errorText: String?
     let points: [PlotPoint]
@@ -541,6 +712,20 @@ private struct PlotConfig {
         yMin = (raw["yMin"] as? NSNumber)?.doubleValue ?? -128
         yMax = (raw["yMax"] as? NSNumber)?.doubleValue ?? 384
         xBounds = PlotDomain.boundsFromProps(raw)
+        bins = {
+            if let n = raw["bins"] as? NSNumber {
+                return max(1, min(12000, n.intValue))
+            }
+            if let i = raw["bins"] as? Int {
+                return max(1, min(12000, i))
+            }
+            if let s = raw["bins"] as? String, let i = Int(s.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return max(1, min(12000, i))
+            }
+            return 900
+        }()
+        sourceId = PlotConfig.extractSourceId(raw["source"])
+        sourceKey = (sourceId ?? "") + ":" + String(bins)
         overlayText = raw["overlayText"] as? String
         errorText = raw["errorText"] as? String
 
@@ -557,6 +742,31 @@ private struct PlotConfig {
             }
             points = out
         }
+    }
+
+    private static func extractSourceId(_ value: Any?) -> String? {
+        if let s = value as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let dict = value as? [String: Any] {
+            if let kind = dict["kind"] as? String {
+                if kind == "samplerBits" {
+                    return "samplerBits"
+                }
+                if kind == "buffer" {
+                    if let id = dict["id"] as? String {
+                        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                }
+            }
+            if let id = dict["id"] as? String {
+                let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        }
+        return nil
     }
 
     private static func extractDoubleArray(_ value: Any?) -> [Double] {
