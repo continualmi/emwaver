@@ -48,7 +48,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" Spacing="2">
+                    <StackPanel Grid.Row="0" Spacing="2" Visibility="Collapsed">
                         <TextBlock x:Name="EditorTitleText" Text="Select a script" FontWeight="SemiBold" />
                         <TextBlock x:Name="EditorSubtitleText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
                     </StackPanel>
