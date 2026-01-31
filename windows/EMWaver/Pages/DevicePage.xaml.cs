@@ -11,6 +11,10 @@ public sealed partial class DevicePage : Page
     public DevicePage()
     {
         InitializeComponent();
+
+        // Device manager can raise PropertyChanged off-UI-thread; always marshal UI work.
+        AppServices.Device.AttachUiDispatcher(this.DispatcherQueue);
+
         PortsList.ItemsSource = AppServices.Device.AvailablePorts;
         AutoConnectSwitch.IsOn = AppServices.Device.AutoConnectEnabled;
 
@@ -23,7 +27,13 @@ public sealed partial class DevicePage : Page
     {
         Loaded -= OnLoaded;
         await AppServices.Device.RefreshPortsAsync();
-        UpdateUi();
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            UpdateUi();
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(UpdateUi);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -34,7 +44,13 @@ public sealed partial class DevicePage : Page
 
     private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        UpdateUi();
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            UpdateUi();
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(UpdateUi);
     }
 
     private void UpdateUi()
