@@ -550,6 +550,8 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 - Keep the same `.emw` script semantics as Android/iOS/macOS (sync-only).
 - USB MIDI SysEx transport is native Windows; shared buffering/compression/pacing uses `crates/emwaver-buffer-core` via `crates/emwaver-buffer-windows-ffi`.
 
+> **Agent Note:** In this agent environment on Windows, avoid running builds (MSBuild/WinUI XAML compilation). After code changes, wait for the user to build/run locally; this environment frequently hits file locks/permission issues.
+
 Windows dev prerequisites (Rust buffer core)
 
 - The WinUI app can do basic device comms without Rust, but buffer monitor/sampler parity requires the Rust DLL.
