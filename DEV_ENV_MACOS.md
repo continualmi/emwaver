@@ -10,6 +10,8 @@ Scope:
 
 From the repo root:
 
+Note: the repo `.tmux-init` opens `vi` automatically; set up `vi -> nvim` first (see Neovim section).
+
 ```bash
 # Backend (Flask)
 cd backend
@@ -79,6 +81,33 @@ Example setting:
 macos-option-as-alt = left
 ```
 
+## 2.1) System Preferences (optional)
+
+Screenshots (if you like the swapped behavior):
+
+- `Cmd+Shift+4` -> Copy selection to clipboard
+- `Cmd+Ctrl+Shift+4` -> Save selection to file
+
+Configure in: System Settings -> Keyboard -> Keyboard Shortcuts -> Screenshots.
+
+## 2.2) AI Tooling (optional)
+
+- OpenCode is the primary assistant tool in this workflow.
+- If you use custom OpenCode commands, they typically live at `~/.opencode/commands/`.
+
+Example custom command (`~/.opencode/commands/explain.md`):
+
+```markdown
+---
+description: Explain functionality of the current codebase
+agent: plan
+---
+
+Explain functionality of the current codebase regarding the following topic: $ARGUMENTS
+
+This includes clear markdown with detailed no-code only architecture and natural language description of the subject.
+```
+
 ## 3) Git / Diff UX (delta)
 
 If you use `delta` as your pager, set it globally:
@@ -89,6 +118,19 @@ git config --global interactive.diffFilter "delta --color-only"
 ```
 
 If you use LazyGit, it can be configured to use delta as well (optional).
+
+Typical macOS config path:
+
+- `~/Library/Application Support/lazygit/config.yml`
+
+Example:
+
+```yaml
+git:
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never --line-numbers --syntax-theme='OneHalfDark'
+```
 
 ## 4) Tmux
 
@@ -221,7 +263,13 @@ Ensure your shell uses Neovim for `vi`:
 
 ```bash
 echo "alias vi='nvim'" >> ~/.zshrc
+source ~/.zshrc
+
+# Optional: make editor defaults consistent
+echo "export EDITOR=nvim" >> ~/.zshrc
 ```
+
+If you use bash, put the same alias in `~/.bashrc`.
 
 ### Minimal config (Lazy.nvim bootstrap)
 
@@ -242,6 +290,17 @@ vim.g.maplocalleader = " "
 vim.opt.signcolumn = "yes"
 vim.opt.clipboard = "unnamedplus"
 
+-- Text navigation with Option key (Alt)
+vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+  pattern = "*.txt",
+  callback = function(ev)
+    local opts = { buffer = ev.buf, silent = true }
+    vim.keymap.set("i", "<M-BS>", "<C-w>", opts)
+    vim.keymap.set("i", "<M-Del>", "<C-w>", opts)
+    vim.keymap.set("i", "<M-h>", "<C-w>", opts)
+  end,
+})
+
 -- Bootstrap lazy.nvim
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.loop.fs_stat(lazypath) then
@@ -259,12 +318,214 @@ vim.opt.rtp:prepend(lazypath)
 require("lazy").setup({
   { import = "plugins" },
 })
+
+-- Ergonomic quitting & saving
+vim.keymap.set("n", "<leader>w", "<cmd>write<CR>", { desc = "Save" })
+vim.keymap.set("n", "<leader>q", "<cmd>quit<CR>", { desc = "Quit" })
+vim.keymap.set("n", "<leader>Q", "<cmd>qa!<CR>", { desc = "Force Quit All" })
+vim.keymap.set("n", "<leader>x", "<cmd>x<CR>", { desc = "Save and Quit" })
+
+-- Clear search highlights
+vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
 ```
 
 Plugin ideas that work well with this repo:
 - Telescope (fast file search + ripgrep)
 - GitSigns or Fugitive (git integration)
 - Treesitter (Rust/Swift/Java/TS)
+
+If you want a "Primeagen-style" baseline set, these are the typical pieces + keymaps:
+
+- Telescope: `<leader>pf` find files, `<C-p>` git files, `<leader>fg` live grep, `<leader>ps` grep prompt
+- Harpoon v2: `<leader>a` add file, `<C-e>` menu, `<C-h>/<C-j>/<C-k>/<C-l>` jump 1-4
+- Nvim-tree: `<leader>pv` toggle tree, `<leader>pt` reveal current file
+- Outline: `<leader>o` toggle symbols
+
+### Primeagen-style plugin configs (copy/paste friendly)
+
+These match the common layout from `~/setup/AGENTS.md`, with one change: any fancy Unicode glyphs (like folder arrows) are replaced with ASCII so this file stays ASCII-only.
+
+Create these files under `~/.config/nvim/lua/plugins/`.
+
+Telescope: `~/.config/nvim/lua/plugins/telescope.lua`
+
+```lua
+return {
+  {
+    "nvim-telescope/telescope.nvim",
+    branch = "master",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    config = function()
+      -- Disable treesitter in preview to fix "ft_to_lang" crash
+      require("telescope").setup({
+        defaults = {
+          preview = {
+            treesitter = false,
+          },
+        },
+      })
+
+      local builtin = require("telescope.builtin")
+      vim.keymap.set("n", "<leader>pf", function()
+        builtin.find_files({ no_ignore = true, hidden = true })
+      end, { desc = "Telescope Find Files (All)" })
+      vim.keymap.set("n", "<C-p>", builtin.git_files, { desc = "Telescope Git Files" })
+      vim.keymap.set("n", "<leader>ps", function()
+        builtin.grep_string({ search = vim.fn.input("Grep > ") })
+      end, { desc = "Telescope Grep String" })
+      vim.keymap.set("n", "<leader>fg", builtin.live_grep, { desc = "Telescope Live Grep" })
+      vim.keymap.set("n", "<leader>vh", builtin.help_tags, { desc = "Telescope Help" })
+    end,
+  },
+}
+```
+
+Harpoon v2: `~/.config/nvim/lua/plugins/harpoon.lua`
+
+```lua
+return {
+  {
+    "ThePrimeagen/harpoon",
+    branch = "harpoon2",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    config = function()
+      local harpoon = require("harpoon")
+      harpoon:setup()
+      vim.keymap.set("n", "<leader>a", function()
+        harpoon:list():add()
+      end, { desc = "Harpoon Add" })
+      vim.keymap.set("n", "<C-e>", function()
+        harpoon.ui:toggle_quick_menu(harpoon:list())
+      end, { desc = "Harpoon Menu" })
+      vim.keymap.set("n", "<C-h>", function()
+        harpoon:list():select(1)
+      end)
+      vim.keymap.set("n", "<C-j>", function()
+        harpoon:list():select(2)
+      end)
+      vim.keymap.set("n", "<C-k>", function()
+        harpoon:list():select(3)
+      end)
+      vim.keymap.set("n", "<C-l>", function()
+        harpoon:list():select(4)
+      end)
+    end,
+  },
+}
+```
+
+Nvim-tree: `~/.config/nvim/lua/plugins/nvim-tree.lua`
+
+```lua
+return {
+  {
+    "nvim-tree/nvim-tree.lua",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    config = function()
+      require("nvim-tree").setup({
+        sort_by = "case_sensitive",
+        view = { width = 30 },
+        renderer = {
+          group_empty = true,
+          indent_markers = { enable = true },
+          icons = {
+            glyphs = {
+              folder = {
+                arrow_closed = ">",
+                arrow_open = "v",
+              },
+            },
+          },
+        },
+        filters = {
+          dotfiles = false,
+          git_ignored = false,
+        },
+      })
+      vim.keymap.set("n", "<leader>pv", "<cmd>NvimTreeToggle<CR>", { desc = "Toggle File Tree" })
+      vim.keymap.set("n", "<leader>pt", "<cmd>NvimTreeFindFile<CR>", { desc = "Find Current File in Tree" })
+    end,
+  },
+}
+```
+
+Lualine: `~/.config/nvim/lua/plugins/lualine.lua`
+
+```lua
+return {
+  {
+    "nvim-lualine/lualine.nvim",
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    config = function()
+      require("lualine").setup({
+        options = {
+          theme = "onedark",
+          component_separators = { left = "|", right = "|" },
+          section_separators = { left = "", right = "" },
+        },
+      })
+    end,
+  },
+}
+```
+
+Outline: `~/.config/nvim/lua/plugins/outline.lua`
+
+```lua
+return {
+  {
+    "hedyhli/outline.nvim",
+    config = function()
+      require("outline").setup({
+        outline_window = {
+          position = "right",
+          width = 30,
+          auto_close = false,
+          wrap = true,
+        },
+        keymaps = {
+          goto_location = "<CR>",
+          peek_location = "o",
+          fold = "h",
+          unfold = "l",
+          fold_toggle = "<Tab>",
+        },
+      })
+    end,
+    keys = {
+      { "<leader>o", "<cmd>Outline<CR>", desc = "Toggle Outline" },
+    },
+  },
+}
+```
+
+Satellite (scrollbar): `~/.config/nvim/lua/plugins/scrollbar.lua`
+
+```lua
+return {
+  {
+    "lewis6991/satellite.nvim",
+    config = function()
+      require("satellite").setup({
+        winblend = 0,
+        handlers = {
+          gitsigns = { enable = true },
+          search = { enable = true },
+          diagnostic = { enable = true },
+        },
+      })
+    end,
+  },
+}
+```
+
+Other plugins mentioned in the original setup notes (optional):
+
+- GitSigns: inline hunk signs; common keys: `]c` / `[c` jump hunks, `<leader>gd` preview diff, `<leader>ghs` stage hunk
+- Treesitter: install parsers for `markdown` and `markdown_inline` (plus whatever you use day-to-day)
+- Markdown render: `MeanderingProgrammer/render-markdown.nvim`
+- Prose wrapping: `preservim/vim-pencil`
+- Git UI: `tpope/vim-fugitive` (`:Git`, `:Gdiffsplit`, `:Gclog`)
 
 ## 7) Language / Platform Toolchains
 
