@@ -2,11 +2,11 @@ import { notFound, redirect } from "next/navigation";
 
 const REDIRECTS: Record<string, string> = {
   "overview": "/",
-  "installing-using": "/install",
-  "hardware/device": "/device",
-  "hardware/pinout": "/pinout",
-  "hardware/pinout/index": "/pinout",
-  "scripts": "/scripts",
+  "installing-using": "/docs/install",
+  "hardware/device": "/docs/hardware/device",
+  "hardware/pinout": "/docs/hardware/pinout",
+  "hardware/pinout/index": "/docs/hardware/pinout",
+  "scripts": "/docs/scripts",
 };
 
 export default async function DocPage({
