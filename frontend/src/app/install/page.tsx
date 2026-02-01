@@ -20,20 +20,20 @@ function StoreBadges() {
         rel="noreferrer"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">iOS</div>
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">iOS / macOS</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">App Store</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Install the mobile app.</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Install on iPhone, iPad, and Mac.</div>
       </a>
 
       <a
-        href="https://github.com/luispl77/emwaver/releases/latest"
+        href="https://apps.microsoft.com/search?query=EMWaver"
         target="_blank"
         rel="noreferrer"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Desktop</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Downloads</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Windows / macOS / Linux.</div>
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Microsoft Store</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Install the desktop app.</div>
       </a>
     </div>
   );
@@ -46,7 +46,7 @@ export default function InstallPage() {
       title="Installing & Using"
       description="Install the apps, connect over USB, and run scripts with UI."
     >
-      <h2>Download</h2>
+      <h2>Install</h2>
       <StoreBadges />
 
       <h2>Connect</h2>

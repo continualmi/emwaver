@@ -7,9 +7,20 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Transport:** USB only (class-compliant **USB MIDI SysEx**, fixed 64‑byte frames)
 - **Hardware:** **STM32 only** (one current-gen board)
 - **Firmware:** **one** firmware binary for the platform (no board catalog, no variants)
-- **Distribution:** **binary-first** (apps + firmware are shipped as binaries; end users should not be building or flashing from source)
+- **Distribution:** **store-only for apps** (App Store / Play Store / Microsoft Store) + **bundled firmware payloads** (end users should not be building from source)
 - **Core UX:** **Script-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
 - **Surface area shipped:** Android app, iOS app, macOS app, Windows app
+
+Store distribution (apps)
+
+- **Apple App Store**: iOS + macOS
+- **Google Play Store**: Android
+- **Microsoft Store**: Windows
+
+We do **not** publish direct-download installers for end users (`.dmg`, `.apk`, `.exe`).
+
+GitHub Actions are used for CI (and optionally deployment) of **frontend + backend** only.
+We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
