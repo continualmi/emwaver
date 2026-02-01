@@ -71,6 +71,14 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Website:** `frontend/` (Next.js)
 - **Dev env (macOS + Windows):** `DEV_ENV.md` (developer setup checklist; not product docs)
 
+### Repo-local utilities (dev-only)
+
+- Image generation helper (Gemini 2.5 Flash Image): `scripts/gen_image_gemini.py`
+  - Model default: `gemini-2.5-flash-image` (txt2img + img2img for edits/variations via `--in`)
+  - Requires: Python 3.10+, `pip install google-genai pillow`, and `GEMINI_API_KEY` in env (or repo-root `.env`)
+  - Example: `python scripts/gen_image_gemini.py --prompt "Clean product shot, dark studio" --out out.png --overwrite`
+  - Example (img2img): `python scripts/gen_image_gemini.py --in ref.png --prompt "Make a subtle variation, keep composition" --out out.png --overwrite`
+
 Notes on dev environment docs:
 - `DEV_ENV.md` is a developer-only setup checklist (not end-user/product documentation).
 - Use the macOS or Windows section depending on the platform.
