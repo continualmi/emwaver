@@ -111,6 +111,25 @@ sudo apt -y upgrade
 sudo apt -y install git ripgrep fzf tmux neovim git-delta lazygit
 ```
 
+If you run Android Gradle tasks inside WSL (optional):
+
+```bash
+sudo apt -y install openjdk-17-jdk
+echo "export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
+echo "export PATH=\"$JAVA_HOME/bin:$PATH\"" >> ~/.bashrc
+source ~/.bashrc
+java -version
+```
+
+Gradle note:
+- Prefer the project wrapper (`android/gradlew`). You usually do not need a system Gradle.
+- If you still want one in WSL (not required, can be old):
+
+```bash
+sudo apt -y install gradle
+gradle --version
+```
+
 Notes:
 - The repo root `.tmux-init` opens a `lazygit` pane; install it so the layout works out of the box.
 - Some Ubuntu distros/repos may not include `lazygit` (or may ship an older version). If `lazygit` is missing, install the latest binary to `~/.local/bin`:
@@ -350,6 +369,13 @@ If you want a full Neovim baseline (Lazy.nvim + Telescope/Harpoon/etc.), add a s
 
 WSL note:
 - This repo does not ship a Neovim config.
+- If file icons look wrong ("tofu" squares / misaligned glyphs), your terminal font is missing Nerd Font glyphs. Install a Nerd Font on Windows and set your terminal to use it (Windows Terminal: Settings -> Profiles -> Defaults -> Appearance -> Font face).
+- If tmux is involved, make sure tmux is using a truecolor-capable terminal:
+
+```tmux
+set -g default-terminal "tmux-256color"
+set-option -sa terminal-overrides ",xterm*:Tc"
+```
 - If you want a minimal baseline quickly (includes `nvim-tree`), you can generate one locally under `~/.config/nvim`:
 
 ```bash
