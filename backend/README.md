@@ -42,7 +42,10 @@ Run locally
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r ../requirements.txt
+
+# Optional: Postgres driver (only if you set DATABASE_URL to Postgres)
+pip install -r ../requirements-postgres.txt
 ```
 
 2) Export env vars (or use your shell env manager):
@@ -66,6 +69,7 @@ Notes
 
 - This is a development-friendly starting point. Cloud sync endpoints exist, but client-side sync UX is still evolving.
 - For Azure later: this app is compatible with `gunicorn` (see `requirements.txt`).
+ - For Azure later: this app is compatible with `gunicorn` (see `requirements.txt`).
 
 Auth note
 

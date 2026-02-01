@@ -7,7 +7,10 @@ Local dev (recommended)
   cd backend
   python3 -m venv .venv
   source .venv/bin/activate
-  pip install -r requirements.txt
+  pip install -r ../requirements.txt
+
+  # Optional: Postgres driver (only if you set DATABASE_URL to Postgres)
+  pip install -r ../requirements-postgres.txt
 
 2) Configure env:
 
@@ -47,8 +50,8 @@ Auth (Firebase) mode
 
 Docker
 
-  cd backend
-  docker build -t emwaver-backend .
+  # Build from repo root so Docker can access repo-wide requirements.txt
+  docker build -f backend/Dockerfile -t emwaver-backend .
 
   # Local dev without auth
   docker run --rm -p 8787:8787 \
