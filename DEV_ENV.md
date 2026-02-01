@@ -108,7 +108,30 @@ In WSL:
 ```bash
 sudo apt update
 sudo apt -y upgrade
-sudo apt -y install git ripgrep fzf tmux neovim git-delta
+sudo apt -y install git ripgrep fzf tmux neovim git-delta lazygit
+```
+
+Notes:
+- The repo root `.tmux-init` opens a `lazygit` pane; install it so the layout works out of the box.
+- Some Ubuntu distros/repos may not include `lazygit` (or may ship an older version). If `lazygit` is missing, install the latest binary to `~/.local/bin`:
+
+```bash
+mkdir -p ~/.local/bin
+python3 - <<'PY' > /tmp/_lazygit_url.txt
+import json, re, urllib.request
+url='https://api.github.com/repos/jesseduffield/lazygit/releases/latest'
+with urllib.request.urlopen(url) as r:
+  data=json.load(r)
+for a in data.get('assets', []):
+  name=a.get('name','')
+  if re.search(r'lazygit_.*_linux_x86_64\\.tar\\.gz$', name):
+    print(a['browser_download_url'])
+    break
+PY
+curl -L -o /tmp/lazygit.tar.gz "$(cat /tmp/_lazygit_url.txt)"
+tar -xzf /tmp/lazygit.tar.gz -C /tmp
+install -m 0755 /tmp/lazygit ~/.local/bin/lazygit
+rm -f /tmp/lazygit.tar.gz /tmp/_lazygit_url.txt
 ```
 
 Optional:
@@ -145,6 +168,38 @@ If you use `delta` as your pager:
 ```bash
 git config --global core.pager "delta --paging=never"
 git config --global interactive.diffFilter "delta --color-only"
+```
+
+WSL note (lazygit integration):
+- Ensure `delta` is installed (`git-delta` package provides the `delta` binary).
+- Configure lazygit to use delta by creating/editing `~/.config/lazygit/config.yml`:
+
+```yaml
+git:
+  paging:
+    colorArg: always
+    pager: delta --paging=never
+```
+
+If `delta` is missing and you don't want to use `sudo`, install the latest `delta` binary to `~/.local/bin`:
+
+```bash
+mkdir -p ~/.local/bin
+python3 - <<'PY' > /tmp/_delta_url.txt
+import json, re, urllib.request
+url='https://api.github.com/repos/dandavison/delta/releases/latest'
+with urllib.request.urlopen(url) as r:
+  data=json.load(r)
+for a in data.get('assets', []):
+  name=a.get('name','')
+  if re.search(r'delta-.*-x86_64-unknown-linux-musl\.tar\.gz$', name):
+    print(a['browser_download_url'])
+    break
+PY
+curl -L -o /tmp/delta.tar.gz "$(cat /tmp/_delta_url.txt)"
+tar -xzf /tmp/delta.tar.gz -C /tmp
+install -m 0755 /tmp/delta-*/delta ~/.local/bin/delta
+rm -f /tmp/delta.tar.gz /tmp/_delta_url.txt
 ```
 
 ## 4) Tmux
@@ -292,6 +347,49 @@ source ~/.bashrc
 ```
 
 If you want a full Neovim baseline (Lazy.nvim + Telescope/Harpoon/etc.), add a shared `nvim/` doc later (or copy the config from your dotfiles).
+
+WSL note:
+- This repo does not ship a Neovim config.
+- If you want a minimal baseline quickly (includes `nvim-tree`), you can generate one locally under `~/.config/nvim`:
+
+```bash
+mkdir -p ~/.config/nvim/lua/emw
+cat > ~/.config/nvim/init.lua <<'EOF'
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+
+vim.opt.number = true
+vim.opt.relativenumber = true
+vim.opt.termguicolors = true
+vim.opt.mouse = "a"
+vim.opt.clipboard = "unnamedplus"
+
+require("emw.lazy")
+
+vim.keymap.set("n", "<leader>e", function()
+  require("nvim-tree.api").tree.toggle({ find_file = true, focus = true })
+end)
+EOF
+
+cat > ~/.config/nvim/lua/emw/lazy.lua <<'EOF'
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not vim.loop.fs_stat(lazypath) then
+  vim.fn.system({
+    "git",
+    "clone",
+    "--filter=blob:none",
+    "https://github.com/folke/lazy.nvim.git",
+    "--branch=stable",
+    lazypath,
+  })
+end
+vim.opt.rtp:prepend(lazypath)
+
+require("lazy").setup({
+  { "nvim-tree/nvim-tree.lua", dependencies = { "nvim-tree/nvim-web-devicons" } },
+})
+EOF
+```
 
 ## 7) Language / Platform Toolchains
 

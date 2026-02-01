@@ -19,18 +19,18 @@ tmux select-pane -t $SESSION:1.1
 # Use pane_id capture so we don't depend on tmux's pane numbering.
 PANE_EDITOR=$(tmux new-window -t $SESSION -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# Split horizontally: Left (~1/6) | Right (~5/6)
-# -p is the percentage size of the *new* pane.
-PANE_RIGHT=$(tmux split-window -h -p 84 -t "$PANE_EDITOR" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+# Split horizontally: Left (editor) | Right (work grid)
+# Note: tmux 3.4 does not support split-window -p; use -l with a percentage.
+PANE_RIGHT=$(tmux split-window -h -l 84% -t "$PANE_EDITOR" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
 # Left: Editor
 tmux send-keys -t "$PANE_EDITOR" 'vi .' C-m
 
 # Right: make a 2x2 grid with equal halves
 # Order matters: split right pane into top/bottom, then split each row into left/right.
-PANE_RIGHT_BOTTOM=$(tmux split-window -v -p 50 -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_RIGHT_TOP_RIGHT=$(tmux split-window -h -p 50 -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_RIGHT_BOTTOM_RIGHT=$(tmux split-window -h -p 50 -t "$PANE_RIGHT_BOTTOM" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_RIGHT_BOTTOM=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_RIGHT_TOP_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_RIGHT_BOTTOM_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_RIGHT_BOTTOM" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
 # Assign commands
 # Top-left of right grid: Backend (Flask)
