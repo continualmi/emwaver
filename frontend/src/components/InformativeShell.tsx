@@ -8,12 +8,11 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/install", label: "Get started" },
+  { href: "/order", label: "Order" },
+  { href: "/install", label: "Download" },
   { href: "/device", label: "Device" },
   { href: "/pinout", label: "Pinout" },
   { href: "/scripts", label: "Scripts" },
-  { href: "/order", label: "Order" },
-  { href: "/history", label: "History" },
 ];
 
 function NavLinks({ activeHref }: { activeHref: string }) {

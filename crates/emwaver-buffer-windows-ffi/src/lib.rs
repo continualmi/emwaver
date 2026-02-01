@@ -365,7 +365,7 @@ pub extern "C" fn emw_buffer_compress_data_bits(
 }
 
 #[repr(C)]
-pub struct EmwBleTxProfile {
+pub struct EmwTxProfile {
     max_packet_size: i32,
     min_packet_size: i32,
     initial_packet_size: i32,
@@ -380,9 +380,9 @@ pub struct EmwBleTxProfile {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn emw_tx_ble_profile_default() -> EmwBleTxProfile {
-    let p = tx::BleTxProfile::default();
-    EmwBleTxProfile {
+pub extern "C" fn emw_tx_profile_default() -> EmwTxProfile {
+    let p = tx::TxProfile::default();
+    EmwTxProfile {
         max_packet_size: p.max_packet_size as i32,
         min_packet_size: p.min_packet_size as i32,
         initial_packet_size: p.initial_packet_size as i32,
@@ -398,7 +398,7 @@ pub extern "C" fn emw_tx_ble_profile_default() -> EmwBleTxProfile {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn emw_tx_ble_next_packet_size(
+pub extern "C" fn emw_tx_next_packet_size(
     bytes_sent: i32,
     last_status: i32,
     current_packet_size: i32,
@@ -413,8 +413,8 @@ pub extern "C" fn emw_tx_ble_next_packet_size(
     } else {
         current_packet_size as usize
     };
-    tx::ble_next_packet_size(
-        tx::BleTxProfile::default(),
+    tx::tx_next_packet_size(
+        tx::TxProfile::default(),
         bytes_sent,
         last_status,
         current_packet_size,

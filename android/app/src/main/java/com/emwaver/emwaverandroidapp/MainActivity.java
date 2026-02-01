@@ -374,7 +374,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
     
-    // Check if Bluetooth is enabled when resumed
+    // Keep USB attachment receiver registered while resumed.
     @Override
     protected void onResume() {
         super.onResume();

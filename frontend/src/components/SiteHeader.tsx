@@ -1,11 +1,10 @@
 import Link from "next/link";
 
 const nav = [
-  { href: "/install", label: "Get started" },
+  { href: "/order", label: "Order" },
+  { href: "/install", label: "Download" },
   { href: "/pinout", label: "Pinout" },
   { href: "/scripts", label: "Scripts" },
-  { href: "/order", label: "Order" },
-  { href: "/history", label: "History" },
   { href: "/news", label: "News" },
 ];
 

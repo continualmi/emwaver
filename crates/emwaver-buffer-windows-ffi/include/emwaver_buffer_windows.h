@@ -108,10 +108,10 @@ typedef struct {
     int32_t nudge_band;
     int32_t step_large;
     int32_t step_small;
-} EmwBleTxProfile;
+} EmwTxProfile;
 
-EmwBleTxProfile emw_tx_ble_profile_default(void);
-int32_t emw_tx_ble_next_packet_size(int32_t bytes_sent, int32_t last_status, int32_t current_packet_size);
+EmwTxProfile emw_tx_profile_default(void);
+int32_t emw_tx_next_packet_size(int32_t bytes_sent, int32_t last_status, int32_t current_packet_size);
 
 // --- Internal RX swap (avoid contaminating sampler capture with BS packets during TX) ---
 

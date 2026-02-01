@@ -182,16 +182,16 @@ internal static class NativeBufferRust
         return ok ? outPacket : null;
     }
 
-    internal static EmwBufferNative.EmwBleTxProfile TxBleProfileDefault()
+    internal static EmwBufferNative.EmwTxProfile TxProfileDefault()
     {
         if (!IsAvailable) return default;
-        return EmwBufferNative.TxBleProfileDefault();
+        return EmwBufferNative.TxProfileDefault();
     }
 
-    internal static int TxBleNextPacketSize(int bytesSent, int lastStatus, int currentPacketSize)
+    internal static int TxNextPacketSize(int bytesSent, int lastStatus, int currentPacketSize)
     {
         if (!IsAvailable) return currentPacketSize;
-        return EmwBufferNative.TxBleNextPacketSize(bytesSent, lastStatus, currentPacketSize);
+        return EmwBufferNative.TxNextPacketSize(bytesSent, lastStatus, currentPacketSize);
     }
 
     internal static (byte[] rxBytes, ulong[] rxTsMs, ulong rxCounter) TakeRxState()

@@ -5,7 +5,7 @@
  */
 
 #[derive(Debug, Clone, Copy)]
-pub struct BleTxProfile {
+pub struct TxProfile {
     pub max_packet_size: usize,
     pub min_packet_size: usize,
     pub initial_packet_size: usize,
@@ -19,7 +19,7 @@ pub struct BleTxProfile {
     pub step_small: usize,
 }
 
-impl BleTxProfile {
+impl TxProfile {
     pub const fn default() -> Self {
         Self {
             max_packet_size: 240,
@@ -37,8 +37,8 @@ impl BleTxProfile {
     }
 }
 
-pub fn ble_next_packet_size(
-    profile: BleTxProfile,
+pub fn tx_next_packet_size(
+    profile: TxProfile,
     bytes_sent: usize,
     last_status: i32,
     current_packet_size: usize,
@@ -129,27 +129,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ble_next_packet_size_uses_max_during_initial_fill() {
-        let p = BleTxProfile::default();
+    fn tx_next_packet_size_uses_max_during_initial_fill() {
+        let p = TxProfile::default();
         assert_eq!(
-            ble_next_packet_size(p, 0, p.target_buffer_level, 188),
+            tx_next_packet_size(p, 0, p.target_buffer_level, 188),
             p.max_packet_size
         );
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes - 1, 0, 128),
+            tx_next_packet_size(p, p.initial_fill_bytes - 1, 0, 128),
             p.max_packet_size
         );
     }
 
     #[test]
-    fn ble_next_packet_size_slows_down_when_buffer_too_high() {
-        let p = BleTxProfile::default();
+    fn tx_next_packet_size_slows_down_when_buffer_too_high() {
+        let p = TxProfile::default();
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, p.buffer_high_threshold + 1, 200),
+            tx_next_packet_size(p, p.initial_fill_bytes, p.buffer_high_threshold + 1, 200),
             168
         );
         assert_eq!(
-            ble_next_packet_size(
+            tx_next_packet_size(
                 p,
                 p.initial_fill_bytes,
                 p.buffer_high_threshold + 1,
@@ -160,14 +160,14 @@ mod tests {
     }
 
     #[test]
-    fn ble_next_packet_size_speeds_up_when_buffer_too_low() {
-        let p = BleTxProfile::default();
+    fn tx_next_packet_size_speeds_up_when_buffer_too_low() {
+        let p = TxProfile::default();
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, p.buffer_low_threshold - 1, 160),
+            tx_next_packet_size(p, p.initial_fill_bytes, p.buffer_low_threshold - 1, 160),
             192
         );
         assert_eq!(
-            ble_next_packet_size(
+            tx_next_packet_size(
                 p,
                 p.initial_fill_bytes,
                 p.buffer_low_threshold - 1,
@@ -178,19 +178,19 @@ mod tests {
     }
 
     #[test]
-    fn ble_next_packet_size_nudges_towards_initial_packet_size() {
-        let p = BleTxProfile::default();
+    fn tx_next_packet_size_nudges_towards_initial_packet_size() {
+        let p = TxProfile::default();
         let ok_status = p.target_buffer_level;
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, ok_status, 100),
+            tx_next_packet_size(p, p.initial_fill_bytes, ok_status, 100),
             116
         );
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, ok_status, 220),
+            tx_next_packet_size(p, p.initial_fill_bytes, ok_status, 220),
             204
         );
         assert_eq!(
-            ble_next_packet_size(p, p.initial_fill_bytes, ok_status, p.initial_packet_size),
+            tx_next_packet_size(p, p.initial_fill_bytes, ok_status, p.initial_packet_size),
             p.initial_packet_size
         );
     }

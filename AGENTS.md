@@ -41,7 +41,7 @@ We treat `.emw` as the first-class format for these scripts.
 
 We intentionally give up:
 
-- Wireless / BLE-first workflows.
+- Wireless workflows.
 - End-user firmware build/flash/customization workflows.
 
 The board should be useful **only with the client** (Android/iOS/Desktop). That’s the point: the client is the product.

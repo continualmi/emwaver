@@ -89,7 +89,7 @@ internal static class EmwBufferNative
         out nuint outDataLen);
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct EmwBleTxProfile
+    internal struct EmwTxProfile
     {
         internal int max_packet_size;
         internal int min_packet_size;
@@ -104,11 +104,11 @@ internal static class EmwBufferNative
         internal int step_small;
     }
 
-    [DllImport(DllName, EntryPoint = "emw_tx_ble_profile_default", CallingConvention = CallingConvention.Cdecl)]
-    internal static extern EmwBleTxProfile TxBleProfileDefault();
+    [DllImport(DllName, EntryPoint = "emw_tx_profile_default", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern EmwTxProfile TxProfileDefault();
 
-    [DllImport(DllName, EntryPoint = "emw_tx_ble_next_packet_size", CallingConvention = CallingConvention.Cdecl)]
-    internal static extern int TxBleNextPacketSize(int bytesSent, int lastStatus, int currentPacketSize);
+    [DllImport(DllName, EntryPoint = "emw_tx_next_packet_size", CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int TxNextPacketSize(int bytesSent, int lastStatus, int currentPacketSize);
 
     [DllImport(DllName, EntryPoint = "emw_buffer_take_rx_state", CallingConvention = CallingConvention.Cdecl)]
     internal static extern void TakeRxState(

@@ -72,7 +72,7 @@ public final class ScriptEngine {
         // Manual command helper (bridges to ScriptDeviceWrapper when present).
         let sendCommandBlock: @convention(block) (JSValue, JSValue) -> JSValue? = { [weak self] commandValue, timeoutValue in
             guard let self, let context = commandValue.context else { return nil }
-            guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+            guard let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else {
                 return JSValue(nullIn: context)
             }
             guard let command = commandValue.toObject() as? Data, timeoutValue.isNumber else {
@@ -89,7 +89,7 @@ public final class ScriptEngine {
         // Android parity: DeviceConnection.sendCommandString appends newline.
         let sendCommandStringBlock: @convention(block) (String, Int) -> JSValue? = { [weak self] command, timeout in
             guard let self else { return nil }
-            guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+            guard let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else {
                 return JSValue(nullIn: context)
             }
 
@@ -107,7 +107,7 @@ public final class ScriptEngine {
         // Byte-level packet variant.
         let sendPacketBlock: @convention(block) (JSValue, Int) -> JSValue? = { [weak self] bytesValue, timeout in
             guard let self else { return nil }
-            guard let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+            guard let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else {
                 return JSValue(nullIn: context)
             }
             guard let data = self.dataFromJSBytes(bytesValue) else { return JSValue(nullIn: context) }
@@ -297,7 +297,7 @@ public final class ScriptEngine {
         // -----------------------------------------------------------------
 
         let samplerPacketCountBlock: @convention(block) () -> Int = { [weak self] in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return 0 }
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return 0 }
             let len = wrapper.getBuffer().count
             if len <= 0 { return 0 }
             return Int((len + 63) / 64)
@@ -305,13 +305,13 @@ public final class ScriptEngine {
         context.setObject(samplerPacketCountBlock, forKeyedSubscript: "_scriptSamplerBufferGetPacketCount" as NSString)
 
         let samplerLenBytesBlock: @convention(block) () -> Int = { [weak self] in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return 0 }
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return 0 }
             return wrapper.getBuffer().count
         }
         context.setObject(samplerLenBytesBlock, forKeyedSubscript: "_scriptSamplerBufferGetLenBytes" as NSString)
 
         let samplerGetBytesBlock: @convention(block) () -> JSValue = { [weak self] in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else {
                 return JSValue(object: [], in: context)
             }
             return JSValue(object: Array(wrapper.getBuffer()), in: context)
@@ -319,7 +319,7 @@ public final class ScriptEngine {
         context.setObject(samplerGetBytesBlock, forKeyedSubscript: "_scriptSamplerBufferGetBytes" as NSString)
 
         let samplerClearBlock: @convention(block) () -> Void = { [weak self] in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return }
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return }
             wrapper.clearBuffer()
         }
         context.setObject(samplerClearBlock, forKeyedSubscript: "_scriptSamplerBufferClear" as NSString)
@@ -331,7 +331,7 @@ public final class ScriptEngine {
         context.setObject(samplerInvertBlock, forKeyedSubscript: "_scriptSamplerBufferSetInvertRx" as NSString)
 
         let samplerReadPacketsBlock: @convention(block) (Int, Int) -> JSValue = { [weak self] packetIndex, maxPackets in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else {
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else {
                 return JSValue(object: ["data": [], "nextPacketIndex": 0, "availablePackets": 0], in: context)
             }
             let data = wrapper.getBuffer()
@@ -360,7 +360,7 @@ public final class ScriptEngine {
         // -----------------------------------------------------------------
 
         // Register the live sampler buffer as a plot source.
-        if let wrapper = globalBindings["BLEService"] as? ScriptDeviceWrapper {
+        if let wrapper = globalBindings["Device"] as? ScriptDeviceWrapper {
             PlotBufferStore.shared.setProvider(id: "samplerBits") {
                 wrapper.getBuffer()
             }
@@ -381,7 +381,7 @@ public final class ScriptEngine {
         // -----------------------------------------------------------------
 
         let bufferSetBytesBlock: @convention(block) (JSValue) -> Int = { [weak self] bytesValue in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return 0 }
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return 0 }
             guard let data = self.dataFromJSBytes(bytesValue) else { return 0 }
             wrapper.loadBuffer(data: data)
             return data.count
@@ -389,7 +389,7 @@ public final class ScriptEngine {
         context.setObject(bufferSetBytesBlock, forKeyedSubscript: "_scriptBufferSetBytes" as NSString)
 
         let bufferSaveBytesFileBlock: @convention(block) (String) -> Void = { [weak self] path in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return }
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return }
             let p = path.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !p.isEmpty else { return }
             do {
@@ -403,7 +403,7 @@ public final class ScriptEngine {
         context.setObject(bufferSaveBytesFileBlock, forKeyedSubscript: "_scriptBufferSaveBytesFile" as NSString)
 
         let bufferBuildSignedRawTimingsBlock: @convention(block) (Int) -> String = { [weak self] samplePeriodUsRaw in
-            guard let self, let wrapper = self.globalBindings["BLEService"] as? ScriptDeviceWrapper else { return "" }
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return "" }
             let data = wrapper.getBuffer()
             if data.isEmpty { return "" }
 
