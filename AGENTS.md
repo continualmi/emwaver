@@ -635,14 +635,11 @@ Removed (scripts are run via the apps).
 - Next.js website.
 - This is the only public-facing documentation surface (we no longer ship MkDocs from `docs/`).
 
-#### Hardware pages: Order vs History
+#### Hardware pages
 
 - **Order** (`/order`): placeholder UX for device ordering.
   - No vendor branding.
   - **No fabrication/manufacturing artifacts** are published (no Gerbers/BOM/CPL/pick-and-place/case STLs/CAD exports).
-- **Board history** (`/history`): archive only.
-  - Allowed: description, photo gallery, and basic metadata.
-  - Disallowed: schematics/electronics CAD/fabrication artifacts and external hardware project links.
 
 ## Agent Workflow Guardrails
 

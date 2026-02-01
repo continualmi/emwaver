@@ -10,11 +10,8 @@ export function SiteFooter() {
         </div>
 
         <div className="space-y-2 text-sm text-[color:var(--ink-dim)]">
-          <a className="block hover:text-[color:var(--ink)]" href="/scripts">
-            Scripts
-          </a>
-          <a className="block hover:text-[color:var(--ink)]" href="/pinout">
-            Pinout
+          <a className="block hover:text-[color:var(--ink)]" href="/docs">
+            Documentation
           </a>
           <a className="block hover:text-[color:var(--ink)]" href="/order">
             Order

@@ -8,29 +8,14 @@ export default function PinoutPage() {
       description="GPIO numbering model, header map, and the pins that matter on the current board."
     >
       <h2>Diagram</h2>
-      <p>
-        For exact physical header orientation and board-specific routing constraints, use the PCB PDF.
-      </p>
-      <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-4 md:grid-cols-1">
         <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)]">
           <img
-            src="/hardware-catalog/hardware/emwaver_photoshoot/IMG_0150.webp"
+            src="/EMWAVER.jpg"
             alt="EMWaver device"
             className="h-auto w-full object-cover"
           />
         </div>
-        <a
-          href="/hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf"
-          target="_blank"
-          rel="noreferrer"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-        >
-          <div className="text-xs font-semibold text-[color:var(--copper)]">PCB</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Open PCB PDF</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Use this for orientation, spacing, and routing.
-          </div>
-        </a>
       </div>
 
       <h2>GPIO numbering</h2>
