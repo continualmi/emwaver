@@ -8,17 +8,7 @@ export default function DevicePage() {
       title="Current Device"
       description="EMWaver ships a single current-gen STM32 board, USB-only, designed around scripts + UI rather than reflashing loops."
     >
-      <div className="grid gap-4 md:grid-cols-3">
-        <a
-          href="/hardware-catalog/hardware/pcb/PCB_emwaver_2025-12-09.pdf"
-          target="_blank"
-          rel="noreferrer"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-        >
-          <div className="text-xs font-semibold text-[color:var(--copper)]">PCB</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Open PCB PDF</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Header orientation + routing details.</div>
-        </a>
+      <div className="grid gap-4 md:grid-cols-2">
         <Link
           href="/pinout"
           className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"

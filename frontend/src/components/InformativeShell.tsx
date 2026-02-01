@@ -10,9 +10,8 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/order", label: "Order" },
   { href: "/install", label: "Download" },
+  { href: "/docs", label: "Documentation" },
   { href: "/device", label: "Device" },
-  { href: "/pinout", label: "Pinout" },
-  { href: "/scripts", label: "Scripts" },
 ];
 
 function NavLinks({ activeHref }: { activeHref: string }) {
