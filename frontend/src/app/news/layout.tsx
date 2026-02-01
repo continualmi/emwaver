@@ -1,9 +1,9 @@
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
-import { DocsMobileNav } from "@/components/docs/DocsMobileNav";
-import { DocsSidebar } from "@/components/docs/DocsSidebar";
+import { NewsMobileNav } from "@/components/news/NewsMobileNav";
+import { NewsSidebar } from "@/components/news/NewsSidebar";
 
-export default function DocsLayout({
+export default function NewsLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -15,12 +15,12 @@ export default function DocsLayout({
       <main className="mx-auto w-full max-w-6xl flex-1 overflow-hidden px-5 py-10">
         <div className="grid h-full gap-8 md:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="hidden overflow-y-auto md:block">
-            <DocsSidebar />
+            <NewsSidebar />
           </aside>
 
           <div className="min-w-0 overflow-hidden">
             <div className="md:hidden">
-              <DocsMobileNav />
+              <NewsMobileNav />
             </div>
 
             <div className="mt-6 h-full overflow-y-auto md:mt-0">
