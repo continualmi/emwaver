@@ -69,12 +69,11 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Shared assets:** `assets/` (default scripts, etc.)
 - **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`)
 - **Website:** `frontend/` (Next.js)
-- **Personal dev env (macOS):** `DEV_ENV_MACOS.md` (developer setup checklist; not product docs)
-- **Personal dev env (Windows):** `DEV_ENV_WINDOWS.md` (developer setup checklist; not product docs)
+- **Dev env (macOS + Windows):** `DEV_ENV.md` (developer setup checklist; not product docs)
 
 Notes on dev environment docs:
-- `DEV_ENV_MACOS.md` and `DEV_ENV_WINDOWS.md` are developer-only setup checklists (not end-user/product documentation).
-- Refer to the matching file when someone asks "how do I set up EMWaver development on macOS?" or "...on Windows?".
+- `DEV_ENV.md` is a developer-only setup checklist (not end-user/product documentation).
+- Use the macOS or Windows section depending on the platform.
 
 ## Repository Code Map (Deep Tree)
 
