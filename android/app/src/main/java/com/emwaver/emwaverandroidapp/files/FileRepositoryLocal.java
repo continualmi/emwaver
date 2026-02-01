@@ -300,7 +300,7 @@ public final class FileRepositoryLocal {
         fos.close();
     }
 
-    // Synchronous methods for BLE file sync server
+    // Synchronous helpers used by the app.
     public List<UserFileMetadata> listFiles() {
         List<UserFileMetadata> result = new ArrayList<>();
         File[] files = storageDir.listFiles();

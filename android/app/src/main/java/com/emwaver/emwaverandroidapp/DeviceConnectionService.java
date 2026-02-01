@@ -7,9 +7,7 @@
 package com.emwaver.emwaverandroidapp;
 
 /**
- * Common interface for device connection services (BLE and USB).
- * This interface provides a unified API for communicating with EMWaver devices
- * regardless of the connection type.
+ * Common interface for device connections (USB-only).
  */
 public interface DeviceConnectionService {
     
@@ -17,7 +15,6 @@ public interface DeviceConnectionService {
      * Connection type enumeration
      */
     enum ConnectionType {
-        BLE,
         USB,
         NONE
     }

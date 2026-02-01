@@ -19,7 +19,7 @@ final class NativeBufferRust {
         let available_packets: UInt64
     }
 
-    struct BleTxProfile {
+    struct TxProfile {
         let max_packet_size: Int32
         let min_packet_size: Int32
         let initial_packet_size: Int32
@@ -109,11 +109,11 @@ final class NativeBufferRust {
         _ outDataLen: UnsafeMutablePointer<Int>
     )
 
-    @_silgen_name("emw_tx_ble_profile_default")
-    private static func c_tx_ble_profile_default() -> BleTxProfile
+    @_silgen_name("emw_tx_profile_default")
+    private static func c_tx_profile_default() -> TxProfile
 
-    @_silgen_name("emw_tx_ble_next_packet_size")
-    private static func c_tx_ble_next_packet_size(_ bytesSent: Int32, _ lastStatus: Int32, _ currentPacketSize: Int32) -> Int32
+    @_silgen_name("emw_tx_next_packet_size")
+    private static func c_tx_next_packet_size(_ bytesSent: Int32, _ lastStatus: Int32, _ currentPacketSize: Int32) -> Int32
 
     @_silgen_name("emw_buffer_take_rx_state")
     private static func c_take_rx_state(
@@ -306,12 +306,12 @@ final class NativeBufferRust {
         return (timeValues, dataValues)
     }
 
-    static func txBleProfile() -> BleTxProfile {
-        c_tx_ble_profile_default()
+    static func txProfile() -> TxProfile {
+        c_tx_profile_default()
     }
 
-    static func txBleNextPacketSize(bytesSent: Int, lastStatus: Int, currentPacketSize: Int) -> Int {
-        Int(c_tx_ble_next_packet_size(Int32(bytesSent), Int32(lastStatus), Int32(currentPacketSize)))
+    static func txNextPacketSize(bytesSent: Int, lastStatus: Int, currentPacketSize: Int) -> Int {
+        Int(c_tx_next_packet_size(Int32(bytesSent), Int32(lastStatus), Int32(currentPacketSize)))
     }
 
     static func takeRxState() -> (rxBytes: Data, rxTsMs: [UInt64], rxCounter: UInt64) {

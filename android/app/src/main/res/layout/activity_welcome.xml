@@ -52,7 +52,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="You'll need an EMWaver hardware device - a versatile ESP32-S3 board that connects via Bluetooth."
+            android:text="You'll need an EMWaver hardware device connected over USB."
             android:textSize="16sp"
             android:textColor="@android:color/darker_gray"
             android:gravity="center"

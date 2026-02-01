@@ -98,7 +98,7 @@ public final class ScriptPreviewManager: ObservableObject {
     private func buildBindings() -> [String: Any] {
         var bindings: [String: Any] = [:]
         if let device {
-            bindings["BLEService"] = ScriptDeviceWrapper(device: device)
+            bindings["Device"] = ScriptDeviceWrapper(device: device)
         }
         return bindings
     }

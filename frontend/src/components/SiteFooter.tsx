@@ -19,9 +19,6 @@ export function SiteFooter() {
           <a className="block hover:text-[color:var(--ink)]" href="/order">
             Order
           </a>
-          <a className="block hover:text-[color:var(--ink)]" href="/history">
-            History
-          </a>
           <a className="block hover:text-[color:var(--ink)]" href="/news">
             News
           </a>

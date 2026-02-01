@@ -87,9 +87,9 @@ internal static class UsbMidiSysex
         return raw;
     }
 
-    // 7-bit packing scheme:
-    // - For each group of up to 6 raw bytes, emit 1 prefix byte containing their MSBs, then 6 bytes with MSB cleared.
-    // - 36 raw bytes => 6 groups => 42 encoded bytes.
+    // 7-bit packing scheme (matches firmware/Android/Apple):
+    // - For each group of up to 7 raw bytes, emit 1 prefix byte containing their MSBs, then the bytes with MSB cleared.
+    // - 36 raw bytes => 5 full groups of 7 + 1 group of 1 => 42 encoded bytes.
     private static void Encode7Bit(ReadOnlySpan<byte> raw, Span<byte> encoded)
     {
         if (raw.Length != RawLen || encoded.Length != EncodedLen)
@@ -100,23 +100,31 @@ internal static class UsbMidiSysex
         int outIdx = 0;
         int inIdx = 0;
 
-        for (int group = 0; group < 6; group++)
+        while (inIdx < RawLen)
         {
+            int chunkLen = Math.Min(7, RawLen - inIdx);
             byte prefix = 0;
 
             // Reserve prefix byte.
             int prefixIdx = outIdx;
             encoded[outIdx++] = 0;
 
-            for (int j = 0; j < 6; j++)
+            for (int j = 0; j < chunkLen; j++)
             {
                 byte b = raw[inIdx++];
-                byte msb = (byte)((b >> 7) & 0x01);
-                prefix |= (byte)(msb << j);
+                if ((b & 0x80) != 0)
+                {
+                    prefix |= (byte)(1 << j);
+                }
                 encoded[outIdx++] = (byte)(b & 0x7F);
             }
 
-            encoded[prefixIdx] = prefix;
+            encoded[prefixIdx] = (byte)(prefix & 0x7F);
+        }
+
+        if (outIdx != EncodedLen)
+        {
+            throw new ArgumentException("Internal error: 7-bit encoder produced wrong length");
         }
     }
 
@@ -130,15 +138,32 @@ internal static class UsbMidiSysex
         int inIdx = 0;
         int outIdx = 0;
 
-        for (int group = 0; group < 6; group++)
+        while (inIdx < EncodedLen && outIdx < RawLen)
         {
-            byte prefix = encoded[inIdx++];
-            for (int j = 0; j < 6; j++)
+            byte prefix = (byte)(encoded[inIdx++] & 0x7F);
+            for (int j = 0; j < 7; j++)
             {
-                byte b = encoded[inIdx++];
-                byte msb = (byte)((prefix >> j) & 0x01);
-                raw[outIdx++] = (byte)(b | (msb << 7));
+                if (outIdx >= RawLen)
+                {
+                    break;
+                }
+                if (inIdx >= EncodedLen)
+                {
+                    throw new ArgumentException("Invalid encoded payload (truncated)");
+                }
+
+                byte b = (byte)(encoded[inIdx++] & 0x7F);
+                if (((prefix >> j) & 0x01) != 0)
+                {
+                    b |= 0x80;
+                }
+                raw[outIdx++] = b;
             }
+        }
+
+        if (outIdx != RawLen)
+        {
+            throw new ArgumentException("Invalid encoded payload (wrong decoded length)");
         }
     }
 }

@@ -66,20 +66,7 @@ export default function HardwarePage() {
                 </div>
               </Link>
 
-              <Link
-                href="/history"
-                className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-              >
-                <div className="text-xs font-semibold text-[color:var(--ink-dim)]">
-                  Archive
-                </div>
-                <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-                  Board history
-                </div>
-                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                  Older boards, photos, and metadata.
-                </div>
-              </Link>
+              
             </div>
           </div>
 

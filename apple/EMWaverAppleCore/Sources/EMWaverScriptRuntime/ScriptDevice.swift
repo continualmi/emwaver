@@ -7,10 +7,7 @@
 import Foundation
 import JavaScriptCore
 
-// Device bridge exposed to scripts.
-//
-// We keep the historical name `BLEService` on the JS side for parity with
-// Android/iOS legacy scripts, but transport is USB MIDI.
+// Device bridge exposed to the script runtime.
 public protocol ScriptDevice: AnyObject {
     func getBuffer() -> Data
     func clearBuffer()

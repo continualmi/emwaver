@@ -455,7 +455,7 @@ final class USBManager: ObservableObject {
         }
         DispatchQueue.main.async { self.bufferVersion += 1 }
 
-        let profile = withBufferQueueSync { NativeBufferRust.txBleProfile() }
+        let profile = withBufferQueueSync { NativeBufferRust.txProfile() }
         let fixedDelayMs = Double(profile.fixed_delay_ms)
 
         let totalBytesToSend = bufferToSend.count
@@ -470,7 +470,7 @@ final class USBManager: ObservableObject {
             }
 
             currentPacketSize = withBufferQueueSync {
-                NativeBufferRust.txBleNextPacketSize(bytesSent: bytesSent, lastStatus: lastStatus, currentPacketSize: currentPacketSize)
+                NativeBufferRust.txNextPacketSize(bytesSent: bytesSent, lastStatus: lastStatus, currentPacketSize: currentPacketSize)
             }
 
             let remainingBytes = totalBytesToSend - bytesSent

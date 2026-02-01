@@ -513,11 +513,11 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_restoreRx
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleProfile(
+pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txProfile(
     mut env: JNIEnv<'_>,
     _class: JClass<'_>,
 ) -> jintArray {
-    let p = tx::BleTxProfile::default();
+    let p = tx::TxProfile::default();
     let values: [jint; 11] = [
         p.max_packet_size as jint,
         p.min_packet_size as jint,
@@ -538,7 +538,7 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleProf
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleNextPacketSize(
+pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txNextPacketSize(
     _env: JNIEnv<'_>,
     _class: JClass<'_>,
     bytes_sent: jint,
@@ -556,8 +556,8 @@ pub extern "system" fn Java_com_emwaver_emwaverandroidapp_NativeBuffer_txBleNext
         current_packet_size as usize
     };
 
-    tx::ble_next_packet_size(
-        tx::BleTxProfile::default(),
+    tx::tx_next_packet_size(
+        tx::TxProfile::default(),
         bytes_sent,
         last_status as i32,
         current_packet_size,
