@@ -3,10 +3,11 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY requirements.txt ./
+COPY requirements-postgres.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py ./
-COPY emw_backend ./emw_backend
+COPY backend/app.py ./app.py
+COPY backend/emw_backend ./emw_backend
 
 ENV PORT=8787
 EXPOSE 8787

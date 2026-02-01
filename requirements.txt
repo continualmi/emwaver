@@ -1,3 +1,9 @@
+# Python dependencies (repo-wide)
+#
+# Includes:
+# - backend/ (Flask API + cloud sync)
+# - scripts/gen_image_gemini.py (Gemini image generation helper)
+
 Flask==3.0.0
 flask-cors==4.0.0
 requests==2.31.0
@@ -8,3 +14,7 @@ SQLAlchemy==2.0.46
 
 # Auth (Firebase ID token verification)
 google-auth==2.26.2
+
+# Dev-only utility deps
+google-genai
+pillow

@@ -1,5 +1,6 @@
-# Postgres driver dependency.
+# Optional Postgres driver dependency.
 #
 # Keep this separate so local dev (SQLite default) doesn't break on newer
 # Python versions when psycopg2 wheels lag behind.
+
 psycopg2-binary==2.9.9

@@ -33,7 +33,7 @@ Note: this repo includes `.tmux-init` which opens `vi` automatically; set up `vi
 ```bash
 # Backend (Flask)
 cd backend
-python -m pip install -r requirements.txt
+python -m pip install -r ../requirements.txt
 export EMWAVER_AUTH_MODE=disabled
 export OPENROUTER_API_KEY=...   # only if you call /api/agent/chat
 python app.py

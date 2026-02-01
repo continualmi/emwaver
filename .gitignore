@@ -110,3 +110,6 @@ cli/crates/**/Cargo.lock
 worktrees/
 prompt.txt
 notes.txt
+
+# Local branding explorations (generated)
+assets/branding/logo-explorations/
