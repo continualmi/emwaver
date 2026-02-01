@@ -6,16 +6,16 @@ export default function DocsIndex() {
     <InformativeShell
       activeHref="/docs"
       title="Documentation"
-      description="Everything you need to download, connect, and run scripts."
+      description="Everything you need to install, connect, and run scripts."
     >
       <div className="grid gap-4 md:grid-cols-2">
         <Link
           href="/install"
           className="block rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
         >
-          <div className="text-xs font-semibold text-[color:var(--aqua)]">Download</div>
+          <div className="text-xs font-semibold text-[color:var(--aqua)]">Install</div>
           <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-            Download & connect
+            Install & connect
           </div>
           <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
             Get the apps and connect over USB.

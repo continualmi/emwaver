@@ -38,7 +38,7 @@ export default function HomePage() {
                   href="/install"
                   className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-3 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
                 >
-                  Download
+                  Install
                 </Link>
               </div>
             </div>
@@ -244,7 +244,7 @@ UI.render(UI.column({
             <div className="flex items-end justify-between gap-6">
               <div>
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
-                  Download
+                  Install
                 </div>
                 <h2 className="pt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
                   Start with the basics.
@@ -265,10 +265,10 @@ UI.render(UI.column({
                 <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
                   Installing & using
                 </div>
-                <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                  Download the apps and connect over USB.
-                </div>
-              </Link>
+                  <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                    Install the apps and connect over USB.
+                  </div>
+                </Link>
 
               <Link
                 href="/scripts"
