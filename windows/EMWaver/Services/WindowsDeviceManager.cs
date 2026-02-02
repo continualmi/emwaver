@@ -368,15 +368,15 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private async Task<string?> QueryDeviceVersionAsync(int timeoutMs)
     {
-        // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
+        // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, 0...]
         var resp = await SendCommandAsync(
             commandLane: new byte[] { EmwOpcode.Version },
             timeoutMs: timeoutMs,
             responsePredicate: lane18 =>
             {
-                if (lane18.Length < 4) return false;
+                if (lane18.Length < 3) return false;
                 if (lane18[0] != 0x80) return false;
-                for (int i = 4; i < lane18.Length; i++)
+                for (int i = 3; i < lane18.Length; i++)
                 {
                     if (lane18[i] != 0) return false;
                 }
@@ -384,12 +384,12 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
         );
 
-        if (resp == null || resp.Length < 4 || resp[0] != 0x80)
+        if (resp == null || resp.Length < 3 || resp[0] != 0x80)
         {
             return null;
         }
 
-        return $"{resp[1]}.{resp[2]}.{resp[3]}";
+        return $"{resp[1]}.{resp[2]}";
     }
 
     private async Task<byte[]?> SendCommandAsync(byte[] commandLane, int timeoutMs, Func<byte[], bool> responsePredicate)

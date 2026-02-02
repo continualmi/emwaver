@@ -683,15 +683,14 @@ function __scriptDecodeText(bytes) {
 
 var device = typeof device !== 'undefined' ? device : {};
 if (typeof device.version !== 'function') {
-  device.version = function () {
-    var pkt = new Uint8Array([EMW_OP_VERSION]);
-    var resp = __emwSendPacket(pkt, 1500);
-    var p = __emwPayload(resp);
-    var major = p[0] & 0xff;
-    var minor = p[1] & 0xff;
-    var patch = p[2] & 0xff;
-    return String(major) + '.' + String(minor) + '.' + String(patch);
-  };
+   device.version = function () {
+     var pkt = new Uint8Array([EMW_OP_VERSION]);
+     var resp = __emwSendPacket(pkt, 1500);
+     var p = __emwPayload(resp);
+     var major = p[0] & 0xff;
+     var minor = p[1] & 0xff;
+     return String(major) + '.' + String(minor);
+   };
 }
 if (typeof device.reset !== 'function') {
   device.reset = function () {

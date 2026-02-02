@@ -1,11 +1,11 @@
-arguments=--init-script /Users/luispl/.local/share/opencode/bin/jdtls/config_mac/org.eclipse.osgi/59/0/.cp/gradle/init/init.gradle
+arguments=--init-script /home/luispl/.local/share/opencode/bin/jdtls/config_linux/org.eclipse.osgi/58/0/.cp/gradle/init/init.gradle
 auto.sync=false
 build.scans.enabled=false
 connection.gradle.distribution=GRADLE_DISTRIBUTION(VERSION(8.9))
 connection.project.dir=
 eclipse.preferences.version=1
 gradle.user.home=
-java.home=/Library/Java/JavaVirtualMachines/jdk-22.jdk/Contents/Home
+java.home=/usr/lib/jvm/java-21-openjdk-amd64
 jvm.arguments=
 offline.mode=false
 override.workspace.settings=true
