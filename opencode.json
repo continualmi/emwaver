@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "small_model": "x-ai/grok-4.1-fast",
   "provider": {
     "openrouter": {
       "models": {
