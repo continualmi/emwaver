@@ -79,29 +79,16 @@ DerivedData/
 !stm/emwaver-firmware/USB_DEVICE/Target/
 !stm/emwaver-firmware/USB_DEVICE/Target/**
 
-# STM32CubeIDE Makefile build outputs (generated)
-stm/emwaver-firmware/Release/**/*.o
-stm/emwaver-firmware/Release/**/*.d
-stm/emwaver-firmware/Release/**/*.su
-stm/emwaver-firmware/Release/**/*.cyclo
-stm/emwaver-firmware/Release/**/*.su
-stm/emwaver-firmware/Release/*.elf
-stm/emwaver-firmware/Release/*.bin
-stm/emwaver-firmware/Release/*.hex
-stm/emwaver-firmware/Release/*.map
-stm/emwaver-firmware/Release/emwaver-firmware.list
-stm/emwaver-firmware/Release/default.size.stdout
+# STM32CubeIDE project files (generated/IDE-specific)
+stm/emwaver-firmware/.cproject
+stm/emwaver-firmware/.project
+stm/emwaver-firmware/.settings/
 
-stm/emwaver-firmware/Debug/**/*.o
-stm/emwaver-firmware/Debug/**/*.d
-stm/emwaver-firmware/Debug/**/*.su
-stm/emwaver-firmware/Debug/**/*.cyclo
-stm/emwaver-firmware/Debug/*.elf
-stm/emwaver-firmware/Debug/*.bin
-stm/emwaver-firmware/Debug/*.hex
-stm/emwaver-firmware/Debug/*.map
-stm/emwaver-firmware/Debug/emwaver-firmware.list
-stm/emwaver-firmware/Debug/default.size.stdout
+# STM32CubeIDE build output directories (generated) - ignore everything
+stm/emwaver-firmware/Debug/
+stm/emwaver-firmware/Release/
+
+
 
 # Library crates don't need lockfiles
 cli/crates/**/Cargo.lock
