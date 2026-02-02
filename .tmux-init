@@ -12,42 +12,26 @@ tmux split-window -h -t $SESSION:1 -c "$PROJECT_DIR"
 tmux send-keys -t $SESSION:1.2 'lazygit' C-m
 tmux select-pane -t $SESSION:1.1
 
-# Window 2: Dev Ops (Editor + 2x2 Grid)
-# Left 1/3: vi
-# Right 2/3: Backend/Firmware/Android/Web in a 2x2 grid (equal panes)
+# Window 2: Dev Ops (2x2 Grid)
+# All 4 panes: Backend, Android, vi (editor), Web
 
 # Use pane_id capture so we don't depend on tmux's pane numbering.
-PANE_EDITOR=$(tmux new-window -t $SESSION -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_TOP_LEFT=$(tmux new-window -t $SESSION -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# Split horizontally: Left (editor) | Right (work grid)
-# Note: tmux 3.4 does not support split-window -p; use -l with a percentage.
-PANE_RIGHT=$(tmux split-window -h -l 84% -t "$PANE_EDITOR" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+# Split horizontally: left (Backend) | right (Android)
+PANE_TOP_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# Left: Editor
-tmux send-keys -t "$PANE_EDITOR" 'vi .' C-m
-
-# Right: make a 2x2 grid with equal halves
-# Order matters: split right pane into top/bottom, then split each row into left/right.
-PANE_RIGHT_BOTTOM=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_RIGHT_TOP_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_RIGHT_BOTTOM_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_RIGHT_BOTTOM" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+# Split vertically: bottom-left (vi) from top-left
+PANE_BOTTOM_LEFT=$(tmux split-window -v -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+# Split vertically: bottom-right (Web) from top-right
+PANE_BOTTOM_RIGHT=$(tmux split-window -v -l 50% -t "$PANE_TOP_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
 # Assign commands
-# Top-left of right grid: Backend (Flask)
-tmux send-keys -t "$PANE_RIGHT" 'cd backend' C-m
-tmux send-keys -t "$PANE_RIGHT" 'python app.py'
-
-# Top-right of right grid: Android
-tmux send-keys -t "$PANE_RIGHT_TOP_RIGHT" 'cd android' C-m
-tmux send-keys -t "$PANE_RIGHT_TOP_RIGHT" './gradlew installDebug'
-
-# Bottom-left of right grid: Firmware
-tmux send-keys -t "$PANE_RIGHT_BOTTOM" 'cd stm/emwaver-firmware' C-m
-tmux send-keys -t "$PANE_RIGHT_BOTTOM" 'emwaver build && emwaver flash'
-
-# Bottom-right of right grid: Web (Next.js)
-tmux send-keys -t "$PANE_RIGHT_BOTTOM_RIGHT" 'cd frontend' C-m
-tmux send-keys -t "$PANE_RIGHT_BOTTOM_RIGHT" 'npm run dev'
+# Pre-type commands (not executed) except vi which runs
+tmux send-keys -t "$PANE_TOP_LEFT" 'cd backend && python app.py'
+tmux send-keys -t "$PANE_TOP_RIGHT" 'cd android && ./gradlew installDebug'
+tmux send-keys -t "$PANE_BOTTOM_LEFT" 'vi .' C-m
+tmux send-keys -t "$PANE_BOTTOM_RIGHT" 'cd frontend && npm run dev'
 
 # Start on terminal window, pane 1
 tmux select-window -t "$SESSION:1"
