@@ -1,0 +1,7 @@
+../Core/Src/stm32f0xx_it.c:73:6:NMI_Handler	0	static
+../Core/Src/stm32f0xx_it.c:88:6:HardFault_Handler	0	static
+../Core/Src/stm32f0xx_it.c:103:6:SVC_Handler	0	static
+../Core/Src/stm32f0xx_it.c:116:6:PendSV_Handler	0	static
+../Core/Src/stm32f0xx_it.c:129:6:SysTick_Handler	8	static
+../Core/Src/stm32f0xx_it.c:150:6:TIM3_IRQHandler	8	static
+../Core/Src/stm32f0xx_it.c:169:6:USB_IRQHandler	8	static
