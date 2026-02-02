@@ -41,7 +41,7 @@ bash stm/emwaver-firmware/build_android_asset.sh
 - GPIO command protocol (`gpio in/out/read/high/low/pull/info`)
 - Sampler stream (`sample start --pin=<encodedPin>`, `sample stop`)
 - Retransmit stream (`transmit start --pin=<encodedPin>`, `transmit stop`)
-- Version command (`version`) prints a welcome string ending in `0.1.0`
+- Version command (`version`) prints a welcome string ending in `1.0.0`
 
 ## IDE Files
 

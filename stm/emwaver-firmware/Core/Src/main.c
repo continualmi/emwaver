@@ -41,9 +41,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define USB_TIMEOUT 100
-#define EMWAVER_FIRMWARE_VERSION_MAJOR 0u
-#define EMWAVER_FIRMWARE_VERSION_MINOR 1u
-#define EMWAVER_FIRMWARE_VERSION_PATCH 0u
+#define EMWAVER_FIRMWARE_VERSION_MAJOR 1u
+#define EMWAVER_FIRMWARE_VERSION_MINOR 0u
 
 // Internal dev toggle: force ROM DFU on boot by erasing the initial flash pages.
 // Keep disabled in normal firmware builds.
@@ -1476,10 +1475,9 @@ int main(void)
           }
 
           case EMW_OP_VERSION: {
-              uint8_t out[3] = {
+              uint8_t out[2] = {
                   (uint8_t)EMWAVER_FIRMWARE_VERSION_MAJOR,
                   (uint8_t)EMWAVER_FIRMWARE_VERSION_MINOR,
-                  (uint8_t)EMWAVER_FIRMWARE_VERSION_PATCH,
               };
               command_send_ok(out, sizeof(out));
               break;
