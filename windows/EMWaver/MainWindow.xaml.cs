@@ -59,12 +59,33 @@ public sealed partial class MainWindow : Window
                 iconPath = Path.Combine(AppContext.BaseDirectory, "emwaver.ico");
             }
 
-            if (File.Exists(iconPath) && App.MainWindow != null)
+            if (!File.Exists(iconPath) || App.MainWindow == null)
             {
-                var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
+                return;
+            }
+
+            var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
+
+            // 1) Best-effort: AppWindow icon (taskbar/alt-tab, depends on host)
+            try
+            {
                 var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                 var appWindow = AppWindow.GetFromWindowId(windowId);
                 appWindow.SetIcon(iconPath);
+            }
+            catch
+            {
+                // Ignore.
+            }
+
+            // 2) Set the Win32 window icon (top-left titlebar icon)
+            try
+            {
+                SetWin32WindowIcons(hwnd, iconPath);
+            }
+            catch
+            {
+                // Ignore.
             }
         }
         catch
@@ -72,6 +93,32 @@ public sealed partial class MainWindow : Window
             // Non-fatal. Some environments can throw if the window isn't ready yet.
         }
     }
+
+    private static void SetWin32WindowIcons(IntPtr hwnd, string icoPath)
+    {
+        // Load the icon from file and apply to the window.
+        // This updates the small titlebar icon shown to the left of the window title.
+        const uint IMAGE_ICON = 1;
+        const uint LR_LOADFROMFILE = 0x0010;
+        const int WM_SETICON = 0x0080;
+        const int ICON_SMALL = 0;
+        const int ICON_BIG = 1;
+
+        var hIcon = LoadImageW(IntPtr.Zero, icoPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE);
+        if (hIcon == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ = SendMessageW(hwnd, WM_SETICON, new IntPtr(ICON_SMALL), hIcon);
+        _ = SendMessageW(hwnd, WM_SETICON, new IntPtr(ICON_BIG), hIcon);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadImageW(IntPtr hInst, string name, uint type, int cx, int cy, uint fuLoad);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern IntPtr SendMessageW(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     private void OnContentNavigated(object sender, NavigationEventArgs e)
     {
