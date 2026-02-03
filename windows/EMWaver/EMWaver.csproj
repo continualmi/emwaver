@@ -60,6 +60,13 @@
   </Target>
 
   <ItemGroup>
+    <!-- App icon assets (runtime): used for titlebar/taskbar icon and in-app icon. -->
+    <Content Include="Assets\\emwaver.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
     <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
     <Content Include="Assets\\DefaultScripts\\*.emw">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
