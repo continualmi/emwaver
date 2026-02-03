@@ -53,7 +53,23 @@ internal sealed class Dfu : IAsyncDisposable
         }
 
         var ifaceNum = dev.DefaultInterface?.InterfaceNumber ?? 0;
-        return new Dfu(dev, ifaceNum);
+        var dfu = new Dfu(dev, ifaceNum);
+
+        // Align with Rust: if we start in dfuERROR, clear it once.
+        try
+        {
+            var st = await dfu.GetStatusAsync(CancellationToken.None);
+            if (st.Length >= 5 && st[4] == 0x0A /*dfuERROR*/)
+            {
+                await dfu.ClearStatusAsync(CancellationToken.None);
+            }
+        }
+        catch
+        {
+            // best-effort only
+        }
+
+        return dfu;
     }
 
     public async ValueTask DisposeAsync()
@@ -66,7 +82,17 @@ internal sealed class Dfu : IAsyncDisposable
     {
         var buf = new byte[6];
         await ControlTransferInAsync(DFU_GETSTATUS, value: 0, index: (ushort)_interfaceNumber, buf, ct, timeoutMs: 500);
+
+        // DFU_GETSTATUS must return 6 bytes.
+        // (WinRT should fill the buffer; if it doesn't, something is off with the control transfer.)
         return buf;
+    }
+
+    private static string FormatStatus(byte[] st)
+    {
+        if (st.Length < 6) return $"<short status len={st.Length}>";
+        var poll = BwPollTimeoutMs(st);
+        return $"bStatus=0x{st[0]:X2} bState=0x{st[4]:X2} bwPollTimeout={poll} iString={st[5]}";
     }
 
     public async Task ClearStatusAsync(CancellationToken ct)
@@ -129,29 +155,50 @@ internal sealed class Dfu : IAsyncDisposable
     public async Task MassEraseAsync(CancellationToken ct)
     {
         // ST extension: 0x41 = mass erase
+        // Match crates/emwaver-dfu (Rust) behavior: poll GETSTATUS until idle, sleeping bwPollTimeout.
         await WaitDownloadIdleAsync(ct);
-        await ControlTransferOutAsync(DFU_DNLOAD, value: 0, index: (ushort)_interfaceNumber, data: new byte[] { 0x41 }, ct, timeoutMs: 500);
+        await ControlTransferOutAsync(DFU_DNLOAD, value: 0, index: (ushort)_interfaceNumber, data: new byte[] { 0x41 }, ct, timeoutMs: 50);
 
-        var st = await GetStatusAsync(ct);
-        var state = st[4];
-        if (!(state == 0x04 /*dfuDNBUSY*/ || state == 0x05 /*dfuDNLOAD-IDLE*/))
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(60);
+        while (true)
         {
-            throw new InvalidOperationException("Mass erase failed (unexpected DFU state)." );
-        }
+            ct.ThrowIfCancellationRequested();
 
-        await Task.Delay(BwPollTimeoutMs(st), ct);
+            var st = await GetStatusAsync(ct);
+            var bStatus = st[0];
+            var state = st[4];
 
-        st = await GetStatusAsync(ct);
-        state = st[4];
-        if (!(state == 0x02 /*dfuIDLE*/ || state == 0x05 /*dfuDNLOAD-IDLE*/))
-        {
-            throw new InvalidOperationException("Mass erase failed (not idle)." );
+            if (bStatus != 0x00 || state == 0x0A /*dfuERROR*/)
+                throw new InvalidOperationException($"Mass erase failed (status={FormatStatus(st)})");
+
+            switch (state)
+            {
+                case 0x02: // dfuIDLE
+                case 0x05: // dfuDNLOAD-IDLE
+                    return;
+
+                case 0x03: // dfuDNLOAD-SYNC
+                case 0x04: // dfuDNBUSY
+                case 0x06: // dfuMANIFEST-SYNC
+                case 0x07: // dfuMANIFEST
+                case 0x08: // dfuMANIFEST-WAIT-RESET
+                    if (DateTimeOffset.UtcNow > deadline)
+                        throw new TimeoutException($"Timeout exceeded while waiting for mass erase (status={FormatStatus(st)})");
+
+                    await Task.Delay(Math.Max(10, BwPollTimeoutMs(st)), ct);
+                    break;
+
+                default:
+                    throw new InvalidOperationException($"Mass erase failed (unexpected DFU state 0x{state:X2}, status={FormatStatus(st)})");
+            }
         }
     }
 
     public async Task SetAddressPointerAsync(uint address, CancellationToken ct)
     {
         // ST extension: 0x21 + address LE
+        await WaitDownloadIdleAsync(ct);
+
         var buf = new byte[5];
         buf[0] = 0x21;
         buf[1] = (byte)(address & 0xFF);
@@ -159,23 +206,37 @@ internal sealed class Dfu : IAsyncDisposable
         buf[3] = (byte)((address >> 16) & 0xFF);
         buf[4] = (byte)((address >> 24) & 0xFF);
 
-        await WaitDownloadIdleAsync(ct);
-        await ControlTransferOutAsync(DFU_DNLOAD, value: 0, index: (ushort)_interfaceNumber, data: buf, ct, timeoutMs: 500);
+        await ControlTransferOutAsync(DFU_DNLOAD, value: 0, index: (ushort)_interfaceNumber, data: buf, ct, timeoutMs: 50);
 
-        var st = await GetStatusAsync(ct);
-        var state = st[4];
-        if (!(state == 0x04 /*dfuDNBUSY*/ || state == 0x05 /*dfuDNLOAD-IDLE*/))
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (true)
         {
-            throw new InvalidOperationException("Set address pointer failed (unexpected DFU state)." );
-        }
+            ct.ThrowIfCancellationRequested();
 
-        await Task.Delay(BwPollTimeoutMs(st), ct);
+            var st = await GetStatusAsync(ct);
+            var bStatus = st[0];
+            var state = st[4];
 
-        st = await GetStatusAsync(ct);
-        state = st[4];
-        if (!(state == 0x02 /*dfuIDLE*/ || state == 0x05 /*dfuDNLOAD-IDLE*/))
-        {
-            throw new InvalidOperationException("Set address pointer failed (not idle)." );
+            if (bStatus != 0x00 || state == 0x0A /*dfuERROR*/)
+                throw new InvalidOperationException($"Set address pointer failed (status={FormatStatus(st)})");
+
+            switch (state)
+            {
+                case 0x02: // dfuIDLE
+                case 0x05: // dfuDNLOAD-IDLE
+                    return;
+
+                case 0x03: // dfuDNLOAD-SYNC
+                case 0x04: // dfuDNBUSY
+                    if (DateTimeOffset.UtcNow > deadline)
+                        throw new TimeoutException($"Timeout exceeded while setting address pointer (status={FormatStatus(st)})");
+
+                    await Task.Delay(Math.Max(10, BwPollTimeoutMs(st)), ct);
+                    break;
+
+                default:
+                    throw new InvalidOperationException($"Set address pointer failed (unexpected DFU state 0x{state:X2}, status={FormatStatus(st)})");
+            }
         }
     }
 
@@ -195,22 +256,37 @@ internal sealed class Dfu : IAsyncDisposable
             Buffer.BlockCopy(data, 0, chunk, 0, numBytes);
         }
 
-        await ControlTransferOutAsync(DFU_DNLOAD, value: blockNum, index: (ushort)_interfaceNumber, data: chunk, ct, timeoutMs: 3000);
+        await ControlTransferOutAsync(DFU_DNLOAD, value: blockNum, index: (ushort)_interfaceNumber, data: chunk, ct, timeoutMs: 500);
 
-        var st = await GetStatusAsync(ct);
-        var state = st[4];
-        if (!(state == 0x04 /*dfuDNBUSY*/ || state == 0x05 /*dfuDNLOAD-IDLE*/))
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (true)
         {
-            throw new InvalidOperationException("Write block failed (unexpected DFU state)." );
-        }
+            ct.ThrowIfCancellationRequested();
 
-        await Task.Delay(BwPollTimeoutMs(st), ct);
+            var st = await GetStatusAsync(ct);
+            var bStatus = st[0];
+            var state = st[4];
 
-        st = await GetStatusAsync(ct);
-        state = st[4];
-        if (!(state == 0x02 /*dfuIDLE*/ || state == 0x05 /*dfuDNLOAD-IDLE*/))
-        {
-            throw new InvalidOperationException("Write block failed (not idle)." );
+            if (bStatus != 0x00 || state == 0x0A /*dfuERROR*/)
+                throw new InvalidOperationException($"Write block {blockNum} failed (status={FormatStatus(st)})");
+
+            switch (state)
+            {
+                case 0x02: // dfuIDLE
+                case 0x05: // dfuDNLOAD-IDLE
+                    return;
+
+                case 0x03: // dfuDNLOAD-SYNC
+                case 0x04: // dfuDNBUSY
+                    if (DateTimeOffset.UtcNow > deadline)
+                        throw new TimeoutException($"Timeout exceeded while writing block {blockNum} (status={FormatStatus(st)})");
+
+                    await Task.Delay(Math.Max(10, BwPollTimeoutMs(st)), ct);
+                    break;
+
+                default:
+                    throw new InvalidOperationException($"Write block {blockNum} failed (unexpected DFU state 0x{state:X2}, status={FormatStatus(st)})");
+            }
         }
     }
 
