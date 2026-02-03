@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "emwaver-buffer-core"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "emwaver-buffer-ios-ffi"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emwaver-buffer-core",
 ]

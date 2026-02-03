@@ -14,14 +14,14 @@ dependencies = [
 
 [[package]]
 name = "emwaver-dfu"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "rusb",
 ]
 
 [[package]]
 name = "emwaver-dfu-helper"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "emwaver-dfu",
 ]
