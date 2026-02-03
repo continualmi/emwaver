@@ -9,8 +9,11 @@ flask-cors==4.0.0
 requests==2.31.0
 gunicorn==21.2.0
 
-# Storage (Azure Postgres in prod; SQLite for dev)
+# Storage
 SQLAlchemy==2.0.46
+
+# Postgres driver (Azure Postgres in prod; required if DATABASE_URL is Postgres)
+psycopg2-binary==2.9.9
 
 # Azure Blob Storage (signals/scripts/files)
 azure-storage-blob==12.19.0
