@@ -7,6 +7,10 @@
 !emwaver-firmware/Release/
 
 # Keep makefile metadata, ignore build artifacts.
+# But keep the built firmware ELF committed (used to generate bundled .bin files).
+!emwaver-firmware/Debug/*.elf
+!emwaver-firmware/Release/*.elf
+
 !emwaver-firmware/Debug/makefile
 !emwaver-firmware/Debug/*.mk
 !emwaver-firmware/Debug/objects.list

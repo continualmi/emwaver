@@ -84,10 +84,13 @@ stm/emwaver-firmware/.cproject
 stm/emwaver-firmware/.project
 stm/emwaver-firmware/.settings/
 
-# STM32CubeIDE build output directories (generated) - ignore everything
+# STM32CubeIDE build output directories
+# We keep the firmware .elf committed (used as an input to produce the bundled .bin payloads).
+# Keep the rest of the build output ignored.
 stm/emwaver-firmware/Debug/
 stm/emwaver-firmware/Release/
-
+!stm/emwaver-firmware/Release/emwaver-firmware.elf
+!stm/emwaver-firmware/Debug/emwaver-firmware.elf
 
 
 # Library crates don't need lockfiles
