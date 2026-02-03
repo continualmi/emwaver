@@ -234,6 +234,11 @@ public sealed class ScriptPlotControl : UserControl
         var maxBits = bytes.Length * 8.0;
         if (maxBits <= 0) return;
 
+        // We implement our own horizontal zooming. Mark the event handled so parent
+        // containers (e.g. ScrollViewer with ZoomMode enabled) don't also apply a
+        // uniform zoom/scroll that feels like the chart is zooming vertically.
+        e.Handled = true;
+
         var delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
         var zoom = delta > 0 ? 0.85 : 1.15;
 
