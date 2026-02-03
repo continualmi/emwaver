@@ -7,7 +7,7 @@ set -euo pipefail
 #   stm/update_firmware_bins.sh [path/to/emwaver.elf]
 #
 # Defaults:
-#   - repo-root/emwaver10.elf if present
+#   - stm/emwaver-firmware/Release/emwaver-firmware.elf if present
 #
 # Requirements:
 #   - arm-none-eabi-objcopy (GNU objcopy for ARM embedded toolchains)
@@ -15,12 +15,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-ELF_PATH="${1:-}" 
+ELF_PATH="${1:-}"
 if [[ -z "${ELF_PATH}" ]]; then
-  if [[ -f "$REPO_ROOT/emwaver10.elf" ]]; then
-    ELF_PATH="$REPO_ROOT/emwaver10.elf"
+  DEFAULT_ELF="$REPO_ROOT/stm/emwaver-firmware/Release/emwaver-firmware.elf"
+  if [[ -f "$DEFAULT_ELF" ]]; then
+    ELF_PATH="$DEFAULT_ELF"
   else
-    echo "error: no .elf provided, and default $REPO_ROOT/emwaver10.elf not found" >&2
+    echo "error: no .elf provided, and default $DEFAULT_ELF not found" >&2
     exit 2
   fi
 fi
@@ -43,10 +44,10 @@ arm-none-eabi-objcopy -O binary "$ELF_PATH" "$TMP_BIN"
 
 TARGETS=(
   "$REPO_ROOT/firmware/emwaver.bin"
-  "$REPO_ROOT/android/app/src/main/assets/ota/emwaver.bin"
-  "$REPO_ROOT/ios/EMWaver/ota/emwaver.bin"
-  "$REPO_ROOT/windows/EMWaver/Assets/ota/emwaver.bin"
-  "$REPO_ROOT/apple/EMWaverAppleCore/Resources/ota/emwaver.bin"
+  "$REPO_ROOT/android/app/src/main/assets/firmware/emwaver.bin"
+  "$REPO_ROOT/ios/EMWaver/firmware/emwaver.bin"
+  "$REPO_ROOT/windows/EMWaver/Assets/Firmware/emwaver.bin"
+  "$REPO_ROOT/apple/EMWaverAppleCore/Resources/Firmware/emwaver.bin"
 )
 
 for out in "${TARGETS[@]}"; do
