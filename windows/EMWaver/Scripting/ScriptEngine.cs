@@ -27,6 +27,8 @@ public sealed class ScriptEngine : IDisposable
     private Action<string>? _errorHandler;
     private Func<byte[], int, byte[]?>? _sendPacket;
 
+    private bool _haltedUntilNextExecute;
+
     public ScriptEngine()
     {
         _thread = new Thread(ThreadMain)
@@ -77,6 +79,7 @@ public sealed class ScriptEngine : IDisposable
                 return;
             }
 
+            _haltedUntilNextExecute = false;
             CancelAllTimeoutsLocked();
             _callbacks.Clear();
 
@@ -114,6 +117,11 @@ public sealed class ScriptEngine : IDisposable
             if (_engine == null)
             {
                 EmitError("No engine available for callback");
+                return;
+            }
+            if (_haltedUntilNextExecute)
+            {
+                // Ignore callbacks/timers after a fatal script error until the next Execute().
                 return;
             }
             if (!_callbacks.TryGetValue(token, out var fn))
@@ -307,6 +315,7 @@ public sealed class ScriptEngine : IDisposable
                     Enqueue(() =>
                     {
                         if (!_timeouts.Remove(id)) return;
+                        if (_haltedUntilNextExecute) return;
                         try { _engine!.Invoke(fn, Array.Empty<JsValue>()); }
                         catch (JavaScriptException ex) { EmitError("Script timer error: " + ex.Message); }
                         catch (Exception ex) { EmitError("Script timer error: " + ex.Message); }
@@ -600,6 +609,13 @@ public sealed class ScriptEngine : IDisposable
 
     private void EmitError(string message)
     {
+        // Treat any script error as fatal for the current run.
+        // This prevents runaway timers (e.g. every()) from repeatedly throwing and
+        // spamming UI dialogs when the device is disconnected.
+        _haltedUntilNextExecute = true;
+        CancelAllTimeoutsLocked();
+        _callbacks.Clear();
+
         try { _errorHandler?.Invoke(message); }
         catch { }
     }

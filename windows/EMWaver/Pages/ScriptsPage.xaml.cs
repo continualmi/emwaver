@@ -1087,17 +1087,34 @@ public sealed partial class ScriptsPage : Page
         return result == ContentDialogResult.Primary;
     }
 
+    private readonly SemaphoreSlim _infoDialogLock = new(1, 1);
+
     private async Task ShowInfoAsync(string title, string message)
     {
-        var dialog = new ContentDialog
+        // WinUI limitation: only one ContentDialog can be open at a time.
+        // Scripts like hello.emw can throw repeatedly (e.g. when device is disconnected),
+        // so we serialize dialogs to avoid crashing the app.
+        await _infoDialogLock.WaitAsync();
+        try
         {
-            Title = title,
-            Content = message,
-            CloseButtonText = "OK",
-            XamlRoot = XamlRoot
-        };
+            var dialog = new ContentDialog
+            {
+                Title = title,
+                Content = message,
+                CloseButtonText = "OK",
+                XamlRoot = XamlRoot
+            };
 
-        await dialog.ShowAsync();
+            await dialog.ShowAsync();
+        }
+        catch (COMException)
+        {
+            // If something else snuck in (or WinUI is mid-transition), don't crash the app.
+        }
+        finally
+        {
+            _infoDialogLock.Release();
+        }
     }
 
     private async Task<string?> PromptForNameAsync(string title, string message, string initialValue)
