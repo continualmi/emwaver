@@ -28,7 +28,11 @@
   <!-- Workaround: PRI generation occasionally fails with PRI175/0x80070057 in some dev environments.
        Our app does not rely on MRT/PRI-based resource lookup for scripts; default scripts are plain files. -->
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <!-- WinAppSDK/MSIX tooling: avoid makepri.exe during Debug builds (PRI175/0x80070057 on some setups). -->
     <GenerateProjectPriFile>false</GenerateProjectPriFile>
+    <GeneratePriFile>false</GeneratePriFile>
+    <AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
+    <EnableMsixTooling>false</EnableMsixTooling>
   </PropertyGroup>
 
   <ItemGroup>
