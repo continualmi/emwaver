@@ -134,11 +134,11 @@ public sealed partial class MainWindow : Window
         {
             var rx = NativeBufferRust.GetRxPacketCount();
             var tx = NativeBufferRust.GetTxPacketCount();
-            DeviceBufferText.Text = $"RX {rx} TX {tx}";
+            // Debug RX/TX counter UI removed.
         }
         else
         {
-            DeviceBufferText.Text = string.Empty;
+            // Debug RX/TX counter UI removed.
         }
 
         AutoConnectMenuItem.IsChecked = device.AutoConnectEnabled;
