@@ -11,10 +11,13 @@ Endpoints
 
 Cloud sync (v1)
 
-- `GET /v1/files?kind=script&ext=.emw&include_content=0|1`
-- `GET /v1/files/<id>`
-- `POST /v1/files`
-- `PUT /v1/files/<id>` (requires `etag`)
+Files are stored in **Azure Blob Storage**. Postgres/SQLite stores metadata + indexing.
+
+- `GET /v1/files?kind=...&ext=...` (metadata only)
+- `GET /v1/files/<id>` (metadata only)
+- `POST /v1/files/init-upload` -> `{ file, upload_url }`
+- `POST /v1/files/<id>/commit-upload` (requires `etag`)
+- `GET /v1/files/<id>/download` -> `{ download_url }`
 - `POST /v1/files/<id>/rename`
 - `DELETE /v1/files/<id>?etag=...`
 
@@ -30,6 +33,12 @@ Auth / cloud sync
 - `FIREBASE_PROJECT_ID` (required for auth in prod) - used to verify Firebase ID tokens
 - `EMWAVER_AUTH_MODE` (optional, default: `firebase`) - set to `disabled` for local dev without auth
 - `DATABASE_URL` (optional, default: `sqlite:///./emwaver.db`) - Azure Postgres in prod
+
+Azure Blob storage
+
+- `AZURE_STORAGE_ACCOUNT` (required in prod)
+- `AZURE_STORAGE_KEY` (required in prod; prefer Azure Key Vault in deployment)
+- `AZURE_BLOB_CONTAINER` (optional, default: `emwaver-user-files`)
 
 Env loading
 

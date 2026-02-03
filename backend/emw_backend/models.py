@@ -40,7 +40,14 @@ class UserFile(Base):
     extension: Mapped[str] = mapped_column(String(32), default="")
     content_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
+    # Storage
+    storage_provider: Mapped[str] = mapped_column(String(32), default="azure_blob")
+    blob_container: Mapped[str] = mapped_column(String(128), default="")
+    blob_key: Mapped[str] = mapped_column(String(768), default="")
+
+    # Legacy (kept for compatibility; new flows store content in Azure Blob only)
     content_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
 
     etag: Mapped[str] = mapped_column(String(64), default=lambda: str(_now_epoch()))

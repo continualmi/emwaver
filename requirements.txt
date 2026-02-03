@@ -12,6 +12,9 @@ gunicorn==21.2.0
 # Storage (Azure Postgres in prod; SQLite for dev)
 SQLAlchemy==2.0.46
 
+# Azure Blob Storage (signals/scripts/files)
+azure-storage-blob==12.19.0
+
 # Auth (Firebase ID token verification)
 google-auth==2.26.2
 
