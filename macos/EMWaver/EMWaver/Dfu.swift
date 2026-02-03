@@ -215,33 +215,32 @@ final class Dfu: @unchecked Sendable {
     private func openDeviceAndInterface(service: io_service_t) throws {
         defer { IOObjectRelease(service) }
 
-        var plugIn: UnsafeMutablePointer<IOCFPlugInInterface>? = nil
+        // IOCreatePlugInInterfaceForService returns an IOCFPlugInInterface **
+        var plugIn: UnsafeMutablePointer<UnsafeMutablePointer<IOCFPlugInInterface>?>? = nil
         var score: Int32 = 0
-        var kr = withUnsafeMutablePointer(to: &plugIn) { plugInPtr in
-            IOCreatePlugInInterfaceForService(
-                service,
-                Self.usbDeviceUserClientTypeID,
-                Self.ioCFPlugInInterfaceID,
-                plugInPtr,
-                &score
-            )
-        }
+        let kr = IOCreatePlugInInterfaceForService(
+            service,
+            Self.usbDeviceUserClientTypeID,
+            Self.ioCFPlugInInterfaceID,
+            &plugIn,
+            &score
+        )
         guard kr == KERN_SUCCESS, let plugIn else {
             throw DfuError.openFailed(kr)
         }
-        defer { _ = plugIn.pointee.Release(plugIn) }
+        defer { _ = plugIn.pointee?.pointee.Release(plugIn) }
 
         var devPtr: UnsafeMutablePointer<IOUSBDeviceInterface320>? = nil
-        kr = withUnsafeMutablePointer(to: &devPtr) { devPtrPtr in
+        let krQI = withUnsafeMutablePointer(to: &devPtr) { devPtrPtr in
             let iid = CFUUIDGetUUIDBytes(Self.usbDeviceInterfaceID320)
-            return plugIn.pointee.QueryInterface(
+            return plugIn.pointee!.pointee.QueryInterface(
                 plugIn,
                 iid,
                 UnsafeMutableRawPointer(devPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
             )
         }
-        guard kr == KERN_SUCCESS, let devPtr else {
-            throw DfuError.openFailed(kr)
+        guard krQI == KERN_SUCCESS, let devPtr else {
+            throw DfuError.openFailed(krQI)
         }
         self.device = devPtr
 
@@ -272,33 +271,31 @@ final class Dfu: @unchecked Sendable {
         }
         defer { IOObjectRelease(ifaceService) }
 
-        var ifPlug: UnsafeMutablePointer<IOCFPlugInInterface>? = nil
+        var ifPlug: UnsafeMutablePointer<UnsafeMutablePointer<IOCFPlugInInterface>?>? = nil
         var ifScore: Int32 = 0
-        kr = withUnsafeMutablePointer(to: &ifPlug) { plugInPtr in
-            IOCreatePlugInInterfaceForService(
-                ifaceService,
-                Self.usbInterfaceUserClientTypeID,
-                Self.ioCFPlugInInterfaceID,
-                plugInPtr,
-                &ifScore
-            )
+        let krIf = IOCreatePlugInInterfaceForService(
+            ifaceService,
+            Self.usbInterfaceUserClientTypeID,
+            Self.ioCFPlugInInterfaceID,
+            &ifPlug,
+            &ifScore
+        )
+        guard krIf == KERN_SUCCESS, let ifPlug else {
+            throw DfuError.openFailed(krIf)
         }
-        guard kr == KERN_SUCCESS, let ifPlug else {
-            throw DfuError.openFailed(kr)
-        }
-        defer { _ = ifPlug.pointee.Release(ifPlug) }
+        defer { _ = ifPlug.pointee?.pointee.Release(ifPlug) }
 
         var intfPtr: UnsafeMutablePointer<IOUSBInterfaceInterface300>? = nil
-        kr = withUnsafeMutablePointer(to: &intfPtr) { intfPtrPtr in
+        let krQI2 = withUnsafeMutablePointer(to: &intfPtr) { intfPtrPtr in
             let iid = CFUUIDGetUUIDBytes(Self.usbInterfaceInterfaceID300)
-            return ifPlug.pointee.QueryInterface(
+            return ifPlug.pointee!.pointee.QueryInterface(
                 ifPlug,
                 iid,
                 UnsafeMutableRawPointer(intfPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
             )
         }
-        guard kr == KERN_SUCCESS, let intfPtr else {
-            throw DfuError.openFailed(kr)
+        guard krQI2 == KERN_SUCCESS, let intfPtr else {
+            throw DfuError.openFailed(krQI2)
         }
         self.interface = intfPtr
 
