@@ -14,9 +14,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
     <!-- CI/dev shells may not have full VC toolchain installed; avoid vcmeta-based fingerprinting. -->
     <UseVCMetaManaged>false</UseVCMetaManaged>
     <XAMLFingerprint>false</XAMLFingerprint>
+
     <!-- Use in-proc XAML compiler (avoids net472 XamlCompiler.exe). -->
     <UseXamlCompilerExecutable>false</UseXamlCompilerExecutable>
 
@@ -38,53 +40,40 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Native\\*.dll">
+    <None Include="Native\*.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <!-- Place native DLLs in the app root so DllImport can find them. -->
       <TargetPath>%(Filename)%(Extension)</TargetPath>
     </None>
   </ItemGroup>
 
-  <!-- Bundle firmware payload into the app output (used by in-app DFU flasher). -->
-  <Target Name="BundleFirmware" BeforeTargets="BeforeBuild">
-    <PropertyGroup>
-      <_FirmwareSrc>..\\..\\firmware\\emwaver.bin</_FirmwareSrc>
-    </PropertyGroup>
-
-    <Error Condition="!Exists('$(_FirmwareSrc)')" Text="Missing bundled firmware at: $(_FirmwareSrc)" />
-    <Message Text="[Bundle Firmware] firmware_src=$(_FirmwareSrc)" Importance="high" />
-
-    <!-- Copy firmware into app root output as emwaver.bin -->
-    <Copy SourceFiles="$(_FirmwareSrc)" DestinationFiles="$(OutDir)emwaver.bin" SkipUnchangedFiles="false" />
-  </Target>
-
   <!-- Sync bundled example scripts from repo assets into the Windows project folder.
        This makes the packaged path deterministic (Assets/DefaultScripts).
   -->
   <Target Name="SyncDefaultScripts" BeforeTargets="BeforeBuild">
     <ItemGroup>
-      <_SrcDefaultScripts Include="..\\..\\assets\\default-scripts\\*.emw" />
-      <_DestDefaultScripts Include="Assets\\DefaultScripts\\*.emw" />
+      <_SrcDefaultScripts Include="..\..\assets\default-scripts\*.emw" />
+      <_DestDefaultScripts Include="Assets\DefaultScripts\*.emw" />
     </ItemGroup>
 
-    <MakeDir Directories="Assets\\DefaultScripts" />
+    <MakeDir Directories="Assets\DefaultScripts" />
     <Delete Files="@(_DestDefaultScripts)" />
-    <Copy SourceFiles="@(_SrcDefaultScripts)" DestinationFolder="Assets\\DefaultScripts\\" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="@(_SrcDefaultScripts)" DestinationFolder="Assets\DefaultScripts\" SkipUnchangedFiles="false" />
   </Target>
 
   <ItemGroup>
     <!-- App icon asset (runtime). Keep as None (not PRI-indexed) but copy to output. -->
-    <None Include="Assets\\emwaver.ico">
+    <None Include="Assets\emwaver.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </None>
 
     <!-- Ensure .gitkeep doesn't participate in PRI/resource indexing. -->
-    <None Remove="Assets\\DefaultScripts\\.gitkeep" />
+    <None Remove="Assets\DefaultScripts\.gitkeep" />
 
     <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
-    <Content Include="Assets\\DefaultScripts\\*.emw">
+    <Content Include="Assets\DefaultScripts\*.emw">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->
@@ -92,17 +81,10 @@
     </Content>
 
     <!-- Bundled firmware payload (read-only). -->
-    <Content Include="..\\..\\firmware\\emwaver.bin">
+    <Content Include="..\..\firmware\emwaver.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <TargetPath>emwaver.bin</TargetPath>
-      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
-    </Content>
-
-    <!-- Bundled DFU helper. Built by BundleFirmwareAndDfuHelper target; included for publish as well. -->
-    <Content Include="$(OutDir)emwaver-dfu-helper.exe" Condition="Exists('$(OutDir)emwaver-dfu-helper.exe')">
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-dfu-helper.exe</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
   </ItemGroup>
