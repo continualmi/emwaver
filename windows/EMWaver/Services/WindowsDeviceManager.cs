@@ -12,6 +12,7 @@ using Windows.Devices.Enumeration;
 using Windows.Devices.Midi;
 using Windows.Devices.Usb;
 using Windows.Storage.Streams;
+using System.Diagnostics;
 
 namespace EMWaver.Services;
 
@@ -442,14 +443,20 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var bytes = BufferFromIbuffer(sx.RawData);
             if (bytes == null)
             {
+                Debug.WriteLine("[EMWaver][MIDI][RX] sysEx rawData decode failed (null)");
                 return;
             }
+
+            Debug.WriteLine($"[EMWaver][MIDI][RX] sysex={bytes.Length}");
 
             var superframe = UsbMidiSysex.DecodeSysexToSuperframe(bytes);
             if (superframe == null || superframe.Length != SuperframeSizeBytes)
             {
+                Debug.WriteLine("[EMWaver][MIDI][RX] decode superframe failed");
                 return;
             }
+
+            Debug.WriteLine($"[EMWaver][MIDI][RX] superframe36 ok cmd0=0x{superframe[0]:X2}");
 
             var tsMs = NowMs();
             var cmdLane = superframe.Take(LaneSizeBytes).ToArray();
@@ -538,6 +545,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         // Log TX for buffer parity/debugging (Rust buffer core chunks to 18B packets).
         NativeBufferRust.AppendTxBytes(superframe36, NowMs());
+
+        // Debug log (visible in Visual Studio Output -> Debug).
+        Debug.WriteLine($"[EMWaver][MIDI][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
 
         var msg = new MidiSystemExclusiveMessage(BufferFromBytes(sysex));
         _outPort.SendMessage(msg);
