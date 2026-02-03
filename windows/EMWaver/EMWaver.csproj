@@ -45,11 +45,28 @@
     </None>
   </ItemGroup>
 
+  <!-- Sync bundled example scripts from repo assets into the Windows project folder.
+       This makes the packaged path deterministic (Assets/DefaultScripts).
+  -->
+  <Target Name="SyncDefaultScripts" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <_SrcDefaultScripts Include="..\\..\\assets\\default-scripts\\*.emw" />
+      <_DestDefaultScripts Include="Assets\\DefaultScripts\\*.emw" />
+    </ItemGroup>
+
+    <MakeDir Directories="Assets\\DefaultScripts" />
+    <Delete Files="@(_DestDefaultScripts)" />
+    <Copy SourceFiles="@(_SrcDefaultScripts)" DestinationFolder="Assets\\DefaultScripts\\" SkipUnchangedFiles="false" />
+  </Target>
+
   <ItemGroup>
-    <None Include="..\\..\\assets\\default-scripts\\*.emw">
-      <Link>Assets\\DefaultScripts\\%(Filename)%(Extension)</Link>
+    <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
+    <Content Include="Assets\\DefaultScripts\\*.emw">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
   </ItemGroup>
 
 </Project>
