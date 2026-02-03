@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace EMWaver.Services;
@@ -23,13 +25,67 @@ internal sealed class ScriptRepository
         "DefaultScripts"
     );
 
+    private string BundledManifestPath => Path.Combine(LocalScriptsDir, ".bundled_scripts_manifest.json");
+
+    private sealed class BundledScriptManifest
+    {
+        public int Version { get; set; } = 1;
+        public Dictionary<string, string> BundledHashByName { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
     internal async Task EnsureBootstrappedAsync()
     {
         Directory.CreateDirectory(LocalScriptsDir);
 
-        // Note: we intentionally do NOT copy bundled scripts into LocalScriptsDir.
-        // Parity with macOS: bundled/example scripts are read-only and can be copied.
-        await Task.CompletedTask;
+        // Windows UX: we primarily operate on local scripts. To keep parity with other platforms
+        // and ensure default scripts update from the repo/app bundle, we seed LocalScriptsDir from
+        // bundled scripts (without overwriting user edits).
+        //
+        // Policy:
+        // - If a script does not exist locally: copy it in.
+        // - If a script exists locally and matches the last bundled hash we copied: update it to the
+        //   current bundled version.
+        // - If a script exists locally and differs: treat it as user-modified and do not overwrite.
+        if (!Directory.Exists(BundledScriptsDir))
+        {
+            await Task.CompletedTask;
+            return;
+        }
+
+        var manifest = await ReadBundledManifestAsync();
+
+        foreach (var bundledPath in Directory.EnumerateFiles(BundledScriptsDir, "*.emw", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileNameWithoutExtension(bundledPath);
+            if (string.Equals(name, "script_bootstrap", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var dest = Path.Combine(LocalScriptsDir, Path.GetFileName(bundledPath));
+            var bundledHash = await Sha256HexAsync(bundledPath);
+
+            if (!File.Exists(dest))
+            {
+                File.Copy(bundledPath, dest);
+                manifest.BundledHashByName[name] = bundledHash;
+                continue;
+            }
+
+            // Existing local file: only update if it still matches the last bundled version we seeded.
+            if (manifest.BundledHashByName.TryGetValue(name, out var lastBundledHash))
+            {
+                var localHash = await Sha256HexAsync(dest);
+                if (string.Equals(localHash, lastBundledHash, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(bundledHash, lastBundledHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(bundledPath, dest, overwrite: true);
+                    manifest.BundledHashByName[name] = bundledHash;
+                }
+            }
+        }
+
+        await WriteBundledManifestAsync(manifest);
     }
 
     internal Task<IReadOnlyList<ScriptInfo>> ListScriptsAsync()
@@ -211,6 +267,41 @@ internal sealed class ScriptRepository
 
         File.Move(script.FullPath, dest);
         return Task.FromResult(new ScriptInfo(Path.GetFileNameWithoutExtension(dest), dest, IsBundled: false, ShadowsBundled: false));
+    }
+
+    private async Task<BundledScriptManifest> ReadBundledManifestAsync()
+    {
+        try
+        {
+            if (!File.Exists(BundledManifestPath)) return new BundledScriptManifest();
+            var json = await File.ReadAllTextAsync(BundledManifestPath);
+            return JsonSerializer.Deserialize<BundledScriptManifest>(json) ?? new BundledScriptManifest();
+        }
+        catch
+        {
+            return new BundledScriptManifest();
+        }
+    }
+
+    private async Task WriteBundledManifestAsync(BundledScriptManifest manifest)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(BundledManifestPath, json);
+        }
+        catch
+        {
+            // Ignore.
+        }
+    }
+
+    private static async Task<string> Sha256HexAsync(string path)
+    {
+        using var fs = File.OpenRead(path);
+        using var sha = SHA256.Create();
+        var hash = await sha.ComputeHashAsync(fs);
+        return Convert.ToHexString(hash);
     }
 
     private static string SanitizeFileName(string name)
