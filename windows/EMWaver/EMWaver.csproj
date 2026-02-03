@@ -45,44 +45,17 @@
     </None>
   </ItemGroup>
 
-  <PropertyGroup>
-    <!-- Default: do NOT compile the Rust DFU helper on developer machines.
-         It requires a full MSVC+Windows SDK toolchain (and is flaky across shells).
-         Instead, bundle a prebuilt helper exe (built in CI or on a known-good box).
-         Set /p:BuildDfuHelper=true to build it locally. -->
-    <BuildDfuHelper>false</BuildDfuHelper>
-  </PropertyGroup>
-
-  <!-- Bundle firmware + DFU helper (Rust) into the app output, mirroring macOS behavior. -->
-  <Target Name="BundleFirmwareAndDfuHelper" BeforeTargets="BeforeBuild">
+  <!-- Bundle firmware payload into the app output (used by in-app DFU flasher). -->
+  <Target Name="BundleFirmware" BeforeTargets="BeforeBuild">
     <PropertyGroup>
       <_FirmwareSrc>..\\..\\firmware\\emwaver.bin</_FirmwareSrc>
-      <_DfuHelperManifest>..\\..\\crates\\emwaver-dfu-helper\\Cargo.toml</_DfuHelperManifest>
-      <_DfuHelperTarget>$(BaseIntermediateOutputPath)emwaver-dfu-helper\\target</_DfuHelperTarget>
-      <_DfuHelperExe>$(_DfuHelperTarget)\\x86_64-pc-windows-msvc\\release\\emwaver-dfu-helper.exe</_DfuHelperExe>
-      <_PrebuiltDfuHelper>Assets\\dfu\\emwaver-dfu-helper.exe</_PrebuiltDfuHelper>
     </PropertyGroup>
 
     <Error Condition="!Exists('$(_FirmwareSrc)')" Text="Missing bundled firmware at: $(_FirmwareSrc)" />
-
-    <Message Text="[Bundle Firmware + DFU Helper] firmware_src=$(_FirmwareSrc)" Importance="high" />
+    <Message Text="[Bundle Firmware] firmware_src=$(_FirmwareSrc)" Importance="high" />
 
     <!-- Copy firmware into app root output as emwaver.bin -->
     <Copy SourceFiles="$(_FirmwareSrc)" DestinationFiles="$(OutDir)emwaver.bin" SkipUnchangedFiles="false" />
-
-    <!-- DFU helper: either copy a prebuilt exe, or (optionally) build it locally. -->
-
-    <Message Condition="Exists('$(_PrebuiltDfuHelper)')" Text="[Bundle Firmware + DFU Helper] using prebuilt helper: $(_PrebuiltDfuHelper)" Importance="high" />
-    <Copy Condition="Exists('$(_PrebuiltDfuHelper)')" SourceFiles="$(_PrebuiltDfuHelper)" DestinationFiles="$(OutDir)emwaver-dfu-helper.exe" SkipUnchangedFiles="false" />
-
-    <!-- Local build (opt-in): run under VsDevCmd so link.exe can resolve MSVC libs across shells. -->
-    <Message Condition="'$(BuildDfuHelper)' == 'true'" Text="[Bundle Firmware + DFU Helper] building helper via cargo (BuildDfuHelper=true)" Importance="high" />
-    <Error Condition="'$(BuildDfuHelper)' == 'true' and '$(VsInstallRoot)' == ''" Text="VsInstallRoot not set; cannot locate VsDevCmd.bat for DFU helper build." />
-    <Exec Condition="'$(BuildDfuHelper)' == 'true'" Command="cmd /c &quot;&quot;$(VsInstallRoot)\\Common7\\Tools\\VsDevCmd.bat&quot; -arch=x64 -host_arch=x64 &amp;&amp; cargo build --manifest-path &quot;$(_DfuHelperManifest)&quot; --release --target x86_64-pc-windows-msvc --target-dir &quot;$(_DfuHelperTarget)&quot;&quot;" />
-    <Copy Condition="'$(BuildDfuHelper)' == 'true' and Exists('$(_DfuHelperExe)')" SourceFiles="$(_DfuHelperExe)" DestinationFiles="$(OutDir)emwaver-dfu-helper.exe" SkipUnchangedFiles="false" />
-
-    <!-- Warn (don’t fail) if no helper is available; the UI will show a friendly error when attempting update. -->
-    <Warning Condition="!Exists('$(OutDir)emwaver-dfu-helper.exe')" Text="DFU helper not bundled. Place a prebuilt helper at windows/EMWaver/Assets/dfu/emwaver-dfu-helper.exe or build with /p:BuildDfuHelper=true." />
   </Target>
 
   <!-- Sync bundled example scripts from repo assets into the Windows project folder.
