@@ -48,7 +48,7 @@
   <ItemGroup>
     <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
     <Content Include="..\\..\\assets\\default-scripts\\*.emw">
-      <Link>DefaultScripts\\%(Filename)%(Extension)</Link>
+      <Link>Assets\\DefaultScripts\\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->

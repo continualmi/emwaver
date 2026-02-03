@@ -22,7 +22,7 @@ internal sealed class ScriptRepository
     private static string ResolveBundledScriptsDir()
     {
         // Unpackaged/dev runs: scripts are copied next to the exe.
-        var baseDir = Path.Combine(AppContext.BaseDirectory, "DefaultScripts");
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultScripts");
         if (Directory.Exists(baseDir))
         {
             return baseDir;
@@ -34,7 +34,7 @@ internal sealed class ScriptRepository
             var installed = Windows.ApplicationModel.Package.Current?.InstalledLocation?.Path;
             if (!string.IsNullOrWhiteSpace(installed))
             {
-                var packaged = Path.Combine(installed, "DefaultScripts");
+                var packaged = Path.Combine(installed, "Assets", "DefaultScripts");
                 if (Directory.Exists(packaged))
                 {
                     return packaged;
