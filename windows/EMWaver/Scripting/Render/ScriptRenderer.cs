@@ -496,14 +496,11 @@ public sealed class ScriptRenderer
             }
         }
 
-        combo.SelectionChanged += (_, __) =>
-        {
-            if (combo.SelectedItem is ComboBoxItem cbi)
-            {
-                if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { cbi.Tag?.ToString() ?? string.Empty });
-            }
-        };
-
+        // Important: setting SelectedItem programmatically can fire SelectionChanged.
+        // If a script re-renders in its onChange handler, that can create an infinite render loop
+        // (open script -> set selection -> SelectionChanged -> script render -> recreate picker -> ...).
+        //
+        // So: set initial selection first, then wire the event, and only invoke when the value truly changes.
         foreach (var it in combo.Items.OfType<ComboBoxItem>())
         {
             if (string.Equals(it.Tag?.ToString(), selected, StringComparison.Ordinal))
@@ -512,6 +509,16 @@ public sealed class ScriptRenderer
                 break;
             }
         }
+
+        var lastValue = selected;
+        combo.SelectionChanged += (_, __) =>
+        {
+            if (combo.SelectedItem is not ComboBoxItem cbi) return;
+            var next = cbi.Tag?.ToString() ?? string.Empty;
+            if (string.Equals(next, lastValue, StringComparison.Ordinal)) return;
+            lastValue = next;
+            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { next });
+        };
 
         if (string.IsNullOrWhiteSpace(label))
         {
