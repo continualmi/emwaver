@@ -138,6 +138,13 @@ public sealed class ScriptPlotControl : UserControl
 
         var points = new PointCollection();
 
+        // Add a little padding so the signal doesn't draw right on the border.
+        // This avoids the "min/max going out of the chart" feel when values are 0/255.
+        var padX = 6.0;
+        var padY = 6.0;
+        var plotW = Math.Max(1.0, width - padX * 2);
+        var plotH = Math.Max(1.0, height - padY * 2);
+
         for (var i = 0; i < bins; i++)
         {
             var t0 = xMin + (xMax - xMin) * (i / (double)bins);
@@ -148,8 +155,8 @@ public sealed class ScriptPlotControl : UserControl
             // render a stable 0/255 digital level by taking the majority value per bin.
             var v = BinMajority(bytes, (int)Math.Floor(t0), (int)Math.Floor(t1));
 
-            var px = (i / (double)(bins - 1)) * width;
-            var py = height - (v / 255.0) * height;
+            var px = padX + (i / (double)(bins - 1)) * plotW;
+            var py = padY + (1.0 - (v / 255.0)) * plotH;
             points.Add(new Windows.Foundation.Point(px, py));
         }
 
