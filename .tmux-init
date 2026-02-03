@@ -29,7 +29,8 @@ PANE_BOTTOM_RIGHT=$(tmux split-window -v -l 50% -t "$PANE_TOP_RIGHT" -c "$PROJEC
 # Assign commands
 # Pre-type commands (not executed) except vi which runs
 tmux send-keys -t "$PANE_TOP_LEFT" 'cd backend && python app.py'
-tmux send-keys -t "$PANE_TOP_RIGHT" 'cd android && ./gradlew installDebug'
+tmux send-keys -t "$PANE_TOP_RIGHT" 'cd android' C-m
+tmux send-keys -t "$PANE_TOP_RIGHT" './gradlew installDebug' C-m
 tmux send-keys -t "$PANE_BOTTOM_LEFT" 'vi .' C-m
 tmux send-keys -t "$PANE_BOTTOM_RIGHT" 'cd frontend && npm run dev'
 
