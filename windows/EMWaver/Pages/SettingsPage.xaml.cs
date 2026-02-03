@@ -23,14 +23,26 @@ public sealed partial class SettingsPage : Page
 
     private void RefreshUi(string? message = null)
     {
-        var signedIn = AppServices.CloudAuth.IsSignedIn;
-        AuthStatusText.Text = signedIn ? "Signed in" : "Signed out";
-        AuthDetailText.Text = message ?? string.Empty;
+        void Apply()
+        {
+            var signedIn = AppServices.CloudAuth.IsSignedIn;
+            AuthStatusText.Text = signedIn ? "Signed in" : "Signed out";
+            AuthDetailText.Text = message ?? string.Empty;
 
-        SignInButton.IsEnabled = !signedIn;
-        SignOutButton.IsEnabled = signedIn;
+            SignInButton.IsEnabled = !signedIn;
+            SignOutButton.IsEnabled = signedIn;
 
-        BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
+            BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
+        }
+
+        // UI updates must happen on the UI thread.
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            Apply();
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(Apply);
     }
 
     private async void OnSignInClick(object sender, RoutedEventArgs e)
@@ -55,7 +67,7 @@ public sealed partial class SettingsPage : Page
 
     private async void OnCloudTestClick(object sender, RoutedEventArgs e)
     {
-        CloudResultText.Text = "Running...";
+        RefreshCloudResult("Running...");
         try
         {
             var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
@@ -83,11 +95,22 @@ public sealed partial class SettingsPage : Page
             await AppServices.CloudFiles.CommitUploadAsync(init.File.Metadata.Id, init.File.Metadata.Etag, bytes.Length, cts.Token);
 
             var files = await AppServices.CloudFiles.ListAsync(kind: null, ext: null, ct: cts.Token);
-            CloudResultText.Text = $"Uploaded {name}. Files now: {files.Count}";
+            RefreshCloudResult($"Uploaded {name}. Files now: {files.Count}");
         }
         catch (Exception ex)
         {
-            CloudResultText.Text = "Failed: " + ex.Message;
+            RefreshCloudResult("Failed: " + ex.Message);
         }
+    }
+
+    private void RefreshCloudResult(string message)
+    {
+        void Apply() => CloudResultText.Text = message;
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            Apply();
+            return;
+        }
+        _ = DispatcherQueue.TryEnqueue(Apply);
     }
 }
