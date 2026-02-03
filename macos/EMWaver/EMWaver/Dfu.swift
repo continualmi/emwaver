@@ -230,21 +230,22 @@ final class Dfu: @unchecked Sendable {
         }
         defer { _ = plugIn.pointee?.pointee.Release(plugIn) }
 
-        var devPtr: UnsafeMutablePointer<IOUSBDeviceInterface320>? = nil
-        let krQI = withUnsafeMutablePointer(to: &devPtr) { devPtrPtr in
+        // QueryInterface returns IOUSBDeviceInterface320 ** (pointer-to-pointer).
+        var devPP: UnsafeMutablePointer<UnsafeMutablePointer<IOUSBDeviceInterface320>?>? = nil
+        let krQI = withUnsafeMutablePointer(to: &devPP) { devPPPtr in
             let iid = CFUUIDGetUUIDBytes(Self.usbDeviceInterfaceID320)
             return plugIn.pointee!.pointee.QueryInterface(
                 plugIn,
                 iid,
-                UnsafeMutableRawPointer(devPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
+                UnsafeMutableRawPointer(devPPPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
             )
         }
-        guard krQI == KERN_SUCCESS, let devPtr else {
+        guard krQI == KERN_SUCCESS, let dev = devPP?.pointee else {
             throw DfuError.openFailed(krQI)
         }
-        self.device = devPtr
+        self.device = dev
 
-        let krOpen = devPtr.pointee.USBDeviceOpen(devPtr)
+        let krOpen = dev.pointee.USBDeviceOpen(dev)
         guard krOpen == KERN_SUCCESS else {
             throw DfuError.openFailed(krOpen)
         }
@@ -259,7 +260,7 @@ final class Dfu: @unchecked Sendable {
         )
 
         var iter: io_iterator_t = 0
-        let krIter = devPtr.pointee.CreateInterfaceIterator(devPtr, &request, &iter)
+        let krIter = dev.pointee.CreateInterfaceIterator(dev, &request, &iter)
         guard krIter == KERN_SUCCESS else {
             throw DfuError.usbError(krIter, "CreateInterfaceIterator")
         }
@@ -285,27 +286,28 @@ final class Dfu: @unchecked Sendable {
         }
         defer { _ = ifPlug.pointee?.pointee.Release(ifPlug) }
 
-        var intfPtr: UnsafeMutablePointer<IOUSBInterfaceInterface300>? = nil
-        let krQI2 = withUnsafeMutablePointer(to: &intfPtr) { intfPtrPtr in
+        // QueryInterface returns IOUSBInterfaceInterface300 **.
+        var intfPP: UnsafeMutablePointer<UnsafeMutablePointer<IOUSBInterfaceInterface300>?>? = nil
+        let krQI2 = withUnsafeMutablePointer(to: &intfPP) { intfPPPtr in
             let iid = CFUUIDGetUUIDBytes(Self.usbInterfaceInterfaceID300)
             return ifPlug.pointee!.pointee.QueryInterface(
                 ifPlug,
                 iid,
-                UnsafeMutableRawPointer(intfPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
+                UnsafeMutableRawPointer(intfPPPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
             )
         }
-        guard krQI2 == KERN_SUCCESS, let intfPtr else {
+        guard krQI2 == KERN_SUCCESS, let intf = intfPP?.pointee else {
             throw DfuError.openFailed(krQI2)
         }
-        self.interface = intfPtr
+        self.interface = intf
 
-        let krIntfOpen = intfPtr.pointee.USBInterfaceOpen(intfPtr)
+        let krIntfOpen = intf.pointee.USBInterfaceOpen(intf)
         guard krIntfOpen == KERN_SUCCESS else {
             throw DfuError.openFailed(krIntfOpen)
         }
 
         var ifaceNum: UInt8 = 0
-        _ = intfPtr.pointee.GetInterfaceNumber(intfPtr, &ifaceNum)
+        _ = intf.pointee.GetInterfaceNumber(intf, &ifaceNum)
         self.interfaceNumber = ifaceNum
 
         // If we start in dfuERROR, clear it once (best-effort).
