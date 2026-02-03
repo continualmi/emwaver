@@ -142,7 +142,11 @@ public sealed class ScriptPlotControl : UserControl
         {
             var t0 = xMin + (xMax - xMin) * (i / (double)bins);
             var t1 = xMin + (xMax - xMin) * ((i + 1) / (double)bins);
-            var v = BinDensity(bytes, (int)Math.Floor(t0), (int)Math.Floor(t1));
+            // For binary sources we want the plot to *not* "zoom" vertically as the
+            // viewport changes. Using average density (0..255) makes the waveform
+            // appear to compress/expand when the bin width changes. Instead we
+            // render a stable 0/255 digital level by taking the majority value per bin.
+            var v = BinMajority(bytes, (int)Math.Floor(t0), (int)Math.Floor(t1));
 
             var px = (i / (double)(bins - 1)) * width;
             var py = height - (v / 255.0) * height;
@@ -152,7 +156,7 @@ public sealed class ScriptPlotControl : UserControl
         _line.Points = points;
     }
 
-    private static int BinDensity(byte[] bytes, int bitStart, int bitEnd)
+    private static int BinMajority(byte[] bytes, int bitStart, int bitEnd)
     {
         var maxBits = bytes.Length * 8;
         var start = Math.Max(0, Math.Min(bitStart, maxBits));
@@ -167,8 +171,9 @@ public sealed class ScriptPlotControl : UserControl
             var bi = b & 7;
             if (((bytes[by] >> bi) & 1) == 1) ones++;
         }
-        var frac = total <= 0 ? 0.0 : (ones / (double)total);
-        return (int)Math.Round(frac * 255.0);
+
+        // Majority vote: stable 0/255 even when the bin width changes.
+        return ones * 2 >= total ? 255 : 0;
     }
 
     private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
