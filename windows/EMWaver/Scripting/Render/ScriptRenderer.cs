@@ -334,23 +334,43 @@ public sealed class ScriptRenderer
         // So: treat Windows sliders as commit-on-release.
         var isDragging = false;
 
-        slider.PointerPressed += (_, __) => { isDragging = true; };
-        slider.PointerCaptureLost += (_, __) => { isDragging = false; };
-        slider.PointerReleased += (_, __) =>
+        // NOTE: Slider internally handles pointer events; use AddHandler(..., handledEventsToo: true)
+        // so we still observe drag start/end.
+        slider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, __) =>
         {
+            isDragging = true;
+        }), handledEventsToo: true);
+
+        slider.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, __) =>
+        {
+            var wasDragging = isDragging;
             isDragging = false;
+
+            // Commit-on-release for submit sliders.
+            if (!wasDragging) return;
+            var token = tokenSubmit ?? tokenChange;
+            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { slider.Value });
+        }), handledEventsToo: true);
+
+        slider.PointerCaptureLost += (_, __) =>
+        {
+            // If capture is lost mid-drag, treat it as a commit.
+            var wasDragging = isDragging;
+            isDragging = false;
+            if (!wasDragging) return;
             var token = tokenSubmit ?? tokenChange;
             if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { slider.Value });
         };
 
         slider.ValueChanged += (_, e) =>
         {
+            // While dragging: let the UI update without spamming the script/render loop.
             if (isDragging) return;
 
             // For "submit" sliders, do not fire continuously.
             if (!string.IsNullOrWhiteSpace(tokenSubmit)) return;
 
-            // Value changed by programmatic update / keyboard / tapping the track.
+            // Value changed by keyboard / tapping the track.
             if (!string.IsNullOrWhiteSpace(tokenChange)) _invokeHandler(tokenChange!, new object?[] { e.NewValue });
         };
 
