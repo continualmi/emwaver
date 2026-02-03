@@ -63,7 +63,9 @@
     <Copy SourceFiles="$(_FirmwareSrc)" DestinationFiles="$(OutDir)emwaver.bin" SkipUnchangedFiles="false" />
 
     <!-- Build DFU helper and copy into app root output as emwaver-dfu-helper.exe -->
-    <Exec Command="cargo build --manifest-path &quot;$(_DfuHelperManifest)&quot; --release --target x86_64-pc-windows-msvc --target-dir &quot;$(_DfuHelperTarget)&quot;" />
+    <!-- IMPORTANT: run under VsDevCmd so link.exe can resolve msvcrt/ucrt libs consistently across shells. -->
+    <Error Condition="'$(VsInstallRoot)' == ''" Text="VsInstallRoot not set; cannot locate VsDevCmd.bat for DFU helper build." />
+    <Exec Command="cmd /c &quot;&quot;$(VsInstallRoot)\\Common7\\Tools\\VsDevCmd.bat&quot; -arch=x64 -host_arch=x64 &amp;&amp; cargo build --manifest-path &quot;$(_DfuHelperManifest)&quot; --release --target x86_64-pc-windows-msvc --target-dir &quot;$(_DfuHelperTarget)&quot;&quot;" />
     <Error Condition="!Exists('$(_DfuHelperExe)')" Text="Missing helper binary at: $(_DfuHelperExe)" />
     <Copy SourceFiles="$(_DfuHelperExe)" DestinationFiles="$(OutDir)emwaver-dfu-helper.exe" SkipUnchangedFiles="false" />
   </Target>
