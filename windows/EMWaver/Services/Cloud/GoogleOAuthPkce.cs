@@ -21,7 +21,7 @@ internal sealed class GoogleOAuthPkce
         _http = http;
     }
 
-    internal async Task<GoogleTokens> AuthorizeAsync(string clientId, CancellationToken ct)
+    internal async Task<GoogleTokens> AuthorizeAsync(string clientId, string clientSecret, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(clientId))
         {
@@ -83,7 +83,7 @@ internal sealed class GoogleOAuthPkce
                 throw new InvalidOperationException("Missing OAuth authorization code");
             }
 
-            var tokens = await ExchangeCodeAsync(code, clientId, redirectUri, verifier, ct);
+            var tokens = await ExchangeCodeAsync(code, clientId, clientSecret, redirectUri, verifier, ct);
             html = "<html><body><h2>Signed in</h2><p>You can close this window.</p></body></html>";
 
             await WriteResponseAsync(resp, html);
@@ -102,7 +102,7 @@ internal sealed class GoogleOAuthPkce
         }
     }
 
-    private async Task<GoogleTokens> ExchangeCodeAsync(string code, string clientId, string redirectUri, string verifier, CancellationToken ct)
+    private async Task<GoogleTokens> ExchangeCodeAsync(string code, string clientId, string clientSecret, string redirectUri, string verifier, CancellationToken ct)
     {
         var body = new Dictionary<string, string>
         {
@@ -112,6 +112,13 @@ internal sealed class GoogleOAuthPkce
             ["grant_type"] = "authorization_code",
             ["code_verifier"] = verifier,
         };
+
+        // Some OAuth client types still require a client_secret. Desktop+PKCE should not,
+        // but allow it as an escape hatch to unblock dev setups.
+        if (!string.IsNullOrWhiteSpace(clientSecret))
+        {
+            body["client_secret"] = clientSecret;
+        }
 
         using var content = new FormUrlEncodedContent(body);
         using var res = await _http.PostAsync("https://oauth2.googleapis.com/token", content, ct);
