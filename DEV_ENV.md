@@ -502,8 +502,22 @@ WSL:
 
 - Install STM32CubeIDE.
 
+Also install the ARM GNU binutils so we can convert the built firmware `.elf` into a distributable `.bin`:
+
+macOS:
+```bash
+brew install arm-none-eabi-binutils
+```
+
+Ubuntu / WSL:
+```bash
+sudo apt-get update
+sudo apt-get install -y binutils-arm-none-eabi
+```
+
 Notes:
 - On Windows, the simplest path is to build the firmware from STM32CubeIDE.
+- `stm/update_firmware_bins.sh` uses `arm-none-eabi-objcopy` to generate `firmware/emwaver.bin` and the per-platform bundled copies.
 - `emwaver build` currently hardcodes a macOS STM32CubeIDE toolchain path in `cli/src/lib.rs`.
 
 ## 8) Platform IDEs
