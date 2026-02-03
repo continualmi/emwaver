@@ -151,7 +151,7 @@ function start() {
   try {
     var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
     var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
-    var s = Sampler.start({ pin: Number(rxPin), clearBefore: true, invert: false, periodUs: periodUs, maxBytes: maxBytes });
+    var s = Sampler.start({ pin: Number(rxPin), clearBefore: true, periodUs: periodUs, maxBytes: maxBytes });
     recordId = s && s.id != null ? String(s.id) : null;
     recording = true;
     status = 'Recording…';

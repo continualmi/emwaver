@@ -42,7 +42,7 @@ final class NativeBufferRust {
 
     @_silgen_name("emw_buffer_get_rx_counter") private static func c_get_rx_counter() -> UInt64
     @_silgen_name("emw_buffer_set_rx_counter") private static func c_set_rx_counter(_ v: UInt64)
-    @_silgen_name("emw_buffer_set_invert_rx") private static func c_set_invert_rx(_ enabled: Bool)
+    // emw_buffer_set_invert_rx removed (legacy)
 
     @_silgen_name("emw_buffer_load_rx_bytes")
     private static func c_load_rx_bytes(_ data: UnsafePointer<UInt8>?, _ len: Int)
@@ -163,9 +163,7 @@ final class NativeBufferRust {
         c_set_rx_counter(value)
     }
 
-    static func setInvertRx(_ enabled: Bool) {
-        c_set_invert_rx(enabled)
-    }
+    // setInvertRx removed (legacy)
 
     static func loadBuffer(_ data: Data) {
         data.withUnsafeBytes { raw in

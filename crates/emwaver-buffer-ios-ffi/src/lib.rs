@@ -174,10 +174,7 @@ pub extern "C" fn emw_buffer_set_rx_counter(value: u64) {
     });
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn emw_buffer_set_invert_rx(enabled: bool) {
-    with_state(|state| core_buf::set_invert_rx(&mut state.buffer, enabled));
-}
+// emw_buffer_set_invert_rx removed (legacy).
 
 #[unsafe(no_mangle)]
 pub extern "C" fn emw_buffer_load_rx_bytes(data: *const u8, len: usize) {

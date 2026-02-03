@@ -32,7 +32,7 @@ final class NativeBufferRustTests: XCTestCase {
 
     func testStoreBulkPktInvertsWhenEnabled() {
         NativeBufferRust.clearAll()
-        NativeBufferRust.setInvertRx(true)
+        // NativeBufferRust.setInvertRx removed (legacy)
         NativeBufferRust.storeBulkPkt(Data([0x00, 0x0F, 0xFF]), tsMs: 123)
         XCTAssertEqual(Array(NativeBufferRust.getBuffer()), [0xFF, 0xF0, 0x00])
     }
