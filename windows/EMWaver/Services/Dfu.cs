@@ -319,13 +319,22 @@ internal sealed class Dfu : IAsyncDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(Math.Max(1, timeoutMs));
 
-        if (buf != null)
+        try
         {
-            await _dev.SendControlOutTransferAsync(setup, buf).AsTask(cts.Token);
+            if (buf != null)
+            {
+                await _dev.SendControlOutTransferAsync(setup, buf).AsTask(cts.Token);
+            }
+            else
+            {
+                await _dev.SendControlOutTransferAsync(setup).AsTask(cts.Token);
+            }
         }
-        else
+        catch (System.Runtime.InteropServices.COMException ex)
         {
-            await _dev.SendControlOutTransferAsync(setup).AsTask(cts.Token);
+            throw new InvalidOperationException(
+                $"DFU control OUT failed: req=0x{request:X2} value=0x{value:X4} index=0x{index:X4} len={(data?.Length ?? 0)} hr=0x{ex.HResult:X8} msg={ex.Message}",
+                ex);
         }
     }
 
@@ -344,9 +353,18 @@ internal sealed class Dfu : IAsyncDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(Math.Max(1, timeoutMs));
 
-        // WinRT API expects an IBuffer for IN transfers.
-        Windows.Storage.Streams.Buffer inBuffer = new Windows.Storage.Streams.Buffer((uint)outBuf.Length);
-        var ibuf = await _dev.SendControlInTransferAsync(setup, inBuffer).AsTask(cts.Token);
-        ibuf.CopyTo(0, outBuf.AsBuffer(), 0, (uint)outBuf.Length);
+        try
+        {
+            // WinRT API expects an IBuffer for IN transfers.
+            Windows.Storage.Streams.Buffer inBuffer = new Windows.Storage.Streams.Buffer((uint)outBuf.Length);
+            var ibuf = await _dev.SendControlInTransferAsync(setup, inBuffer).AsTask(cts.Token);
+            ibuf.CopyTo(0, outBuf.AsBuffer(), 0, (uint)outBuf.Length);
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            throw new InvalidOperationException(
+                $"DFU control IN failed: req=0x{request:X2} value=0x{value:X4} index=0x{index:X4} len={outBuf.Length} hr=0x{ex.HResult:X8} msg={ex.Message}",
+                ex);
+        }
     }
 }
