@@ -6,8 +6,11 @@
 
 import Foundation
 
+// iOS: intentionally avoid the Rust buffer-core static lib.
+// This keeps the same API surface (NativeBufferRust) so USBManager code stays stable,
+// but implements the buffer logic in Swift.
 final class NativeBufferRust {
-    // PACKET_SIZE from Rust buffer core (emwaver-buffer-core): fixed 18B.
+    // PACKET_SIZE from Rust buffer core: fixed 18B.
     static let packetSizeBytes: Int = 18
 
     private init() {}
@@ -33,324 +36,316 @@ final class NativeBufferRust {
         let step_small: Int32
     }
 
-    // MARK: - C ABI
+    // MARK: - Managed state
 
-    @_silgen_name("emw_buffer_clear_all") private static func c_clear_all()
-    @_silgen_name("emw_buffer_rx_len_bytes") private static func c_rx_len_bytes() -> Int
-    @_silgen_name("emw_buffer_rx_packet_count") private static func c_rx_packet_count() -> UInt64
-    @_silgen_name("emw_buffer_tx_packet_count") private static func c_tx_packet_count() -> UInt64
+    private static let lock = NSLock()
 
-    @_silgen_name("emw_buffer_get_rx_counter") private static func c_get_rx_counter() -> UInt64
-    @_silgen_name("emw_buffer_set_rx_counter") private static func c_set_rx_counter(_ v: UInt64)
-    // emw_buffer_set_invert_rx removed (legacy)
+    private static var rxBytes: [UInt8] = []
+    // One timestamp per completed 18B packet.
+    private static var rxTsMs: [UInt64] = []
+    // Packet cursor used by nextRxPacket.
+    private static var rxCounter: UInt64 = 0
 
-    @_silgen_name("emw_buffer_load_rx_bytes")
-    private static func c_load_rx_bytes(_ data: UnsafePointer<UInt8>?, _ len: Int)
+    private static var txBytes: [UInt8] = []
+    // One timestamp per 18B packet.
+    private static var txTsMs: [UInt64] = []
 
-    @_silgen_name("emw_buffer_get_rx_snapshot")
-    private static func c_get_rx_snapshot(_ outPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>, _ outLen: UnsafeMutablePointer<Int>)
-
-    @_silgen_name("emw_buffer_store_bulk_pkt")
-    private static func c_store_bulk_pkt(_ data: UnsafePointer<UInt8>?, _ len: Int, _ ts_ms: UInt64)
-
-    @_silgen_name("emw_buffer_append_tx_bytes")
-    private static func c_append_tx_bytes(_ data: UnsafePointer<UInt8>?, _ len: Int, _ ts_ms: UInt64)
-
-    @_silgen_name("emw_buffer_read_rx_since")
-    private static func c_read_rx_since(
-        _ packetIndex: UInt64,
-        _ maxPackets: Int,
-        _ outDataPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
-        _ outDataLen: UnsafeMutablePointer<Int>,
-        _ outTsPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt64>?>,
-        _ outTsLen: UnsafeMutablePointer<Int>,
-        _ outNextPacketIndex: UnsafeMutablePointer<UInt64>,
-        _ outAvailablePackets: UnsafeMutablePointer<UInt64>
-    )
-
-    @_silgen_name("emw_buffer_read_tx_since")
-    private static func c_read_tx_since(
-        _ packetIndex: UInt64,
-        _ maxPackets: Int,
-        _ outDataPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
-        _ outDataLen: UnsafeMutablePointer<Int>,
-        _ outTsPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt64>?>,
-        _ outTsLen: UnsafeMutablePointer<Int>,
-        _ outNextPacketIndex: UnsafeMutablePointer<UInt64>,
-        _ outAvailablePackets: UnsafeMutablePointer<UInt64>
-    )
-
-    @_silgen_name("emw_buffer_next_rx_packet")
-    private static func c_next_rx_packet(
-        _ outPacket64: UnsafeMutablePointer<UInt8>?,
-        _ outPacket64Len: Int,
-        _ outTsMs: UnsafeMutablePointer<UInt64>?
-    ) -> Bool
-
-    @_silgen_name("emw_packet_make_packet64")
-    private static func c_make_packet64(
-        _ data: UnsafePointer<UInt8>?,
-        _ len: Int,
-        _ outPacket64: UnsafeMutablePointer<UInt8>?,
-        _ outPacket64Len: Int
-    ) -> Bool
-
-    @_silgen_name("emw_status_parse_bs")
-    private static func c_parse_bs(_ packet64: UnsafePointer<UInt8>?, _ len: Int) -> Int32
-
-    @_silgen_name("emw_buffer_compress_data_bits")
-    private static func c_compress_data_bits(
-        _ rangeStart: Int32,
-        _ rangeEnd: Int32,
-        _ numberBins: Int32,
-        _ outTimePtr: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>,
-        _ outTimeLen: UnsafeMutablePointer<Int>,
-        _ outDataPtr: UnsafeMutablePointer<UnsafeMutablePointer<Float>?>,
-        _ outDataLen: UnsafeMutablePointer<Int>
-    )
-
-    @_silgen_name("emw_tx_profile_default")
-    private static func c_tx_profile_default() -> TxProfile
-
-    @_silgen_name("emw_tx_next_packet_size")
-    private static func c_tx_next_packet_size(_ bytesSent: Int32, _ lastStatus: Int32, _ currentPacketSize: Int32) -> Int32
-
-    @_silgen_name("emw_buffer_take_rx_state")
-    private static func c_take_rx_state(
-        _ outBytesPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>,
-        _ outBytesLen: UnsafeMutablePointer<Int>,
-        _ outTsPtr: UnsafeMutablePointer<UnsafeMutablePointer<UInt64>?>,
-        _ outTsLen: UnsafeMutablePointer<Int>,
-        _ outRxCounter: UnsafeMutablePointer<UInt64>
-    )
-
-    @_silgen_name("emw_buffer_restore_rx_state")
-    private static func c_restore_rx_state(
-        _ rxBytes: UnsafePointer<UInt8>?,
-        _ rxBytesLen: Int,
-        _ rxTs: UnsafePointer<UInt64>?,
-        _ rxTsLen: Int,
-        _ rxCounter: UInt64
-    )
-
-    @_silgen_name("emw_free_u8") private static func c_free_u8(_ ptr: UnsafeMutablePointer<UInt8>?, _ len: Int)
-    @_silgen_name("emw_free_u64") private static func c_free_u64(_ ptr: UnsafeMutablePointer<UInt64>?, _ len: Int)
-    @_silgen_name("emw_free_f32") private static func c_free_f32(_ ptr: UnsafeMutablePointer<Float>?, _ len: Int)
-
-    // MARK: - Public API (Swift-friendly)
+    // MARK: - Buffer APIs
 
     static func clearAll() {
-        c_clear_all()
-    }
-
-    static func getBufferLength() -> Int {
-        c_rx_len_bytes()
+        lock.lock(); defer { lock.unlock() }
+        rxBytes = []
+        rxTsMs = []
+        rxCounter = 0
+        txBytes = []
+        txTsMs = []
     }
 
     static func getRxPacketCount() -> UInt64 {
-        c_rx_packet_count()
+        lock.lock(); defer { lock.unlock() }
+        return UInt64(rxBytes.count / packetSizeBytes)
     }
 
     static func getTxPacketCount() -> UInt64 {
-        c_tx_packet_count()
+        lock.lock(); defer { lock.unlock() }
+        return UInt64(txTsMs.count)
     }
 
     static func getRxCounter() -> UInt64 {
-        c_get_rx_counter()
+        lock.lock(); defer { lock.unlock() }
+        return rxCounter
     }
 
     static func setRxCounter(_ value: UInt64) {
-        c_set_rx_counter(value)
-    }
-
-    // setInvertRx removed (legacy)
-
-    static func loadBuffer(_ data: Data) {
-        data.withUnsafeBytes { raw in
-            c_load_rx_bytes(raw.bindMemory(to: UInt8.self).baseAddress, data.count)
-        }
-    }
-
-    static func getBuffer() -> Data {
-        var ptr: UnsafeMutablePointer<UInt8>? = nil
-        var len: Int = 0
-        c_get_rx_snapshot(&ptr, &len)
-        guard let ptr, len > 0 else { return Data() }
-        let data = Data(bytes: ptr, count: len)
-        c_free_u8(ptr, len)
-        return data
+        lock.lock(); defer { lock.unlock() }
+        let packets = UInt64(rxBytes.count / packetSizeBytes)
+        rxCounter = min(value, packets)
     }
 
     static func storeBulkPkt(_ data: Data, tsMs: UInt64) {
-        data.withUnsafeBytes { raw in
-            c_store_bulk_pkt(raw.bindMemory(to: UInt8.self).baseAddress, data.count, tsMs)
+        if data.isEmpty { return }
+        lock.lock(); defer { lock.unlock() }
+
+        let prevPackets = rxBytes.count / packetSizeBytes
+        rxBytes.append(contentsOf: data)
+        let newPackets = rxBytes.count / packetSizeBytes
+        let delta = max(0, newPackets - prevPackets)
+        if delta > 0 {
+            rxTsMs.append(contentsOf: Array(repeating: tsMs, count: delta))
         }
     }
 
     static func appendTxBytes(_ data: Data, tsMs: UInt64) {
-        data.withUnsafeBytes { raw in
-            c_append_tx_bytes(raw.bindMemory(to: UInt8.self).baseAddress, data.count, tsMs)
+        if data.isEmpty { return }
+        lock.lock(); defer { lock.unlock() }
+
+        // Log as padded 18B packets with one ts per packet.
+        var offset = 0
+        while offset < data.count {
+            let take = min(packetSizeBytes, data.count - offset)
+            var pkt = [UInt8](repeating: 0, count: packetSizeBytes)
+            data.copyBytes(to: &pkt, from: offset..<(offset + take))
+            txBytes.append(contentsOf: pkt)
+            txTsMs.append(tsMs)
+            offset += take
         }
+    }
+
+    static func loadBuffer(_ data: Data) {
+        lock.lock(); defer { lock.unlock() }
+        rxBytes = Array(data)
+        rxCounter = 0
+        let packets = rxBytes.count / packetSizeBytes
+        rxTsMs = Array(repeating: 0, count: packets)
+    }
+
+    static func getBuffer() -> Data {
+        lock.lock(); defer { lock.unlock() }
+        return Data(rxBytes)
     }
 
     static func readRxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
-        var dataPtr: UnsafeMutablePointer<UInt8>? = nil
-        var dataLen: Int = 0
-        var tsPtr: UnsafeMutablePointer<UInt64>? = nil
-        var tsLen: Int = 0
-        var nextIndex: UInt64 = 0
-        var available: UInt64 = 0
+        lock.lock(); defer { lock.unlock() }
 
-        c_read_rx_since(packetIndex, maxPackets, &dataPtr, &dataLen, &tsPtr, &tsLen, &nextIndex, &available)
-
-        let data: [UInt8]
-        if let dataPtr, dataLen > 0 {
-            data = Array(UnsafeBufferPointer(start: dataPtr, count: dataLen))
-            c_free_u8(dataPtr, dataLen)
-        } else {
-            data = []
+        let availablePackets = UInt64(rxBytes.count / packetSizeBytes)
+        if availablePackets == 0 || maxPackets <= 0 || packetIndex >= availablePackets {
+            return ReadPackets(data: [], ts_ms: [], next_packet_index: min(packetIndex, availablePackets), available_packets: availablePackets)
         }
 
-        let ts: [UInt64]
-        if let tsPtr, tsLen > 0 {
-            ts = Array(UnsafeBufferPointer(start: tsPtr, count: tsLen))
-            c_free_u64(tsPtr, tsLen)
-        } else {
-            ts = []
-        }
+        let toRead = UInt64(min(maxPackets, Int(availablePackets - packetIndex)))
+        let startByte = Int(packetIndex) * packetSizeBytes
+        let endByte = min(rxBytes.count, startByte + Int(toRead) * packetSizeBytes)
+        let dataSlice = startByte < endByte ? Array(rxBytes[startByte..<endByte]) : []
 
-        return ReadPackets(data: data, ts_ms: ts, next_packet_index: nextIndex, available_packets: available)
+        let tsStart = Int(packetIndex)
+        let tsEnd = min(rxTsMs.count, tsStart + Int(toRead))
+        let tsSlice = tsStart < tsEnd ? Array(rxTsMs[tsStart..<tsEnd]) : []
+
+        return ReadPackets(data: dataSlice, ts_ms: tsSlice, next_packet_index: packetIndex + toRead, available_packets: availablePackets)
     }
 
     static func readTxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
-        var dataPtr: UnsafeMutablePointer<UInt8>? = nil
-        var dataLen: Int = 0
-        var tsPtr: UnsafeMutablePointer<UInt64>? = nil
-        var tsLen: Int = 0
-        var nextIndex: UInt64 = 0
-        var available: UInt64 = 0
+        lock.lock(); defer { lock.unlock() }
 
-        c_read_tx_since(packetIndex, maxPackets, &dataPtr, &dataLen, &tsPtr, &tsLen, &nextIndex, &available)
-
-        let data: [UInt8]
-        if let dataPtr, dataLen > 0 {
-            data = Array(UnsafeBufferPointer(start: dataPtr, count: dataLen))
-            c_free_u8(dataPtr, dataLen)
-        } else {
-            data = []
+        let availablePackets = UInt64(txTsMs.count)
+        if availablePackets == 0 || maxPackets <= 0 || packetIndex >= availablePackets {
+            return ReadPackets(data: [], ts_ms: [], next_packet_index: min(packetIndex, availablePackets), available_packets: availablePackets)
         }
 
-        let ts: [UInt64]
-        if let tsPtr, tsLen > 0 {
-            ts = Array(UnsafeBufferPointer(start: tsPtr, count: tsLen))
-            c_free_u64(tsPtr, tsLen)
-        } else {
-            ts = []
-        }
+        let toRead = UInt64(min(maxPackets, Int(availablePackets - packetIndex)))
+        let startByte = Int(packetIndex) * packetSizeBytes
+        let endByte = min(txBytes.count, startByte + Int(toRead) * packetSizeBytes)
+        let dataSlice = startByte < endByte ? Array(txBytes[startByte..<endByte]) : []
 
-        return ReadPackets(data: data, ts_ms: ts, next_packet_index: nextIndex, available_packets: available)
+        let tsStart = Int(packetIndex)
+        let tsEnd = min(txTsMs.count, tsStart + Int(toRead))
+        let tsSlice = tsStart < tsEnd ? Array(txTsMs[tsStart..<tsEnd]) : []
+
+        return ReadPackets(data: dataSlice, ts_ms: tsSlice, next_packet_index: packetIndex + toRead, available_packets: availablePackets)
     }
 
     static func nextRxPacket() -> (packet64: Data, tsMs: UInt64)? {
-        var out = [UInt8](repeating: 0, count: packetSizeBytes)
-        var ts: UInt64 = 0
-        let ok = out.withUnsafeMutableBufferPointer { buf in
-            c_next_rx_packet(buf.baseAddress, buf.count, &ts)
-        }
-        guard ok else { return nil }
-        return (Data(out), ts)
+        lock.lock(); defer { lock.unlock() }
+
+        let packets = UInt64(rxBytes.count / packetSizeBytes)
+        if rxCounter >= packets { return nil }
+
+        let startByte = Int(rxCounter) * packetSizeBytes
+        if startByte + packetSizeBytes > rxBytes.count { return nil }
+
+        let pkt = Data(rxBytes[startByte..<(startByte + packetSizeBytes)])
+        let ts = Int(rxCounter) < rxTsMs.count ? rxTsMs[Int(rxCounter)] : 0
+        rxCounter += 1
+        return (pkt, ts)
     }
 
     static func makePacket64(_ data: Data) -> Data? {
+        // Historical name: this produces an 18B packet.
+        if data.count > packetSizeBytes { return nil }
         var out = [UInt8](repeating: 0, count: packetSizeBytes)
-        let ok = out.withUnsafeMutableBufferPointer { outBuf in
-            data.withUnsafeBytes { raw in
-                c_make_packet64(raw.bindMemory(to: UInt8.self).baseAddress, data.count, outBuf.baseAddress, outBuf.count)
-            }
-        }
-        return ok ? Data(out) : nil
+        data.copyBytes(to: &out, count: data.count)
+        return Data(out)
     }
 
     static func parseBsStatus(_ packet64: Data) -> Int {
-        packet64.withUnsafeBytes { raw in
-            Int(c_parse_bs(raw.bindMemory(to: UInt8.self).baseAddress, packet64.count))
-        }
+        // Matches crates/emwaver-buffer-core/src/status.rs
+        if packet64.count < 4 { return -1 }
+        let b0 = packet64[packet64.startIndex]
+        let b1 = packet64[packet64.startIndex.advanced(by: 1)]
+        if b0 != UInt8(ascii: "B") || b1 != UInt8(ascii: "S") { return -1 }
+        let hi = UInt16(packet64[packet64.startIndex.advanced(by: 2)])
+        let lo = UInt16(packet64[packet64.startIndex.advanced(by: 3)])
+        return Int((hi << 8) | lo)
     }
 
+    // MARK: - Sampler plot compression
+
     static func compressDataBits(rangeStart: Int, rangeEnd: Int, numberBins: Int) -> ([Float], [Float]) {
-        var timePtr: UnsafeMutablePointer<Float>? = nil
-        var timeLen: Int = 0
-        var dataPtr: UnsafeMutablePointer<Float>? = nil
-        var dataLen: Int = 0
+        // Matches crates/emwaver-buffer-core/src/sampler.rs compress_bits
+        lock.lock(); defer { lock.unlock() }
 
-        c_compress_data_bits(Int32(rangeStart), Int32(rangeEnd), Int32(numberBins), &timePtr, &timeLen, &dataPtr, &dataLen)
-
-        let timeValues: [Float]
-        if let timePtr, timeLen > 0 {
-            timeValues = Array(UnsafeBufferPointer(start: timePtr, count: timeLen))
-            c_free_f32(timePtr, timeLen)
-        } else {
-            timeValues = []
+        let buffer = rxBytes
+        let totalBits = buffer.count * 8
+        if buffer.isEmpty || rangeStart >= rangeEnd || rangeStart >= totalBits || numberBins <= 0 {
+            return ([], [])
         }
 
-        let dataValues: [Float]
-        if let dataPtr, dataLen > 0 {
-            dataValues = Array(UnsafeBufferPointer(start: dataPtr, count: dataLen))
-            c_free_f32(dataPtr, dataLen)
-        } else {
-            dataValues = []
+        let end = min(rangeEnd, totalBits)
+        let start = min(rangeStart, end)
+        let span = end - start
+        if span <= 0 { return ([], []) }
+
+        func bitAt(_ i: Int) -> UInt8 {
+            let byteIndex = i >> 3
+            if byteIndex < 0 || byteIndex >= buffer.count { return 0 }
+            let bitIndex = i & 7
+            return (buffer[byteIndex] >> bitIndex) & 1
+        }
+
+        var timeValues: [Float] = []
+        var dataValues: [Float] = []
+
+        if span <= numberBins * 2 {
+            timeValues.reserveCapacity(span)
+            dataValues.reserveCapacity(span)
+            for i in start..<end {
+                timeValues.append(Float(i))
+                dataValues.append(bitAt(i) == 1 ? 255.0 : 0.0)
+            }
+            return (timeValues, dataValues)
+        }
+
+        let binWidth = Float(span) / Float(numberBins)
+        for bin in 0..<numberBins {
+            let binStart = Int(floor(Float(start) + Float(bin) * binWidth))
+            var binEnd = Int(floor(Float(binStart) + binWidth))
+            if binEnd > end { binEnd = end }
+            if binEnd <= binStart { continue }
+
+            var hasLow = false
+            var hasHigh = false
+
+            var i = binStart
+            while i < binEnd {
+                let byteIndex = i >> 3
+                if byteIndex >= buffer.count { break }
+
+                if (i & 7) == 0 && i + 8 <= binEnd {
+                    let byteVal = buffer[byteIndex]
+                    if byteVal == 0 {
+                        hasLow = true
+                    } else if byteVal == 255 {
+                        hasHigh = true
+                    } else {
+                        hasLow = true
+                        hasHigh = true
+                    }
+                    i += 8
+                } else {
+                    if bitAt(i) == 1 { hasHigh = true } else { hasLow = true }
+                    i += 1
+                }
+
+                if hasLow && hasHigh { break }
+            }
+
+            if hasLow || hasHigh {
+                timeValues.append(Float(binStart))
+                dataValues.append(hasLow ? 0.0 : 255.0)
+                timeValues.append(Float(binEnd - 1))
+                dataValues.append(hasHigh ? 255.0 : 0.0)
+            }
         }
 
         return (timeValues, dataValues)
     }
 
+    // MARK: - TX pacing (matches crates/emwaver-buffer-core/src/tx.rs)
+
     static func txProfile() -> TxProfile {
-        c_tx_profile_default()
+        TxProfile(
+            max_packet_size: 240,
+            min_packet_size: 128,
+            initial_packet_size: 188,
+            fixed_delay_ms: 15,
+            target_buffer_level: 2048,
+            buffer_high_threshold: 3000,
+            buffer_low_threshold: 1000,
+            initial_fill_bytes: 2048,
+            nudge_band: 100,
+            step_large: 32,
+            step_small: 16
+        )
     }
 
     static func txNextPacketSize(bytesSent: Int, lastStatus: Int, currentPacketSize: Int) -> Int {
-        Int(c_tx_next_packet_size(Int32(bytesSent), Int32(lastStatus), Int32(currentPacketSize)))
+        let p = txProfile()
+
+        let bytesSent = max(0, bytesSent)
+        let current = max(0, currentPacketSize)
+
+        if bytesSent < Int(p.initial_fill_bytes) {
+            return Int(p.max_packet_size)
+        }
+
+        if lastStatus > Int(p.buffer_high_threshold) {
+            return max(Int(p.min_packet_size), current - Int(p.step_large))
+        }
+
+        if lastStatus < Int(p.buffer_low_threshold) {
+            return min(Int(p.max_packet_size), current + Int(p.step_large))
+        }
+
+        if current != Int(p.initial_packet_size) && abs(lastStatus - Int(p.target_buffer_level)) < Int(p.nudge_band) {
+            if current < Int(p.initial_packet_size) {
+                return min(Int(p.initial_packet_size), current + Int(p.step_small))
+            }
+            return max(Int(p.initial_packet_size), current - Int(p.step_small))
+        }
+
+        return current
     }
 
+    // MARK: - RX swap (used by transmit)
+
     static func takeRxState() -> (rxBytes: Data, rxTsMs: [UInt64], rxCounter: UInt64) {
-        var bytesPtr: UnsafeMutablePointer<UInt8>? = nil
-        var bytesLen: Int = 0
-        var tsPtr: UnsafeMutablePointer<UInt64>? = nil
-        var tsLen: Int = 0
-        var counter: UInt64 = 0
-
-        c_take_rx_state(&bytesPtr, &bytesLen, &tsPtr, &tsLen, &counter)
-
-        let rxBytes: Data
-        if let bytesPtr, bytesLen > 0 {
-            rxBytes = Data(bytes: bytesPtr, count: bytesLen)
-            c_free_u8(bytesPtr, bytesLen)
-        } else {
-            rxBytes = Data()
-        }
-
-        let rxTs: [UInt64]
-        if let tsPtr, tsLen > 0 {
-            rxTs = Array(UnsafeBufferPointer(start: tsPtr, count: tsLen))
-            c_free_u64(tsPtr, tsLen)
-        } else {
-            rxTs = []
-        }
-
-        return (rxBytes, rxTs, counter)
+        lock.lock(); defer { lock.unlock() }
+        return (Data(rxBytes), rxTsMs, rxCounter)
     }
 
     static func restoreRxState(rxBytes: Data, rxTsMs: [UInt64], rxCounter: UInt64) {
-        rxBytes.withUnsafeBytes { rawBytes in
-            rxTsMs.withUnsafeBufferPointer { tsBuf in
-                c_restore_rx_state(
-                    rawBytes.bindMemory(to: UInt8.self).baseAddress,
-                    rxBytes.count,
-                    tsBuf.baseAddress,
-                    tsBuf.count,
-                    rxCounter
-                )
-            }
+        lock.lock(); defer { lock.unlock() }
+        self.rxBytes = Array(rxBytes)
+        self.rxTsMs = rxTsMs
+
+        // Ensure ts length matches whole packets.
+        let packets = self.rxBytes.count / packetSizeBytes
+        if self.rxTsMs.count < packets {
+            self.rxTsMs.append(contentsOf: Array(repeating: 0, count: packets - self.rxTsMs.count))
+        } else if self.rxTsMs.count > packets {
+            self.rxTsMs = Array(self.rxTsMs.prefix(packets))
         }
+
+        self.rxCounter = min(rxCounter, UInt64(packets))
     }
 }
