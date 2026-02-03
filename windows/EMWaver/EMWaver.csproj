@@ -45,6 +45,29 @@
     </None>
   </ItemGroup>
 
+  <!-- Bundle firmware + DFU helper (Rust) into the app output, mirroring macOS behavior. -->
+  <Target Name="BundleFirmwareAndDfuHelper" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_FirmwareSrc>..\\..\\firmware\\emwaver.bin</_FirmwareSrc>
+      <_DfuHelperManifest>..\\..\\crates\\emwaver-dfu-helper\\Cargo.toml</_DfuHelperManifest>
+      <_DfuHelperTarget>$(BaseIntermediateOutputPath)emwaver-dfu-helper\\target</_DfuHelperTarget>
+      <_DfuHelperExe>$(_DfuHelperTarget)\\x86_64-pc-windows-msvc\\release\\emwaver-dfu-helper.exe</_DfuHelperExe>
+    </PropertyGroup>
+
+    <Error Condition="!Exists('$(_FirmwareSrc)')" Text="Missing bundled firmware at: $(_FirmwareSrc)" />
+
+    <Message Text="[Bundle Firmware + DFU Helper] firmware_src=$(_FirmwareSrc)" Importance="high" />
+    <Message Text="[Bundle Firmware + DFU Helper] helper_manifest=$(_DfuHelperManifest)" Importance="high" />
+
+    <!-- Copy firmware into app root output as emwaver.bin -->
+    <Copy SourceFiles="$(_FirmwareSrc)" DestinationFiles="$(OutDir)emwaver.bin" SkipUnchangedFiles="false" />
+
+    <!-- Build DFU helper and copy into app root output as emwaver-dfu-helper.exe -->
+    <Exec Command="cargo build --manifest-path &quot;$(_DfuHelperManifest)&quot; --release --target x86_64-pc-windows-msvc --target-dir &quot;$(_DfuHelperTarget)&quot;" />
+    <Error Condition="!Exists('$(_DfuHelperExe)')" Text="Missing helper binary at: $(_DfuHelperExe)" />
+    <Copy SourceFiles="$(_DfuHelperExe)" DestinationFiles="$(OutDir)emwaver-dfu-helper.exe" SkipUnchangedFiles="false" />
+  </Target>
+
   <!-- Sync bundled example scripts from repo assets into the Windows project folder.
        This makes the packaged path deterministic (Assets/DefaultScripts).
   -->
@@ -72,6 +95,21 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <!-- Bundled firmware payload (read-only). -->
+    <Content Include="..\\..\\firmware\\emwaver.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver.bin</TargetPath>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <!-- Bundled DFU helper. Built by BundleFirmwareAndDfuHelper target; included for publish as well. -->
+    <Content Include="$(OutDir)emwaver-dfu-helper.exe" Condition="Exists('$(OutDir)emwaver-dfu-helper.exe')">
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver-dfu-helper.exe</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
   </ItemGroup>
