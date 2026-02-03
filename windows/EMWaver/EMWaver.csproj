@@ -83,12 +83,15 @@
   </Target>
 
   <ItemGroup>
-    <!-- App icon assets (runtime): used for titlebar/taskbar icon and in-app icon. -->
-    <Content Include="Assets\\emwaver.ico">
+    <!-- App icon asset (runtime). Keep as None (not PRI-indexed) but copy to output. -->
+    <None Include="Assets\\emwaver.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
-    </Content>
+    </None>
+
+    <!-- Ensure .gitkeep doesn't participate in PRI/resource indexing. -->
+    <None Remove="Assets\\DefaultScripts\\.gitkeep" />
 
     <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
     <Content Include="Assets\\DefaultScripts\\*.emw">
