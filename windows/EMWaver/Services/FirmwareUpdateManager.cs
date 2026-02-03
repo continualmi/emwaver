@@ -93,7 +93,9 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         if (_dfuPollTimer != null) return;
 
-        _dfuPollTimer = ui.CreateTimer();
+        // Some WinUI/WindowsAppSDK combos expose CreateTimer() with quirky metadata; keep it explicit.
+        DispatcherQueueTimer timer = ui.CreateTimer();
+        _dfuPollTimer = timer;
         _dfuPollTimer.Interval = TimeSpan.FromMilliseconds(900);
         _dfuPollTimer.IsRepeating = true;
         _dfuPollTimer.Tick += (_, __) => _ = RefreshDfuPresenceAsync();
@@ -308,7 +310,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return;
         }
 
-        _ = ui.TryEnqueue(fn);
+        _ = ui.TryEnqueue(new DispatcherQueueHandler(fn));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
