@@ -392,6 +392,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private func queryDeviceVersion(timeoutMs: Int) -> String? {
         // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
+        // Product UI uses major.minor (patch is internal / not shown).
         let resp = sendCommandInternal(
             Data([EmwOpcode.version]),
             timeout: timeoutMs,
@@ -405,7 +406,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         if resp.count < 4 { return nil }
         if resp[0] != 0x80 { return nil }
         if resp.dropFirst(4).contains(where: { $0 != 0 }) { return nil }
-        return "\(resp[1]).\(resp[2]).\(resp[3])"
+        return "\(resp[1]).\(resp[2])"
     }
 
     private func listPortCandidatesInternal() -> [PortCandidate] {
