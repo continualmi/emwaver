@@ -8,37 +8,6 @@ Going along with it, adding the chart directly to the scripts as a a component c
 
 Connection logic still needs work: removing device doesnt make it disconnected
 
-
-Emwaver history dates: 
-
-ism waver v0 : 2023-03-29
-ism waver v1 : 2023-05-13 
-ism waver v2 : 2024-02-01 
-infrared waver v0: 2024-03-12
-infrared waver v1: 2024-05-07
-gpio waver v1: 2024-07-08 
-duplex waver module: 2024-07-17
-
-2024-08-24 : gpio waver, rfid waver, infrared waver, ism waver
-wifi waver: 2024-12-03 
-ble waver dongle: 2025-01-04
-emwaver v0: 2025-02-16 currently missing for some reason used to be called emwaver one i think
-emwaver v1: 2025-03-24 currently called emwaver plus
-emwaver v2: 2025-04-23 used to be just called emwaver, the flasgship
-emwaver diy: 2025-06-23 
-emwaver shield: 2025-10-08 
-emwaver: 2026-01-06 
-
-
-usb waver probably after 2024-08-24  sometime, maybe a few weeks
-gpio waver v0 probably some weeks before gpio waver v1
-gpio waver module and emw-1 are close together likely shortly after gpio waver v1
-
-
-
--------]
-
-
 Adding internet access to scripts runtime
 If we add internet API, we can for instance fetch all kinds of things that might be userufl when writing scripts and so on. we can even fetch remotes from IRDB, for example. 
 
