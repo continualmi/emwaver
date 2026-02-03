@@ -218,15 +218,15 @@ final class Dfu: @unchecked Sendable {
         // IOCreatePlugInInterfaceForService returns an IOCFPlugInInterface **
         var plugIn: UnsafeMutablePointer<UnsafeMutablePointer<IOCFPlugInInterface>?>? = nil
         var score: Int32 = 0
-        let kr = IOCreatePlugInInterfaceForService(
+        let krCreate = IOCreatePlugInInterfaceForService(
             service,
             Self.usbDeviceUserClientTypeID,
             Self.ioCFPlugInInterfaceID,
             &plugIn,
             &score
         )
-        guard kr == KERN_SUCCESS, let plugIn else {
-            throw DfuError.openFailed(kr)
+        guard krCreate == KERN_SUCCESS, let plugIn else {
+            throw DfuError.openFailed(krCreate)
         }
         defer { _ = plugIn.pointee?.pointee.Release(plugIn) }
 
@@ -244,9 +244,9 @@ final class Dfu: @unchecked Sendable {
         }
         self.device = devPtr
 
-        kr = devPtr.pointee.USBDeviceOpen(devPtr)
-        guard kr == KERN_SUCCESS else {
-            throw DfuError.openFailed(kr)
+        let krOpen = devPtr.pointee.USBDeviceOpen(devPtr)
+        guard krOpen == KERN_SUCCESS else {
+            throw DfuError.openFailed(krOpen)
         }
 
         // Discover first DFU interface (class 0xFE, subclass 0x01).
@@ -259,9 +259,9 @@ final class Dfu: @unchecked Sendable {
         )
 
         var iter: io_iterator_t = 0
-        kr = devPtr.pointee.CreateInterfaceIterator(devPtr, &request, &iter)
-        guard kr == KERN_SUCCESS else {
-            throw DfuError.usbError(kr, "CreateInterfaceIterator")
+        let krIter = devPtr.pointee.CreateInterfaceIterator(devPtr, &request, &iter)
+        guard krIter == KERN_SUCCESS else {
+            throw DfuError.usbError(krIter, "CreateInterfaceIterator")
         }
         defer { IOObjectRelease(iter) }
 
@@ -299,9 +299,9 @@ final class Dfu: @unchecked Sendable {
         }
         self.interface = intfPtr
 
-        kr = intfPtr.pointee.USBInterfaceOpen(intfPtr)
-        guard kr == KERN_SUCCESS else {
-            throw DfuError.openFailed(kr)
+        let krIntfOpen = intfPtr.pointee.USBInterfaceOpen(intfPtr)
+        guard krIntfOpen == KERN_SUCCESS else {
+            throw DfuError.openFailed(krIntfOpen)
         }
 
         var ifaceNum: UInt8 = 0
