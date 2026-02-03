@@ -17,11 +17,38 @@ internal sealed class ScriptRepository
         "Scripts"
     );
 
-    internal string BundledScriptsDir { get; } = Path.Combine(
-        AppContext.BaseDirectory,
-        "Assets",
-        "DefaultScripts"
-    );
+    internal string BundledScriptsDir { get; } = ResolveBundledScriptsDir();
+
+    private static string ResolveBundledScriptsDir()
+    {
+        // Unpackaged/dev runs: scripts are copied next to the exe.
+        var baseDir = Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultScripts");
+        if (Directory.Exists(baseDir))
+        {
+            return baseDir;
+        }
+
+        // Packaged (MSIX/Store) runs: prefer the installed package location.
+        try
+        {
+            var installed = Windows.ApplicationModel.Package.Current?.InstalledLocation?.Path;
+            if (!string.IsNullOrWhiteSpace(installed))
+            {
+                var packaged = Path.Combine(installed, "Assets", "DefaultScripts");
+                if (Directory.Exists(packaged))
+                {
+                    return packaged;
+                }
+            }
+        }
+        catch
+        {
+            // Accessing Package.Current can throw in unpackaged contexts.
+        }
+
+        // Fall back to baseDir even if it doesn't exist (callers handle missing dir).
+        return baseDir;
+    }
 
     internal async Task EnsureBootstrappedAsync()
     {
