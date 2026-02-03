@@ -375,9 +375,9 @@ function render() {
             UI.column({
               spacing: 6,
               children: [
-                UI.text({ text: 'Pin', font: 'caption', fontWeight: 'medium' }),
                 UI.picker({
                   style: 'menu',
+                  label: 'Pin',
                   selected: String(rxPin),
                   options: PINS,
                   onChange: function (v) { rxPin = String(v); render(); },
@@ -387,9 +387,9 @@ function render() {
             UI.column({
               spacing: 6,
               children: [
-                UI.text({ text: 'Signal', font: 'caption', fontWeight: 'medium' }),
                 UI.picker({
                   style: 'menu',
+                  label: 'Signal',
                   selected: String(selectedFile || ''),
                   options: picker,
                   onChange: function (v) {
