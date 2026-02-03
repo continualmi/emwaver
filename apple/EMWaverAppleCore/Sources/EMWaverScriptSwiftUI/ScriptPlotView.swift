@@ -414,7 +414,9 @@ struct ScriptPlotView: View {
     }
 
     private static func compressBits(bytes: Data, startBit: Int, endBit: Int, bins: Int) -> ([Double], [Double]) {
-#if canImport(Darwin)
+#if canImport(Darwin) && !os(macOS)
+        // iOS can optionally use the Rust buffer-core fast path.
+        // macOS intentionally does not link the Rust buffer core.
         let rs = Int32(min(startBit, Int(Int32.max)))
         let re = Int32(min(endBit, Int(Int32.max)))
         let nb = Int32(min(bins, Int(Int32.max)))
@@ -428,7 +430,7 @@ struct ScriptPlotView: View {
         }
 #endif
 
-        // Fallback: match `emwaver-buffer-core` `compress_bits` behavior.
+        // Match `emwaver-buffer-core` `compress_bits` behavior (Swift implementation).
         let span = max(0, endBit - startBit)
         if span <= 0 {
             return ([], [])
