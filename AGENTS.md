@@ -78,7 +78,11 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **macOS App (defacto):** `macos/` (SwiftUI)
 - **Internal tooling (not shipped):** `cli/` (firmware build + DFU flash)
 - **Shared assets:** `assets/` (default scripts, etc.)
-- **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`)
+- **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`) + per-platform copies:
+  - Android: `android/app/src/main/assets/firmware/emwaver.bin`
+  - iOS: `ios/EMWaver/firmware/emwaver.bin`
+  - Apple shared: `apple/EMWaverAppleCore/Resources/Firmware/emwaver.bin`
+  - Windows: `windows/EMWaver/Assets/Firmware/emwaver.bin`
 - **Website:** `frontend/` (Next.js)
 - **Dev env (macOS + Windows):** `DEV_ENV.md` (developer setup checklist; not product docs)
 
@@ -139,6 +143,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 
 ├─ android/
 │  └─ app/src/main/
+│     ├─ assets/firmware/                     # Bundled firmware payload (emwaver.bin)
 │     ├─ java/com/emwaver/emwaverandroidapp/
 │     │  ├─ MainActivity.java / WelcomeActivity.java
 │     │  ├─ DeviceConnectionManager.java / DeviceConnectionService.java
@@ -163,6 +168,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │
 ├─ ios/
 │  └─ EMWaver/
+│     ├─ firmware/                            # Bundled firmware payload (emwaver.bin)
 │     ├─ EMWaverApp.swift / ContentView.swift # SwiftUI bootstrap
 │     ├─ JavaScriptEngine.swift               # Lower-level JS runtime wrapper
 │     ├─ Managers/
@@ -184,6 +190,7 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 │
 ├─ apple/                                     # Shared Apple code (iOS + macOS)
 │  └─ EMWaverAppleCore/                        # SwiftPM: transport + script UI model/renderer
+│     └─ Resources/Firmware/                   # Bundled firmware payload (emwaver.bin)
 │
 ├─ macos/                                     # macOS native app (SwiftUI)
 │  └─ EMWaver/                                # Xcode project
@@ -596,6 +603,7 @@ Script storage
 - Repository: `windows/EMWaver/Services/ScriptRepository.cs`
   - Local scripts dir: `%LocalAppData%\EMWaver\Scripts`
   - Bundled scripts dir (in app output): `Assets/DefaultScripts`
+  - Bundled firmware payload (in app output): `Assets/Firmware/emwaver.bin`
   - Bundled scripts are read-only; users can copy them to local.
 
 Scripting runtime + UI renderer
