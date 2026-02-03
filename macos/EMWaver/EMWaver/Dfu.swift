@@ -1,5 +1,6 @@
 import Foundation
 import IOKit
+import IOKit.usb
 import IOKit.usb.IOUSBLib
 
 // Minimal STM32 ROM DFU implementation (0483:DF11) using IOUSBLib.
@@ -17,6 +18,42 @@ import IOKit.usb.IOUSBLib
 final class Dfu: @unchecked Sendable {
     static let vendorId: Int32 = 0x0483
     static let productId: Int32 = 0xDF11
+
+    // IOUSBLib uses CFUUID macros in headers which Swift does not import. Define the UUIDs here.
+    private static let ioCFPlugInInterfaceID: CFUUID = CFUUIDCreateFromUUIDBytes(nil, CFUUIDBytes(
+        byte0: 0xC2, byte1: 0x44, byte2: 0xE8, byte3: 0x58,
+        byte4: 0x10, byte5: 0x9C, byte6: 0x11, byte7: 0xD4,
+        byte8: 0x91, byte9: 0xD4, byte10: 0x00, byte11: 0x50,
+        byte12: 0xE4, byte13: 0xC6, byte14: 0x42, byte15: 0x6F
+    ))
+
+    private static let usbDeviceUserClientTypeID: CFUUID = CFUUIDCreateFromUUIDBytes(nil, CFUUIDBytes(
+        byte0: 0x9d, byte1: 0xc7, byte2: 0xb7, byte3: 0x80,
+        byte4: 0x9e, byte5: 0xc0, byte6: 0x11, byte7: 0xD4,
+        byte8: 0xa5, byte9: 0x4f, byte10: 0x00, byte11: 0x0a,
+        byte12: 0x27, byte13: 0x05, byte14: 0x28, byte15: 0x61
+    ))
+
+    private static let usbInterfaceUserClientTypeID: CFUUID = CFUUIDCreateFromUUIDBytes(nil, CFUUIDBytes(
+        byte0: 0x2d, byte1: 0x97, byte2: 0x86, byte3: 0xc6,
+        byte4: 0x9e, byte5: 0xf3, byte6: 0x11, byte7: 0xD4,
+        byte8: 0xad, byte9: 0x51, byte10: 0x00, byte11: 0x0a,
+        byte12: 0x27, byte13: 0x05, byte14: 0x28, byte15: 0x61
+    ))
+
+    private static let usbDeviceInterfaceID320: CFUUID = CFUUIDCreateFromUUIDBytes(nil, CFUUIDBytes(
+        byte0: 0x01, byte1: 0xA2, byte2: 0xD0, byte3: 0xE9,
+        byte4: 0x42, byte5: 0xF6, byte6: 0x4A, byte7: 0x87,
+        byte8: 0x8B, byte9: 0x8B, byte10: 0x77, byte11: 0x05,
+        byte12: 0x7C, byte13: 0x8C, byte14: 0xE0, byte15: 0xCE
+    ))
+
+    private static let usbInterfaceInterfaceID300: CFUUID = CFUUIDCreateFromUUIDBytes(nil, CFUUIDBytes(
+        byte0: 0xBC, byte1: 0xEA, byte2: 0xAD, byte3: 0xDC,
+        byte4: 0x88, byte5: 0x4D, byte6: 0x4F, byte7: 0x27,
+        byte8: 0x83, byte9: 0x40, byte10: 0x36, byte11: 0xD6,
+        byte12: 0x9F, byte13: 0xAB, byte14: 0x90, byte15: 0xF6
+    ))
 
     // DFU class requests
     private static let DFU_DNLOAD: UInt8 = 0x01
@@ -180,13 +217,15 @@ final class Dfu: @unchecked Sendable {
 
         var plugIn: UnsafeMutablePointer<IOCFPlugInInterface>? = nil
         var score: Int32 = 0
-        var kr = IOCreatePlugInInterfaceForService(
-            service,
-            kIOUSBDeviceUserClientTypeID,
-            kIOCFPlugInInterfaceID,
-            &plugIn,
-            &score
-        )
+        var kr = withUnsafeMutablePointer(to: &plugIn) { plugInPtr in
+            IOCreatePlugInInterfaceForService(
+                service,
+                Self.usbDeviceUserClientTypeID,
+                Self.ioCFPlugInInterfaceID,
+                plugInPtr,
+                &score
+            )
+        }
         guard kr == KERN_SUCCESS, let plugIn else {
             throw DfuError.openFailed(kr)
         }
@@ -194,8 +233,12 @@ final class Dfu: @unchecked Sendable {
 
         var devPtr: UnsafeMutablePointer<IOUSBDeviceInterface320>? = nil
         kr = withUnsafeMutablePointer(to: &devPtr) { devPtrPtr in
-            let iid = CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320)
-            return plugIn.pointee.QueryInterface(plugIn, iid, UnsafeMutableRawPointer(devPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self))
+            let iid = CFUUIDGetUUIDBytes(Self.usbDeviceInterfaceID320)
+            return plugIn.pointee.QueryInterface(
+                plugIn,
+                iid,
+                UnsafeMutableRawPointer(devPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
+            )
         }
         guard kr == KERN_SUCCESS, let devPtr else {
             throw DfuError.openFailed(kr)
@@ -231,13 +274,15 @@ final class Dfu: @unchecked Sendable {
 
         var ifPlug: UnsafeMutablePointer<IOCFPlugInInterface>? = nil
         var ifScore: Int32 = 0
-        kr = IOCreatePlugInInterfaceForService(
-            ifaceService,
-            kIOUSBInterfaceUserClientTypeID,
-            kIOCFPlugInInterfaceID,
-            &ifPlug,
-            &ifScore
-        )
+        kr = withUnsafeMutablePointer(to: &ifPlug) { plugInPtr in
+            IOCreatePlugInInterfaceForService(
+                ifaceService,
+                Self.usbInterfaceUserClientTypeID,
+                Self.ioCFPlugInInterfaceID,
+                plugInPtr,
+                &ifScore
+            )
+        }
         guard kr == KERN_SUCCESS, let ifPlug else {
             throw DfuError.openFailed(kr)
         }
@@ -245,8 +290,12 @@ final class Dfu: @unchecked Sendable {
 
         var intfPtr: UnsafeMutablePointer<IOUSBInterfaceInterface300>? = nil
         kr = withUnsafeMutablePointer(to: &intfPtr) { intfPtrPtr in
-            let iid = CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID300)
-            return ifPlug.pointee.QueryInterface(ifPlug, iid, UnsafeMutableRawPointer(intfPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self))
+            let iid = CFUUIDGetUUIDBytes(Self.usbInterfaceInterfaceID300)
+            return ifPlug.pointee.QueryInterface(
+                ifPlug,
+                iid,
+                UnsafeMutableRawPointer(intfPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
+            )
         }
         guard kr == KERN_SUCCESS, let intfPtr else {
             throw DfuError.openFailed(kr)
