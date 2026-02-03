@@ -1,11 +1,12 @@
-Connection logic still needs work: removing device doesnt make it disconnected
+1) Connection logic still needs work: removing device doesnt make it disconnected
 
-Adding internet access to scripts runtime
-If we add internet API, we can for instance fetch all kinds of things that might be userufl when writing scripts and so on. we can even fetch remotes from IRDB, for example. 
+2) Adding internet access to scripts runtime
+If we add internet API, we can for instance fetch all kinds of things that might be userufl when writing scripts and so on. we can even fetch remotes from IRDB, for example.
+In fact, for infrared remote control generation this is the ideal interface: let the agent access the internet. Instead of thinking about which database is most useful, let the agent figure that out for you and fetch the remote data and build the remote .emw file complete with the buttons and so on.
 
-Scripts runtime and agent: allow agent to fetch the UI and apply button clicks and interactions
-This will allow the agent to test fucntiality, eliminating the need for a human in the loop once the hardware is connected to the device. In fact, for infrared remote control generation this is the ideal interface: let the agent access the internet. Instead of thinking about which database is most useful, let the agent figure that out for you and fetch the remote data and build the remote .emw file complete with the buttons and so on.
+3) Scripts runtime and agent: allow agent to fetch the UI and apply button clicks and interactions
+This will allow the agent to test fucntiality, eliminating the need for a human in the loop once the hardware is connected to the device.
 
-Error handling/debugging
+4) Error handling/debugging
 We need good error handling for when we run scripts and they have problems, ideally telling us the line , etc, the code part. on a modal probably after we try to run it.
 
