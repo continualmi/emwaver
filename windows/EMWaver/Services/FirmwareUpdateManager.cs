@@ -13,7 +13,7 @@ namespace EMWaver.Services;
 internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
     private DispatcherQueue? _ui;
-    private DispatcherQueueTimer? _dfuPollTimer;
+    private Timer? _dfuPollTimer;
 
     private bool _dfuConnected;
     public bool DfuConnected
@@ -93,15 +93,11 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         if (_dfuPollTimer != null) return;
 
-        // Some WinUI/WindowsAppSDK combos expose CreateTimer() with quirky metadata; keep it explicit.
-        DispatcherQueueTimer timer = ui.CreateTimer();
-        _dfuPollTimer = timer;
-        _dfuPollTimer.Interval = TimeSpan.FromMilliseconds(900);
-        _dfuPollTimer.IsRepeating = true;
-        _dfuPollTimer.Tick += (_, __) => _ = RefreshDfuPresenceAsync();
-        _dfuPollTimer.Start();
-
-        _ = RefreshDfuPresenceAsync();
+        // Use a plain Timer (avoids WindowsAppSDK DispatcherQueueTimer metadata differences across toolchains).
+        _dfuPollTimer = new Timer(_ =>
+        {
+            _ = RefreshDfuPresenceAsync();
+        }, null, dueTime: 0, period: 900);
     }
 
     public void ResetForPresent()

@@ -269,7 +269,7 @@ internal sealed class Dfu : IAsyncDisposable
         cts.CancelAfter(Math.Max(1, timeoutMs));
 
         // WinRT API expects an IBuffer for IN transfers.
-        var inBuffer = new Buffer((uint)outBuf.Length);
+        Windows.Storage.Streams.Buffer inBuffer = new Windows.Storage.Streams.Buffer((uint)outBuf.Length);
         var ibuf = await _dev.SendControlInTransferAsync(setup, inBuffer).AsTask(cts.Token);
         ibuf.CopyTo(0, outBuf.AsBuffer(), 0, (uint)outBuf.Length);
     }
