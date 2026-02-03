@@ -56,7 +56,15 @@ def _file_json(f: UserFile) -> Dict[str, Any]:
     }
 
 
-def _require_user(config: Config) -> Optional[User]:
+class UserCtx:
+    __slots__ = ("id", "firebase_uid")
+
+    def __init__(self, *, id: str, firebase_uid: str):
+        self.id = id
+        self.firebase_uid = firebase_uid
+
+
+def _require_user(config: Config) -> Optional[UserCtx]:
     ident = verify_request_identity(request, config)
     if not ident:
         return None
@@ -79,7 +87,9 @@ def _require_user(config: Config) -> Optional[User]:
         else:
             user.last_seen_at = now
             db.commit()
-        return user
+
+        # Return a detached-safe snapshot.
+        return UserCtx(id=str(user.id), firebase_uid=str(user.firebase_uid))
     finally:
         db.close()
 
