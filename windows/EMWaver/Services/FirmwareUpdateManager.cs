@@ -1,13 +1,12 @@
 using Microsoft.UI.Dispatching;
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Devices.Enumeration;
+using Windows.Devices.Usb;
 
 namespace EMWaver.Services;
 
@@ -15,9 +14,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
     private DispatcherQueue? _ui;
     private DispatcherQueueTimer? _dfuPollTimer;
-
-    private Process? _flashProcess;
-    private readonly StringBuilder _stderr = new();
 
     private bool _dfuConnected;
     public bool DfuConnected
@@ -120,30 +116,11 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         try
         {
-            var (code, stderr) = await RunHelperAndWaitAsync(new[] { "is-connected" }, timeoutMs: 2000);
-            if (code == 0)
-            {
-                DfuConnected = true;
-                return;
-            }
-
-            if (code == 1)
-            {
-                DfuConnected = false;
-                return;
-            }
-
-            DfuConnected = false;
-            var msg = (stderr ?? "").Trim();
-            if (!string.IsNullOrWhiteSpace(msg))
-            {
-                UpdateError = msg;
-            }
+            DfuConnected = await IsDfuPresentAsync();
         }
-        catch (Exception ex)
+        catch
         {
             DfuConnected = false;
-            UpdateError = ex.Message;
         }
     }
 
@@ -179,28 +156,17 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         // Poll for DFU presence with a short timeout.
         var detected = false;
-        string? lastErr = null;
-
         var deadline = DateTimeOffset.UtcNow.AddSeconds(8);
         while (DateTimeOffset.UtcNow < deadline)
         {
             try
             {
-                var (code, stderr) = await RunHelperAndWaitAsync(new[] { "is-connected" }, timeoutMs: 2000);
-                if (code == 0)
-                {
-                    detected = true;
-                    break;
-                }
-                if (code != 1)
-                {
-                    var msg = (stderr ?? "").Trim();
-                    if (!string.IsNullOrWhiteSpace(msg)) lastErr = msg;
-                }
+                detected = await IsDfuPresentAsync();
+                if (detected) break;
             }
-            catch (Exception ex)
+            catch
             {
-                lastErr = ex.Message;
+                detected = false;
             }
 
             await Task.Delay(250);
@@ -211,7 +177,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         if (!detected)
         {
             ProgressMessage = "";
-            UpdateError = lastErr ?? "Failed to enter Update Mode (DFU not detected).";
+            UpdateError = "Failed to enter Update Mode (DFU not detected).";
             return;
         }
 
@@ -220,16 +186,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
     }
 
     // MARK: - Private
-
-    private string HelperPath()
-    {
-        var p = Path.Combine(AppContext.BaseDirectory, "emwaver-dfu-helper.exe");
-        if (!File.Exists(p))
-        {
-            throw new FileNotFoundException("Missing bundled DFU helper (emwaver-dfu-helper.exe).", p);
-        }
-        return p;
-    }
 
     private string FirmwarePath()
     {
@@ -241,134 +197,99 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         return p;
     }
 
-    private async Task<(int exitCode, string stderr)> RunHelperAndWaitAsync(string[] args, int timeoutMs)
+    private static async Task<bool> IsDfuPresentAsync()
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = HelperPath(),
-            Arguments = string.Join(" ", args),
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-
-        using var proc = new Process { StartInfo = psi };
-        proc.Start();
-
-        using var cts = new CancellationTokenSource(Math.Max(1, timeoutMs));
-        var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
-        var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
-
-        try
-        {
-            await proc.WaitForExitAsync(cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            try { proc.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException("DFU helper timed out.");
-        }
-
-        var stderr = "";
-        try { stderr = await stderrTask; } catch { }
-        return (proc.ExitCode, stderr);
+        var selector = UsbDevice.GetDeviceSelector(Dfu.USB_VENDOR_ID, Dfu.USB_PRODUCT_ID);
+        var devices = await DeviceInformation.FindAllAsync(selector);
+        return devices.Count > 0;
     }
 
     private async Task RunFlashAsync()
     {
-        if (_flashProcess != null) return;
+        if (IsFlashing) return;
 
         IsFlashing = true;
         UpdateDone = false;
         UpdateError = null;
         ProgressPct = 0;
-
-        _stderr.Clear();
-
-        var fw = FirmwarePath();
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = HelperPath(),
-            Arguments = $"flash --firmware \"{fw}\"",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-
-        var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _flashProcess = proc;
-
-        proc.OutputDataReceived += (_, e) =>
-        {
-            if (e.Data == null) return;
-            RunOnUi(() => HandleProgressLine(e.Data));
-        };
-
-        proc.ErrorDataReceived += (_, e) =>
-        {
-            if (e.Data == null) return;
-            _stderr.AppendLine(e.Data);
-        };
-
-        proc.Exited += (_, __) =>
-        {
-            var code = proc.ExitCode;
-            RunOnUi(() =>
-            {
-                _flashProcess = null;
-                IsFlashing = false;
-
-                if (code == 0)
-                {
-                    ProgressPct = 100;
-                    UpdateDone = true;
-                    ProgressMessage = "";
-                }
-                else
-                {
-                    var msg = _stderr.ToString().Trim();
-                    UpdateError = string.IsNullOrWhiteSpace(msg)
-                        ? $"Firmware update failed (exit code: {code})."
-                        : msg;
-                }
-            });
-
-            proc.Dispose();
-        };
+        ProgressMessage = "";
 
         try
         {
-            proc.Start();
-            proc.BeginOutputReadLine();
-            proc.BeginErrorReadLine();
+            var fwPath = FirmwarePath();
+            var fwBytes = await File.ReadAllBytesAsync(fwPath);
+
+            // Mirror Android/macos messaging.
+            ProgressMessage = "Starting mass erase...";
+            ProgressPct = 0;
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var ct = cts.Token;
+
+            await using var dfu = await Dfu.OpenFirstAsync();
+
+            await dfu.MassEraseAsync(ct);
+
+            ProgressMessage = "Mass erase complete. Setting address pointer...";
+            ProgressPct = 2;
+
+            await dfu.SetAddressPointerAsync(0x0800_0000, ct);
+
+            var totalBlocks = (fwBytes.Length + Dfu.BLOCK_SIZE - 1) / Dfu.BLOCK_SIZE;
+            var totalSteps = Math.Max(1, totalBlocks * 2 + 2);
+            var step = 2;
+
+            ProgressMessage = "Address pointer set. Starting flash write...";
+            ProgressPct = (step * 100.0) / totalSteps;
+
+            ushort blockNum = 2;
+            var readBuf = new byte[Dfu.BLOCK_SIZE];
+
+            for (int blockIndex = 0; blockIndex < totalBlocks; blockIndex++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var chunkStart = blockIndex * Dfu.BLOCK_SIZE;
+                var chunkLen = Math.Min(Dfu.BLOCK_SIZE, fwBytes.Length - chunkStart);
+
+                var oneBased = blockIndex + 1;
+                ProgressMessage = $"Writing block {blockNum} ({oneBased}/{totalBlocks})...";
+                ProgressPct = (step * 100.0) / totalSteps;
+
+                // Slice chunk.
+                var chunk = new byte[chunkLen];
+                Buffer.BlockCopy(fwBytes, chunkStart, chunk, 0, chunkLen);
+                await dfu.WriteBlockAsync(chunk, blockNum, chunkLen, ct);
+
+                step += 1;
+                ProgressMessage = $"Verifying block {blockNum} ({oneBased}/{totalBlocks})...";
+                ProgressPct = (step * 100.0) / totalSteps;
+
+                await dfu.ReadBlockAsync(readBuf, blockNum, chunkLen, ct);
+
+                for (int i = 0; i < chunkLen; i++)
+                {
+                    if (readBuf[i] != chunk[i])
+                    {
+                        throw new InvalidOperationException($"Error verifying block {blockNum - 2}");
+                    }
+                }
+
+                step += 1;
+                blockNum += 1;
+            }
+
+            ProgressMessage = "Flash write completed successfully.";
+            ProgressPct = 100;
+            UpdateDone = true;
         }
         catch (Exception ex)
         {
-            _flashProcess = null;
-            IsFlashing = false;
             UpdateError = ex.Message;
         }
-
-        await Task.CompletedTask;
-    }
-
-    private static readonly Regex PctRe = new(@"\((\d+)%\)", RegexOptions.Compiled);
-    private static readonly Regex PctSuffixRe = new(@"\s*\(\d+%\)\s*$", RegexOptions.Compiled);
-
-    private void HandleProgressLine(string line)
-    {
-        var trimmed = (line ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(trimmed)) return;
-
-        ProgressMessage = PctSuffixRe.Replace(trimmed, "");
-
-        var m = PctRe.Match(trimmed);
-        if (m.Success && int.TryParse(m.Groups[1].Value, out var pct))
+        finally
         {
-            ProgressPct = Math.Max(0, Math.Min(100, pct));
+            IsFlashing = false;
         }
     }
 
