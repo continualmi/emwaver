@@ -48,7 +48,7 @@ var recordId = null;
 
 var samplePeriodUsText = '10';
 var maxBytesText = '393216';
-var binsText = '900';
+var binsText = '400';
 
 var bufLen = 0;
 var xMin = 0;
@@ -223,6 +223,12 @@ function loadSelected() {
       saveName = baseName(name) + '.raw';
     }
     refreshPlot();
+
+    // After loading from disk, default to a full-range view of the entire signal.
+    var maxBits = Math.max(0, bufLen * 8);
+    xMin = 0;
+    xMax = maxBits > 0 ? maxBits : 10000;
+
     status = 'Loaded ' + name;
   } catch (e) {
     status = String(e && e.message ? e.message : e);
@@ -313,7 +319,7 @@ function render() {
           font: 'caption',
         }),
         UI.plot({
-          height: 320,
+          height: 240,
           source: 'samplerBits',
           bins: clamp(i(binsText, 900), 64, 6000),
           xMin: xMin,
@@ -405,12 +411,14 @@ function render() {
           style: 'menu',
           selected: String(selectedFile || ''),
           options: picker,
-          onChange: function (v) { selectedFile = String(v || ''); render(); },
+          onChange: function (v) {
+            selectedFile = String(v || '');
+            loadSelected();
+          },
         }),
         UI.row({
           spacing: 10,
           children: [
-            UI.button({ label: 'Load', onTap: loadSelected }),
             UI.button({ label: 'Delete', onTap: removeSelected }),
             UI.button({
               label: 'Refresh list',
