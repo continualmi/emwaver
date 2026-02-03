@@ -18,11 +18,26 @@
             BorderThickness="0,0,0,1">
             <Grid Padding="10,6">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <MenuBar>
+            <!-- App icon (rounded) shown in the top app bar -->
+            <Border
+                Grid.Column="0"
+                Width="24"
+                Height="24"
+                Margin="0,0,10,0"
+                CornerRadius="6"
+                Background="Transparent"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                VerticalAlignment="Center">
+                <Image Source="ms-appx:///Assets/emwaver.ico" Stretch="UniformToFill" />
+            </Border>
+
+            <MenuBar Grid.Column="1">
                 <MenuBarItem Title="Device">
                     <MenuFlyoutItem Text="Refresh Ports" Click="OnRefreshPortsClick" />
                     <ToggleMenuFlyoutItem x:Name="AutoConnectMenuItem" Text="Auto-connect" Click="OnAutoConnectClick" />
@@ -44,7 +59,7 @@
                 </MenuBarItem>
             </MenuBar>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
                     <AppBarButton x:Name="ScriptNewButton" Label="New" Icon="Add" Click="OnScriptNewClick" />
                     <AppBarButton x:Name="ScriptSaveButton" Label="Save" Icon="Save" Click="OnScriptSaveClick" IsEnabled="False" />

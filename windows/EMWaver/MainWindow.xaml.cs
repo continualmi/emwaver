@@ -8,8 +8,11 @@ using Microsoft.UI.Xaml.Navigation;
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using WinRT.Interop;
+using Microsoft.UI.Windowing;
 
 namespace EMWaver;
 
@@ -23,6 +26,9 @@ public sealed partial class MainWindow : Window
 
         // Dark-mode only (Windows app).
         RootGrid.RequestedTheme = ElementTheme.Dark;
+
+        // Ensure the window/titlebar icon matches the app icon.
+        TrySetWindowIcon();
 
         AppServices.Device.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
         AppServices.Device.PropertyChanged += OnDevicePropertyChanged;
@@ -39,6 +45,32 @@ public sealed partial class MainWindow : Window
             UpdateDeviceStatus();
             RebuildConnectMenu();
         });
+    }
+
+    private void TrySetWindowIcon()
+    {
+        try
+        {
+            // AppWindow expects a filesystem path.
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "emwaver.ico");
+            if (!File.Exists(iconPath))
+            {
+                // Fallback for older layouts.
+                iconPath = Path.Combine(AppContext.BaseDirectory, "emwaver.ico");
+            }
+
+            if (File.Exists(iconPath) && App.MainWindow != null)
+            {
+                var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
+                var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+                var appWindow = AppWindow.GetFromWindowId(windowId);
+                appWindow.SetIcon(iconPath);
+            }
+        }
+        catch
+        {
+            // Non-fatal. Some environments can throw if the window isn't ready yet.
+        }
     }
 
     private void OnContentNavigated(object sender, NavigationEventArgs e)
