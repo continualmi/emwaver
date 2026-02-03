@@ -96,7 +96,12 @@ cli/crates/**/Cargo.lock
 # Git worktrees (local developer checkouts)
 worktrees/
 prompt.txt
-notes.txt
+
+# Notes (keep tracked)
+# notes.txt
+
+# Asset Catalog icon backups
+**/AppIcon.appiconset/orig/
 
 # Local branding explorations (generated)
 assets/branding/logo-explorations/
