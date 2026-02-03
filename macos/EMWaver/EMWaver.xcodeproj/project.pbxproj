@@ -276,7 +276,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/../../firmware/emwaver.bin",
-				"$(SRCROOT)/../Tools/emwaver-dfu-helper",
+				"$(SRCROOT)/Tools/emwaver-dfu-helper",
 			);
 			name = "Bundle Firmware + DFU Helper (prebuilt)";
 			outputPaths = (
@@ -285,7 +285,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\ndst_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ndst_firmware=\"${SCRIPT_OUTPUT_FILE_0:-${dst_root}/emwaver.bin}\"\ndst_helper=\"${SCRIPT_OUTPUT_FILE_1:-${dst_root}/emwaver-dfu-helper}\"\n\nfirmware_src=\"${SRCROOT}/../../firmware/emwaver.bin\"\nhelper_src=\"${SRCROOT}/../Tools/emwaver-dfu-helper\"\n\necho \"[Bundle Firmware + DFU Helper] firmware_src=${firmware_src}\"\necho \"[Bundle Firmware + DFU Helper] helper_src=${helper_src}\"\necho \"[Bundle Firmware + DFU Helper] dst_root=${dst_root}\"\n\ntest -f \"${firmware_src}\" || (echo \"Missing bundled firmware at: ${firmware_src}\" >&2; exit 1)\ntest -f \"${helper_src}\" || (echo \"Missing prebuilt DFU helper at: ${helper_src}\" >&2; exit 1)\n\nmkdir -p \"$(dirname \"${dst_firmware}\")\"\ncp -f \"${firmware_src}\" \"${dst_firmware}\"\n\nmkdir -p \"$(dirname \"${dst_helper}\")\"\ncp -f \"${helper_src}\" \"${dst_helper}\"\nchmod +x \"${dst_helper}\"\n";
+			shellScript = "set -e\n\ndst_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ndst_firmware=\"${SCRIPT_OUTPUT_FILE_0:-${dst_root}/emwaver.bin}\"\ndst_helper=\"${SCRIPT_OUTPUT_FILE_1:-${dst_root}/emwaver-dfu-helper}\"\n\nfirmware_src=\"${SRCROOT}/../../firmware/emwaver.bin\"\nhelper_src=\"${SRCROOT}/Tools/emwaver-dfu-helper\"\n\necho \"[Bundle Firmware + DFU Helper] firmware_src=${firmware_src}\"\necho \"[Bundle Firmware + DFU Helper] helper_src=${helper_src}\"\necho \"[Bundle Firmware + DFU Helper] dst_root=${dst_root}\"\n\ntest -f \"${firmware_src}\" || (echo \"Missing bundled firmware at: ${firmware_src}\" >&2; exit 1)\ntest -f \"${helper_src}\" || (echo \"Missing prebuilt DFU helper at: ${helper_src}\" >&2; exit 1)\n\nmkdir -p \"$(dirname \"${dst_firmware}\")\"\ncp -f \"${firmware_src}\" \"${dst_firmware}\"\n\nmkdir -p \"$(dirname \"${dst_helper}\")\"\ncp -f \"${helper_src}\" \"${dst_helper}\"\nchmod +x \"${dst_helper}\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
