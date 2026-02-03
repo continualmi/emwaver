@@ -39,6 +39,8 @@
 
             <MenuBar Grid.Column="1">
                 <MenuBarItem Title="Device">
+                    <MenuFlyoutItem Text="Settings" Click="OnSettingsClick" />
+                    <MenuFlyoutSeparator />
                     <MenuFlyoutItem Text="Refresh Ports" Click="OnRefreshPortsClick" />
                     <ToggleMenuFlyoutItem x:Name="AutoConnectMenuItem" Text="Auto-connect" Click="OnAutoConnectClick" />
 
