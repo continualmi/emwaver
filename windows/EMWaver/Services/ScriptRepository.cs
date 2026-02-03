@@ -136,16 +136,10 @@ internal sealed class ScriptRepository
                 .ToList();
         }
 
-        var localNames = new HashSet<string>(
-            local.Select(s => s.Name),
-            StringComparer.OrdinalIgnoreCase
-        );
-
-        // If a local script exists with the same name, treat it as an override and don't show
-        // the bundled one as a separate entry (avoids confusing duplicates).
+        // Always show bundled scripts (examples) even if a local script with the same name exists.
+        // Local scripts can be treated as “overrides”, but we still want the examples to remain visible.
         var bundledVisible = bundledRaw
             .Select(p => new ScriptInfo(Path.GetFileNameWithoutExtension(p), p, IsBundled: true, ShadowsBundled: false))
-            .Where(s => !localNames.Contains(s.Name))
             .ToList();
 
         // Show bundled scripts first.
