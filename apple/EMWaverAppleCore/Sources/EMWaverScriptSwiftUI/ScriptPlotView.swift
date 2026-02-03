@@ -25,8 +25,7 @@ struct ScriptPlotView: View {
     @State private var internalPoints: [PlotPoint] = []
     @State private var internalBounds: PlotDomain? = nil
     @State private var recomputeWorkItem: DispatchWorkItem? = nil
-    @State private var pendingRecompute: Bool = false
-    @State private var lastInteractiveRecomputeAt: TimeInterval = 0
+    @State private var recomputeSeq: Int = 0
     @State private var plotAreaFrame: CGRect = .zero
 #if canImport(AppKit)
     @State private var isHovering: Bool = false
@@ -347,37 +346,18 @@ struct ScriptPlotView: View {
             return
         }
 
-        // During continuous zoom/pan, domain changes can arrive faster than recompute.
-        // If we cancel-and-reschedule every time, the recompute may never run until the gesture ends.
-        // Strategy:
-        // - While interacting: throttle recompute rate and temporarily reduce bins so refreshes land mid-gesture.
-        // - Coalesce additional changes via a pending flag.
-        if isInteracting {
-            let now = Date().timeIntervalSinceReferenceDate
-            // ~30 fps max recompute scheduling.
-            if now - lastInteractiveRecomputeAt < 0.033 {
-                pendingRecompute = true
-                return
-            }
-            lastInteractiveRecomputeAt = now
+        // IMPORTANT: recompute runs async; we must drop stale results or we'll show the wrong viewport.
+        recomputeSeq += 1
+        let seq = recomputeSeq
 
-            if recomputeWorkItem != nil {
-                pendingRecompute = true
-                return
-            }
-        }
+        // Snapshot the domain *now* (this is the viewport we want to render).
+        let start = domain.min
+        let end = domain.max
+        let bins = config.bins
 
         recomputeWorkItem?.cancel()
-        let bins = isInteracting ? min(config.bins, 100) : config.bins
-        let work = DispatchWorkItem { [sourceId, bins] in
-            recomputeInternalPoints(sourceId: sourceId, bins: bins)
-            DispatchQueue.main.async {
-                recomputeWorkItem = nil
-                if pendingRecompute {
-                    pendingRecompute = false
-                    scheduleInternalRecompute(config: config, immediate: false)
-                }
-            }
+        let work = DispatchWorkItem { [sourceId, bins, start, end, seq] in
+            recomputeInternalPoints(sourceId: sourceId, bins: bins, domainMin: start, domainMax: end, seq: seq)
         }
         recomputeWorkItem = work
 
@@ -385,14 +365,15 @@ struct ScriptPlotView: View {
         if immediate {
             delay = 0
         } else if isInteracting {
-            delay = 0.0
+            // Small delay while interacting to avoid thrashing.
+            delay = 0.02
         } else {
             delay = 0.02
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func recomputeInternalPoints(sourceId: String, bins: Int) {
+    private func recomputeInternalPoints(sourceId: String, bins: Int, domainMin: Double, domainMax: Double, seq: Int) {
         let bytes = PlotBufferStore.shared.getBytes(id: sourceId)
         let totalBits = max(0, bytes.count * 8)
         if totalBits <= 0 {
@@ -405,8 +386,8 @@ struct ScriptPlotView: View {
             internalBounds = PlotDomain(min: 0, max: Double(totalBits))
         }
 
-        let startBit = max(0, min(totalBits, Int(floor(domain.min))))
-        let endBit = max(startBit, min(totalBits, Int(ceil(domain.max))))
+        let startBit = max(0, min(totalBits, Int(floor(domainMin))))
+        let endBit = max(startBit, min(totalBits, Int(ceil(domainMax))))
         let span = max(0, endBit - startBit)
         if span <= 0 {
             internalPoints = []
@@ -424,7 +405,10 @@ struct ScriptPlotView: View {
                 out.append(PlotPoint(id: i, x: xs[i], y: ys[i]))
             }
             DispatchQueue.main.async {
+                // Drop stale results (e.g. if the user kept zooming/panning).
+                guard seq == recomputeSeq else { return }
                 internalPoints = out
+                recomputeWorkItem = nil
             }
         }
     }
