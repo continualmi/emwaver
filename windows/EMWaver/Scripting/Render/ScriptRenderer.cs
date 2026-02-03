@@ -319,7 +319,11 @@ public sealed class ScriptRenderer
         var min = ScriptPropParsers.GetDouble(raw, "min") ?? 0;
         var max = ScriptPropParsers.GetDouble(raw, "max") ?? 1;
         if (min > max) (min, max) = (max, min);
-        var token = node.Props.HandlerId(ScriptEventType.Change);
+
+        // Scripts often use slider "onSubmit" semantics (commit value), not continuous change.
+        // Prefer submit when present; fall back to change.
+        var tokenSubmit = node.Props.HandlerId(ScriptEventType.Submit);
+        var tokenChange = node.Props.HandlerId(ScriptEventType.Change);
 
         var slider = new Slider { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max) };
 
@@ -335,14 +339,19 @@ public sealed class ScriptRenderer
         slider.PointerReleased += (_, __) =>
         {
             isDragging = false;
+            var token = tokenSubmit ?? tokenChange;
             if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { slider.Value });
         };
 
         slider.ValueChanged += (_, e) =>
         {
             if (isDragging) return;
+
+            // For "submit" sliders, do not fire continuously.
+            if (!string.IsNullOrWhiteSpace(tokenSubmit)) return;
+
             // Value changed by programmatic update / keyboard / tapping the track.
-            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { e.NewValue });
+            if (!string.IsNullOrWhiteSpace(tokenChange)) _invokeHandler(tokenChange!, new object?[] { e.NewValue });
         };
 
         if (string.IsNullOrWhiteSpace(label))
