@@ -419,16 +419,7 @@ Sampler.__scriptShim = true;
     throw new Error('Sampler.clear unavailable on this host');
   };
 
-  Sampler.setInvertRx = function (enabled) {
-    var flag = !!enabled;
-    if (__scriptHostSampler && __scriptHostSampler.buffer && typeof __scriptHostSampler.buffer.setInvertRx === 'function') {
-      return __scriptHostSampler.buffer.setInvertRx.call(__scriptHostSampler.buffer, flag);
-    }
-    if (typeof _scriptSamplerBufferSetInvertRx === 'function') {
-      return _scriptSamplerBufferSetInvertRx(flag);
-    }
-    throw new Error('Sampler.setInvertRx unavailable on this host');
-  };
+  // Sampler.setInvertRx removed (legacy).
 
   Sampler.readPacketsSince = function (opts) {
     var packetIndex = Math.max(0, Number(opts && opts.packetIndex) || 0);
@@ -509,12 +500,10 @@ Sampler.__scriptShim = true;
     }
 
     var clearBefore = !!(opts && opts.clearBefore);
-    var invert = !!(opts && opts.invert);
 
     if (clearBefore) {
       Sampler.clear();
     }
-    Sampler.setInvertRx(invert);
 
     var startPacket = Sampler.packetCount();
     __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_START, pin & 0xff, periodUs & 0xff]), 1500);
@@ -533,7 +522,6 @@ Sampler.__scriptShim = true;
     try {
       __emwSendPacket(new Uint8Array([EMW_OP_SAMPLE, EMW_SAMPLE_STOP]), 1500);
     } finally {
-      try { Sampler.setInvertRx(false); } catch (e) {}
       __samplerActiveSession = null;
     }
   };
@@ -555,11 +543,10 @@ Sampler.__scriptShim = true;
     var pin = Number(opts && opts.pin);
     var durationMs = Math.max(0, Number(opts && opts.durationMs) || 0);
     var clearBefore = opts && typeof opts.clearBefore === 'boolean' ? !!opts.clearBefore : true;
-    var invert = !!(opts && opts.invert);
 
     var session = null;
     try {
-      session = Sampler.start({ pin: pin, clearBefore: clearBefore, invert: invert });
+      session = Sampler.start({ pin: pin, clearBefore: clearBefore });
       __samplerSleep(durationMs);
     } finally {
       try { Sampler.stop(session && session.id); } catch (e) {}

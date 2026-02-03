@@ -324,11 +324,7 @@ public final class ScriptEngine {
         }
         context.setObject(samplerClearBlock, forKeyedSubscript: "_scriptSamplerBufferClear" as NSString)
 
-        let samplerInvertBlock: @convention(block) (Bool) -> Void = { _ in
-            // Inversion is applied at capture start (Sampler.start opts.invert).
-            // Keep as a no-op for parity with hosts that expose it.
-        }
-        context.setObject(samplerInvertBlock, forKeyedSubscript: "_scriptSamplerBufferSetInvertRx" as NSString)
+        // _scriptSamplerBufferSetInvertRx removed (legacy).
 
         let samplerReadPacketsBlock: @convention(block) (Int, Int) -> JSValue = { [weak self] packetIndex, maxPackets in
             guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else {

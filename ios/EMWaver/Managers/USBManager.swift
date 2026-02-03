@@ -387,9 +387,7 @@ final class USBManager: ObservableObject {
         }
     }
 
-    func setInvertRx(_ enabled: Bool) {
-        withBufferQueueSync { NativeBufferRust.setInvertRx(enabled) }
-    }
+    // setInvertRx removed (legacy)
 
     func storeBulkPkt(_ data: Data) {
         withBufferQueueSync {

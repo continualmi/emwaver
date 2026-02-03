@@ -23,7 +23,7 @@ public final class NativeBuffer {
     public static native void storeBulkPkt(byte[] data, long tsMs);
 
     // Sampler-only option: invert bits (0↔1) on RX ingest when enabled.
-    public static native void setInvertRx(boolean enabled);
+    // setInvertRx removed (legacy).
 
     // Append outbound bytes to the TX log as padded 18B packets (one tsMs per 18B packet).
     public static native void appendTxBytes(byte[] data, long tsMs);

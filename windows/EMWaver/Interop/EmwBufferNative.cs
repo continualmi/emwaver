@@ -30,8 +30,7 @@ internal static class EmwBufferNative
     [DllImport(DllName, EntryPoint = "emw_buffer_set_rx_counter", CallingConvention = CallingConvention.Cdecl)]
     internal static extern void SetRxCounter(ulong value);
 
-    [DllImport(DllName, EntryPoint = "emw_buffer_set_invert_rx", CallingConvention = CallingConvention.Cdecl)]
-    internal static extern void SetInvertRx([MarshalAs(UnmanagedType.I1)] bool enabled);
+    // emw_buffer_set_invert_rx removed (legacy).
 
     [DllImport(DllName, EntryPoint = "emw_buffer_load_rx_bytes", CallingConvention = CallingConvention.Cdecl)]
     internal static extern void LoadRxBytes(byte[]? data, nuint len);

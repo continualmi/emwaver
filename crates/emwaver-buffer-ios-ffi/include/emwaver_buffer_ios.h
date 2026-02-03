@@ -26,7 +26,7 @@ uint64_t emw_buffer_tx_packet_count(void);
 
 uint64_t emw_buffer_get_rx_counter(void);
 void emw_buffer_set_rx_counter(uint64_t value);
-void emw_buffer_set_invert_rx(bool enabled);
+// emw_buffer_set_invert_rx removed (legacy).
 
 // --- RX/TX logging ---
 
