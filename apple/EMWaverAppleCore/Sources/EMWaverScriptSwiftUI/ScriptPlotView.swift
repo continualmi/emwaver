@@ -26,6 +26,7 @@ struct ScriptPlotView: View {
     @State private var internalBounds: PlotDomain? = nil
     @State private var recomputeWorkItem: DispatchWorkItem? = nil
     @State private var pendingRecompute: Bool = false
+    @State private var lastInteractiveRecomputeAt: TimeInterval = 0
     @State private var plotAreaFrame: CGRect = .zero
 #if canImport(AppKit)
     @State private var isHovering: Bool = false
@@ -346,16 +347,28 @@ struct ScriptPlotView: View {
             return
         }
 
-        // During continuous zoom/pan, domain changes can arrive faster than the scheduled recompute.
-        // If we cancel-and-reschedule every time, the recompute may never actually run until the gesture ends.
-        // Instead, while interacting, coalesce into a "run again" flag so we refresh periodically during the gesture.
-        if isInteracting, recomputeWorkItem != nil {
-            pendingRecompute = true
-            return
+        // During continuous zoom/pan, domain changes can arrive faster than recompute.
+        // If we cancel-and-reschedule every time, the recompute may never run until the gesture ends.
+        // Strategy:
+        // - While interacting: throttle recompute rate and temporarily reduce bins so refreshes land mid-gesture.
+        // - Coalesce additional changes via a pending flag.
+        if isInteracting {
+            let now = Date().timeIntervalSinceReferenceDate
+            // ~30 fps max recompute scheduling.
+            if now - lastInteractiveRecomputeAt < 0.033 {
+                pendingRecompute = true
+                return
+            }
+            lastInteractiveRecomputeAt = now
+
+            if recomputeWorkItem != nil {
+                pendingRecompute = true
+                return
+            }
         }
 
         recomputeWorkItem?.cancel()
-        let bins = config.bins
+        let bins = isInteracting ? min(config.bins, 100) : config.bins
         let work = DispatchWorkItem { [sourceId, bins] in
             recomputeInternalPoints(sourceId: sourceId, bins: bins)
             DispatchQueue.main.async {
@@ -372,7 +385,7 @@ struct ScriptPlotView: View {
         if immediate {
             delay = 0
         } else if isInteracting {
-            delay = 0.03
+            delay = 0.0
         } else {
             delay = 0.02
         }
