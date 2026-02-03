@@ -42,7 +42,6 @@ function signalsDir() {
 
 var status = '';
 var rxPin = '0';
-var invert = false;
 var recording = false;
 var recordId = null;
 
@@ -152,7 +151,7 @@ function start() {
   try {
     var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
     var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
-    var s = Sampler.start({ pin: Number(rxPin), clearBefore: true, invert: invert, periodUs: periodUs, maxBytes: maxBytes });
+    var s = Sampler.start({ pin: Number(rxPin), clearBefore: true, invert: false, periodUs: periodUs, maxBytes: maxBytes });
     recordId = s && s.id != null ? String(s.id) : null;
     recording = true;
     status = 'Recording…';
@@ -333,25 +332,23 @@ function render() {
             __scheduleViewport(range.min, range.max);
           },
         }),
+
+
+        // Controls directly below the chart (primary workflow).
+        UI.text({ text: 'Capture', fontWeight: 'semibold' }),
+
         UI.row({
           spacing: 10,
           children: [
-            UI.button({
-              label: 'Reset view',
-              onTap: function () {
-                xMin = 0;
-                xMax = 10000;
-                render();
-              },
-            }),
+            UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
+            UI.button({ label: 'Stop', onTap: stop }),
+            UI.button({ label: 'Refresh', onTap: function () { refreshPlot(); render(); } }),
           ],
         }),
 
-        UI.divider({}),
-
-        UI.text({ text: 'Capture', fontWeight: 'semibold' }),
+        // Make the core pickers horizontal: Pin + Signal side-by-side.
         UI.row({
-          spacing: 10,
+          spacing: 12,
           children: [
             UI.column({
               spacing: 6,
@@ -365,57 +362,69 @@ function render() {
                 }),
               ],
             }),
-            UI.spacer({}),
-            UI.button({
-              label: 'Invert: ' + (invert ? 'On' : 'Off'),
-              onTap: function () { invert = !invert; render(); },
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.text({ text: 'Signal', font: 'caption', fontWeight: 'medium' }),
+                UI.picker({
+                  style: 'menu',
+                  selected: String(selectedFile || ''),
+                  options: picker,
+                  onChange: function (v) {
+                    selectedFile = String(v || '');
+                    loadSelected();
+                  },
+                }),
+              ],
             }),
           ],
         }),
+
         UI.row({
           spacing: 10,
           children: [
-            UI.textField({
-              value: samplePeriodUsText,
-              placeholder: 'Period us',
-              onChange: function (v) { samplePeriodUsText = String(v); },
-              onSubmit: function () { render(); },
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.text({ text: 'Sample period (µs)', font: 'caption', fontWeight: 'medium' }),
+                UI.textField({
+                  value: samplePeriodUsText,
+                  placeholder: '10',
+                  onChange: function (v) { samplePeriodUsText = String(v); },
+                  onSubmit: function () { render(); },
+                }),
+              ],
             }),
-            UI.textField({
-              value: maxBytesText,
-              placeholder: 'Max bytes',
-              onChange: function (v) { maxBytesText = String(v); },
-              onSubmit: function () { render(); },
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.text({ text: 'Max capture bytes', font: 'caption', fontWeight: 'medium' }),
+                UI.textField({
+                  value: maxBytesText,
+                  placeholder: '393216',
+                  onChange: function (v) { maxBytesText = String(v); },
+                  onSubmit: function () { render(); },
+                }),
+              ],
             }),
-            UI.textField({
-              value: binsText,
-              placeholder: 'Bins',
-              onChange: function (v) { binsText = String(v); },
-              onSubmit: function () { refreshPlot(); render(); },
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.text({ text: 'Plot bins (resolution)', font: 'caption', fontWeight: 'medium' }),
+                UI.textField({
+                  value: binsText,
+                  placeholder: '400',
+                  onChange: function (v) { binsText = String(v); },
+                  onSubmit: function () { refreshPlot(); render(); },
+                }),
+              ],
             }),
-          ],
-        }),
-        UI.row({
-          spacing: 10,
-          children: [
-            UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
-            UI.button({ label: 'Stop', onTap: stop }),
-            UI.button({ label: 'Refresh', onTap: function () { refreshPlot(); render(); } }),
           ],
         }),
 
         UI.divider({}),
 
-        UI.text({ text: 'Signals', fontWeight: 'semibold' }),
-        UI.picker({
-          style: 'menu',
-          selected: String(selectedFile || ''),
-          options: picker,
-          onChange: function (v) {
-            selectedFile = String(v || '');
-            loadSelected();
-          },
-        }),
+        UI.text({ text: 'Files', fontWeight: 'semibold' }),
         UI.row({
           spacing: 10,
           children: [
