@@ -51,8 +51,6 @@
       <Link>Assets\\DefaultScripts\\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->
-      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
   </ItemGroup>
 
