@@ -283,7 +283,8 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
         catch (Exception ex)
         {
-            UpdateError = ex.Message;
+            // COMException messages are often empty; keep full details for debugging.
+            UpdateError = ex.ToString();
         }
         finally
         {
