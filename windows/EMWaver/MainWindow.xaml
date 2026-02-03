@@ -72,7 +72,12 @@
                     <AppBarSeparator />
 
                     <AppBarButton x:Name="CloudSignInButton" Label="Sign in" Icon="Contact" Click="OnCloudSignInClick" />
-                    <AppBarButton x:Name="CloudTestButton" Label="Cloud test" Icon="Cloud" Click="OnCloudTestClick" />
+
+                    <AppBarButton x:Name="CloudTestButton" Label="Cloud test" Click="OnCloudTestClick">
+                        <AppBarButton.Icon>
+                            <SymbolIcon Symbol="Globe" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
 
                     <AppBarSeparator />
 
