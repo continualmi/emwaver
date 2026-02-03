@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Diagnostics;
 
 namespace EMWaver.Scripting;
 
@@ -105,6 +106,8 @@ public sealed class ScriptEngine : IDisposable
         {
             return;
         }
+
+        Debug.WriteLine($"[EMWaver][Script][Invoke] token={token} argc={arguments?.Count ?? 0}");
 
         Enqueue(() =>
         {
@@ -258,10 +261,12 @@ public sealed class ScriptEngine : IDisposable
                 return JsValue.Null;
             }
 
+            var opcode = payload.Length > 0 ? $"0x{payload[0]:X2}" : "<empty>";
+            Debug.WriteLine($"[EMWaver][Script][SendPacket] opcode={opcode} timeoutMs={timeoutMs}");
+
             var resp = send(payload, Math.Max(0, timeoutMs));
             if (resp == null)
             {
-                var opcode = payload.Length > 0 ? $"0x{payload[0]:X2}" : "<empty>";
                 EmitError($"Device command timed out (opcode {opcode}, timeout {timeoutMs}ms)");
                 return JsValue.Null;
             }
