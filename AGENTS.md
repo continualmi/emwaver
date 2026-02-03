@@ -654,7 +654,9 @@ Removed (scripts are run via the apps).
 
 ## Agent Workflow Guardrails
 
-- Do **not** `git commit` or `git push` unless explicitly requested.
+- Prefer making changes in working tree first and showing a diff/summary.
+- **After significant changes, you MUST `git commit` + `git push`** (don’t wait to be asked), unless the user explicitly says not to.
+- For small or speculative tweaks, ask before committing/pushing.
 ├─ crates/                                   # Shared Rust crates (used by apps)
 │  ├─ emwaver-buffer-core/                    # 64B framing + RX capture + cursor parsing
 │  │  └─ src/{packet,buffer,status,sampler,tx}.rs
