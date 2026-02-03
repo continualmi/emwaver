@@ -247,18 +247,22 @@ public sealed class ScriptEngine : IDisposable
             var send = _sendPacket;
             if (send == null)
             {
+                EmitError("Script sendPacket failed: host not ready");
                 return JsValue.Null;
             }
 
             var payload = CoerceToByteArray(bytesValue);
             if (payload == null)
             {
+                EmitError("Script sendPacket failed: invalid payload");
                 return JsValue.Null;
             }
 
             var resp = send(payload, Math.Max(0, timeoutMs));
             if (resp == null)
             {
+                var opcode = payload.Length > 0 ? $"0x{payload[0]:X2}" : "<empty>";
+                EmitError($"Device command timed out (opcode {opcode}, timeout {timeoutMs}ms)");
                 return JsValue.Null;
             }
 

@@ -62,7 +62,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                     <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
                     <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="DeviceBufferText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <!-- DeviceBufferText removed (debug RX/TX counter UI) -->
                 </StackPanel>
             </StackPanel>
             </Grid>

@@ -322,8 +322,26 @@ public sealed class ScriptRenderer
         var token = node.Props.HandlerId(ScriptEventType.Change);
 
         var slider = new Slider { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max) };
+
+        // Windows quirk: many scripts call render() from slider handlers.
+        // If we invoke on every ValueChanged tick while the user is dragging, the UI tree is rebuilt
+        // and the slider thumb appears to "fight" the user (doesn't move smoothly / snaps back).
+        //
+        // So: treat Windows sliders as commit-on-release.
+        var isDragging = false;
+
+        slider.PointerPressed += (_, __) => { isDragging = true; };
+        slider.PointerCaptureLost += (_, __) => { isDragging = false; };
+        slider.PointerReleased += (_, __) =>
+        {
+            isDragging = false;
+            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { slider.Value });
+        };
+
         slider.ValueChanged += (_, e) =>
         {
+            if (isDragging) return;
+            // Value changed by programmatic update / keyboard / tapping the track.
             if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { e.NewValue });
         };
 
