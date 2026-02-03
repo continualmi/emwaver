@@ -10,7 +10,7 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
     private readonly WindowsDeviceManager _device;
     private readonly FirmwareUpdateManager _updater;
 
-    public FirmwareUpdateDialog(WindowsDeviceManager device, FirmwareUpdateManager updater)
+    internal FirmwareUpdateDialog(WindowsDeviceManager device, FirmwareUpdateManager updater)
     {
         InitializeComponent();
         _device = device;
