@@ -68,6 +68,14 @@
                     <AppBarButton x:Name="ScriptRenameButton" Label="Rename" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
                     <AppBarButton x:Name="ScriptDeleteButton" Label="Delete" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
                     <AppBarButton x:Name="ScriptRefreshButton" Label="Refresh" Icon="Refresh" Click="OnScriptRefreshClick" />
+
+                    <AppBarSeparator />
+
+                    <AppBarButton x:Name="CloudSignInButton" Label="Sign in" Icon="Contact" Click="OnCloudSignInClick" />
+                    <AppBarButton x:Name="CloudTestButton" Label="Cloud test" Icon="Cloud" Click="OnCloudTestClick" />
+
+                    <AppBarSeparator />
+
                     <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="Agent" Click="OnScriptAgentToggleClick">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="Message" />
