@@ -230,7 +230,8 @@ internal sealed class Dfu : IAsyncDisposable
     {
         var setup = new UsbSetupPacket
         {
-            RequestType = new UsbControlRequestType { Direction = UsbTransferDirection.Out, Recipient = UsbControlRecipient.Interface, ControlTransferType = UsbControlTransferType.Class },
+            // NOTE: Some Windows SDK projections don’t expose UsbControlRecipient.Interface; value 1 is Interface.
+            RequestType = new UsbControlRequestType { Direction = UsbTransferDirection.Out, Recipient = (UsbControlRecipient)1, ControlTransferType = UsbControlTransferType.Class },
             Request = request,
             Value = value,
             Index = index,
@@ -256,7 +257,8 @@ internal sealed class Dfu : IAsyncDisposable
     {
         var setup = new UsbSetupPacket
         {
-            RequestType = new UsbControlRequestType { Direction = UsbTransferDirection.In, Recipient = UsbControlRecipient.Interface, ControlTransferType = UsbControlTransferType.Class },
+            // NOTE: Some Windows SDK projections don’t expose UsbControlRecipient.Interface; value 1 is Interface.
+            RequestType = new UsbControlRequestType { Direction = UsbTransferDirection.In, Recipient = (UsbControlRecipient)1, ControlTransferType = UsbControlTransferType.Class },
             Request = request,
             Value = value,
             Index = index,
@@ -266,7 +268,9 @@ internal sealed class Dfu : IAsyncDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(Math.Max(1, timeoutMs));
 
-        var ibuf = await _dev.SendControlInTransferAsync(setup, (uint)outBuf.Length).AsTask(cts.Token);
+        // WinRT API expects an IBuffer for IN transfers.
+        var inBuffer = new Buffer((uint)outBuf.Length);
+        var ibuf = await _dev.SendControlInTransferAsync(setup, inBuffer).AsTask(cts.Token);
         ibuf.CopyTo(0, outBuf.AsBuffer(), 0, (uint)outBuf.Length);
     }
 }
