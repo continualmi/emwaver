@@ -303,7 +303,8 @@ struct ScriptPlotView: View {
         isInteracting = true
 
         let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
-        let z = exp(dy * 0.002)
+        // Invert zoom direction: scrolling up should zoom out.
+        let z = exp(-dy * 0.002)
         let nextRange = max(domainRange * z, 1)
 
         let t = Double(min(1, max(0, hoverX / max(1, effectiveWidth))))
