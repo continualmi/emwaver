@@ -230,19 +230,17 @@ final class Dfu: @unchecked Sendable {
         }
         defer { _ = plugIn.pointee?.pointee.Release(plugIn) }
 
-        // QueryInterface returns IOUSBDeviceInterface320 ** (pointer-to-pointer).
-        var devPP: UnsafeMutablePointer<UnsafeMutablePointer<IOUSBDeviceInterface320>?>? = nil
-        let krQI = withUnsafeMutablePointer(to: &devPP) { devPPPtr in
+        // QueryInterface returns an opaque pointer (LPVOID) to an IOUSBDeviceInterface320.
+        // Use a raw pointer out-param to avoid Swift's nested optional pointer shenanigans.
+        var devRaw: UnsafeMutableRawPointer? = nil
+        let krQI = withUnsafeMutablePointer(to: &devRaw) { devRawPtr in
             let iid = CFUUIDGetUUIDBytes(Self.usbDeviceInterfaceID320)
-            return plugIn.pointee!.pointee.QueryInterface(
-                plugIn,
-                iid,
-                UnsafeMutableRawPointer(devPPPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
-            )
+            return plugIn.pointee!.pointee.QueryInterface(plugIn, iid, devRawPtr)
         }
-        guard krQI == KERN_SUCCESS, let dev = devPP?.pointee else {
+        guard krQI == KERN_SUCCESS, let devRaw else {
             throw DfuError.openFailed(krQI)
         }
+        let dev = devRaw.assumingMemoryBound(to: IOUSBDeviceInterface320.self)
         self.device = dev
 
         let krOpen = dev.pointee.USBDeviceOpen(dev)
@@ -286,19 +284,16 @@ final class Dfu: @unchecked Sendable {
         }
         defer { _ = ifPlug.pointee?.pointee.Release(ifPlug) }
 
-        // QueryInterface returns IOUSBInterfaceInterface300 **.
-        var intfPP: UnsafeMutablePointer<UnsafeMutablePointer<IOUSBInterfaceInterface300>?>? = nil
-        let krQI2 = withUnsafeMutablePointer(to: &intfPP) { intfPPPtr in
+        // QueryInterface returns an opaque pointer (LPVOID) to an IOUSBInterfaceInterface300.
+        var intfRaw: UnsafeMutableRawPointer? = nil
+        let krQI2 = withUnsafeMutablePointer(to: &intfRaw) { intfRawPtr in
             let iid = CFUUIDGetUUIDBytes(Self.usbInterfaceInterfaceID300)
-            return ifPlug.pointee!.pointee.QueryInterface(
-                ifPlug,
-                iid,
-                UnsafeMutableRawPointer(intfPPPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self)
-            )
+            return ifPlug.pointee!.pointee.QueryInterface(ifPlug, iid, intfRawPtr)
         }
-        guard krQI2 == KERN_SUCCESS, let intf = intfPP?.pointee else {
+        guard krQI2 == KERN_SUCCESS, let intfRaw else {
             throw DfuError.openFailed(krQI2)
         }
+        let intf = intfRaw.assumingMemoryBound(to: IOUSBInterfaceInterface300.self)
         self.interface = intf
 
         let krIntfOpen = intf.pointee.USBInterfaceOpen(intf)
