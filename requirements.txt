@@ -13,7 +13,8 @@ gunicorn==21.2.0
 SQLAlchemy==2.0.46
 
 # Postgres driver (Azure Postgres in prod; required if DATABASE_URL is Postgres)
-psycopg2-binary==2.9.9
+# psycopg3 installs cleanly on modern Python (incl. 3.13) without pg_config.
+psycopg[binary]==3.2.5
 
 # Azure Blob Storage (signals/scripts/files)
 azure-storage-blob==12.19.0
