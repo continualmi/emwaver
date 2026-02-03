@@ -1,24 +1,10 @@
-
-Need to work on the retransmit with the new duplex superframe logic: seems to be doing flow control but the output signal is not correct as it doesn't work. 
-
-Implemented the Sampler scripting api, to start just on desktop; need to add it to Android and IOS as well. 
-
-Adding a mode like SPI sampling where we stream register reads could be very useful, for example for reading the RSSI power at the CC1101 receiver.
-Going along with it, adding the chart directly to the scripts as a a component could be useful to display said readings. We might also just add that SPI RSSI sample option to the Sampler fragment itself, since its a emwaver board specific feature with the CC1101. 
-
 Connection logic still needs work: removing device doesnt make it disconnected
 
 Adding internet access to scripts runtime
 If we add internet API, we can for instance fetch all kinds of things that might be userufl when writing scripts and so on. we can even fetch remotes from IRDB, for example. 
 
-Making Sampler Fragment and ISM Fragment a script rather than a fragment
-Solidifies the script centered focus of EMWaver. Simplifies the application to have no fragments, just on home screen with everything, potentially 2 fragments , home and scripts.
-
 Scripts runtime and agent: allow agent to fetch the UI and apply button clicks and interactions
-This will allow the agent to test fucntiality, eliminating the need for a human in the loop once the hardware is connected to the device
-
-Idea for making sampling/transmission the same
-We might be able to transmit and sample at the same time via the BS packets, which we receive one for each packet we transmit. This simplifies the sampler and can work for some applications, for example we can emulate 2 wires or more of protocol, thinking for example of raw sampling / applying of say SPI or I2C. of course its tricky , and might not be worth doing.
+This will allow the agent to test fucntiality, eliminating the need for a human in the loop once the hardware is connected to the device. In fact, for infrared remote control generation this is the ideal interface: let the agent access the internet. Instead of thinking about which database is most useful, let the agent figure that out for you and fetch the remote data and build the remote .emw file complete with the buttons and so on.
 
 Error handling/debugging
 We need good error handling for when we run scripts and they have problems, ideally telling us the line , etc, the code part. on a modal probably after we try to run it.
