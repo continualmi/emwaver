@@ -32,7 +32,7 @@ Auth / cloud sync
 
 - `FIREBASE_PROJECT_ID` (required for auth in prod) - used to verify Firebase ID tokens
 - `EMWAVER_AUTH_MODE` (optional, default: `firebase`) - set to `disabled` for local dev without auth
-- `DATABASE_URL` (optional, default: `sqlite:///./emwaver.db`) - Azure Postgres in prod
+- `DATABASE_URL` (optional, default: `sqlite:///./emwaver.db`) - Azure Postgres in prod (use `postgresql+psycopg://...`)
 
 Azure Blob storage
 
@@ -53,8 +53,12 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r ../requirements.txt
 
-# Optional: Postgres driver (only if you set DATABASE_URL to Postgres)
-pip install -r ../requirements-postgres.txt
+# Postgres driver
+#
+# If DATABASE_URL points at Postgres, you must install the Postgres driver.
+# This repo uses psycopg3 (psycopg[binary]) by default.
+# (No longer needed) Postgres driver is included in repo-root requirements.txt now.
+# pip install -r ../requirements-postgres.txt
 ```
 
 2) Export env vars (or use your shell env manager):
