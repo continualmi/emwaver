@@ -53,11 +53,24 @@ internal sealed class GoogleOAuthPkce
         listener.Start();
 
         // Launch browser.
-        Process.Start(new ProcessStartInfo
+        // Process.Start can throw in some WinAppSDK contexts; prefer Launcher.
+        try
         {
-            FileName = authUrl,
-            UseShellExecute = true,
-        });
+            var ok = await Windows.System.Launcher.LaunchUriAsync(new Uri(authUrl));
+            if (!ok)
+            {
+                throw new InvalidOperationException("Failed to launch browser for Google sign-in");
+            }
+        }
+        catch
+        {
+            // Fallback for environments where Launcher isn't available.
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = authUrl,
+                UseShellExecute = true,
+            });
+        }
 
         // Wait for the OAuth redirect.
         var ctx = await listener.GetContextAsync().WaitAsync(ct);
