@@ -1,3 +1,4 @@
+using EMWaver.Dialogs;
 using EMWaver.Interop;
 using EMWaver.Models;
 using EMWaver.Pages;
@@ -31,6 +32,8 @@ public sealed partial class MainWindow : Window
         TrySetWindowIcon();
 
         AppServices.Device.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
+        AppServices.FirmwareUpdater.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
+
         AppServices.Device.PropertyChanged += OnDevicePropertyChanged;
 
         AppServices.Device.AvailablePorts.CollectionChanged += OnPortsCollectionChanged;
@@ -221,7 +224,11 @@ public sealed partial class MainWindow : Window
         }
 
         AutoConnectMenuItem.IsChecked = device.AutoConnectEnabled;
-        UpdateModeStatusItem.Text = device.DfuConnected ? "Update Mode: Detected" : "Update Mode: Not detected";
+        // Keep a fast UI hint using the built-in VID/PID scan, but also keep parity with
+        // macOS by polling the shared DFU helper (libusb) in the background.
+        UpdateModeStatusItem.Text = (device.DfuConnected || AppServices.FirmwareUpdater.DfuConnected)
+            ? "Update Mode: Detected"
+            : "Update Mode: Not detected";
 
         if (!string.IsNullOrWhiteSpace(device.LastErrorText))
         {
@@ -303,6 +310,17 @@ public sealed partial class MainWindow : Window
     private async void OnRefreshUpdateModeClick(object sender, RoutedEventArgs e)
     {
         await AppServices.Device.RefreshDfuPresenceAsync();
+        await AppServices.FirmwareUpdater.RefreshDfuPresenceAsync();
+    }
+
+    private async void OnUpdateFirmwareClick(object sender, RoutedEventArgs e)
+    {
+        var dlg = new FirmwareUpdateDialog(AppServices.Device, AppServices.FirmwareUpdater)
+        {
+            XamlRoot = this.Content.XamlRoot,
+        };
+
+        await dlg.ShowAsync();
     }
 
     private void OnScriptNewClick(object sender, RoutedEventArgs e)

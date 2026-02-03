@@ -51,6 +51,7 @@
 
                     <MenuFlyoutItem Text="Enter Update Mode" Click="OnEnterUpdateModeClick" />
                     <MenuFlyoutItem Text="Refresh Update Mode" Click="OnRefreshUpdateModeClick" />
+                    <MenuFlyoutItem Text="Update Firmware…" Click="OnUpdateFirmwareClick" />
                     <MenuFlyoutItem x:Name="UpdateModeStatusItem" Text="Update Mode: Not detected" IsEnabled="False" />
 
                     <MenuFlyoutSeparator />
