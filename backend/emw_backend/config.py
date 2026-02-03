@@ -20,6 +20,11 @@ class Config:
     auth_mode: str
     firebase_project_id: str
 
+    # Azure Blob storage
+    azure_storage_account: str
+    azure_storage_key: str
+    azure_blob_container: str
+
     # Agent
     openrouter_api_key: str
     openrouter_model: str
@@ -38,6 +43,9 @@ class Config:
             cors_origins=cors_origins,
             auth_mode=_env("EMWAVER_AUTH_MODE", "firebase"),
             firebase_project_id=_env("FIREBASE_PROJECT_ID", ""),
+            azure_storage_account=_env("AZURE_STORAGE_ACCOUNT", ""),
+            azure_storage_key=_env("AZURE_STORAGE_KEY", ""),
+            azure_blob_container=_env("AZURE_BLOB_CONTAINER", "emwaver-user-files"),
             openrouter_api_key=_env("OPENROUTER_API_KEY", ""),
             openrouter_model=_env("OPENROUTER_MODEL", "x-ai/grok-4.1-fast"),
         )
