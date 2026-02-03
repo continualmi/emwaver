@@ -49,7 +49,7 @@ internal sealed class CloudAuthManager
 
     internal async Task<string> SignInInteractiveAsync(CancellationToken ct)
     {
-        var googleTokens = await _google.AuthorizeAsync(_cfg.GoogleClientId, ct);
+        var googleTokens = await _google.AuthorizeAsync(_cfg.GoogleClientId, _cfg.GoogleClientSecret, ct);
         var session = await _firebase.SignInWithGoogleAsync(
             firebaseWebApiKey: _cfg.FirebaseWebApiKey,
             googleIdToken: googleTokens.IdToken,
