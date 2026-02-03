@@ -8,9 +8,7 @@ import SwiftUI
 import EMWaverScriptModel
 import EMWaverScriptRuntime
 
-#if canImport(Charts)
 import Charts
-#endif
 
 #if canImport(AppKit)
 import AppKit
@@ -27,9 +25,7 @@ struct ScriptPlotView: View {
     @State private var internalPoints: [PlotPoint] = []
     @State private var internalBounds: PlotDomain? = nil
     @State private var recomputeWorkItem: DispatchWorkItem? = nil
-#if canImport(Charts)
     @State private var plotAreaFrame: CGRect = .zero
-#endif
 #if canImport(AppKit)
     @State private var isHovering: Bool = false
     @State private var hoverX: CGFloat = 0
@@ -50,16 +46,7 @@ struct ScriptPlotView: View {
 
         return GeometryReader { geo in
             ZStack(alignment: .topLeading) {
-#if canImport(Charts)
                 chartPlot(config: config, size: geo.size, points: points, bounds: boundsForInteractions)
-#else
-                Canvas { context, size in
-                    drawPlot(config: config, points: points, in: size, context: &context)
-                }
-                .contentShape(Rectangle())
-                .gesture(dragGesture(config: config, bounds: boundsForInteractions, size: geo.size))
-                .simultaneousGesture(magnificationGesture(config: config, bounds: boundsForInteractions, size: geo.size))
-#endif
 
                 if let errorText = config.errorText, !errorText.isEmpty {
                     Text("Chart error: \(errorText)")
@@ -79,7 +66,6 @@ struct ScriptPlotView: View {
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let location):
-                    #if canImport(Charts)
                     if plotAreaFrame != .zero {
                         isHovering = plotAreaFrame.contains(location)
                         hoverX = location.x - plotAreaFrame.minX
@@ -87,10 +73,6 @@ struct ScriptPlotView: View {
                         isHovering = true
                         hoverX = location.x
                     }
-                    #else
-                    isHovering = true
-                    hoverX = location.x
-                    #endif
                 case .ended:
                     isHovering = false
                 }
@@ -125,7 +107,6 @@ struct ScriptPlotView: View {
         }
     }
 
-#if canImport(Charts)
     private func chartPlot(config: PlotConfig, size: CGSize, points: [PlotPoint], bounds: PlotDomain?) -> some View {
         let displayPoints = decimate(points: points, width: size.width)
 
@@ -256,100 +237,6 @@ struct ScriptPlotView: View {
         let t = min(1, max(0, xPx / max(1, plotWidth)))
         return domain.min + Double(t) * domainRange
     }
-#endif
-
-    private func drawPlot(config: PlotConfig, points: [PlotPoint], in size: CGSize, context: inout GraphicsContext) {
-        if points.isEmpty || size.width <= 2 || size.height <= 2 {
-            return
-        }
-
-        let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
-        let yRange = max(.leastNonzeroMagnitude, config.yMax - config.yMin)
-
-        let maxSegments = max(64, Int(size.width) * 2)
-        let step = points.count > maxSegments ? max(1, points.count / maxSegments) : 1
-
-        var path = Path()
-        var didMove = false
-        for idx in stride(from: 0, to: points.count, by: step) {
-            let p = points[idx]
-            let xT = (p.x - domain.min) / domainRange
-            if xT < 0 || xT > 1 {
-                continue
-            }
-            let yT = (p.y - config.yMin) / yRange
-            let x = CGFloat(xT) * size.width
-            let y = (1 - CGFloat(yT)) * size.height
-
-            if !didMove {
-                path.move(to: CGPoint(x: x, y: y))
-                didMove = true
-            } else {
-                path.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-
-        if didMove {
-            context.stroke(path, with: .color(.primary), lineWidth: 1.5)
-        }
-
-        if let selection, selection.upperBound > selection.lowerBound {
-            let x0 = CGFloat((selection.lowerBound - domain.min) / domainRange) * size.width
-            let x1 = CGFloat((selection.upperBound - domain.min) / domainRange) * size.width
-            let rect = CGRect(x: min(x0, x1), y: 0, width: abs(x1 - x0), height: size.height)
-            context.fill(Path(rect), with: .color(Color.accentColor.opacity(0.15)))
-            context.stroke(Path(rect), with: .color(Color.accentColor.opacity(0.35)), lineWidth: 1)
-        }
-    }
-
-    private func dragGesture(config: PlotConfig, bounds: PlotDomain?, size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                guard size.width > 2 else { return }
-
-                isInteracting = true
-
-                if isSelectionMode {
-                    if selectionStartX == nil {
-                        selectionStartX = xValue(from: value.startLocation.x, size: size)
-                    }
-                    let start = selectionStartX ?? xValue(from: value.startLocation.x, size: size)
-                    let end = xValue(from: value.location.x, size: size)
-                    selection = min(start, end)...max(start, end)
-                    return
-                }
-
-                // Pan horizontally.
-                let dx = value.translation.width
-                let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
-                let deltaX = Double(-dx / size.width) * domainRange
-                let next = PlotDomain(min: domain.min + deltaX, max: domain.max + deltaX)
-                domain = clampDomain(next, bounds: bounds)
-            }
-            .onEnded { value in
-                defer {
-                    isInteracting = false
-                    selectionStartX = nil
-                    selection = nil
-                }
-
-                if isSelectionMode {
-                    guard let token = node.props.handlerId(for: .select) else { return }
-                    let start = selectionStartX ?? xValue(from: value.startLocation.x, size: size)
-                    let end = xValue(from: value.location.x, size: size)
-                    let minX = min(start, end)
-                    let maxX = max(start, end)
-                    if maxX > minX {
-                        invokeHandler(token, [["min": minX, "max": maxX]])
-                    }
-                    return
-                }
-
-                if let token = node.props.handlerId(for: .viewport) {
-                    invokeHandler(token, [["min": domain.min, "max": domain.max]])
-                }
-            }
-    }
 
     private func magnificationGesture(config: PlotConfig, bounds: PlotDomain?, size: CGSize) -> some Gesture {
         MagnificationGesture()
@@ -378,11 +265,7 @@ struct ScriptPlotView: View {
 #endif
     }
 
-    private func xValue(from xPx: CGFloat, size: CGSize) -> Double {
-        let domainRange = max(.leastNonzeroMagnitude, domain.max - domain.min)
-        let t = min(1, max(0, xPx / max(1, size.width)))
-        return domain.min + Double(t) * domainRange
-    }
+    // Canvas-only helper removed (Charts is the only plot backend).
 
 #if canImport(AppKit)
     private func installScrollWheelMonitor(size: CGSize) {
@@ -408,12 +291,7 @@ struct ScriptPlotView: View {
     }
 
     private func handleScrollWheel(_ event: NSEvent, size: CGSize) {
-        let effectiveWidth: CGFloat
-        #if canImport(Charts)
-        effectiveWidth = plotAreaFrame != .zero ? plotAreaFrame.width : size.width
-        #else
-        effectiveWidth = size.width
-        #endif
+        let effectiveWidth: CGFloat = plotAreaFrame != .zero ? plotAreaFrame.width : size.width
 
         guard effectiveWidth > 2 else { return }
 
