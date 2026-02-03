@@ -187,11 +187,11 @@ public sealed class ScriptEngine : IDisposable
         }
 
         var baseDir = AppContext.BaseDirectory;
-        var path = Path.Combine(baseDir, "Assets", "DefaultScripts", "script_bootstrap.emw");
+        var path = Path.Combine(baseDir, "DefaultScripts", "script_bootstrap.emw");
         if (!File.Exists(path))
         {
             _bootstrapSource = string.Empty;
-            EmitError("Script bootstrap missing from app bundle (Assets/DefaultScripts/script_bootstrap.emw)");
+            EmitError("Script bootstrap missing from app bundle (DefaultScripts/script_bootstrap.emw)");
             return;
         }
 
