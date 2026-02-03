@@ -1,6 +1,6 @@
 import Foundation
 import IOKit
-import IOKit.usb
+import IOKit.usb.IOUSBLib
 
 // Minimal STM32 ROM DFU implementation (0483:DF11) using IOUSBLib.
 // Mirrors the sequencing in crates/emwaver-dfu (Rust):
@@ -74,12 +74,12 @@ final class Dfu: @unchecked Sendable {
 
     func close() {
         if let intf = interface {
-            _ = intf.pointee.pointee.USBInterfaceClose(intf)
-            _ = intf.pointee.pointee.Release(intf)
+            _ = intf.pointee.USBInterfaceClose(intf)
+            _ = intf.pointee.Release(intf)
         }
         if let dev = device {
-            _ = dev.pointee.pointee.USBDeviceClose(dev)
-            _ = dev.pointee.pointee.Release(dev)
+            _ = dev.pointee.USBDeviceClose(dev)
+            _ = dev.pointee.Release(dev)
         }
         interface = nil
         device = nil
@@ -157,7 +157,9 @@ final class Dfu: @unchecked Sendable {
     }
 
     private static func findFirstDevice() throws -> io_service_t {
-        let matching = IOServiceMatching(kIOUSBDeviceClassName)
+        guard let matching = IOServiceMatching(kIOUSBDeviceClassName) else {
+            throw DfuError.protocolError("IOServiceMatching returned nil")
+        }
         let dict = matching as NSMutableDictionary
         dict[kUSBVendorID] = vendorId
         dict[kUSBProductID] = productId
@@ -188,19 +190,19 @@ final class Dfu: @unchecked Sendable {
         guard kr == KERN_SUCCESS, let plugIn else {
             throw DfuError.openFailed(kr)
         }
-        defer { _ = plugIn.pointee.pointee.Release(plugIn) }
+        defer { _ = plugIn.pointee.Release(plugIn) }
 
         var devPtr: UnsafeMutablePointer<IOUSBDeviceInterface320>? = nil
         kr = withUnsafeMutablePointer(to: &devPtr) { devPtrPtr in
             let iid = CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID320)
-            return plugIn.pointee.pointee.QueryInterface(plugIn, iid, UnsafeMutableRawPointer(devPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self))
+            return plugIn.pointee.QueryInterface(plugIn, iid, UnsafeMutableRawPointer(devPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self))
         }
         guard kr == KERN_SUCCESS, let devPtr else {
             throw DfuError.openFailed(kr)
         }
         self.device = devPtr
 
-        kr = devPtr.pointee.pointee.USBDeviceOpen(devPtr)
+        kr = devPtr.pointee.USBDeviceOpen(devPtr)
         guard kr == KERN_SUCCESS else {
             throw DfuError.openFailed(kr)
         }
@@ -215,7 +217,7 @@ final class Dfu: @unchecked Sendable {
         )
 
         var iter: io_iterator_t = 0
-        kr = devPtr.pointee.pointee.CreateInterfaceIterator(devPtr, &request, &iter)
+        kr = devPtr.pointee.CreateInterfaceIterator(devPtr, &request, &iter)
         guard kr == KERN_SUCCESS else {
             throw DfuError.usbError(kr, "CreateInterfaceIterator")
         }
@@ -239,25 +241,25 @@ final class Dfu: @unchecked Sendable {
         guard kr == KERN_SUCCESS, let ifPlug else {
             throw DfuError.openFailed(kr)
         }
-        defer { _ = ifPlug.pointee.pointee.Release(ifPlug) }
+        defer { _ = ifPlug.pointee.Release(ifPlug) }
 
         var intfPtr: UnsafeMutablePointer<IOUSBInterfaceInterface300>? = nil
         kr = withUnsafeMutablePointer(to: &intfPtr) { intfPtrPtr in
             let iid = CFUUIDGetUUIDBytes(kIOUSBInterfaceInterfaceID300)
-            return ifPlug.pointee.pointee.QueryInterface(ifPlug, iid, UnsafeMutableRawPointer(intfPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self))
+            return ifPlug.pointee.QueryInterface(ifPlug, iid, UnsafeMutableRawPointer(intfPtrPtr).assumingMemoryBound(to: UnsafeMutableRawPointer?.self))
         }
         guard kr == KERN_SUCCESS, let intfPtr else {
             throw DfuError.openFailed(kr)
         }
         self.interface = intfPtr
 
-        kr = intfPtr.pointee.pointee.USBInterfaceOpen(intfPtr)
+        kr = intfPtr.pointee.USBInterfaceOpen(intfPtr)
         guard kr == KERN_SUCCESS else {
             throw DfuError.openFailed(kr)
         }
 
         var ifaceNum: UInt8 = 0
-        _ = intfPtr.pointee.pointee.GetInterfaceNumber(intfPtr, &ifaceNum)
+        _ = intfPtr.pointee.GetInterfaceNumber(intfPtr, &ifaceNum)
         self.interfaceNumber = ifaceNum
 
         // If we start in dfuERROR, clear it once (best-effort).
@@ -293,7 +295,7 @@ final class Dfu: @unchecked Sendable {
         var buffer = data
         return try buffer.withUnsafeMutableBytes { raw in
             req.pData = raw.baseAddress
-            let kr = intf.pointee.pointee.ControlRequest(intf, 0, &req)
+            let kr = intf.pointee.ControlRequest(intf, 0, &req)
             if kr != KERN_SUCCESS {
                 throw DfuError.usbError(kr, "ControlRequest OUT req=0x\(String(format: "%02X", request)) value=0x\(String(format: "%04X", value))")
             }
@@ -316,7 +318,7 @@ final class Dfu: @unchecked Sendable {
 
         try out.withUnsafeMutableBytes { raw in
             req.pData = raw.baseAddress
-            let kr = intf.pointee.pointee.ControlRequest(intf, 0, &req)
+            let kr = intf.pointee.ControlRequest(intf, 0, &req)
             if kr != KERN_SUCCESS {
                 throw DfuError.usbError(kr, "ControlRequest IN req=0x\(String(format: "%02X", request)) value=0x\(String(format: "%04X", value))")
             }
