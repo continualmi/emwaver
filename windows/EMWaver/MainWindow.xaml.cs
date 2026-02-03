@@ -2,6 +2,7 @@ using EMWaver.Dialogs;
 using EMWaver.Interop;
 using EMWaver.Models;
 using EMWaver.Pages;
+using EMWaver.Services.Cloud;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,6 +12,8 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using WinRT.Interop;
 using Microsoft.UI.Windowing;
@@ -356,5 +359,82 @@ public sealed partial class MainWindow : Window
     private void OnScriptAgentToggleClick(object sender, RoutedEventArgs e)
     {
         _scriptsPage?.HandleToolbarAgentToggle(ScriptAgentToggleButton.IsChecked == true);
+    }
+
+    private async void OnCloudSignInClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            await AppServices.CloudAuth.SignInInteractiveAsync(cts.Token);
+            await ShowInfoAsync("Cloud", "Signed in.");
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync("Cloud sign-in failed", ex.Message);
+        }
+    }
+
+    private async void OnCloudTestClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+
+            // 1) Ensure signed-in
+            _ = await AppServices.CloudAuth.EnsureSignedInAsync(cts.Token);
+
+            // 2) Create an upload
+            var name = "hello_cloud.emw";
+            var content = "// cloud smoke test\n" +
+                         "export default async function(ctx) {\n" +
+                         "  ui.text({ text: 'cloud ok' })\n" +
+                         "}\n";
+            var bytes = Encoding.UTF8.GetBytes(content);
+
+            var init = await AppServices.CloudFiles.InitUploadAsync(
+                name: name,
+                kind: "file",
+                contentType: "text/plain",
+                sizeBytes: bytes.Length,
+                ct: cts.Token
+            );
+
+            // 3) Upload to Azure Blob via SAS
+            await AppServices.CloudFiles.UploadBytesToSasAsync(init.UploadUrl, bytes, "text/plain", cts.Token);
+
+            // 4) Commit
+            await AppServices.CloudFiles.CommitUploadAsync(init.File.Metadata.Id, init.File.Metadata.Etag, bytes.Length, cts.Token);
+
+            // 5) List
+            var files = await AppServices.CloudFiles.ListAsync(kind: null, ext: null, ct: cts.Token);
+
+            var msg = $"Uploaded {name} (id {init.File.Metadata.Id}).\n\nFiles now: {files.Count}";
+            await ShowInfoAsync("Cloud test", msg);
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync("Cloud test failed", ex.Message);
+        }
+    }
+
+    private async Task ShowInfoAsync(string title, string message)
+    {
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                Title = title,
+                Content = message,
+                CloseButtonText = "OK",
+                XamlRoot = this.Content.XamlRoot,
+            };
+
+            await dialog.ShowAsync();
+        }
+        catch
+        {
+            // Ignore UI dialog failures.
+        }
     }
 }
