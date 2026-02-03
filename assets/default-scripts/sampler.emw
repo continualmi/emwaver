@@ -448,5 +448,11 @@ function render() {
 }
 
 listFiles();
-refreshPlot();
-render();
+
+// Auto-load the default (first) signal on startup so the plot is immediately populated.
+if (selectedFile) {
+  loadSelected();
+} else {
+  refreshPlot();
+  render();
+}
