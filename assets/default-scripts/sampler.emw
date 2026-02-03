@@ -169,6 +169,27 @@ function stop() {
   render();
 }
 
+function clearBuffer() {
+  status = '';
+  chartErr = '';
+  try {
+    // If we're currently sampling, stop first to avoid immediately refilling.
+    try { Sampler.stop(recordId); } catch (e0) {}
+    recording = false;
+    recordId = null;
+
+    Sampler.clear();
+
+    bufLen = 0;
+    xMin = 0;
+    xMax = 10000;
+    status = 'Cleared';
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
 function parseTimings(text) {
   return String(text || '')
     .split(/[\s,]+/g)
@@ -342,6 +363,7 @@ function render() {
           children: [
             UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
             UI.button({ label: 'Stop', onTap: stop }),
+            UI.button({ label: 'Clear', onTap: clearBuffer }),
             UI.button({ label: 'Refresh', onTap: function () { refreshPlot(); render(); } }),
           ],
         }),
