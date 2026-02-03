@@ -10,3 +10,6 @@ This will allow the agent to test fucntiality, eliminating the need for a human 
 4) Error handling/debugging
 We need good error handling for when we run scripts and they have problems, ideally telling us the line , etc, the code part. on a modal probably after we try to run it.
 
+5) windows: match UI on macos
+currently windows UI is different: we show both the script list adn the preview/edit area on the side. change that to the macos style: show only the scripts list. pressing on the script opens the priview. then we can go back. etc. same for edit, same flow
+
