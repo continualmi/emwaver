@@ -62,7 +62,7 @@ public sealed partial class MainWindow : Window
             if (File.Exists(iconPath) && App.MainWindow != null)
             {
                 var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
-                var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+                var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                 var appWindow = AppWindow.GetFromWindowId(windowId);
                 appWindow.SetIcon(iconPath);
             }
