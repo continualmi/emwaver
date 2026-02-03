@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -112,14 +113,17 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
     {
         if (IsFlashing) return;
 
+        bool present;
         try
         {
-            DfuConnected = await IsDfuPresentAsync();
+            present = await IsDfuPresentAsync();
         }
         catch
         {
-            DfuConnected = false;
+            present = false;
         }
+
+        RunOnUi(() => DfuConnected = present);
     }
 
     public async Task StartUpdateAsync(WindowsDeviceManager device)
@@ -206,39 +210,56 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
     {
         if (IsFlashing) return;
 
-        IsFlashing = true;
-        UpdateDone = false;
-        UpdateError = null;
-        ProgressPct = 0;
-        ProgressMessage = "";
+        RunOnUi(() =>
+        {
+            IsFlashing = true;
+            UpdateDone = false;
+            UpdateError = null;
+            ProgressPct = 0;
+            ProgressMessage = "";
+        });
+
+        void Log(string s)
+        {
+            Debug.WriteLine($"[DFU] {s}");
+        }
+
+        void SetProgress(string msg, double pct)
+        {
+            RunOnUi(() =>
+            {
+                ProgressMessage = msg;
+                ProgressPct = pct;
+            });
+            Log($"{msg} ({pct:0.##}%)");
+        }
 
         try
         {
             var fwPath = FirmwarePath();
             var fwBytes = await File.ReadAllBytesAsync(fwPath);
 
-            // Mirror Android/macos messaging.
-            ProgressMessage = "Starting mass erase...";
-            ProgressPct = 0;
+            SetProgress("Starting mass erase...", 0);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             var ct = cts.Token;
 
+            Log("Opening DFU device...");
             await using var dfu = await Dfu.OpenFirstAsync();
+            Log("DFU device opened.");
 
+            Log("Mass erase...");
             await dfu.MassEraseAsync(ct);
 
-            ProgressMessage = "Mass erase complete. Setting address pointer...";
-            ProgressPct = 2;
-
+            SetProgress("Mass erase complete. Setting address pointer...", 2);
+            Log("SetAddressPointer 0x08000000...");
             await dfu.SetAddressPointerAsync(0x0800_0000, ct);
 
             var totalBlocks = (fwBytes.Length + Dfu.BLOCK_SIZE - 1) / Dfu.BLOCK_SIZE;
             var totalSteps = Math.Max(1, totalBlocks * 2 + 2);
             var step = 2;
 
-            ProgressMessage = "Address pointer set. Starting flash write...";
-            ProgressPct = (step * 100.0) / totalSteps;
+            SetProgress("Address pointer set. Starting flash write...", (step * 100.0) / totalSteps);
 
             ushort blockNum = 2;
             var readBuf = new byte[Dfu.BLOCK_SIZE];
@@ -251,17 +272,14 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 var chunkLen = Math.Min(Dfu.BLOCK_SIZE, fwBytes.Length - chunkStart);
 
                 var oneBased = blockIndex + 1;
-                ProgressMessage = $"Writing block {blockNum} ({oneBased}/{totalBlocks})...";
-                ProgressPct = (step * 100.0) / totalSteps;
+                SetProgress($"Writing block {blockNum} ({oneBased}/{totalBlocks})...", (step * 100.0) / totalSteps);
 
-                // Slice chunk.
                 var chunk = new byte[chunkLen];
                 Buffer.BlockCopy(fwBytes, chunkStart, chunk, 0, chunkLen);
                 await dfu.WriteBlockAsync(chunk, blockNum, chunkLen, ct);
 
                 step += 1;
-                ProgressMessage = $"Verifying block {blockNum} ({oneBased}/{totalBlocks})...";
-                ProgressPct = (step * 100.0) / totalSteps;
+                SetProgress($"Verifying block {blockNum} ({oneBased}/{totalBlocks})...", (step * 100.0) / totalSteps);
 
                 await dfu.ReadBlockAsync(readBuf, blockNum, chunkLen, ct);
 
@@ -277,18 +295,21 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 blockNum += 1;
             }
 
-            ProgressMessage = "Flash write completed successfully.";
-            ProgressPct = 100;
-            UpdateDone = true;
+            SetProgress("Flash write completed successfully.", 100);
+            RunOnUi(() => UpdateDone = true);
         }
         catch (Exception ex)
         {
-            // COMException messages are often empty; keep full details for debugging.
-            UpdateError = ex.ToString();
+            Log($"FAILED: {ex}");
+            RunOnUi(() =>
+            {
+                // COMException messages are often empty; keep full details for debugging.
+                UpdateError = ex.ToString();
+            });
         }
         finally
         {
-            IsFlashing = false;
+            RunOnUi(() => IsFlashing = false);
         }
     }
 
