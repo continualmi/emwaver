@@ -145,7 +145,18 @@ public sealed partial class MainWindow : Window
             ScriptsCommandBar.Visibility = Visibility.Collapsed;
         }
 
-        BackButton.IsEnabled = ContentFrame.CanGoBack;
+        // Top-level navigation UX
+        var isSettings = e.Content is SettingsPage;
+
+        // Settings is a "focused" page: hide device/connect + script toolbar clutter.
+        DeviceMenuButton.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        ScriptsCommandBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        AppCommandBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+
+        TopBackButton.Visibility = isSettings ? Visibility.Visible : Visibility.Collapsed;
+        TopAppIcon.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+
+        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 
     private void OnBackClick(object sender, RoutedEventArgs e)
@@ -154,13 +165,13 @@ public sealed partial class MainWindow : Window
         {
             ContentFrame.GoBack();
         }
-        BackButton.IsEnabled = ContentFrame.CanGoBack;
+        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 
     private void OnTopSettingsClick(object sender, RoutedEventArgs e)
     {
         ContentFrame.Navigate(typeof(SettingsPage));
-        BackButton.IsEnabled = ContentFrame.CanGoBack;
+        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 
     private void RunOnUi(Action action)
@@ -457,6 +468,6 @@ public sealed partial class MainWindow : Window
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         ContentFrame.Navigate(typeof(SettingsPage));
-        BackButton.IsEnabled = ContentFrame.CanGoBack;
+        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 }
