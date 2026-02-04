@@ -13,6 +13,8 @@ struct ContentView: View {
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @EnvironmentObject private var auth: AuthenticationManager
 
+    @State private var showingDeviceSheet: Bool = false
+
     var body: some View {
         NavigationStack {
             ScriptsRootView(device: device) {
@@ -24,20 +26,26 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                HStack(spacing: 8) {
-                    if device.isConnected {
-                        Label("Connected", systemImage: "cable.connector")
-                    } else if firmwareUpdater.dfuConnected {
-                        Label("Update Mode", systemImage: "arrow.triangle.2.circlepath")
-                    } else {
-                        Label("Disconnected", systemImage: "cable.connector.slash")
-                    }
+                Button {
+                    showingDeviceSheet = true
+                } label: {
+                    HStack(spacing: 8) {
+                        if device.isConnected {
+                            Label(device.connectedPortName ?? "Connected", systemImage: "cable.connector")
+                        } else if firmwareUpdater.dfuConnected {
+                            Label("Update Mode", systemImage: "arrow.triangle.2.circlepath")
+                        } else {
+                            Label("Disconnected", systemImage: "cable.connector.slash")
+                        }
 
-                    if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
-                        Text("EMWaver \(v)")
-                            .foregroundStyle(.secondary)
+                        if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
+                            Text("EMWaver \(v)")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
+                .buttonStyle(.plain)
+                .help("Device / connection options")
             }
 
             ToolbarItem(placement: .automatic) {
@@ -68,6 +76,9 @@ struct ContentView: View {
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
                 .environmentObject(auth)
+        }
+        .sheet(isPresented: $showingDeviceSheet) {
+            DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
         }
     }
 }
