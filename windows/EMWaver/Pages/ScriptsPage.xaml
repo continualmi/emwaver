@@ -44,28 +44,61 @@
 
             <!-- Editor (native, embedded; no popup HWND) -->
             <Border Grid.Column="1" Margin="12,0,0,0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <Grid>
-                    <TextBox
-                        x:Name="EditorBox"
-                        BorderThickness="0"
-                        Background="#1E1E1E"
-                        Foreground="#D4D4D4"
-                        FontFamily="Consolas"
-                        FontSize="13"
-                        TextWrapping="NoWrap"
-                        AcceptsReturn="True"
-                        IsSpellCheckEnabled="False"
-                        IsTextPredictionEnabled="False"
-                        ScrollViewer.VerticalScrollBarVisibility="Auto"
-                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                        TextChanged="OnEditorTextChanged" />
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
-                    <TextBlock
-                        x:Name="EmptyHint"
-                        Text="Pick a script to view/edit."
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        VerticalAlignment="Center"
-                        HorizontalAlignment="Center" />
+                    <!-- Read-only hint for bundled scripts -->
+                    <Border
+                        x:Name="ReadOnlyBanner"
+                        Grid.Row="0"
+                        CornerRadius="6"
+                        Background="#242424"
+                        BorderBrush="#3A3A3A"
+                        BorderThickness="1"
+                        Padding="10"
+                        Visibility="Collapsed">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Text="Bundled script (read-only). Make a copy to edit."
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                VerticalAlignment="Center" />
+                            <Button
+                                Grid.Column="1"
+                                Content="Make a copy"
+                                Click="OnMakeCopyBannerClick" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <TextBox
+                            x:Name="EditorBox"
+                            BorderThickness="0"
+                            Background="#1E1E1E"
+                            Foreground="#D4D4D4"
+                            FontFamily="Consolas"
+                            FontSize="13"
+                            TextWrapping="NoWrap"
+                            AcceptsReturn="True"
+                            IsSpellCheckEnabled="False"
+                            IsTextPredictionEnabled="False"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                            TextChanged="OnEditorTextChanged" />
+
+                        <TextBlock
+                            x:Name="EmptyHint"
+                            Text="Pick a script to view/edit."
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center" />
+                    </Grid>
                 </Grid>
             </Border>
 

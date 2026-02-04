@@ -173,6 +173,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = false;
 
             EmptyHint.Visibility = Visibility.Collapsed;
+            ReadOnlyBanner.Visibility = script.IsBundled ? Visibility.Visible : Visibility.Collapsed;
 
             UpdateCommandStates();
             await Task.CompletedTask;
@@ -196,6 +197,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = false;
 
             EmptyHint.Visibility = Visibility.Visible;
+            ReadOnlyBanner.Visibility = Visibility.Collapsed;
             UpdateCommandStates();
             await Task.CompletedTask;
         });
@@ -273,6 +275,12 @@ public sealed partial class ScriptsPage : Page
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         await RefreshAsync();
+    }
+
+    private void OnMakeCopyBannerClick(object sender, RoutedEventArgs e)
+    {
+        // Same behavior as the toolbar copy action.
+        OnMakeCopyClick(sender, e);
     }
 
     private async void OnNewClick(object sender, RoutedEventArgs e)
