@@ -119,18 +119,30 @@ def list_files():
 
 @files_bp.get("/files/content")
 def get_file_content():
-    """Download bytes for a file by name."""
+    """Download bytes for a file.
+
+    Preferred: pass blob_key (exact key returned by GET /v1/files).
+    Legacy: pass name (downloads u/<uid>/<name>).
+    """
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
+    blob_key = (request.args.get("blob_key") or "").strip()
     name = _sanitize_name(request.args.get("name") or "")
-    if not name:
-        return jsonify({"error": "Missing or invalid 'name'"}), 400
+
+    if blob_key:
+        expected_prefix = f"u/{uid}/"
+        if not blob_key.startswith(expected_prefix):
+            return jsonify({"error": "Invalid 'blob_key'"}), 400
+    else:
+        if not name:
+            return jsonify({"error": "Missing or invalid 'name'"}), 400
+        blob_key = _blob_key(uid, name)
 
     svc = _azure_blob_service(config)
-    blob = svc.get_blob_client(container=config.azure_blob_container, blob=_blob_key(uid, name))
+    blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
 
     try:
         downloader = blob.download_blob()
