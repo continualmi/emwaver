@@ -118,10 +118,10 @@ public sealed partial class ScriptsPage
                 var range = RichEditor.Document.GetRange(sp.Start, sp.Start + sp.Length);
                 range.CharacterFormat.ForegroundColor = sp.Kind switch
                 {
-                    SyntaxHighlighter.TokenKind.Comment => Color.FromArgb(0xFF, 0x6A, 0x99, 0x55),
-                    SyntaxHighlighter.TokenKind.String => Color.FromArgb(0xFF, 0xCE, 0x91, 0x78),
-                    SyntaxHighlighter.TokenKind.Number => Color.FromArgb(0xFF, 0xB5, 0xCE, 0xA8),
-                    SyntaxHighlighter.TokenKind.Keyword => Color.FromArgb(0xFF, 0x56, 0x9C, 0xD6),
+                    SyntaxHighlighter.TokenKind.Comment => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x6A, 0x99, 0x55),
+                    SyntaxHighlighter.TokenKind.String => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xCE, 0x91, 0x78),
+                    SyntaxHighlighter.TokenKind.Number => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xB5, 0xCE, 0xA8),
+                    SyntaxHighlighter.TokenKind.Keyword => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x56, 0x9C, 0xD6),
                     _ => Colors.Gainsboro,
                 };
             }
