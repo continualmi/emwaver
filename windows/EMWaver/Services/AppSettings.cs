@@ -12,8 +12,8 @@ internal sealed class AppSettings
 
     private sealed class SettingsModel
     {
-        // "simple" | "rich" | "monaco"
-        public string EditorMode { get; set; } = "monaco";
+        // "simple" | "code"
+        public string EditorMode { get; set; } = "code";
 
         // Back-compat for older builds. If present, we migrate to EditorMode.
         public bool? UseMonacoEditor { get; set; }
@@ -42,7 +42,7 @@ internal sealed class AppSettings
             // Migrate legacy bool toggle (if present) into EditorMode.
             if (model.UseMonacoEditor.HasValue)
             {
-                model.EditorMode = model.UseMonacoEditor.Value ? "monaco" : "simple";
+                model.EditorMode = model.UseMonacoEditor.Value ? "code" : "simple";
                 model.UseMonacoEditor = null;
             }
 
@@ -84,8 +84,7 @@ internal sealed class AppSettings
                 return Load().EditorMode switch
                 {
                     "simple" => EMWaver.Services.EditorMode.Simple,
-                    "rich" => EMWaver.Services.EditorMode.Rich,
-                    _ => EMWaver.Services.EditorMode.Monaco,
+                    _ => EMWaver.Services.EditorMode.Code,
                 };
             }
         }
@@ -97,8 +96,7 @@ internal sealed class AppSettings
                 m.EditorMode = value switch
                 {
                     EMWaver.Services.EditorMode.Simple => "simple",
-                    EMWaver.Services.EditorMode.Rich => "rich",
-                    _ => "monaco",
+                    _ => "code",
                 };
                 Save(m);
             }
@@ -109,7 +107,7 @@ internal sealed class AppSettings
     // Back-compat API used by older UI code paths.
     public bool UseMonacoEditor
     {
-        get => EditorMode == EMWaver.Services.EditorMode.Monaco;
-        set => EditorMode = value ? EMWaver.Services.EditorMode.Monaco : EMWaver.Services.EditorMode.Simple;
+        get => EditorMode == EMWaver.Services.EditorMode.Code;
+        set => EditorMode = value ? EMWaver.Services.EditorMode.Code : EMWaver.Services.EditorMode.Simple;
     }
 }

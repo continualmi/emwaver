@@ -57,8 +57,8 @@ internal static class SyntaxHighlighter
                 continue;
             }
 
-            // Strings: '...' or "..." (no template strings for now)
-            if (c == '\'' || c == '"')
+            // Strings: '...' or "..." or template strings `...`
+            if (c == '\'' || c == '"' || c == '`')
             {
                 int start = i;
                 char quote = c;
@@ -67,6 +67,8 @@ internal static class SyntaxHighlighter
                 {
                     var ch = text[i];
                     if (ch == '\\') { i += 2; continue; }
+
+                    // template strings can span newlines; regular quotes typically don't, but we'll just scan safely.
                     i++;
                     if (ch == quote) break;
                 }
@@ -109,17 +111,44 @@ internal static class SyntaxHighlighter
 
     private static bool IsKeyword(ReadOnlySpan<char> w)
     {
-        // Keep this tiny and stable. Add more later.
+        // JS/TS-ish keyword list (not exhaustive, but much closer than the previous minimal set).
         return w.SequenceEqual("export".AsSpan())
             || w.SequenceEqual("default".AsSpan())
+            || w.SequenceEqual("import".AsSpan())
+            || w.SequenceEqual("from".AsSpan())
+            || w.SequenceEqual("as".AsSpan())
             || w.SequenceEqual("function".AsSpan())
             || w.SequenceEqual("return".AsSpan())
             || w.SequenceEqual("if".AsSpan())
             || w.SequenceEqual("else".AsSpan())
             || w.SequenceEqual("for".AsSpan())
             || w.SequenceEqual("while".AsSpan())
+            || w.SequenceEqual("do".AsSpan())
+            || w.SequenceEqual("switch".AsSpan())
+            || w.SequenceEqual("case".AsSpan())
+            || w.SequenceEqual("break".AsSpan())
+            || w.SequenceEqual("continue".AsSpan())
+            || w.SequenceEqual("try".AsSpan())
+            || w.SequenceEqual("catch".AsSpan())
+            || w.SequenceEqual("finally".AsSpan())
+            || w.SequenceEqual("throw".AsSpan())
+            || w.SequenceEqual("const".AsSpan())
+            || w.SequenceEqual("let".AsSpan())
+            || w.SequenceEqual("var".AsSpan())
+            || w.SequenceEqual("class".AsSpan())
+            || w.SequenceEqual("extends".AsSpan())
+            || w.SequenceEqual("new".AsSpan())
+            || w.SequenceEqual("this".AsSpan())
+            || w.SequenceEqual("super".AsSpan())
+            || w.SequenceEqual("await".AsSpan())
+            || w.SequenceEqual("async".AsSpan())
+            || w.SequenceEqual("yield".AsSpan())
+            || w.SequenceEqual("typeof".AsSpan())
+            || w.SequenceEqual("instanceof".AsSpan())
+            || w.SequenceEqual("in".AsSpan())
             || w.SequenceEqual("true".AsSpan())
             || w.SequenceEqual("false".AsSpan())
-            || w.SequenceEqual("null".AsSpan());
+            || w.SequenceEqual("null".AsSpan())
+            || w.SequenceEqual("undefined".AsSpan());
     }
 }

@@ -109,18 +109,7 @@
                                 IsTextPredictionEnabled="False"
                                 TextChanged="OnRichEditorTextChanged" />
 
-                            <!-- Monaco editor (WebView2) -->
-                            <Grid x:Name="MonacoHost" Visibility="Collapsed">
-                                <WebView2 x:Name="MonacoView" />
-
-                                <!-- Loading overlay (Monaco can take time / fail). -->
-                                <Border x:Name="MonacoLoadingOverlay" Background="#AA000000" Visibility="Collapsed">
-                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                                        <ProgressRing IsActive="True" Width="28" Height="28" />
-                                        <TextBlock Text="Loading Monaco editor…" Foreground="White" />
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
+                            <!-- -->
 
                             <TextBlock
                                 x:Name="EmptyHint"

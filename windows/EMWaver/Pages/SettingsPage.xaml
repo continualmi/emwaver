@@ -42,11 +42,10 @@
 
                     <ComboBox x:Name="EditorModeCombo" SelectionChanged="OnEditorModeChanged" Width="260">
                         <ComboBoxItem Content="Simple" Tag="simple" />
-                        <ComboBoxItem Content="Highlighted" Tag="rich" />
-                        <ComboBoxItem Content="Monaco" Tag="monaco" />
+                        <ComboBoxItem Content="Code (JS)" Tag="code" />
                     </ComboBox>
 
-                    <TextBlock Text="Monaco uses WebView2 and may fail on some machines. Highlighted uses RichEditBox with lightweight syntax highlighting." Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Code editor is native (RichEdit document formatting) and uses JS-focused tokenization." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
