@@ -1,190 +1,170 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import time
-import uuid
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, Response, jsonify, request, current_app
-from sqlalchemy.orm import Session
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from emw_backend.auth import verify_request_identity
 from emw_backend.config import Config
-from emw_backend.db import SessionLocal
-from emw_backend.models import User, UserFile
-from emw_backend.storage_azure import AzureBlobConfig
-
-# We use a simple backend-mediated upload/download flow (no SAS).
-
 
 files_bp = Blueprint("files", __name__, url_prefix="/v1")
 
 
-def _now_epoch() -> int:
-    return int(time.time())
+def _now_epoch_ms() -> int:
+    return int(time.time() * 1000)
 
 
-def _file_ext(name: str) -> str:
-    if "." not in name:
-        return ""
-    dot = name.rfind(".")
-    return name[dot:] if dot >= 0 else ""
+def _azure_blob_service(config: Config):
+    from azure.storage.blob import BlobServiceClient
+
+    if not config.azure_storage_account or not config.azure_storage_key or not config.azure_blob_container:
+        raise RuntimeError(
+            "Azure Blob storage is not configured (AZURE_STORAGE_ACCOUNT/AZURE_STORAGE_KEY/AZURE_BLOB_CONTAINER)"
+        )
+
+    url = f"https://{config.azure_storage_account}.blob.core.windows.net"
+    return BlobServiceClient(account_url=url, credential=config.azure_storage_key)
 
 
-def _azure_cfg(config: Config) -> AzureBlobConfig:
-    return AzureBlobConfig(
-        account=config.azure_storage_account,
-        key=config.azure_storage_key,
-        container=config.azure_blob_container,
-    )
-
-
-def _file_json(f: UserFile) -> Dict[str, Any]:
-    return {
-        "metadata": {
-            "id": f.id,
-            "name": f.name,
-            "extension": f.extension or "",
-            "file_extension": f.extension or "",
-            "kind": f.kind,
-            "etag": f.etag,
-            "size_bytes": int(f.size_bytes),
-            "content_type": f.content_type,
-            "sha256": f.content_sha256,
-        },
-        "storage": {
-            "provider": f.storage_provider,
-            "container": f.blob_container,
-            "blob_key": f.blob_key,
-        },
-    }
-
-
-class UserCtx:
-    __slots__ = ("id", "firebase_uid")
-
-    def __init__(self, *, id: str, firebase_uid: str):
-        self.id = id
-        self.firebase_uid = firebase_uid
-
-
-def _require_user(config: Config) -> Optional[UserCtx]:
+def _require_user_uid(config: Config) -> Optional[str]:
     ident = verify_request_identity(request, config)
-    if not ident:
+    return ident.uid if ident else None
+
+
+def _sanitize_name(raw: str) -> Optional[str]:
+    """User-visible file name.
+
+    We store blobs at: u/<uid>/<name>
+
+    Constraints:
+    - no empty name
+    - no backslashes
+    - no parent traversal
+    - no absolute paths
+    - allow subfolders later if we want; for now keep it flat.
+    """
+    name = (raw or "").strip()
+    if not name:
         return None
+    if "\\" in name:
+        return None
+    if name.startswith("/"):
+        return None
+    if ".." in name.split("/"):
+        return None
+    if "/" in name:
+        # keep it simple: flat namespace for now
+        return None
+    return name
 
-    db: Session = SessionLocal()
+
+def _blob_key(uid: str, name: str) -> str:
+    return f"u/{uid}/{name}"
+
+
+def _dt_to_iso(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def _file_json_from_blob(blob: Any) -> Dict[str, Any]:
+    # Azure returns metadata keys lowercased in practice.
+    md = getattr(blob, "metadata", None) or {}
+    mtime_ms = md.get("mtime_ms")
     try:
-        user = db.query(User).filter(User.firebase_uid == ident.uid).one_or_none()
-        now = _now_epoch()
-        if user is None:
-            user = User(
-                firebase_uid=ident.uid,
-                email=ident.email,
-                display_name=ident.display_name,
-                created_at=now,
-                last_seen_at=now,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        else:
-            user.last_seen_at = now
-            db.commit()
+        mtime_ms_int = int(mtime_ms) if mtime_ms is not None else None
+    except Exception:
+        mtime_ms_int = None
 
-        # Return a detached-safe snapshot.
-        return UserCtx(id=str(user.id), firebase_uid=str(user.firebase_uid))
-    finally:
-        db.close()
+    return {
+        "name": blob.name.split("/")[-1],
+        "blob_key": blob.name,
+        "etag": getattr(blob, "etag", None),
+        "size_bytes": int(getattr(blob, "size", 0) or 0),
+        "last_modified": _dt_to_iso(getattr(blob, "last_modified", None)),
+        "content_type": getattr(getattr(blob, "content_settings", None), "content_type", None),
+        "mtime_ms": mtime_ms_int,
+    }
 
 
 @files_bp.get("/files")
 def list_files():
+    """List all user files (blobs-only)."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
+    uid = _require_user_uid(config)
+    if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
-    kind = (request.args.get("kind") or "").strip()
-    ext = (request.args.get("ext") or "").strip()
+    svc = _azure_blob_service(config)
+    container = svc.get_container_client(config.azure_blob_container)
 
-    db: Session = SessionLocal()
-    try:
-        q = db.query(UserFile).filter(UserFile.user_id == user.id)
-        if kind:
-            q = q.filter(UserFile.kind == kind)
-        if ext:
-            q = q.filter(UserFile.extension == ext)
-        q = q.order_by(UserFile.name.asc())
-        files = q.all()
-        return jsonify({"files": [_file_json(f) for f in files]})
-    finally:
-        db.close()
+    prefix = f"u/{uid}/"
+    blobs = container.list_blobs(name_starts_with=prefix, include=["metadata"])
+
+    files: List[Dict[str, Any]] = []
+    for b in blobs:
+        # b.name is full key
+        files.append(_file_json_from_blob(b))
+
+    files.sort(key=lambda x: x.get("name") or "")
+    return jsonify({"files": files})
 
 
-@files_bp.get("/files/<file_id>")
-def get_file(file_id: str):
-    """Metadata only.
-
-    File content is stored in Azure Blob. Use:
-    - GET /v1/files/<id>/content to fetch bytes through backend
-    """
+@files_bp.get("/files/content")
+def get_file_content():
+    """Download bytes for a file by name."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
+    uid = _require_user_uid(config)
+    if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
-    db: Session = SessionLocal()
+    name = _sanitize_name(request.args.get("name") or "")
+    if not name:
+        return jsonify({"error": "Missing or invalid 'name'"}), 400
+
+    svc = _azure_blob_service(config)
+    blob = svc.get_blob_client(container=config.azure_blob_container, blob=_blob_key(uid, name))
+
     try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.id == file_id)
-            .one_or_none()
-        )
-        if f is None:
+        downloader = blob.download_blob()
+        data = downloader.readall()
+        props = blob.get_blob_properties()
+    except Exception as e:
+        msg = str(e)
+        if "BlobNotFound" in msg or "The specified blob does not exist" in msg:
             return jsonify({"error": "Not found"}), 404
-        return jsonify(_file_json(f))
-    finally:
-        db.close()
+        return jsonify({"error": f"Azure download failed: {msg}"}), 502
+
+    ct = getattr(getattr(props, "content_settings", None), "content_type", None) or "application/octet-stream"
+    return Response(data, mimetype=ct)
 
 
 @files_bp.post("/files/upload")
-def upload_file_via_backend():
-    """One-shot upload through backend (no SAS).
-
-    This is a simpler flow than the legacy SAS-based upload.
-
-    Request JSON:
-      {
-        "kind": "script"|"signal_raw"|"signal_text"|...,   (required)
-        "name": "tesla.raw",                               (required)
-        "content_type": "application/octet-stream",        (optional)
-        "data_base64": "...",                               (required)
-        "size_bytes": 1234                                   (optional)
-      }
-
-    Overwrite semantics:
-      - If a file with same (user, kind, name) exists, its blob is overwritten in-place.
-    """
+def upload_file():
+    """Upload bytes for a file by name (overwrite)."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
+    uid = _require_user_uid(config)
+    if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
     payload = request.get_json(force=True, silent=False)
     if not isinstance(payload, dict):
         return jsonify({"error": "Invalid JSON payload"}), 400
 
-    kind = str(payload.get("kind") or "file").strip()
-    name = str(payload.get("name") or "").strip()
+    name = _sanitize_name(str(payload.get("name") or ""))
     content_type = payload.get("content_type")
     data_b64 = payload.get("data_base64")
-    size_bytes_raw = payload.get("size_bytes")
+    mtime_ms_raw = payload.get("mtime_ms")
 
     if not name:
-        return jsonify({"error": "Missing 'name'"}), 400
+        return jsonify({"error": "Missing or invalid 'name'"}), 400
     if not data_b64 or not isinstance(data_b64, str):
         return jsonify({"error": "Missing 'data_base64'"}), 400
     if content_type is not None and not isinstance(content_type, str):
@@ -195,216 +175,67 @@ def upload_file_via_backend():
     except Exception:
         return jsonify({"error": "Invalid base64 in 'data_base64'"}), 400
 
-    if size_bytes_raw is not None:
+    mtime_ms: int
+    if mtime_ms_raw is None:
+        mtime_ms = _now_epoch_ms()
+    else:
         try:
-            size_bytes = int(size_bytes_raw)
+            mtime_ms = int(mtime_ms_raw)
         except Exception:
-            return jsonify({"error": "Invalid 'size_bytes'"}), 400
-        if size_bytes < 0:
-            return jsonify({"error": "Invalid 'size_bytes'"}), 400
-        if size_bytes != len(data):
-            return jsonify({"error": "'size_bytes' does not match decoded data length"}), 400
+            return jsonify({"error": "Invalid 'mtime_ms'"}), 400
 
-    ext = _file_ext(name)
-    now = str(_now_epoch())
-    sha256_hex = hashlib.sha256(data).hexdigest()
+    svc = _azure_blob_service(config)
+    blob = svc.get_blob_client(container=config.azure_blob_container, blob=_blob_key(uid, name))
 
-    # Upsert DB record by (user_id, kind, name)
-    db: Session = SessionLocal()
     try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.kind == kind)
-            .filter(UserFile.name == name)
-            .one_or_none()
+        from azure.storage.blob import ContentSettings
+
+        blob.upload_blob(
+            data,
+            overwrite=True,
+            content_settings=ContentSettings(content_type=content_type or "application/octet-stream"),
+            metadata={"mtime_ms": str(mtime_ms)},
         )
+        props = blob.get_blob_properties()
+    except Exception as e:
+        return jsonify({"error": f"Azure upload failed: {str(e)}"}), 502
 
-        if f is None:
-            file_id = str(uuid.uuid4())
-            blob_key = f"u/{user.firebase_uid}/{file_id}/{name}"
-            f = UserFile(
-                id=file_id,
-                user_id=user.id,
-                kind=kind,
-                name=name,
-                extension=ext,
-                content_type=content_type or "application/octet-stream",
-                storage_provider="azure_blob",
-                blob_container=config.azure_blob_container,
-                blob_key=blob_key,
-                size_bytes=len(data),
-                content_sha256=sha256_hex,
-                etag=now,
-                created_at=int(now),
-                updated_at=int(now),
-            )
-            db.add(f)
-            db.commit()
-            db.refresh(f)
-        else:
-            # Overwrite existing blob in-place.
-            f.content_type = content_type or f.content_type or "application/octet-stream"
-            f.size_bytes = len(data)
-            f.content_sha256 = sha256_hex
-            f.etag = now
-            f.updated_at = int(now)
-            db.commit()
-            db.refresh(f)
-
-        # Upload bytes to Azure via account key.
-        try:
-            from azure.storage.blob import BlobServiceClient
-            from azure.storage.blob import ContentSettings
-
-            cfg = _azure_cfg(config)
-            bs = BlobServiceClient(account_url=f"https://{cfg.account}.blob.core.windows.net", credential=cfg.key)
-            bc = bs.get_blob_client(container=cfg.container, blob=f.blob_key)
-            bc.upload_blob(
-                data,
-                overwrite=True,
-                content_settings=ContentSettings(content_type=f.content_type),
-            )
-        except Exception as e:
-            return jsonify({"error": f"Azure upload failed: {e}"}), 502
-
-        return jsonify({"file": _file_json(f)}), 200
-    finally:
-        db.close()
+    # Return metadata (best-effort)
+    return jsonify(
+        {
+            "file": {
+                "name": name,
+                "blob_key": _blob_key(uid, name),
+                "etag": getattr(props, "etag", None),
+                "size_bytes": int(getattr(props, "size", 0) or len(data)),
+                "last_modified": _dt_to_iso(getattr(props, "last_modified", None)),
+                "content_type": getattr(getattr(props, "content_settings", None), "content_type", None),
+                "mtime_ms": mtime_ms,
+            }
+        }
+    )
 
 
-@files_bp.get("/files/<file_id>/content")
-def download_content_via_backend(file_id: str):
-    """Downloads file bytes through backend (no SAS).
-
-    Intended for manual testing and debugging.
-    """
+@files_bp.delete("/files")
+def delete_file():
     config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
+    uid = _require_user_uid(config)
+    if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
-    db: Session = SessionLocal()
+    name = _sanitize_name(request.args.get("name") or "")
+    if not name:
+        return jsonify({"error": "Missing or invalid 'name'"}), 400
+
+    svc = _azure_blob_service(config)
+    blob = svc.get_blob_client(container=config.azure_blob_container, blob=_blob_key(uid, name))
+
     try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.id == file_id)
-            .one_or_none()
-        )
-        if f is None:
+        blob.delete_blob()
+    except Exception as e:
+        msg = str(e)
+        if "BlobNotFound" in msg or "The specified blob does not exist" in msg:
             return jsonify({"error": "Not found"}), 404
+        return jsonify({"error": f"Azure delete failed: {msg}"}), 502
 
-        try:
-            from azure.storage.blob import BlobServiceClient
-
-            cfg = _azure_cfg(config)
-            bs = BlobServiceClient(account_url=f"https://{cfg.account}.blob.core.windows.net", credential=cfg.key)
-            bc = bs.get_blob_client(container=cfg.container, blob=f.blob_key)
-            data = bc.download_blob().readall()
-        except Exception as e:
-            return jsonify({"error": f"Azure download failed: {e}"}), 502
-
-        return Response(data, mimetype=f.content_type)
-    finally:
-        db.close()
-
-
-@files_bp.post("/files/<file_id>/rename")
-def rename_file(file_id: str):
-    config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    payload = request.get_json(force=True, silent=False)
-    if not isinstance(payload, dict):
-        return jsonify({"error": "Invalid JSON payload"}), 400
-
-    new_name = str(payload.get("name") or "").strip()
-    if not new_name:
-        return jsonify({"error": "Missing 'name'"}), 400
-
-    db: Session = SessionLocal()
-    try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.id == file_id)
-            .one_or_none()
-        )
-        if f is None:
-            return jsonify({"error": "Not found"}), 404
-
-        existing = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.kind == f.kind)
-            .filter(UserFile.name == new_name)
-            .one_or_none()
-        )
-        if existing is not None and existing.id != f.id:
-            return jsonify({"error": "Name already in use"}), 409
-
-        now = str(_now_epoch())
-        f.name = new_name
-        f.extension = _file_ext(new_name)
-        # Note: blob_key is not renamed; name is logical/metadata.
-        f.etag = now
-        f.updated_at = int(now)
-        db.commit()
-        db.refresh(f)
-        return jsonify(_file_json(f))
-    finally:
-        db.close()
-
-
-@files_bp.delete("/files/<file_id>")
-def delete_file(file_id: str):
-    config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    expected_etag = (request.args.get("etag") or "").strip()
-    if not expected_etag:
-        return jsonify({"error": "Missing 'etag'"}), 400
-
-    db: Session = SessionLocal()
-    try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.id == file_id)
-            .one_or_none()
-        )
-        if f is None:
-            return jsonify({"error": "Not found"}), 404
-        if f.etag != expected_etag:
-            return jsonify({"error": "Conflict", "current": _file_json(f)}), 409
-
-        # Best-effort: we do not fail delete if blob deletion fails.
-        try:
-            from azure.storage.blob import BlobServiceClient
-
-            cfg = _azure_cfg(config)
-            bs = BlobServiceClient(account_url=f"https://{cfg.account}.blob.core.windows.net", credential=cfg.key)
-            bc = bs.get_blob_client(container=cfg.container, blob=f.blob_key)
-            bc.delete_blob(delete_snapshots="include")
-        except Exception:
-            pass
-
-        db.delete(f)
-        db.commit()
-        return jsonify({"ok": True})
-    finally:
-        db.close()
-
-
-# Legacy endpoints (v1 text mode) are intentionally removed from the main flow.
-# If any older client still calls them, return a clear error.
-
-
-@files_bp.put("/files/<file_id>")
-def legacy_update_file(file_id: str):
-    return jsonify({"error": "Deprecated."}), 410
+    return jsonify({"ok": True})

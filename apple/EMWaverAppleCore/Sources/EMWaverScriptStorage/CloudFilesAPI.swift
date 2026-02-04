@@ -24,32 +24,24 @@ public enum CloudFilesAPIError: LocalizedError {
     }
 }
 
-public struct CloudFileMetadata: Codable, Equatable {
-    public struct Metadata: Codable, Equatable {
-        public let id: String
-        public let name: String
-        public let extensionValue: String?
-        public let fileExtension: String?
-        public let kind: String
-        public let etag: String?
-        public let sizeBytes: Int64?
-        public let contentType: String?
-        public let sha256: String?
+public struct CloudUserFile: Codable, Equatable {
+    public let name: String
+    public let blobKey: String
+    public let etag: String?
+    public let sizeBytes: Int64?
+    public let lastModified: String?
+    public let contentType: String?
+    public let mtimeMs: Int64?
 
-        private enum CodingKeys: String, CodingKey {
-            case id
-            case name
-            case extensionValue = "extension"
-            case fileExtension = "file_extension"
-            case kind
-            case etag
-            case sizeBytes = "size_bytes"
-            case contentType = "content_type"
-            case sha256
-        }
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case blobKey = "blob_key"
+        case etag
+        case sizeBytes = "size_bytes"
+        case lastModified = "last_modified"
+        case contentType = "content_type"
+        case mtimeMs = "mtime_ms"
     }
-
-    public let metadata: Metadata
 }
 
 public final class CloudFilesAPI {
@@ -63,13 +55,8 @@ public final class CloudFilesAPI {
 
     public init() {}
 
-    public func listFiles(baseURL: URL, accessToken: String, kind: String, ext: String) async throws -> [CloudFileMetadata] {
-        var components = URLComponents(url: baseURL.appendingPathComponent("v1/files"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "kind", value: kind),
-            URLQueryItem(name: "ext", value: ext),
-        ]
-        guard let url = components?.url else { throw CloudFilesAPIError.invalidBaseURL }
+    public func listFiles(baseURL: URL, accessToken: String) async throws -> [CloudUserFile] {
+        let url = baseURL.appendingPathComponent("v1/files")
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -80,27 +67,24 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
-        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files?kind=\(kind)&ext=\(ext) -> \(http.statusCode)")
+        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files -> \(http.statusCode)")
         try validate(http: http, data: data)
 
-        struct Body: Codable { let files: [CloudFileMetadata] }
+        struct Body: Codable { let files: [CloudUserFile] }
         guard let decoded = try? JSONDecoder().decode(Body.self, from: data) else {
             throw CloudFilesAPIError.invalidResponse
         }
         return decoded.files
     }
 
-
-
-
     public func uploadViaBackend(
         baseURL: URL,
         accessToken: String,
-        kind: String,
         name: String,
         contentType: String,
-        bytes: Data
-    ) async throws -> CloudFileMetadata {
+        bytes: Data,
+        mtimeMs: Int64
+    ) async throws -> CloudUserFile {
         let url = baseURL.appendingPathComponent("v1/files/upload")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -111,28 +95,30 @@ public final class CloudFilesAPI {
         }
 
         let payload: [String: Any] = [
-            "kind": kind,
             "name": name,
             "content_type": contentType,
             "data_base64": bytes.base64EncodedString(),
-            "size_bytes": Int64(bytes.count),
+            "mtime_ms": Int64(mtimeMs),
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
-        os_log("%{public}@", log: Self.log, type: .fault, "POST /v1/files/upload kind=\(kind) name=\(name) bytes=\(bytes.count) -> \(http.statusCode)")
+        os_log("%{public}@", log: Self.log, type: .fault, "POST /v1/files/upload name=\(name) bytes=\(bytes.count) -> \(http.statusCode)")
         try validate(http: http, data: data)
 
-        struct Body: Codable { let file: CloudFileMetadata }
+        struct Body: Codable { let file: CloudUserFile }
         guard let decoded = try? JSONDecoder().decode(Body.self, from: data) else {
             throw CloudFilesAPIError.invalidResponse
         }
         return decoded.file
     }
 
-    public func downloadContentViaBackend(baseURL: URL, accessToken: String, fileId: String) async throws -> (data: Data, contentType: String?) {
-        let url = baseURL.appendingPathComponent("v1/files/\(fileId)/content")
+    public func downloadContentViaBackend(baseURL: URL, accessToken: String, name: String) async throws -> (data: Data, contentType: String?) {
+        var components = URLComponents(url: baseURL.appendingPathComponent("v1/files/content"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "name", value: name)]
+        guard let url = components?.url else { throw CloudFilesAPIError.invalidBaseURL }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         if !accessToken.isEmpty {
@@ -141,16 +127,16 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
-        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files/\\(fileId)/content -> \\(http.statusCode) bytes=\\(data.count)")
+        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files/content?name=\(name) -> \(http.statusCode) bytes=\(data.count)")
         try validate(http: http, data: data)
 
         let ct = http.value(forHTTPHeaderField: "Content-Type")
         return (data, ct)
     }
 
-    public func deleteFile(baseURL: URL, accessToken: String, fileId: String, etag: String) async throws {
-        var components = URLComponents(url: baseURL.appendingPathComponent("v1/files/\(fileId)"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "etag", value: etag)]
+    public func deleteFile(baseURL: URL, accessToken: String, name: String) async throws {
+        var components = URLComponents(url: baseURL.appendingPathComponent("v1/files"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "name", value: name)]
         guard let url = components?.url else { throw CloudFilesAPIError.invalidBaseURL }
 
         var request = URLRequest(url: url)
@@ -162,8 +148,8 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
+        os_log("%{public}@", log: Self.log, type: .fault, "DELETE /v1/files?name=\(name) -> \(http.statusCode)")
         try validate(http: http, data: data)
-
         _ = data
     }
 

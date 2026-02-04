@@ -137,40 +137,23 @@ public final class ScriptsViewModel: ObservableObject {
         }
 
         do {
-            // Scripts live in Documents/scripts
+            // All user files live in Documents/scripts on macOS.
             let scriptsDir = fileService.storageDirectoryURL()
-            if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] scriptsDir=\(scriptsDir.path)") }
-            let s1 = try await syncEngine.sync(
-                baseURL: baseURL,
-                accessToken: accessToken,
-                storageDir: scriptsDir,
-                kinds: [
-                    .init(kind: "script", ext: scriptExtension, contentType: "text/plain"),
-                ],
-                policy: .preferLocal
-            )
+            if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] dir=\(scriptsDir.path)") }
 
-            // Signals live in Application Support/signals
-            let signalsDir = fileService.signalsDirectoryURL()
-            if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] signalsDir=\(signalsDir.path)") }
-            let s2 = try await syncEngine.sync(
+            let s = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
-                storageDir: signalsDir,
-                kinds: [
-                    .init(kind: "signal_raw", ext: signalRawExtension, contentType: "application/octet-stream"),
-                    .init(kind: "signal_text", ext: signalTextExtension, contentType: "text/plain"),
-                ],
-                policy: .preferLocal
+                storageDir: scriptsDir
             )
 
             await loadScripts()
             if debug {
-                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] done uploaded=\(s1.uploaded + s2.uploaded) downloaded=\(s1.downloaded + s2.downloaded) conflicts=\(s1.conflicts + s2.conflicts)")
+                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] done uploaded=\(s.uploaded) downloaded=\(s.downloaded) skipped=\(s.skipped)")
             }
             showInfo(
                 title: "Sync complete",
-                message: "Uploaded: \(s1.uploaded + s2.uploaded), Downloaded: \(s1.downloaded + s2.downloaded), Conflicts: \(s1.conflicts + s2.conflicts)"
+                message: "Uploaded: \(s.uploaded), Downloaded: \(s.downloaded), Skipped: \(s.skipped)"
             )
         } catch {
             if debug {

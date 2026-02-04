@@ -12,7 +12,7 @@ def _openapi_spec(*, base_url: str) -> dict:
         "info": {
             "title": "EMWaver Backend API",
             "version": "v1",
-            "description": "Manual Swagger UI docs. Auth: Authorization: Bearer <firebase_id_token>.",
+            "description": "Blobs-only user file store. Auth: Authorization: Bearer <firebase_id_token>.",
         },
         "servers": [{"url": base_url}],
         "components": {
@@ -30,83 +30,38 @@ def _openapi_spec(*, base_url: str) -> dict:
                     "properties": {"error": {"type": "string"}},
                     "required": ["error"],
                 },
-                "FileMetadata": {
+                "UserFile": {
                     "type": "object",
                     "properties": {
-                        "id": {"type": "string", "format": "uuid"},
-                        "name": {"type": "string"},
-                        "extension": {"type": "string"},
-                        "file_extension": {"type": "string"},
-                        "kind": {"type": "string"},
+                        "name": {"type": "string", "example": "tesla.raw"},
+                        "blob_key": {"type": "string", "example": "u/<uid>/tesla.raw"},
                         "etag": {"type": "string"},
                         "size_bytes": {"type": "integer"},
-                        "content_type": {"type": "string"},
-                        "sha256": {"type": "string", "description": "hex sha256 of file bytes", "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+                        "last_modified": {"type": "string", "nullable": True},
+                        "content_type": {"type": "string", "nullable": True},
+                        "mtime_ms": {"type": "integer", "nullable": True, "description": "User modification time (unix ms) stored in blob metadata"},
                     },
-                    "required": ["id", "name", "kind", "etag", "size_bytes", "content_type"],
-                },
-                "FileStorage": {
-                    "type": "object",
-                    "properties": {
-                        "provider": {"type": "string"},
-                        "container": {"type": "string"},
-                        "blob_key": {"type": "string"},
-                    },
-                    "required": ["provider", "container", "blob_key"],
-                },
-                "CloudFile": {
-                    "type": "object",
-                    "properties": {
-                        "metadata": {"$ref": "#/components/schemas/FileMetadata"},
-                        "storage": {"$ref": "#/components/schemas/FileStorage"},
-                    },
-                    "required": ["metadata", "storage"],
+                    "required": ["name", "blob_key", "size_bytes"],
                 },
                 "ListFilesResponse": {
                     "type": "object",
-                    "properties": {
-                        "files": {
-                            "type": "array",
-                            "items": {"$ref": "#/components/schemas/CloudFile"},
-                        }
-                    },
+                    "properties": {"files": {"type": "array", "items": {"$ref": "#/components/schemas/UserFile"}}},
                     "required": ["files"],
                 },
-                "InitUploadRequest": {
+                "UploadRequest": {
                     "type": "object",
                     "properties": {
-                        "kind": {"type": "string", "example": "script"},
-                        "name": {"type": "string", "example": "uart.emw"},
+                        "name": {"type": "string", "example": "tesla.raw"},
                         "content_type": {"type": "string", "example": "application/octet-stream"},
-                        "size_bytes": {"type": "integer", "example": 1234},
+                        "data_base64": {"type": "string", "example": "AAECAw=="},
+                        "mtime_ms": {"type": "integer", "example": 1738695200000},
                     },
-                    "required": ["kind", "name"],
+                    "required": ["name", "data_base64"],
                 },
-                "InitUploadResponse": {
+                "UploadResponse": {
                     "type": "object",
-                    "properties": {
-                        "file": {"$ref": "#/components/schemas/CloudFile"},
-                        "upload_url": {"type": "string"},
-                    },
-                    "required": ["file", "upload_url"],
-                },
-                "CommitUploadRequest": {
-                    "type": "object",
-                    "properties": {
-                        "etag": {"type": "string", "description": "etag"},
-                        "size_bytes": {"type": "integer"},
-                    },
-                    "required": ["etag"],
-                },
-                "DownloadURLResponse": {
-                    "type": "object",
-                    "properties": {"download_url": {"type": "string"}},
-                    "required": ["download_url"],
-                },
-                "RenameRequest": {
-                    "type": "object",
-                    "properties": {"name": {"type": "string"}},
-                    "required": ["name"],
+                    "properties": {"file": {"$ref": "#/components/schemas/UserFile"}},
+                    "required": ["file"],
                 },
                 "OkResponse": {
                     "type": "object",
@@ -119,315 +74,48 @@ def _openapi_spec(*, base_url: str) -> dict:
         "paths": {
             "/v1/files": {
                 "get": {
-                    "summary": "List files (metadata)",
-                    "parameters": [
-                        {
-                            "name": "kind",
-                            "in": "query",
-                            "required": False,
-                            "schema": {"type": "string"},
-                            "description": "Examples: script, signal_raw, signal_text",
-                        },
-                        {
-                            "name": "ext",
-                            "in": "query",
-                            "required": False,
-                            "schema": {"type": "string"},
-                            "description": "Examples: .emw, .raw, .txt",
-                        },
-                    ],
+                    "summary": "List all files for the current user",
                     "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"$ref": "#/components/schemas/ListFilesResponse"}
-                                }
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                    },
-                }
-            },
-            "/v1/files/upload": {
-                "post": {
-                    "summary": "Upload file via backend (overwrite by name)",
-                    "description": "One-shot flow: client sends base64 bytes to backend; backend stores in Azure and upserts metadata.",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "kind": {"type": "string", "example": "signal_raw"},
-                                        "name": {"type": "string", "example": "tesla.raw"},
-                                        "content_type": {"type": "string", "example": "application/octet-stream"},
-                                        "data_base64": {"type": "string", "example": "AAECAw=="},
-                                        "size_bytes": {"type": "integer", "example": 4},
-                                    },
-                                    "required": ["kind", "name", "data_base64"],
-                                }
-                            }
-                        },
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "properties": {"file": {"$ref": "#/components/schemas/CloudFile"}},
-                                        "required": ["file"],
-                                    }
-                                }
-                            },
-                        },
-                        "400": {
-                            "description": "Bad request",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                        "502": {
-                            "description": "Azure upload failed",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                    },
-                }
-            },
-            "/v1/files/{file_id}": {
-                "get": {
-                    "summary": "Get file metadata",
-                    "parameters": [
-                        {
-                            "name": "file_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string", "format": "uuid"},
-                        }
-                    ],
-                    "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/CloudFile"}}
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "404": {
-                            "description": "Not found",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListFilesResponse"}}}},
+                        "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
                     },
                 },
                 "delete": {
-                    "summary": "Delete file (requires etag query param)",
+                    "summary": "Delete a file by name",
                     "parameters": [
-                        {
-                            "name": "file_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string", "format": "uuid"},
-                        },
-                        {
-                            "name": "etag",
-                            "in": "query",
-                            "required": True,
-                            "schema": {"type": "string"},
-                        },
+                        {"name": "name", "in": "query", "required": True, "schema": {"type": "string"}, "example": "tesla.raw"}
                     ],
                     "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/OkResponse"}}
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "404": {
-                            "description": "Not found",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "409": {
-                            "description": "Conflict",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OkResponse"}}}},
+                        "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
                     },
                 },
             },
-            "/v1/files/{file_id}/commit-upload": {
+            "/v1/files/upload": {
                 "post": {
-                    "summary": "Commit upload (finalize after Azure PUT)",
-                    "parameters": [
-                        {
-                            "name": "file_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string", "format": "uuid"},
-                        }
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {"schema": {"$ref": "#/components/schemas/CommitUploadRequest"}}
-                        },
-                    },
+                    "summary": "Upload a file by name (overwrite)",
+                    "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadRequest"}}}},
                     "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/CloudFile"}}
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "404": {
-                            "description": "Not found",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "409": {
-                            "description": "Conflict",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UploadResponse"}}}},
+                        "400": {"description": "Bad request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "502": {"description": "Azure upload failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
                     },
                 }
             },
-            "/v1/files/{file_id}/content": {
+            "/v1/files/content": {
                 "get": {
-                    "summary": "Download file bytes via backend (no SAS)",
+                    "summary": "Download bytes for a file by name",
                     "parameters": [
-                        {
-                            "name": "file_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string", "format": "uuid"},
-                        }
+                        {"name": "name", "in": "query", "required": True, "schema": {"type": "string"}, "example": "tesla.raw"}
                     ],
                     "responses": {
-                        "200": {"description": "OK"},
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                        "404": {
-                            "description": "Not found",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                        "502": {
-                            "description": "Azure download failed",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                    },
-                }
-            },
-            "/v1/files/{file_id}/download": {
-                "get": {
-                    "summary": "Get Azure SAS download URL",
-                    "parameters": [
-                        {
-                            "name": "file_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string", "format": "uuid"},
-                        }
-                    ],
-                    "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/DownloadURLResponse"}}
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "404": {
-                            "description": "Not found",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                    },
-                }
-            },
-            "/v1/files/{file_id}/rename": {
-                "post": {
-                    "summary": "Rename file (metadata only; blob key is not renamed)",
-                    "parameters": [
-                        {
-                            "name": "file_id",
-                            "in": "path",
-                            "required": True,
-                            "schema": {"type": "string", "format": "uuid"},
-                        }
-                    ],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {"schema": {"$ref": "#/components/schemas/RenameRequest"}}
-                        },
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/CloudFile"}}
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "404": {
-                            "description": "Not found",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "409": {
-                            "description": "Conflict (name already in use)",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
+                        "200": {"description": "OK", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}},
+                        "400": {"description": "Bad request", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "401": {"description": "Unauthorized", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                        "502": {"description": "Azure download failed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
                     },
                 }
             },
@@ -437,35 +125,30 @@ def _openapi_spec(*, base_url: str) -> dict:
 
 @docs_bp.get("/openapi.json")
 def openapi_json():
-    # Serve spec with the correct base URL for the current host/port.
     base_url = request.host_url.rstrip("/")
     return jsonify(_openapi_spec(base_url=base_url))
 
 
 @docs_bp.get("/docs")
 def swagger_ui():
-    html = """<!doctype html>
+    # Minimal Swagger UI bootstrap.
+    html = f"""<!doctype html>
 <html>
   <head>
     <meta charset='utf-8' />
     <meta name='viewport' content='width=device-width, initial-scale=1' />
-    <title>EMWaver Backend API Docs</title>
+    <title>EMWaver API Docs</title>
     <link rel='stylesheet' href='https://unpkg.com/swagger-ui-dist@5/swagger-ui.css' />
-    <style>
-      body { margin: 0; }
-      #swagger-ui { height: 100vh; }
-    </style>
   </head>
   <body>
     <div id='swagger-ui'></div>
     <script src='https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js'></script>
     <script>
       window.ui = SwaggerUIBundle({
-        url: '/openapi.json',
+        url: '{request.host_url.rstrip('/')}/openapi.json',
         dom_id: '#swagger-ui',
-        deepLinking: true,
-        persistAuthorization: true,
-        displayRequestDuration: true,
+        presets: [SwaggerUIBundle.presets.apis],
+        layout: 'BaseLayout'
       });
     </script>
   </body>
