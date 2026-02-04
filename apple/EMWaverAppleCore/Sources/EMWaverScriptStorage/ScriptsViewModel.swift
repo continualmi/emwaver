@@ -655,12 +655,12 @@ public final class ScriptsViewModel: ObservableObject {
         notice = Notice(title: "Error", message: message)
     }
 
-    private static func dateFromEtagSeconds(_ etag: String) -> Date? {
+    static func dateFromEtagSeconds(_ etag: String) -> Date? {
         guard let s = Int64(etag.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(s))
     }
 
-    private func computeSyncStatus(name: String, localModifiedAt: Date?) -> SyncStatus {
+    func computeSyncStatus(name: String, localModifiedAt: Date?) -> SyncStatus {
         // We only know cloud state if we've synced at least once (snapshot loaded).
         guard let cloud = cloudFilesByName[name] else {
             return .localOnly
