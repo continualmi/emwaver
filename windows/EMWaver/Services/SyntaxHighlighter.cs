@@ -38,7 +38,7 @@ internal static class SyntaxHighlighter
             {
                 int start = i;
                 i += 2;
-                while (i < n && text[i] != '\n') i++;
+                while (i < n && text[i] != '\n' && text[i] != '\r') i++;
                 spans.Add(new Span(start, i - start, TokenKind.Comment));
                 continue;
             }
