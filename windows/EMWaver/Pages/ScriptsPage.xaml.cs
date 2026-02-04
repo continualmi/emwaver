@@ -19,7 +19,7 @@ namespace EMWaver.Pages;
 
 public sealed partial class ScriptsPage : Page
 {
-    // Preview mode is owned by this page; toolbar buttons call into SetPreviewMode/Run.
+    public event Action<bool>? PreviewModeChanged;
 
     protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
@@ -482,7 +482,7 @@ public sealed partial class ScriptsPage : Page
             });
         }
 
-        // Toolbar state is driven by selection/dirty state; mode buttons directly call into SetPreviewMode.
+        PreviewModeChanged?.Invoke(preview);
     }
 
     private void RenderPreview(ScriptTree tree)
