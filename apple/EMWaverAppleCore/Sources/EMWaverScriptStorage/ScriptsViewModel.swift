@@ -561,7 +561,7 @@ public final class ScriptsViewModel: ObservableObject {
         var custom: [ScriptListItem] = records.values
             .filter { $0.metadata != nil }
             .map {
-                let modifiedAt = $0.metadata.flatMap { Self.dateFromEtagSeconds($0.etag) }
+                let modifiedAt = $0.metadata?.etag.flatMap { Self.dateFromEtagSeconds($0) }
                 let syncStatus = computeSyncStatus(name: $0.name, localModifiedAt: modifiedAt)
                 return ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script, modifiedAt: modifiedAt, syncStatus: syncStatus)
             }
