@@ -10,6 +10,13 @@ final class FirebaseAuthService {
         let localId: String?
     }
 
+    private struct RefreshResponse: Decodable {
+        let id_token: String
+        let refresh_token: String
+        let expires_in: String?
+        let user_id: String?
+    }
+
     private let urlSession: URLSession
 
     init(urlSession: URLSession = .shared) {
@@ -52,5 +59,46 @@ final class FirebaseAuthService {
         }
 
         return try JSONDecoder().decode(FirebaseSession.self, from: data)
+    }
+
+    func refresh(firebaseWebApiKey: String, refreshToken: String) async throws -> FirebaseSession {
+        if firebaseWebApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw AuthError.failed("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)")
+        }
+        if refreshToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw AuthError.failed("Missing refresh token")
+        }
+
+        let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseWebApiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? firebaseWebApiKey)")!
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        func esc(_ s: String) -> String {
+            s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
+        }
+
+        let body = "grant_type=refresh_token&refresh_token=\(esc(refreshToken))"
+        req.httpBody = body.data(using: .utf8)
+
+        let (data, res) = try await urlSession.data(for: req)
+        let code = (res as? HTTPURLResponse)?.statusCode ?? -1
+
+        if code < 200 || code >= 300 {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            throw AuthError.failed("Firebase token refresh failed: \(msg)")
+        }
+
+        let rr = try JSONDecoder().decode(RefreshResponse.self, from: data)
+
+        return FirebaseSession(
+            idToken: rr.id_token,
+            refreshToken: rr.refresh_token,
+            expiresIn: rr.expires_in,
+            email: nil,
+            displayName: nil,
+            localId: rr.user_id
+        )
     }
 }
