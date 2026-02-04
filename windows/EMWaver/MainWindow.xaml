@@ -104,20 +104,18 @@
                 </Grid.ColumnDefinitions>
 
                 <CommandBar x:Name="ScriptsCommandBar" Grid.Column="0" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
-                    <!-- Mode toggles (mutually exclusive) -->
-                    <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Code" IsEnabled="False"
-                                        Click="OnScriptEditClick">
-                        <AppBarToggleButton.Icon>
+                    <!-- Script mode + run -->
+                    <AppBarButton x:Name="ScriptCodeButton" Label="Code" IsEnabled="False" Click="OnScriptCodeClick">
+                        <AppBarButton.Icon>
                             <SymbolIcon Symbol="Document" />
-                        </AppBarToggleButton.Icon>
-                    </AppBarToggleButton>
+                        </AppBarButton.Icon>
+                    </AppBarButton>
 
-                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Preview" IsEnabled="False"
-                                        Click="OnScriptPreviewClick">
-                        <AppBarToggleButton.Icon>
+                    <AppBarButton x:Name="ScriptRunButton" Label="Run" IsEnabled="False" Click="OnScriptRunClick">
+                        <AppBarButton.Icon>
                             <SymbolIcon Symbol="Play" />
-                        </AppBarToggleButton.Icon>
-                    </AppBarToggleButton>
+                        </AppBarButton.Icon>
+                    </AppBarButton>
 
                     <AppBarSeparator />
 

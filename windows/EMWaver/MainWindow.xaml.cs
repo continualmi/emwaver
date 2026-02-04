@@ -131,16 +131,13 @@ public sealed partial class MainWindow : Window
         if (_scriptsPage != null)
         {
             _scriptsPage.ToolbarStateChanged -= OnScriptsToolbarStateChanged;
-            _scriptsPage.PreviewModeChanged -= OnScriptsPreviewModeChanged;
         }
 
         _scriptsPage = e.Content as ScriptsPage;
         if (_scriptsPage != null)
         {
             _scriptsPage.ToolbarStateChanged += OnScriptsToolbarStateChanged;
-            _scriptsPage.PreviewModeChanged += OnScriptsPreviewModeChanged;
             OnScriptsToolbarStateChanged(_scriptsPage.CurrentToolbarState);
-            OnScriptsPreviewModeChanged(false);
             ScriptsCommandBar.Visibility = Visibility.Visible;
         }
         else
@@ -284,22 +281,15 @@ public sealed partial class MainWindow : Window
 
     private void OnScriptsToolbarStateChanged(ScriptToolbarState state)
     {
-        ScriptEditToggleButton.IsEnabled = state.CanPreview;
-        ScriptPreviewToggleButton.IsEnabled = state.CanPreview;
+        ScriptCodeButton.IsEnabled = state.HasSelection;
+        ScriptRunButton.IsEnabled = state.CanPreview;
 
-        // Ensure we always have a valid mode when a script is selected.
-        if (state.HasSelection)
-        {
-            if (ScriptEditToggleButton.IsChecked != true && ScriptPreviewToggleButton.IsChecked != true)
-            {
-                SetScriptMode(preview: false);
-            }
-        }
-        else
+        if (!state.HasSelection)
         {
             // No script selected: default to editor mode.
             SetScriptMode(preview: false);
         }
+
         ScriptSaveButton.IsEnabled = state.CanSave;
         ScriptCopyButton.IsEnabled = state.CanCopy;
         ScriptRenameButton.IsEnabled = state.CanRename;
@@ -386,39 +376,14 @@ public sealed partial class MainWindow : Window
         _scriptsPage?.HandleToolbarRun();
     }
 
-    private bool _suppressModeToggle;
-
     private void SetScriptMode(bool preview)
     {
-        if (_suppressModeToggle)
-        {
-            return;
-        }
-
-        _suppressModeToggle = true;
-        try
-        {
-            ScriptEditToggleButton.IsChecked = !preview;
-            ScriptPreviewToggleButton.IsChecked = preview;
-        }
-        finally
-        {
-            _suppressModeToggle = false;
-        }
-
         _scriptsPage?.HandleToolbarPreviewToggle(preview);
     }
 
-    private void OnScriptEditClick(object sender, RoutedEventArgs e)
+    private void OnScriptCodeClick(object sender, RoutedEventArgs e)
     {
-        if (_suppressModeToggle) return;
         SetScriptMode(preview: false);
-    }
-
-    private void OnScriptPreviewClick(object sender, RoutedEventArgs e)
-    {
-        if (_suppressModeToggle) return;
-        SetScriptMode(preview: true);
     }
 
     private void OnScriptNewClick(object sender, RoutedEventArgs e)
