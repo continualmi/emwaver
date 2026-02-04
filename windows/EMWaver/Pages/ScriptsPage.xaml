@@ -96,6 +96,19 @@
                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                 TextChanged="OnEditorTextChanged" />
 
+                            <!-- Highlighted editor (RichEditBox) -->
+                            <RichEditBox
+                                x:Name="RichEditor"
+                                Visibility="Collapsed"
+                                BorderThickness="0"
+                                Background="#1E1E1E"
+                                Foreground="#D4D4D4"
+                                FontFamily="Consolas"
+                                FontSize="13"
+                                IsSpellCheckEnabled="False"
+                                IsTextPredictionEnabled="False"
+                                TextChanged="OnRichEditorTextChanged" />
+
                             <!-- Monaco editor (WebView2) -->
                             <WebView2
                                 x:Name="MonacoView"

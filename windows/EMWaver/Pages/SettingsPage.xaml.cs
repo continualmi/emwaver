@@ -34,7 +34,22 @@ public sealed partial class SettingsPage : Page
 
             BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
 
-            UseMonacoToggle.IsOn = AppServices.Settings.UseMonacoEditor;
+            var mode = AppServices.Settings.EditorMode;
+            var tag = mode switch
+            {
+                Services.EditorMode.Simple => "simple",
+                Services.EditorMode.Rich => "rich",
+                _ => "monaco",
+            };
+
+            foreach (var item in EditorModeCombo.Items)
+            {
+                if (item is ComboBoxItem cbi && (cbi.Tag as string) == tag)
+                {
+                    EditorModeCombo.SelectedItem = cbi;
+                    break;
+                }
+            }
         }
 
         // UI updates must happen on the UI thread.
@@ -67,12 +82,24 @@ public sealed partial class SettingsPage : Page
         RefreshUi("Signed out.");
     }
 
-    private void OnUseMonacoToggled(object sender, RoutedEventArgs e)
+    private void OnEditorModeChanged(object sender, SelectionChangedEventArgs e)
     {
-        var next = UseMonacoToggle.IsOn;
-        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] UseMonaco toggled => {next}");
-        AppServices.Settings.UseMonacoEditor = next;
-        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] UseMonaco persisted? {AppServices.Settings.UseMonacoEditor}");
+        if (EditorModeCombo.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        var tag = item.Tag as string;
+        var mode = tag switch
+        {
+            "simple" => Services.EditorMode.Simple,
+            "rich" => Services.EditorMode.Rich,
+            _ => Services.EditorMode.Monaco,
+        };
+
+        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] EditorMode => {tag}");
+        AppServices.Settings.EditorMode = mode;
+        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] EditorMode persisted => {AppServices.Settings.EditorMode}");
         RefreshUi("Editor setting updated.");
     }
 

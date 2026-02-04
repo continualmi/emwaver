@@ -40,15 +40,13 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="Editor" FontWeight="SemiBold" />
 
-                    <muxc:ToggleSwitch x:Name="UseMonacoToggle"
-                                      Header="Use Monaco editor"
-                                      OffContent="Simple editor"
-                                      OnContent="Monaco"
-                                      Toggled="OnUseMonacoToggled" />
+                    <ComboBox x:Name="EditorModeCombo" SelectionChanged="OnEditorModeChanged" Width="260">
+                        <ComboBoxItem Content="Simple" Tag="simple" />
+                        <ComboBoxItem Content="Highlighted" Tag="rich" />
+                        <ComboBoxItem Content="Monaco" Tag="monaco" />
+                    </ComboBox>
 
-                    <TextBlock Text="(Requires WebView2 runtime; if it fails, the app will fall back to the simple editor.)" Opacity="0.65" TextWrapping="Wrap" />
-
-                    <TextBlock Text="If the editor misbehaves, switch back to the simple editor." Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Monaco uses WebView2 and may fail on some machines. Highlighted uses RichEditBox with lightweight syntax highlighting." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
