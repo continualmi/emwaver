@@ -35,7 +35,7 @@ public sealed partial class ScriptsPage : Page
             ApplyEditorMode();
         }
 
-        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode visible monaco={MonacoView?.Visibility} rich={RichEditor?.Visibility} simple={EditorBox?.Visibility}");
+        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode visible monaco={MonacoHost?.Visibility} rich={RichEditor?.Visibility} simple={EditorBox?.Visibility}");
 
         if (_editorMode == EditorMode.Monaco)
         {
@@ -183,11 +183,11 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        MonacoView.Visibility = _editorMode == EditorMode.Monaco ? Visibility.Visible : Visibility.Collapsed;
+        MonacoHost.Visibility = _editorMode == EditorMode.Monaco ? Visibility.Visible : Visibility.Collapsed;
         RichEditor.Visibility = _editorMode == EditorMode.Rich ? Visibility.Visible : Visibility.Collapsed;
         EditorBox.Visibility = _editorMode == EditorMode.Simple ? Visibility.Visible : Visibility.Collapsed;
 
-        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode: mode={_editorMode} => monaco={MonacoView.Visibility} rich={RichEditor.Visibility} simple={EditorBox.Visibility}");
+        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode: mode={_editorMode} => monaco={MonacoHost.Visibility} rich={RichEditor.Visibility} simple={EditorBox.Visibility}");
     }
 
     private async Task EnsureMonacoInitializedAsync()
@@ -198,6 +198,7 @@ public sealed partial class ScriptsPage : Page
         }
 
         Debug.WriteLine("[EMWaver][Windows][Monaco] EnsureMonacoInitializedAsync: start");
+        MonacoLoadingOverlay.Visibility = Visibility.Visible;
 
         // WebView2 needs to be loaded/initialized before navigation.
         try
@@ -214,7 +215,35 @@ public sealed partial class ScriptsPage : Page
             MonacoView.WebMessageReceived -= OnMonacoWebMessage;
             MonacoView.WebMessageReceived += OnMonacoWebMessage;
 
-            var uri = new Uri("ms-appx-web:///Assets/Monaco/monaco.html");
+            // NOTE: ms-appx-web:/// works only for packaged apps. In unpackaged WinUI runs,
+            // it often fails with ConnectionAborted. Use a virtual host mapping to local output assets.
+            var folder = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Monaco");
+            Debug.WriteLine("[EMWaver][Windows][Monaco] Asset folder: " + folder);
+
+            try
+            {
+                if (System.IO.Directory.Exists(folder))
+                {
+                    MonacoView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        hostName: "emwaver-assets",
+                        folderPath: folder,
+                        accessKind: CoreWebView2HostResourceAccessKind.Allow
+                    );
+                }
+                else
+                {
+                    Debug.WriteLine("[EMWaver][Windows][Monaco] Asset folder missing; falling back to ms-appx-web.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[EMWaver][Windows][Monaco] SetVirtualHostNameToFolderMapping failed: " + ex.Message);
+            }
+
+            var uri = System.IO.Directory.Exists(folder)
+                ? new Uri("https://emwaver-assets/monaco.html")
+                : new Uri("ms-appx-web:///Assets/Monaco/monaco.html");
+
             Debug.WriteLine("[EMWaver][Windows][Monaco] Navigate: " + uri);
             MonacoView.Source = uri;
 
@@ -225,6 +254,7 @@ public sealed partial class ScriptsPage : Page
             }
 
             Debug.WriteLine("[EMWaver][Windows][Monaco] Ready=" + _monacoReady);
+            MonacoLoadingOverlay.Visibility = Visibility.Collapsed;
 
             if (_monacoReady)
             {
@@ -242,6 +272,7 @@ public sealed partial class ScriptsPage : Page
         }
         catch (Exception ex)
         {
+            MonacoLoadingOverlay.Visibility = Visibility.Collapsed;
             Debug.WriteLine("[EMWaver][Windows][Monaco] Init failed: " + ex);
 
             // If Monaco fails to init for any reason, fall back to the simple editor.
@@ -268,6 +299,25 @@ public sealed partial class ScriptsPage : Page
     private void OnMonacoNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         Debug.WriteLine($"[EMWaver][Windows][Monaco] NavigationCompleted success={args.IsSuccess} status={args.WebErrorStatus}");
+
+        if (!args.IsSuccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    MonacoLoadingOverlay.Visibility = Visibility.Collapsed;
+                    await ShowInfoAsync(
+                        "Monaco editor",
+                        "Monaco failed to load the local host page (WebView2 error: " + args.WebErrorStatus + ").\n\n" +
+                        "This is usually NOT the CDN yet — it means the WebView couldn't even open the local monaco.html. " +
+                        "In unpackaged WinUI runs, ms-appx-web can fail; we now try a virtual-host mapping from the output Assets folder.\n\n" +
+                        "Switch to Editor Mode = Highlighted or Simple for now."
+                    );
+                }
+                catch { }
+            });
+        }
     }
 
     private void OnMonacoProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
