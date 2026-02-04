@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Optional
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from emw_backend.db import Base
@@ -73,8 +73,8 @@ class UserFileIndex(Base):
     name: Mapped[str] = mapped_column(String(512))
     blob_key: Mapped[str] = mapped_column(String(768))
 
-    mtime_ms: Mapped[int] = mapped_column(Integer)
-    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    mtime_ms: Mapped[int] = mapped_column(BigInteger)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     content_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     etag: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 

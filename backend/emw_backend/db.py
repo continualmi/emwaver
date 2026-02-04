@@ -29,18 +29,40 @@ def init_db(database_url: str) -> None:
 
     Base.metadata.create_all(bind=_ENGINE)
 
-    # Lightweight migrations (no Alembic yet): add missing columns.
+    # Lightweight migrations (no Alembic yet): best-effort schema fixes.
     try:
         from sqlalchemy import inspect, text
 
         insp = inspect(_ENGINE)
+
+        # Legacy table: add missing columns.
         cols = {c["name"] for c in insp.get_columns("files")}
         if "content_sha256" not in cols:
             with _ENGINE.begin() as conn:
                 conn.execute(text("ALTER TABLE files ADD COLUMN content_sha256 VARCHAR(64)"))
+
+        # New index table: ensure BIGINT for ms timestamps and sizes.
+        if insp.has_table("user_files"):
+            ucols = {c["name"]: c for c in insp.get_columns("user_files")}
+
+            def _coltype(name: str) -> str:
+                t = ucols.get(name, {}).get("type")
+                return str(t).lower() if t is not None else ""
+
+            mtime_t = _coltype("mtime_ms")
+            size_t = _coltype("size_bytes")
+
+            # PostgreSQL: migrate INTEGER -> BIGINT if needed.
+            dialect = getattr(_ENGINE, "dialect", None)
+            if getattr(dialect, "name", "") == "postgresql":
+                with _ENGINE.begin() as conn:
+                    if "integer" in mtime_t and "bigint" not in mtime_t:
+                        conn.execute(text("ALTER TABLE user_files ALTER COLUMN mtime_ms TYPE BIGINT"))
+                    if "integer" in size_t and "bigint" not in size_t:
+                        conn.execute(text("ALTER TABLE user_files ALTER COLUMN size_bytes TYPE BIGINT"))
+
     except Exception:
-        # Best-effort: if this fails (permissions/older DB), backend will still run;
-        # the sha field will just be absent until DB is recreated.
+        # Best-effort: if this fails (permissions/older DB), backend will still run.
         pass
 
 
