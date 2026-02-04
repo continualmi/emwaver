@@ -172,11 +172,6 @@ public sealed partial class ScriptsPage : Page
             var now = GetEditorTextNormalized();
             _isDirty = !string.Equals(now, _loadedTextNormalized, StringComparison.Ordinal);
             UpdateCommandStates();
-
-            // Re-evaluate dirty state (buffer may have moved between controls).
-            var now = GetEditorTextNormalized();
-            _isDirty = !string.Equals(now, _loadedTextNormalized, StringComparison.Ordinal);
-            UpdateCommandStates();
         });
     }
 
