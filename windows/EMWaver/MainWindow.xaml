@@ -64,8 +64,6 @@
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
-                    <AppBarButton x:Name="ScriptRunButton" Label="Run" Icon="Play" Click="OnScriptRunClick" IsEnabled="False" />
-
                     <!-- Mode toggles (Preview replaces editor region) -->
                     <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Edit" IsEnabled="False"
                                         Checked="OnScriptEditChecked">
@@ -88,7 +86,6 @@
                     <AppBarButton x:Name="ScriptCopyButton" Label="Copy" Icon="Copy" Click="OnScriptCopyClick" IsEnabled="False" />
                     <AppBarButton x:Name="ScriptRenameButton" Label="Rename" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
                     <AppBarButton x:Name="ScriptDeleteButton" Label="Delete" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
-                    <AppBarButton x:Name="ScriptRefreshButton" Label="Refresh" Icon="Refresh" Click="OnScriptRefreshClick" />
 
                     <AppBarSeparator />
 
