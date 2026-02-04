@@ -97,13 +97,13 @@
                 </Button.Flyout>
             </Button>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <Grid Grid.Column="2" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                <CommandBar x:Name="AppCommandBar" DefaultLabelPosition="Collapsed">
-                    <AppBarButton x:Name="SettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
-                </CommandBar>
-
-                <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
+                <CommandBar x:Name="ScriptsCommandBar" Grid.Column="0" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
                     <!-- Mode toggles (Preview replaces editor region) -->
                     <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Code" IsEnabled="False"
                                         Checked="OnScriptEditChecked">
@@ -137,7 +137,11 @@
                 </CommandBar>
 
                 <!-- Device status moved to the left (DeviceMenuButton) -->
-            </StackPanel>
+
+                <CommandBar x:Name="AppCommandBar" Grid.Column="1" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
+                    <AppBarButton x:Name="SettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
+                </CommandBar>
+            </Grid>
             </Grid>
         </Border>
 

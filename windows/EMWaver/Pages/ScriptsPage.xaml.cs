@@ -25,11 +25,15 @@ public sealed partial class ScriptsPage : Page
         base.OnNavigatedTo(e);
 
         var next = AppServices.Settings.UseMonacoEditor;
+        Debug.WriteLine($"[EMWaver][Windows][Monaco] OnNavigatedTo useMonaco(setting)={next} prev={_useMonaco}");
+
         if (next != _useMonaco)
         {
             _useMonaco = next;
             ApplyEditorMode();
         }
+
+        Debug.WriteLine($"[EMWaver][Windows][Monaco] ApplyEditorMode visible monaco={MonacoView?.Visibility} simple={EditorBox?.Visibility}");
 
         if (_useMonaco)
         {
@@ -154,11 +158,13 @@ public sealed partial class ScriptsPage : Page
     {
         if (MonacoView == null || EditorBox == null)
         {
+            Debug.WriteLine("[EMWaver][Windows][Monaco] ApplyEditorMode: controls not ready");
             return;
         }
 
         MonacoView.Visibility = _useMonaco ? Visibility.Visible : Visibility.Collapsed;
         EditorBox.Visibility = _useMonaco ? Visibility.Collapsed : Visibility.Visible;
+        Debug.WriteLine($"[EMWaver][Windows][Monaco] ApplyEditorMode: useMonaco={_useMonaco} => monaco={MonacoView.Visibility} simple={EditorBox.Visibility}");
     }
 
     private async Task EnsureMonacoInitializedAsync()
@@ -219,6 +225,16 @@ public sealed partial class ScriptsPage : Page
             _useMonaco = false;
             AppServices.Settings.UseMonacoEditor = false;
             ApplyEditorMode();
+
+            // Make the failure obvious (but non-fatal).
+            _ = DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await ShowInfoAsync("Monaco editor", "Failed to start Monaco/WebView2. Falling back to the simple editor.\n\n" + ex.Message);
+                }
+                catch { }
+            });
         }
     }
 
