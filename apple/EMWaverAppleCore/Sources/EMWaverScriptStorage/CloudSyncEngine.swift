@@ -149,9 +149,17 @@ public final class CloudSyncEngine {
                             cloudSha256: cloud.metadata.sha256
                         )
                     } catch {
-                        // If Azure blob is missing (common during early dev when init-upload happened but PUT/commit failed),
-                        // leave the local file absent and surface the error to the caller.
+                        // If cloud metadata exists but blob is missing/corrupt, do not abort sync.
+                        // This situation can happen due to earlier flows; best effort: delete the broken cloud entry.
                         Self.debug("download failed \(spec.kind) \(name): \(error)")
+                        if case CloudFilesAPIError.serverError(let code, _) = error, (code == 404 || code == 502) {
+                            if let etag = cloud.metadata.etag {
+                                Self.debug("deleting broken cloud entry \(cloud.metadata.id) etag=\(etag)")
+                                try? await api.deleteFile(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id, etag: etag)
+                            }
+                            // Skip this file and continue with the rest.
+                            break
+                        }
                         throw error
                     }
 
