@@ -339,37 +339,39 @@ Definition of done:
 - Sign-in optional.
 - Sync never blocks running scripts.
 
-#### Cloud Sync + Auth Implementation Notes (2026-01-30)
+#### Cloud Sync + Auth Implementation Notes (updated 2026-02-04)
 
-Current decision for implementation planning:
+Decisions (shipping direction):
 
 - **Login is optional**: EMWaver must remain usable without sign-in.
 - **Local-first always**: scripts/signals are always stored locally; when signed in, the app syncs/backs up to cloud.
-- **Auth**: Firebase Authentication, **Google sign-in only** (no email/password in v1).
-- **Platform order**: start with **macOS** only; expand to iOS/Android later.
-- **Backend hosting**: deploy the Python backend under `backend/` to **Azure**.
-- **Cloud storage**: use Azure-managed storage (initially Azure Postgres for metadata + content; optionally Azure Blob for large assets later).
+- **No backcompat / no versioning / no one-off migrations**: cloud “starts empty” from the sync client’s perspective; we do not attempt to reindex legacy blobs.
+- **Sync policy (v1)**: list everything every sync; compare by filename + modification timestamp; **newer wins**. No checksum negotiation and no historical conflict naming (`conflict_upload_...`) in the product direction.
 
-Auth contract (backend):
+Auth (macOS + backend contract):
 
-- Clients call authenticated endpoints with `Authorization: Bearer <firebase_id_token>`.
-- Backend verifies the Firebase ID token (JWT) and derives a stable user identity from `uid`.
-- Backend owns authorization (user scoping); clients never pass `user_id`.
+- **Auth provider**: Firebase Authentication (Google sign-in only in v1).
+- **macOS login flow**: `ASWebAuthenticationSession` + PKCE (Google OAuth) → Firebase Identity Toolkit `accounts:signInWithIdp` → obtain Firebase `idToken`.
+- **Backend auth contract**: clients call authenticated endpoints with `Authorization: Bearer <firebase_id_token>`; backend verifies and scopes by `uid`.
 
-Storage contract (backend):
+Cloud storage architecture (hybrid, authoritative index):
 
-- Prefer a single generic file API for scripts and signals (user-scoped): `kind=script|signal`.
-- Concurrency uses `etag` with optimistic locking; conflicts return HTTP 409.
-- Sync must never block the ability to run scripts locally.
+- **Bytes live in Azure Blob Storage** (keyed as `u/<uid>/<name>`).
+- **Authoritative file index lives in Postgres** (`user_files`): per-user filename, `mtime_ms`, `size_bytes`, and the blob key.
+- Rationale: fast listing/sync, simpler server-side authorization, and avoids “list blobs” being the source of truth.
 
-Backend v1 endpoints (proposed):
+Backend API (implemented, v1):
 
-- `GET /v1/files?kind=script&ext=.emw&include_content=0|1`
-- `GET /v1/files/<id>`
-- `POST /v1/files` (create)
-- `PUT /v1/files/<id>` (update; requires `etag`)
-- `POST /v1/files/<id>/rename`
-- `DELETE /v1/files/<id>` (delete; requires `etag`)
+- `GET /v1/files` → list files for the current user **from Postgres index**.
+- `POST /v1/files/upload` → upload bytes to blob storage + upsert index row.
+- `GET /v1/files/content?name=<filename>` → look up blob key in Postgres + stream bytes from Azure.
+- `DELETE /v1/files?name=<filename>` → delete blob + best-effort delete index row.
+
+Web dashboard (fast feedback loop):
+
+- We maintain a **Next.js Dashboard** (`/cloud`) for rapid iteration without rebuilding native apps.
+- Dashboard scope (v1): **account** (Firebase login/logout), **file management** (list/view/upload/delete/edit text), and (next) an **agent panel**.
+- This dashboard is explicitly a developer/ops surface for now, used to validate backend behavior and speed UI iterations.
 
 ### Phase 6 — In-app AI Agent (monetizable layer)
 
