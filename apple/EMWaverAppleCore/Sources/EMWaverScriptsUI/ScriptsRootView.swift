@@ -29,7 +29,7 @@ public struct ScriptsRootView: View {
     @State private var currentScriptId: String?
     @State private var editorContent: String = ""
     @State private var editorIsReadOnly = false
-    @State private var lineWrapEnabled = false
+    // Line-wrapping is always enabled in the editor.
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
@@ -304,7 +304,7 @@ public struct ScriptsRootView: View {
 
     private var editorTextView: some View {
         Group {
-            EmwCodeEditor(text: $editorContent, isEditable: !editorIsReadOnly, wrapLines: lineWrapEnabled)
+            EmwCodeEditor(text: $editorContent, isEditable: !editorIsReadOnly, wrapLines: true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: editorContent) { newValue in
@@ -371,7 +371,6 @@ public struct ScriptsRootView: View {
     private func openEditor(for id: String) {
         editorMode = .script
         editorTitleOverride = nil
-        lineWrapEnabled = false
         viewModel.selectScript(id: id)
         currentScriptId = id
         editorIsReadOnly = viewModel.isAssetScript(id)
@@ -396,15 +395,12 @@ public struct ScriptsRootView: View {
         case .signalRaw:
             editorMode = .signalRaw
             editorIsReadOnly = true
-            lineWrapEnabled = false
         case .signalText:
             editorMode = .signalText
             editorIsReadOnly = false
-            lineWrapEnabled = true
         case .script:
             editorMode = .script
             editorIsReadOnly = false
-            lineWrapEnabled = false
         }
 
         Task {
@@ -439,7 +435,6 @@ public struct ScriptsRootView: View {
         currentScriptId = viewModel.unsavedIdentifier
         editorContent = viewModel.scriptDraft(for: viewModel.unsavedIdentifier)
         editorIsReadOnly = false
-        lineWrapEnabled = false
         showingEditor = true
         showingPreview = false
     }
@@ -686,8 +681,7 @@ public struct ScriptsRootView: View {
                         }
                     }
 
-                    Divider()
-                    Button(lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap") { lineWrapEnabled.toggle() }
+                    // Line wrap is always enabled.
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

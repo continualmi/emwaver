@@ -13,19 +13,20 @@ import AppKit
 public struct EmwCodeEditor: NSViewRepresentable {
     @Binding private var text: String
     private let isEditable: Bool
-    private let wrapLines: Bool
 
-    public init(text: Binding<String>, isEditable: Bool = true, wrapLines: Bool = false) {
+    // Always wrap lines; we do not support horizontal scrolling.
+    private let wrapLines: Bool = true
+
+    public init(text: Binding<String>, isEditable: Bool = true, wrapLines: Bool = true) {
         _text = text
         self.isEditable = isEditable
-        self.wrapLines = wrapLines
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = !wrapLines
+        scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
 
@@ -55,7 +56,7 @@ public struct EmwCodeEditor: NSViewRepresentable {
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
-        nsView.hasHorizontalScroller = !wrapLines
+        nsView.hasHorizontalScroller = false
         context.coordinator.configure(textView: textView, isEditable: isEditable, wrapLines: wrapLines)
         context.coordinator.setTextIfNeeded(text)
     }
