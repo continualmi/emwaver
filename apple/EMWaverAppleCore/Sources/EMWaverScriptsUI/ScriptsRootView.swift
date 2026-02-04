@@ -34,7 +34,13 @@ public struct ScriptsRootView: View {
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
 
-    @State private var signalViewerItem: SignalViewerView.Item?
+    private enum EditorMode {
+        case script
+        case signalRaw
+        case signalText
+    }
+
+    @State private var editorMode: EditorMode = .script
 
     #if os(macOS)
     @State private var showingAgentPanel = false
@@ -122,9 +128,7 @@ public struct ScriptsRootView: View {
                 Text("Are you sure you want to delete \(target.name)?")
             }
         }
-        .sheet(item: $signalViewerItem) { item in
-            SignalViewerView(item: item)
-        }
+        // Signals open in the same editor view (not a modal sheet).
         .onAppear {
             previewManager.attach(device: device)
             loadScripts()
@@ -215,12 +219,8 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: item,
                                         isSelected: false,
-                                        onTap: {
-                                            signalViewerItem = SignalViewerView.Item(id: item.id, name: item.name, kind: item.kind)
-                                        },
-                                        onEdit: {
-                                            signalViewerItem = SignalViewerView.Item(id: item.id, name: item.name, kind: item.kind)
-                                        }
+                                        onTap: { openSignalEditor(item) },
+                                        onEdit: { openSignalEditor(item) }
                                     )
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
@@ -237,19 +237,22 @@ public struct ScriptsRootView: View {
     private var editorView: some View {
         VStack(spacing: 0) {
                 if editorIsReadOnly {
+
                     HStack(spacing: 10) {
-                        Label("Example script (read-only)", systemImage: "lock")
+                        Label(readOnlyLabelText, systemImage: "lock")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
 
                         Spacer()
 
-                        Button("Make Copy") {
-                            if let currentScriptId {
-                                presentNamePrompt(context: .copy(id: currentScriptId))
+                        if editorMode == .script {
+                            Button("Make Copy") {
+                                if let currentScriptId {
+                                    presentNamePrompt(context: .copy(id: currentScriptId))
+                                }
                             }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -260,6 +263,17 @@ public struct ScriptsRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Self.primaryBackground)
+    }
+
+    private var readOnlyLabelText: String {
+        switch editorMode {
+        case .script:
+            return "Example script (read-only)"
+        case .signalRaw:
+            return "Signal .raw (read-only)"
+        case .signalText:
+            return "Signal .txt"
+        }
     }
 
     private var editorTextView: some View {
@@ -316,6 +330,7 @@ public struct ScriptsRootView: View {
     }
 
     private func openEditor(for id: String) {
+        editorMode = .script
         viewModel.selectScript(id: id)
         currentScriptId = id
         editorIsReadOnly = viewModel.isAssetScript(id)
@@ -329,7 +344,49 @@ public struct ScriptsRootView: View {
         }
     }
 
+    private func openSignalEditor(_ item: ScriptsViewModel.ScriptListItem) {
+        guard item.kind != .script else { return }
+        currentScriptId = item.id
+        viewModel.selectScript(id: nil)
+
+        switch item.kind {
+        case .signalRaw:
+            editorMode = .signalRaw
+            editorIsReadOnly = true
+        case .signalText:
+            editorMode = .signalText
+            editorIsReadOnly = false
+        case .script:
+            editorMode = .script
+            editorIsReadOnly = false
+        }
+
+        Task {
+            do {
+                let url = FileService.shared.signalsDirectoryURL().appendingPathComponent(item.id)
+                let data = try Data(contentsOf: url)
+                await MainActor.run {
+                    if item.kind == .signalRaw {
+                        editorContent = formatHex(data: data, maxBytes: 256 * 1024)
+                    } else {
+                        editorContent = String(data: data, encoding: .utf8) ?? ""
+                    }
+                    showingEditor = true
+                    showingPreview = false
+                }
+            } catch {
+                await MainActor.run {
+                    editorContent = ""
+                    editorIsReadOnly = true
+                    showingEditor = true
+                    showingPreview = false
+                }
+            }
+        }
+    }
+
     private func openNewScriptEditor() {
+        editorMode = .script
         viewModel.selectScript(id: viewModel.unsavedIdentifier)
         currentScriptId = viewModel.unsavedIdentifier
         editorContent = viewModel.scriptDraft(for: viewModel.unsavedIdentifier)
@@ -343,6 +400,7 @@ public struct ScriptsRootView: View {
         currentScriptId = nil
         editorContent = ""
         editorIsReadOnly = false
+        editorMode = .script
     }
 
     private func exitPreview() {
@@ -369,6 +427,46 @@ public struct ScriptsRootView: View {
         } else {
             presentNamePrompt(context: .create)
         }
+    }
+
+    private func saveCurrentSignalText() {
+        guard let id = currentScriptId else { return }
+        let url = FileService.shared.signalsDirectoryURL().appendingPathComponent(id)
+        let data = editorContent.data(using: .utf8) ?? Data()
+        Task {
+            do {
+                try data.write(to: url, options: [.atomic])
+                await viewModel.loadScripts()
+            } catch {
+                // Best-effort; view model will show errors elsewhere.
+            }
+        }
+    }
+
+    private func formatHex(data: Data, maxBytes: Int) -> String {
+        let slice = data.prefix(maxBytes)
+        var out: [String] = []
+        out.reserveCapacity((slice.count / 16) + 8)
+
+        let bytes = [UInt8](slice)
+        var offset = 0
+        while offset < bytes.count {
+            let line = bytes[offset..<min(offset + 16, bytes.count)]
+            let hex = line.map { String(format: "%02X", $0) }.joined(separator: " ")
+            let ascii = line.map { b -> String in
+                if b >= 32 && b < 127 {
+                    return String(UnicodeScalar(b))
+                }
+                return "."
+            }.joined()
+            out.append(String(format: "%08X  %-47@  |%@|", offset, hex as NSString, ascii as NSString))
+            offset += 16
+        }
+
+        if data.count > maxBytes {
+            out.append("\n(truncated to \(maxBytes) bytes; file is \(data.count) bytes)")
+        }
+        return out.joined(separator: "\n")
     }
 
     private func presentNamePrompt(context: NamePromptContext) {
@@ -432,29 +530,38 @@ public struct ScriptsRootView: View {
         #endif
 
         if showingEditor {
+            let isScriptEditor = (editorMode == .script)
+            let canRun = isScriptEditor
+            let canSave = isScriptEditor || (editorMode == .signalText)
+
             ToolbarItem(placement: .navigation) {
                 Button("Close") { exitEditor() }
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    guard let id = currentScriptId else { return }
-                    viewModel.updateDraft(for: id, content: editorContent)
-                    previewScript(id)
-                } label: {
-                    Image(systemName: "play.fill")
+                if canRun {
+                    Button {
+                        guard let id = currentScriptId else { return }
+                        viewModel.updateDraft(for: id, content: editorContent)
+                        previewScript(id)
+                    } label: {
+                        Image(systemName: "play.fill")
+                    }
+                    .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                 Menu {
                     Button("Copy") { copyToPasteboard(editorContent) }
-                    Button("Paste") {
-                        if let text = pasteFromPasteboard() {
-                            editorContent = text
+
+                    if !editorIsReadOnly {
+                        Button("Paste") {
+                            if let text = pasteFromPasteboard() {
+                                editorContent = text
+                            }
                         }
                     }
 
-                    if let currentScriptId, viewModel.isExistingScript(currentScriptId), !viewModel.isAssetScript(currentScriptId) {
+                    if isScriptEditor, let currentScriptId, viewModel.isExistingScript(currentScriptId), !viewModel.isAssetScript(currentScriptId) {
                         Divider()
                         Button("Rename") { presentNamePrompt(context: .rename(id: currentScriptId)) }
                         Button("Make Copy") { presentNamePrompt(context: .copy(id: currentScriptId)) }
@@ -470,9 +577,13 @@ public struct ScriptsRootView: View {
                     Image(systemName: "ellipsis.circle")
                 }
 
-                if !editorIsReadOnly {
-                    Button(viewModel.isExistingScript(currentScriptId ?? "") ? "Save" : "Create") {
-                        saveCurrentScript()
+                if canSave, !editorIsReadOnly {
+                    Button("Save") {
+                        if isScriptEditor {
+                            saveCurrentScript()
+                        } else {
+                            saveCurrentSignalText()
+                        }
                     }
                 }
             }
