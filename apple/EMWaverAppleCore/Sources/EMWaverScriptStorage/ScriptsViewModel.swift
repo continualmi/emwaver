@@ -17,6 +17,7 @@ public final class ScriptsViewModel: ObservableObject {
         public var iconSystemName: String {
             switch self {
             case .script:
+                // Rendered as a custom EM badge in the UI (see ScriptRow).
                 return "doc.text"
             case .signalRaw:
                 return "waveform.path.ecg"
