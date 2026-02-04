@@ -96,76 +96,75 @@ def _file_json_from_blob(blob: Any) -> Dict[str, Any]:
 
 @files_bp.get("/files")
 def list_files():
-    """List all user files (blobs-only)."""
+    """List all user files from Postgres index (bytes live in Azure Blob)."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
-    svc = _azure_blob_service(config)
-    container = svc.get_container_client(config.azure_blob_container)
+    from emw_backend.db import SessionLocal
+    from emw_backend.models import UserFileIndex
 
-    prefix = f"u/{uid}/"
-    blobs = container.list_blobs(name_starts_with=prefix, include=["metadata"])
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(UserFileIndex)
+            .filter(UserFileIndex.firebase_uid == uid)
+            .order_by(UserFileIndex.name.asc())
+            .all()
+        )
 
-    # De-dupe by user-visible name. Legacy layouts had u/<uid>/<uuid>/<name>, which can
-    # create multiple blobs with the same trailing name.
-    by_name: Dict[str, Dict[str, Any]] = {}
+        files: List[Dict[str, Any]] = []
+        for r in rows:
+            files.append(
+                {
+                    "name": r.name,
+                    "blob_key": r.blob_key,
+                    "etag": r.etag,
+                    "size_bytes": int(r.size_bytes or 0),
+                    "last_modified": None,
+                    "content_type": r.content_type,
+                    "mtime_ms": int(r.mtime_ms),
+                }
+            )
 
-    for b in blobs:
-        item = _file_json_from_blob(b)
-        name = item.get("name") or ""
-        if not name:
-            continue
-
-        prev = by_name.get(name)
-        if prev is None:
-            by_name[name] = item
-            continue
-
-        # Prefer canonical key u/<uid>/<name> over legacy subfolders.
-        canonical = f"u/{uid}/{name}"
-        if item.get("blob_key") == canonical and prev.get("blob_key") != canonical:
-            by_name[name] = item
-            continue
-        if prev.get("blob_key") == canonical and item.get("blob_key") != canonical:
-            continue
-
-        # Otherwise pick the most recently modified blob.
-        # last_modified is ISO string; lexical compare works for UTC ISO8601.
-        prev_lm = prev.get("last_modified") or ""
-        item_lm = item.get("last_modified") or ""
-        if item_lm > prev_lm:
-            by_name[name] = item
-
-    files = list(by_name.values())
-    files.sort(key=lambda x: x.get("name") or "")
-    return jsonify({"files": files})
+        return jsonify({"files": files})
+    finally:
+        db.close()
 
 
 @files_bp.get("/files/content")
 def get_file_content():
-    """Download bytes for a file.
-
-    Preferred: pass blob_key (exact key returned by GET /v1/files).
-    Legacy: pass name (downloads u/<uid>/<name>).
-    """
+    """Download bytes for a file (Azure Blob), with Postgres index lookup."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
         return jsonify({"error": "Unauthorized"}), 401
 
-    blob_key = (request.args.get("blob_key") or "").strip()
     name = _sanitize_name(request.args.get("name") or "")
+    if not name:
+        return jsonify({"error": "Missing or invalid 'name'"}), 400
 
-    if blob_key:
+    from emw_backend.db import SessionLocal
+    from emw_backend.models import UserFileIndex
+
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(UserFileIndex)
+            .filter(UserFileIndex.firebase_uid == uid)
+            .filter(UserFileIndex.name == name)
+            .first()
+        )
+        if not row:
+            return jsonify({"error": "Not found"}), 404
+        blob_key = row.blob_key
+
         expected_prefix = f"u/{uid}/"
         if not blob_key.startswith(expected_prefix):
-            return jsonify({"error": "Invalid 'blob_key'"}), 400
-    else:
-        if not name:
-            return jsonify({"error": "Missing or invalid 'name'"}), 400
-        blob_key = _blob_key(uid, name)
+            return jsonify({"error": "Invalid blob_key in index"}), 500
+    finally:
+        db.close()
 
     svc = _azure_blob_service(config)
     blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
@@ -186,7 +185,10 @@ def get_file_content():
 
 @files_bp.post("/files/upload")
 def upload_file():
-    """Upload bytes for a file by name (overwrite)."""
+    """Upload bytes for a file by name (overwrite).
+
+    Writes bytes to Azure Blob and upserts metadata to Postgres index.
+    """
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
@@ -223,7 +225,8 @@ def upload_file():
             return jsonify({"error": "Invalid 'mtime_ms'"}), 400
 
     svc = _azure_blob_service(config)
-    blob = svc.get_blob_client(container=config.azure_blob_container, blob=_blob_key(uid, name))
+    blob_key = _blob_key(uid, name)
+    blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
 
     try:
         from azure.storage.blob import ContentSettings
@@ -238,12 +241,72 @@ def upload_file():
     except Exception as e:
         return jsonify({"error": f"Azure upload failed: {str(e)}"}), 502
 
-    # Return metadata (best-effort)
+    # Upsert Postgres index
+    try:
+        from emw_backend.db import SessionLocal
+        from emw_backend.models import UserFileIndex
+
+        db = SessionLocal()
+        try:
+            now_s = int(time.time())
+            dialect = getattr(getattr(db, "bind", None), "dialect", None)
+            dialect_name = getattr(dialect, "name", "")
+
+            values = {
+                "firebase_uid": uid,
+                "name": name,
+                "blob_key": blob_key,
+                "mtime_ms": int(mtime_ms),
+                "size_bytes": int(getattr(props, "size", 0) or len(data)),
+                "content_type": getattr(getattr(props, "content_settings", None), "content_type", None),
+                "etag": getattr(props, "etag", None),
+                "updated_at": now_s,
+            }
+
+            if dialect_name == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+                stmt = pg_insert(UserFileIndex).values(**values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=[UserFileIndex.firebase_uid, UserFileIndex.name],
+                    set_=values,
+                )
+                db.execute(stmt)
+            elif dialect_name == "sqlite":
+                from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+                stmt = sqlite_insert(UserFileIndex).values(**values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=[UserFileIndex.firebase_uid, UserFileIndex.name],
+                    set_=values,
+                )
+                db.execute(stmt)
+            else:
+                # Best-effort fallback: update then insert.
+                q = (
+                    db.query(UserFileIndex)
+                    .filter(UserFileIndex.firebase_uid == uid)
+                    .filter(UserFileIndex.name == name)
+                )
+                row = q.first()
+                if row:
+                    for k, v in values.items():
+                        setattr(row, k, v)
+                else:
+                    db.add(UserFileIndex(created_at=now_s, **values))
+
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({"error": f"DB index update failed: {str(e)}"}), 502
+
+    # Return metadata
     return jsonify(
         {
             "file": {
                 "name": name,
-                "blob_key": _blob_key(uid, name),
+                "blob_key": blob_key,
                 "etag": getattr(props, "etag", None),
                 "size_bytes": int(getattr(props, "size", 0) or len(data)),
                 "last_modified": _dt_to_iso(getattr(props, "last_modified", None)),
@@ -265,8 +328,13 @@ def delete_file():
     if not name:
         return jsonify({"error": "Missing or invalid 'name'"}), 400
 
+    from emw_backend.db import SessionLocal
+    from emw_backend.models import UserFileIndex
+
+    # Delete bytes first
     svc = _azure_blob_service(config)
-    blob = svc.get_blob_client(container=config.azure_blob_container, blob=_blob_key(uid, name))
+    blob_key = _blob_key(uid, name)
+    blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
 
     try:
         blob.delete_blob()
@@ -275,5 +343,21 @@ def delete_file():
         if "BlobNotFound" in msg or "The specified blob does not exist" in msg:
             return jsonify({"error": "Not found"}), 404
         return jsonify({"error": f"Azure delete failed: {msg}"}), 502
+
+    # Delete index row (best-effort)
+    try:
+        db = SessionLocal()
+        try:
+            (
+                db.query(UserFileIndex)
+                .filter(UserFileIndex.firebase_uid == uid)
+                .filter(UserFileIndex.name == name)
+                .delete(synchronize_session=False)
+            )
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
 
     return jsonify({"ok": True})

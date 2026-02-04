@@ -32,6 +32,7 @@ class User(Base):
 class UserFile(Base):
     __tablename__ = "files"
 
+    # Legacy table (kept to avoid breaking existing DBs). New file sync does NOT use this.
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
 
@@ -40,17 +41,12 @@ class UserFile(Base):
     extension: Mapped[str] = mapped_column(String(32), default="")
     content_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
-    # Storage
     storage_provider: Mapped[str] = mapped_column(String(32), default="azure_blob")
     blob_container: Mapped[str] = mapped_column(String(128), default="")
     blob_key: Mapped[str] = mapped_column(String(768), default="")
 
-    # Legacy (kept for compatibility; new flows store content in Azure Blob only)
     content_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
-
-    # Content hash (hex sha256) for sync/change detection.
     content_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     etag: Mapped[str] = mapped_column(String(64), default=lambda: str(_now_epoch()))
@@ -61,3 +57,29 @@ class UserFile(Base):
 
 
 Index("idx_files_user_kind_name", UserFile.user_id, UserFile.kind, UserFile.name, unique=True)
+
+
+class UserFileIndex(Base):
+    """Current file index (Postgres): bytes in Azure Blob, metadata/index in SQL.
+
+    We intentionally store firebase_uid directly to avoid joins for list/sync.
+    """
+
+    __tablename__ = "user_files"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
+
+    name: Mapped[str] = mapped_column(String(512))
+    blob_key: Mapped[str] = mapped_column(String(768))
+
+    mtime_ms: Mapped[int] = mapped_column(Integer)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    content_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    etag: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    created_at: Mapped[int] = mapped_column(Integer, default=_now_epoch)
+    updated_at: Mapped[int] = mapped_column(Integer, default=_now_epoch)
+
+
+Index("idx_user_files_uid_name", UserFileIndex.firebase_uid, UserFileIndex.name, unique=True)
