@@ -464,6 +464,14 @@ public sealed partial class ScriptsPage : Page
             }
             catch { }
 
+            // Re-apply highlighting when returning from preview.
+            // (RichEdit can lose formatting when hidden/collapsed by the layout.)
+            if (_editorMode == EditorMode.Code && _current != null)
+            {
+                try { _highlightTimer?.Stop(); } catch { }
+                ApplyHighlightingSafe();
+            }
+
             // When returning to code view, make the editor immediately interactive.
             _ = DispatcherQueue.TryEnqueue(() =>
             {
