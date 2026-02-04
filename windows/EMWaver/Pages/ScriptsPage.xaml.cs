@@ -204,13 +204,19 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
+        // WinUI 3 async continuations can hop off the UI thread.
+        // Also, this method may get invoked from non-UI contexts.
+        await SwitchToUiAsync();
+
         Debug.WriteLine("[EMWaver][Windows][Monaco] EnsureMonacoInitializedAsync: start");
         MonacoLoadingOverlay.Visibility = Visibility.Visible;
 
         // WebView2 needs to be loaded/initialized before navigation.
         try
         {
+            await SwitchToUiAsync();
             await MonacoView.EnsureCoreWebView2Async();
+            await SwitchToUiAsync();
             Debug.WriteLine("[EMWaver][Windows][Monaco] CoreWebView2 ready");
 
             // Wire diagnostics once.
@@ -258,8 +264,11 @@ public sealed partial class ScriptsPage : Page
             for (var i = 0; i < 80 && !_monacoReady; i++)
             {
                 await Task.Delay(50);
+                // Continuations may run on a non-UI thread; hop back.
+                await SwitchToUiAsync();
             }
 
+            await SwitchToUiAsync();
             Debug.WriteLine("[EMWaver][Windows][Monaco] Ready=" + _monacoReady);
             MonacoLoadingOverlay.Visibility = Visibility.Collapsed;
 
@@ -871,6 +880,11 @@ public sealed partial class ScriptsPage : Page
             }
         });
         return tcs.Task;
+    }
+
+    private Task SwitchToUiAsync()
+    {
+        return RunOnUiAsync(static () => Task.CompletedTask);
     }
 
     private async Task<bool> ConfirmAsync(string title, string message, string primaryButtonText, string closeButtonText)
