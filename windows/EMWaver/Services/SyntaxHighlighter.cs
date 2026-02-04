@@ -115,8 +115,12 @@ internal static class SyntaxHighlighter
                         if (left.SequenceEqual("ui".AsSpan()))
                         {
                             spans.Add(new Span(start, i - start, TokenKind.Builtin));
+                            continue;
                         }
                     }
+
+                    // Default identifier styling (helps function names / API surface pop).
+                    spans.Add(new Span(start, i - start, TokenKind.Ident));
                 }
 
                 continue;
