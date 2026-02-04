@@ -464,6 +464,8 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = text ?? string.Empty;
             _suppressEditorChanged = false;
 
+            RichEditor.IsReadOnly = script.IsBundled;
+
             _pendingMonacoReadOnly = script.IsBundled;
             _pendingMonacoText = text ?? string.Empty;
             _monacoTextCache = _pendingMonacoText;

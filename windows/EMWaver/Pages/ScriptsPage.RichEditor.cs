@@ -101,8 +101,13 @@ public sealed partial class ScriptsPage
 
         try
         {
-            var text = _richTextCache;
+            // IMPORTANT: RichEditBox normalizes line endings internally.
+            // Always read the document's current text and tokenize that so span indices match.
+            var text = GetRichEditorText();
+            _richTextCache = text;
             var spans = SyntaxHighlighter.Tokenize(text);
+
+            Debug.WriteLine($"[EMWaver][Windows][RichEdit] highlight: len={text.Length} spans={spans.Count}");
 
             // Snapshot selection.
             var sel = RichEditor.Document.Selection;
