@@ -5,6 +5,7 @@
  */
 
 import Foundation
+import os
 
 public enum CloudFilesAPIError: LocalizedError {
     case invalidBaseURL
@@ -52,6 +53,7 @@ public struct CloudFileMetadata: Codable, Equatable {
 }
 
 public final class CloudFilesAPI {
+    private static let log = OSLog(subsystem: "com.emwaver", category: "CloudFilesAPI")
     private static let session: URLSession = {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest = 12
@@ -78,6 +80,7 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
+        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files?kind=\(kind)&ext=\(ext) -> \(http.statusCode)")
         try validate(http: http, data: data)
 
         struct Body: Codable { let files: [CloudFileMetadata] }
@@ -118,6 +121,7 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
+        os_log("%{public}@", log: Self.log, type: .fault, "POST /v1/files/upload kind=\(kind) name=\(name) bytes=\(bytes.count) -> \(http.statusCode)")
         try validate(http: http, data: data)
 
         struct Body: Codable { let file: CloudFileMetadata }
@@ -137,6 +141,7 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
+        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files/\\(fileId)/content -> \\(http.statusCode) bytes=\\(data.count)")
         try validate(http: http, data: data)
 
         let ct = http.value(forHTTPHeaderField: "Content-Type")
