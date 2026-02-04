@@ -18,6 +18,13 @@ public struct CloudSyncSummary: Equatable {
 }
 
 public final class CloudSyncEngine {
+    private static let uploadSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 20
+        cfg.timeoutIntervalForResource = 60
+        return URLSession(configuration: cfg)
+    }()
+
     public struct FileKindSpec: Equatable {
         public let kind: String
         public let ext: String
@@ -218,10 +225,19 @@ public final class CloudSyncEngine {
         var req = URLRequest(url: url)
         req.httpMethod = "PUT"
         req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+
+        // Azure Blob upload (SAS) requires blob type on create.
+        // Without this header Azure returns 400 and nothing appears in the container.
+        req.setValue("BlockBlob", forHTTPHeaderField: "x-ms-blob-type")
+
         // Azure blob SAS expects raw body.
-        let (_, resp) = try await URLSession.shared.upload(for: req, from: data)
-        guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        let (resData, resp) = try await Self.uploadSession.upload(for: req, from: data)
+        guard let http = resp as? HTTPURLResponse else {
             throw CloudFilesAPIError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let msg = String(data: resData, encoding: .utf8) ?? ""
+            throw CloudFilesAPIError.serverError(http.statusCode, msg.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
 
