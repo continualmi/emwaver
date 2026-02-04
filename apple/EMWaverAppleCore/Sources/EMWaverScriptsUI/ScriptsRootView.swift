@@ -838,10 +838,24 @@ private struct ScriptRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(script.name)
                     .font(isSelected ? .headline : .body)
-                if script.isDirty {
-                    Text("Unsaved changes")
+
+                HStack(spacing: 8) {
+                    if let modifiedAt = script.modifiedAt {
+                        Text(modifiedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Image(systemName: script.syncStatus.iconSystemName)
                         .font(.caption)
-                        .foregroundColor(.orange)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(Text(script.syncStatus.rawValue))
+
+                    if script.isDirty {
+                        Text("Unsaved changes")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
             Spacer()
