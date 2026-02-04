@@ -25,7 +25,7 @@ public final class CloudSyncEngine {
 
     private static func debug(_ msg: String) {
         guard debugEnabled() else { return }
-        print("[CloudSync] \(msg)")
+        NSLog("[CloudSync] %@", msg)
     }
 
     private static let uploadSession: URLSession = {
@@ -76,7 +76,9 @@ public final class CloudSyncEngine {
         kinds: [FileKindSpec],
         policy: CloudSyncPolicy = .preferLocal
     ) async throws -> CloudSyncSummary {
+        Self.debug("sync begin dir=\(storageDir.path) tokenLen=\(accessToken.count)")
         guard !accessToken.isEmpty else {
+            Self.debug("sync aborted: empty access token")
             // Signed-out: no-op.
             return CloudSyncSummary()
         }
