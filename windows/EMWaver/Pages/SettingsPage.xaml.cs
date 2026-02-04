@@ -33,6 +33,8 @@ public sealed partial class SettingsPage : Page
             SignOutButton.IsEnabled = signedIn;
 
             BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
+
+            UseMonacoToggle.IsOn = AppServices.Settings.UseMonacoEditor;
         }
 
         // UI updates must happen on the UI thread.
@@ -63,6 +65,12 @@ public sealed partial class SettingsPage : Page
     {
         AppServices.CloudAuth.SignOut();
         RefreshUi("Signed out.");
+    }
+
+    private void OnUseMonacoToggled(object sender, RoutedEventArgs e)
+    {
+        AppServices.Settings.UseMonacoEditor = UseMonacoToggle.IsOn;
+        RefreshUi("Editor setting updated.");
     }
 
     private async void OnCloudTestClick(object sender, RoutedEventArgs e)

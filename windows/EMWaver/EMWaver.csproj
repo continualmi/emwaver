@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
     <PackageReference Include="Jint" Version="3.1.6" />
     <!-- Required for WinUI XAML compiler tasks under dotnet msbuild. -->
     <PackageReference Include="System.Security.Permissions" Version="6.0.0" />
@@ -76,6 +77,13 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <!-- Monaco editor host page (WebView). -->
+    <Content Include="Assets\Monaco\monaco.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 

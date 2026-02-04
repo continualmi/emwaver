@@ -9,6 +9,7 @@ internal static class AppServices
     internal static readonly ScriptRepository Scripts = new();
     internal static readonly WindowsDeviceManager Device = new();
     internal static readonly FirmwareUpdateManager FirmwareUpdater = new();
+    internal static readonly AppSettings Settings = new();
 
     // Cloud sync (Google via Firebase Auth + Azure Blob storage via backend SAS URLs)
     internal static readonly HttpClient Http = new();

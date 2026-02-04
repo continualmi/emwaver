@@ -80,6 +80,7 @@
                         </Border>
 
                         <Grid Grid.Row="1">
+                            <!-- Simple editor (fallback) -->
                             <TextBox
                                 x:Name="EditorBox"
                                 BorderThickness="0"
@@ -94,6 +95,11 @@
                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                 TextChanged="OnEditorTextChanged" />
+
+                            <!-- Monaco editor (WebView2) -->
+                            <WebView2
+                                x:Name="MonacoView"
+                                Visibility="Collapsed" />
 
                             <TextBlock
                                 x:Name="EmptyHint"
