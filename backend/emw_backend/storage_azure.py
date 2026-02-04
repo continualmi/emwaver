@@ -33,7 +33,17 @@ def make_upload_url(cfg: AzureBlobConfig, blob_key: str, *, ttl_seconds: int = 1
         permission=BlobSasPermissions(create=True, write=True, add=True),
         expiry=_now() + ttl_seconds,
     )
-    return f"https://{cfg.account}.blob.core.windows.net/{cfg.container}/{blob_key}?{sas}"
+
+    # Important: blob_key may contain characters that must be URL-escaped.
+    # Keep '/' unescaped so virtual directories remain readable.
+    try:
+        from urllib.parse import quote
+
+        path = quote(blob_key, safe="/")
+    except Exception:
+        path = blob_key
+
+    return f"https://{cfg.account}.blob.core.windows.net/{cfg.container}/{path}?{sas}"
 
 
 def make_download_url(cfg: AzureBlobConfig, blob_key: str, *, ttl_seconds: int = 15 * 60, content_type: Optional[str] = None) -> str:
@@ -47,4 +57,12 @@ def make_download_url(cfg: AzureBlobConfig, blob_key: str, *, ttl_seconds: int =
         expiry=_now() + ttl_seconds,
         content_type=content_type,
     )
-    return f"https://{cfg.account}.blob.core.windows.net/{cfg.container}/{blob_key}?{sas}"
+
+    try:
+        from urllib.parse import quote
+
+        path = quote(blob_key, safe="/")
+    except Exception:
+        path = blob_key
+
+    return f"https://{cfg.account}.blob.core.windows.net/{cfg.container}/{path}?{sas}"
