@@ -247,7 +247,6 @@ public sealed partial class MainWindow : Window
 
     private void OnScriptsToolbarStateChanged(ScriptToolbarState state)
     {
-        ScriptRunButton.IsEnabled = state.CanRun;
         ScriptEditToggleButton.IsEnabled = state.CanPreview;
         ScriptPreviewToggleButton.IsEnabled = state.CanPreview;
 
