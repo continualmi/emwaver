@@ -18,8 +18,16 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScriptsRootView(device: device) {
-                let raw = UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? ""
-                guard let base = URL(string: raw) else { return nil }
+                // Backend URL resolution order:
+                // 1) EMWAVER_BACKEND_URL env var (parity with Windows)
+                // 2) UserDefaults key emwaver.agent.backendURL
+                let envURL = (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let defaultsURL = (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let raw = !envURL.isEmpty ? envURL : defaultsURL
+                guard let base = URL(string: raw), !raw.isEmpty else { return nil }
 
                 // For local dev: allow sync without sign-in when backend auth is disabled.
                 // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
