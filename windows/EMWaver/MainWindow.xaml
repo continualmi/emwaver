@@ -37,30 +37,37 @@
                 <Image Source="ms-appx:///Assets/emwaver.ico" Stretch="UniformToFill" />
             </Border>
 
-            <MenuBar Grid.Column="1">
-                <MenuBarItem Title="Device">
-                    <MenuFlyoutItem Text="Settings" Click="OnSettingsClick" />
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Text="Refresh Ports" Click="OnRefreshPortsClick" />
-                    <ToggleMenuFlyoutItem x:Name="AutoConnectMenuItem" Text="Auto-connect" Click="OnAutoConnectClick" />
+            <!-- Device status button (replaces "Device" menu; shows connection + version) -->
+            <Button Grid.Column="1" x:Name="DeviceMenuButton" Padding="10,6" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
+                    <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <Button.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="Settings" Click="OnSettingsClick" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem Text="Refresh Ports" Click="OnRefreshPortsClick" />
+                        <ToggleMenuFlyoutItem x:Name="AutoConnectMenuItem" Text="Auto-connect" Click="OnAutoConnectClick" />
 
-                    <MenuFlyoutSeparator />
+                        <MenuFlyoutSeparator />
 
-                    <MenuFlyoutSubItem x:Name="ConnectSubmenu" Text="Connect" />
-                    <MenuFlyoutItem Text="Disconnect" Click="OnDisconnectClick" />
+                        <MenuFlyoutSubItem x:Name="ConnectSubmenu" Text="Connect" />
+                        <MenuFlyoutItem Text="Disconnect" Click="OnDisconnectClick" />
 
-                    <MenuFlyoutSeparator />
+                        <MenuFlyoutSeparator />
 
-                    <MenuFlyoutItem Text="Enter Update Mode" Click="OnEnterUpdateModeClick" />
-                    <MenuFlyoutItem Text="Refresh Update Mode" Click="OnRefreshUpdateModeClick" />
-                    <MenuFlyoutItem Text="Update Firmware…" Click="OnUpdateFirmwareClick" />
-                    <MenuFlyoutItem x:Name="UpdateModeStatusItem" Text="Update Mode: Not detected" IsEnabled="False" />
+                        <MenuFlyoutItem Text="Enter Update Mode" Click="OnEnterUpdateModeClick" />
+                        <MenuFlyoutItem Text="Refresh Update Mode" Click="OnRefreshUpdateModeClick" />
+                        <MenuFlyoutItem Text="Update Firmware…" Click="OnUpdateFirmwareClick" />
+                        <MenuFlyoutItem x:Name="UpdateModeStatusItem" Text="Update Mode: Not detected" IsEnabled="False" />
 
-                    <MenuFlyoutSeparator />
+                        <MenuFlyoutSeparator />
 
-                    <MenuFlyoutItem x:Name="LastErrorMenuItem" Text="" IsEnabled="False" Visibility="Collapsed" />
-                </MenuBarItem>
-            </MenuBar>
+                        <MenuFlyoutItem x:Name="LastErrorMenuItem" Text="" IsEnabled="False" Visibility="Collapsed" />
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
@@ -96,11 +103,7 @@
                     </AppBarToggleButton>
                 </CommandBar>
 
-                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
-                    <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <!-- DeviceBufferText removed (debug RX/TX counter UI) -->
-                </StackPanel>
+                <!-- Device status moved to the left (DeviceMenuButton) -->
             </StackPanel>
             </Grid>
         </Border>
