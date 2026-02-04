@@ -124,13 +124,14 @@ public sealed partial class SettingsPage : Page
                 kind: "file",
                 contentType: "text/plain",
                 sizeBytes: bytes.Length,
+                accessToken: null,
                 ct: cts.Token
             );
 
             await AppServices.CloudFiles.UploadBytesToSasAsync(init.UploadUrl, bytes, "text/plain", cts.Token);
-            await AppServices.CloudFiles.CommitUploadAsync(init.File.Metadata.Id, init.File.Metadata.Etag, bytes.Length, cts.Token);
+            await AppServices.CloudFiles.CommitUploadAsync(init.File.Metadata.Id, init.File.Metadata.Etag, bytes.Length, accessToken: null, ct: cts.Token);
 
-            var files = await AppServices.CloudFiles.ListAsync(kind: null, ext: null, ct: cts.Token);
+            var files = await AppServices.CloudFiles.ListAsync(kind: null, ext: null, accessToken: null, ct: cts.Token);
             RefreshCloudResult($"Uploaded {name}. Files now: {files.Count}");
         }
         catch (Exception ex)
