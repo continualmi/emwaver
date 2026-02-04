@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
 import { firebaseAuth, googleProvider } from "@/lib/firebase";
 import {
   deleteFile,
@@ -159,103 +161,128 @@ export default function CloudPage() {
   }
 
   return (
-    <div style={{ padding: 24, display: "grid", gridTemplateColumns: "360px 1fr", gap: 16 }}>
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Cloud Files</h1>
+    <div className="min-h-dvh">
+      <SiteHeader />
 
-        {!idToken ? (
-          <button onClick={doSignIn}>Sign in with Google</button>
-        ) : (
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-            <div style={{ color: "#666" }}>{userEmail}</div>
-            <button onClick={doSignOut}>Sign out</button>
+      <main className="mx-auto max-w-6xl px-5 pt-10 pb-14">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Dashboard</h1>
+            <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Cloud file browser + editor</div>
           </div>
-        )}
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 6 }}>Upload</label>
-          <input
-            type="file"
-            disabled={!idToken || isBusy}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void doUploadFromPicker(f);
-              e.currentTarget.value = "";
-            }}
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <button disabled={!idToken || isBusy} onClick={() => idToken && refresh(idToken)}>
-            Refresh
-          </button>
-        </div>
-
-        <div style={{ border: "1px solid #eee", borderRadius: 8, overflow: "hidden" }}>
-          {files.length === 0 ? (
-            <div style={{ padding: 12, color: "#666" }}>No files indexed yet. First sync/upload will populate Postgres.</div>
+          {!idToken ? (
+            <button
+              onClick={doSignIn}
+              className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
+            >
+              Sign in with Google
+            </button>
           ) : (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {files.map((f) => (
-                <li
-                  key={f.name}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    padding: "10px 12px",
-                    borderBottom: "1px solid #f2f2f2",
-                    background: selected === f.name ? "#f7f7ff" : "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div onClick={() => void openFile(f.name)} style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600 }}>{f.name}</div>
-                    <div style={{ fontSize: 12, color: "#666" }}>
-                      {(f.size_bytes ?? 0).toLocaleString()} bytes
-                      {typeof f.mtime_ms === "number" ? ` • mtime ${new Date(f.mtime_ms).toLocaleString()}` : ""}
-                    </div>
-                  </div>
-                  <button disabled={!idToken || isBusy} onClick={() => void doDelete(f.name)}>
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="flex items-center gap-3">
+              <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>
+              <button
+                onClick={doSignOut}
+                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+              >
+                Sign out
+              </button>
+            </div>
           )}
         </div>
 
-        {error ? <div style={{ marginTop: 12, color: "#b00020", whiteSpace: "pre-wrap" }}>{error}</div> : null}
-      </div>
+        <div className="grid gap-4 md:grid-cols-[340px_1fr]">
+          <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Files</div>
+              <button
+                disabled={!idToken || isBusy}
+                onClick={() => idToken && refresh(idToken)}
+                className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] disabled:opacity-50"
+              >
+                Refresh
+              </button>
+            </div>
 
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700 }}>{selected ? selected : "Viewer"}</h2>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button disabled={!selected || isBusy || !idToken} onClick={saveCurrent}>
-              Save
-            </button>
-          </div>
+            <div className="mt-3">
+              <label className="block text-xs font-semibold text-[color:var(--ink-dim)]">Upload</label>
+              <input
+                type="file"
+                disabled={!idToken || isBusy}
+                className="mt-2 w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] p-2 text-xs text-[color:var(--ink)] disabled:opacity-50"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void doUploadFromPicker(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--line)]">
+              {files.length === 0 ? (
+                <div className="p-3 text-sm text-[color:var(--ink-dim)]">
+                  No files indexed yet. First sync/upload will populate Postgres.
+                </div>
+              ) : (
+                <ul className="divide-y divide-[color:var(--line)]">
+                  {files.map((f) => (
+                    <li key={f.name} className={selected === f.name ? "bg-[rgba(91,192,255,0.10)]" : ""}>
+                      <div className="flex items-start justify-between gap-3 p-3">
+                        <button
+                          onClick={() => void openFile(f.name)}
+                          className="flex-1 text-left"
+                          disabled={!idToken || isBusy}
+                        >
+                          <div className="font-semibold text-[color:var(--ink)]">{f.name}</div>
+                          <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">
+                            {(f.size_bytes ?? 0).toLocaleString()} bytes
+                            {typeof f.mtime_ms === "number" ? ` • ${new Date(f.mtime_ms).toLocaleString()}` : ""}
+                          </div>
+                        </button>
+                        <button
+                          disabled={!idToken || isBusy}
+                          onClick={() => void doDelete(f.name)}
+                          className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)] disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {error ? <div className="mt-3 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
+          </section>
+
+          <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm font-semibold text-[color:var(--ink)]">{selected ? selected : "Viewer"}</div>
+              <button
+                disabled={!selected || isBusy || !idToken}
+                onClick={saveCurrent}
+                className="rounded-lg bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-[color:var(--paper)] disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+
+            <textarea
+              value={viewerText}
+              onChange={(e) => setViewerText(e.target.value)}
+              readOnly={selected ? isRaw(selected) : true}
+              className="mt-3 h-[calc(100vh-240px)] w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
+            />
+
+            {selected && isRaw(selected) ? (
+              <div className="mt-2 text-xs text-[color:var(--ink-dim)]">.raw is viewer-only for now.</div>
+            ) : null}
+          </section>
         </div>
-        <textarea
-          value={viewerText}
-          onChange={(e) => setViewerText(e.target.value)}
-          readOnly={selected ? isRaw(selected) : true}
-          style={{
-            width: "100%",
-            height: "calc(100vh - 120px)",
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-            fontSize: 12,
-            lineHeight: 1.4,
-            padding: 12,
-            border: "1px solid #eee",
-            borderRadius: 8,
-          }}
-        />
-        {selected && isRaw(selected) ? (
-          <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>.raw is viewer-only for now.</div>
-        ) : null}
-      </div>
+      </main>
+
+      <SiteFooter />
     </div>
   );
 }
