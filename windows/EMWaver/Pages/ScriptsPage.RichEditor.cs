@@ -116,8 +116,17 @@ public sealed partial class ScriptsPage
         // highlight loop. Suppress change handling while we apply formatting.
         var prevSuppress = _suppressRichChanged;
         _suppressRichChanged = true;
+
+        var prevReadOnly = RichEditor.IsReadOnly;
         try
         {
+            // RichEdit formatting can throw UnauthorizedAccessException when the control is read-only.
+            // Temporarily allow edits just for formatting, then restore.
+            if (prevReadOnly)
+            {
+                try { RichEditor.IsReadOnly = false; } catch { }
+            }
+
             // IMPORTANT: RichEdit uses CR (\r) line separators; tokenize exactly what the document returns.
             var text = GetRichEditorText();
             _richTextCache = text;
@@ -162,6 +171,7 @@ public sealed partial class ScriptsPage
         }
         finally
         {
+            try { RichEditor.IsReadOnly = prevReadOnly; } catch { }
             _suppressRichChanged = prevSuppress;
         }
     }
