@@ -310,6 +310,9 @@ public sealed partial class ScriptsPage : Page
             ScheduleHighlight();
             ApplyHighlightingSafe();
 
+            // Always start in editor mode when opening a script.
+            SetPreviewMode(false);
+
             EmptyHint.Visibility = Visibility.Collapsed;
             ReadOnlyBanner.Visibility = script.IsBundled ? Visibility.Visible : Visibility.Collapsed;
 
@@ -338,8 +341,7 @@ public sealed partial class ScriptsPage : Page
             await Task.CompletedTask;
         });
 
-        // Execute on open so users see script-side effects immediately.
-        _scriptEngine.Execute(text);
+        // Do NOT auto-run on open. Rendering should only happen when the user presses Run.
     }
 
     private void ClearEditor()
@@ -619,6 +621,9 @@ public sealed partial class ScriptsPage : Page
         }
 
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Scripts] Run clicked script={_current.Name} bundled={_current.IsBundled}");
+
+        // Switch to preview mode on Run.
+        SetPreviewMode(true);
 
         // Run the current editor buffer (even if dirty) so iteration is fast.
         var text = GetEditorTextNormalized();
