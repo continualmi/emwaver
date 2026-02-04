@@ -18,91 +18,56 @@
                 <ColumnDefinition x:Name="AgentColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <ListView x:Name="ScriptsList" SelectionMode="Single" SelectionChanged="OnSelectionChanged">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+            <!-- Scripts list -->
+            <Border Grid.Column="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <ListView x:Name="ScriptsList" SelectionMode="Single" SelectionChanged="OnSelectionChanged">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                                    <SymbolIcon
-                                        Grid.Column="0"
-                                        Symbol="View"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Visibility="{Binding IsBundled, Converter={StaticResource BoolToVisibility}}" />
+                                <SymbolIcon
+                                    Grid.Column="0"
+                                    Symbol="View"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Visibility="{Binding IsBundled, Converter={StaticResource BoolToVisibility}}" />
 
-                                    <TextBlock Grid.Column="1" Text="{Binding FileName}" FontWeight="SemiBold" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </Border>
+                                <TextBlock Grid.Column="1" Text="{Binding FileName}" FontWeight="SemiBold" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Border>
 
+            <!-- Editor (native, embedded; no popup HWND) -->
             <Border Grid.Column="1" Margin="12,0,0,0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <Grid RowSpacing="10">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+                <Grid>
+                    <RichEditBox
+                        x:Name="EditorBox"
+                        BorderThickness="0"
+                        Background="#1E1E1E"
+                        Foreground="#D4D4D4"
+                        FontFamily="Consolas"
+                        FontSize="13"
+                        TextWrapping="NoWrap"
+                        IsSpellCheckEnabled="False"
+                        IsTextPredictionEnabled="False"
+                        SelectionHighlightColor="#264F78"
+                        TextChanged="OnEditorTextChanged" />
 
-                    <StackPanel Grid.Row="0" Spacing="2" Visibility="Collapsed">
-                        <TextBlock x:Name="EditorTitleText" Text="Select a script" FontWeight="SemiBold" />
-                        <TextBlock x:Name="EditorSubtitleText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
-                    </StackPanel>
-
-                    <Grid Grid.Row="1" RowSpacing="10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                            <RadioButton x:Name="PreviewModeButton" Content="Preview" GroupName="ScriptViewMode" IsChecked="True" Checked="OnViewModeChanged" />
-                            <RadioButton x:Name="EditModeButton" Content="Edit" GroupName="ScriptViewMode" Checked="OnViewModeChanged" />
-                        </StackPanel>
-
-                        <Grid Grid.Row="1">
-                            <Grid x:Name="EditorPane" Visibility="Collapsed">
-                                <Grid
-                                    x:Name="EditorHost"
-                                    Visibility="Collapsed"
-                                    Loaded="OnEditorHostLoaded"
-                                    Unloaded="OnEditorHostUnloaded"
-                                    LayoutUpdated="OnEditorHostLayoutUpdated"
-                                    SizeChanged="OnEditorHostSizeChanged"
-                                    PointerPressed="OnEditorHostPointerPressed">
-                                    <!-- Native Scintilla editor is hosted as an owned HWND positioned over this panel. -->
-                                    <Border Background="#1E1E1E" CornerRadius="6" />
-                                </Grid>
-
-                                <TextBlock
-                                    x:Name="EmptyHint"
-                                    Text="Pick a script to view/edit."
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Center" />
-                            </Grid>
-
-                            <Grid x:Name="PreviewPane" Visibility="Visible">
-                                <ScrollViewer>
-                                    <StackPanel x:Name="PreviewHost" />
-                                </ScrollViewer>
-
-                                <TextBlock
-                                    x:Name="PreviewHint"
-                                    Text="Select a script to preview its UI."
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Center" />
-                            </Grid>
-                        </Grid>
-                    </Grid>
+                    <TextBlock
+                        x:Name="EmptyHint"
+                        Text="Pick a script to view/edit."
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center" />
                 </Grid>
             </Border>
 
+            <!-- Agent pane -->
             <Grid Grid.Column="2" Margin="12,0,0,0">
                 <Border
                     x:Name="AgentPane"
