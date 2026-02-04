@@ -54,11 +54,10 @@
                         FontSize="13"
                         TextWrapping="NoWrap"
                         AcceptsReturn="True"
-                        AcceptsTab="True"
                         IsSpellCheckEnabled="False"
                         IsTextPredictionEnabled="False"
-                        VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Auto"
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
                         TextChanged="OnEditorTextChanged" />
 
                     <TextBlock
