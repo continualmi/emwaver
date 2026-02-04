@@ -164,6 +164,14 @@ public sealed partial class ScriptsPage : Page
         RichEditor.Visibility = _editorMode == EditorMode.Code ? Visibility.Visible : Visibility.Collapsed;
         EditorBox.Visibility = _editorMode == EditorMode.Simple ? Visibility.Visible : Visibility.Collapsed;
 
+        // When switching into code mode, apply highlight once (helps read-only/bundled scripts).
+        if (_editorMode == EditorMode.Code && _current != null)
+        {
+            EnsureHighlightTimer();
+            ScheduleHighlight();
+            ApplyHighlightingSafe();
+        }
+
         Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode: mode={_editorMode} => code={RichEditor.Visibility} simple={EditorBox.Visibility}");
     }
 
@@ -309,6 +317,24 @@ public sealed partial class ScriptsPage : Page
             PreviewHint.Visibility = Visibility.Visible;
 
             UpdateCommandStates();
+
+            // Improve UX: focus the active editor automatically when a script is opened.
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    if (_editorMode == EditorMode.Code)
+                    {
+                        RichEditor.Focus(FocusState.Programmatic);
+                    }
+                    else
+                    {
+                        EditorBox.Focus(FocusState.Programmatic);
+                    }
+                }
+                catch { }
+            });
+
             await Task.CompletedTask;
         });
 

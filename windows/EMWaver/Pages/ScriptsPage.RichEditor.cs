@@ -147,6 +147,7 @@ public sealed partial class ScriptsPage
                     SyntaxHighlighter.TokenKind.Number => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xB5, 0xCE, 0xA8),
                     SyntaxHighlighter.TokenKind.Keyword => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x56, 0x9C, 0xD6),
                     SyntaxHighlighter.TokenKind.Builtin => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x4E, 0xC9, 0xB0),
+                    SyntaxHighlighter.TokenKind.Ident => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x9C, 0xDC, 0xFE),
                     _ => Colors.Gainsboro,
                 };
             }
