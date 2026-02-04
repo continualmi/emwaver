@@ -18,6 +18,15 @@ public struct CloudSyncSummary: Equatable {
 }
 
 public final class CloudSyncEngine {
+    private static func debugEnabled() -> Bool {
+        (ProcessInfo.processInfo.environment["EMWAVER_SYNC_DEBUG"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+    }
+
+    private static func debug(_ msg: String) {
+        guard debugEnabled() else { return }
+        print("[CloudSync] \(msg)")
+    }
+
     private static let uploadSession: URLSession = {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest = 20
@@ -79,6 +88,8 @@ public final class CloudSyncEngine {
             let localURLs = try localFiles(in: storageDir, withSuffix: spec.ext)
             let localByName: [String: URL] = Dictionary(uniqueKeysWithValues: localURLs.map { ($0.lastPathComponent, $0) })
 
+            Self.debug("Kind=\(spec.kind) ext=\(spec.ext) local=\(localByName.count) cloud=\(cloudByName.count) dir=\(storageDir.path)")
+
             let names = Set(cloudByName.keys).union(localByName.keys)
 
             for name in names.sorted() {
@@ -98,12 +109,14 @@ public final class CloudSyncEngine {
                 switch (localURL, cloudMeta) {
                 case (nil, let cloud?):
                     // Cloud-only -> download.
+                    Self.debug("download \(spec.kind) \(name) (cloudId=\(cloud.metadata.id))")
                     try await download(cloud: cloud, to: storageDir.appendingPathComponent(name), baseURL: baseURL, accessToken: accessToken)
                     summary.downloaded += 1
                     updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: storageDir.appendingPathComponent(name)), cloudEtag: cloud.metadata.etag)
 
                 case (let local?, nil):
                     // Local-only -> upload.
+                    Self.debug("upload \(spec.kind) \(name) (local-only)")
                     let data = try Data(contentsOf: local)
                     let initRes = try await api.initUpload(
                         baseURL: baseURL,
@@ -214,9 +227,15 @@ public final class CloudSyncEngine {
 
     private func download(cloud: CloudFileMetadata, to localURL: URL, baseURL: URL, accessToken: String) async throws {
         let sas = try await api.downloadURL(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id)
-        let (data, resp) = try await URLSession.shared.data(from: sas)
-        guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        var req = URLRequest(url: sas)
+        req.httpMethod = "GET"
+        let (data, resp) = try await Self.uploadSession.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
             throw CloudFilesAPIError.invalidResponse
+        }
+        guard (200...299).contains(http.statusCode) else {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            throw CloudFilesAPIError.serverError(http.statusCode, msg.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         try data.write(to: localURL, options: [.atomic])
     }
