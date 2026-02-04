@@ -210,7 +210,7 @@ public struct ScriptsRootView: View {
                 } else {
                     List {
                         if !viewModel.assetScripts.isEmpty {
-                            Section {
+                            Section("Example Scripts") {
                                 ForEach(viewModel.assetScripts) { script in
                                     ScriptRow(
                                         script: script,
@@ -225,7 +225,7 @@ public struct ScriptsRootView: View {
                         }
 
                         if !viewModel.customScripts.isEmpty {
-                            Section("Scripts") {
+                            Section("Custom Scripts") {
                                 ForEach(viewModel.customScripts) { script in
                                     ScriptRow(
                                         script: script,
@@ -534,7 +534,13 @@ public struct ScriptsRootView: View {
         case .rename(let id):
             initial = viewModel.scriptName(for: id)
         case .copy(let id):
-            initial = viewModel.scriptName(for: id)
+            let original = viewModel.scriptName(for: id)
+            if original.lowercased().hasSuffix(".emw") {
+                let base = String(original.dropLast(4))
+                initial = base + "_copy.emw"
+            } else {
+                initial = original + "_copy"
+            }
         }
 
         namePrompt = NamePrompt(
@@ -935,6 +941,20 @@ private struct NamePromptSheet: View {
             }
             .navigationTitle(prompt.title)
             .toolbar {
+                #if os(macOS)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        prompt.action(value)
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                #else
                 ToolbarItem(placement: .navigation) {
                     Button("Cancel") { dismiss() }
                 }
@@ -945,6 +965,7 @@ private struct NamePromptSheet: View {
                     }
                     .disabled(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                #endif
             }
         }
     }
