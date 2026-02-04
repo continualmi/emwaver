@@ -48,7 +48,7 @@
 
                     <SymbolIcon
                         x:Name="CableIconDisconnected"
-                        Symbol="UnLink"
+                        Symbol="Cancel"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Visibility="Visible" />
 
@@ -87,7 +87,7 @@
                     <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Code" IsEnabled="False"
                                         Checked="OnScriptEditChecked">
                         <AppBarToggleButton.Icon>
-                            <SymbolIcon Symbol="Code" />
+                            <SymbolIcon Symbol="Document" />
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
 
