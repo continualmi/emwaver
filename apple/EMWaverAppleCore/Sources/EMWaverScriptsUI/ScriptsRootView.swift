@@ -21,6 +21,7 @@ public struct ScriptsRootView: View {
     @StateObject private var agentViewModel = AgentChatViewModel()
 
     private let device: (any ScriptDevice)?
+    private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
     @State private var showingEditor = false
     @State private var showingPreview = false
@@ -37,8 +38,12 @@ public struct ScriptsRootView: View {
     @State private var showingAgentPanel = false
     #endif
 
-    public init(device: (any ScriptDevice)? = nil) {
+    public init(
+        device: (any ScriptDevice)? = nil,
+        syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil
+    ) {
         self.device = device
+        self.syncProvider = syncProvider
     }
 
     public var body: some View {
@@ -192,6 +197,21 @@ public struct ScriptsRootView: View {
                                         isSelected: script.id == viewModel.selectedScriptId,
                                         onTap: { previewScript(script.id) },
                                         onEdit: { openEditor(for: script.id) }
+                                    )
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                }
+                            }
+                        }
+
+                        if !viewModel.signalFiles.isEmpty {
+                            Section("Signals") {
+                                ForEach(viewModel.signalFiles) { item in
+                                    ScriptRow(
+                                        script: item,
+                                        isSelected: false,
+                                        onTap: { /* TODO: open signal viewer */ },
+                                        onEdit: { /* TODO */ }
                                     )
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
@@ -460,6 +480,19 @@ public struct ScriptsRootView: View {
             }
         } else {
             ToolbarItem(placement: .primaryAction) {
+                if let provider = syncProvider, let ctx = provider(), !ctx.accessToken.isEmpty {
+                    Button {
+                        Task {
+                            await viewModel.sync(baseURL: ctx.baseURL, accessToken: ctx.accessToken)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    .help("Sync")
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("New Script") { openNewScriptEditor() }
 
@@ -530,7 +563,11 @@ private struct ScriptRow: View {
     let onEdit: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
+            Image(systemName: script.kind.iconSystemName)
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(script.name)
                     .font(isSelected ? .headline : .body)
@@ -542,7 +579,11 @@ private struct ScriptRow: View {
             }
             Spacer()
             Button(action: onEdit) {
-                Image(systemName: script.isAsset ? "eye" : "pencil")
+                if script.kind == .script {
+                    Image(systemName: script.isAsset ? "eye" : "pencil")
+                } else {
+                    Image(systemName: "eye")
+                }
             }
             .buttonStyle(.plain)
             .padding(.leading, 8)

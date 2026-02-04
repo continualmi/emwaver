@@ -29,6 +29,12 @@ public final class FileService {
     private let storageDir: URL
     private let fileManager = FileManager.default
 
+    /// Exposes the local storage directory so higher-level services (like cloud sync) can work
+    /// without duplicating path logic.
+    public func storageDirectoryURL() -> URL {
+        storageDir
+    }
+
     public init() {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         storageDir = documentsPath.appendingPathComponent("scripts", isDirectory: true)

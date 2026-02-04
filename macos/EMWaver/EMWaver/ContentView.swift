@@ -15,7 +15,12 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScriptsRootView(device: device)
+            ScriptsRootView(device: device) {
+                guard let session = auth.session else { return nil }
+                let raw = UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? ""
+                guard let base = URL(string: raw), !session.idToken.isEmpty else { return nil }
+                return (baseURL: base, accessToken: session.idToken)
+            }
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
