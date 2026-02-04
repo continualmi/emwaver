@@ -25,17 +25,18 @@
                         <DataTemplate>
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
+                                <TextBlock Grid.Column="0" Text="{Binding FileName}" FontWeight="SemiBold" />
+
                                 <SymbolIcon
-                                    Grid.Column="0"
+                                    Grid.Column="1"
                                     Symbol="View"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    VerticalAlignment="Center"
                                     Visibility="{Binding IsBundled, Converter={StaticResource BoolToVisibility}}" />
-
-                                <TextBlock Grid.Column="1" Text="{Binding FileName}" FontWeight="SemiBold" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
