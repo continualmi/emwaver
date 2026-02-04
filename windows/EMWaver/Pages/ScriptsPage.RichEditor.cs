@@ -112,10 +112,13 @@ public sealed partial class ScriptsPage
             return;
         }
 
+        // NOTE: formatting operations can fire TextChanged, which can cause an infinite
+        // highlight loop. Suppress change handling while we apply formatting.
+        var prevSuppress = _suppressRichChanged;
+        _suppressRichChanged = true;
         try
         {
-            // IMPORTANT: RichEditBox normalizes line endings internally.
-            // Always read the document's current text and tokenize that so span indices match.
+            // IMPORTANT: RichEdit uses CR (\r) line separators; tokenize exactly what the document returns.
             var text = GetRichEditorText();
             _richTextCache = text;
             var spans = SyntaxHighlighter.Tokenize(text);
@@ -133,7 +136,10 @@ public sealed partial class ScriptsPage
 
             foreach (var sp in spans)
             {
-                var range = RichEditor.Document.GetRange(sp.Start, sp.Start + sp.Length);
+                var end = Math.Min(text.Length, sp.Start + sp.Length);
+                if (end <= sp.Start) continue;
+
+                var range = RichEditor.Document.GetRange(sp.Start, end);
                 range.CharacterFormat.ForegroundColor = sp.Kind switch
                 {
                     SyntaxHighlighter.TokenKind.Comment => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x6A, 0x99, 0x55),
@@ -151,6 +157,10 @@ public sealed partial class ScriptsPage
         catch (Exception ex)
         {
             Debug.WriteLine("[EMWaver][Windows][RichEdit] highlight failed: " + ex.Message);
+        }
+        finally
+        {
+            _suppressRichChanged = prevSuppress;
         }
     }
 }
