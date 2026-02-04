@@ -212,6 +212,8 @@ public sealed class ScriptEngine : IDisposable
         {
             try
             {
+                Debug.WriteLine("[EMWaver][Script][Render] called");
+
                 if (nodeValue.IsNull() || nodeValue.IsUndefined())
                 {
                     EmitError("Script render called with invalid node");
@@ -229,6 +231,8 @@ public sealed class ScriptEngine : IDisposable
                     EmitError("Script render received malformed node");
                     return;
                 }
+
+                Debug.WriteLine($"[EMWaver][Script][Render] rootType={tree.Root.Type} rootId={tree.Root.Id}");
                 _renderHandler?.Invoke(tree);
             }
             catch (Exception ex)
