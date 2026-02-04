@@ -40,21 +40,17 @@
             <!-- Device status button (replaces "Device" menu; shows connection + version) -->
             <Button Grid.Column="1" x:Name="DeviceMenuButton" Padding="10,6" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                    <PathIcon
+                    <SymbolIcon
                         x:Name="CableIconConnected"
-                        Width="16"
-                        Height="16"
+                        Symbol="Link"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Visibility="Collapsed"
-                        Data="M2,8 L8,8 M8,6 L8,10 M10,6 L10,10 M12,8 L20,8 M20,6 L20,10" />
+                        Visibility="Collapsed" />
 
-                    <PathIcon
+                    <SymbolIcon
                         x:Name="CableIconDisconnected"
-                        Width="16"
-                        Height="16"
+                        Symbol="UnLink"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Visibility="Visible"
-                        Data="M2,8 L8,8 M8,6 L8,10 M10,6 L10,10 M12,8 L20,8 M20,6 L20,10 M4,4 L18,12" />
+                        Visibility="Visible" />
 
                     <TextBlock x:Name="DeviceStatusText" Text="Disconnected" />
                     <TextBlock x:Name="DeviceVersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
