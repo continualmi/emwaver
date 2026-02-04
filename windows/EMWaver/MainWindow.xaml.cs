@@ -333,9 +333,14 @@ public sealed partial class MainWindow : Window
         _scriptsPage?.HandleToolbarRun();
     }
 
-    private void OnScriptPreviewToggleClick(object sender, RoutedEventArgs e)
+    private void OnScriptPreviewChecked(object sender, RoutedEventArgs e)
     {
-        _scriptsPage?.HandleToolbarPreviewToggle(ScriptPreviewToggleButton.IsChecked == true);
+        _scriptsPage?.HandleToolbarPreviewToggle(true);
+    }
+
+    private void OnScriptPreviewUnchecked(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarPreviewToggle(false);
     }
 
     private void OnScriptNewClick(object sender, RoutedEventArgs e)

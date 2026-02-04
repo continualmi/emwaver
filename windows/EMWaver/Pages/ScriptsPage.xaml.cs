@@ -468,6 +468,10 @@ public sealed partial class ScriptsPage : Page
         // Run the current editor buffer (even if dirty) so iteration is fast.
         var text = GetEditorTextNormalized();
         await Task.CompletedTask;
+
+        // Most users expect Run → see UI.
+        SetPreviewMode(true);
+
         _scriptEngine.Execute(text);
     }
 
