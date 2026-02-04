@@ -53,11 +53,12 @@ public final class FileService {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         storageDir = documentsPath.appendingPathComponent("scripts", isDirectory: true)
 
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        signalsDir = appSupport.appendingPathComponent("signals", isDirectory: true)
+        // Keep signals alongside scripts to simplify user-visible storage + sync.
+        // (Signals are still conceptually separate, but live in the same directory.)
+        signalsDir = storageDir
 
         try? fileManager.createDirectory(at: storageDir, withIntermediateDirectories: true)
-        try? fileManager.createDirectory(at: signalsDir, withIntermediateDirectories: true)
+        // signalsDir == storageDir
 
         Self.debug("scriptsDir=\(storageDir.path)")
         Self.debug("signalsDir=\(signalsDir.path)")
