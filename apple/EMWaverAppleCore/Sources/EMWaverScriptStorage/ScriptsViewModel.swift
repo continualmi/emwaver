@@ -129,9 +129,15 @@ public final class ScriptsViewModel: ObservableObject {
         isPerformingAction = true
         defer { isPerformingAction = false }
 
+        let debug = (ProcessInfo.processInfo.environment["EMWAVER_SYNC_DEBUG"] ?? "") == "1"
+        if debug {
+            print("[Sync] begin baseURL=\(baseURL.absoluteString) tokenLen=\(accessToken.count)")
+        }
+
         do {
             // Scripts live in Documents/scripts
             let scriptsDir = fileService.storageDirectoryURL()
+            if debug { print("[Sync] scriptsDir=\(scriptsDir.path)") }
             let s1 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
@@ -144,6 +150,7 @@ public final class ScriptsViewModel: ObservableObject {
 
             // Signals live in Application Support/signals
             let signalsDir = fileService.signalsDirectoryURL()
+            if debug { print("[Sync] signalsDir=\(signalsDir.path)") }
             let s2 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
@@ -156,11 +163,17 @@ public final class ScriptsViewModel: ObservableObject {
             )
 
             await loadScripts()
+            if debug {
+                print("[Sync] done uploaded=\(s1.uploaded + s2.uploaded) downloaded=\(s1.downloaded + s2.downloaded) conflicts=\(s1.conflicts + s2.conflicts)")
+            }
             showInfo(
                 title: "Sync complete",
                 message: "Uploaded: \(s1.uploaded + s2.uploaded), Downloaded: \(s1.downloaded + s2.downloaded), Conflicts: \(s1.conflicts + s2.conflicts)"
             )
         } catch {
+            if debug {
+                print("[Sync] error: \(error)")
+            }
             showError(message: error.localizedDescription)
         }
     }

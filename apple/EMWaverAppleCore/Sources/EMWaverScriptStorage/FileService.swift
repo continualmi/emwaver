@@ -26,6 +26,15 @@ public enum FileServiceError: LocalizedError {
 public final class FileService {
     public static let shared = FileService()
 
+    private static func debugEnabled() -> Bool {
+        (ProcessInfo.processInfo.environment["EMWAVER_SYNC_DEBUG"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+    }
+
+    private static func debug(_ msg: String) {
+        guard debugEnabled() else { return }
+        print("[FileService] \(msg)")
+    }
+
     private let storageDir: URL
     private let signalsDir: URL
     private let fileManager = FileManager.default
@@ -46,6 +55,9 @@ public final class FileService {
 
         try? fileManager.createDirectory(at: storageDir, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: signalsDir, withIntermediateDirectories: true)
+
+        Self.debug("scriptsDir=\(storageDir.path)")
+        Self.debug("signalsDir=\(signalsDir.path)")
     }
 
     public func listFiles(
@@ -76,6 +88,7 @@ public final class FileService {
                         at: dir,
                         includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]
                     )
+                    Self.debug("list dir=\(dir.lastPathComponent) path=\(dir.path) filter=\(fileExtension ?? "<any>") total=\(files.count)")
 
                     var result: [UserFileData] = []
                     for fileURL in files {
