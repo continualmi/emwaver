@@ -39,7 +39,15 @@ public final class CloudSyncEngine {
         }
 
         let cloudFiles = try await api.listFiles(baseURL: baseURL, accessToken: accessToken)
-        let cloudByName: [String: CloudUserFile] = Dictionary(uniqueKeysWithValues: cloudFiles.map { ($0.name, $0) })
+        // Backend should de-dupe, but be defensive.
+        let cloudByName: [String: CloudUserFile] = Dictionary(cloudFiles.map { ($0.name, $0) }, uniquingKeysWith: { a, b in
+            // Prefer the one with mtime (if only one has it); otherwise keep the larger one.
+            if a.mtimeMs == nil, b.mtimeMs != nil { return b }
+            if a.mtimeMs != nil, b.mtimeMs == nil { return a }
+            let asz = a.sizeBytes ?? 0
+            let bsz = b.sizeBytes ?? 0
+            return bsz >= asz ? b : a
+        })
 
         let localURLs = try localFiles(in: storageDir)
         let localByName: [String: URL] = Dictionary(uniqueKeysWithValues: localURLs.map { ($0.lastPathComponent, $0) })

@@ -108,11 +108,37 @@ def list_files():
     prefix = f"u/{uid}/"
     blobs = container.list_blobs(name_starts_with=prefix, include=["metadata"])
 
-    files: List[Dict[str, Any]] = []
-    for b in blobs:
-        # b.name is full key
-        files.append(_file_json_from_blob(b))
+    # De-dupe by user-visible name. Legacy layouts had u/<uid>/<uuid>/<name>, which can
+    # create multiple blobs with the same trailing name.
+    by_name: Dict[str, Dict[str, Any]] = {}
 
+    for b in blobs:
+        item = _file_json_from_blob(b)
+        name = item.get("name") or ""
+        if not name:
+            continue
+
+        prev = by_name.get(name)
+        if prev is None:
+            by_name[name] = item
+            continue
+
+        # Prefer canonical key u/<uid>/<name> over legacy subfolders.
+        canonical = f"u/{uid}/{name}"
+        if item.get("blob_key") == canonical and prev.get("blob_key") != canonical:
+            by_name[name] = item
+            continue
+        if prev.get("blob_key") == canonical and item.get("blob_key") != canonical:
+            continue
+
+        # Otherwise pick the most recently modified blob.
+        # last_modified is ISO string; lexical compare works for UTC ISO8601.
+        prev_lm = prev.get("last_modified") or ""
+        item_lm = item.get("last_modified") or ""
+        if item_lm > prev_lm:
+            by_name[name] = item
+
+    files = list(by_name.values())
     files.sort(key=lambda x: x.get("name") or "")
     return jsonify({"files": files})
 

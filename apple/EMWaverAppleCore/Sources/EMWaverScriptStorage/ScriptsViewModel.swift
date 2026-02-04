@@ -114,7 +114,7 @@ public final class ScriptsViewModel: ObservableObject {
 
         // Load last known cloud snapshot (for main-screen badges) if present.
         if let snap = cloudStateStore.load(storageDir: fileService.storageDirectoryURL()) {
-            cloudFilesByName = Dictionary(uniqueKeysWithValues: snap.files.map { ($0.name, $0) })
+            cloudFilesByName = Dictionary(snap.files.map { ($0.name, $0) }, uniquingKeysWith: { a, b in b })
         }
 
         rebuildScriptItems()
@@ -179,7 +179,7 @@ public final class ScriptsViewModel: ObservableObject {
             do {
                 let cloud = try await CloudFilesAPI().listFiles(baseURL: baseURL, accessToken: accessToken)
                 cloudStateStore.save(storageDir: scriptsDir, files: cloud)
-                cloudFilesByName = Dictionary(uniqueKeysWithValues: cloud.map { ($0.name, $0) })
+                cloudFilesByName = Dictionary(cloud.map { ($0.name, $0) }, uniquingKeysWith: { a, b in b })
             } catch {
                 os_log("%{public}@", log: Self.log, type: .fault, "[Sync] failed to refresh cloud snapshot: \(error)")
             }
