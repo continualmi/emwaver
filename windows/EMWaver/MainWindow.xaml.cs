@@ -131,13 +131,16 @@ public sealed partial class MainWindow : Window
         if (_scriptsPage != null)
         {
             _scriptsPage.ToolbarStateChanged -= OnScriptsToolbarStateChanged;
+            _scriptsPage.PreviewModeChanged -= OnScriptsPreviewModeChanged;
         }
 
         _scriptsPage = e.Content as ScriptsPage;
         if (_scriptsPage != null)
         {
             _scriptsPage.ToolbarStateChanged += OnScriptsToolbarStateChanged;
+            _scriptsPage.PreviewModeChanged += OnScriptsPreviewModeChanged;
             OnScriptsToolbarStateChanged(_scriptsPage.CurrentToolbarState);
+            OnScriptsPreviewModeChanged(false);
             ScriptsCommandBar.Visibility = Visibility.Visible;
         }
         else
