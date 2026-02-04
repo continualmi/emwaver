@@ -29,7 +29,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
     <PackageReference Include="Jint" Version="3.1.6" />
     <!-- Required for WinUI XAML compiler tasks under dotnet msbuild. -->
     <PackageReference Include="System.Security.Permissions" Version="6.0.0" />
