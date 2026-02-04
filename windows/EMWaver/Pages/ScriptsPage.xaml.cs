@@ -300,6 +300,7 @@ public sealed partial class ScriptsPage : Page
         }
 
         // Selecting a different file while in preview should exit preview mode.
+        // (OpenScriptAsync can run off-UI-thread depending on SelectionChanged flow.)
         SetPreviewMode(false);
 
         await RunOnUiAsync(async () =>
@@ -427,6 +428,13 @@ public sealed partial class ScriptsPage : Page
 
     private void SetPreviewMode(bool preview)
     {
+        // Must be on UI thread; otherwise WinUI will throw RPC_E_WRONG_THREAD (0x8001010E).
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(() => SetPreviewMode(preview));
+            return;
+        }
+
         if (EditorPane == null || PreviewPane == null)
         {
             return;
