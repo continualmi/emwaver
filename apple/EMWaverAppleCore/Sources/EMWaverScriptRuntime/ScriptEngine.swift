@@ -31,9 +31,14 @@ public final class ScriptEngine {
     }
 
     private func appDataRootURL() -> URL? {
-        // Match the app’s existing storage conventions (e.g. iOS SamplerViewModel stores signals
-        // under Application Support/signals, not a bundle-id subfolder).
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        #if canImport(AppKit)
+        // macOS: keep signals alongside scripts for simpler UX.
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        return docs?.appendingPathComponent("scripts", isDirectory: true)
+        #else
+        // iOS: keep existing convention (Application Support).
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        #endif
     }
 
     private func installHostPrimitives(into context: JSContext) {
