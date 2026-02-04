@@ -74,7 +74,7 @@ public final class CloudSyncEngine {
                 // Cloud-only -> download
                 Self.debug("download name=\(name) cloudEtag=\(cloud.etag ?? "-") mtime_ms=\(cloud.mtimeMs.map(String.init) ?? "-")")
                 do {
-                    let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, blobKey: cloud.blobKey)
+                    let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, name: cloud.name)
                     let dest = storageDir.appendingPathComponent(name)
                     try data.write(to: dest, options: .atomic)
                     if let mtime = cloud.mtimeMs {
@@ -130,7 +130,7 @@ public final class CloudSyncEngine {
                         continue
                     } else {
                         Self.debug("download newer-cloud name=\(name)")
-                        let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, blobKey: cloud.blobKey)
+                        let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, name: cloud.name)
                         try data.write(to: local, options: .atomic)
                         try? setFileMtimeMs(url: local, mtimeMs: cloudMtime)
                         summary.downloaded += 1
