@@ -247,6 +247,7 @@ public sealed partial class MainWindow : Window
 
     private void OnScriptsToolbarStateChanged(ScriptToolbarState state)
     {
+        ScriptRunButton.IsEnabled = state.CanRun;
         ScriptSaveButton.IsEnabled = state.CanSave;
         ScriptCopyButton.IsEnabled = state.CanCopy;
         ScriptRenameButton.IsEnabled = state.CanRename;
@@ -324,6 +325,11 @@ public sealed partial class MainWindow : Window
         };
 
         await dlg.ShowAsync();
+    }
+
+    private void OnScriptRunClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarRun();
     }
 
     private void OnScriptNewClick(object sender, RoutedEventArgs e)
