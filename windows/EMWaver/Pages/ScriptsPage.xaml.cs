@@ -10,6 +10,8 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
+using Windows.UI;
+using Windows.UI.Text;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
@@ -24,20 +26,25 @@ public sealed partial class ScriptsPage : Page
     {
         base.OnNavigatedTo(e);
 
-        var next = AppServices.Settings.UseMonacoEditor;
-        Debug.WriteLine($"[EMWaver][Windows][Monaco] OnNavigatedTo useMonaco(setting)={next} prev={_useMonaco}");
+        var next = AppServices.Settings.EditorMode;
+        Debug.WriteLine($"[EMWaver][Windows][Editor] OnNavigatedTo mode(setting)={next} prev={_editorMode}");
 
-        if (next != _useMonaco)
+        if (next != _editorMode)
         {
-            _useMonaco = next;
+            _editorMode = next;
             ApplyEditorMode();
         }
 
-        Debug.WriteLine($"[EMWaver][Windows][Monaco] ApplyEditorMode visible monaco={MonacoView?.Visibility} simple={EditorBox?.Visibility}");
+        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode visible monaco={MonacoView?.Visibility} rich={RichEditor?.Visibility} simple={EditorBox?.Visibility}");
 
-        if (_useMonaco)
+        if (_editorMode == EditorMode.Monaco)
         {
             await EnsureMonacoInitializedAsync();
+        }
+        else if (_editorMode == EditorMode.Rich)
+        {
+            EnsureHighlightTimer();
+            ScheduleHighlight();
         }
     }
 
@@ -50,12 +57,18 @@ public sealed partial class ScriptsPage : Page
     private bool _suppressSelectionChange;
     private bool _suppressEditorChanged;
 
+    private EditorMode _editorMode;
+
     // Monaco editor state (WebView2)
-    private bool _useMonaco;
     private bool _monacoReady;
     private string _monacoTextCache = string.Empty;
     private string _pendingMonacoText = string.Empty;
     private bool _pendingMonacoReadOnly;
+
+    // Rich editor state (RichEditBox)
+    private bool _suppressRichChanged;
+    private string _richTextCache = string.Empty;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _highlightTimer;
 
     private readonly ScriptEngine _scriptEngine = new();
     private readonly ScriptRenderer _scriptRenderer;
@@ -70,7 +83,7 @@ public sealed partial class ScriptsPage : Page
         ScriptsList.ItemsSource = _scripts;
         AgentMessagesList.ItemsSource = _agentMessages;
 
-        _useMonaco = AppServices.Settings.UseMonacoEditor;
+        _editorMode = AppServices.Settings.EditorMode;
         AppServices.Settings.Changed += OnSettingsChanged;
 
         _scriptRenderer = new ScriptRenderer((token, args) =>
@@ -108,7 +121,7 @@ public sealed partial class ScriptsPage : Page
     {
         Loaded -= OnLoaded;
 
-        if (_useMonaco)
+        if (_editorMode == EditorMode.Monaco)
         {
             await EnsureMonacoInitializedAsync();
         }
@@ -120,32 +133,45 @@ public sealed partial class ScriptsPage : Page
     {
         _ = DispatcherQueue.TryEnqueue(async () =>
         {
-            var next = AppServices.Settings.UseMonacoEditor;
-            if (next == _useMonaco)
+            var next = AppServices.Settings.EditorMode;
+            if (next == _editorMode)
             {
                 return;
             }
 
-            // If we're turning Monaco off, capture the latest buffer so the simple editor matches.
-            if (!next)
+            // Moving away from Monaco/Rich: capture latest buffer so the next editor has the same text.
+            var currentText = GetEditorTextNormalized();
+
+            _editorMode = next;
+            ApplyEditorMode();
+
+            if (_editorMode == EditorMode.Simple)
             {
                 _suppressEditorChanged = true;
-                try
-                {
-                    EditorBox.Text = _monacoTextCache;
-                }
-                finally
-                {
-                    _suppressEditorChanged = false;
-                }
+                try { EditorBox.Text = currentText; }
+                finally { _suppressEditorChanged = false; }
+            }
+            else if (_editorMode == EditorMode.Rich)
+            {
+                SetRichEditorText(currentText);
+                EnsureHighlightTimer();
+                ScheduleHighlight();
             }
             else
             {
                 await EnsureMonacoInitializedAsync();
+                _pendingMonacoText = currentText;
+                _monacoTextCache = currentText;
+                if (_monacoReady)
+                {
+                    PostMonaco(new { type = "setText", text = currentText });
+                }
             }
 
-            _useMonaco = next;
-            ApplyEditorMode();
+            // Re-evaluate dirty state (buffer may have moved between controls).
+            var now = GetEditorTextNormalized();
+            _isDirty = !string.Equals(now, _loadedTextNormalized, StringComparison.Ordinal);
+            UpdateCommandStates();
 
             // Re-evaluate dirty state (buffer may have moved between controls).
             var now = GetEditorTextNormalized();
@@ -156,15 +182,17 @@ public sealed partial class ScriptsPage : Page
 
     private void ApplyEditorMode()
     {
-        if (MonacoView == null || EditorBox == null)
+        if (MonacoView == null || RichEditor == null || EditorBox == null)
         {
-            Debug.WriteLine("[EMWaver][Windows][Monaco] ApplyEditorMode: controls not ready");
+            Debug.WriteLine("[EMWaver][Windows][Editor] ApplyEditorMode: controls not ready");
             return;
         }
 
-        MonacoView.Visibility = _useMonaco ? Visibility.Visible : Visibility.Collapsed;
-        EditorBox.Visibility = _useMonaco ? Visibility.Collapsed : Visibility.Visible;
-        Debug.WriteLine($"[EMWaver][Windows][Monaco] ApplyEditorMode: useMonaco={_useMonaco} => monaco={MonacoView.Visibility} simple={EditorBox.Visibility}");
+        MonacoView.Visibility = _editorMode == EditorMode.Monaco ? Visibility.Visible : Visibility.Collapsed;
+        RichEditor.Visibility = _editorMode == EditorMode.Rich ? Visibility.Visible : Visibility.Collapsed;
+        EditorBox.Visibility = _editorMode == EditorMode.Simple ? Visibility.Visible : Visibility.Collapsed;
+
+        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode: mode={_editorMode} => monaco={MonacoView.Visibility} rich={RichEditor.Visibility} simple={EditorBox.Visibility}");
     }
 
     private async Task EnsureMonacoInitializedAsync()
@@ -222,7 +250,7 @@ public sealed partial class ScriptsPage : Page
             Debug.WriteLine("[EMWaver][Windows][Monaco] Init failed: " + ex);
 
             // If Monaco fails to init for any reason, fall back to the simple editor.
-            _useMonaco = false;
+            _editorMode = EditorMode.Simple;
             ApplyEditorMode();
 
             // Make the failure obvious (but non-fatal).
@@ -444,7 +472,13 @@ public sealed partial class ScriptsPage : Page
             _pendingMonacoReadOnly = script.IsBundled;
             _pendingMonacoText = text ?? string.Empty;
             _monacoTextCache = _pendingMonacoText;
-            if (_useMonaco && _monacoReady)
+
+            // Rich editor state
+            SetRichEditorText(_pendingMonacoText);
+            EnsureHighlightTimer();
+            ScheduleHighlight();
+
+            if (_editorMode == EditorMode.Monaco && _monacoReady)
             {
                 PostMonaco(new { type = "setReadOnly", readOnly = _pendingMonacoReadOnly });
                 PostMonaco(new { type = "setText", text = _pendingMonacoText });
@@ -481,7 +515,10 @@ public sealed partial class ScriptsPage : Page
             _pendingMonacoReadOnly = true;
             _pendingMonacoText = string.Empty;
             _monacoTextCache = string.Empty;
-            if (_useMonaco && _monacoReady)
+
+            SetRichEditorText(string.Empty);
+
+            if (_editorMode == EditorMode.Monaco && _monacoReady)
             {
                 PostMonaco(new { type = "setReadOnly", readOnly = true });
                 PostMonaco(new { type = "setText", text = string.Empty });
@@ -501,7 +538,7 @@ public sealed partial class ScriptsPage : Page
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
     {
-        if (_suppressEditorChanged || _useMonaco)
+        if (_suppressEditorChanged || _editorMode != EditorMode.Simple)
         {
             return;
         }
@@ -522,7 +559,12 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextNormalized()
     {
-        var raw = _useMonaco ? _monacoTextCache : (EditorBox.Text ?? string.Empty);
+        var raw = _editorMode switch
+        {
+            EditorMode.Monaco => _monacoTextCache,
+            EditorMode.Rich => _richTextCache,
+            _ => (EditorBox.Text ?? string.Empty),
+        };
         return NormalizeLineEndings(raw).TrimEnd('\n');
     }
 

@@ -12,7 +12,11 @@ internal sealed class AppSettings
 
     private sealed class SettingsModel
     {
-        public bool UseMonacoEditor { get; set; } = true;
+        // "simple" | "rich" | "monaco"
+        public string EditorMode { get; set; } = "monaco";
+
+        // Back-compat for older builds. If present, we migrate to EditorMode.
+        public bool? UseMonacoEditor { get; set; }
     }
 
     private static string GetSettingsPath()
@@ -33,8 +37,16 @@ internal sealed class AppSettings
             }
 
             var json = File.ReadAllText(path);
-            var model = JsonSerializer.Deserialize<SettingsModel>(json);
-            return model ?? new SettingsModel();
+            var model = JsonSerializer.Deserialize<SettingsModel>(json) ?? new SettingsModel();
+
+            // Migrate legacy bool toggle (if present) into EditorMode.
+            if (model.UseMonacoEditor.HasValue)
+            {
+                model.EditorMode = model.UseMonacoEditor.Value ? "monaco" : "simple";
+                model.UseMonacoEditor = null;
+            }
+
+            return model;
         }
         catch
         {
@@ -63,13 +75,18 @@ internal sealed class AppSettings
         }
     }
 
-    public bool UseMonacoEditor
+    public EMWaver.Services.EditorMode EditorMode
     {
         get
         {
             lock (_lock)
             {
-                return Load().UseMonacoEditor;
+                return Load().EditorMode switch
+                {
+                    "simple" => EMWaver.Services.EditorMode.Simple,
+                    "rich" => EMWaver.Services.EditorMode.Rich,
+                    _ => EMWaver.Services.EditorMode.Monaco,
+                };
             }
         }
         set
@@ -77,10 +94,22 @@ internal sealed class AppSettings
             lock (_lock)
             {
                 var m = Load();
-                m.UseMonacoEditor = value;
+                m.EditorMode = value switch
+                {
+                    EMWaver.Services.EditorMode.Simple => "simple",
+                    EMWaver.Services.EditorMode.Rich => "rich",
+                    _ => "monaco",
+                };
                 Save(m);
             }
             Changed?.Invoke();
         }
+    }
+
+    // Back-compat API used by older UI code paths.
+    public bool UseMonacoEditor
+    {
+        get => EditorMode == EMWaver.Services.EditorMode.Monaco;
+        set => EditorMode = value ? EMWaver.Services.EditorMode.Monaco : EMWaver.Services.EditorMode.Simple;
     }
 }
