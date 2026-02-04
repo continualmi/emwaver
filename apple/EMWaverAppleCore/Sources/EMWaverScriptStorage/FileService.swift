@@ -27,19 +27,25 @@ public final class FileService {
     public static let shared = FileService()
 
     private let storageDir: URL
+    private let signalsDir: URL
     private let fileManager = FileManager.default
 
-    /// Exposes the local storage directory so higher-level services (like cloud sync) can work
-    /// without duplicating path logic.
-    public func storageDirectoryURL() -> URL {
-        storageDir
-    }
+    /// Exposes the local scripts storage directory so higher-level services (like cloud sync)
+    /// can work without duplicating path logic.
+    public func storageDirectoryURL() -> URL { storageDir }
+
+    /// Signals are stored under Application Support/signals (matches sampler.emw usage).
+    public func signalsDirectoryURL() -> URL { signalsDir }
 
     public init() {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         storageDir = documentsPath.appendingPathComponent("scripts", isDirectory: true)
 
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        signalsDir = appSupport.appendingPathComponent("signals", isDirectory: true)
+
         try? fileManager.createDirectory(at: storageDir, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: signalsDir, withIntermediateDirectories: true)
     }
 
     public func listFiles(
