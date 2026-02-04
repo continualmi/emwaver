@@ -91,8 +91,7 @@ final class AuthenticationManager: ObservableObject {
             }
 
             var storedProfile: StoredProfile? = nil
-            if let rawOpt = try? KeychainStore.getString(account: profileAccount),
-               let raw = rawOpt {
+            if let raw = try KeychainStore.getString(account: profileAccount) {
                 if let data = raw.data(using: .utf8),
                    let decoded = try? JSONDecoder().decode(StoredProfile.self, from: data) {
                     storedProfile = decoded
