@@ -594,9 +594,10 @@ App bootstrap + shell
 Pages
 
 - Scripts (main UX): `windows/EMWaver/Pages/ScriptsPage.xaml`, `windows/EMWaver/Pages/ScriptsPage.xaml.cs`
-  - Script list + preview renderer + native editor host.
+  - Script list + preview renderer + **plain text editor** (`TextBox` named `EditorBox`).
   - Preview and editor are mutually exclusive (toggle in the page).
 - Device: `windows/EMWaver/Pages/DevicePage.xaml`, `windows/EMWaver/Pages/DevicePage.xaml.cs`
+- Settings: `windows/EMWaver/Pages/SettingsPage.xaml`, `windows/EMWaver/Pages/SettingsPage.xaml.cs`
 
 Script storage
 
@@ -619,11 +620,24 @@ Transport / device
 - USB MIDI SysEx tunnel: `windows/EMWaver/Services/UsbMidiSysex.cs`
 - Service singleton wiring: `windows/EMWaver/Services/AppServices.cs`
 
+Firmware update / DFU
+
+- DFU helpers + device-side update flow: `windows/EMWaver/Services/Dfu.cs`
+- Update orchestration/state: `windows/EMWaver/Services/FirmwareUpdateManager.cs`
+- UI: `windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml`, `windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs`
+
+Cloud (auth + files)
+
+- Cloud feature wiring: `windows/EMWaver/Services/Cloud/CloudAuthManager.cs`, `windows/EMWaver/Services/Cloud/CloudConfig.cs`
+- Firebase auth: `windows/EMWaver/Services/Cloud/FirebaseAuthService.cs`
+- Google OAuth (PKCE): `windows/EMWaver/Services/Cloud/GoogleOAuthPkce.cs`, `windows/EMWaver/Services/Cloud/PkceUtil.cs`
+- Files client: `windows/EMWaver/Services/Cloud/CloudFilesClient.cs`
+
 Native interop
 
 - Rust buffer DLL bridge: `windows/EMWaver/Interop/NativeBufferRust.cs`, `windows/EMWaver/Interop/EmwBufferNative.cs`
   - Generated DLL (do not commit): `windows/EMWaver/Native/emwaver_buffer_windows.dll`
-- Native editor host (Scintilla HWND): `windows/EMWaver/Interop/ScintillaWin32.cs`
+- Legacy/unused (do not use as product dependency): `windows/EMWaver/Interop/ScintillaWin32.cs`
 
 > **Agent Note:** In this agent environment on Windows, avoid running builds (MSBuild/WinUI XAML compilation). After code changes, wait for the user to build/run locally; this environment frequently hits file locks/permission issues.
 
