@@ -83,43 +83,50 @@ public sealed partial class ScriptsPage : Page
 
             await RunOnUiAsync(async () =>
             {
-                _scripts.Clear();
-                foreach (var s in scripts)
+                _suppressSelectionChange = true;
+                try
                 {
-                    _scripts.Add(s);
-                }
-
-                // Force ListView to notice collection refresh even if called from odd contexts.
-                ScriptsList.UpdateLayout();
-
-                if (selectFullPath != null)
-                {
-                    var match = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, selectFullPath, StringComparison.OrdinalIgnoreCase));
-                    if (match != null)
+                    _scripts.Clear();
+                    foreach (var s in scripts)
                     {
-                        _suppressSelectionChange = true;
-                        ScriptsList.SelectedItem = match;
-                        _suppressSelectionChange = false;
-                        await OpenScriptAsync(match);
+                        _scripts.Add(s);
                     }
-                    return;
-                }
 
-                if (_current != null)
-                {
-                    var stillThere = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, _current.FullPath, StringComparison.OrdinalIgnoreCase));
-                    if (stillThere != null)
+                    // Force ListView to notice collection refresh even if called from odd contexts.
+                    ScriptsList.UpdateLayout();
+
+                    if (selectFullPath != null)
                     {
-                        _suppressSelectionChange = true;
-                        ScriptsList.SelectedItem = stillThere;
-                        _suppressSelectionChange = false;
-                        await OpenScriptAsync(stillThere);
+                        var match = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, selectFullPath, StringComparison.OrdinalIgnoreCase));
+                        if (match != null)
+                        {
+                            ScriptsList.SelectedItem = match;
+                            await OpenScriptAsync(match);
+                        }
                         return;
                     }
-                }
 
-                ClearEditor();
-                await Task.CompletedTask;
+                    if (_current != null)
+                    {
+                        var stillThere = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, _current.FullPath, StringComparison.OrdinalIgnoreCase));
+                        if (stillThere != null)
+                        {
+                            ScriptsList.SelectedItem = stillThere;
+                            await OpenScriptAsync(stillThere);
+                            return;
+                        }
+                    }
+
+                    // If the current script disappeared (e.g., deleted), clear selection without prompting.
+                    _isDirty = false;
+                    ScriptsList.SelectedItem = null;
+                    ClearEditor();
+                    await Task.CompletedTask;
+                }
+                finally
+                {
+                    _suppressSelectionChange = false;
+                }
             });
         }
         catch (Exception ex)
