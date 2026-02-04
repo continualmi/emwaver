@@ -55,18 +55,14 @@
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="Cloud files" FontWeight="SemiBold" />
+                    <TextBlock Text="Cloud" FontWeight="SemiBold" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <TextBlock Text="Backend:" />
                         <TextBlock x:Name="BackendUrlText" Text="" />
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button x:Name="CloudTestButton" Content="Run cloud test" Click="OnCloudTestClick" />
-                    </StackPanel>
-
-                    <TextBlock x:Name="CloudResultText" Text="" Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Use Sync in Scripts to upload/download your scripts and signals." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

@@ -460,11 +460,7 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigate(typeof(SettingsPage));
     }
 
-    private void OnCloudTestClick(object sender, RoutedEventArgs e)
-    {
-        // Keep toolbar buttons as shortcuts; route to Settings.
-        ContentFrame.Navigate(typeof(SettingsPage));
-    }
+    // Cloud test UI removed.
 
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
