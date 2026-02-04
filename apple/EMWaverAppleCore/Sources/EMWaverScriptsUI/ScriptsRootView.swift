@@ -41,6 +41,11 @@ public struct ScriptsRootView: View {
     }
 
     @State private var editorMode: EditorMode = .script
+    @State private var editorTitleOverride: String?
+
+    @State private var signalRenamePrompt: NamePrompt?
+    @State private var signalDeleteTarget: DeletionTarget?
+    @State private var showingSignalDeleteConfirmation = false
 
     #if os(macOS)
     @State private var showingAgentPanel = false
@@ -81,7 +86,7 @@ public struct ScriptsRootView: View {
                     .shadow(radius: 12)
             }
         }
-        .navigationTitle(showingEditor ? (currentScriptName ?? "Script") : (showingPreview ? (currentScriptName ?? "Script Preview") : "EMWaver"))
+        .navigationTitle(navigationTitleText)
         #if canImport(UIKit)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -108,6 +113,9 @@ public struct ScriptsRootView: View {
         .sheet(item: $namePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
         }
+        .sheet(item: $signalRenamePrompt) { prompt in
+            NamePromptSheet(prompt: prompt)
+        }
         .confirmationDialog(
             "Delete script?",
             isPresented: $showingDeleteConfirmation,
@@ -125,6 +133,24 @@ public struct ScriptsRootView: View {
             }
         } message: {
             if let target = deleteTarget {
+                Text("Are you sure you want to delete \(target.name)?")
+            }
+        }
+        .confirmationDialog(
+            "Delete file?",
+            isPresented: $showingSignalDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                guard let target = signalDeleteTarget else { return }
+                deleteSignalFile(id: target.id)
+                signalDeleteTarget = nil
+            }
+            Button("Cancel", role: .cancel) {
+                signalDeleteTarget = nil
+            }
+        } message: {
+            if let target = signalDeleteTarget {
                 Text("Are you sure you want to delete \(target.name)?")
             }
         }
@@ -300,6 +326,19 @@ public struct ScriptsRootView: View {
         return viewModel.scriptName(for: id)
     }
 
+    private var navigationTitleText: String {
+        if showingEditor {
+            if let override = editorTitleOverride, !override.isEmpty {
+                return override
+            }
+            return currentScriptName ?? "Script"
+        }
+        if showingPreview {
+            return (currentScriptName ?? "Script") + " Preview"
+        }
+        return "EMWaver"
+    }
+
     private func loadScripts() {
         Task {
             await viewModel.loadScripts()
@@ -331,6 +370,8 @@ public struct ScriptsRootView: View {
 
     private func openEditor(for id: String) {
         editorMode = .script
+        editorTitleOverride = nil
+        lineWrapEnabled = false
         viewModel.selectScript(id: id)
         currentScriptId = id
         editorIsReadOnly = viewModel.isAssetScript(id)
@@ -346,19 +387,24 @@ public struct ScriptsRootView: View {
 
     private func openSignalEditor(_ item: ScriptsViewModel.ScriptListItem) {
         guard item.kind != .script else { return }
+
         currentScriptId = item.id
+        editorTitleOverride = item.name
         viewModel.selectScript(id: nil)
 
         switch item.kind {
         case .signalRaw:
             editorMode = .signalRaw
             editorIsReadOnly = true
+            lineWrapEnabled = false
         case .signalText:
             editorMode = .signalText
             editorIsReadOnly = false
+            lineWrapEnabled = true
         case .script:
             editorMode = .script
             editorIsReadOnly = false
+            lineWrapEnabled = false
         }
 
         Task {
@@ -387,10 +433,12 @@ public struct ScriptsRootView: View {
 
     private func openNewScriptEditor() {
         editorMode = .script
+        editorTitleOverride = nil
         viewModel.selectScript(id: viewModel.unsavedIdentifier)
         currentScriptId = viewModel.unsavedIdentifier
         editorContent = viewModel.scriptDraft(for: viewModel.unsavedIdentifier)
         editorIsReadOnly = false
+        lineWrapEnabled = false
         showingEditor = true
         showingPreview = false
     }
@@ -401,6 +449,7 @@ public struct ScriptsRootView: View {
         editorContent = ""
         editorIsReadOnly = false
         editorMode = .script
+        editorTitleOverride = nil
     }
 
     private func exitPreview() {
@@ -490,6 +539,64 @@ public struct ScriptsRootView: View {
         }
     }
 
+    private func presentSignalRenamePrompt(id: String) {
+        let currentName = editorTitleOverride ?? id
+        signalRenamePrompt = NamePrompt(
+            context: .rename(id: id),
+            title: "Rename File",
+            message: "Enter a new name for this file.",
+            initialValue: currentName
+        ) { name in
+            renameSignalFile(id: id, newName: name)
+        }
+    }
+
+    private func renameSignalFile(id: String, newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Keep extension stable.
+        let requiredExt: String
+        switch editorMode {
+        case .signalRaw: requiredExt = ".raw"
+        case .signalText: requiredExt = ".txt"
+        case .script: requiredExt = ""
+        }
+
+        var finalName = trimmed
+        if !requiredExt.isEmpty, !finalName.lowercased().hasSuffix(requiredExt) {
+            finalName += requiredExt
+        }
+
+        let dir = FileService.shared.signalsDirectoryURL()
+        let oldURL = dir.appendingPathComponent(id)
+        let newURL = dir.appendingPathComponent(finalName)
+
+        do {
+            if FileManager.default.fileExists(atPath: newURL.path) {
+                return
+            }
+            try FileManager.default.moveItem(at: oldURL, to: newURL)
+            currentScriptId = finalName
+            editorTitleOverride = finalName
+            Task { await viewModel.loadScripts() }
+        } catch {
+            // Best-effort; ignore for now.
+        }
+    }
+
+    private func deleteSignalFile(id: String) {
+        let dir = FileService.shared.signalsDirectoryURL()
+        let url = dir.appendingPathComponent(id)
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            // ignore
+        }
+        exitEditor()
+        loadScripts()
+    }
+
     private func handleName(context: NamePromptContext, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -568,6 +675,13 @@ public struct ScriptsRootView: View {
                         Button("Delete", role: .destructive) {
                             deleteTarget = DeletionTarget(id: currentScriptId, name: viewModel.scriptName(for: currentScriptId))
                             showingDeleteConfirmation = true
+                        }
+                    } else if !isScriptEditor, let id = currentScriptId {
+                        Divider()
+                        Button("Rename") { presentSignalRenamePrompt(id: id) }
+                        Button("Delete", role: .destructive) {
+                            signalDeleteTarget = DeletionTarget(id: id, name: editorTitleOverride ?? id)
+                            showingSignalDeleteConfirmation = true
                         }
                     }
 
