@@ -65,7 +65,8 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
                     <AppBarButton x:Name="ScriptRunButton" Label="Run" Icon="Play" Click="OnScriptRunClick" IsEnabled="False" />
-                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Preview" Click="OnScriptPreviewToggleClick" IsEnabled="False">
+                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Preview" IsEnabled="False"
+                                        Checked="OnScriptPreviewChecked" Unchecked="OnScriptPreviewUnchecked">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="View" />
                         </AppBarToggleButton.Icon>
