@@ -81,7 +81,14 @@ public sealed partial class ScriptsPage : Page
         _scriptEngine.Setup(
             renderHandler: tree =>
             {
-                _ = DispatcherQueue.TryEnqueue(() => RenderPreview(tree));
+                // Only touch the preview UI if we're actually in Preview mode.
+                _ = DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_isPreviewMode)
+                    {
+                        RenderPreview(tree);
+                    }
+                });
             },
             sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
             errorHandler: message =>
@@ -409,6 +416,8 @@ public sealed partial class ScriptsPage : Page
         return text.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
+    private bool _isPreviewMode;
+
     private void SetPreviewMode(bool preview)
     {
         if (EditorPane == null || PreviewPane == null)
@@ -416,13 +425,39 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
+        _isPreviewMode = preview;
         EditorPane.Visibility = preview ? Visibility.Collapsed : Visibility.Visible;
         PreviewPane.Visibility = preview ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!preview)
+        {
+            // When returning to code view, make the editor immediately interactive.
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    if (_editorMode == EditorMode.Code)
+                    {
+                        RichEditor.Focus(FocusState.Programmatic);
+                    }
+                    else
+                    {
+                        EditorBox.Focus(FocusState.Programmatic);
+                    }
+                }
+                catch { }
+            });
+        }
     }
 
     private void RenderPreview(ScriptTree tree)
     {
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Preview] RenderPreview rootType={tree?.Root.Type}");
+
+        if (!_isPreviewMode)
+        {
+            return;
+        }
 
         PreviewHost.Children.Clear();
         PreviewHost.Children.Add(_scriptRenderer.Render(tree));

@@ -406,13 +406,13 @@ public sealed partial class MainWindow : Window
         _scriptsPage?.HandleToolbarPreviewToggle(preview);
     }
 
-    private void OnScriptEditChecked(object sender, RoutedEventArgs e)
+    private void OnScriptEditClick(object sender, RoutedEventArgs e)
     {
         if (_suppressModeToggle) return;
         SetScriptMode(preview: false);
     }
 
-    private void OnScriptPreviewChecked(object sender, RoutedEventArgs e)
+    private void OnScriptPreviewClick(object sender, RoutedEventArgs e)
     {
         if (_suppressModeToggle) return;
         SetScriptMode(preview: true);

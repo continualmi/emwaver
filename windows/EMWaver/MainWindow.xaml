@@ -104,16 +104,16 @@
                 </Grid.ColumnDefinitions>
 
                 <CommandBar x:Name="ScriptsCommandBar" Grid.Column="0" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
-                    <!-- Mode toggles (Preview replaces editor region) -->
+                    <!-- Mode toggles (mutually exclusive) -->
                     <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Code" IsEnabled="False"
-                                        Checked="OnScriptEditChecked">
+                                        Click="OnScriptEditClick">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="Document" />
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
 
-                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Run" IsEnabled="False"
-                                        Checked="OnScriptPreviewChecked">
+                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Preview" IsEnabled="False"
+                                        Click="OnScriptPreviewClick">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="Play" />
                         </AppBarToggleButton.Icon>
