@@ -127,8 +127,9 @@ public struct EmwCodeEditor: NSViewRepresentable {
             textView.isHorizontallyResizable = !wrapLines
             let max = CGFloat(Double.greatestFiniteMagnitude)
             textView.maxSize = NSSize(width: max, height: max)
+            let wrapWidth = max(200, textView.bounds.width)
             textView.textContainer?.containerSize = NSSize(
-                width: wrapLines ? textView.bounds.width : max,
+                width: wrapLines ? wrapWidth : max,
                 height: max
             )
         }
