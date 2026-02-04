@@ -34,6 +34,8 @@ public struct ScriptsRootView: View {
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
 
+    @State private var signalViewerItem: SignalViewerView.Item?
+
     #if os(macOS)
     @State private var showingAgentPanel = false
     #endif
@@ -119,6 +121,9 @@ public struct ScriptsRootView: View {
             if let target = deleteTarget {
                 Text("Are you sure you want to delete \(target.name)?")
             }
+        }
+        .sheet(item: $signalViewerItem) { item in
+            SignalViewerView(item: item)
         }
         .onAppear {
             previewManager.attach(device: device)
@@ -210,8 +215,12 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: item,
                                         isSelected: false,
-                                        onTap: { /* TODO: open signal viewer */ },
-                                        onEdit: { /* TODO */ }
+                                        onTap: {
+                                            signalViewerItem = SignalViewerView.Item(id: item.id, name: item.name, kind: item.kind)
+                                        },
+                                        onEdit: {
+                                            signalViewerItem = SignalViewerView.Item(id: item.id, name: item.name, kind: item.kind)
+                                        }
                                     )
                                     .listRowSeparator(.hidden)
                                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
