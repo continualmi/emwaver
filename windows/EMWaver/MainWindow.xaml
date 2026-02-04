@@ -82,6 +82,12 @@
             </Button>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+
+                <CommandBar x:Name="AppCommandBar" DefaultLabelPosition="Collapsed">
+                    <AppBarButton x:Name="BackButton" Label="Back" Icon="Back" Click="OnBackClick" IsEnabled="False" />
+                    <AppBarButton x:Name="SettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
+                </CommandBar>
+
                 <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
                     <!-- Mode toggles (Preview replaces editor region) -->
                     <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Code" IsEnabled="False"

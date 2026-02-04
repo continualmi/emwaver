@@ -144,6 +144,23 @@ public sealed partial class MainWindow : Window
         {
             ScriptsCommandBar.Visibility = Visibility.Collapsed;
         }
+
+        BackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
+    private void OnBackClick(object sender, RoutedEventArgs e)
+    {
+        if (ContentFrame.CanGoBack)
+        {
+            ContentFrame.GoBack();
+        }
+        BackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
+    private void OnTopSettingsClick(object sender, RoutedEventArgs e)
+    {
+        ContentFrame.Navigate(typeof(SettingsPage));
+        BackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 
     private void RunOnUi(Action action)
@@ -440,5 +457,6 @@ public sealed partial class MainWindow : Window
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         ContentFrame.Navigate(typeof(SettingsPage));
+        BackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 }
