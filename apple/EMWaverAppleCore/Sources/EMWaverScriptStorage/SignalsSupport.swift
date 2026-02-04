@@ -26,7 +26,7 @@ extension ScriptsViewModel {
             } else {
                 kind = .signalText
             }
-            let modifiedAt = ScriptsViewModel.dateFromEtagSeconds(entry.metadata.etag)
+            let modifiedAt = entry.metadata.etag.flatMap { ScriptsViewModel.dateFromEtagSeconds($0) }
             let syncStatus = computeSyncStatus(name: name, localModifiedAt: modifiedAt)
             signals.append(ScriptListItem(id: entry.metadata.id, name: name, isDirty: false, isAsset: false, kind: kind, modifiedAt: modifiedAt, syncStatus: syncStatus))
         }
