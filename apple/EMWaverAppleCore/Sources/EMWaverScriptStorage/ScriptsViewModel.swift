@@ -150,7 +150,7 @@ public final class ScriptsViewModel: ObservableObject {
                 storageDir: signalsDir,
                 kinds: [
                     .init(kind: "signal_raw", ext: signalRawExtension, contentType: "application/octet-stream"),
-                    .init(kind: "signal_txt", ext: signalTextExtension, contentType: "text/plain"),
+                    .init(kind: "signal_text", ext: signalTextExtension, contentType: "text/plain"),
                 ],
                 policy: .preferLocal
             )

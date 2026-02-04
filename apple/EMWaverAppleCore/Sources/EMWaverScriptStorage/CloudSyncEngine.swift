@@ -163,9 +163,29 @@ public final class CloudSyncEngine {
                         summary.uploaded += 1
                     } else if cloudChanged {
                         // Download cloud.
-                        try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
-                        summary.downloaded += 1
-                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
+                        do {
+                            try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
+                            summary.downloaded += 1
+                            updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
+                        } catch {
+                            // If the cloud metadata exists but the blob is missing/corrupt (common during earlier SAS flow),
+                            // prefer local and overwrite cloud by name.
+                            if case CloudFilesAPIError.serverError(let code, _) = error, (code == 404 || code == 502) {
+                                Self.debug("cloud download failed for \(name) (\(code)); overwriting from local")
+                                let data = try Data(contentsOf: local)
+                                _ = try await api.uploadViaBackend(
+                                    baseURL: baseURL,
+                                    accessToken: accessToken,
+                                    kind: spec.kind,
+                                    name: name,
+                                    contentType: spec.contentType,
+                                    bytes: data
+                                )
+                                summary.uploaded += 1
+                            } else {
+                                throw error
+                            }
+                        }
                     } else if localChanged && cloudChanged {
                         // Conflict.
                         switch policy {
