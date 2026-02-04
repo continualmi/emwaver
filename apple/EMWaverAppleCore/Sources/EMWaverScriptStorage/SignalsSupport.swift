@@ -26,7 +26,9 @@ extension ScriptsViewModel {
             } else {
                 kind = .signalText
             }
-            signals.append(ScriptListItem(id: entry.metadata.id, name: name, isDirty: false, isAsset: false, kind: kind))
+            let modifiedAt = ScriptsViewModel.dateFromEtagSeconds(entry.metadata.etag)
+            let syncStatus = computeSyncStatus(name: name, localModifiedAt: modifiedAt)
+            signals.append(ScriptListItem(id: entry.metadata.id, name: name, isDirty: false, isAsset: false, kind: kind, modifiedAt: modifiedAt, syncStatus: syncStatus))
         }
         signals.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         signalFiles = signals

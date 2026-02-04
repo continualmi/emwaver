@@ -29,12 +29,32 @@ public final class ScriptsViewModel: ObservableObject {
         }
     }
 
+    public enum SyncStatus: String, Equatable {
+        case synced
+        case localNewer
+        case cloudNewer
+        case localOnly
+        case unknown
+
+        public var iconSystemName: String {
+            switch self {
+            case .synced: return "checkmark.circle"
+            case .localNewer: return "arrow.up.circle"
+            case .cloudNewer: return "arrow.down.circle"
+            case .localOnly: return "circle.dashed"
+            case .unknown: return "questionmark.circle"
+            }
+        }
+    }
+
     public struct ScriptListItem: Identifiable, Equatable {
         public let id: String
         public var name: String
         public var isDirty: Bool
         public var isAsset: Bool
         public var kind: FileKind
+        public var modifiedAt: Date?
+        public var syncStatus: SyncStatus
     }
 
     public struct Notice: Identifiable {
@@ -62,6 +82,7 @@ public final class ScriptsViewModel: ObservableObject {
     @Published public private(set) var assetScripts: [ScriptListItem] = []
     @Published public private(set) var customScripts: [ScriptListItem] = []
     @Published public var signalFiles: [ScriptListItem] = []
+    @Published public private(set) var cloudFilesByName: [String: CloudUserFile] = [:]
     @Published public var selectedScriptId: String?
     @Published public var notice: Notice?
     @Published public var isLoading = false
@@ -73,6 +94,7 @@ public final class ScriptsViewModel: ObservableObject {
     private let fileService: FileService
     private let defaults: UserDefaults
     private let syncEngine = CloudSyncEngine()
+    private let cloudStateStore = CloudSyncStateStore()
 
     private let scriptExtension = ".emw"
     private let signalRawExtension = ".raw"
@@ -89,6 +111,12 @@ public final class ScriptsViewModel: ObservableObject {
         self.defaults = defaults
         selectedScriptId = defaults.string(forKey: lastScriptDefaultsKey)
         createUnsavedRecordIfNeeded()
+
+        // Load last known cloud snapshot (for main-screen badges) if present.
+        if let snap = cloudStateStore.load(storageDir: fileService.storageDirectoryURL()) {
+            cloudFilesByName = Dictionary(uniqueKeysWithValues: snap.files.map { ($0.name, $0) })
+        }
+
         rebuildScriptItems()
     }
 
@@ -146,6 +174,15 @@ public final class ScriptsViewModel: ObservableObject {
                 accessToken: accessToken,
                 storageDir: scriptsDir
             )
+
+            // Refresh cloud snapshot for badges (name -> mtime_ms).
+            do {
+                let cloud = try await CloudFilesAPI().listFiles(baseURL: baseURL, accessToken: accessToken)
+                cloudStateStore.save(storageDir: scriptsDir, files: cloud)
+                cloudFilesByName = Dictionary(uniqueKeysWithValues: cloud.map { ($0.name, $0) })
+            } catch {
+                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] failed to refresh cloud snapshot: \(error)")
+            }
 
             await loadScripts()
             if debug {
@@ -523,11 +560,15 @@ public final class ScriptsViewModel: ObservableObject {
     private func rebuildScriptItems() {
         var custom: [ScriptListItem] = records.values
             .filter { $0.metadata != nil }
-            .map { ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script) }
+            .map {
+                let modifiedAt = $0.metadata.flatMap { Self.dateFromEtagSeconds($0.etag) }
+                let syncStatus = computeSyncStatus(name: $0.name, localModifiedAt: modifiedAt)
+                return ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script, modifiedAt: modifiedAt, syncStatus: syncStatus)
+            }
         custom.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         var assets = assetRecords.values.map {
-            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: .script)
+            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: .script, modifiedAt: nil, syncStatus: .unknown)
         }
         assets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
@@ -612,6 +653,30 @@ public final class ScriptsViewModel: ObservableObject {
 
     private func showError(message: String) {
         notice = Notice(title: "Error", message: message)
+    }
+
+    private static func dateFromEtagSeconds(_ etag: String) -> Date? {
+        guard let s = Int64(etag.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(s))
+    }
+
+    private func computeSyncStatus(name: String, localModifiedAt: Date?) -> SyncStatus {
+        // We only know cloud state if we've synced at least once (snapshot loaded).
+        guard let cloud = cloudFilesByName[name] else {
+            return .localOnly
+        }
+        guard let localModifiedAt else {
+            return .unknown
+        }
+        guard let cloudMtimeMs = cloud.mtimeMs else {
+            return .unknown
+        }
+
+        let localMs = Int64(localModifiedAt.timeIntervalSince1970 * 1000)
+        if localMs == cloudMtimeMs {
+            return .synced
+        }
+        return localMs > cloudMtimeMs ? .localNewer : .cloudNewer
     }
 
     private func showInfo(title: String, message: String) {
