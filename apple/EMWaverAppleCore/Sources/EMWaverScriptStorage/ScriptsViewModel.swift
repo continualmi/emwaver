@@ -58,7 +58,7 @@ public final class ScriptsViewModel: ObservableObject {
 
     @Published public private(set) var assetScripts: [ScriptListItem] = []
     @Published public private(set) var customScripts: [ScriptListItem] = []
-    @Published public private(set) var signalFiles: [ScriptListItem] = []
+    @Published public var signalFiles: [ScriptListItem] = []
     @Published public var selectedScriptId: String?
     @Published public var notice: Notice?
     @Published public var isLoading = false
