@@ -122,7 +122,7 @@
 
                     <!-- PREVIEW PANE -->
                     <Grid x:Name="PreviewPane" Visibility="Collapsed">
-                        <Border CornerRadius="6" BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Padding="10">
+                        <Border CornerRadius="6" BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" Background="#1E1E1E" Padding="10">
                             <Grid>
                                 <ScrollViewer>
                                     <StackPanel x:Name="PreviewHost" />
