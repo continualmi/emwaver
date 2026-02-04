@@ -5,6 +5,7 @@
  */
 
 import Foundation
+import os
 
 public enum FileServiceError: LocalizedError {
     case fileNotFound
@@ -26,13 +27,15 @@ public enum FileServiceError: LocalizedError {
 public final class FileService {
     public static let shared = FileService()
 
+    private static let log = OSLog(subsystem: "com.emwaver", category: "FileService")
+
     private static func debugEnabled() -> Bool {
         true
     }
 
     private static func debug(_ msg: String) {
         guard debugEnabled() else { return }
-        NSLog("[FileService] %@", msg)
+        os_log("%{public}@", log: log, type: .fault, "[FileService] \(msg)")
     }
 
     private let storageDir: URL

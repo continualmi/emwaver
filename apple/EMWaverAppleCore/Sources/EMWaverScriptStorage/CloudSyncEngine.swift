@@ -6,6 +6,7 @@
 
 import Foundation
 import CryptoKit
+import os
 
 public enum CloudSyncPolicy {
     /// If both changed, keep local as canonical and download the cloud version as a conflict copy.
@@ -19,13 +20,14 @@ public struct CloudSyncSummary: Equatable {
 }
 
 public final class CloudSyncEngine {
+    private static let log = OSLog(subsystem: "com.emwaver", category: "CloudSync")
     private static func debugEnabled() -> Bool {
         true
     }
 
     private static func debug(_ msg: String) {
         guard debugEnabled() else { return }
-        NSLog("[CloudSync] %@", msg)
+        os_log("%{public}@", log: log, type: .fault, "[CloudSync] \(msg)")
     }
 
     private static let uploadSession: URLSession = {

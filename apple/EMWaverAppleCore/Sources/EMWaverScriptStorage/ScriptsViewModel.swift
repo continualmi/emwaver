@@ -6,9 +6,11 @@
 
 import Foundation
 import SwiftUI
+import os
 
 @MainActor
 public final class ScriptsViewModel: ObservableObject {
+    private static let log = OSLog(subsystem: "com.emwaver", category: "Sync")
     public enum FileKind: String, Equatable {
         case script
         case signalRaw
@@ -131,13 +133,13 @@ public final class ScriptsViewModel: ObservableObject {
 
         let debug = true
         if debug {
-            NSLog("[Sync] begin baseURL=%@ tokenLen=%d", baseURL.absoluteString, accessToken.count)
+            os_log("%{public}@", log: Self.log, type: .fault, "[Sync] begin baseURL=\(baseURL.absoluteString) tokenLen=\(accessToken.count)")
         }
 
         do {
             // Scripts live in Documents/scripts
             let scriptsDir = fileService.storageDirectoryURL()
-            if debug { NSLog("[Sync] scriptsDir=%@", scriptsDir.path) }
+            if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] scriptsDir=\(scriptsDir.path)") }
             let s1 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
@@ -150,7 +152,7 @@ public final class ScriptsViewModel: ObservableObject {
 
             // Signals live in Application Support/signals
             let signalsDir = fileService.signalsDirectoryURL()
-            if debug { NSLog("[Sync] signalsDir=%@", signalsDir.path) }
+            if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] signalsDir=\(signalsDir.path)") }
             let s2 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
@@ -164,7 +166,7 @@ public final class ScriptsViewModel: ObservableObject {
 
             await loadScripts()
             if debug {
-                NSLog("[Sync] done uploaded=%d downloaded=%d conflicts=%d", (s1.uploaded + s2.uploaded), (s1.downloaded + s2.downloaded), (s1.conflicts + s2.conflicts))
+                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] done uploaded=\(s1.uploaded + s2.uploaded) downloaded=\(s1.downloaded + s2.downloaded) conflicts=\(s1.conflicts + s2.conflicts)")
             }
             showInfo(
                 title: "Sync complete",
@@ -172,7 +174,7 @@ public final class ScriptsViewModel: ObservableObject {
             )
         } catch {
             if debug {
-                NSLog("[Sync] error: %@", String(describing: error))
+                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] error: \(String(describing: error))")
             }
             showError(message: error.localizedDescription)
         }
