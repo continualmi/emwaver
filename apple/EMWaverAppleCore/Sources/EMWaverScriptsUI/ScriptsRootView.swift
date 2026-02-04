@@ -415,7 +415,8 @@ public struct ScriptsRootView: View {
                     if item.kind == .signalRaw {
                         editorContent = formatHex(data: data, maxBytes: 256 * 1024)
                     } else {
-                        editorContent = String(data: data, encoding: .utf8) ?? ""
+                        // Be tolerant of non-UTF8 bytes; show replacement chars instead of blank.
+                        editorContent = String(decoding: data, as: UTF8.self)
                     }
                     showingEditor = true
                     showingPreview = false
