@@ -57,6 +57,11 @@ public final class CloudSyncEngine {
             let cloud = cloudByName[name]
 
             switch (localURL, cloud) {
+            case (nil, nil):
+                // Should be impossible because `name` comes from union(local, cloud), but keep switch exhaustive.
+                summary.skipped += 1
+                continue
+
             case (nil, let cloud?):
                 // Cloud-only -> download
                 Self.debug("download name=\(name) cloudEtag=\(cloud.etag ?? "-") mtime_ms=\(cloud.mtimeMs.map(String.init) ?? "-")")

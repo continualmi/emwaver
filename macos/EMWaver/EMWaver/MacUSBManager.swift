@@ -520,7 +520,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
         let ok: Bool = sysex.withUnsafeBytes { bytes in
             guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else { return false }
-            return MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base) != nil
+            MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base)
+            return true
         }
         guard ok else { return -1 }
         return MIDISend(outPort, destination, pktList)
