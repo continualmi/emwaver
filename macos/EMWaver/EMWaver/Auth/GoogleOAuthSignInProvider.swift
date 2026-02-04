@@ -107,7 +107,8 @@ final class GoogleOAuthSignInProvider: NSObject, GoogleSignInProviding {
             uid: fb.localId ?? "",
             email: fb.email,
             displayName: fb.displayName,
-            idToken: fb.idToken
+            idToken: fb.idToken,
+            refreshToken: fb.refreshToken
         )
     }
 
