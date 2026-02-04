@@ -351,7 +351,8 @@ public sealed partial class ScriptsPage : Page
 
         try
         {
-            var created = await AppServices.Scripts.CreateLocalScriptAsync(name, content: "");
+            var template = "// New EMWaver script\n\nUI.render(\n  UI.column({\n    padding: 16,\n    spacing: 12,\n    children: [\n      UI.text({ text: \"hello\" }),\n    ],\n  })\n);\n";
+            var created = await AppServices.Scripts.CreateLocalScriptAsync(name, content: template);
             await RefreshAsync(selectFullPath: created.FullPath);
         }
         catch (Exception ex)
