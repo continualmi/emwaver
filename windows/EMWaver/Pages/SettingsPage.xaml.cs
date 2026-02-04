@@ -38,8 +38,7 @@ public sealed partial class SettingsPage : Page
             var tag = mode switch
             {
                 Services.EditorMode.Simple => "simple",
-                Services.EditorMode.Rich => "rich",
-                _ => "monaco",
+                _ => "code",
             };
 
             foreach (var item in EditorModeCombo.Items)
@@ -93,8 +92,7 @@ public sealed partial class SettingsPage : Page
         var mode = tag switch
         {
             "simple" => Services.EditorMode.Simple,
-            "rich" => Services.EditorMode.Rich,
-            _ => Services.EditorMode.Monaco,
+            _ => Services.EditorMode.Code,
         };
 
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] EditorMode => {tag}");

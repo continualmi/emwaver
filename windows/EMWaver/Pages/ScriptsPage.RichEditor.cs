@@ -30,7 +30,7 @@ public sealed partial class ScriptsPage
 
     private void ScheduleHighlight()
     {
-        if (_editorMode != EditorMode.Rich)
+        if (_editorMode != EditorMode.Code)
         {
             return;
         }
@@ -42,7 +42,7 @@ public sealed partial class ScriptsPage
 
     private void OnRichEditorTextChanged(object sender, RoutedEventArgs e)
     {
-        if (_suppressRichChanged || _editorMode != EditorMode.Rich)
+        if (_suppressRichChanged || _editorMode != EditorMode.Code)
         {
             return;
         }
@@ -107,7 +107,7 @@ public sealed partial class ScriptsPage
 
     private void ApplyHighlightingSafe()
     {
-        if (_editorMode != EditorMode.Rich)
+        if (_editorMode != EditorMode.Code)
         {
             return;
         }
