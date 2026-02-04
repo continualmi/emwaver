@@ -81,43 +81,51 @@ public sealed partial class ScriptsPage : Page
             await AppServices.Scripts.EnsureBootstrappedAsync();
             var scripts = await AppServices.Scripts.ListScriptsAsync();
 
-            _scripts.Clear();
-            foreach (var s in scripts)
+            await RunOnUiAsync(async () =>
             {
-                _scripts.Add(s);
-            }
-
-            if (selectFullPath != null)
-            {
-                var match = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, selectFullPath, StringComparison.OrdinalIgnoreCase));
-                if (match != null)
+                _scripts.Clear();
+                foreach (var s in scripts)
                 {
-                    _suppressSelectionChange = true;
-                    ScriptsList.SelectedItem = match;
-                    _suppressSelectionChange = false;
-                    await OpenScriptAsync(match);
+                    _scripts.Add(s);
                 }
-                return;
-            }
 
-            if (_current != null)
-            {
-                var stillThere = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, _current.FullPath, StringComparison.OrdinalIgnoreCase));
-                if (stillThere != null)
+                // Force ListView to notice collection refresh even if called from odd contexts.
+                ScriptsList.UpdateLayout();
+
+                if (selectFullPath != null)
                 {
-                    _suppressSelectionChange = true;
-                    ScriptsList.SelectedItem = stillThere;
-                    _suppressSelectionChange = false;
-                    await OpenScriptAsync(stillThere);
+                    var match = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, selectFullPath, StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                    {
+                        _suppressSelectionChange = true;
+                        ScriptsList.SelectedItem = match;
+                        _suppressSelectionChange = false;
+                        await OpenScriptAsync(match);
+                    }
                     return;
                 }
-            }
 
-            ClearEditor();
+                if (_current != null)
+                {
+                    var stillThere = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, _current.FullPath, StringComparison.OrdinalIgnoreCase));
+                    if (stillThere != null)
+                    {
+                        _suppressSelectionChange = true;
+                        ScriptsList.SelectedItem = stillThere;
+                        _suppressSelectionChange = false;
+                        await OpenScriptAsync(stillThere);
+                        return;
+                    }
+                }
+
+                ClearEditor();
+                await Task.CompletedTask;
+            });
         }
-        catch
+        catch (Exception ex)
         {
-            // Leave whatever is currently shown.
+            // Don’t silently fail: it makes the list look “stuck”.
+            _ = DispatcherQueue.TryEnqueue(async () => await ShowInfoAsync("Scripts", "Refresh failed: " + ex.Message));
         }
     }
 
