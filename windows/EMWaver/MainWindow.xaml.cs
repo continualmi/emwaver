@@ -211,9 +211,15 @@ public sealed partial class MainWindow : Window
                 break;
         }
 
-        DeviceVersionText.Text = device.IsConnected && !string.IsNullOrWhiteSpace(device.DeviceEmwaverVersion)
+        var connected = device.IsConnected;
+
+        DeviceVersionText.Text = connected && !string.IsNullOrWhiteSpace(device.DeviceEmwaverVersion)
             ? $"EMWaver {device.DeviceEmwaverVersion}"
             : string.Empty;
+
+        // Cable icon state
+        CableIconConnected.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+        CableIconDisconnected.Visibility = connected ? Visibility.Collapsed : Visibility.Visible;
 
         if (device.IsConnected && NativeBufferRust.IsAvailable)
         {
