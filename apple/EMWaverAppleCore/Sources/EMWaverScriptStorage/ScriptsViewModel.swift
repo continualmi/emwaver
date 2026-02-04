@@ -103,9 +103,9 @@ public final class ScriptsViewModel: ObservableObject {
             )
             mergeRemoteScripts(data)
 
-            // Signals are listed (metadata only for now).
-            let raw = try await fileService.listFiles(withExtension: signalRawExtension, includeContent: false, accessToken: "")
-            let txt = try await fileService.listFiles(withExtension: signalTextExtension, includeContent: false, accessToken: "")
+            // Signals are stored under Application Support/signals (sampler.emw convention).
+            let raw = try await listSignals(withExtension: signalRawExtension)
+            let txt = try await listSignals(withExtension: signalTextExtension)
             mergeRemoteSignals(raw + txt)
 
             let allScripts = assetScripts + customScripts
@@ -129,20 +129,36 @@ public final class ScriptsViewModel: ObservableObject {
         defer { isPerformingAction = false }
 
         do {
-            let dir = fileService.storageDirectoryURL()
-            let summary = try await syncEngine.sync(
+            // Scripts live in Documents/scripts
+            let scriptsDir = fileService.storageDirectoryURL()
+            let s1 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
-                storageDir: dir,
+                storageDir: scriptsDir,
                 kinds: [
                     .init(kind: "script", ext: scriptExtension, contentType: "text/plain"),
+                ],
+                policy: .preferLocal
+            )
+
+            // Signals live in Application Support/signals
+            let signalsDir = fileService.signalsDirectoryURL()
+            let s2 = try await syncEngine.sync(
+                baseURL: baseURL,
+                accessToken: accessToken,
+                storageDir: signalsDir,
+                kinds: [
                     .init(kind: "signal_raw", ext: signalRawExtension, contentType: "application/octet-stream"),
                     .init(kind: "signal_txt", ext: signalTextExtension, contentType: "text/plain"),
                 ],
                 policy: .preferLocal
             )
+
             await loadScripts()
-            showInfo(title: "Sync complete", message: "Uploaded: \(summary.uploaded), Downloaded: \(summary.downloaded), Conflicts: \(summary.conflicts)")
+            showInfo(
+                title: "Sync complete",
+                message: "Uploaded: \(s1.uploaded + s2.uploaded), Downloaded: \(s1.downloaded + s2.downloaded), Conflicts: \(s1.conflicts + s2.conflicts)"
+            )
         } catch {
             showError(message: error.localizedDescription)
         }
