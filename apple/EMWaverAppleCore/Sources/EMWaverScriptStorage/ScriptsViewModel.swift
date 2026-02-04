@@ -104,8 +104,8 @@ public final class ScriptsViewModel: ObservableObject {
             mergeRemoteScripts(data)
 
             // Signals are stored under Application Support/signals (sampler.emw convention).
-            let raw = try await listSignals(withExtension: signalRawExtension)
-            let txt = try await listSignals(withExtension: signalTextExtension)
+            let raw = try await fileService.listSignalFiles(withExtension: signalRawExtension, includeContent: false, accessToken: "")
+            let txt = try await fileService.listSignalFiles(withExtension: signalTextExtension, includeContent: false, accessToken: "")
             mergeRemoteSignals(raw + txt)
 
             let allScripts = assetScripts + customScripts
