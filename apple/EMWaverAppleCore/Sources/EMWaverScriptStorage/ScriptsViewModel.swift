@@ -9,11 +9,29 @@ import SwiftUI
 
 @MainActor
 public final class ScriptsViewModel: ObservableObject {
+    public enum FileKind: String, Equatable {
+        case script
+        case signalRaw
+        case signalText
+
+        public var iconSystemName: String {
+            switch self {
+            case .script:
+                return "doc.text"
+            case .signalRaw:
+                return "waveform.path.ecg"
+            case .signalText:
+                return "doc.plaintext"
+            }
+        }
+    }
+
     public struct ScriptListItem: Identifiable, Equatable {
         public let id: String
         public var name: String
         public var isDirty: Bool
         public var isAsset: Bool
+        public var kind: FileKind
     }
 
     public struct Notice: Identifiable {
@@ -40,6 +58,7 @@ public final class ScriptsViewModel: ObservableObject {
 
     @Published public private(set) var assetScripts: [ScriptListItem] = []
     @Published public private(set) var customScripts: [ScriptListItem] = []
+    @Published public private(set) var signalFiles: [ScriptListItem] = []
     @Published public var selectedScriptId: String?
     @Published public var notice: Notice?
     @Published public var isLoading = false
@@ -50,8 +69,11 @@ public final class ScriptsViewModel: ObservableObject {
 
     private let fileService: FileService
     private let defaults: UserDefaults
+    private let syncEngine = CloudSyncEngine()
 
     private let scriptExtension = ".emw"
+    private let signalRawExtension = ".raw"
+    private let signalTextExtension = ".txt"
     private let unsavedKey = "__unsaved__"
     private let lastScriptDefaultsKey = "scripts.last_script_id"
     private let assetIdPrefix = "__asset__"
@@ -79,7 +101,12 @@ public final class ScriptsViewModel: ObservableObject {
                 includeContent: true,
                 accessToken: ""
             )
-            mergeRemote(data)
+            mergeRemoteScripts(data)
+
+            // Signals are listed (metadata only for now).
+            let raw = try await fileService.listFiles(withExtension: signalRawExtension, includeContent: false, accessToken: "")
+            let txt = try await fileService.listFiles(withExtension: signalTextExtension, includeContent: false, accessToken: "")
+            mergeRemoteSignals(raw + txt)
 
             let allScripts = assetScripts + customScripts
             if allScripts.isEmpty {
@@ -92,6 +119,30 @@ public final class ScriptsViewModel: ObservableObject {
             if let selected = selectedScriptId {
                 defaults.set(selected, forKey: lastScriptDefaultsKey)
             }
+        } catch {
+            showError(message: error.localizedDescription)
+        }
+    }
+
+    public func sync(baseURL: URL, accessToken: String) async {
+        isPerformingAction = true
+        defer { isPerformingAction = false }
+
+        do {
+            let dir = fileService.storageDirectoryURL()
+            let summary = try await syncEngine.sync(
+                baseURL: baseURL,
+                accessToken: accessToken,
+                storageDir: dir,
+                kinds: [
+                    .init(kind: "script", ext: scriptExtension, contentType: "text/plain"),
+                    .init(kind: "signal_raw", ext: signalRawExtension, contentType: "application/octet-stream"),
+                    .init(kind: "signal_txt", ext: signalTextExtension, contentType: "text/plain"),
+                ],
+                policy: .preferLocal
+            )
+            await loadScripts()
+            showInfo(title: "Sync complete", message: "Uploaded: \(summary.uploaded), Downloaded: \(summary.downloaded), Conflicts: \(summary.conflicts)")
         } catch {
             showError(message: error.localizedDescription)
         }
@@ -349,7 +400,7 @@ public final class ScriptsViewModel: ObservableObject {
         return modules
     }
 
-    private func mergeRemote(_ data: [UserFileData]) {
+    private func mergeRemoteScripts(_ data: [UserFileData]) {
         var updated: [String: ScriptRecord] = [:]
         let assetNameSet = Set(assetRecords.values.map { $0.name.lowercased() })
 
@@ -457,11 +508,11 @@ public final class ScriptsViewModel: ObservableObject {
     private func rebuildScriptItems() {
         var custom: [ScriptListItem] = records.values
             .filter { $0.metadata != nil }
-            .map { ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false) }
+            .map { ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script) }
         custom.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         var assets = assetRecords.values.map {
-            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true)
+            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: .script)
         }
         assets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
