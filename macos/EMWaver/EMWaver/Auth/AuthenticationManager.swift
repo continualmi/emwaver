@@ -10,7 +10,7 @@ final class AuthenticationManager: ObservableObject {
 
     private let provider: GoogleSignInProviding
 
-    init(provider: GoogleSignInProviding = NotConfiguredGoogleSignInProvider()) {
+    init(provider: GoogleSignInProviding = GoogleOAuthSignInProvider()) {
         self.provider = provider
     }
 
