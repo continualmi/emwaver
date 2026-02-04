@@ -129,7 +129,7 @@ public final class ScriptsViewModel: ObservableObject {
         isPerformingAction = true
         defer { isPerformingAction = false }
 
-        let debug = (ProcessInfo.processInfo.environment["EMWAVER_SYNC_DEBUG"] ?? "") == "1"
+        let debug = true
         if debug {
             print("[Sync] begin baseURL=\(baseURL.absoluteString) tokenLen=\(accessToken.count)")
         }

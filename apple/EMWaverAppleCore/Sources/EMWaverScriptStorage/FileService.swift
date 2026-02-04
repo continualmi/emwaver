@@ -27,7 +27,7 @@ public final class FileService {
     public static let shared = FileService()
 
     private static func debugEnabled() -> Bool {
-        (ProcessInfo.processInfo.environment["EMWAVER_SYNC_DEBUG"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+        true
     }
 
     private static func debug(_ msg: String) {
