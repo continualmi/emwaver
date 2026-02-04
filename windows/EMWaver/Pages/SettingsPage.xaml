@@ -46,6 +46,8 @@
                                       OnContent="Monaco"
                                       Toggled="OnUseMonacoToggled" />
 
+                    <TextBlock Text="(Requires WebView2 runtime; if it fails, the app will fall back to the simple editor.)" Opacity="0.65" TextWrapping="Wrap" />
+
                     <TextBlock Text="If the editor misbehaves, switch back to the simple editor." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>

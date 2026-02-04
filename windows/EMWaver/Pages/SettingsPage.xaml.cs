@@ -69,7 +69,10 @@ public sealed partial class SettingsPage : Page
 
     private void OnUseMonacoToggled(object sender, RoutedEventArgs e)
     {
-        AppServices.Settings.UseMonacoEditor = UseMonacoToggle.IsOn;
+        var next = UseMonacoToggle.IsOn;
+        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] UseMonaco toggled => {next}");
+        AppServices.Settings.UseMonacoEditor = next;
+        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] UseMonaco persisted? {AppServices.Settings.UseMonacoEditor}");
         RefreshUi("Editor setting updated.");
     }
 

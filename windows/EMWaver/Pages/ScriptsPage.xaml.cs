@@ -223,7 +223,6 @@ public sealed partial class ScriptsPage : Page
 
             // If Monaco fails to init for any reason, fall back to the simple editor.
             _useMonaco = false;
-            AppServices.Settings.UseMonacoEditor = false;
             ApplyEditorMode();
 
             // Make the failure obvious (but non-fatal).
@@ -231,7 +230,12 @@ public sealed partial class ScriptsPage : Page
             {
                 try
                 {
-                    await ShowInfoAsync("Monaco editor", "Failed to start Monaco/WebView2. Falling back to the simple editor.\n\n" + ex.Message);
+                    await ShowInfoAsync(
+                        "Monaco editor",
+                        "Failed to start Monaco/WebView2. Falling back to the simple editor for this session.\n\n" +
+                        "You can keep Monaco enabled in Settings and retry after restarting the app, or disable it there.\n\n" +
+                        ex.Message
+                    );
                 }
                 catch { }
             });
