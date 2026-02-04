@@ -464,7 +464,8 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = text ?? string.Empty;
             _suppressEditorChanged = false;
 
-            RichEditor.IsReadOnly = script.IsBundled;
+            // NOTE: setting RichEditBox.Document text can throw if IsReadOnly is true.
+            // Set read-only after we load text.
 
             _pendingMonacoReadOnly = script.IsBundled;
             _pendingMonacoText = text ?? string.Empty;
@@ -472,6 +473,7 @@ public sealed partial class ScriptsPage : Page
 
             // Rich editor state
             SetRichEditorText(_pendingMonacoText);
+            RichEditor.IsReadOnly = script.IsBundled;
             EnsureHighlightTimer();
             ScheduleHighlight();
 
