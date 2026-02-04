@@ -29,7 +29,7 @@ public struct ScriptsRootView: View {
     @State private var currentScriptId: String?
     @State private var editorContent: String = ""
     @State private var editorIsReadOnly = false
-    // Line-wrapping is always enabled in the editor.
+    @State private var lineWrapEnabled = false
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
@@ -304,7 +304,11 @@ public struct ScriptsRootView: View {
 
     private var editorTextView: some View {
         Group {
-            EmwCodeEditor(text: $editorContent, isEditable: !editorIsReadOnly, wrapLines: true)
+            EmwCodeEditor(
+                text: $editorContent,
+                isEditable: !editorIsReadOnly,
+                wrapLines: (editorMode == .signalText) ? true : lineWrapEnabled
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: editorContent) { newValue in
@@ -371,6 +375,8 @@ public struct ScriptsRootView: View {
     private func openEditor(for id: String) {
         editorMode = .script
         editorTitleOverride = nil
+        // Default to no-wrap for scripts (toggle available in menu)
+        lineWrapEnabled = false
         viewModel.selectScript(id: id)
         currentScriptId = id
         editorIsReadOnly = viewModel.isAssetScript(id)
@@ -395,12 +401,16 @@ public struct ScriptsRootView: View {
         case .signalRaw:
             editorMode = .signalRaw
             editorIsReadOnly = true
+            lineWrapEnabled = false
         case .signalText:
             editorMode = .signalText
             editorIsReadOnly = false
+            // Always wrap .txt (no toggle)
+            lineWrapEnabled = true
         case .script:
             editorMode = .script
             editorIsReadOnly = false
+            lineWrapEnabled = false
         }
 
         Task {
@@ -431,6 +441,7 @@ public struct ScriptsRootView: View {
     private func openNewScriptEditor() {
         editorMode = .script
         editorTitleOverride = nil
+        lineWrapEnabled = false
         viewModel.selectScript(id: viewModel.unsavedIdentifier)
         currentScriptId = viewModel.unsavedIdentifier
         editorContent = viewModel.scriptDraft(for: viewModel.unsavedIdentifier)
@@ -446,6 +457,7 @@ public struct ScriptsRootView: View {
         editorIsReadOnly = false
         editorMode = .script
         editorTitleOverride = nil
+        lineWrapEnabled = false
     }
 
     private func exitPreview() {
@@ -681,7 +693,10 @@ public struct ScriptsRootView: View {
                         }
                     }
 
-                    // Line wrap is always enabled.
+                    if isScriptEditor {
+                        Divider()
+                        Button(lineWrapEnabled ? "Disable Line Wrap" : "Enable Line Wrap") { lineWrapEnabled.toggle() }
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

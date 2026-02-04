@@ -13,20 +13,19 @@ import AppKit
 public struct EmwCodeEditor: NSViewRepresentable {
     @Binding private var text: String
     private let isEditable: Bool
+    private let wrapLines: Bool
 
-    // Always wrap lines; we do not support horizontal scrolling.
-    private let wrapLines: Bool = true
-
-    public init(text: Binding<String>, isEditable: Bool = true, wrapLines: Bool = true) {
+    public init(text: Binding<String>, isEditable: Bool = true, wrapLines: Bool = false) {
         _text = text
         self.isEditable = isEditable
+        self.wrapLines = wrapLines
     }
 
     public func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = !wrapLines
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
 
@@ -56,7 +55,7 @@ public struct EmwCodeEditor: NSViewRepresentable {
 
     public func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
-        nsView.hasHorizontalScroller = false
+        nsView.hasHorizontalScroller = !wrapLines
         context.coordinator.configure(textView: textView, isEditable: isEditable, wrapLines: wrapLines)
         context.coordinator.setTextIfNeeded(text)
     }
@@ -130,25 +129,27 @@ public struct EmwCodeEditor: NSViewRepresentable {
             textView.isVerticallyResizable = true
 
             // Wrapping behavior.
+            textView.textContainer?.lineBreakMode = .byWordWrapping
             textView.textContainer?.widthTracksTextView = wrapLines
-            textView.isHorizontallyResizable = !wrapLines
-            textView.autoresizingMask = wrapLines ? [.width] : []
 
             let contentWidth = textView.enclosingScrollView?.contentSize.width ?? textView.bounds.width
             let wrapWidth = Swift.max(200, contentWidth)
 
-            textView.textContainer?.containerSize = NSSize(
-                width: wrapLines ? wrapWidth : maxSize,
-                height: maxSize
-            )
-
             if wrapLines {
-                // Ensure the view itself has a sensible width early in layout.
+                textView.isHorizontallyResizable = false
+                textView.autoresizingMask = [.width]
+                textView.textContainer?.containerSize = NSSize(width: wrapWidth, height: maxSize)
+
+                // Ensure the view itself tracks the scroll view width.
                 var f = textView.frame
-                if f.size.width < wrapWidth {
+                if f.size.width != wrapWidth {
                     f.size.width = wrapWidth
                     textView.frame = f
                 }
+            } else {
+                textView.isHorizontallyResizable = true
+                textView.autoresizingMask = []
+                textView.textContainer?.containerSize = NSSize(width: maxSize, height: maxSize)
             }
         }
 
