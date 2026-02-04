@@ -95,6 +95,12 @@ public final class CloudSyncEngine {
             let localByName: [String: URL] = Dictionary(uniqueKeysWithValues: localURLs.map { ($0.lastPathComponent, $0) })
 
             Self.debug("Kind=\(spec.kind) ext=\(spec.ext) local=\(localByName.count) cloud=\(cloudByName.count) dir=\(storageDir.path)")
+            if Self.debugEnabled() {
+                let localNames = localByName.keys.sorted().joined(separator: ", ")
+                let cloudNames = cloudByName.keys.sorted().joined(separator: ", ")
+                Self.debug("localNames=[\(localNames)]")
+                Self.debug("cloudNames=[\(cloudNames)]")
+            }
 
             let names = Set(cloudByName.keys).union(localByName.keys)
 
@@ -114,6 +120,12 @@ public final class CloudSyncEngine {
 
                 let localSha = localURL.flatMap { try? computeLocalSha256(url: $0) }
                 let cloudSha = cloudMeta?.metadata.sha256
+
+                if Self.debugEnabled() {
+                    Self.debug("name=\(name) local=\(localURL != nil) cloud=\(cloudMeta != nil) localEtag=\(localEtag ?? "-") cloudEtag=\(cloudEtag ?? "-")")
+                    Self.debug("  localSha=\(localSha ?? "-")")
+                    Self.debug("  cloudSha=\(cloudSha ?? "-")")
+                }
 
                 switch (localURL, cloudMeta) {
                 case (nil, let cloud?):
@@ -181,6 +193,12 @@ public final class CloudSyncEngine {
                         if let cloudSha, let lastCloudSha { return cloudSha != lastCloudSha }
                         return (lastCloudEtag != nil && cloud.metadata.etag != lastCloudEtag) || (lastCloudEtag == nil && cloud.metadata.etag != nil)
                     }()
+
+                    if Self.debugEnabled() {
+                        Self.debug("  lastLocalEtag=\(lastLocalEtag ?? "-") lastCloudEtag=\(lastCloudEtag ?? "-")")
+                        Self.debug("  lastLocalSha=\(lastLocalSha ?? "-") lastCloudSha=\(lastCloudSha ?? "-")")
+                        Self.debug("  decisionFlags localChanged=\(localChanged) cloudChanged=\(cloudChanged)")
+                    }
 
                     // If we have both hashes and they match, nothing to do.
                     if let localSha, let cloudSha, localSha == cloudSha {
