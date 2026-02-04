@@ -92,7 +92,7 @@ def _openapi_spec(*, base_url: str) -> dict:
                 "CommitUploadRequest": {
                     "type": "object",
                     "properties": {
-                        "etag": {"type": "string", "description": "etag from init-upload response"},
+                        "etag": {"type": "string", "description": "etag"},
                         "size_bytes": {"type": "integer"},
                     },
                     "required": ["etag"],
@@ -199,45 +199,6 @@ def _openapi_spec(*, base_url: str) -> dict:
                         "502": {
                             "description": "Azure upload failed",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
-                        },
-                    },
-                }
-            },
-            "/v1/files/init-upload": {
-                "post": {
-                    "summary": "Init upload (allocate metadata + get Azure SAS PUT URL)",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {"schema": {"$ref": "#/components/schemas/InitUploadRequest"}}
-                        },
-                    },
-                    "responses": {
-                        "201": {
-                            "description": "Created",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"$ref": "#/components/schemas/InitUploadResponse"}
-                                }
-                            },
-                        },
-                        "400": {
-                            "description": "Bad request",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "401": {
-                            "description": "Unauthorized",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
-                        },
-                        "409": {
-                            "description": "File already exists",
-                            "content": {
-                                "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
-                            },
                         },
                     },
                 }
