@@ -19,6 +19,23 @@ namespace EMWaver.Pages;
 
 public sealed partial class ScriptsPage : Page
 {
+    protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+
+        var next = AppServices.Settings.UseMonacoEditor;
+        if (next != _useMonaco)
+        {
+            _useMonaco = next;
+            ApplyEditorMode();
+        }
+
+        if (_useMonaco)
+        {
+            await EnsureMonacoInitializedAsync();
+        }
+    }
+
     private readonly ObservableCollection<ScriptInfo> _scripts = new();
     private readonly ObservableCollection<string> _agentMessages = new();
 
