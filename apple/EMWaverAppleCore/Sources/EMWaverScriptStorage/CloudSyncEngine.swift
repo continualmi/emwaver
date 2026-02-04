@@ -110,9 +110,16 @@ public final class CloudSyncEngine {
                 case (nil, let cloud?):
                     // Cloud-only -> download.
                     Self.debug("download \(spec.kind) \(name) (cloudId=\(cloud.metadata.id))")
-                    try await download(cloud: cloud, to: storageDir.appendingPathComponent(name), baseURL: baseURL, accessToken: accessToken)
-                    summary.downloaded += 1
-                    updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: storageDir.appendingPathComponent(name)), cloudEtag: cloud.metadata.etag)
+                    do {
+                        try await download(cloud: cloud, to: storageDir.appendingPathComponent(name), baseURL: baseURL, accessToken: accessToken)
+                        summary.downloaded += 1
+                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: storageDir.appendingPathComponent(name)), cloudEtag: cloud.metadata.etag)
+                    } catch {
+                        // If Azure blob is missing (common during early dev when init-upload happened but PUT/commit failed),
+                        // leave the local file absent and surface the error to the caller.
+                        Self.debug("download failed \(spec.kind) \(name): \(error)")
+                        throw error
+                    }
 
                 case (let local?, nil):
                     // Local-only -> upload.
@@ -179,9 +186,39 @@ public final class CloudSyncEngine {
                         }
                     } else if !localChanged && cloudChanged {
                         // Download cloud.
-                        try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
-                        summary.downloaded += 1
-                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
+                        do {
+                            try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
+                            summary.downloaded += 1
+                            updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
+                        } catch {
+                            // Recovery: if blob is missing in Azure (404), but we do have local bytes,
+                            // re-upload by creating a new conflict copy in cloud.
+                            if case CloudFilesAPIError.serverError(let code, _) = error, code == 404 {
+                                Self.debug("azure missing blob for \(name); re-uploading as conflict copy")
+                                let data = try Data(contentsOf: local)
+                                let conflictName = makeConflictName(original: name, suffix: "repair")
+                                let initRes = try await api.initUpload(
+                                    baseURL: baseURL,
+                                    accessToken: accessToken,
+                                    kind: spec.kind,
+                                    name: conflictName,
+                                    contentType: spec.contentType,
+                                    sizeBytes: Int64(data.count)
+                                )
+                                try await putBytes(data, to: initRes.uploadURL, contentType: spec.contentType)
+                                _ = try await api.commitUpload(
+                                    baseURL: baseURL,
+                                    accessToken: accessToken,
+                                    fileId: initRes.file.metadata.id,
+                                    expectedEtag: initRes.file.metadata.etag ?? "",
+                                    sizeBytes: Int64(data.count)
+                                )
+                                summary.uploaded += 1
+                                summary.conflicts += 1
+                            } else {
+                                throw error
+                            }
+                        }
                     } else if localChanged && cloudChanged {
                         // Conflict.
                         switch policy {
