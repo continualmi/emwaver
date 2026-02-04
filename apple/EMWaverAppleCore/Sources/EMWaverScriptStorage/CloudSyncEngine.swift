@@ -5,6 +5,7 @@
  */
 
 import Foundation
+import CryptoKit
 
 public enum CloudSyncPolicy {
     /// If both changed, keep local as canonical and download the cloud version as a conflict copy.
@@ -52,6 +53,8 @@ public final class CloudSyncEngine {
         var cloudId: String
         var lastSyncedLocalEtag: String?
         var lastSyncedCloudEtag: String?
+        var lastSyncedLocalSha256: String?
+        var lastSyncedCloudSha256: String?
     }
 
     private struct IndexFile: Codable, Equatable {
@@ -101,13 +104,16 @@ public final class CloudSyncEngine {
 
                 // Ensure we have an index entry if we have cloud meta.
                 if let cloudMeta {
-                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: cloudMeta.metadata.id, cloudEtag: cloudMeta.metadata.etag)
+                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: cloudMeta.metadata.id, cloudEtag: cloudMeta.metadata.etag, cloudSha256: cloudMeta.metadata.sha256)
                 }
 
                 let entry = index.entries.first(where: { $0.kind == spec.kind && $0.name == name })
 
                 let localEtag = localURL.flatMap { try? computeLocalEtag(url: $0) }
                 let cloudEtag = cloudMeta?.metadata.etag
+
+                let localSha = localURL.flatMap { try? computeLocalSha256(url: $0) }
+                let cloudSha = cloudMeta?.metadata.sha256
 
                 switch (localURL, cloudMeta) {
                 case (nil, let cloud?):
@@ -116,7 +122,16 @@ public final class CloudSyncEngine {
                     do {
                         try await download(cloud: cloud, to: storageDir.appendingPathComponent(name), baseURL: baseURL, accessToken: accessToken)
                         summary.downloaded += 1
-                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: storageDir.appendingPathComponent(name)), cloudEtag: cloud.metadata.etag)
+                        let dest = storageDir.appendingPathComponent(name)
+                        updateIndexAfterSync(
+                            &index,
+                            kind: spec.kind,
+                            name: name,
+                            localEtag: try? computeLocalEtag(url: dest),
+                            cloudEtag: cloud.metadata.etag,
+                            localSha256: try? computeLocalSha256(url: dest),
+                            cloudSha256: cloud.metadata.sha256
+                        )
                     } catch {
                         // If Azure blob is missing (common during early dev when init-upload happened but PUT/commit failed),
                         // leave the local file absent and surface the error to the caller.
@@ -137,20 +152,59 @@ public final class CloudSyncEngine {
                         bytes: data
                     )
                     summary.uploaded += 1
-                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: f.metadata.id, cloudEtag: f.metadata.etag)
-                    updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: f.metadata.etag)
+                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: f.metadata.id, cloudEtag: f.metadata.etag, cloudSha256: f.metadata.sha256)
+                    updateIndexAfterSync(
+                        &index,
+                        kind: spec.kind,
+                        name: name,
+                        localEtag: localEtag,
+                        cloudEtag: f.metadata.etag,
+                        localSha256: localSha,
+                        cloudSha256: f.metadata.sha256
+                    )
 
                 case (let local?, let cloud?):
                     // Both exist.
                     let last = index.entries.first(where: { $0.kind == spec.kind && $0.name == name })
-                    let lastLocal = last?.lastSyncedLocalEtag
-                    let lastCloud = last?.lastSyncedCloudEtag
+                    let lastLocalEtag = last?.lastSyncedLocalEtag
+                    let lastCloudEtag = last?.lastSyncedCloudEtag
+                    let lastLocalSha = last?.lastSyncedLocalSha256
+                    let lastCloudSha = last?.lastSyncedCloudSha256
 
-                    let localChanged = (lastLocal != nil && localEtag != lastLocal) || (lastLocal == nil && localEtag != nil)
-                    let cloudChanged = (lastCloud != nil && cloud.metadata.etag != lastCloud) || (lastCloud == nil && cloud.metadata.etag != nil)
+                    // Prefer sha256 when available; fall back to etag/mtime.
+                    let localChanged: Bool = {
+                        if let localSha, let lastLocalSha { return localSha != lastLocalSha }
+                        return (lastLocalEtag != nil && localEtag != lastLocalEtag) || (lastLocalEtag == nil && localEtag != nil)
+                    }()
 
-                    if localChanged {
-                        // Overwrite-by-name flow: just upload the local bytes again.
+                    let cloudChanged: Bool = {
+                        if let cloudSha, let lastCloudSha { return cloudSha != lastCloudSha }
+                        return (lastCloudEtag != nil && cloud.metadata.etag != lastCloudEtag) || (lastCloudEtag == nil && cloud.metadata.etag != nil)
+                    }()
+
+                    // If we have both hashes and they match, nothing to do.
+                    if let localSha, let cloudSha, localSha == cloudSha {
+                        upsertIndex(&index, kind: spec.kind, name: name, cloudId: cloud.metadata.id, cloudEtag: cloud.metadata.etag, cloudSha256: cloudSha)
+                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: cloud.metadata.etag, localSha256: localSha, cloudSha256: cloudSha)
+                        break
+                    }
+
+                    // If we have no prior sync state but hashes differ, treat as conflict.
+                    let hasHistory = (lastLocalSha != nil || lastCloudSha != nil || lastLocalEtag != nil || lastCloudEtag != nil)
+                    let treatAsConflict = (!hasHistory && localSha != nil && cloudSha != nil && localSha != cloudSha)
+
+                    if treatAsConflict || (localChanged && cloudChanged) {
+                        // Conflict.
+                        switch policy {
+                        case .preferLocal:
+                            // Keep local, download cloud as a conflict copy.
+                            let conflictURL = storageDir.appendingPathComponent(makeConflictName(original: name, suffix: "cloud"))
+                            try await download(cloud: cloud, to: conflictURL, baseURL: baseURL, accessToken: accessToken)
+                            summary.conflicts += 1
+                            summary.downloaded += 1
+                        }
+                    } else if localChanged && !cloudChanged {
+                        // Upload local (overwrite-by-name).
                         let data = try Data(contentsOf: local)
                         _ = try await api.uploadViaBackend(
                             baseURL: baseURL,
@@ -161,14 +215,22 @@ public final class CloudSyncEngine {
                             bytes: data
                         )
                         summary.uploaded += 1
-                    } else if cloudChanged {
+                    } else if !localChanged && cloudChanged {
                         // Download cloud.
                         do {
                             try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
                             summary.downloaded += 1
-                            updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
+                            updateIndexAfterSync(
+                                &index,
+                                kind: spec.kind,
+                                name: name,
+                                localEtag: try? computeLocalEtag(url: local),
+                                cloudEtag: cloud.metadata.etag,
+                                localSha256: try? computeLocalSha256(url: local),
+                                cloudSha256: cloud.metadata.sha256
+                            )
                         } catch {
-                            // If the cloud metadata exists but the blob is missing/corrupt (common during earlier SAS flow),
+                            // If the cloud metadata exists but the blob is missing/corrupt,
                             // prefer local and overwrite cloud by name.
                             if case CloudFilesAPIError.serverError(let code, _) = error, (code == 404 || code == 502) {
                                 Self.debug("cloud download failed for \(name) (\(code)); overwriting from local")
@@ -186,23 +248,21 @@ public final class CloudSyncEngine {
                                 throw error
                             }
                         }
-                    } else if localChanged && cloudChanged {
-                        // Conflict.
-                        switch policy {
-                        case .preferLocal:
-                            // Keep local, download cloud as a conflict copy.
-                            let conflictURL = storageDir.appendingPathComponent(makeConflictName(original: name, suffix: "cloud"))
-                            try await download(cloud: cloud, to: conflictURL, baseURL: baseURL, accessToken: accessToken)
-                            summary.conflicts += 1
-                            summary.downloaded += 1
-                        }
                     } else {
                         // No-op.
                     }
 
                     // Refresh stored mapping.
-                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: cloud.metadata.id, cloudEtag: cloud.metadata.etag)
-                    updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: cloud.metadata.etag)
+                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: cloud.metadata.id, cloudEtag: cloud.metadata.etag, cloudSha256: cloud.metadata.sha256)
+                    updateIndexAfterSync(
+                        &index,
+                        kind: spec.kind,
+                        name: name,
+                        localEtag: localEtag,
+                        cloudEtag: cloud.metadata.etag,
+                        localSha256: localSha,
+                        cloudSha256: cloud.metadata.sha256
+                    )
 
                 case (nil, nil):
                     break
@@ -227,6 +287,20 @@ public final class CloudSyncEngine {
         return String(Int(date.timeIntervalSince1970))
     }
 
+    private func computeLocalSha256(url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        var hasher = SHA256()
+        while true {
+            let chunk = try handle.read(upToCount: 1024 * 1024) ?? Data()
+            if chunk.isEmpty { break }
+            hasher.update(data: chunk)
+        }
+        let digest = hasher.finalize()
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     // MARK: - Transfer
 
     private func download(cloud: CloudFileMetadata, to localURL: URL, baseURL: URL, accessToken: String) async throws {
@@ -244,13 +318,13 @@ public final class CloudSyncEngine {
     private func loadIndex(storageDir: URL) throws -> IndexFile {
         let url = indexURL(storageDir: storageDir)
         guard fileManager.fileExists(atPath: url.path) else {
-            return IndexFile(version: 1, entries: [])
+            return IndexFile(version: 2, entries: [])
         }
         let data = try Data(contentsOf: url)
         if let decoded = try? JSONDecoder().decode(IndexFile.self, from: data) {
             return decoded
         }
-        return IndexFile(version: 1, entries: [])
+        return IndexFile(version: 2, entries: [])
     }
 
     private func saveIndex(_ index: IndexFile, storageDir: URL) throws {
@@ -259,21 +333,51 @@ public final class CloudSyncEngine {
         try data.write(to: url, options: [.atomic])
     }
 
-    private func upsertIndex(_ index: inout IndexFile, kind: String, name: String, cloudId: String, cloudEtag: String?) {
+    private func upsertIndex(
+        _ index: inout IndexFile,
+        kind: String,
+        name: String,
+        cloudId: String,
+        cloudEtag: String?,
+        cloudSha256: String? = nil
+    ) {
         if let i = index.entries.firstIndex(where: { $0.kind == kind && $0.name == name }) {
             index.entries[i].cloudId = cloudId
             if index.entries[i].lastSyncedCloudEtag == nil {
                 index.entries[i].lastSyncedCloudEtag = cloudEtag
             }
+            if index.entries[i].lastSyncedCloudSha256 == nil {
+                index.entries[i].lastSyncedCloudSha256 = cloudSha256
+            }
         } else {
-            index.entries.append(IndexEntry(kind: kind, name: name, cloudId: cloudId, lastSyncedLocalEtag: nil, lastSyncedCloudEtag: cloudEtag))
+            index.entries.append(
+                IndexEntry(
+                    kind: kind,
+                    name: name,
+                    cloudId: cloudId,
+                    lastSyncedLocalEtag: nil,
+                    lastSyncedCloudEtag: cloudEtag,
+                    lastSyncedLocalSha256: nil,
+                    lastSyncedCloudSha256: cloudSha256
+                )
+            )
         }
     }
 
-    private func updateIndexAfterSync(_ index: inout IndexFile, kind: String, name: String, localEtag: String?, cloudEtag: String?) {
+    private func updateIndexAfterSync(
+        _ index: inout IndexFile,
+        kind: String,
+        name: String,
+        localEtag: String?,
+        cloudEtag: String?,
+        localSha256: String?,
+        cloudSha256: String?
+    ) {
         guard let i = index.entries.firstIndex(where: { $0.kind == kind && $0.name == name }) else { return }
         index.entries[i].lastSyncedLocalEtag = localEtag
         index.entries[i].lastSyncedCloudEtag = cloudEtag
+        index.entries[i].lastSyncedLocalSha256 = localSha256
+        index.entries[i].lastSyncedCloudSha256 = cloudSha256
     }
 
     private func makeConflictName(original: String, suffix: String) -> String {

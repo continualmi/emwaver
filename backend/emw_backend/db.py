@@ -29,6 +29,20 @@ def init_db(database_url: str) -> None:
 
     Base.metadata.create_all(bind=_ENGINE)
 
+    # Lightweight migrations (no Alembic yet): add missing columns.
+    try:
+        from sqlalchemy import inspect, text
+
+        insp = inspect(_ENGINE)
+        cols = {c["name"] for c in insp.get_columns("files")}
+        if "content_sha256" not in cols:
+            with _ENGINE.begin() as conn:
+                conn.execute(text("ALTER TABLE files ADD COLUMN content_sha256 VARCHAR(64)"))
+    except Exception:
+        # Best-effort: if this fails (permissions/older DB), backend will still run;
+        # the sha field will just be absent until DB is recreated.
+        pass
+
 
 def db_session():
     db = SessionLocal()
