@@ -48,6 +48,8 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="260" />
                     </Grid.RowDefinitions>
 
                     <!-- Read-only hint for bundled scripts -->
@@ -76,6 +78,7 @@
                         </Grid>
                     </Border>
 
+                    <!-- Editor -->
                     <Grid Grid.Row="1">
                         <TextBox
                             x:Name="EditorBox"
@@ -99,6 +102,28 @@
                             VerticalAlignment="Center"
                             HorizontalAlignment="Center" />
                     </Grid>
+
+                    <GridSplitter
+                        Grid.Row="2"
+                        Height="8"
+                        HorizontalAlignment="Stretch"
+                        Background="Transparent" />
+
+                    <!-- Preview (rendered UI) -->
+                    <Border Grid.Row="3" CornerRadius="6" BorderThickness="1" BorderBrush="#2A2A2A" Background="#111111" Padding="10">
+                        <Grid>
+                            <ScrollViewer>
+                                <StackPanel x:Name="PreviewHost" />
+                            </ScrollViewer>
+
+                            <TextBlock
+                                x:Name="PreviewHint"
+                                Text="Run the script to render its UI."
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center" />
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 

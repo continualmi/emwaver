@@ -1,5 +1,6 @@
 using EMWaver.Models;
 using EMWaver.Scripting;
+using EMWaver.Scripting.Render;
 using EMWaver.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -26,6 +27,7 @@ public sealed partial class ScriptsPage : Page
     private bool _suppressEditorChanged;
 
     private readonly ScriptEngine _scriptEngine = new();
+    private readonly ScriptRenderer _scriptRenderer;
 
     public event Action<ScriptToolbarState>? ToolbarStateChanged;
     public ScriptToolbarState CurrentToolbarState { get; private set; } = new(false, false, false);
@@ -37,11 +39,15 @@ public sealed partial class ScriptsPage : Page
         ScriptsList.ItemsSource = _scripts;
         AgentMessagesList.ItemsSource = _agentMessages;
 
+        _scriptRenderer = new ScriptRenderer((token, args) =>
+        {
+            _scriptEngine.Invoke(token, args);
+        });
+
         _scriptEngine.Setup(
-            renderHandler: _ =>
+            renderHandler: tree =>
             {
-                // UI preview is currently not hosted on Windows.
-                // We keep the render hook so scripts that call render() don't throw.
+                _ = DispatcherQueue.TryEnqueue(() => RenderPreview(tree));
             },
             sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
             errorHandler: message =>
@@ -54,6 +60,8 @@ public sealed partial class ScriptsPage : Page
 
         // Default: editor-first.
         EmptyHint.Visibility = Visibility.Visible;
+        PreviewHint.Visibility = Visibility.Visible;
+        PreviewHost.Children.Clear();
         EditorBox.IsReadOnly = true;
         EditorBox.Text = string.Empty;
     }
@@ -175,6 +183,9 @@ public sealed partial class ScriptsPage : Page
             EmptyHint.Visibility = Visibility.Collapsed;
             ReadOnlyBanner.Visibility = script.IsBundled ? Visibility.Visible : Visibility.Collapsed;
 
+            PreviewHost.Children.Clear();
+            PreviewHint.Visibility = Visibility.Visible;
+
             UpdateCommandStates();
             await Task.CompletedTask;
         });
@@ -198,6 +209,10 @@ public sealed partial class ScriptsPage : Page
 
             EmptyHint.Visibility = Visibility.Visible;
             ReadOnlyBanner.Visibility = Visibility.Collapsed;
+
+            PreviewHost.Children.Clear();
+            PreviewHint.Visibility = Visibility.Visible;
+
             UpdateCommandStates();
             await Task.CompletedTask;
         });
@@ -234,6 +249,13 @@ public sealed partial class ScriptsPage : Page
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
         return text.Replace("\r\n", "\n").Replace("\r", "\n");
+    }
+
+    private void RenderPreview(ScriptTree tree)
+    {
+        PreviewHost.Children.Clear();
+        PreviewHost.Children.Add(_scriptRenderer.Render(tree));
+        PreviewHint.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateCommandStates()
