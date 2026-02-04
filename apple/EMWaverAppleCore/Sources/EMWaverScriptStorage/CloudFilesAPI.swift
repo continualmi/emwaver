@@ -177,6 +177,59 @@ public final class CloudFilesAPI {
         return url
     }
 
+    public func uploadViaBackend(
+        baseURL: URL,
+        accessToken: String,
+        kind: String,
+        name: String,
+        contentType: String,
+        bytes: Data
+    ) async throws -> CloudFileMetadata {
+        let url = baseURL.appendingPathComponent("v1/files/upload")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !accessToken.isEmpty {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let payload: [String: Any] = [
+            "kind": kind,
+            "name": name,
+            "content_type": contentType,
+            "data_base64": bytes.base64EncodedString(),
+            "size_bytes": Int64(bytes.count),
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+
+        let (data, response) = try await Self.session.data(for: request)
+        let http = try requireHTTP(response)
+        try validate(http: http, data: data)
+
+        struct Body: Codable { let file: CloudFileMetadata }
+        guard let decoded = try? JSONDecoder().decode(Body.self, from: data) else {
+            throw CloudFilesAPIError.invalidResponse
+        }
+        return decoded.file
+    }
+
+    public func downloadContentViaBackend(baseURL: URL, accessToken: String, fileId: String) async throws -> (data: Data, contentType: String?) {
+        let url = baseURL.appendingPathComponent("v1/files/\(fileId)/content")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if !accessToken.isEmpty {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await Self.session.data(for: request)
+        let http = try requireHTTP(response)
+        try validate(http: http, data: data)
+
+        let ct = http.value(forHTTPHeaderField: "Content-Type")
+        return (data, ct)
+    }
+
     public func deleteFile(baseURL: URL, accessToken: String, fileId: String, etag: String) async throws {
         var components = URLComponents(url: baseURL.appendingPathComponent("v1/files/\(fileId)"), resolvingAgainstBaseURL: false)
         components?.queryItems = [URLQueryItem(name: "etag", value: etag)]

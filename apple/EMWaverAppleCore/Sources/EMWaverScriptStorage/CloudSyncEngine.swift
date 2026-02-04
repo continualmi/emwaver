@@ -73,10 +73,17 @@ public final class CloudSyncEngine {
         kinds: [FileKindSpec],
         policy: CloudSyncPolicy = .preferLocal
     ) async throws -> CloudSyncSummary {
-        guard !accessToken.isEmpty else {
+        let allowAnon = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+        guard !accessToken.isEmpty || allowAnon else {
             // Signed-out: no-op.
             return CloudSyncSummary()
         }
+
+        let flow = (ProcessInfo.processInfo.environment["EMWAVER_SYNC_FLOW"] ?? "sas")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let useBackendFlow = (flow == "backend")
+        Self.debug("sync flow=\(useBackendFlow ? "backend" : "sas")")
 
         var summary = CloudSyncSummary()
         var index = try loadIndex(storageDir: storageDir)
@@ -125,25 +132,39 @@ public final class CloudSyncEngine {
                     // Local-only -> upload.
                     Self.debug("upload \(spec.kind) \(name) (local-only)")
                     let data = try Data(contentsOf: local)
-                    let initRes = try await api.initUpload(
-                        baseURL: baseURL,
-                        accessToken: accessToken,
-                        kind: spec.kind,
-                        name: name,
-                        contentType: spec.contentType,
-                        sizeBytes: Int64(data.count)
-                    )
-                    try await putBytes(data, to: initRes.uploadURL, contentType: spec.contentType)
-                    _ = try await api.commitUpload(
-                        baseURL: baseURL,
-                        accessToken: accessToken,
-                        fileId: initRes.file.metadata.id,
-                        expectedEtag: initRes.file.metadata.etag ?? "",
-                        sizeBytes: Int64(data.count)
-                    )
-                    summary.uploaded += 1
-                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: initRes.file.metadata.id, cloudEtag: initRes.file.metadata.etag)
-                    updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: initRes.file.metadata.etag)
+                    if useBackendFlow {
+                        let f = try await api.uploadViaBackend(
+                            baseURL: baseURL,
+                            accessToken: accessToken,
+                            kind: spec.kind,
+                            name: name,
+                            contentType: spec.contentType,
+                            bytes: data
+                        )
+                        summary.uploaded += 1
+                        upsertIndex(&index, kind: spec.kind, name: name, cloudId: f.metadata.id, cloudEtag: f.metadata.etag)
+                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: f.metadata.etag)
+                    } else {
+                        let initRes = try await api.initUpload(
+                            baseURL: baseURL,
+                            accessToken: accessToken,
+                            kind: spec.kind,
+                            name: name,
+                            contentType: spec.contentType,
+                            sizeBytes: Int64(data.count)
+                        )
+                        try await putBytes(data, to: initRes.uploadURL, contentType: spec.contentType)
+                        _ = try await api.commitUpload(
+                            baseURL: baseURL,
+                            accessToken: accessToken,
+                            fileId: initRes.file.metadata.id,
+                            expectedEtag: initRes.file.metadata.etag ?? "",
+                            sizeBytes: Int64(data.count)
+                        )
+                        summary.uploaded += 1
+                        upsertIndex(&index, kind: spec.kind, name: name, cloudId: initRes.file.metadata.id, cloudEtag: initRes.file.metadata.etag)
+                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: initRes.file.metadata.etag)
+                    }
 
                 case (let local?, let cloud?):
                     // Both exist.
@@ -263,6 +284,17 @@ public final class CloudSyncEngine {
     // MARK: - Transfer
 
     private func download(cloud: CloudFileMetadata, to localURL: URL, baseURL: URL, accessToken: String) async throws {
+        let flow = (ProcessInfo.processInfo.environment["EMWAVER_SYNC_FLOW"] ?? "sas")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let useBackendFlow = (flow == "backend")
+
+        if useBackendFlow {
+            let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id)
+            try data.write(to: localURL, options: [.atomic])
+            return
+        }
+
         let sas = try await api.downloadURL(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id)
         var req = URLRequest(url: sas)
         req.httpMethod = "GET"
