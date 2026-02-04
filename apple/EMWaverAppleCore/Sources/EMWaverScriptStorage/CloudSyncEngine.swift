@@ -229,6 +229,9 @@ public final class CloudSyncEngine {
         // Azure Blob upload (SAS) requires blob type on create.
         // Without this header Azure returns 400 and nothing appears in the container.
         req.setValue("BlockBlob", forHTTPHeaderField: "x-ms-blob-type")
+        // Some Azure setups behave better when these are present (harmless for SAS).
+        req.setValue("2020-10-02", forHTTPHeaderField: "x-ms-version")
+        req.setValue(contentType, forHTTPHeaderField: "x-ms-blob-content-type")
 
         // Azure blob SAS expects raw body.
         let (resData, resp) = try await Self.uploadSession.upload(for: req, from: data)
