@@ -565,6 +565,20 @@ public struct ScriptsRootView: View {
     }
 }
 
+private struct EmwFileBadgeIcon: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.secondary.opacity(0.18))
+            Text("EM")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: 18, height: 18)
+        .accessibilityLabel("EMWaver script")
+    }
+}
+
 private struct ScriptRow: View {
     let script: ScriptsViewModel.ScriptListItem
     let isSelected: Bool
@@ -573,9 +587,13 @@ private struct ScriptRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: script.kind.iconSystemName)
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
+            if script.kind == .script {
+                EmwFileBadgeIcon()
+            } else {
+                Image(systemName: script.kind.iconSystemName)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(script.name)
