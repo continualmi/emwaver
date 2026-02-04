@@ -266,6 +266,8 @@ public sealed partial class ScriptsPage : Page
 
     private void RenderPreview(ScriptTree tree)
     {
+        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Preview] RenderPreview rootType={tree?.Root.Type}");
+
         PreviewHost.Children.Clear();
         PreviewHost.Children.Add(_scriptRenderer.Render(tree));
         PreviewHint.Visibility = Visibility.Collapsed;
@@ -460,6 +462,8 @@ public sealed partial class ScriptsPage : Page
         {
             return;
         }
+
+        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Scripts] Run clicked script={_current.Name} bundled={_current.IsBundled}");
 
         // Run the current editor buffer (even if dirty) so iteration is fast.
         var text = GetEditorTextNormalized();
