@@ -469,9 +469,6 @@ public sealed partial class ScriptsPage : Page
         var text = GetEditorTextNormalized();
         await Task.CompletedTask;
 
-        // Most users expect Run → see UI.
-        SetPreviewMode(true);
-
         _scriptEngine.Execute(text);
     }
 
