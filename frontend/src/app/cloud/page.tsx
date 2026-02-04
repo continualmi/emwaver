@@ -171,7 +171,7 @@ export default function CloudPage() {
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Cloud file browser + editor</div>
           </div>
 
-          {!idToken ? (
+          {!userEmail ? (
             <button
               onClick={doSignIn}
               className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
@@ -185,7 +185,7 @@ export default function CloudPage() {
                 onClick={doSignOut}
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
               >
-                Sign out
+                Log out
               </button>
             </div>
           )}
