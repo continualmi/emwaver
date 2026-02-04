@@ -114,9 +114,9 @@ public final class CloudFilesAPI {
         return decoded.file
     }
 
-    public func downloadContentViaBackend(baseURL: URL, accessToken: String, name: String) async throws -> (data: Data, contentType: String?) {
+    public func downloadContentViaBackend(baseURL: URL, accessToken: String, blobKey: String) async throws -> (data: Data, contentType: String?) {
         var components = URLComponents(url: baseURL.appendingPathComponent("v1/files/content"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "name", value: name)]
+        components?.queryItems = [URLQueryItem(name: "blob_key", value: blobKey)]
         guard let url = components?.url else { throw CloudFilesAPIError.invalidBaseURL }
 
         var request = URLRequest(url: url)
@@ -127,7 +127,7 @@ public final class CloudFilesAPI {
 
         let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
-        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files/content?name=\(name) -> \(http.statusCode) bytes=\(data.count)")
+        os_log("%{public}@", log: Self.log, type: .fault, "GET /v1/files/content?blob_key=\(blobKey) -> \(http.statusCode) bytes=\(data.count)")
         try validate(http: http, data: data)
 
         let ct = http.value(forHTTPHeaderField: "Content-Type")
