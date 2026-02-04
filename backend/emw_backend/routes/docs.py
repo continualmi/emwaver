@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response, jsonify, request
 
 
 docs_bp = Blueprint("docs", __name__)
 
 
-def _openapi_spec() -> dict:
+def _openapi_spec(*, base_url: str) -> dict:
     return {
         "openapi": "3.0.3",
         "info": {
@@ -14,7 +14,7 @@ def _openapi_spec() -> dict:
             "version": "v1",
             "description": "Manual Swagger UI docs. Auth: Authorization: Bearer <firebase_id_token>.",
         },
-        "servers": [{"url": "http://127.0.0.1:5000"}],
+        "servers": [{"url": base_url}],
         "components": {
             "securitySchemes": {
                 "bearerAuth": {
@@ -397,7 +397,9 @@ def _openapi_spec() -> dict:
 
 @docs_bp.get("/openapi.json")
 def openapi_json():
-    return jsonify(_openapi_spec())
+    # Serve spec with the correct base URL for the current host/port.
+    base_url = request.host_url.rstrip("/")
+    return jsonify(_openapi_spec(base_url=base_url))
 
 
 @docs_bp.get("/docs")
