@@ -190,7 +190,14 @@ public sealed partial class ScriptsPage : Page
         Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode: mode={_editorMode} => monaco={MonacoHost.Visibility} rich={RichEditor.Visibility} simple={EditorBox.Visibility}");
     }
 
-    private async Task EnsureMonacoInitializedAsync()
+    private Task EnsureMonacoInitializedAsync()
+    {
+        // WebView2 / XAML elements are UI-thread-affine. This method can be called from settings change callbacks.
+        // Always marshal to the UI thread to avoid RPC_E_WRONG_THREAD / 0x8001010E.
+        return RunOnUiAsync(EnsureMonacoInitializedOnUiAsync);
+    }
+
+    private async Task EnsureMonacoInitializedOnUiAsync()
     {
         if (_monacoReady)
         {
