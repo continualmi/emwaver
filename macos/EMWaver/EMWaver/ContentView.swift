@@ -18,10 +18,22 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScriptsRootView(device: device) {
-                guard let session = auth.session else { return nil }
                 let raw = UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? ""
-                guard let base = URL(string: raw), !session.idToken.isEmpty else { return nil }
-                return (baseURL: base, accessToken: session.idToken)
+                guard let base = URL(string: raw) else { return nil }
+
+                // For local dev: allow sync without sign-in when backend auth is disabled.
+                // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
+                let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
+
+                if let session = auth.session, !session.idToken.isEmpty {
+                    return (baseURL: base, accessToken: session.idToken)
+                }
+
+                if allowAnonSync {
+                    return (baseURL: base, accessToken: "")
+                }
+
+                return nil
             }
         }
         .toolbar {
