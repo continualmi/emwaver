@@ -141,7 +141,7 @@ public sealed partial class ScriptsPage
 
             // Reset formatting across full doc.
             var all = RichEditor.Document.GetRange(0, text.Length);
-            all.CharacterFormat.ForegroundColor = Colors.Gainsboro;
+            all.CharacterFormat.ForegroundColor = Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xD4, 0xD4, 0xD4);
 
             foreach (var sp in spans)
             {
@@ -157,7 +157,7 @@ public sealed partial class ScriptsPage
                     SyntaxHighlighter.TokenKind.Keyword => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x56, 0x9C, 0xD6),
                     SyntaxHighlighter.TokenKind.Builtin => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x4E, 0xC9, 0xB0),
                     SyntaxHighlighter.TokenKind.Ident => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x9C, 0xDC, 0xFE),
-                    _ => Colors.Gainsboro,
+                    _ => Microsoft.UI.ColorHelper.FromArgb(0xFF, 0xD4, 0xD4, 0xD4),
                 };
             }
 

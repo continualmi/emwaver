@@ -19,6 +19,8 @@ namespace EMWaver.Pages;
 
 public sealed partial class ScriptsPage : Page
 {
+    public event Action<bool>? PreviewModeChanged;
+
     protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -81,10 +83,10 @@ public sealed partial class ScriptsPage : Page
         _scriptEngine.Setup(
             renderHandler: tree =>
             {
-                // Only touch the preview UI if we're actually in Preview mode.
+                var gen = _activeRenderGeneration;
                 _ = DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (_isPreviewMode)
+                    if (_isPreviewMode && gen == _activeRenderGeneration)
                     {
                         RenderPreview(tree);
                     }
@@ -297,6 +299,9 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
+        // Selecting a different file while in preview should exit preview mode.
+        SetPreviewMode(false);
+
         await RunOnUiAsync(async () =>
         {
             _loadedTextNormalized = NormalizeLineEndings(text).TrimEnd('\n');
@@ -417,6 +422,8 @@ public sealed partial class ScriptsPage : Page
     }
 
     private bool _isPreviewMode;
+    private int _renderGeneration;
+    private int _activeRenderGeneration;
 
     private void SetPreviewMode(bool preview)
     {
@@ -425,12 +432,30 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
+        if (_isPreviewMode == preview)
+        {
+            return;
+        }
+
         _isPreviewMode = preview;
+
+        // Any mode switch cancels the previous preview run.
+        _renderGeneration++;
+        _activeRenderGeneration = _renderGeneration;
+
         EditorPane.Visibility = preview ? Visibility.Collapsed : Visibility.Visible;
         PreviewPane.Visibility = preview ? Visibility.Visible : Visibility.Collapsed;
 
         if (!preview)
         {
+            // Clear preview UI when leaving preview.
+            try
+            {
+                PreviewHost.Children.Clear();
+                PreviewHint.Visibility = Visibility.Visible;
+            }
+            catch { }
+
             // When returning to code view, make the editor immediately interactive.
             _ = DispatcherQueue.TryEnqueue(() =>
             {
@@ -448,6 +473,8 @@ public sealed partial class ScriptsPage : Page
                 catch { }
             });
         }
+
+        PreviewModeChanged?.Invoke(preview);
     }
 
     private void RenderPreview(ScriptTree tree)
@@ -659,6 +686,18 @@ public sealed partial class ScriptsPage : Page
 
         // Switch to preview mode on Run.
         SetPreviewMode(true);
+
+        // Start a new render generation (cancels any previous preview run output).
+        _renderGeneration++;
+        _activeRenderGeneration = _renderGeneration;
+
+        // Clear preview host before running.
+        try
+        {
+            PreviewHost.Children.Clear();
+            PreviewHint.Visibility = Visibility.Visible;
+        }
+        catch { }
 
         // Run the current editor buffer (even if dirty) so iteration is fast.
         var text = GetEditorTextNormalized();
