@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -167,42 +168,75 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
+        Debug.WriteLine("[EMWaver][Windows][Monaco] EnsureMonacoInitializedAsync: start");
+
         // WebView2 needs to be loaded/initialized before navigation.
         try
         {
             await MonacoView.EnsureCoreWebView2Async();
+            Debug.WriteLine("[EMWaver][Windows][Monaco] CoreWebView2 ready");
+
+            // Wire diagnostics once.
+            MonacoView.NavigationCompleted -= OnMonacoNavigationCompleted;
+            MonacoView.NavigationCompleted += OnMonacoNavigationCompleted;
+            MonacoView.CoreWebView2.ProcessFailed -= OnMonacoProcessFailed;
+            MonacoView.CoreWebView2.ProcessFailed += OnMonacoProcessFailed;
+            MonacoView.CoreWebView2.ConsoleMessageReceived -= OnMonacoConsole;
+            MonacoView.CoreWebView2.ConsoleMessageReceived += OnMonacoConsole;
 
             MonacoView.WebMessageReceived -= OnMonacoWebMessage;
             MonacoView.WebMessageReceived += OnMonacoWebMessage;
 
-            MonacoView.Source = new Uri("ms-appx-web:///Assets/Monaco/monaco.html");
+            var uri = new Uri("ms-appx-web:///Assets/Monaco/monaco.html");
+            Debug.WriteLine("[EMWaver][Windows][Monaco] Navigate: " + uri);
+            MonacoView.Source = uri;
 
             // Wait until the web side reports ready.
-            // (No busy loop: the ready message flips _monacoReady.)
             for (var i = 0; i < 80 && !_monacoReady; i++)
             {
                 await Task.Delay(50);
             }
+
+            Debug.WriteLine("[EMWaver][Windows][Monaco] Ready=" + _monacoReady);
 
             if (_monacoReady)
             {
                 // Push any pending state.
                 if (!string.IsNullOrEmpty(_pendingMonacoText))
                 {
+                    Debug.WriteLine($"[EMWaver][Windows][Monaco] Push pending text len={_pendingMonacoText.Length}");
                     PostMonaco(new { type = "setText", text = _pendingMonacoText });
                     _pendingMonacoText = string.Empty;
                 }
 
+                Debug.WriteLine($"[EMWaver][Windows][Monaco] Push readOnly={_pendingMonacoReadOnly}");
                 PostMonaco(new { type = "setReadOnly", readOnly = _pendingMonacoReadOnly });
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine("[EMWaver][Windows][Monaco] Init failed: " + ex);
+
             // If Monaco fails to init for any reason, fall back to the simple editor.
             _useMonaco = false;
             AppServices.Settings.UseMonacoEditor = false;
             ApplyEditorMode();
         }
+    }
+
+    private void OnMonacoNavigationCompleted(WebView2 sender, Microsoft.UI.Xaml.Controls.NavigationCompletedEventArgs args)
+    {
+        Debug.WriteLine($"[EMWaver][Windows][Monaco] NavigationCompleted success={args.IsSuccess} status={args.WebErrorStatus}");
+    }
+
+    private void OnMonacoProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
+    {
+        Debug.WriteLine($"[EMWaver][Windows][Monaco] ProcessFailed kind={args.ProcessFailedKind}");
+    }
+
+    private void OnMonacoConsole(CoreWebView2 sender, CoreWebView2ConsoleMessageReceivedEventArgs args)
+    {
+        Debug.WriteLine($"[EMWaver][Windows][Monaco][console] {args.Level}: {args.Message} (line {args.LineNumber} source {args.Source})");
     }
 
     private void PostMonaco(object payload)

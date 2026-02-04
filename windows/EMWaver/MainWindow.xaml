@@ -23,8 +23,24 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- App icon (rounded) shown in the top app bar -->
-            <Border
+            <!-- Back button (shown only on sub-pages like Settings) -->
+            <Button x:Name="TopBackButton"
+                    Grid.Column="0"
+                    Padding="8,6"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Click="OnBackClick"
+                    Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <SymbolIcon Symbol="Back" />
+                    <TextBlock Text="Back" />
+                </StackPanel>
+            </Button>
+
+            <!-- App icon (rounded) shown in the top app bar (main page only) -->
+            <Border x:Name="TopAppIcon"
                 Grid.Column="0"
                 Width="24"
                 Height="24"
@@ -84,7 +100,6 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
 
                 <CommandBar x:Name="AppCommandBar" DefaultLabelPosition="Collapsed">
-                    <AppBarButton x:Name="BackButton" Label="Back" Icon="Back" Click="OnBackClick" IsEnabled="False" />
                     <AppBarButton x:Name="SettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
                 </CommandBar>
 
