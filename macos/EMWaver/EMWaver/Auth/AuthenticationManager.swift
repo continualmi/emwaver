@@ -20,8 +20,8 @@ final class AuthenticationManager: ObservableObject {
         var displayName: String?
     }
 
-    init(provider: GoogleSignInProviding = GoogleOAuthSignInProvider()) {
-        self.provider = provider
+    init(provider: GoogleSignInProviding? = nil) {
+        self.provider = provider ?? GoogleOAuthSignInProvider()
 
         // Best-effort session restore.
         Task { [weak self] in
@@ -91,8 +91,10 @@ final class AuthenticationManager: ObservableObject {
             }
 
             var storedProfile: StoredProfile? = nil
-            if let raw = try? KeychainStore.getString(account: profileAccount), let raw {
-                if let data = raw.data(using: .utf8), let decoded = try? JSONDecoder().decode(StoredProfile.self, from: data) {
+            if let rawOpt = try? KeychainStore.getString(account: profileAccount),
+               let raw = rawOpt {
+                if let data = raw.data(using: .utf8),
+                   let decoded = try? JSONDecoder().decode(StoredProfile.self, from: data) {
                     storedProfile = decoded
                 }
             }
