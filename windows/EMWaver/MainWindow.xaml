@@ -84,17 +84,17 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                 <CommandBar x:Name="ScriptsCommandBar" DefaultLabelPosition="Collapsed">
                     <!-- Mode toggles (Preview replaces editor region) -->
-                    <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Edit" IsEnabled="False"
+                    <AppBarToggleButton x:Name="ScriptEditToggleButton" Label="Code" IsEnabled="False"
                                         Checked="OnScriptEditChecked">
                         <AppBarToggleButton.Icon>
-                            <SymbolIcon Symbol="Edit" />
+                            <SymbolIcon Symbol="Code" />
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
 
-                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Preview" IsEnabled="False"
+                    <AppBarToggleButton x:Name="ScriptPreviewToggleButton" Label="Run" IsEnabled="False"
                                         Checked="OnScriptPreviewChecked">
                         <AppBarToggleButton.Icon>
-                            <SymbolIcon Symbol="View" />
+                            <SymbolIcon Symbol="Play" />
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
 
