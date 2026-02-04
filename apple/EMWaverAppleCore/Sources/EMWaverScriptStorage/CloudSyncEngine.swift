@@ -73,17 +73,13 @@ public final class CloudSyncEngine {
         kinds: [FileKindSpec],
         policy: CloudSyncPolicy = .preferLocal
     ) async throws -> CloudSyncSummary {
-        let allowAnon = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "1"
-        guard !accessToken.isEmpty || allowAnon else {
+        guard !accessToken.isEmpty else {
             // Signed-out: no-op.
             return CloudSyncSummary()
         }
 
-        let flow = (ProcessInfo.processInfo.environment["EMWAVER_SYNC_FLOW"] ?? "sas")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let useBackendFlow = (flow == "backend")
-        Self.debug("sync flow=\(useBackendFlow ? "backend" : "sas")")
+        // Single supported flow: backend-mediated upload/download.
+        let useBackendFlow = true
 
         var summary = CloudSyncSummary()
         var index = try loadIndex(storageDir: storageDir)
@@ -132,39 +128,17 @@ public final class CloudSyncEngine {
                     // Local-only -> upload.
                     Self.debug("upload \(spec.kind) \(name) (local-only)")
                     let data = try Data(contentsOf: local)
-                    if useBackendFlow {
-                        let f = try await api.uploadViaBackend(
-                            baseURL: baseURL,
-                            accessToken: accessToken,
-                            kind: spec.kind,
-                            name: name,
-                            contentType: spec.contentType,
-                            bytes: data
-                        )
-                        summary.uploaded += 1
-                        upsertIndex(&index, kind: spec.kind, name: name, cloudId: f.metadata.id, cloudEtag: f.metadata.etag)
-                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: f.metadata.etag)
-                    } else {
-                        let initRes = try await api.initUpload(
-                            baseURL: baseURL,
-                            accessToken: accessToken,
-                            kind: spec.kind,
-                            name: name,
-                            contentType: spec.contentType,
-                            sizeBytes: Int64(data.count)
-                        )
-                        try await putBytes(data, to: initRes.uploadURL, contentType: spec.contentType)
-                        _ = try await api.commitUpload(
-                            baseURL: baseURL,
-                            accessToken: accessToken,
-                            fileId: initRes.file.metadata.id,
-                            expectedEtag: initRes.file.metadata.etag ?? "",
-                            sizeBytes: Int64(data.count)
-                        )
-                        summary.uploaded += 1
-                        upsertIndex(&index, kind: spec.kind, name: name, cloudId: initRes.file.metadata.id, cloudEtag: initRes.file.metadata.etag)
-                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: initRes.file.metadata.etag)
-                    }
+                    let f = try await api.uploadViaBackend(
+                        baseURL: baseURL,
+                        accessToken: accessToken,
+                        kind: spec.kind,
+                        name: name,
+                        contentType: spec.contentType,
+                        bytes: data
+                    )
+                    summary.uploaded += 1
+                    upsertIndex(&index, kind: spec.kind, name: name, cloudId: f.metadata.id, cloudEtag: f.metadata.etag)
+                    updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: localEtag, cloudEtag: f.metadata.etag)
 
                 case (let local?, let cloud?):
                     // Both exist.
@@ -175,71 +149,23 @@ public final class CloudSyncEngine {
                     let localChanged = (lastLocal != nil && localEtag != lastLocal) || (lastLocal == nil && localEtag != nil)
                     let cloudChanged = (lastCloud != nil && cloud.metadata.etag != lastCloud) || (lastCloud == nil && cloud.metadata.etag != nil)
 
-                    if localChanged && !cloudChanged {
-                        // Upload local.
+                    if localChanged {
+                        // Overwrite-by-name flow: just upload the local bytes again.
                         let data = try Data(contentsOf: local)
-                        // Backend v1 doesn't support overwrite-by-name, so we create a new cloud record only if missing.
-                        // When it exists, we re-upload by creating a new version is not supported; instead: delete+recreate is too destructive.
-                        // For now: if it exists, treat as conflict and prefer local by creating a uniquely named file.
-                        // (We can add a proper update endpoint later.)
-                        switch policy {
-                        case .preferLocal:
-                            // Create a new file name with suffix.
-                            let conflictName = makeConflictName(original: name, suffix: "upload")
-                            let initRes = try await api.initUpload(
-                                baseURL: baseURL,
-                                accessToken: accessToken,
-                                kind: spec.kind,
-                                name: conflictName,
-                                contentType: spec.contentType,
-                                sizeBytes: Int64(data.count)
-                            )
-                            try await putBytes(data, to: initRes.uploadURL, contentType: spec.contentType)
-                            _ = try await api.commitUpload(
-                                baseURL: baseURL,
-                                accessToken: accessToken,
-                                fileId: initRes.file.metadata.id,
-                                expectedEtag: initRes.file.metadata.etag ?? "",
-                                sizeBytes: Int64(data.count)
-                            )
-                            summary.conflicts += 1
-                            summary.uploaded += 1
-                        }
-                    } else if !localChanged && cloudChanged {
+                        _ = try await api.uploadViaBackend(
+                            baseURL: baseURL,
+                            accessToken: accessToken,
+                            kind: spec.kind,
+                            name: name,
+                            contentType: spec.contentType,
+                            bytes: data
+                        )
+                        summary.uploaded += 1
+                    } else if cloudChanged {
                         // Download cloud.
-                        do {
-                            try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
-                            summary.downloaded += 1
-                            updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
-                        } catch {
-                            // Recovery: if blob is missing in Azure (404), but we do have local bytes,
-                            // re-upload by creating a new conflict copy in cloud.
-                            if case CloudFilesAPIError.serverError(let code, _) = error, code == 404 {
-                                Self.debug("azure missing blob for \(name); re-uploading as conflict copy")
-                                let data = try Data(contentsOf: local)
-                                let conflictName = makeConflictName(original: name, suffix: "repair")
-                                let initRes = try await api.initUpload(
-                                    baseURL: baseURL,
-                                    accessToken: accessToken,
-                                    kind: spec.kind,
-                                    name: conflictName,
-                                    contentType: spec.contentType,
-                                    sizeBytes: Int64(data.count)
-                                )
-                                try await putBytes(data, to: initRes.uploadURL, contentType: spec.contentType)
-                                _ = try await api.commitUpload(
-                                    baseURL: baseURL,
-                                    accessToken: accessToken,
-                                    fileId: initRes.file.metadata.id,
-                                    expectedEtag: initRes.file.metadata.etag ?? "",
-                                    sizeBytes: Int64(data.count)
-                                )
-                                summary.uploaded += 1
-                                summary.conflicts += 1
-                            } else {
-                                throw error
-                            }
-                        }
+                        try await download(cloud: cloud, to: local, baseURL: baseURL, accessToken: accessToken)
+                        summary.downloaded += 1
+                        updateIndexAfterSync(&index, kind: spec.kind, name: name, localEtag: try? computeLocalEtag(url: local), cloudEtag: cloud.metadata.etag)
                     } else if localChanged && cloudChanged {
                         // Conflict.
                         switch policy {
@@ -284,53 +210,10 @@ public final class CloudSyncEngine {
     // MARK: - Transfer
 
     private func download(cloud: CloudFileMetadata, to localURL: URL, baseURL: URL, accessToken: String) async throws {
-        let flow = (ProcessInfo.processInfo.environment["EMWAVER_SYNC_FLOW"] ?? "sas")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        let useBackendFlow = (flow == "backend")
-
-        if useBackendFlow {
-            let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id)
-            try data.write(to: localURL, options: [.atomic])
-            return
-        }
-
-        let sas = try await api.downloadURL(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id)
-        var req = URLRequest(url: sas)
-        req.httpMethod = "GET"
-        let (data, resp) = try await Self.uploadSession.data(for: req)
-        guard let http = resp as? HTTPURLResponse else {
-            throw CloudFilesAPIError.invalidResponse
-        }
-        guard (200...299).contains(http.statusCode) else {
-            let msg = String(data: data, encoding: .utf8) ?? ""
-            throw CloudFilesAPIError.serverError(http.statusCode, msg.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
+        let (data, _) = try await api.downloadContentViaBackend(baseURL: baseURL, accessToken: accessToken, fileId: cloud.metadata.id)
         try data.write(to: localURL, options: [.atomic])
     }
 
-    private func putBytes(_ data: Data, to url: URL, contentType: String) async throws {
-        var req = URLRequest(url: url)
-        req.httpMethod = "PUT"
-        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
-
-        // Azure Blob upload (SAS) requires blob type on create.
-        // Without this header Azure returns 400 and nothing appears in the container.
-        req.setValue("BlockBlob", forHTTPHeaderField: "x-ms-blob-type")
-        // Some Azure setups behave better when these are present (harmless for SAS).
-        req.setValue("2020-10-02", forHTTPHeaderField: "x-ms-version")
-        req.setValue(contentType, forHTTPHeaderField: "x-ms-blob-content-type")
-
-        // Azure blob SAS expects raw body.
-        let (resData, resp) = try await Self.uploadSession.upload(for: req, from: data)
-        guard let http = resp as? HTTPURLResponse else {
-            throw CloudFilesAPIError.invalidResponse
-        }
-        guard (200...299).contains(http.statusCode) else {
-            let msg = String(data: resData, encoding: .utf8) ?? ""
-            throw CloudFilesAPIError.serverError(http.statusCode, msg.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-    }
 
     // MARK: - Index
 

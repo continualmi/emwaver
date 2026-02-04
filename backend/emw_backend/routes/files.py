@@ -12,10 +12,9 @@ from emw_backend.auth import verify_request_identity
 from emw_backend.config import Config
 from emw_backend.db import SessionLocal
 from emw_backend.models import User, UserFile
-from emw_backend.storage_azure import AzureBlobConfig, make_download_url, make_upload_url
+from emw_backend.storage_azure import AzureBlobConfig
 
-# NOTE: We also support a simpler "upload via backend" flow for dev/manual testing,
-# where the backend uploads bytes to Azure directly (no SAS).
+# We use a simple backend-mediated upload/download flow (no SAS).
 
 
 files_bp = Blueprint("files", __name__, url_prefix="/v1")
@@ -149,92 +148,11 @@ def get_file(file_id: str):
         db.close()
 
 
-@files_bp.post("/files/init-upload")
-def init_upload():
-    """Creates/allocates a file record and returns an Azure Blob SAS upload URL.
-
-    Client flow:
-      1) POST /v1/files/init-upload -> { file, upload_url }
-      2) PUT bytes to upload_url
-      3) POST /v1/files/<id>/commit-upload with { etag }
-    """
-    config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    payload = request.get_json(force=True, silent=False)
-    if not isinstance(payload, dict):
-        return jsonify({"error": "Invalid JSON payload"}), 400
-
-    kind = str(payload.get("kind") or "file").strip()
-    name = str(payload.get("name") or "").strip()
-    content_type = payload.get("content_type")
-    size_bytes_raw = payload.get("size_bytes")
-
-    if not name:
-        return jsonify({"error": "Missing 'name'"}), 400
-    if content_type is not None and not isinstance(content_type, str):
-        return jsonify({"error": "Invalid 'content_type'"}), 400
-
-    size_bytes = 0
-    if size_bytes_raw is not None:
-        try:
-            size_bytes = int(size_bytes_raw)
-        except Exception:
-            return jsonify({"error": "Invalid 'size_bytes'"}), 400
-        if size_bytes < 0:
-            return jsonify({"error": "Invalid 'size_bytes'"}), 400
-
-    ext = _file_ext(name)
-    now = str(_now_epoch())
-
-    # We use a stable blob key per file id.
-    file_id = str(uuid.uuid4())
-    blob_key = f"u/{user.firebase_uid}/{file_id}/{name}"
-
-    db: Session = SessionLocal()
-    try:
-        existing = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.kind == kind)
-            .filter(UserFile.name == name)
-            .one_or_none()
-        )
-        if existing is not None:
-            return jsonify({"error": "File already exists"}), 409
-
-        f = UserFile(
-            id=file_id,
-            user_id=user.id,
-            kind=kind,
-            name=name,
-            extension=ext,
-            content_type=content_type or "application/octet-stream",
-            storage_provider="azure_blob",
-            blob_container=config.azure_blob_container,
-            blob_key=blob_key,
-            size_bytes=size_bytes,
-            etag=now,
-            created_at=int(now),
-            updated_at=int(now),
-        )
-        db.add(f)
-        db.commit()
-        db.refresh(f)
-
-        upload_url = make_upload_url(_azure_cfg(config), blob_key)
-        return jsonify({"file": _file_json(f), "upload_url": upload_url}), 201
-    finally:
-        db.close()
-
-
 @files_bp.post("/files/upload")
 def upload_file_via_backend():
     """One-shot upload through backend (no SAS).
 
-    This is a simpler flow than init-upload + Azure PUT + commit-upload.
+    This is a simpler flow than the legacy SAS-based upload.
 
     Request JSON:
       {
@@ -387,83 +305,6 @@ def download_content_via_backend(file_id: str):
         db.close()
 
 
-@files_bp.post("/files/<file_id>/commit-upload")
-def commit_upload(file_id: str):
-    config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    payload = request.get_json(force=True, silent=False)
-    if not isinstance(payload, dict):
-        return jsonify({"error": "Invalid JSON payload"}), 400
-
-    expected_etag = str(payload.get("etag") or "").strip()
-    if not expected_etag:
-        return jsonify({"error": "Missing 'etag'"}), 400
-
-    size_bytes_raw = payload.get("size_bytes")
-    size_bytes: Optional[int] = None
-    if size_bytes_raw is not None:
-        try:
-            size_bytes = int(size_bytes_raw)
-        except Exception:
-            return jsonify({"error": "Invalid 'size_bytes'"}), 400
-        if size_bytes < 0:
-            return jsonify({"error": "Invalid 'size_bytes'"}), 400
-
-    now = str(_now_epoch())
-
-    db: Session = SessionLocal()
-    try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.id == file_id)
-            .one_or_none()
-        )
-        if f is None:
-            return jsonify({"error": "Not found"}), 404
-        if f.etag != expected_etag:
-            return jsonify({"error": "Conflict", "current": _file_json(f)}), 409
-
-        if size_bytes is not None:
-            f.size_bytes = size_bytes
-
-        # Mark content committed by bumping etag/updated.
-        f.etag = now
-        f.updated_at = int(now)
-        db.commit()
-        db.refresh(f)
-        return jsonify(_file_json(f))
-    finally:
-        db.close()
-
-
-@files_bp.get("/files/<file_id>/download")
-def download(file_id: str):
-    config: Config = current_app.config["EMWAVER_CONFIG"]
-    user = _require_user(config)
-    if user is None:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    db: Session = SessionLocal()
-    try:
-        f = (
-            db.query(UserFile)
-            .filter(UserFile.user_id == user.id)
-            .filter(UserFile.id == file_id)
-            .one_or_none()
-        )
-        if f is None:
-            return jsonify({"error": "Not found"}), 404
-
-        url = make_download_url(_azure_cfg(config), f.blob_key, content_type=f.content_type)
-        return jsonify({"download_url": url})
-    finally:
-        db.close()
-
-
 @files_bp.post("/files/<file_id>/rename")
 def rename_file(file_id: str):
     config: Config = current_app.config["EMWAVER_CONFIG"]
@@ -559,11 +400,6 @@ def delete_file(file_id: str):
 # If any older client still calls them, return a clear error.
 
 
-@files_bp.post("/files")
-def legacy_create_file():
-    return jsonify({"error": "Deprecated. Use POST /v1/files/init-upload"}), 410
-
-
 @files_bp.put("/files/<file_id>")
 def legacy_update_file(file_id: str):
-    return jsonify({"error": "Deprecated. Use init-upload + commit-upload"}), 410
+    return jsonify({"error": "Deprecated."}), 410
