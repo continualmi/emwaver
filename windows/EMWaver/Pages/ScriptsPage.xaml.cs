@@ -177,12 +177,10 @@ public sealed partial class ScriptsPage : Page
             Debug.WriteLine("[EMWaver][Windows][Monaco] CoreWebView2 ready");
 
             // Wire diagnostics once.
-            MonacoView.NavigationCompleted -= OnMonacoNavigationCompleted;
-            MonacoView.NavigationCompleted += OnMonacoNavigationCompleted;
+            MonacoView.CoreWebView2.NavigationCompleted -= OnMonacoNavigationCompleted;
+            MonacoView.CoreWebView2.NavigationCompleted += OnMonacoNavigationCompleted;
             MonacoView.CoreWebView2.ProcessFailed -= OnMonacoProcessFailed;
             MonacoView.CoreWebView2.ProcessFailed += OnMonacoProcessFailed;
-            MonacoView.CoreWebView2.ConsoleMessageReceived -= OnMonacoConsole;
-            MonacoView.CoreWebView2.ConsoleMessageReceived += OnMonacoConsole;
 
             MonacoView.WebMessageReceived -= OnMonacoWebMessage;
             MonacoView.WebMessageReceived += OnMonacoWebMessage;
@@ -224,7 +222,7 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
-    private void OnMonacoNavigationCompleted(WebView2 sender, Microsoft.UI.Xaml.Controls.NavigationCompletedEventArgs args)
+    private void OnMonacoNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         Debug.WriteLine($"[EMWaver][Windows][Monaco] NavigationCompleted success={args.IsSuccess} status={args.WebErrorStatus}");
     }
@@ -234,10 +232,8 @@ public sealed partial class ScriptsPage : Page
         Debug.WriteLine($"[EMWaver][Windows][Monaco] ProcessFailed kind={args.ProcessFailedKind}");
     }
 
-    private void OnMonacoConsole(CoreWebView2 sender, CoreWebView2ConsoleMessageReceivedEventArgs args)
-    {
-        Debug.WriteLine($"[EMWaver][Windows][Monaco][console] {args.Level}: {args.Message} (line {args.LineNumber} source {args.Source})");
-    }
+    // Note: CoreWebView2.ConsoleMessageReceived is not available on all WebView2 SDK versions.
+    // If we need JS console visibility, we can re-add it once the package baseline is stable.
 
     private void PostMonaco(object payload)
     {
