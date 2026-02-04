@@ -13,6 +13,7 @@ internal static class SyntaxHighlighter
         Number,
         Keyword,
         Ident,
+        Builtin,
     }
 
     internal readonly record struct Span(int Start, int Length, TokenKind Kind);
@@ -98,7 +99,25 @@ internal static class SyntaxHighlighter
                 {
                     spans.Add(new Span(start, i - start, TokenKind.Keyword));
                 }
-                // else: we don't style idents yet
+                else if (IsBuiltin(word))
+                {
+                    spans.Add(new Span(start, i - start, TokenKind.Builtin));
+                }
+                else
+                {
+                    // Heuristic: highlight identifiers that look like EMWaver UI calls: ui.foo(...)
+                    // If we see `.name` and the left side was `ui`, mark the name as Builtin-ish.
+                    if (start >= 3 && text[start - 1] == '.')
+                    {
+                        var j = start - 2;
+                        while (j >= 0 && (char.IsLetterOrDigit(text[j]) || text[j] == '_' || text[j] == '$')) j--;
+                        var left = text.AsSpan(j + 1, (start - 1) - (j + 1));
+                        if (left.SequenceEqual("ui".AsSpan()))
+                        {
+                            spans.Add(new Span(start, i - start, TokenKind.Builtin));
+                        }
+                    }
+                }
 
                 continue;
             }
@@ -149,6 +168,22 @@ internal static class SyntaxHighlighter
             || w.SequenceEqual("true".AsSpan())
             || w.SequenceEqual("false".AsSpan())
             || w.SequenceEqual("null".AsSpan())
-            || w.SequenceEqual("undefined".AsSpan());
+            || w.SequenceEqual("undefined".AsSpan())
+            || w.SequenceEqual("typeof".AsSpan())
+            || w.SequenceEqual("void".AsSpan())
+            || w.SequenceEqual("delete".AsSpan())
+            || w.SequenceEqual("get".AsSpan())
+            || w.SequenceEqual("set".AsSpan());
+    }
+
+    private static bool IsBuiltin(ReadOnlySpan<char> w)
+    {
+        // EMWaver script conventions / common JS globals.
+        return w.SequenceEqual("ui".AsSpan())
+            || w.SequenceEqual("ctx".AsSpan())
+            || w.SequenceEqual("console".AsSpan())
+            || w.SequenceEqual("Math".AsSpan())
+            || w.SequenceEqual("JSON".AsSpan())
+            || w.SequenceEqual("Date".AsSpan());
     }
 }

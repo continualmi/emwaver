@@ -284,7 +284,7 @@ public sealed partial class ScriptsPage : Page
 
         await RunOnUiAsync(async () =>
         {
-            _loadedTextNormalized = NormalizeLineEndings(text);
+            _loadedTextNormalized = NormalizeLineEndings(text).TrimEnd('\n');
             _isDirty = false;
 
             _suppressEditorChanged = true;
@@ -300,6 +300,7 @@ public sealed partial class ScriptsPage : Page
             RichEditor.IsReadOnly = script.IsBundled;
             EnsureHighlightTimer();
             ScheduleHighlight();
+            ApplyHighlightingSafe();
 
             EmptyHint.Visibility = Visibility.Collapsed;
             ReadOnlyBanner.Visibility = script.IsBundled ? Visibility.Visible : Visibility.Collapsed;
@@ -367,7 +368,8 @@ public sealed partial class ScriptsPage : Page
     {
         var raw = _editorMode switch
         {
-            EditorMode.Code => _richTextCache,
+            // Always read the document; RichEdit normalizes line endings and may differ from our last cache.
+            EditorMode.Code => GetRichEditorText(),
             _ => (EditorBox.Text ?? string.Empty),
         };
         return NormalizeLineEndings(raw).TrimEnd('\n');
