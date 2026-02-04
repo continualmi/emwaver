@@ -1,46 +1,84 @@
 using System;
-using Windows.Storage;
+using System.IO;
+using System.Text.Json;
 
 namespace EMWaver.Services;
 
 internal sealed class AppSettings
 {
-    private const string KeyUseMonaco = "UseMonacoEditor";
+    private static readonly object _lock = new();
 
     public event Action? Changed;
+
+    private sealed class SettingsModel
+    {
+        public bool UseMonacoEditor { get; set; } = true;
+    }
+
+    private static string GetSettingsPath()
+    {
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EMWaver");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "settings.json");
+    }
+
+    private static SettingsModel Load()
+    {
+        try
+        {
+            var path = GetSettingsPath();
+            if (!File.Exists(path))
+            {
+                return new SettingsModel();
+            }
+
+            var json = File.ReadAllText(path);
+            var model = JsonSerializer.Deserialize<SettingsModel>(json);
+            return model ?? new SettingsModel();
+        }
+        catch
+        {
+            // Fail safe: keep defaults (Monaco ON) if settings are unreadable.
+            return new SettingsModel();
+        }
+    }
+
+    private static void Save(SettingsModel model)
+    {
+        var path = GetSettingsPath();
+        var tmp = path + ".tmp";
+        var json = JsonSerializer.Serialize(model, new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllText(tmp, json);
+
+        // Atomic-ish replace.
+        try
+        {
+            File.Copy(tmp, path, overwrite: true);
+            File.Delete(tmp);
+        }
+        catch
+        {
+            // Best effort.
+            try { File.Move(tmp, path, overwrite: true); } catch { }
+        }
+    }
 
     public bool UseMonacoEditor
     {
         get
         {
-            try
+            lock (_lock)
             {
-                var ls = ApplicationData.Current.LocalSettings;
-                if (ls.Values.TryGetValue(KeyUseMonaco, out var v) && v is bool b)
-                {
-                    return b;
-                }
-
-                // Default ON: Monaco is preferred, but the user can switch back to the simple editor.
-                return true;
-            }
-            catch
-            {
-                // If LocalSettings is unavailable for any reason (rare WinRT init issues),
-                // fail safe to the simple editor.
-                return false;
+                return Load().UseMonacoEditor;
             }
         }
         set
         {
-            try
+            lock (_lock)
             {
-                var ls = ApplicationData.Current.LocalSettings;
-                ls.Values[KeyUseMonaco] = value;
-            }
-            catch
-            {
-                // Ignore write failures; caller can still proceed.
+                var m = Load();
+                m.UseMonacoEditor = value;
+                Save(m);
             }
             Changed?.Invoke();
         }
