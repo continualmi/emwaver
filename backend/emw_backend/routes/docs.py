@@ -106,10 +106,9 @@ def _openapi_spec(*, base_url: str) -> dict:
             },
             "/v1/files/content": {
                 "get": {
-                    "summary": "Download bytes for a file (by blob_key or name)",
+                    "summary": "Download bytes for a file (by name)",
                     "parameters": [
-                        {"name": "blob_key", "in": "query", "required": False, "schema": {"type": "string"}, "example": "u/<uid>/tesla.raw"},
-                        {"name": "name", "in": "query", "required": False, "schema": {"type": "string"}, "example": "tesla.raw"}
+                        {"name": "name", "in": "query", "required": True, "schema": {"type": "string"}, "example": "tesla.raw"}
                     ],
                     "responses": {
                         "200": {"description": "OK", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}},
