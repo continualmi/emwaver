@@ -724,7 +724,12 @@ public struct ScriptsRootView: View {
             }
         } else {
             ToolbarItem(placement: .primaryAction) {
-                if let provider = syncProvider, let ctx = provider(), !ctx.accessToken.isEmpty {
+                // Local dev convenience: allow sync without a token when backend auth is disabled.
+                let allowAnonSync = (
+                    ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1"
+                )
+
+                if let provider = syncProvider, let ctx = provider(), (!ctx.accessToken.isEmpty || allowAnonSync) {
                     Button {
                         Task {
                             await viewModel.sync(baseURL: ctx.baseURL, accessToken: ctx.accessToken)
