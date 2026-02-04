@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import time
 import uuid
 from typing import Any, Dict, Optional
@@ -50,6 +51,7 @@ def _file_json(f: UserFile) -> Dict[str, Any]:
             "etag": f.etag,
             "size_bytes": int(f.size_bytes),
             "content_type": f.content_type,
+            "sha256": f.content_sha256,
         },
         "storage": {
             "provider": f.storage_provider,
@@ -126,7 +128,7 @@ def get_file(file_id: str):
     """Metadata only.
 
     File content is stored in Azure Blob. Use:
-    - GET /v1/files/<id>/download to get a SAS URL
+    - GET /v1/files/<id>/content to fetch bytes through backend
     """
     config: Config = current_app.config["EMWAVER_CONFIG"]
     user = _require_user(config)
@@ -205,6 +207,7 @@ def upload_file_via_backend():
 
     ext = _file_ext(name)
     now = str(_now_epoch())
+    sha256_hex = hashlib.sha256(data).hexdigest()
 
     # Upsert DB record by (user_id, kind, name)
     db: Session = SessionLocal()
@@ -231,6 +234,7 @@ def upload_file_via_backend():
                 blob_container=config.azure_blob_container,
                 blob_key=blob_key,
                 size_bytes=len(data),
+                content_sha256=sha256_hex,
                 etag=now,
                 created_at=int(now),
                 updated_at=int(now),
@@ -242,6 +246,7 @@ def upload_file_via_backend():
             # Overwrite existing blob in-place.
             f.content_type = content_type or f.content_type or "application/octet-stream"
             f.size_bytes = len(data)
+            f.content_sha256 = sha256_hex
             f.etag = now
             f.updated_at = int(now)
             db.commit()

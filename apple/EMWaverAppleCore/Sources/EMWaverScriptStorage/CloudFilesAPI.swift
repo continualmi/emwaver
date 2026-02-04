@@ -33,6 +33,7 @@ public struct CloudFileMetadata: Codable, Equatable {
         public let etag: String?
         public let sizeBytes: Int64?
         public let contentType: String?
+        public let sha256: String?
 
         private enum CodingKeys: String, CodingKey {
             case id
@@ -43,6 +44,7 @@ public struct CloudFileMetadata: Codable, Equatable {
             case etag
             case sizeBytes = "size_bytes"
             case contentType = "content_type"
+            case sha256
         }
     }
 

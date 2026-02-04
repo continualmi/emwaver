@@ -50,6 +50,9 @@ class UserFile(Base):
 
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Content hash (hex sha256) for sync/change detection.
+    content_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     etag: Mapped[str] = mapped_column(String(64), default=lambda: str(_now_epoch()))
     created_at: Mapped[int] = mapped_column(Integer, default=_now_epoch)
     updated_at: Mapped[int] = mapped_column(Integer, default=_now_epoch)

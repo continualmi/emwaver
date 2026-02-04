@@ -41,6 +41,7 @@ def _openapi_spec(*, base_url: str) -> dict:
                         "etag": {"type": "string"},
                         "size_bytes": {"type": "integer"},
                         "content_type": {"type": "string"},
+                        "sha256": {"type": "string", "description": "hex sha256 of file bytes", "example": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
                     },
                     "required": ["id", "name", "kind", "etag", "size_bytes", "content_type"],
                 },
