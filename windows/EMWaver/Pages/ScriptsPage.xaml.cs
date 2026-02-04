@@ -59,6 +59,8 @@ public sealed partial class ScriptsPage : Page
         Loaded += OnLoaded;
 
         // Default: editor-first.
+        SetPreviewMode(false);
+
         EmptyHint.Visibility = Visibility.Visible;
         PreviewHint.Visibility = Visibility.Visible;
         PreviewHost.Children.Clear();
@@ -251,6 +253,17 @@ public sealed partial class ScriptsPage : Page
         return text.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
+    private void SetPreviewMode(bool preview)
+    {
+        if (EditorPane == null || PreviewPane == null)
+        {
+            return;
+        }
+
+        EditorPane.Visibility = preview ? Visibility.Collapsed : Visibility.Visible;
+        PreviewPane.Visibility = preview ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void RenderPreview(ScriptTree tree)
     {
         PreviewHost.Children.Clear();
@@ -276,6 +289,7 @@ public sealed partial class ScriptsPage : Page
     internal void HandleToolbarRename() => OnRenameClick(this, new RoutedEventArgs());
     internal void HandleToolbarDelete() => OnDeleteClick(this, new RoutedEventArgs());
     internal void HandleToolbarRefresh() => OnRefreshClick(this, new RoutedEventArgs());
+    internal void HandleToolbarPreviewToggle(bool preview) => SetPreviewMode(preview);
     internal void HandleToolbarAgentToggle(bool show) => SetAgentPaneVisibility(show);
 
     private void SetAgentPaneVisibility(bool show)
