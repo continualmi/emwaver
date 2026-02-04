@@ -50,6 +50,13 @@ public struct CloudFileMetadata: Codable, Equatable {
 }
 
 public final class CloudFilesAPI {
+    private static let session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 12
+        cfg.timeoutIntervalForResource = 30
+        return URLSession(configuration: cfg)
+    }()
+
     public init() {}
 
     public func listFiles(baseURL: URL, accessToken: String, kind: String, ext: String) async throws -> [CloudFileMetadata] {
@@ -67,7 +74,7 @@ public final class CloudFilesAPI {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
         try validate(http: http, data: data)
 
@@ -103,7 +110,7 @@ public final class CloudFilesAPI {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
         try validate(http: http, data: data)
 
@@ -137,7 +144,7 @@ public final class CloudFilesAPI {
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
         try validate(http: http, data: data)
 
@@ -156,7 +163,7 @@ public final class CloudFilesAPI {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
         try validate(http: http, data: data)
 
@@ -182,7 +189,7 @@ public final class CloudFilesAPI {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await Self.session.data(for: request)
         let http = try requireHTTP(response)
         try validate(http: http, data: data)
 
