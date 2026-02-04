@@ -9,7 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -26,6 +26,13 @@ public sealed partial class ScriptsPage : Page
     private bool _suppressSelectionChange;
     private bool _suppressEditorChanged;
 
+    // Monaco editor state (WebView2)
+    private bool _useMonaco;
+    private bool _monacoReady;
+    private string _monacoTextCache = string.Empty;
+    private string _pendingMonacoText = string.Empty;
+    private bool _pendingMonacoReadOnly;
+
     private readonly ScriptEngine _scriptEngine = new();
     private readonly ScriptRenderer _scriptRenderer;
 
@@ -38,6 +45,9 @@ public sealed partial class ScriptsPage : Page
 
         ScriptsList.ItemsSource = _scripts;
         AgentMessagesList.ItemsSource = _agentMessages;
+
+        _useMonaco = AppServices.Settings.UseMonacoEditor;
+        AppServices.Settings.Changed += OnSettingsChanged;
 
         _scriptRenderer = new ScriptRenderer((token, args) =>
         {
@@ -61,6 +71,8 @@ public sealed partial class ScriptsPage : Page
         // Default: editor-first.
         SetPreviewMode(false);
 
+        ApplyEditorMode();
+
         EmptyHint.Visibility = Visibility.Visible;
         PreviewHint.Visibility = Visibility.Visible;
         PreviewHost.Children.Clear();
@@ -71,7 +83,168 @@ public sealed partial class ScriptsPage : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
+
+        if (_useMonaco)
+        {
+            await EnsureMonacoInitializedAsync();
+        }
+
         await RefreshAsync();
+    }
+
+    private void OnSettingsChanged()
+    {
+        _ = DispatcherQueue.TryEnqueue(async () =>
+        {
+            var next = AppServices.Settings.UseMonacoEditor;
+            if (next == _useMonaco)
+            {
+                return;
+            }
+
+            // If we're turning Monaco off, capture the latest buffer so the simple editor matches.
+            if (!next)
+            {
+                _suppressEditorChanged = true;
+                try
+                {
+                    EditorBox.Text = _monacoTextCache;
+                }
+                finally
+                {
+                    _suppressEditorChanged = false;
+                }
+            }
+            else
+            {
+                await EnsureMonacoInitializedAsync();
+            }
+
+            _useMonaco = next;
+            ApplyEditorMode();
+
+            // Re-evaluate dirty state (buffer may have moved between controls).
+            var now = GetEditorTextNormalized();
+            _isDirty = !string.Equals(now, _loadedTextNormalized, StringComparison.Ordinal);
+            UpdateCommandStates();
+        });
+    }
+
+    private void ApplyEditorMode()
+    {
+        if (MonacoView == null || EditorBox == null)
+        {
+            return;
+        }
+
+        MonacoView.Visibility = _useMonaco ? Visibility.Visible : Visibility.Collapsed;
+        EditorBox.Visibility = _useMonaco ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async Task EnsureMonacoInitializedAsync()
+    {
+        if (_monacoReady)
+        {
+            return;
+        }
+
+        // WebView2 needs to be loaded/initialized before navigation.
+        try
+        {
+            MonacoView.WebMessageReceived -= OnMonacoWebMessage;
+            MonacoView.WebMessageReceived += OnMonacoWebMessage;
+
+            MonacoView.Source = new Uri("ms-appx-web:///Assets/Monaco/monaco.html");
+
+            // Wait until the web side reports ready.
+            // (No busy loop: the ready message flips _monacoReady.)
+            for (var i = 0; i < 80 && !_monacoReady; i++)
+            {
+                await Task.Delay(50);
+            }
+
+            if (_monacoReady)
+            {
+                // Push any pending state.
+                if (!string.IsNullOrEmpty(_pendingMonacoText))
+                {
+                    PostMonaco(new { type = "setText", text = _pendingMonacoText });
+                    _pendingMonacoText = string.Empty;
+                }
+
+                PostMonaco(new { type = "setReadOnly", readOnly = _pendingMonacoReadOnly });
+            }
+        }
+        catch
+        {
+            // If Monaco fails to init for any reason, fall back to the simple editor.
+            _useMonaco = false;
+            AppServices.Settings.UseMonacoEditor = false;
+            ApplyEditorMode();
+        }
+    }
+
+    private void PostMonaco(object payload)
+    {
+        if (!_monacoReady)
+        {
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(payload);
+        MonacoView.PostWebMessageAsJson(json);
+    }
+
+    private void OnMonacoWebMessage(WebView2 sender, WebView2WebMessageReceivedEventArgs args)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(args.WebMessageAsJson);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("type", out var tEl)) return;
+            var type = tEl.GetString();
+            if (type == "ready")
+            {
+                _monacoReady = true;
+
+                // Apply initial state (current buffer + readonly) once Monaco is ready.
+                var text = _pendingMonacoText;
+                if (string.IsNullOrEmpty(text))
+                {
+                    text = EditorBox.Text ?? string.Empty;
+                }
+
+                _monacoTextCache = text;
+                PostMonaco(new { type = "setText", text });
+                PostMonaco(new { type = "setReadOnly", readOnly = _pendingMonacoReadOnly });
+                _pendingMonacoText = string.Empty;
+                return;
+            }
+
+            if (type == "text")
+            {
+                if (root.TryGetProperty("text", out var textEl))
+                {
+                    _monacoTextCache = textEl.GetString() ?? string.Empty;
+
+                    // Dirty tracking for Monaco: compare cache against last loaded normalized.
+                    if (_current != null && _current.IsBundled == false)
+                    {
+                        var now = NormalizeLineEndings(_monacoTextCache).TrimEnd('\n');
+                        var dirty = !string.Equals(now, _loadedTextNormalized, StringComparison.Ordinal);
+                        if (dirty != _isDirty)
+                        {
+                            _isDirty = dirty;
+                            UpdateCommandStates();
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore malformed messages.
+        }
     }
 
     private async Task RefreshAsync(string? selectFullPath = null)
@@ -197,6 +370,16 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = text ?? string.Empty;
             _suppressEditorChanged = false;
 
+            _pendingMonacoReadOnly = script.IsBundled;
+            _pendingMonacoText = text ?? string.Empty;
+            _monacoTextCache = _pendingMonacoText;
+            if (_useMonaco && _monacoReady)
+            {
+                PostMonaco(new { type = "setReadOnly", readOnly = _pendingMonacoReadOnly });
+                PostMonaco(new { type = "setText", text = _pendingMonacoText });
+                _pendingMonacoText = string.Empty;
+            }
+
             EmptyHint.Visibility = Visibility.Collapsed;
             ReadOnlyBanner.Visibility = script.IsBundled ? Visibility.Visible : Visibility.Collapsed;
 
@@ -224,6 +407,16 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = string.Empty;
             _suppressEditorChanged = false;
 
+            _pendingMonacoReadOnly = true;
+            _pendingMonacoText = string.Empty;
+            _monacoTextCache = string.Empty;
+            if (_useMonaco && _monacoReady)
+            {
+                PostMonaco(new { type = "setReadOnly", readOnly = true });
+                PostMonaco(new { type = "setText", text = string.Empty });
+                _pendingMonacoText = string.Empty;
+            }
+
             EmptyHint.Visibility = Visibility.Visible;
             ReadOnlyBanner.Visibility = Visibility.Collapsed;
 
@@ -237,7 +430,7 @@ public sealed partial class ScriptsPage : Page
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
     {
-        if (_suppressEditorChanged)
+        if (_suppressEditorChanged || _useMonaco)
         {
             return;
         }
@@ -258,7 +451,7 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextNormalized()
     {
-        var raw = EditorBox.Text ?? string.Empty;
+        var raw = _useMonaco ? _monacoTextCache : (EditorBox.Text ?? string.Empty);
         return NormalizeLineEndings(raw).TrimEnd('\n');
     }
 

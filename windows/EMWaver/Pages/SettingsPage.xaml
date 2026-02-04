@@ -38,6 +38,24 @@
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
+                    <TextBlock Text="Editor" FontWeight="SemiBold" />
+
+                    <muxc:ToggleSwitch x:Name="UseMonacoToggle"
+                                      Header="Use Monaco editor"
+                                      OffContent="Simple editor"
+                                      OnContent="Monaco"
+                                      Toggled="OnUseMonacoToggled" />
+
+                    <TextBlock Text="If the editor misbehaves, switch back to the simple editor." Opacity="0.75" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
                     <TextBlock Text="Cloud files" FontWeight="SemiBold" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
